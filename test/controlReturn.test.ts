@@ -36,6 +36,11 @@ describe('controlReturnNote — qui rentre d’un assaut sur un point fixe', () 
       'le héros et 1 champion en trop rentrent',
     );
   });
+  it('🏯 un lieu sans place (citadelle) : personne n’y reste, ni « pris » ni « en trop »', () => {
+    const n = controlReturnNote(60, 60, true, 3, 0);
+    expect(n).toContain('tout le monde');
+    expect(n).not.toMatch(/pris|en trop|restent/);
+  });
 });
 
 describe('controlReturnValue — la pastille « Retour »', () => {

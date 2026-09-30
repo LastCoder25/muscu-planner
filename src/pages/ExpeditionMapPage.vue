@@ -778,6 +778,11 @@
             </button>
           </div>
           <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
+          <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
+            🏯 Attaque-la avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout
+            le monde rentre après l’assaut. Abattue, elle offre {{ CONTROL_YIELD.citadel }} et monte
+            d’un palier ; un échec la fait redescendre.
+          </p>
           <p v-else-if="liveControl" class="sh-note">
             🏰 Prends-le avec 1 à 3 champions, sans le héros :
             {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
