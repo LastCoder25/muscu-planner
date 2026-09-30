@@ -29,53 +29,40 @@
       <p v-if="!rows.length" class="ats-empty">
         Aucune armée repérée en marche. La Tour de guet te préviendra dès qu’une approche.
       </p>
-      <button
-        v-for="r in rows"
-        :key="r.army.id"
-        type="button"
-        class="ats-tile"
-        :class="{ soon: r.inMs < SOON_MS }"
-        :style="{ '--rk': poiRank(r.army).color }"
-        @click="emit('open', r.army)"
-      >
-        <span class="ats-emo">{{ FACTION_EMOJI[r.faction] }}</span>
-        <span class="ats-body">
-          <span class="ats-name">
-            {{ r.kind === 'siege' ? 'Siège de ta base' : `Reprise : ${targetName(r)}` }}
-          </span>
-          <span class="ats-pills">
-            <span class="ats-pill rk">{{ poiRank(r.army).name }}</span>
-            <span class="ats-pill">{{ FACTION_LABEL[r.faction] }}</span>
-            <span class="ats-pill"
-              >≈ {{ fmtSize(r.size) }} champion{{ r.size >= 2 ? 's' : '' }}</span
-            >
-            <span
-              v-if="holdOf(r) !== null"
-              class="ats-pill hold"
-              :class="siegeOdds(holdOf(r)! / 100)"
-              :title="`Ta défense actuelle repousse environ ${holdOf(r)} % de ces attaques`"
-              >🛡️ tu tiens {{ holdOf(r) }} %</span
-            >
-            <span
-              v-else-if="r.kind === 'siege'"
-              class="ats-pill"
-              title="Sans renseignement de la Tour de guet, on ne sait pas si tu tiens"
-              >🛡️ tenue ?</span
-            >
-          </span>
-        </span>
-        <span class="ats-time">
-          <small>frappe dans</small>
-          <b>{{ formatDuration(r.inMs) }}</b>
-        </span>
-      </button>
+      <!-- 🗂️ EN TUILES, COMME LES EXPÉDITIONS (demandé) : trois par ligne, et le LIEU VISÉ en
+           encart haut-droit (🏰 la base pour un siège, le point fixe pour une reprise). Le
+           détail (faction, force) passe dans le titre de la tuile ; la fiche l'écrit en entier. -->
+      <div v-if="rows.length" class="ats-grid">
+        <button
+          v-for="r in rows"
+          :key="r.army.id"
+          type="button"
+          class="ats-tile"
+          :class="{ soon: r.inMs < SOON_MS }"
+          :style="{ '--rk': poiRank(r.army).color }"
+          :title="titleOf(r)"
+          :aria-label="titleOf(r)"
+          @click="emit('open', r.army)"
+        >
+          <span class="ats-target">{{ r.target ? poiEmo(r.target) : '🏰' }}</span>
+          <span class="ats-emo">{{ FACTION_EMOJI[r.faction] }}</span>
+          <span class="ats-name">{{
+            r.kind === 'siege' ? 'Siège de ta base' : targetName(r)
+          }}</span>
+          <span class="ats-time">{{ formatDuration(r.inMs) }}</span>
+          <span v-if="holdOf(r) !== null" class="ats-hold" :class="siegeOdds(holdOf(r)! / 100)"
+            >🛡️ {{ holdOf(r) }} %</span
+          >
+          <span v-else-if="r.kind === 'siege'" class="ats-hold">🛡️ tenue ?</span>
+        </button>
+      </div>
     </div>
   </SheetShell>
 </template>
 
 <script setup lang="ts">
 import { poiRank } from '@/lib/poiRank';
-import { poiLabel, type Poi } from '@/lib/expedition';
+import { poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import type { ActiveAttack } from '@/lib/fieldArmy';
@@ -96,6 +83,19 @@ const SOON_MS = 3_600_000;
 const targetName = (r: ActiveAttack) => (r.target ? poiLabel(r.target) : 'un point fixe');
 const holdOf = (r: ActiveAttack): number | null => props.holds?.[r.army.id] ?? null;
 const fmtSize = (n: number) => (Math.round(n * 10) / 10).toLocaleString('fr-FR');
+/** Le détail que la tuile n'a plus la place d'écrire (survol, lecteur d'écran). */
+function titleOf(r: ActiveAttack): string {
+  const hold = holdOf(r);
+  return [
+    r.kind === 'siege' ? 'Siège de ta base' : `Reprise : ${targetName(r)}`,
+    `${poiRank(r.army).name} · ${FACTION_LABEL[r.faction]}`,
+    `≈ ${fmtSize(r.size)} champion${r.size >= 2 ? 's' : ''}`,
+    `frappe dans ${formatDuration(r.inMs)}`,
+    hold !== null ? `ta défense repousse environ ${hold} %` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 </script>
 
 <style scoped>
@@ -148,99 +148,95 @@ const fmtSize = (n: number) => (Math.round(n * 10) / 10).toLocaleString('fr-FR')
   color: var(--dim);
   font-size: 13px;
 }
-.ats-tile {
+/* TROIS tuiles par ligne, centrées, comme les expéditions (`TripsPanel`). */
+.ats-grid {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.ats-tile {
+  position: relative;
+  box-sizing: border-box;
+  flex: 0 0 calc((100% - 16px) / 3);
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 60px;
-  margin-bottom: 8px;
-  padding: 8px 10px;
+  justify-content: center;
+  gap: 1px 4px;
+  padding: 7px 7px 9px;
   font: inherit;
   color: var(--text);
-  text-align: left;
   cursor: pointer;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--rk);
+  overflow: hidden;
+  border: 1px solid var(--rk);
   border-radius: 12px;
-  background: var(--surface-2, var(--bg));
+  background: var(--surface);
 }
 .ats-tile.soon {
   border-color: var(--d4);
-  border-left-color: var(--d4);
-  background: color-mix(in srgb, var(--d4) 10%, var(--surface-2, var(--bg)));
+  background: color-mix(in srgb, var(--d4) 10%, var(--surface));
+}
+/* 🎯 Le lieu attaqué, en encart dans le coin haut-droit (le dessin de l'objectif d'un voyage). */
+.ats-target {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  border-left: 1px solid;
+  border-bottom: 1px solid;
+  border-color: inherit;
+  border-bottom-left-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2, #2a241c) 70%, var(--surface));
+  pointer-events: none;
 }
 .ats-emo {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 20px;
-  background: var(--surface);
-  border: 2px solid var(--rk);
-}
-.ats-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  font-size: 18px;
 }
 .ats-name {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 10.5px;
   font-weight: 700;
-  font-size: 14px;
-}
-.ats-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.ats-pill {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--dim);
-}
-/* 🛡️ Mêmes bandes que le pronostic de la Base (`siegeOdds`) : couleur ET texte. */
-.ats-pill.hold {
-  font-weight: 700;
-}
-.ats-pill.hold.tenu {
-  color: var(--d1);
-  border-color: color-mix(in srgb, var(--d1) 55%, transparent);
-}
-.ats-pill.hold.serre {
-  color: var(--d3);
-  border-color: color-mix(in srgb, var(--d3) 55%, transparent);
-}
-.ats-pill.hold.perdu {
-  color: var(--d4);
-  border-color: color-mix(in srgb, var(--d4) 55%, transparent);
-}
-.ats-pill.rk {
+  line-height: 1.2;
   color: var(--rk);
-  border-color: color-mix(in srgb, var(--rk) 55%, transparent);
-  font-weight: 700;
+  /* Sur deux lignes si besoin : à 344 px « Jardin d'herboriste » ne tient pas sur une. */
+  overflow-wrap: anywhere;
 }
 .ats-time {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.1;
+  flex-basis: 100%;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.ats-time small {
+.ats-tile.soon .ats-time {
+  color: var(--d4);
+}
+/* 🛡️ Mêmes bandes que le pronostic de la Base (`siegeOdds`). */
+.ats-hold {
+  flex-basis: 100%;
+  text-align: center;
   font-size: 10.5px;
+  font-weight: 700;
   color: var(--dim);
 }
-.ats-time b {
-  font-family: Oswald, sans-serif;
-  font-size: 15px;
+.ats-hold.tenu {
+  color: var(--d1);
 }
-.ats-tile.soon .ats-time b {
+.ats-hold.serre {
+  color: var(--d3);
+}
+.ats-hold.perdu {
   color: var(--d4);
 }
 </style>

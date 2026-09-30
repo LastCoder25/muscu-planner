@@ -2895,6 +2895,8 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       (h) => (out = h),
     );
     expect(out).toContain('Siège de ta base');
+    // 🎯 Le lieu attaqué en encart haut-droit : la base pour un siège.
+    expect(out).toMatch(/class="ats-target"[^>]*>🏰</);
     expect(out).toContain('40 min');
     expect(out).toContain('soon');
     // 🛡️ Sans pronostic (siège sans renseignement) : on le DIT, sans inventer de %.
@@ -2914,8 +2916,8 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       '/',
       (h) => (held = h),
     );
-    expect(held).toContain('tu tiens 82 %');
-    expect(held).toContain('hold tenu');
+    expect(held).toContain('🛡️ 82 %');
+    expect(held).toContain('ats-hold tenu');
     expect(held).not.toContain('tenue ?');
     let empty = '';
     await mountIt(
