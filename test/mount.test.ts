@@ -2857,3 +2857,80 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(inl).not.toContain('Fermer');
   }, 30_000);
 });
+
+describe('⇄ ComboSwapSheet — changer d’exo en cours de Défi 360', () => {
+  it('propose les exos du même groupe déjà dans le défi, et dit ce qui bascule', async () => {
+    const { default: ComboSwapSheet } = await import('@/components/ComboSwapSheet.vue');
+    const leg = (id: string, name: string, n: number) => ({
+      slot: 'push',
+      exercise_id: id,
+      exercise_name: name,
+      muscle_primary: 'pectoraux',
+      rep_weight: 1,
+      target: 6,
+      count_mode: 'sets',
+      sets: Array.from({ length: n }, () => ({ date: '2099-01-05', reps: 10 })),
+    });
+    let out = '';
+    const err = await mountIt(
+      ComboSwapSheet,
+      { modelValue: true, comboId: 'c1', exerciseId: 'ex_bench_barbell' },
+      undefined,
+      async () => {
+        const { useComboStore } = await import('@/stores/combo');
+        const { useChallengesStore } = await import('@/stores/challenges');
+        const { useLibraryStore } = await import('@/stores/library');
+        useComboStore().list = [
+          {
+            id: 'c1',
+            name: '360',
+            start_date: '2099-01-05',
+            duration_days: 7,
+            status: 'active',
+            legs: [leg('ex_bench_barbell', 'Développé couché', 2), leg('ex_dips', 'Dips', 3)],
+          },
+        ] as never;
+        // Un défi en liste : le composant ne va pas chercher les challenges au serveur.
+        useChallengesStore().list = [{ status: 'done', exercise_id: 'x' }] as never;
+        useLibraryStore().fetchAll = () => Promise.resolve([]);
+      },
+      '/',
+      (h) => (out = h),
+    );
+    expect(err).toBeNull();
+    expect(out).toContain('Changer « Développé couché »');
+    expect(out).toContain('Tes 2 séries déjà faites');
+    expect(out).toContain('Déjà dans ton défi');
+    expect(out).toContain('Dips');
+    expect(out).toContain('3/6 → 5/12');
+  }, 30_000);
+});
+
+describe('⇄ ComboLegHead — le bouton « changer d’exo »', () => {
+  it('n’apparaît que si le défi le permet', async () => {
+    const { default: ComboLegHead } = await import('@/components/ComboLegHead.vue');
+    const leg = {
+      slot: 'push',
+      exercise_id: 'ex_dips',
+      exercise_name: 'Dips',
+      muscle_primary: 'pectoraux',
+      rep_weight: 1,
+      target: 6,
+      count_mode: 'sets',
+      sets: [],
+    };
+    let on = '';
+    let off = '';
+    await mountIt(
+      ComboLegHead,
+      { leg, swappable: true },
+      undefined,
+      undefined,
+      '/',
+      (h) => (on = h),
+    );
+    await mountIt(ComboLegHead, { leg }, undefined, undefined, '/', (h) => (off = h));
+    expect(on).toContain('class="lh-swap"');
+    expect(off).not.toContain('lh-swap');
+  }, 30_000);
+});

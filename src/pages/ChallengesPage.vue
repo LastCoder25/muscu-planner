@@ -426,7 +426,9 @@
               :bodyweight="noEquipIds.has(leg.exercise_id)"
               :size="36"
               :history="comboStore.list"
+              swappable
               @history="openHistory(leg)"
+              @swap="openSwap(leg)"
             />
             <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
                  prenaient la largeur, et les cases partaient à la ligne. La prochaine case vide
@@ -448,9 +450,18 @@
                   class="seg"
                   :class="[
                     'tier-' + legSegZone(leg, n),
-                    { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
+                    {
+                      on: n <= legDone(leg),
+                      next: n === legDone(leg) + 1,
+                      moved: !!legSets(leg)[n - 1]?.origin,
+                    },
                   ]"
                   :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
+                  :title="
+                    legSets(leg)[n - 1]?.origin
+                      ? `Faite en ${legSets(leg)[n - 1]!.origin!.exercise_name}`
+                      : undefined
+                  "
                   @click.stop="onSeg(leg, n)"
                 >
                   <template v-if="n <= legDone(leg)">{{
@@ -525,6 +536,12 @@
 
     <!-- Saisie d'une série : la fenêtre PARTAGÉE (fiche du 360, séance générée, défis en
          séries). L'onglet portait sa propre copie, sans fourchette conseillée ni correction. -->
+    <ComboSwapSheet
+      v-model="swapOpen"
+      :combo-id="activeCombo?.id ?? null"
+      :exercise-id="swapId"
+      @done="onSwapped"
+    />
     <SetLogDialog
       v-model="setOpen"
       :title="setLeg?.exercise_name ?? ''"
@@ -567,6 +584,7 @@ import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import {
   challengeStats,
@@ -709,6 +727,17 @@ const comboTab = ref<string>('active');
 // ⚠️ Même règle que le store et que l'écran d'un ami (`activeCombo`, lib) : ces trois copies
 // pouvaient désigner trois 360 différents dès qu'un joueur en a plusieurs d'ouverts.
 const activeCombo = computed(() => activeComboOf(comboStore.list, logicalToday()));
+
+// ⇄ Changer d'exo en cours de défi (cf. ComboSwapSheet / transferComboLeg).
+const swapOpen = ref(false);
+const swapId = ref<string | null>(null);
+function openSwap(leg: ComboLeg) {
+  swapId.value = leg.exercise_id;
+  swapOpen.value = true;
+}
+function onSwapped(name: string) {
+  $q.notify({ type: 'positive', message: `⇄ Tes séries sont passées sur ${name}.` });
+}
 /** Ce qu’arrêter le 360 en cours fera — même source que l’écran de détail, donc les deux
  *  ne peuvent pas annoncer deux choses différentes pour le même geste. */
 const comboStop = computed(() =>
@@ -805,7 +834,6 @@ const comboWeek = computed(() =>
 const pace = computed(() =>
   activeCombo.value ? comboPace(activeCombo.value, logicalToday()) : NO_PACE,
 );
-
 
 // Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
 // du corps, « 12·a » si assisté). Vide si la série n'existe pas encore.
@@ -1659,6 +1687,15 @@ onMounted(async () => {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
+}
+/* Série basculée d'un autre exo (changement d'exo en cours de défi) : fines hachures,
+   lisibles sur toutes les couleurs de palier. Son détail dit sur quel exo elle a été faite. */
+.seg.on.moved {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 5px,
+    rgba(0, 0, 0, 0.2) 5px 7px
+  );
 }
 .seg.on.tier-max,
 .seg.on.tier-beyond {

@@ -13,6 +13,8 @@
           <span class="hist-main">
             {{ s.reps }} {{ unit }}<template v-if="s.weight"> · {{ s.weight }} kg</template>
             <span v-if="s.assisted" class="hist-asst">assisté</span>
+            <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
+            <span v-if="s.origin" class="hist-origin">↪ {{ s.origin.exercise_name }}</span>
           </span>
           <span class="hist-date">{{ fmtDay(s.date) }}</span>
         </div>
@@ -97,6 +99,11 @@ function fmtDay(iso: string): string {
   font-size: 10px;
   color: var(--d3, #ffb23f);
   margin-left: 6px;
+}
+.hist-origin {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
 }
 .hist-date {
   font-size: 11px;

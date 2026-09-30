@@ -22,7 +22,14 @@
 // {jour, exo, muscle principal, séries} ; une seule boucle les crédite par muscle.
 import type { Objective } from './types';
 import { isMuscuLog, mondayOf, volumeState, type LogEntry, type VolumeState } from './volume';
-import { legSets, legMode, legRepRange, type ComboChallenge, type ComboLeg } from './combo';
+import {
+  legSets,
+  legMode,
+  legRepRange,
+  setOrigin,
+  type ComboChallenge,
+  type ComboLeg,
+} from './combo';
 import { challengeTargetBetween, type Challenge } from './challenges';
 import { repRangeForExercise, type RepRange } from './repScheme';
 import { addDaysUtcIso } from './startDate';
@@ -180,15 +187,19 @@ function sessionItems(sessions: readonly LogEntry[]): VolumeItem[] {
 function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
   const mode = legMode(leg);
   const unit = mode === 'sets' ? 0 : perSet(legRepRange(leg, objective));
-  return legSets(leg).map((s) => ({
-    source: 'combo' as const,
-    day: s.date.slice(0, 10),
-    exerciseId: leg.exercise_id,
-    name: leg.exercise_name,
-    primary: leg.muscle_primary,
-    sets: unit ? (s.reps || 0) / unit : 1,
-    reps: mode === 'time' ? 0 : s.reps || 0,
-  }));
+  // ⚠️ Une série basculée d'un autre exo crédite les muscles de SON exo d'origine.
+  return legSets(leg).map((s) => {
+    const o = setOrigin(leg, s);
+    return {
+      source: 'combo' as const,
+      day: s.date.slice(0, 10),
+      exerciseId: o.exercise_id,
+      name: o.exercise_name,
+      primary: o.muscle_primary,
+      sets: unit ? (s.reps || 0) / unit : 1,
+      reps: mode === 'time' ? 0 : s.reps || 0,
+    };
+  });
 }
 
 /** Une valeur d'un challenge (objectif ou réalisé, dans son unité) exprimée en SÉRIES. */

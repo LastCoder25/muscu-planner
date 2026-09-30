@@ -81,7 +81,9 @@
           :bodyweight="noEquipIds.has(leg.exercise_id)"
           :fallback="slotEmoji(leg.slot)"
           :history="combo.list"
+          :swappable="c.status === 'active'"
           @history="openHistory(leg)"
+          @swap="openSwap(leg)"
         />
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple.
              ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 série » et « ↩ »
@@ -102,9 +104,18 @@
             class="seg"
             :class="[
               'tier-' + legSegZone(leg, n),
-              { on: n <= legDone(leg), next: n === legDone(leg) + 1 },
+              {
+                on: n <= legDone(leg),
+                next: n === legDone(leg) + 1,
+                moved: !!legSets(leg)[n - 1]?.origin,
+              },
             ]"
             :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
+            :title="
+              legSets(leg)[n - 1]?.origin
+                ? `Faite en ${legSets(leg)[n - 1]!.origin!.exercise_name}`
+                : undefined
+            "
             @click.stop="onSeg(leg, n)"
           >
             <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
@@ -207,6 +218,12 @@
     </template>
 
     <ComboSetHistory v-model="histOpen" :leg="histLeg" />
+    <ComboSwapSheet
+      v-model="swapOpen"
+      :combo-id="c?.id ?? null"
+      :exercise-id="swapId"
+      @done="onSwapped"
+    />
 
     <!-- Saisie d'une série (reps + poids + assisté), dialogue partagé -->
     <SetLogDialog
@@ -260,6 +277,7 @@ import {
   type ComboLegFilter,
   legMode,
   legSets,
+  ownSets,
   legLastReps,
   legLastWeight,
   legLastAssisted,
@@ -276,6 +294,7 @@ import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import {
   logicalToday,
   addDaysIso,
@@ -307,6 +326,17 @@ function openHistory(leg: ComboLeg) {
 
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
+
+// ⇄ Changer d'exo en cours de défi (cf. ComboSwapSheet / transferComboLeg).
+const swapOpen = ref(false);
+const swapId = ref<string | null>(null);
+function openSwap(leg: ComboLeg) {
+  swapId.value = leg.exercise_id;
+  swapOpen.value = true;
+}
+function onSwapped(name: string) {
+  $q.notify({ type: 'positive', message: `⇄ Tes séries sont passées sur ${name}.` });
+}
 const pct = computed(() => (c.value ? comboProgressPct(c.value) : 0));
 // Paliers (secondaire / principal / maximal) par exo — repères + motivation.
 // Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
@@ -369,7 +399,6 @@ const onTimePct = computed(() => pace.value.onTimePct);
 const showOnTime = computed(() => pace.value.showPace);
 const onTimeState = computed(() => pace.value.state);
 
-
 // Fourchette de reps conseillée d’un exo, telle qu’elle a été figée à la création du
 // défi. L’objectif du profil ne sert que de repli pour les 360 créés avant qu’elle existe.
 function legRange(leg: ComboLeg) {
@@ -425,7 +454,8 @@ function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
   editIndex.value = null;
-  const last = legSets(leg);
+  // Séries faites sur CET exo : celles basculées d'un autre exo ne préremplissent rien.
+  const last = ownSets(leg);
   if (last.length) {
     setInitReps.value = legLastReps(leg);
     setInitWeight.value = legLastWeight(leg) ?? recallWeight(leg.exercise_id);
@@ -436,7 +466,7 @@ function openSet(leg: ComboLeg, count: number) {
     const hist = combo.list
       .flatMap((cc) => cc.legs)
       .filter((l) => l.exercise_id === leg.exercise_id)
-      .flatMap((l) => legSets(l));
+      .flatMap((l) => ownSets(l));
     const sug = suggestSetFromHistory(hist);
     setInitReps.value = sug?.repMax ?? legLastReps(leg, prescribedReps(legRange(leg)));
     setInitWeight.value = recallWeight(leg.exercise_id) ?? sug?.weight ?? legLastWeight(leg);
@@ -918,6 +948,15 @@ onMounted(async () => {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
+}
+/* Série basculée d'un autre exo (changement d'exo en cours de défi) : fines hachures,
+   lisibles sur toutes les couleurs de palier. Son détail dit sur quel exo elle a été faite. */
+.seg.on.moved {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 5px,
+    rgba(0, 0, 0, 0.2) 5px 7px
+  );
 }
 .seg.on.tier-max,
 .seg.on.tier-beyond {

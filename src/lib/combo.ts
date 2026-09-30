@@ -8,6 +8,7 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 // faites s'il a été commencé, comme pour les challenges »).
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
+import { comboSlot, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -27,6 +28,22 @@ export interface ComboSet {
   /** Heure de saisie (ISO) : distingue les séries enchaînées des séries étalées pour le
    *  conseil de charge. Absente des séries saisies avant la v0.1159. */
   at?: string;
+  /** Série FAITE SUR UN AUTRE EXO puis basculée ici par un changement d'exo en cours de
+   *  défi (`transferComboLeg`). Elle compte pour l'avancement et les paliers de l'exo qui
+   *  la porte, mais son XP, son tonnage et ses muscles restent ceux de l'exo d'origine :
+   *  sans cette trace, 3 séries de squat barre deviendraient rétroactivement 3 séries de
+   *  fentes, et l'XP déjà versée changerait. Absente = faite sur l'exo qui la porte. */
+  origin?: ComboSetOrigin;
+}
+/** Ce qu'une série déplacée garde de l'exo sur lequel elle a été faite. */
+export interface ComboSetOrigin {
+  exercise_id: string;
+  exercise_name: string;
+  muscle_primary?: string | null;
+  rep_weight: number;
+  /** Charge mémorisée de l'exo d'origine : une série sans charge propre la reprenait pour
+   *  le tonnage (`s.weight ?? leg.weight_kg`). La garder rend l'XP identique au bit près. */
+  weight_kg?: number | null;
 }
 // Ancien format (reps cumulées/jour) — lu pour migration des défis existants.
 interface ComboLegEntry {
@@ -109,6 +126,31 @@ export function legSets(leg: ComboLeg): ComboSet[] {
   if (leg.progress)
     return leg.progress.map((p) => ({ date: p.date, reps: p.reps, weight: leg.weight_kg ?? null }));
   return [];
+}
+/** L'exo sur lequel une série a VRAIMENT été faite : son origine si elle a été basculée,
+ *  sinon l'exo qui la porte. Source unique de l'XP, du tonnage, des muscles et de
+ *  l'historique d'une série — tout lecteur qui lit `leg.rep_weight` ou `leg.exercise_id`
+ *  pour une série doit passer par ici. */
+export function setOrigin(leg: ComboLeg, s: ComboSet): ComboSetOrigin {
+  return (
+    s.origin ?? {
+      exercise_id: leg.exercise_id,
+      exercise_name: leg.exercise_name,
+      muscle_primary: leg.muscle_primary ?? null,
+      rep_weight: leg.rep_weight ?? 1,
+      weight_kg: leg.weight_kg ?? null,
+    }
+  );
+}
+/** Charge d'une série pour le tonnage (repli sur la charge mémorisée de SON exo). */
+export function setLoad(leg: ComboLeg, s: ComboSet): number {
+  return s.weight ?? setOrigin(leg, s).weight_kg ?? 0;
+}
+/** Séries faites sur l'exo lui-même (sans celles basculées d'un autre) : c'est elles qui
+ *  préremplissent la série suivante et nourrissent le conseil de charge — 40 kg de
+ *  développé couché ne disent rien de la charge des dips. */
+export function ownSets(leg: ComboLeg): ComboSet[] {
+  return legSets(leg).filter((s) => !s.origin);
 }
 /** Nombre de séries faites. */
 export function legSetsDone(leg: ComboLeg): number {
@@ -215,17 +257,17 @@ export function legComplete(leg: ComboLeg): boolean {
 }
 /** Poids de préremplissage : dernier poids saisi (sinon poids de l'exo). */
 export function legLastWeight(leg: ComboLeg): number | null {
-  const s = legSets(leg);
+  const s = ownSets(leg);
   return s.length ? (s[s.length - 1]!.weight ?? null) : (leg.weight_kg ?? null);
 }
 /** Reps de préremplissage : reps de la dernière série (sinon défaut). */
 export function legLastReps(leg: ComboLeg, fallback = COMBO_PLAN_REPS): number {
-  const s = legSets(leg);
+  const s = ownSets(leg);
   return s.length ? s[s.length - 1]!.reps : fallback;
 }
 /** État « assisté » de préremplissage : celui de la dernière série. */
 export function legLastAssisted(leg: ComboLeg): boolean {
-  const s = legSets(leg);
+  const s = ownSets(leg);
   return s.length ? !!s[s.length - 1]!.assisted : false;
 }
 
@@ -440,7 +482,8 @@ export function comboOverachievement(c: ComboChallenge): {
     const done = legDone(l);
     if (l.target > 0 && done > l.target) {
       const legRepXp = sets.reduce(
-        (s, st) => s + (st.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(st.assisted),
+        (s, st) =>
+          s + (st.reps || 0) * REP_XP * setOrigin(l, st).rep_weight * assistMult(st.assisted),
         0,
       );
       extraXp += (legRepXp * (done - l.target)) / done; // part de l'effort au-delà de l'objectif
@@ -731,15 +774,26 @@ export function legBarGeometry(l: ComboLeg): {
  *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */
 function legPlannedEffort(l: ComboLeg): number {
   const sets = legSets(l);
+  // ⚠️ Chaque série pèse le poids de rep de l'exo sur lequel elle a été FAITE (setOrigin) :
+  // une série basculée d'un autre exo garde sa valeur. Sans série basculée, c'est
+  // exactement l'ancien calcul (un seul poids de rep pour tout l'exo).
+  const w = (s: ComboSet) => setOrigin(l, s).rep_weight;
   if (legMode(l) !== 'sets') {
     // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
-    const reps = legReps(l);
-    return Math.min(reps, l.target > 0 ? l.target : reps) * (l.rep_weight ?? 1);
+    let left = l.target > 0 ? l.target : Infinity;
+    let effort = 0;
+    for (const s of sets) {
+      if (left <= 0) break;
+      const take = Math.min(s.reps || 0, left);
+      effort += take * w(s);
+      left -= take;
+    }
+    return effort;
   }
   const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
-  const reps = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS), 0);
+  const done = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS) * w(s), 0);
   const missing = Math.max(0, l.target - counted.length);
-  return (reps + missing * COMBO_PLAN_REPS) * (l.rep_weight ?? 1);
+  return done + missing * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
 }
 
 /** Prime de bouclage À PALIERS (pré-XP_MULT). Par exo : sa part de prime `0,25 ×
@@ -887,8 +941,8 @@ export function comboXpBreakdown(c: ComboChallenge): {
   let tonnage = 0;
   for (const l of c.legs) {
     for (const s of legSets(l)) {
-      reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(s.assisted);
-      tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
+      reps += (s.reps || 0) * REP_XP * setOrigin(l, s).rep_weight * assistMult(s.assisted);
+      tonnage += (s.reps || 0) * setLoad(l, s);
     }
   }
   // Prime à paliers, dont on ISOLE le premium du palier maximal (part au-delà du
@@ -917,8 +971,8 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
     let tonnage = 0;
     for (const l of c.legs) {
       for (const s of legSets(l)) {
-        reps += (s.reps || 0) * REP_XP * (l.rep_weight ?? 1) * assistMult(s.assisted);
-        tonnage += (s.reps || 0) * (s.weight ?? l.weight_kg ?? 0);
+        reps += (s.reps || 0) * REP_XP * setOrigin(l, s).rep_weight * assistMult(s.assisted);
+        tonnage += (s.reps || 0) * setLoad(l, s);
       }
     }
     const duration = comboImpliedMinutes(c) * MUSCU_MIN_XP;
@@ -1361,11 +1415,14 @@ export function comboExportText(c: ComboChallenge, today: string): string {
     if (sets.length) {
       const detail =
         legMode(leg) === 'time'
-          ? sets.map((s) => `${s.reps}s`).join(', ')
+          ? sets
+              .map((s) => (s.origin ? `${s.reps}s (${s.origin.exercise_name})` : `${s.reps}s`))
+              .join(', ')
           : sets
               .map((s) => {
                 const b = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
-                return s.assisted ? `${b}·a` : b;
+                const a = s.assisted ? `${b}·a` : b;
+                return s.origin ? `${a} (${s.origin.exercise_name})` : a;
               })
               .join(', ');
       L.push(`   séries : ${detail}`);
@@ -1408,13 +1465,15 @@ export interface LegLoadAdvice {
 
 /** Séries de référence : celles de ce 360, sinon celles du dernier 360 qui a fait cet exo. */
 function adviceSets(leg: ComboLeg, history: ComboChallenge[]): ComboSet[] {
-  const own = legSets(leg).filter((s) => s.reps > 0);
+  // Séries faites sur CET exo seulement : une série basculée d'un autre exo ne dit rien
+  // de la charge de celui-ci.
+  const own = ownSets(leg).filter((s) => s.reps > 0);
   if (own.length) return own;
   const past = [...history].sort((a, b) => (a.start_date < b.start_date ? 1 : -1));
   for (const c of past) {
     for (const l of c.legs) {
       if (l === leg || l.exercise_id !== leg.exercise_id || legMode(l) === 'time') continue;
-      const s = legSets(l).filter((x) => x.reps > 0);
+      const s = ownSets(l).filter((x) => x.reps > 0);
       if (s.length) return s;
     }
   }
@@ -1468,4 +1527,147 @@ export function legLoadAdvice(
     return { ...base, call: 'down', reps: range.min };
   // Ta meilleure série récente dit ce que tu fais frais ; les moins bonnes = fatigue passagère.
   return { ...base, call: 'hold', reps: Math.min(range.max, best + 1) };
+}
+
+// --- Changer d'exo en cours de défi ---------------------------------------------
+// On quitte un exo pour un autre DU MÊME GROUPE : un exo déjà présent dans le défi, ou un
+// exo neuf. L'exo quitté DISPARAÎT, et TOUT ce qu'il portait bascule sur la cible — son
+// objectif et ses séries déjà faites. L'objectif du groupe est donc conservé, et la cible
+// recalcule ses paliers (secondaire, objectif, maximal) sur l'objectif fusionné.
+//
+// ⚠️ LES SÉRIES BASCULÉES GARDENT LEUR ORIGINE (`ComboSet.origin`). Elles comptent pour
+// l'avancement et les paliers de la cible, mais leur XP, leur tonnage et leurs muscles
+// restent ceux de l'exo sur lequel elles ont été faites. Sans cette trace, l'historique
+// mentirait et l'XP déjà versée changerait.
+
+/** Un exo neuf à mettre à la place : ce que l'assistant de création pose sur un exo. */
+export interface ComboNewExercise {
+  exercise_id: string;
+  exercise_name: string;
+  muscle_primary?: string | null;
+  rep_weight: number;
+  /** Exo au TEMPS (gainage) : il ne peut remplacer qu'un exo au temps, et inversement. */
+  time: boolean;
+  assistable: boolean;
+  rep_min: number;
+  rep_max: number;
+}
+
+/** Vers quoi basculer : un exo déjà dans le défi (son id), ou un exo neuf. */
+export type ComboTransferTarget = { leg: string } | { exercise: ComboNewExercise };
+
+type ComboTransferBlock =
+  | 'notActive'
+  | 'noLeg'
+  | 'sameLeg'
+  | 'otherSlot'
+  | 'modeMismatch'
+  | 'alreadyIn';
+
+export const COMBO_TRANSFER_BLOCK_LABEL: Record<ComboTransferBlock, string> = {
+  notActive: 'Le défi n’est plus en cours.',
+  noLeg: 'Exo introuvable dans le défi.',
+  sameLeg: 'C’est déjà cet exo.',
+  otherSlot: 'Seulement vers un exo du même groupe musculaire.',
+  modeMismatch: 'Les deux exos ne se comptent pas pareil (séries, reps ou durée).',
+  alreadyIn: 'Ce mouvement est déjà dans ton défi.',
+};
+
+/** L'exo neuf appartient-il au groupe de l'exo quitté ? */
+function inSameSlot(from: ComboLeg, muscle: string | null | undefined): boolean {
+  const slot = comboSlot(from.slot);
+  return slot ? slot.muscles.includes(muscle ?? '') : muscle === from.muscle_primary;
+}
+
+/** Pourquoi on ne peut pas basculer — `null` si c'est possible. Source unique de l'écran
+ *  (qui ne propose pas l'impossible) et du store (qui le refuse quand même). */
+export function comboTransferBlocker(
+  c: ComboChallenge,
+  fromId: string,
+  to: ComboTransferTarget,
+): ComboTransferBlock | null {
+  if (c.status !== 'active') return 'notActive';
+  const from = c.legs.find((l) => l.exercise_id === fromId);
+  if (!from) return 'noLeg';
+  if ('leg' in to) {
+    if (to.leg === fromId) return 'sameLeg';
+    const dest = c.legs.find((l) => l.exercise_id === to.leg);
+    if (!dest) return 'noLeg';
+    if (dest.slot !== from.slot) return 'otherSlot';
+    if (legMode(dest) !== legMode(from)) return 'modeMismatch';
+    return null;
+  }
+  const e = to.exercise;
+  if (e.exercise_id === fromId) return 'sameLeg';
+  if (!inSameSlot(from, e.muscle_primary)) return 'otherSlot';
+  if (e.time !== (legMode(from) === 'time')) return 'modeMismatch';
+  // Le même mouvement déjà présent AILLEURS dans le défi (l'exo quitté, lui, s'en va : on
+  // peut passer des dips aux dips assistés).
+  const fam = variantFamilyKey(e.exercise_id);
+  if (c.legs.some((l) => l !== from && variantFamilyKey(l.exercise_id) === fam)) return 'alreadyIn';
+  return null;
+}
+
+/** Ordre chronologique (jour, puis heure de saisie) : les séries fusionnées se lisent dans
+ *  l'ordre où elles ont été faites. Tri stable → deux séries sans heure gardent leur ordre. */
+function chrono(sets: ComboSet[]): ComboSet[] {
+  return [...sets].sort((a, b) =>
+    a.date !== b.date
+      ? a.date < b.date
+        ? -1
+        : 1
+      : (a.at ?? '') < (b.at ?? '')
+        ? -1
+        : (a.at ?? '') > (b.at ?? '')
+          ? 1
+          : 0,
+  );
+}
+
+/** Les exos du défi après la bascule. L'exo quitté disparaît ; la cible porte son objectif
+ *  en plus du sien et toutes ses séries, marquées de leur origine. Lève si c'est bloqué. */
+export function transferComboLeg(
+  c: ComboChallenge,
+  fromId: string,
+  to: ComboTransferTarget,
+): ComboLeg[] {
+  const block = comboTransferBlocker(c, fromId, to);
+  if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
+  const from = c.legs.find((l) => l.exercise_id === fromId)!;
+  // Une série déjà basculée (bascule en chaîne) garde sa VRAIE origine : setOrigin la rend
+  // telle quelle au lieu de l'exo quitté.
+  const moved = legSets(from).map((s) => ({ ...s, origin: setOrigin(from, s) }));
+
+  if ('leg' in to) {
+    return c.legs
+      .filter((l) => l !== from)
+      .map((l) => {
+        if (l.exercise_id !== to.leg) return l;
+        const next: ComboLeg = {
+          ...l,
+          target: l.target + from.target,
+          sets: chrono([...legSets(l), ...moved]),
+        };
+        delete next.progress; // ancien format : déjà converti par legSets
+        return next;
+      });
+  }
+
+  const e = to.exercise;
+  const fresh: ComboLeg = {
+    slot: from.slot,
+    exercise_id: e.exercise_id,
+    exercise_name: e.exercise_name,
+    muscle_primary: e.muscle_primary ?? null,
+    rep_weight: e.rep_weight,
+    target: from.target,
+    count_mode: from.count_mode ?? 'sets',
+    weight_kg: null,
+    assistable: e.assistable,
+    rep_min: e.rep_min,
+    rep_max: e.rep_max,
+    sets: moved,
+  };
+  // À la place de l'exo quitté : la liste garde son ordre.
+  return c.legs.map((l) => (l === from ? fresh : l));
 }

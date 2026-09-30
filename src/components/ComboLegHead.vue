@@ -5,7 +5,7 @@
        place (avant, la pastille lui volait la moitié de la ligne et il partait sur deux ou
        trois lignes). Fourchette de reps, conseil de charge et séries restent TOUJOURS sur une
        même ligne : le conseil de charge passe sur deux lignes dans sa case si besoin. -->
-  <div class="lh">
+  <div class="lh" :class="{ 'lh-can-swap': swappable }">
     <div class="lh-thumb">
       <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="size">
         <span class="lh-emo">{{ fallback }}</span>
@@ -35,6 +35,17 @@
         </span>
       </button>
     </div>
+    <!-- ⇄ Changer d'exo en cours de défi : seulement là où on peut agir (défi en cours). -->
+    <button
+      v-if="swappable"
+      class="lh-swap"
+      type="button"
+      :aria-label="`Changer d’exo : ${leg.exercise_name}`"
+      title="Changer d’exo"
+      @click="emit('swap')"
+    >
+      ⇄
+    </button>
   </div>
 </template>
 
@@ -66,10 +77,19 @@ const props = withDefaults(
     fallback?: string;
     /** Défis 360 passés : le conseil de charge s'y rabat quand l'exo n'a pas encore de série. */
     history?: ComboChallenge[];
+    /** Affiche le bouton ⇄ « changer d'exo » (défi en cours seulement). */
+    swappable?: boolean;
   }>(),
-  { objective: null, bodyweight: false, size: 38, fallback: '💪', history: () => [] },
+  {
+    objective: null,
+    bodyweight: false,
+    size: 38,
+    fallback: '💪',
+    history: () => [],
+    swappable: false,
+  },
 );
-const emit = defineEmits<{ history: [] }>();
+const emit = defineEmits<{ history: []; swap: [] }>();
 
 const range = computed(() =>
   repRangeLabel(legRepRange(props.leg, props.objective), legMode(props.leg) === 'time'),
@@ -122,6 +142,26 @@ const color = computed(() => comboLegColor(props.leg));
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 10px;
   align-items: center;
+}
+/* Une 3e colonne seulement si le bouton existe : vide, elle garderait sa gouttière. */
+.lh.lh-can-swap {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 6px;
+}
+/* Discret (une icône), mais une cible de 44 px de haut : mains moites en salle. */
+.lh-swap {
+  width: 34px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 18px;
+  cursor: pointer;
+}
+.lh-swap:hover,
+.lh-swap:focus-visible {
+  color: var(--accent);
 }
 .lh-thumb {
   display: flex;

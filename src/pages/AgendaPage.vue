@@ -100,7 +100,7 @@ import { useMyBossDays } from '@/composables/useMyBossDays';
 import { groupBySource } from '@/lib/agendaGroups';
 import { localDayIso } from '@/lib/volume';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
-import { legSets, legMode, type ComboSet } from '@/lib/combo';
+import { legSets, legMode, setOrigin, type ComboSet } from '@/lib/combo';
 import {
   sessionXp,
   otherSportXp,
@@ -306,12 +306,17 @@ const entries = computed<Entry[]>(() => {
       const sets = legSets(leg);
       if (!sets.length) continue;
       const mode = legMode(leg);
+      // Par (exo d'ORIGINE, jour) : une série basculée d'un autre exo s'affiche sous l'exo
+      // sur lequel elle a été faite, avec la valeur de celui-ci.
       const byDay = new Map<string, ComboSet[]>();
       for (const s of sets) {
         if (!s.date) continue;
-        (byDay.get(s.date) ?? byDay.set(s.date, []).get(s.date)!).push(s);
+        const k = setOrigin(leg, s).exercise_id + '|' + s.date;
+        (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(s);
       }
-      for (const [date, daySets] of byDay) {
+      for (const daySets of byDay.values()) {
+        const date = daySets[0]!.date;
+        const origin = setOrigin(leg, daySets[0]!);
         const [y, m, dd] = date.split('-').map(Number);
         const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
         const reps = daySets.reduce((a, s) => a + (s.reps || 0), 0);
@@ -319,7 +324,7 @@ const entries = computed<Entry[]>(() => {
         let xp = 0;
         for (const s of daySets) {
           const r = s.reps || 0;
-          xp += r * REP_XP * (leg.rep_weight || 1) * assistMult(s.assisted);
+          xp += r * REP_XP * (origin.rep_weight || 1) * assistMult(s.assisted);
           if (s.weight) xp += (r * s.weight) / 500;
         }
         xp = Math.round(xp);
@@ -336,7 +341,7 @@ const entries = computed<Entry[]>(() => {
           ts,
           kind: 'combo',
           icon: 'track_changes',
-          title: leg.exercise_name,
+          title: origin.exercise_name,
           meta,
           xp,
           energy: xp, // le Défi 360 alimente la piste Muscu → énergie

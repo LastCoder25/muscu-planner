@@ -9,6 +9,8 @@ import {
   comboNextStatus,
   removeSetAt,
   updateSetAt,
+  transferComboLeg,
+  type ComboTransferTarget,
   type ComboChallenge,
   type ComboLeg,
 } from '@/lib/combo';
@@ -226,6 +228,20 @@ export const useComboStore = defineStore('combo', () => {
     if (c) c.status = status;
   }
 
+  /** ⇄ CHANGER D'EXO en cours de défi : l'exo quitté disparaît, son objectif et ses
+   *  séries basculent sur la cible (un exo déjà présent du même groupe, ou un exo neuf).
+   *  Le refus vit dans la lib (comboTransferBlocker) et se rejoue ici : l'écran peut ne
+   *  pas proposer l'impossible, il ne peut pas le garantir. Le statut se recalcule (la
+   *  cible peut repasser sous son objectif, ou l'atteindre). Lève si c'est refusé. */
+  async function transferLeg(id: string, fromId: string, to: ComboTransferTarget) {
+    const c = list.value.find((x) => x.id === id);
+    if (!c) return;
+    const legs = transferComboLeg(c, fromId, to);
+    const next = { ...c, legs };
+    refreshStatus(next);
+    await persistLegs(id, legs, next.status);
+  }
+
   /** 🏁 CLÔTURER à l'objectif, à la demande du joueur (v0.964).
    *
    *  ⚠️ LE STATUT ET LA MARQUE PARTENT DANS LA MÊME ÉCRITURE : séparés, une coupure
@@ -274,6 +290,7 @@ export const useComboStore = defineStore('combo', () => {
     addSet,
     removeSet,
     updateSet,
+    transferLeg,
     setWeight,
     setStatus,
     finish,
