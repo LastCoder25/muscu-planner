@@ -603,15 +603,30 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       { id: 'rations' as const, def: SUPPLIES.rations, n: 2, on: true, why: null },
       { id: 'lanterne' as const, def: SUPPLIES.lanterne, n: 1, on: false, why: 'pas une faille' },
     ];
+    // Replié par défaut : l'en-tête dit ce qui est emporté, aucune tuile.
+    let folded = '';
     expect(
-      await mountIt(SupplyPicker, { rows }, undefined, undefined, '/', (h) => (out = h)),
+      await mountIt(SupplyPicker, { rows }, undefined, undefined, '/', (h) => (folded = h)),
+    ).toBeNull();
+    expect(folded).toContain('1 emporté');
+    expect(folded).toContain('aria-expanded="false"');
+    expect(folded).not.toContain('class="sup on"');
+    expect(
+      await mountIt(
+        SupplyPicker,
+        { rows, startOpen: true },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
     ).toBeNull();
     expect(out.match(/class="sup on"/g)?.length).toBe(1);
     expect(out).toContain('Inutiles ici');
     expect(out).toContain('pas une faille');
     let vide = '';
     await mountIt(SupplyPicker, { rows: [] }, undefined, undefined, '/', (h) => (vide = h));
-    expect(vide).toContain('Aucun consommable en stock');
+    expect(vide).toContain('aucun en stock');
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
