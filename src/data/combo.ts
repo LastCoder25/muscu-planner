@@ -74,6 +74,18 @@ export function comboSlot(key: string): ComboSlot | undefined {
   return COMBO_SLOTS.find((s) => s.key === key);
 }
 
+// Emplacements INTERCHANGEABLES quand on change d'exo en cours de Défi 360. Par défaut un
+// exo ne se remplace que dans son groupe ; seules les JAMBES sont ouvertes entre elles
+// (squats sautés → soulevé de terre roumain, demandé par l'utilisateur) : Squat et
+// Charnière travaillent le même bas du corps, et y basculer ne vide pas un groupe du haut.
+// Le volume change quand même de muscle (quadriceps → ischios) : l'écran le dit.
+const SWAP_FAMILIES: string[][] = [['squat', 'hinge']];
+
+/** Les emplacements vers lesquels un exo de `slotKey` peut basculer (lui compris). */
+export function swapSlotsOf(slotKey: string): string[] {
+  return SWAP_FAMILIES.find((f) => f.includes(slotKey)) ?? [slotKey];
+}
+
 // Familles de MOUVEMENT : mêmes gestes déclinés en versions différentes (assistée,
 // élastique, sur les genoux, à la barre / aux haltères / au poids du corps…).
 // Deux exos d'une même famille = le même mouvement → redondants : on ne les propose
