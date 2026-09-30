@@ -2830,13 +2830,14 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(out).not.toContain('mini free go');
     expect(out).toMatch(/Place 5 libre/);
   }, 30_000);
-  it('le sélecteur propose le milicien et les champions, et un toucher envoie', async () => {
+  it('le sélecteur coche plusieurs renforts, annonce la tenue avec eux, et les envoie ensemble', async () => {
     const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
     const { id, map } = await held();
     const poi = map.pois.find((p) => p.id === id)!;
     const champs: string[] = [];
     const moved: string[] = [];
-    let mil = 0;
+    const mil: number[] = [];
+    let sent = 0;
     let out = '';
     expect(
       await mountIt(
@@ -2860,9 +2861,12 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
             },
           ],
           busy: false,
+          sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
+          selHold: { pct: 78, late: 1 },
           hold: { pct: 62, mil: 4, champ: { [ROW.adventurers[0].id]: 11 }, trans: { a2: -3 } },
-          onChampion: (a: string) => champs.push(a),
-          onMilitia: () => mil++,
+          onToggleChamp: (a: string) => champs.push(a),
+          onMilitia: (n: number) => mil.push(n),
+          onSend: () => sent++,
           onTransfer: (from: string, id: string) => moved.push(from + ':' + id),
         },
         ROW,
@@ -2870,15 +2874,23 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
         '/',
         (h) => (out = h),
         (host) => {
-          host.querySelector<HTMLElement>('.qr-mil')?.click();
+          host.querySelectorAll<HTMLElement>('.qr-step-b')[1]?.click();
           host.querySelector<HTMLElement>('.qr-pick button')?.click();
           host.querySelectorAll<HTMLElement>('.qr-mem')[1]?.click();
+          host.querySelector<HTMLElement>('.qr-go')?.click();
         },
       ),
     ).toBeNull();
     expect(out).toContain('Renfort');
     expect(out).toContain('2 à la base');
-    expect(mil).toBe(1);
+    expect(mil).toEqual([2]);
+    expect(sent).toBe(1);
+    // ➕ La tenue AVEC la sélection, avant d'envoyer.
+    expect(out).toContain('Avec ces renforts');
+    expect(out).toContain('78 %');
+    expect(out).toContain('(+16)');
+    expect(out).toContain('1 arrivera trop tard');
+    expect(out).toContain('Envoyer 2 renforts');
     expect(champs).toEqual([ROW.adventurers[0].id]);
     // ⇄ Depuis un autre lieu : le lieu, ses membres, et un toucher lance le transfert.
     expect(out).toContain('Depuis un autre lieu');

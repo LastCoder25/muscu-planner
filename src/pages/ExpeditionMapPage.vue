@@ -417,11 +417,17 @@
       :militia-min="quickMilitiaMin"
       :sources="quickSources"
       :hold="quickHold"
+      :sel="quickSel"
+      :sel-hold="quickSelHold"
       :busy="ctlBusy"
       @close="quickId = null"
-      @champion="quickChampion"
-      @militia="quickMilitia"
-      @transfer="quickTransfer"
+      @toggle-champ="(id: string) => (quickSel = toggleReinfChamp(quickSel, id, quickFree))"
+      @militia="(n: number) => (quickSel = setReinfMilitia(quickSel, n, milHome, quickFree))"
+      @transfer="
+        (from: string, id: string) =>
+          (quickSel = toggleReinfTransfer(quickSel, from, id, quickFree))
+      "
+      @send="quickSend"
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
@@ -1160,6 +1166,16 @@ import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
+import {
+  emptyReinfSelection,
+  reinfCanAdd,
+  reinfCount,
+  setReinfMilitia,
+  toggleReinfChamp,
+  toggleReinfTransfer,
+  transfersByOrigin,
+  type ReinfSelection,
+} from '@/lib/reinforceSelection';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
 import {
@@ -2891,34 +2907,80 @@ const quickPoi = computed(
 const quickMilitiaMin = computed(() =>
   quickPoi.value ? caravanLegMin(quickPoi.value, [], 0, travelMult.value) : 0,
 );
-/** 🎯 Le renfort direct annonce la tenue du point À L'ATTAQUE, et ce que chaque renfort y
- *  ajouterait (son arrivée comprise : un renfort trop lent n'ajoute rien). */
+/** ➕ La sélection du renfort groupé (`reinforceSelection`), remise à zéro à chaque lieu. */
+const quickSel = ref<ReinfSelection>(emptyReinfSelection());
+watch(quickId, () => (quickSel.value = emptyReinfSelection()));
+const quickFree = computed(() => ({
+  champ: controlFreeSeats(quickPoi.value?.control),
+  total: militiaFreeSeats(quickPoi.value?.control),
+}));
+/** Les arrivées d'une sélection, comme au départ réel : les champions de la base partent
+ *  ensemble (au pas du plus lent, `partyLegMin`), ceux d'un même lieu aussi (`legFromSpot`,
+ *  la règle du transfert), les miliciens à leur pas. */
+function quickExtra(p: Poi, sel: ReinfSelection) {
+  const t = coarseNow.value;
+  const at = (min: number) => t + min * 60_000;
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  const legOf = (q: Poi, escort: Adventurer[]) =>
+    partyLegMin(q, escort, {
+      hero: false,
+      travelMult: travelMult.value,
+      gearSpeed: advGearRoles(escort, char.advGearStock).speed,
+    });
+  const out: { id: string; at: number }[] = [];
+  const escort = sel.champs.flatMap((id) => byId.get(id) ?? []);
+  const leg = escort.length ? legOf(p, escort) : 0;
+  for (const a of escort) out.push({ id: a.id, at: at(leg) });
+  for (let i = 0; i < sel.militia; i++)
+    out.push({ id: `${MILITIA_PREFIX}new${i}`, at: at(quickMilitiaMin.value) });
+  for (const [fromId, ids] of transfersByOrigin(sel)) {
+    const from = char.row?.expedition_map?.pois.find((q) => q.id === fromId);
+    if (!from) continue;
+    const champs = ids.flatMap((id) => byId.get(id) ?? []);
+    const cLeg = champs.length ? legFromSpot(p, from, (q) => legOf(q, champs)) : 0;
+    const mLeg = legFromSpot(p, from, (q) => caravanLegMin(q, [], 0, travelMult.value));
+    for (const id of ids) out.push({ id, at: at(isMilitiaId(id) ? mLeg : cLeg) });
+  }
+  return out;
+}
+/** 🎯 Le renfort direct annonce la tenue du point À L'ATTAQUE, et ce que chaque renfort
+ *  CHANGE à la sélection en cours (arrivée comprise : un renfort trop lent n'ajoute rien) —
+ *  le langage de `AdvPickTile` : coché, ce qu'on perdrait sans lui ; non coché, ce qu'il
+ *  ajouterait. ⚠️ Une simulation par candidat, sur l'horloge GROSSIÈRE. */
 const quickHold = computed(() => {
   const p = quickPoi.value;
   const base = defenseOf(p);
   if (!p || !base) return null;
-  const t = coarseNow.value;
-  const gainOf = (id: string, min: number) =>
-    (defenseOf(p, [{ id, at: t + min * 60_000 }])?.pct ?? 0) - base.pct;
+  const sel = quickSel.value;
+  const cur = defenseOf(p, quickExtra(p, sel))?.pct ?? base.pct;
+  const pctWith = (next: ReinfSelection) => defenseOf(p, quickExtra(p, next))?.pct ?? cur;
+  const free = quickFree.value;
   const champ: Record<string, number> = {};
-  for (const a of freeSorted.value)
-    champ[a.id] = gainOf(
-      a.id,
-      partyLegMin(p, [a], {
-        hero: false,
-        travelMult: travelMult.value,
-        gearSpeed: advGearRoles([a], char.advGearStock).speed,
-      }),
-    );
+  for (const a of freeSorted.value) {
+    const on = sel.champs.includes(a.id);
+    if (!on && !reinfCanAdd(sel, 'champ', free)) continue;
+    const other = pctWith(toggleReinfChamp(sel, a.id, free));
+    champ[a.id] = on ? cur - other : other - cur;
+  }
   const trans: Record<string, number> = {};
-  for (const s of quickSources.value) for (const m of s.members) trans[m.id] = gainOf(m.id, m.min);
-  return {
-    pct: base.pct,
-    vsArmy: base.vsArmy,
-    mil: gainOf(`${MILITIA_PREFIX}new0`, quickMilitiaMin.value),
-    champ,
-    trans,
-  };
+  for (const src of quickSources.value)
+    for (const m of src.members) {
+      const on = sel.transfers.some((t) => t.id === m.id);
+      if (!on && !reinfCanAdd(sel, isMilitiaId(m.id) ? 'mil' : 'champ', free)) continue;
+      const other = pctWith(toggleReinfTransfer(sel, src.fromId, m.id, free));
+      trans[m.id] = on ? cur - other : other - cur;
+    }
+  const mil = reinfCanAdd(sel, 'mil', free)
+    ? pctWith({ ...sel, militia: sel.militia + 1 }) - cur
+    : 0;
+  return { pct: base.pct, vsArmy: base.vsArmy, mil, champ, trans };
+});
+/** La tenue AVEC toute la sélection. */
+const quickSelHold = computed(() => {
+  const p = quickPoi.value;
+  if (!p || !reinfCount(quickSel.value)) return null;
+  const d = defenseOf(p, quickExtra(p, quickSel.value));
+  return d ? { pct: d.pct, late: d.late } : null;
 });
 /** ⇄ Les membres des AUTRES points tenus qui peuvent venir, avec leur trajet depuis leur
  *  point — la règle et le trajet du store (`transferBlocker`, `legFromSpot`). */
@@ -2968,36 +3030,6 @@ const quickSources = computed(() => {
       : [];
   });
 });
-async function quickTransfer(fromId: string, memberId: string) {
-  const uid = auth.user?.id;
-  const to = quickPoi.value;
-  const src = quickSources.value.find((s) => s.fromId === fromId);
-  const m = src?.members.find((x) => x.id === memberId);
-  if (!uid || !to || !src || !m || ctlBusy.value) return;
-  ctlBusy.value = true;
-  try {
-    const why = await char.transferControlGarrison(
-      uid,
-      fromId,
-      to.id,
-      [memberId],
-      Date.now(),
-      heroLevel.value,
-    );
-    if (why) {
-      $q.notify({ type: 'warning', message: `Transfert impossible : ${why}` });
-      return;
-    }
-    const who = m.adv ? m.adv.name : 'Un milicien';
-    $q.notify({
-      type: 'positive',
-      message: `⇄ ${who} quitte ${src.label} — arrivée dans ${formatDurationMin(m.min)}`,
-    });
-    quickId.value = null;
-  } finally {
-    ctlBusy.value = false;
-  }
-}
 /**
  * 🔙 FAIRE DEMI-TOUR (demandé : « en cliquant dessus », puis « plus design avec le détail »).
  * Toucher une troupe ouvre `RecallSheet` : le chemin dessiné, qui rentre, et les deux
@@ -3198,46 +3230,49 @@ async function confirmRecall() {
     recallBusy.value = false;
   }
 }
-async function quickChampion(advId: string) {
+/** 🚀 Envoie toute la sélection : les champions de la base, les miliciens, puis un envoi par
+ *  lieu d'origine — les actions du store, qui refusent ce qui ne passe pas. Au premier refus
+ *  on s'arrête et on dit ce qui est parti. */
+async function quickSend() {
   const uid = auth.user?.id;
   const p = quickPoi.value;
-  const a = char.advList.find((x) => x.id === advId);
-  if (!uid || !p || !a || ctlBusy.value) return;
+  const sel = quickSel.value;
+  if (!uid || !p || ctlBusy.value || !reinfCount(sel)) return;
   ctlBusy.value = true;
-  try {
-    const why = await char.reinforceControlPoint(uid, p.id, [advId], Date.now());
-    if (why) {
-      $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
-      return;
-    }
-    const min = partyLegMin(p, [a], {
-      hero: false,
-      travelMult: travelMult.value,
-      gearSpeed: advGearRoles([a], char.advGearStock).speed,
-    });
+  let sent = 0;
+  const fail = (why: string) =>
     $q.notify({
-      type: 'positive',
-      message: `🧭 ${a.name} en route — arrivée dans ${formatDurationMin(min)}`,
+      type: 'warning',
+      message: `Renfort impossible : ${why}${sent ? ` (${sent} déjà en route)` : ''}`,
     });
-    quickId.value = null;
-  } finally {
-    ctlBusy.value = false;
-  }
-}
-async function quickMilitia() {
-  const uid = auth.user?.id;
-  const p = quickPoi.value;
-  if (!uid || !p || ctlBusy.value) return;
-  ctlBusy.value = true;
   try {
-    const why = await char.sendMilitiaToControl(uid, p.id, 1, Date.now());
-    if (why) {
-      $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
-      return;
+    if (sel.champs.length) {
+      const why = await char.reinforceControlPoint(uid, p.id, sel.champs, Date.now());
+      if (why) return fail(why);
+      sent += sel.champs.length;
+    }
+    if (sel.militia > 0) {
+      const why = await char.sendMilitiaToControl(uid, p.id, sel.militia, Date.now());
+      if (why) return fail(why);
+      sent += sel.militia;
+    }
+    for (const [fromId, ids] of transfersByOrigin(sel)) {
+      const why = await char.transferControlGarrison(
+        uid,
+        fromId,
+        p.id,
+        ids,
+        Date.now(),
+        heroLevel.value,
+      );
+      if (why) return fail(why);
+      sent += ids.length;
     }
     $q.notify({
       type: 'positive',
-      message: `🛡️ Un milicien en route — arrivée dans ${formatDurationMin(quickMilitiaMin.value)}`,
+      message: `➕ ${sent} renfort${sent > 1 ? 's' : ''} en route${
+        quickSelHold.value ? ` — tenue prévue ${quickSelHold.value.pct} %` : ''
+      }`,
     });
     quickId.value = null;
   } finally {

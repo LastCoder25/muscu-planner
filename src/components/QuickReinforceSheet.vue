@@ -1,9 +1,12 @@
 <template>
   <!-- ➕ LE RENFORT DIRECT (2026-09-29, demandé : « cliquer sur un slot de garnison libre et
        directement envoyer un renfort, sans aller dans la gestion du lieu »). Ouvert depuis
-       une case libre de la liste des places fortes. UN TOUCHER ENVOIE : une case = un
-       renfort. ⚠️ Aucune règle ici — la page passe qui peut partir et le store refuse ce qui
-       ne passe pas (`reinforceControlPoint`, `sendMilitiaToControl`), comme la fiche du lieu. -->
+       une case libre (liste des places fortes ou fiche du lieu).
+       ➕ GROUPÉ (demandé : « sélectionner plusieurs renforts d'un coup en voyant le % de
+       défense qu'ils donnent ») : on coche champions, miliciens et membres d'autres lieux,
+       la tenue AVEC la sélection se lit avant d'envoyer, puis un seul bouton envoie tout.
+       ⚠️ Aucune règle ici — les places vivent dans `reinforceSelection`, la tenue dans la
+       page, et le store refuse ce qui ne passe pas. -->
   <q-dialog
     :model-value="!!poi"
     position="bottom"
@@ -18,43 +21,59 @@
         <button type="button" class="qr-x" aria-label="Fermer" @click="emit('close')">✕</button>
       </div>
       <p class="qr-sub">
-        {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion ·
-        {{ milFree }} au total · un toucher l’envoie
+        {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion · {{ milFree }} au total
+        · coche tes renforts puis envoie-les ensemble
       </p>
-      <!-- 🛡️ La tenue À L'ATTAQUE, et ce que chaque renfort y ajoute (arrivée comprise). -->
+      <!-- 🛡️ La tenue À L'ATTAQUE, et ce que la sélection y change (arrivées comprises). -->
       <p v-if="hold" class="qr-hold">
         🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b>
         {{ hold.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
       </p>
-      <!-- 🛡️ Le milicien d'abord : c'est le renfort qu'on a le plus souvent sous la main, et il
-           ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
-      <button
-        v-if="milFree > 0 && milHome > 0"
-        type="button"
-        class="qr-mil"
-        :disabled="busy"
-        @click="emit('militia')"
-      >
+      <!-- 🛡️ Les miliciens d'abord : c'est le renfort qu'on a le plus souvent sous la main, et
+           il ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
+      <div v-if="milFree > 0 && milHome > 0" class="qr-mil">
         <span class="qr-mil-emo"><MilitiaPortrait /></span>
         <span class="qr-mil-main">
-          <span class="qr-mil-name">Un {{ MILITIA_NAME.toLowerCase() }}</span>
+          <span class="qr-mil-name">{{ MILITIA_NAME }}s</span>
           <span class="qr-mil-sub"
             >{{ milHome }} à la base · 🧭 {{ formatDurationMin(militiaMin)
-            }}<template v-if="hold"> · 🎯 {{ sign(hold.mil) }} %</template></span
+            }}<template v-if="hold && canMil"> · 🎯 {{ sign(hold.mil) }} % le suivant</template></span
           >
         </span>
-      </button>
+        <span class="qr-step">
+          <button
+            type="button"
+            class="qr-step-b"
+            aria-label="Un milicien de moins"
+            :disabled="busy || sel.militia <= 0"
+            @click="emit('militia', sel.militia - 1)"
+          >
+            −
+          </button>
+          <b class="qr-step-n">{{ sel.militia }}</b>
+          <button
+            type="button"
+            class="qr-step-b"
+            aria-label="Un milicien de plus"
+            :disabled="busy || !canMil || sel.militia >= milHome"
+            @click="emit('militia', sel.militia + 1)"
+          >
+            ＋
+          </button>
+        </span>
+      </div>
       <template v-if="champFree > 0">
-        <p class="qr-cap">🧑 Un champion</p>
+        <p class="qr-cap">🧑 Des champions</p>
         <div v-if="champs.length" class="qr-pick">
           <AdvPickTile
             v-for="a in champs"
             :key="a.id"
             :adv="a"
-            :on="false"
+            :on="sel.champs.includes(a.id)"
             :gain="hold?.champ[a.id] ?? null"
-            :reason="busy ? '…' : null"
-            @toggle="emit('champion', a.id)"
+            :gain-title="gainTitle(sel.champs.includes(a.id))"
+            :reason="busy ? '…' : !sel.champs.includes(a.id) && !canChamp ? 'plus de place' : null"
+            @toggle="emit('toggleChamp', a.id)"
           />
         </div>
         <p v-else class="qr-none">Aucun champion disponible pour l’instant.</p>
@@ -63,8 +82,8 @@
         Plus de place de champion ici : seuls des miliciens peuvent encore la compléter.
       </p>
       <!-- ⇄ DEPUIS UN AUTRE LIEU (demandé : « faire venir un champion ou milicien d'un autre
-           lieu fixe »). Seuls ceux dont le transfert passe (`transferSourcesFor`) ; un toucher
-           le fait partir directement de son point, sans repasser par la base. -->
+           lieu fixe »). Seuls ceux dont le transfert passe (`transferSourcesFor`) ; ils partent
+           directement de leur point, sans repasser par la base. -->
       <template v-if="sources.length">
         <p class="qr-cap">⇄ Depuis un autre lieu</p>
         <div v-for="s in sources" :key="s.fromId" class="qr-src">
@@ -75,7 +94,9 @@
               :key="m.id"
               type="button"
               class="qr-mem"
-              :disabled="busy"
+              :class="{ on: picked(m.id) }"
+              :aria-pressed="picked(m.id)"
+              :disabled="busy || (!picked(m.id) && !(m.adv ? canChamp : canMil))"
               @click="emit('transfer', s.fromId, m.id)"
             >
               <span class="qr-mem-emo"
@@ -97,11 +118,27 @@
           </div>
         </div>
       </template>
+      <!-- 🚀 L'ENVOI : la tenue AVEC la sélection, puis un seul bouton pour tout faire partir. -->
+      <div v-if="count > 0" class="qr-send">
+        <p v-if="hold && selHold" class="qr-with">
+          🛡️ Avec ces renforts : <b>{{ selHold.pct }} %</b>
+          <span class="qr-delta" :class="{ up: selHold.pct > hold.pct }"
+            >({{ sign(selHold.pct - hold.pct) }})</span
+          >
+          <span v-if="selHold.late > 0" class="qr-late">
+            · {{ selHold.late }} arrivera{{ selHold.late > 1 ? 'ont' : '' }} trop tard</span
+          >
+        </p>
+        <button type="button" class="qr-go" :disabled="busy" @click="emit('send')">
+          ➕ Envoyer {{ count }} renfort{{ count > 1 ? 's' : '' }}
+        </button>
+      </div>
     </div>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
@@ -110,8 +147,9 @@ import type { Poi } from '@/lib/expedition';
 import { MILITIA_NAME } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { formatDurationMin } from '@/lib/duration';
+import { reinfCanAdd, reinfCount, type ReinfSelection } from '@/lib/reinforceSelection';
 
-defineProps<{
+const props = defineProps<{
   poi: Poi | null;
   /** Les champions disponibles, déjà triés (le même ordre que la fiche du lieu). */
   champs: Adventurer[];
@@ -128,7 +166,10 @@ defineProps<{
     members: { id: string; adv: Adventurer | null; min: number }[];
   }[];
   busy: boolean;
-  /** 🎯 La tenue à l'attaque (%) et ce que chaque renfort y ajoute, en points. */
+  /** La sélection en cours (tenue par la page). */
+  sel: ReinfSelection;
+  /** 🎯 La tenue à l'attaque (%) et ce que chaque renfort CHANGE à la sélection, en points :
+   *  coché, ce qu'on perdrait sans lui ; non coché, ce qu'on gagnerait en l'ajoutant. */
   hold: {
     pct: number;
     /** Jugée contre l'armée en approche (visible), pas contre le pire cas. */
@@ -137,14 +178,26 @@ defineProps<{
     champ: Record<string, number>;
     trans: Record<string, number>;
   } | null;
+  /** La tenue AVEC toute la sélection, et combien arriveraient après l'attaque. */
+  selHold: { pct: number; late: number } | null;
 }>();
 /** « +12 », « −3 », « 0 » : un écart se lit avec son signe. */
 const sign = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
+const free = computed(() => ({ champ: props.champFree, total: props.milFree }));
+const canChamp = computed(() => reinfCanAdd(props.sel, 'champ', free.value));
+const canMil = computed(() => reinfCanAdd(props.sel, 'mil', free.value));
+const count = computed(() => reinfCount(props.sel));
+const picked = (id: string) => props.sel.transfers.some((t) => t.id === id);
+const gainTitle = (on: boolean) =>
+  on
+    ? 'Ce que la défense perdrait sans lui, avec le reste de ta sélection'
+    : 'Ce qu’il ajouterait à la défense, en plus de ta sélection';
 const emit = defineEmits<{
   close: [];
-  champion: [string];
-  militia: [];
+  toggleChamp: [string];
+  militia: [number];
   transfer: [string, string];
+  send: [];
 }>();
 </script>
 
@@ -282,7 +335,7 @@ const emit = defineEmits<{
   color: var(--text);
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 .qr-mil:disabled {
   opacity: 0.5;
@@ -301,5 +354,77 @@ const emit = defineEmits<{
 .qr-mil-sub {
   color: var(--dim);
   font-size: 12px;
+}
+.qr-mil-main {
+  flex: 1;
+  min-width: 0;
+}
+.qr-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.qr-step-b {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+}
+.qr-step-b:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.qr-step-n {
+  min-width: 22px;
+  text-align: center;
+  font-family: Oswald, sans-serif;
+  font-size: 18px;
+}
+.qr-mem.on {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2, var(--bg)));
+}
+/* L'envoi colle au bas de la feuille : la tenue avec la sélection reste sous les yeux
+   pendant qu'on coche. */
+.qr-send {
+  position: sticky;
+  bottom: -20px;
+  margin: 12px -12px -20px;
+  padding: 10px 12px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.qr-with {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.qr-delta {
+  margin-left: 4px;
+  color: var(--dim);
+}
+.qr-delta.up {
+  color: var(--d1, #7bc86c);
+}
+.qr-late {
+  color: var(--d3, #ffb23f);
+}
+.qr-go {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #15120e;
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+.qr-go:disabled {
+  opacity: 0.5;
 }
 </style>
