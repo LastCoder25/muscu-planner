@@ -109,6 +109,17 @@
               <span v-else-if="s.kind === 'route'" class="mini route" title="Renfort en route"
                 >🧭</span
               >
+              <!-- ⚔️ En SORTIE : son portrait, estompé, marqué ⚔️ — sa place l'attend, elle
+                   n'est pas libre. -->
+              <span
+                v-else-if="s.kind === 'away'"
+                class="mini away"
+                :title="`${s.adv.name} — en sortie, revient sur ce point`"
+                ><ChampionPortrait :champion-id="s.adv.championId">{{
+                  advTitle(s.adv)?.emoji ?? '🧑'
+                }}</ChampionPortrait
+                ><i class="away-mark" aria-hidden="true">⚔️</i></span
+              >
               <!-- ➕ Une place libre ENVOIE un renfort, sans passer par la gestion du lieu
                    (demandé). Grisée si personne ne peut partir (ni champion ni milicien). -->
               <button
@@ -221,14 +232,16 @@ type Slot =
   | { kind: 'adv'; adv: Adventurer }
   | { kind: 'mil' }
   | { kind: 'route' }
+  | { kind: 'away'; adv: Adventurer }
   | { kind: 'free' };
-/** Les cases de la ligne : champions, miliciens, renforts en route, puis places libres,
- *  jusqu'à `seats`. */
+/** Les cases de la ligne : champions, miliciens, renforts en route, champions en sortie (leur
+ *  place est gardée), puis places libres, jusqu'à `seats`. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
   const filled: Slot[] = [
     ...advsOf(r.garrison).map((adv) => ({ kind: 'adv' as const, adv })),
     ...milOf(r.garrison).map(() => ({ kind: 'mil' as const })),
     ...r.reinforcing.map(() => ({ kind: 'route' as const })),
+    ...advsOf(r.away).map((adv) => ({ kind: 'away' as const, adv })),
   ];
   const free = Math.max(0, r.seats - filled.length);
   return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
@@ -478,6 +491,24 @@ const isFull = (r: ControlRosterRow) =>
   font-size: 14px;
   opacity: 0.75;
   border-style: dashed;
+}
+/* ⚔️ En sortie : le portrait estompé, contour pointillé à l'accent (place PRISE), et le ⚔️ en
+   coin pour qu'on ne le lise pas comme un champion présent. */
+.mini.away {
+  position: relative;
+  border: 1px dashed var(--accent);
+}
+.mini.away :deep(.cp),
+.mini.away > :first-child {
+  opacity: 0.45;
+}
+.away-mark {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
 }
 .cps-chev {
   color: var(--dim);

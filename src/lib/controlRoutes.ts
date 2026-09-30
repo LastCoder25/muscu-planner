@@ -20,6 +20,7 @@ import { distNormAt, type ControlState, type ExpeditionMap, type Poi } from './e
 import { isMilitiaId, MILITIA } from './militia';
 import {
   controlFreeSeats,
+  freeAway,
   militiaFreeSeats,
   reinforceControl,
   releaseFromControl,
@@ -278,7 +279,8 @@ export function championsAbleToGo(
 
 /**
  * 🏠 Une sortie RENTRE à son point à `at` : ceux qui ont encore une place y reprennent leur
- * poste (ils rejoignent la garnison comme un renfort arrivé — une attaque déjà due se résout
+ * poste — la leur leur a été gardée pendant la sortie (`away`) — (ils rejoignent la garnison
+ * comme un renfort arrivé — une attaque déjà due se résout
  * d'abord sans eux) ; les autres (point perdu entre-temps, ou places reprises) rentrent à la
  * base. Rend la carte et la répartition.
  */
@@ -288,9 +290,44 @@ export function rejoinHome(
   ids: readonly string[],
   at: number,
 ): { map: ExpeditionMap; back: string[]; out: string[] } {
-  const home = held(map, homeId);
-  if (!home || !ids.length) return { map, back: [], out: [...ids] };
-  const back = ids.slice(0, controlFreeSeats(home.control));
+  if (!held(map, homeId) || !ids.length) return { map, back: [], out: [...ids] };
+  // ⚔️🏰 Leur place leur était GARDÉE (`away`) : on la leur rend avant de compter les places
+  // libres, sinon ils se la disputeraient avec eux-mêmes.
+  const m = freeAway(map, homeId, ids);
+  const back = ids.slice(0, controlFreeSeats(held(m, homeId)!.control));
   const out = ids.slice(back.length);
-  return { map: back.length ? reinforceControl(map, homeId, back, at) : map, back, out };
+  return { map: back.length ? reinforceControl(m, homeId, back, at) : m, back, out };
+}
+
+/**
+ * ⚔️🏰 QUI EST VRAIMENT DEHORS POUR REVENIR SUR SON POINT : la règle de `pruneAway`. Un
+ * champion garde sa place sur `pointId` tant qu'un voyage EN COURS parti de ce point
+ * (`homeId`) le ramène — il en est membre (`crew`, sinon l'escorte du rapport) et son
+ * `busyUntil` est le retour de CE voyage — ou qu'un groupe d'attaque combinée parti de ce
+ * point l'a emmené (`state: 'gone'`) sans que le voyage soit encore créé. Un champion posté
+ * ailleurs (assaut pris) n'y revient pas. ⚠️ Types STRUCTURELS : aucune dépendance au store.
+ */
+export function sortieAwayKeeper(
+  voyages: readonly {
+    homeId?: string;
+    returnAt: number;
+    crew?: string[];
+    outcome: { party?: { escort: string[] } };
+  }[],
+  wings: readonly { originId: string | null; state: string; gone?: string[] }[],
+  advs: readonly { id: string; busyUntil?: number; posted?: string }[],
+): (pointId: string, advId: string) => boolean {
+  const byId = new Map(advs.map((a) => [a.id, a]));
+  return (pointId, advId) => {
+    const a = byId.get(advId);
+    if (!a || a.posted) return false;
+    if (wings.some((w) => w.state === 'gone' && w.originId === pointId && w.gone?.includes(advId)))
+      return true;
+    return voyages.some(
+      (v) =>
+        v.homeId === pointId &&
+        (a.busyUntil ?? 0) === v.returnAt &&
+        (v.crew ?? v.outcome.party?.escort ?? []).includes(advId),
+    );
+  };
 }

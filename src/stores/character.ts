@@ -332,6 +332,9 @@ import {
   reinforceBlocker,
   reinforceControl,
   releaseFromControl,
+  sortieLeaves,
+  freeAway,
+  pruneAway,
   sendHomeFromControl,
   settleReturns,
   settleReinforcements,
@@ -349,6 +352,7 @@ import {
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
   rejoinHome,
+  sortieAwayKeeper,
   sortieBlocker,
   swapBlocker,
   swapGarrison,
@@ -2158,7 +2162,11 @@ export const useCharacterStore = defineStore('character', () => {
   ): number {
     const defenses = base?.defenses ?? [];
     return detectRadius(
-      baseLeadMs(scoutLevel(defenses), raidIntervalMs(knownActiveDays7), controlDetectBoost(map, Date.now())),
+      baseLeadMs(
+        scoutLevel(defenses),
+        raidIntervalMs(knownActiveDays7),
+        controlDetectBoost(map, Date.now()),
+      ),
     );
   }
   /** ⚔️🗼 Les voyages dont l'issue est tirée (groupes, héros) : les chocs contre les armées en
@@ -3487,11 +3495,10 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
     const map0 = targetTaken(cur.expedition_map, poi);
     // 🏰 Une sortie quitte la garnison de son point (ce qui est produit reste en réserve) :
-    // le point produit moins et se défend moins bien tant qu'elle est dehors.
+    // le point produit moins et se défend moins bien tant qu'elle est dehors — mais sa place
+    // lui est GARDÉE jusqu'à son retour (`sortieLeaves`).
     const map =
-      origin && map0
-        ? releaseFromControl(map0, origin.id, opts.escortIds, now, opts.playerLevel)
-        : map0;
+      origin && map0 ? sortieLeaves(map0, origin.id, opts.escortIds, now, opts.playerLevel) : map0;
     await persist(userId, {
       expedition_map: map,
       ...(supplies.length ? { supplies: stockAfter } : {}),
@@ -3675,7 +3682,8 @@ export const useCharacterStore = defineStore('character', () => {
     const legOf = (p: Poi) =>
       partyLegMin(p, back, {
         hero,
-        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, Date.now()),
+        travelMult:
+          travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, Date.now()),
         gearSpeed: advGearRoles(back, road.advGear).speed,
         supplies,
       });
@@ -3874,7 +3882,7 @@ export const useCharacterStore = defineStore('character', () => {
             : x,
         );
         if (w.originId && map && d.members.length) {
-          map = releaseFromControl(map, w.originId, d.members, w.departAt, a.playerLevel);
+          map = sortieLeaves(map, w.originId, d.members, w.departAt, a.playerLevel);
           advs = advs.map((x) => (went.has(x.id) ? { ...x, posted: undefined } : x));
         }
         const gone = d.members.length > 0 || d.hero;
@@ -4068,7 +4076,15 @@ export const useCharacterStore = defineStore('character', () => {
     activeDays7: number,
   ): Promise<ExpeditionMessage[]> {
     const cur = row.value;
-    if (!cur || !partyList.value.length) return [];
+    if (!cur) return [];
+    if (!partyList.value.length) {
+      // ⚔️🏰 Plus aucun groupe dehors : une place encore gardée n'a plus personne à attendre
+      // (voyage du héros rentré, ancienne sortie). On ne l'écrit que si elle change.
+      const m = cur.expedition_map;
+      const pruned = m && pruneAway(m, awayKeeper(cur, [], advList.value));
+      if (pruned && pruned !== m) await persist(userId, { expedition_map: pruned });
+      return [];
+    }
     const box = boxWith(cur, [], MESSAGES_CAP);
     const clock = settleClock(cur, now);
     const t0 = settleParties(partyList.value, box, clock, MESSAGES_CAP);
@@ -4131,11 +4147,14 @@ export const useCharacterStore = defineStore('character', () => {
     // 🗺️ Un lieu qu'une équipe n'a pas terrassé revient sur la carte DÈS LE RAPPORT, pas au
     // retour en ville — sauf si un autre voyage le vise encore (`restoreUnvanquished`).
     const mapBase = ctl?.map ?? cur.expedition_map;
-    const mapOut = restoreUnvanquished(
+    const mapRestored = restoreUnvanquished(
       mapBase,
       [...partyList.value, ...(cur.expedition ? [cur.expedition] : [])],
       clock,
     );
+    // ⚔️🏰 Une place gardée n'appartient qu'à qui revient VRAIMENT sur son point : les blessés
+    // renvoyés à la base (`splitSorties`) ou postés ailleurs par la mission la libèrent.
+    const mapOut = mapRestored && pruneAway(mapRestored, awayKeeper(cur, t.parties, advsBack));
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
@@ -4149,6 +4168,20 @@ export const useCharacterStore = defineStore('character', () => {
     });
     x.play();
     return t.fresh;
+  }
+
+  /** ⚔️🏰 La règle des places gardées (`sortieAwayKeeper`) sur l'état courant : les voyages
+   *  (groupes + expédition du héros) et les groupes d'attaque combinée déjà partis. */
+  function awayKeeper(
+    cur: CharacterRow,
+    parties: readonly ActiveParty[],
+    advs: readonly Adventurer[],
+  ): (pointId: string, advId: string) => boolean {
+    return sortieAwayKeeper(
+      [...parties, ...(cur.expedition ? [cur.expedition] : [])],
+      attackList.value.flatMap((a) => a.wings),
+      advs,
+    );
   }
 
   /**
@@ -4214,7 +4247,8 @@ export const useCharacterStore = defineStore('character', () => {
     return (
       partyLegMin(p.poi, esc, {
         hero: false,
-        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, Date.now()),
+        travelMult:
+          travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, Date.now()),
         gearSpeed: advGearRoles(esc, escortKitOf(cur).advGear).speed,
       }) * 60_000
     );
@@ -4281,8 +4315,14 @@ export const useCharacterStore = defineStore('character', () => {
       );
       if (!mine.length) continue;
       any = true;
+      // ⚔️🏰 Tous rendent la place qu'on leur gardait : ceux qui la reprennent (`rejoinHome`)
+      // comme ceux qui partent à la base (blessés).
       const r = rejoinHome(
-        map,
+        freeAway(
+          map,
+          p.homeId,
+          mine.map((a) => a.id),
+        ),
         p.homeId,
         mine.filter((a) => !sick.has(a.id)).map((a) => a.id),
         p.returnAt,
