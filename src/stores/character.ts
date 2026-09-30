@@ -1,6 +1,16 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
+import {
+  makePlannedMove,
+  normalizePlanned,
+  planDue,
+  plannedMilitia,
+  plannedSeatsTo,
+  plannedTransferIds,
+  type PlannedMove,
+} from '@/lib/plannedMoves';
+import { reinfCount, reinfSeats, type ReinfSelection } from '@/lib/reinforceSelection';
 import { parseQuestMark, questMark } from '@/lib/weeklyQuests';
 import {
   advanceBossTokens,
@@ -349,6 +359,8 @@ import {
   canTurnBack,
   campGear,
   reinforceBlocker,
+  controlFreeSeats,
+  militiaFreeSeats,
   reinforceControl,
   releaseFromControl,
   sortieLeaves,
@@ -490,6 +502,7 @@ export interface CharacterRow {
   boss_token_state: BossTokenState | null;
   parties: ActiveParty[] | null; // ⚔️ groupes de camp partis SANS le héros (migr. 0077)
   attacks: CombinedAttack[] | null; // ⚔️🧭 attaques combinées en préparation (migr. 0095)
+  planned_moves: PlannedMove[] | null; // ⏳ renforts programmés vers les lieux fixes (migr. 0098)
   /** ⚙️ Version de l'équipement (migr. 0088) : sous `GEAR_VERSION`, la ligne reçoit une fois
    *  les cadeaux de la refonte à 7 emplacements (`gearRefonteGifts`). */
   gear_version: number;
@@ -527,7 +540,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, attacks, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, attacks, planned_moves, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -574,6 +587,7 @@ export const useCharacterStore = defineStore('character', () => {
     // écartée (`buildMessage` la lirait à chaque tick).
     r.parties = normalizeParties(r.parties);
     r.attacks = normalizeAttacks(r.attacks);
+    r.planned_moves = normalizePlanned(r.planned_moves);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     // ⚙️ Refonte à 7 emplacements (étape 8) : chaque objet est converti APRÈS les anciennes
     // migrations (idempotent, cf. `migrateGearItem`) — ses valeurs sont recalculées au
@@ -2840,6 +2854,7 @@ export const useCharacterStore = defineStore('character', () => {
       expedition: cur.expedition,
       parties: partyList.value,
       attacks: attackList.value,
+      planned: plannedList.value,
     });
     const home = heroHomeAt(outings, at);
     // Chaque champion se bat avec SES pièces (plus de compagnon ni de talent, v0.996).
@@ -3410,6 +3425,8 @@ export const useCharacterStore = defineStore('character', () => {
   const partyList = computed<ActiveParty[]>(() => row.value?.parties ?? []);
   /** ⚔️🧭 Les attaques combinées en préparation (certains groupes attendent leur départ). */
   const attackList = computed<CombinedAttack[]>(() => row.value?.attacks ?? []);
+  /** ⏳ Les renforts programmés vers les lieux fixes (migr. 0098). */
+  const plannedList = computed<PlannedMove[]>(() => row.value?.planned_moves ?? []);
   /** 🧝 Le héros est engagé ailleurs : en expédition, ou réservé pour une attaque combinée. */
   const heroEngaged = computed(() => !!row.value?.expedition || heroInAttack(attackList.value));
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
@@ -5104,6 +5121,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur?.base || !poi) return 'la carte n’est pas chargée';
     const block = reinforceBlocker(poi.control, n, true);
     if (block) return REINFORCE_BLOCK_LABEL[block];
+    // ⏳ Les miliciens réservés pour un départ programmé restent à la base, mais pas pour ça.
+    if (n > (cur.base.militia?.home ?? 0) - plannedMilitia(plannedList.value))
+      return 'des miliciens sont réservés pour un départ programmé';
     const took = takeMilitia(cur.base.militia ?? emptyMilitia(now), n);
     if (!took) return 'pas assez de miliciens à la base';
     // Le trajet d'une équipe de champions sans rôle ni équipement de vitesse.
@@ -5328,6 +5348,8 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !map) return 'la carte n’est pas chargée';
     const block = transferBlocker(map, fromId, toId, ids);
     if (block) return TRANSFER_BLOCK_LABEL[block];
+    const reserved = plannedTransferIds(plannedList.value);
+    if (ids.some((x) => reserved.has(x))) return 'un membre est réservé pour un départ programmé';
     const from = map.pois.find((p) => p.id === fromId)!;
     const to = map.pois.find((p) => p.id === toId)!;
     const mil = ids.filter((x) => isMilitiaId(x));
@@ -5361,6 +5383,158 @@ export const useCharacterStore = defineStore('character', () => {
       ),
     });
     return null;
+  }
+
+  /**
+   * ⏳ PROGRAMME un renfort vers un lieu fixe (cf. `plannedMoves`) : il partira dans
+   * `delayMs`. En attendant, les champions de la base sont réservés (`busyUntil` = départ :
+   * ils défendent quand même, `plannedOutings`), les miliciens et les membres d'autres lieux
+   * aussi (les envois ordinaires les refusent). Rend la RAISON d'un refus, `null` si c'est fait.
+   */
+  async function scheduleReinforcement(
+    userId: string,
+    toId: string,
+    sel: ReinfSelection,
+    delayMs: number,
+    now: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return 'la carte n’est pas chargée';
+    const to = map.pois.find((p) => p.id === toId);
+    if (to?.control?.owner !== 'player') return 'ce lieu n’est plus à toi';
+    if (!reinfCount(sel)) return 'personne n’est choisi';
+    if (delayMs <= 0) return 'choisis dans combien de temps ils partent';
+    const list = plannedList.value;
+    // Les places : ce qui est déjà programmé vers ce lieu les occupe aussi.
+    const taken = plannedSeatsTo(list, toId);
+    const seats = reinfSeats(sel);
+    if (
+      seats.champ > controlFreeSeats(to.control) - taken.champ ||
+      seats.total > militiaFreeSeats(to.control) - taken.total
+    )
+      return 'plus assez de places sur ce lieu';
+    const champs = sel.champs.map((id) => advList.value.find((a) => a.id === id));
+    if (champs.some((a) => !a || !advAvailable(a, now)))
+      return 'un champion choisi n’est plus disponible';
+    if (sel.militia > (cur.base?.militia?.home ?? 0) - plannedMilitia(list))
+      return 'pas assez de miliciens libres à la base';
+    const reserved = plannedTransferIds(list);
+    for (const t of sel.transfers) {
+      if (reserved.has(t.id)) return 'un membre choisi est déjà réservé';
+      const from = map.pois.find((p) => p.id === t.fromId);
+      if (!from?.control?.garrison.includes(t.id)) return 'un membre choisi n’est plus là';
+    }
+    const move = makePlannedMove(sel, toId, now, delayMs);
+    const ids = new Set(move.champs);
+    await persist(userId, {
+      planned_moves: [...list, move],
+      adventurers: advList.value.map((a) =>
+        ids.has(a.id) ? { ...a, busyUntil: move.departAt } : a,
+      ),
+    });
+    return null;
+  }
+
+  /** ⏳ Annule un renfort programmé : ses champions redeviennent libres. */
+  async function cancelPlannedMove(userId: string, id: string): Promise<boolean> {
+    await writesSettled();
+    const m = plannedList.value.find((x) => x.id === id);
+    if (!row.value || !m) return false;
+    const ids = new Set(m.champs);
+    await persist(userId, {
+      planned_moves: plannedList.value.filter((x) => x.id !== id),
+      adventurers: advList.value.map((a) => {
+        return ids.has(a.id) && a.busyUntil === m.departAt ? { ...a, busyUntil: undefined } : a;
+      }),
+    });
+    return true;
+  }
+
+  /**
+   * ⏳ Fait partir les renforts programmés échus, À LEUR HEURE (même si l'app était fermée :
+   * trajet et arrivée partent de l'heure prévue). Les actions ordinaires décident ; un groupe
+   * refusé part membre par membre, et ce qui ne peut pas partir est annoncé. ⚠️ Les départs
+   * échus quittent la liste AVANT d'être joués : un second tick ne les rejoue jamais.
+   * Rend les textes à annoncer.
+   */
+  async function plannedTick(userId: string, now: number, playerLevel: number): Promise<string[]> {
+    const { due, rest } = planDue(plannedList.value, now);
+    if (!due.length) return [];
+    await writesSettled();
+    if (!row.value) return [];
+    await persist(userId, { planned_moves: rest });
+    const out: string[] = [];
+    const msgs: ExpeditionMessage[] = [];
+    for (const m of due) {
+      const at = m.departAt;
+      let sent = 0;
+      const fails: string[] = [];
+      const tryGroup = async (
+        ids: readonly string[],
+        send: (ids: readonly string[]) => Promise<string | null>,
+      ) => {
+        if (!ids.length) return;
+        const why = await send(ids);
+        if (!why) {
+          sent += ids.length;
+          return;
+        }
+        if (ids.length === 1) {
+          fails.push(why);
+          return;
+        }
+        for (const id of ids) {
+          const w = await send([id]);
+          if (w) fails.push(w);
+          else sent++;
+        }
+      };
+      await tryGroup(m.champs, (ids) => reinforceControlPoint(userId, m.toId, ids, at));
+      if (m.militia > 0) {
+        let n = m.militia;
+        let why = await sendMilitiaToControl(userId, m.toId, n, at);
+        while (why && n > 1) {
+          n--;
+          why = await sendMilitiaToControl(userId, m.toId, n, at);
+        }
+        if (why) fails.push(why);
+        else {
+          sent += n;
+          if (n < m.militia) fails.push('plus assez de places ou de miliciens');
+        }
+      }
+      const byOrigin = new Map<string, string[]>();
+      for (const t of m.transfers) byOrigin.set(t.fromId, [...(byOrigin.get(t.fromId) ?? []), t.id]);
+      for (const [fromId, ids] of byOrigin)
+        await tryGroup(ids, (x) =>
+          transferControlGarrison(userId, fromId, m.toId, x, at, playerLevel),
+        );
+      const lost = m.champs.length + m.militia + m.transfers.length - sent;
+      const to = row.value?.expedition_map?.pois.find((p) => p.id === m.toId);
+      const label = to?.control ? CONTROL_LABEL[to.control.kind] : 'un lieu fixe';
+      const why = [...new Set(fails)].join(' ; ');
+      const text = lost
+        ? `${sent} en route vers ${label}, ${lost} n’ont pas pu partir (${why}).`
+        : `${sent} en route vers ${label}.`;
+      out.push(`⏳ Renfort programmé : ${text}`);
+      msgs.push({
+        id: `planned_${m.id}`,
+        title: `⏳ Renfort programmé : ${label}`,
+        level: to?.level ?? 1,
+        win: lost === 0,
+        text,
+        gold: 0,
+        energy: 0,
+        key: 0,
+        resolvedAt: at,
+        read: false,
+      });
+    }
+    const cur = row.value;
+    if (cur && msgs.length) await persist(userId, { messages: boxWith(cur, msgs, MESSAGES_CAP) });
+    return out;
   }
 
   /**
@@ -5513,6 +5687,10 @@ export const useCharacterStore = defineStore('character', () => {
     recallControl,
     releaseControlChampions,
     reinforceControlPoint,
+    plannedList,
+    scheduleReinforcement,
+    cancelPlannedMove,
+    plannedTick,
     recallTrip,
     applySpeedBoost,
     sendMilitiaToControl,

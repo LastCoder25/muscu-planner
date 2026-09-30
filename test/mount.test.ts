@@ -2861,6 +2861,10 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
             },
           ],
           busy: false,
+          delayMin: 0,
+          maxDelayMin: 2880,
+          departLabel: null,
+          planned: [],
           sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
           selHold: { pct: 78, late: 1 },
           hold: { pct: 62, mil: 4, champ: { [ROW.adventurers[0].id]: 11 }, trans: { a2: -3 } },
@@ -2902,6 +2906,54 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(out).toContain('🎯 +4 %');
     expect(out).toContain('🎯 +11 %');
     expect(out).toContain('🎯 −3 %');
+  }, 30_000);
+  it('⏳ programmer : le délai se règle, le bouton le dit, un départ programmé s’annule', async () => {
+    const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
+    const { id, map } = await held();
+    const poi = map.pois.find((p) => p.id === id)!;
+    const delays: number[] = [];
+    const cancelled: string[] = [];
+    let out = '';
+    expect(
+      await mountIt(
+        QuickReinforceSheet,
+        {
+          poi,
+          champs: ROW.adventurers,
+          champFree: 4,
+          milFree: 4,
+          milHome: 2,
+          militiaMin: 45,
+          sources: [],
+          busy: false,
+          delayMin: 85,
+          maxDelayMin: 2880,
+          departLabel: '22:45',
+          planned: [{ id: 'plan_1', count: 3, departIn: '2 h 10', departAt: '23:30' }],
+          sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
+          selHold: { pct: 78, late: 0 },
+          hold: null,
+          onDelay: (n: number) => delays.push(n),
+          onCancel: (x: string) => cancelled.push(x),
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => {
+          host.querySelectorAll<HTMLElement>('.qr-when-b')[0]?.click();
+          host.querySelectorAll<HTMLElement>('.qr-delay .qr-step-b')[0]?.click();
+          host.querySelector<HTMLElement>('.qr-plan-x')?.click();
+        },
+      ),
+    ).toBeNull();
+    expect(out).toContain('1 h');
+    expect(out).toContain('25 min');
+    expect(out).toContain('départ à 22:45');
+    expect(out).toContain('Programmer 2 renforts');
+    expect(out).toContain('départ dans 2 h 10');
+    expect(delays).toEqual([0, 25]);
+    expect(cancelled).toEqual(['plan_1']);
   }, 30_000);
 });
 

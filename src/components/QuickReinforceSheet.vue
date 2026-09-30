@@ -22,13 +22,25 @@
       </div>
       <p class="qr-sub">
         {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion · {{ milFree }} au total
-        · coche tes renforts puis envoie-les ensemble
+        · coche tes renforts, puis envoie-les ou programme leur départ
       </p>
       <!-- 🛡️ La tenue À L'ATTAQUE, et ce que la sélection y change (arrivées comprises). -->
       <p v-if="hold" class="qr-hold">
         🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b>
         {{ hold.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
       </p>
+      <!-- ⏳ Les départs déjà programmés vers ce lieu : ils occupent déjà leurs places. -->
+      <div v-for="m in planned" :key="m.id" class="qr-plan">
+        <span class="qr-plan-main"
+          >⏳ <b>{{ m.count }}</b> renfort{{ m.count > 1 ? 's' : '' }} programmé{{
+            m.count > 1 ? 's' : ''
+          }}
+          · départ dans {{ m.departIn }} ({{ m.departAt }})</span
+        >
+        <button type="button" class="qr-plan-x" :disabled="busy" @click="emit('cancel', m.id)">
+          Annuler
+        </button>
+      </div>
       <!-- 🛡️ Les miliciens d'abord : c'est le renfort qu'on a le plus souvent sous la main, et
            il ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
       <div v-if="milFree > 0 && milHome > 0" class="qr-mil">
@@ -121,7 +133,8 @@
       <!-- 🚀 L'ENVOI : la tenue AVEC la sélection, puis un seul bouton pour tout faire partir. -->
       <div v-if="count > 0" class="qr-send">
         <p v-if="hold && selHold" class="qr-with">
-          🛡️ Avec ces renforts : <b>{{ selHold.pct }} %</b>
+          🛡️ Avec ces renforts<template v-if="delayMin > 0"> (départ différé)</template> :
+          <b>{{ selHold.pct }} %</b>
           <span class="qr-delta" :class="{ up: selHold.pct > hold.pct }"
             >({{ sign(selHold.pct - hold.pct) }})</span
           >
@@ -129,8 +142,79 @@
             · {{ selHold.late }} arrivera{{ selHold.late > 1 ? 'ont' : '' }} trop tard</span
           >
         </p>
+        <!-- ⏳ LE DÉPART (demandé : « dans combien de temps, heures/minutes — si une attaque
+             arrive dans 1 h 30 on les envoie dans 1 h 25 », ou tout de suite). -->
+        <div class="qr-when" role="group" aria-label="Départ">
+          <button
+            type="button"
+            class="qr-when-b"
+            :class="{ on: delayMin === 0 }"
+            :aria-pressed="delayMin === 0"
+            @click="emit('delay', 0)"
+          >
+            Maintenant
+          </button>
+          <button
+            type="button"
+            class="qr-when-b"
+            :class="{ on: delayMin > 0 }"
+            :aria-pressed="delayMin > 0"
+            @click="delayMin === 0 && emit('delay', 60)"
+          >
+            ⏳ Programmer
+          </button>
+        </div>
+        <div v-if="delayMin > 0" class="qr-delay">
+          <span class="qr-delay-lab">Départ dans</span>
+          <span class="qr-step">
+            <button
+              type="button"
+              class="qr-step-b"
+              aria-label="Une heure de moins"
+              :disabled="delayMin < 60 + 5"
+              @click="emit('delay', delayMin - 60)"
+            >
+              −
+            </button>
+            <b class="qr-step-n">{{ Math.floor(delayMin / 60) }} h</b>
+            <button
+              type="button"
+              class="qr-step-b"
+              aria-label="Une heure de plus"
+              :disabled="delayMin + 60 > maxDelayMin"
+              @click="emit('delay', delayMin + 60)"
+            >
+              ＋
+            </button>
+          </span>
+          <span class="qr-step">
+            <button
+              type="button"
+              class="qr-step-b"
+              aria-label="Cinq minutes de moins"
+              :disabled="delayMin <= 5"
+              @click="emit('delay', delayMin - 5)"
+            >
+              −
+            </button>
+            <b class="qr-step-n">{{ String(delayMin % 60).padStart(2, '0') }} min</b>
+            <button
+              type="button"
+              class="qr-step-b"
+              aria-label="Cinq minutes de plus"
+              :disabled="delayMin + 5 > maxDelayMin"
+              @click="emit('delay', delayMin + 5)"
+            >
+              ＋
+            </button>
+          </span>
+          <span v-if="departLabel" class="qr-delay-at">départ à {{ departLabel }}</span>
+        </div>
         <button type="button" class="qr-go" :disabled="busy" @click="emit('send')">
-          ➕ Envoyer {{ count }} renfort{{ count > 1 ? 's' : '' }}
+          <template v-if="delayMin > 0"
+            >⏳ Programmer {{ count }} renfort{{ count > 1 ? 's' : '' }}</template
+          >
+          <template v-else>➕ Envoyer {{ count }} renfort{{ count > 1 ? 's' : '' }}</template>
         </button>
       </div>
     </div>
@@ -180,6 +264,13 @@ const props = defineProps<{
   } | null;
   /** La tenue AVEC toute la sélection, et combien arriveraient après l'attaque. */
   selHold: { pct: number; late: number } | null;
+  /** ⏳ Dans combien de minutes la sélection part (0 = tout de suite). */
+  delayMin: number;
+  maxDelayMin: number;
+  /** L'heure de départ, lisible (« 21 h 40 »), quand elle est programmée. */
+  departLabel: string | null;
+  /** ⏳ Les départs déjà programmés vers ce lieu. */
+  planned: { id: string; count: number; departIn: string; departAt: string }[];
 }>();
 /** « +12 », « −3 », « 0 » : un écart se lit avec son signe. */
 const sign = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
@@ -198,6 +289,8 @@ const emit = defineEmits<{
   militia: [number];
   transfer: [string, string];
   send: [];
+  delay: [number];
+  cancel: [string];
 }>();
 </script>
 
@@ -426,5 +519,66 @@ const emit = defineEmits<{
 }
 .qr-go:disabled {
   opacity: 0.5;
+}
+.qr-plan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 6px 6px 6px 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 12px;
+  font-size: 12.5px;
+}
+.qr-plan-main {
+  flex: 1;
+  min-width: 0;
+}
+.qr-plan-x {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.qr-when {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.qr-when-b {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2, var(--bg));
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qr-when-b.on {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2, var(--bg)));
+}
+.qr-delay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.qr-delay-lab {
+  width: 100%;
+  color: var(--dim);
+}
+.qr-delay-at {
+  width: 100%;
+  color: var(--dim);
+  font-size: 12px;
 }
 </style>

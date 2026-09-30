@@ -411,18 +411,24 @@
     <QuickReinforceSheet
       :poi="quickPoi"
       :champs="freeSorted"
-      :champ-free="controlFreeSeats(quickPoi?.control)"
-      :mil-free="militiaFreeSeats(quickPoi?.control)"
-      :mil-home="milHome"
+      :champ-free="quickFree.champ"
+      :mil-free="quickFree.total"
+      :mil-home="milHomeFree"
       :militia-min="quickMilitiaMin"
       :sources="quickSources"
       :hold="quickHold"
       :sel="quickSel"
       :sel-hold="quickSelHold"
+      :delay-min="quickDelayMin"
+      :max-delay-min="PLAN_MAX_DELAY_MS / 60_000"
+      :depart-label="quickDepartLabel"
+      :planned="quickPlanned"
       :busy="ctlBusy"
       @close="quickId = null"
+      @delay="(n: number) => (quickDelayMin = n)"
+      @cancel="quickCancel"
       @toggle-champ="(id: string) => (quickSel = toggleReinfChamp(quickSel, id, quickFree))"
-      @militia="(n: number) => (quickSel = setReinfMilitia(quickSel, n, milHome, quickFree))"
+      @militia="(n: number) => (quickSel = setReinfMilitia(quickSel, n, milHomeFree, quickFree))"
       @transfer="
         (from: string, id: string) =>
           (quickSel = toggleReinfTransfer(quickSel, from, id, quickFree))
@@ -1166,6 +1172,13 @@ import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
+import {
+  PLAN_MAX_DELAY_MS,
+  plannedCount,
+  plannedMilitia,
+  plannedSeatsTo,
+  plannedTransferIds,
+} from '@/lib/plannedMoves';
 import {
   emptyReinfSelection,
   reinfCanAdd,
@@ -2909,16 +2922,51 @@ const quickMilitiaMin = computed(() =>
 );
 /** ➕ La sélection du renfort groupé (`reinforceSelection`), remise à zéro à chaque lieu. */
 const quickSel = ref<ReinfSelection>(emptyReinfSelection());
-watch(quickId, () => (quickSel.value = emptyReinfSelection()));
-const quickFree = computed(() => ({
-  champ: controlFreeSeats(quickPoi.value?.control),
-  total: militiaFreeSeats(quickPoi.value?.control),
-}));
+/** ⏳ Dans combien de minutes la sélection part (0 = tout de suite). */
+const quickDelayMin = ref(0);
+watch(quickId, () => {
+  quickSel.value = emptyReinfSelection();
+  quickDelayMin.value = 0;
+});
+/** Les places libres du lieu, MOINS celles que des départs programmés vers lui occupent déjà. */
+const quickFree = computed(() => {
+  const taken = quickId.value ? plannedSeatsTo(char.plannedList, quickId.value) : null;
+  return {
+    champ: Math.max(0, controlFreeSeats(quickPoi.value?.control) - (taken?.champ ?? 0)),
+    total: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
+  };
+});
+/** 🛡️ Les miliciens de la base qui ne sont pas réservés pour un départ programmé. */
+const milHomeFree = computed(() => Math.max(0, milHome.value - plannedMilitia(char.plannedList)));
+/** L'heure du départ programmé, lisible. */
+const quickDepartLabel = computed(() =>
+  quickDelayMin.value > 0
+    ? new Date(now.value + quickDelayMin.value * 60_000).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null,
+);
+/** ⏳ Les départs déjà programmés vers ce lieu. */
+const quickPlanned = computed(() =>
+  char.plannedList
+    .filter((m) => m.toId === quickId.value)
+    .map((m) => ({
+      id: m.id,
+      count: plannedCount(m),
+      departIn: formatDuration(Math.max(0, m.departAt - now.value)),
+      departAt: new Date(m.departAt).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    })),
+);
 /** Les arrivées d'une sélection, comme au départ réel : les champions de la base partent
  *  ensemble (au pas du plus lent, `partyLegMin`), ceux d'un même lieu aussi (`legFromSpot`,
  *  la règle du transfert), les miliciens à leur pas. */
 function quickExtra(p: Poi, sel: ReinfSelection) {
-  const t = coarseNow.value;
+  // ⏳ Un départ programmé arrive d'autant plus tard.
+  const t = coarseNow.value + quickDelayMin.value * 60_000;
   const at = (min: number) => t + min * 60_000;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const legOf = (q: Poi, escort: Adventurer[]) =>
@@ -2989,11 +3037,13 @@ const quickSources = computed(() => {
   const map = char.row?.expedition_map;
   if (!to || !map) return [];
   const byId = new Map(char.advList.map((a) => [a.id, a]));
+  const reserved = plannedTransferIds(char.plannedList);
   return transferSourcesFor(map, to.id).flatMap((s) => {
     const from = map.pois.find((p) => p.id === s.fromId);
     if (!from?.control) return [];
     type Member = { id: string; adv: (typeof char.advList)[number] | null; min: number };
     const members = s.ids.flatMap((id): Member[] => {
+      if (reserved.has(id)) return [];
       if (isMilitiaId(id))
         return [
           {
@@ -3233,11 +3283,44 @@ async function confirmRecall() {
 /** 🚀 Envoie toute la sélection : les champions de la base, les miliciens, puis un envoi par
  *  lieu d'origine — les actions du store, qui refusent ce qui ne passe pas. Au premier refus
  *  on s'arrête et on dit ce qui est parti. */
+/** ⏳ Annule un départ programmé vers le lieu ouvert. */
+async function quickCancel(id: string) {
+  const uid = auth.user?.id;
+  if (!uid || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    if (await char.cancelPlannedMove(uid, id))
+      $q.notify({ type: 'info', message: '⏳ Départ programmé annulé.' });
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 async function quickSend() {
   const uid = auth.user?.id;
   const p = quickPoi.value;
   const sel = quickSel.value;
   if (!uid || !p || ctlBusy.value || !reinfCount(sel)) return;
+  // ⏳ Programmé : rien ne part maintenant, la sélection est réservée jusqu'à l'heure dite.
+  if (quickDelayMin.value > 0) {
+    ctlBusy.value = true;
+    try {
+      const delay = quickDelayMin.value * 60_000;
+      const why = await char.scheduleReinforcement(uid, p.id, sel, delay, Date.now());
+      if (why) {
+        $q.notify({ type: 'warning', message: `Programmation impossible : ${why}` });
+        return;
+      }
+      const n = reinfCount(sel);
+      $q.notify({
+        type: 'positive',
+        message: `⏳ ${n} renfort${n > 1 ? 's' : ''} programmé${n > 1 ? 's' : ''} — départ dans ${formatDuration(delay)}`,
+      });
+      quickId.value = null;
+    } finally {
+      ctlBusy.value = false;
+    }
+    return;
+  }
   ctlBusy.value = true;
   let sent = 0;
   const fail = (why: string) =>
