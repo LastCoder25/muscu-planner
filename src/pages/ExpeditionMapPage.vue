@@ -38,11 +38,7 @@
 
     <!-- Carte -->
     <div class="map-outer">
-      <div
-        ref="scrollEl"
-        class="map-scroll"
-        @scroll="onScroll"
-      >
+      <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
         <svg
           :viewBox="`${V.min} ${V.min} ${V.size} ${V.size}`"
           class="map"
@@ -222,7 +218,7 @@
             :veiled-key="veiledKey"
             :down-key="downKey"
             :imminent-key="imminentKey"
-            :target="active?.poi ?? null"
+            :target="active && voyageTargetShown(active, now) ? active.poi : null"
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
             @select="selectPoi"
@@ -1178,6 +1174,7 @@ import {
   tripTimeLabel,
   tripLegs,
   voyageProgress,
+  voyageTargetShown,
   voyageVanquished,
   poiCombatant,
   simulateArena,
@@ -2473,6 +2470,11 @@ function expeHaul(o: {
 }
 /** ⚔️ Les GROUPES partis sans le héros, situés comme le héros (`travelPosition`). ⚠️ Un groupe AVEC le
  *  héros vit dans `expedition` : c'est le tracé du héros qui le montre. */
+/** 🗺️ Les voyages dont la CIBLE n'est plus à dessiner : lieu non terrassé, revenu sur la carte
+ *  dès le rapport (`voyageTargetShown`) — il est déjà un lieu ordinaire, réattaquable. */
+const hiddenTargets = computed(
+  () => new Set(char.partyList.filter((g) => !voyageTargetShown(g, now.value)).map((g) => g.id)),
+);
 const partiesOnMap = computed(() =>
   char.partyList
     .filter((g) => now.value < g.returnAt)
@@ -3560,6 +3562,8 @@ const travelTargets = stableBy(
   () =>
     travelersOnMap.value
       .filter((v) => v.kind !== 'reinf') // le point tenu est déjà dessiné par MapPoiLayer
+      // 🗺️ Un lieu non terrassé est REVENU sur la carte dès le rapport : ne pas le redessiner.
+      .filter((v) => !hiddenTargets.value.has(v.id))
       .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind, down: 'down' in v && v.down })),
   (l) => l.map((v) => v.id + (v.down ? '†' : '')).join('|'),
 );

@@ -2275,12 +2275,17 @@ export const useCharacterStore = defineStore('character', () => {
     const advs0 =
       ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value;
     const advs1 = rescheduleReturners(advs0, tripCrew(exp), exp.returnAt, exp2.returnAt);
+    // 🗺️ Le lieu que le héros n'a pas terrassé revient sur la carte DÈS LE RAPPORT : on peut y
+    // renvoyer une équipe sans attendre qu'il rentre (`restoreUnvanquished`).
+    const mapIn = ctl?.map ?? cur.expedition_map;
+    const mapOut = restoreUnvanquished(mapIn, [exp, ...partyList.value], now);
     await persist(userId, {
       ...(dw.base ? { base: dw.base } : {}),
       expedition: exp2,
       messages: dw.tag(x.messages),
       ...x.patch,
-      ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
+      ...(ctl ? { adventurers: ctl.adventurers } : {}),
+      ...(ctl || mapOut !== mapIn ? { expedition_map: mapOut } : {}),
       ...(advs1 !== advs0 ? { adventurers: advs1 } : {}),
     });
     x.play();
@@ -2321,7 +2326,7 @@ export const useCharacterStore = defineStore('character', () => {
       : null;
     // 🗺️ Un lieu que le héros n'a pas terrassé revient sur la carte (`restoreUnvanquished`).
     const map0 = ctl ? ctl.map : cur.expedition_map;
-    const map = restoreUnvanquished(map0, [exp], partyList.value, now);
+    const map = restoreUnvanquished(map0, [exp, ...partyList.value], now);
     await persist(userId, {
       ...(dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
@@ -3380,12 +3385,7 @@ export const useCharacterStore = defineStore('character', () => {
     const stockAfter = takeSupplies(cur.supplies, supplies);
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
-    const sendBlock = partySendBlocker(
-      poi,
-      escort.length,
-      !!hero,
-      engageCap(pantheonLevel.value),
-    );
+    const sendBlock = partySendBlocker(poi, escort.length, !!hero, engageCap(pantheonLevel.value));
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
     // (déjà parti, infirmerie, Avant-poste, or) — `partyHeroBlocker`, une seule définition.
@@ -4092,14 +4092,12 @@ export const useCharacterStore = defineStore('character', () => {
       if (q && q.returnAt !== p.returnAt)
         advsBack = rescheduleReturners(advsBack, tripCrew(q), p.returnAt, q.returnAt);
     }
-    // 🗺️ Un lieu qu'une équipe rentrée n'a pas terrassé revient sur la carte — sauf si un
-    // autre voyage le vise encore (`restoreUnvanquished`).
+    // 🗺️ Un lieu qu'une équipe n'a pas terrassé revient sur la carte DÈS LE RAPPORT, pas au
+    // retour en ville — sauf si un autre voyage le vise encore (`restoreUnvanquished`).
     const mapBase = ctl?.map ?? cur.expedition_map;
-    const ended = partyList.value.filter((p) => !t.parties.some((q) => q.id === p.id));
     const mapOut = restoreUnvanquished(
       mapBase,
-      ended,
-      [...t.parties, ...(cur.expedition ? [cur.expedition] : [])],
+      [...partyList.value, ...(cur.expedition ? [cur.expedition] : [])],
       clock,
     );
     await persist(userId, {

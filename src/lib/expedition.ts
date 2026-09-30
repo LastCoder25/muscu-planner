@@ -2401,7 +2401,13 @@ export function voyageDrawnEnd(exp: Voyage, now: number): { x: number; y: number
  * ⚠️ Seulement AVANT `midAt` : un rappel volontaire pose `midAt = now`, il n'est jamais gommé.
  */
 export function shownVoyage<
-  V extends { sentAt?: number; midAt: number; returnAt: number; turnBack?: number; dwellMs?: number },
+  V extends {
+    sentAt?: number;
+    midAt: number;
+    returnAt: number;
+    turnBack?: number;
+    dwellMs?: number;
+  },
 >(v: V, now: number): V {
   const tb = v.turnBack;
   if (tb === undefined || tb <= 0 || v.sentAt === undefined || now >= v.midAt) return v;
@@ -2478,36 +2484,57 @@ export function voyageVanquished(
  * quitte la carte au DÉPART (`targetTaken`) ; à la fin d'un voyage qui ne l'a pas emporté
  * (défaite, demi-tour forcé sur la route), il y revient tel quel. Rend la MÊME carte quand
  * rien ne change.
- * ⚠️ Pas tant qu'un AUTRE voyage le vise encore (`stillAway`, attaque combinée) : il serait
- * dessiné deux fois, et c'est le dernier arrivé qui tranche.
+ * ⚠️ IL REVIENT DÈS QUE SON SORT EST CONNU (`midAt`, le rapport tombe), PAS au retour de
+ * l'équipe en ville (demandé : « un lieu non abattu est réattaquable avant que l'armée
+ * revienne, si on en a envie »). Avant, il ne revenait qu'à `returnAt` : pendant tout le
+ * trajet retour, impossible d'y renvoyer une autre équipe.
+ * ⚠️ `voyages` = TOUS les voyages connus (en cours ET juste terminés). Un lieu ne revient pas
+ * tant qu'un voyage qui le vise n'a pas encore tranché (attaque combinée, ou nouvel assaut
+ * lancé sur le lieu revenu : il repart de la carte, `targetTaken`), ni si l'un d'eux l'a
+ * terrassé — sans ce second garde, l'ancienne équipe encore sur le chemin du retour le
+ * ferait réapparaître derrière la victoire de la nouvelle.
  * ⚠️ Ni une armée en campagne (jamais retirée), ni un point fixe (marqué, pas retiré), ni
  * l'arène (on ne l'abat pas : on y tient des vagues, elle se consomme). Un lieu expiré
  * entre-temps ne revient pas — même règle que le rappel (`targetBack`).
  */
+type RestoreVoyage = {
+  poi: Poi;
+  midAt: number;
+  returnAt: number;
+  turnBack?: number;
+  outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
+};
+/** Un lieu que `targetTaken` retire de la carte au départ (donc qu'on peut lui rendre). */
+function leavesMapOnDeparture(p: Poi): boolean {
+  return !(isFieldArmyPoi(p) || p.type === 'control' || p.type === 'arena');
+}
 export function restoreUnvanquished(
   map: ExpeditionMap | null,
-  ended: readonly {
-    poi: Poi;
-    midAt: number;
-    returnAt: number;
-    turnBack?: number;
-    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
-  }[],
-  stillAway: readonly { poi: Pick<Poi, 'id'> }[],
+  voyages: readonly RestoreVoyage[],
   now: number,
 ): ExpeditionMap | null {
   if (!map) return map;
-  const away = new Set(stillAway.map((v) => v.poi.id));
+  const blocked = new Set(
+    voyages.filter((v) => now < v.midAt || voyageVanquished(v, now)).map((v) => v.poi.id),
+  );
   const back: Poi[] = [];
-  for (const v of ended) {
+  for (const v of voyages) {
     const p = v.poi;
-    if (isFieldArmyPoi(p) || p.type === 'control' || p.type === 'arena') continue;
-    if (voyageVanquished(v, Math.max(now, v.returnAt))) continue;
-    if (away.has(p.id) || p.expiresAt <= now) continue;
+    // (Un voyage qui n'a pas encore tranché bloque déjà son propre lieu, via `blocked`.)
+    if (!leavesMapOnDeparture(p)) continue;
+    if (blocked.has(p.id) || p.expiresAt <= now) continue;
     if (map.pois.some((q) => q.id === p.id) || back.some((q) => q.id === p.id)) continue;
     back.push(p);
   }
   return back.length ? { ...map, pois: [...map.pois, ...back] } : map;
+}
+
+/** 🗺️ La carte dessine-t-elle encore la CIBLE de ce voyage ? Oui tant que son sort n'est pas
+ *  connu, et s'il l'a terrassée (grisée jusqu'au retour). Non dès qu'un lieu non terrassé est
+ *  revenu sur la carte (`restoreUnvanquished`) : il serait dessiné deux fois. */
+export function voyageTargetShown(v: RestoreVoyage, now: number): boolean {
+  if (!leavesMapOnDeparture(v.poi)) return true;
+  return now < v.midAt || voyageVanquished(v, now);
 }
 
 export function voyageProgress(voyage: Voyage, now: number): { overall: number; mid: number } {
