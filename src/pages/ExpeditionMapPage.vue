@@ -451,6 +451,7 @@
           :poi="selected"
           :rank="selectedRank"
           :sub="poiSub"
+          :engaged="engagedTrip"
           :facts="poiFacts"
           :ambush-left="selectedAmbushLeft"
           :is-rift="!!selectedRift"
@@ -460,477 +461,504 @@
           @close="selected = null"
           @seal="doSeal"
         />
-        <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
+        <!-- ⚔️ Déjà attaqué : plus rien à envoyer, la fiche s'arrête à ce qu'il rapporte. -->
+        <template v-if="!engagedTrip">
+          <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
              revient. On ramène, on renforce ; la production arrive toute seule. -->
-        <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
-          <!-- 🧺 LA PRODUCTION EN TÊTE (demandé : « l’info de la rune est perdue au milieu de
+          <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
+            <!-- 🧺 LA PRODUCTION EN TÊTE (demandé : « l’info de la rune est perdue au milieu de
                tout le détail ») : ce qui attend en gros, la jauge et le TEMPS avant la suite,
                le débit en petit (`controlYieldCard`). Plus de bouton de récolte (2026-09-29) : ce qu'il
                produit est versé tout seul (`autoCollectControls`). -->
-          <div
-            v-if="yieldCard"
-            class="yield-card"
-            :class="{ ready: yieldCard.ready, full: yieldCard.full }"
-          >
-            <div class="yield-head">
-              <span class="yield-emo">{{ yieldCard.emoji }}</span>
-              <span class="yield-main">
-                <b class="yield-value">{{ yieldCard.value }}</b>
-                <span class="yield-what">{{ yieldCard.what }}</span>
-              </span>
+            <div
+              v-if="yieldCard"
+              class="yield-card"
+              :class="{ ready: yieldCard.ready, full: yieldCard.full }"
+            >
+              <div class="yield-head">
+                <span class="yield-emo">{{ yieldCard.emoji }}</span>
+                <span class="yield-main">
+                  <b class="yield-value">{{ yieldCard.value }}</b>
+                  <span class="yield-what">{{ yieldCard.what }}</span>
+                </span>
+              </div>
+              <div v-if="yieldCard.pct !== null" class="yield-bar">
+                <i :style="{ width: Math.round(yieldCard.pct * 100) + '%' }" />
+              </div>
+              <p v-if="yieldCard.gauge" class="yield-gauge">
+                {{ yieldCard.full ? '✅' : '⏳' }} {{ yieldCard.gauge }}
+              </p>
+              <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
-            <div v-if="yieldCard.pct !== null" class="yield-bar">
-              <i :style="{ width: Math.round(yieldCard.pct * 100) + '%' }" />
-            </div>
-            <p v-if="yieldCard.gauge" class="yield-gauge">
-              {{ yieldCard.full ? '✅' : '⏳' }} {{ yieldCard.gauge }}
-            </p>
-            <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
-          </div>
-          <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
+            <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
-          <p class="ctl-line">
-            🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
-            <span class="ctl-dim">
-              · {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }} champion{{
-                seatsOf(liveControl.kind) > 1 ? 's' : ''
-              }}</span
-            >
-            <span class="ctl-dim"> · touche un membre pour le ramener ou le remplacer</span>
-          </p>
-          <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
-          <div class="car-pick">
-            <AdvPickTile
-              v-for="m in controlMembers"
-              :key="m.adv.id"
-              :adv="m.adv"
-              :on="ctlRecallSel.includes(m.adv.id)"
-              :reason="m.arriveIn > 0 ? `🧭 en route · ${formatDuration(m.arriveIn)}` : null"
-              :gain="occupantLoss[m.adv.id] ? -occupantLoss[m.adv.id]!.loss : null"
-              :gain-title="lossTitle(m.adv.id)"
-              @toggle="toggleRecall(m.adv.id)"
-            />
-            <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
-            <button
-              v-for="m in controlMilitia"
-              :key="m.id"
-              type="button"
-              class="mil-tile"
-              :class="{ on: ctlRecallSel.includes(m.id) }"
-              :aria-pressed="ctlRecallSel.includes(m.id)"
-              @click="toggleRecall(m.id)"
-            >
-              <span class="mil-emo"><MilitiaPortrait /></span>
-              <span class="mil-name">{{ MILITIA_NAME }}</span>
-              <span v-if="m.arriveIn > 0" class="mil-sub">🧭 {{ formatDuration(m.arriveIn) }}</span>
-              <span
-                v-else-if="occupantLoss[m.id]"
-                class="mil-loss"
-                :class="{ zero: occupantLoss[m.id]!.loss === 0 }"
-                :title="lossTitle(m.id) ?? ''"
-                >🎯 −{{ occupantLoss[m.id]!.loss }} %</span
+            <p class="ctl-line">
+              🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
+              <span class="ctl-dim">
+                · {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }} champion{{
+                  seatsOf(liveControl.kind) > 1 ? 's' : ''
+                }}</span
               >
-            </button>
-            <!-- ➕ LES PLACES VIDES (demandé : « les 5 slots ») : la garnison se lit comme 5
+              <span class="ctl-dim"> · touche un membre pour le ramener ou le remplacer</span>
+            </p>
+            <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
+            <div class="car-pick">
+              <AdvPickTile
+                v-for="m in controlMembers"
+                :key="m.adv.id"
+                :adv="m.adv"
+                :on="ctlRecallSel.includes(m.adv.id)"
+                :reason="m.arriveIn > 0 ? `🧭 en route · ${formatDuration(m.arriveIn)}` : null"
+                :gain="occupantLoss[m.adv.id] ? -occupantLoss[m.adv.id]!.loss : null"
+                :gain-title="lossTitle(m.adv.id)"
+                @toggle="toggleRecall(m.adv.id)"
+              />
+              <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
+              <button
+                v-for="m in controlMilitia"
+                :key="m.id"
+                type="button"
+                class="mil-tile"
+                :class="{ on: ctlRecallSel.includes(m.id) }"
+                :aria-pressed="ctlRecallSel.includes(m.id)"
+                @click="toggleRecall(m.id)"
+              >
+                <span class="mil-emo"><MilitiaPortrait /></span>
+                <span class="mil-name">{{ MILITIA_NAME }}</span>
+                <span v-if="m.arriveIn > 0" class="mil-sub"
+                  >🧭 {{ formatDuration(m.arriveIn) }}</span
+                >
+                <span
+                  v-else-if="occupantLoss[m.id]"
+                  class="mil-loss"
+                  :class="{ zero: occupantLoss[m.id]!.loss === 0 }"
+                  :title="lossTitle(m.id) ?? ''"
+                  >🎯 −{{ occupantLoss[m.id]!.loss }} %</span
+                >
+              </button>
+              <!-- ➕ LES PLACES VIDES (demandé : « les 5 slots ») : la garnison se lit comme 5
                  cases, pleines ou non. Toucher une case vide amène au renfort. Au-delà des
                  places de champion, une case ne prend qu'un milicien (`controlFree`). -->
+              <button
+                v-for="slot in garrisonSlots"
+                :key="'slot' + slot.i"
+                type="button"
+                class="slot-tile"
+                :aria-label="slot.label"
+                @click="goReinforce"
+              >
+                <span class="slot-plus">＋</span>
+                <span class="slot-name">{{ slot.label }}</span>
+              </button>
+            </div>
             <button
-              v-for="slot in garrisonSlots"
-              :key="'slot' + slot.i"
+              v-if="ctlRecallSel.length"
               type="button"
-              class="slot-tile"
-              :aria-label="slot.label"
-              @click="goReinforce"
+              class="ctl-recall ctl-back"
+              :disabled="ctlBusy"
+              @click="releaseCtl"
             >
-              <span class="slot-plus">＋</span>
-              <span class="slot-name">{{ slot.label }}</span>
+              {{ recallSelLabel }}
             </button>
-          </div>
-          <button
-            v-if="ctlRecallSel.length"
-            type="button"
-            class="ctl-recall ctl-back"
-            :disabled="ctlBusy"
-            @click="releaseCtl"
-          >
-            {{ recallSelLabel }}
-          </button>
-          <!-- ⇄ REMPLACER (demandé) : UN membre coché peut échanger sa place avec quelqu'un de
+            <!-- ⇄ REMPLACER (demandé) : UN membre coché peut échanger sa place avec quelqu'un de
                la base ou d'un autre point. Chaque ligne dit la tenue APRÈS l'échange, le
                trajet, et ce que devient l'autre point. Le remplacé part prendre la place du
                remplaçant (`swapGarrison`). -->
-          <div v-if="swapOut && swapCandidates.length" class="swap">
-            <p class="car-cap">
-              ⇄ <b>ou remplacer {{ swapOut.name }}</b>
-              <span v-if="swapOut.loss" class="ctl-dim"
-                >(apporte {{ swapOut.loss.loss }} % de tenue)</span
-              >
-              par :
-            </p>
-            <div class="swap-list">
-              <button
-                v-for="r in swapCandidates"
-                :key="r.key"
-                type="button"
-                class="swap-row"
-                :disabled="!!r.why || ctlBusy"
-                :title="r.why ?? ''"
-                @click="swapCtl(r)"
-              >
-                <span class="swap-who">
-                  <span class="swap-name">{{ r.adv ? '🗡️' : '🛡️' }} {{ r.name }}</span>
-                  <span class="swap-sub">{{
-                    r.why ?? `${r.where} · 🧭 ${formatDurationMin(r.min)}`
-                  }}</span>
-                  <span v-if="r.other" class="swap-sub"
-                    >là-bas : {{ r.other.before }} → {{ r.other.after }} %</span
-                  >
-                </span>
-                <span v-if="!r.why" class="swap-res">
-                  <b>{{ r.pct }} %</b>
-                  <span class="swap-delta" :class="{ up: r.delta > 0, down: r.delta < 0 }"
-                    >{{ r.delta > 0 ? '+' : r.delta < 0 ? '−' : '='
-                    }}{{ r.delta ? Math.abs(r.delta) : '' }}</span
-                  >
-                </span>
-              </button>
+            <div v-if="swapOut && swapCandidates.length" class="swap">
+              <p class="car-cap">
+                ⇄ <b>ou remplacer {{ swapOut.name }}</b>
+                <span v-if="swapOut.loss" class="ctl-dim"
+                  >(apporte {{ swapOut.loss.loss }} % de tenue)</span
+                >
+                par :
+              </p>
+              <div class="swap-list">
+                <button
+                  v-for="r in swapCandidates"
+                  :key="r.key"
+                  type="button"
+                  class="swap-row"
+                  :disabled="!!r.why || ctlBusy"
+                  :title="r.why ?? ''"
+                  @click="swapCtl(r)"
+                >
+                  <span class="swap-who">
+                    <span class="swap-name">{{ r.adv ? '🗡️' : '🛡️' }} {{ r.name }}</span>
+                    <span class="swap-sub">{{
+                      r.why ?? `${r.where} · 🧭 ${formatDurationMin(r.min)}`
+                    }}</span>
+                    <span v-if="r.other" class="swap-sub"
+                      >là-bas : {{ r.other.before }} → {{ r.other.after }} %</span
+                    >
+                  </span>
+                  <span v-if="!r.why" class="swap-res">
+                    <b>{{ r.pct }} %</b>
+                    <span class="swap-delta" :class="{ up: r.delta > 0, down: r.delta < 0 }"
+                      >{{ r.delta > 0 ? '+' : r.delta < 0 ? '−' : '='
+                      }}{{ r.delta ? Math.abs(r.delta) : '' }}</span
+                    >
+                  </span>
+                </button>
+              </div>
             </div>
-          </div>
-          <!-- ⇄ TRANSFERT (2026-09-29, demandé) : la sélection part directement renforcer un
+            <!-- ⇄ TRANSFERT (2026-09-29, demandé) : la sélection part directement renforcer un
                AUTRE point tenu, comme un renfort parti de la base. Une tuile par point, grisée
                AVEC la raison (`transferBlocker`, la règle du store). -->
-          <div v-if="transferTargets.length" class="xfer">
-            <p class="car-cap">⇄ <b>ou transférer</b> vers un autre point :</p>
-            <div class="xfer-grid">
-              <button
-                v-for="t in transferTargets"
-                :key="t.id"
-                type="button"
-                class="xfer-tile"
-                :disabled="!!t.why || ctlBusy"
-                :title="t.why ?? ''"
-                @click="transferCtl(t.id)"
-              >
-                <span class="xfer-emo">{{ t.emo }}</span>
-                <span class="xfer-main">
-                  <span class="xfer-name">{{ t.label }}</span>
-                  <span class="xfer-sub">{{
-                    t.why ??
-                    `🧭 ${formatDurationMin(t.min)} · ${t.free} place${t.free > 1 ? 's' : ''}`
-                  }}</span>
-                </span>
-              </button>
+            <div v-if="transferTargets.length" class="xfer">
+              <p class="car-cap">⇄ <b>ou transférer</b> vers un autre point :</p>
+              <div class="xfer-grid">
+                <button
+                  v-for="t in transferTargets"
+                  :key="t.id"
+                  type="button"
+                  class="xfer-tile"
+                  :disabled="!!t.why || ctlBusy"
+                  :title="t.why ?? ''"
+                  @click="transferCtl(t.id)"
+                >
+                  <span class="xfer-emo">{{ t.emo }}</span>
+                  <span class="xfer-main">
+                    <span class="xfer-name">{{ t.label }}</span>
+                    <span class="xfer-sub">{{
+                      t.why ??
+                      `🧭 ${formatDurationMin(t.min)} · ${t.free} place${t.free > 1 ? 's' : ''}`
+                    }}</span>
+                  </span>
+                </button>
+              </div>
             </div>
-          </div>
-          <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
+            <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
-          <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
-            ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
-            attaque — sauf si un renfort arrive avant.
-          </p>
-          <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
-          <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
-          <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
-            ⚠️ <b>Bataille imminente</b> : une troupe ennemie marche sur ce lieu. Un renfort proche
-            peut encore arriver à temps.
-          </p>
-          <!-- ⚠️ Sinon l'instant de la reprise n'est PAS annoncé (v0.1239, décision de
+            <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
+              ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
+              attaque — sauf si un renfort arrive avant.
+            </p>
+            <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
+            <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
+            <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
+              ⚠️ <b>Bataille imminente</b> : une troupe ennemie marche sur ce lieu. Un renfort
+              proche peut encore arriver à temps.
+            </p>
+            <!-- ⚠️ Sinon l'instant de la reprise n'est PAS annoncé (v0.1239, décision de
                l'utilisateur) : on sait seulement qu'elle viendra, plus tôt si l'on s'entraîne. -->
-          <p v-else-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
-            ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu t’entraînes
-            beaucoup. Force inconnue : ta garnison ne gagnera pas toujours.
-          </p>
-          <!-- 🛡️ LA TENUE À L'ATTAQUE (demandé) : jugée sur ceux qui seront LÀ — garnison et
+            <p v-else-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
+              ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu t’entraînes
+              beaucoup. Force inconnue : ta garnison ne gagnera pas toujours.
+            </p>
+            <!-- 🛡️ LA TENUE À L'ATTAQUE (demandé) : jugée sur ceux qui seront LÀ — garnison et
                renforts arrivés avant l'assaut (`defendersAtAttack`), contre l'ennemi le plus fort
                possible. L'heure restant secrète hors de la fenêtre imminente, les renforts en
                route y comptent tous. -->
-          <p v-if="defenseNow" class="ctl-line ctl-hold">
-            🛡️ À l’attaque : <b>{{ defenseNow.count }}</b> défenseur{{
-              defenseNow.count > 1 ? 's' : ''
-            }}
-            · repousse environ <b>{{ defenseNow.pct }} %</b>
-            {{ defenseNow.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
-            <span v-if="defenseNow.late" class="ctl-dim">
-              · {{ defenseNow.late }} renfort{{ defenseNow.late > 1 ? 's' : '' }} arrivera trop
-              tard</span
-            >
-          </p>
-          <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
-               puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
-          <div ref="reinfAnchor" />
-          <template v-if="reinfOpen && controlFree > 0">
-            <p class="ctl-line ctl-reinf">
-              ➕
-              <b
-                >{{ controlFree }} place{{ controlFree > 1 ? 's' : '' }} libre{{
-                  controlFree > 1 ? 's' : ''
-                }}</b
-              >
-              — envoie un renfort
-              <span v-if="ctlReinfSel.length" class="ctl-dim">
-                · arrivée dans {{ formatDurationMin(reinforceLegMin) }}</span
+            <p v-if="defenseNow" class="ctl-line ctl-hold">
+              🛡️ À l’attaque : <b>{{ defenseNow.count }}</b> défenseur{{
+                defenseNow.count > 1 ? 's' : ''
+              }}
+              · repousse environ <b>{{ defenseNow.pct }} %</b>
+              {{ defenseNow.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
+              <span v-if="defenseNow.late" class="ctl-dim">
+                · {{ defenseNow.late }} renfort{{ defenseNow.late > 1 ? 's' : '' }} arrivera trop
+                tard</span
               >
             </p>
-            <div v-if="freeSorted.length" class="car-pick">
-              <AdvPickTile
-                v-for="a in freeSorted"
-                :key="a.id"
-                :adv="a"
-                :on="ctlReinfSel.includes(a.id)"
-                :gain="reinfGain[a.id] ?? null"
-                @toggle="toggleReinf(a.id)"
-              />
-            </div>
-            <p v-else class="ctl-line ctl-dim">Aucun champion disponible pour l’instant.</p>
-            <div v-if="ctlReinfSel.length" class="send-bar">
-              <button class="sh-send" :disabled="ctlBusy" @click="reinforceCtl">
-                ➕ Envoyer {{ ctlReinfSel.length }} en renfort
-              </button>
-            </div>
-          </template>
-          <!-- 🛡️ DES MILICIENS (Caserne) : ils complètent la garnison jusqu'à 5, champions
+            <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
+               puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
+            <div ref="reinfAnchor" />
+            <template v-if="reinfOpen && controlFree > 0">
+              <p class="ctl-line ctl-reinf">
+                ➕
+                <b
+                  >{{ controlFree }} place{{ controlFree > 1 ? 's' : '' }} libre{{
+                    controlFree > 1 ? 's' : ''
+                  }}</b
+                >
+                — envoie un renfort
+                <span v-if="ctlReinfSel.length" class="ctl-dim">
+                  · arrivée dans {{ formatDurationMin(reinforceLegMin) }}</span
+                >
+              </p>
+              <div v-if="freeSorted.length" class="car-pick">
+                <AdvPickTile
+                  v-for="a in freeSorted"
+                  :key="a.id"
+                  :adv="a"
+                  :on="ctlReinfSel.includes(a.id)"
+                  :gain="reinfGain[a.id] ?? null"
+                  @toggle="toggleReinf(a.id)"
+                />
+              </div>
+              <p v-else class="ctl-line ctl-dim">Aucun champion disponible pour l’instant.</p>
+              <div v-if="ctlReinfSel.length" class="send-bar">
+                <button class="sh-send" :disabled="ctlBusy" @click="reinforceCtl">
+                  ➕ Envoyer {{ ctlReinfSel.length }} en renfort
+                </button>
+              </div>
+            </template>
+            <!-- 🛡️ DES MILICIENS (Caserne) : ils complètent la garnison jusqu'à 5, champions
                compris. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
                tombent. -->
-          <template v-if="reinfOpen && (militiaBuilt || milHome > 0)">
-            <div class="mil-send">
-              <span class="mil-send-lab"
-                ><span class="mil-inline"><MilitiaPortrait /></span> Miliciens
-                <span class="ctl-dim"
-                  >· {{ milHome }} à la base · {{ militiaFreeSeats(liveControl) }} place{{
-                    militiaFreeSeats(liveControl) > 1 ? 's' : ''
-                  }}
-                  libre{{ militiaFreeSeats(liveControl) > 1 ? 's' : '' }}</span
-                ></span
-              >
-            </div>
-            <!-- 🛡️ Une tuile par milicien de la base, comme les champions au-dessus (demandé :
+            <template v-if="reinfOpen && (militiaBuilt || milHome > 0)">
+              <div class="mil-send">
+                <span class="mil-send-lab"
+                  ><span class="mil-inline"><MilitiaPortrait /></span> Miliciens
+                  <span class="ctl-dim"
+                    >· {{ milHome }} à la base · {{ militiaFreeSeats(liveControl) }} place{{
+                      militiaFreeSeats(liveControl) > 1 ? 's' : ''
+                    }}
+                    libre{{ militiaFreeSeats(liveControl) > 1 ? 's' : '' }}</span
+                  ></span
+                >
+              </div>
+              <!-- 🛡️ Une tuile par milicien de la base, comme les champions au-dessus (demandé :
                  « voir les icônes des miliciens au lieu de saisir un chiffre »). Ils sont
                  anonymes : toucher la N-ième en choisit N, la retoucher en retire une. Au-delà
                  des places libres, la tuile est grisée et le dit. -->
-            <div v-if="milHome > 0" class="mil-pick">
-              <button
-                v-for="i in milHome"
-                :key="'mil' + i"
-                type="button"
-                class="mil-tile"
-                :class="{ on: i <= milSend, off: i > milSendMax }"
-                :disabled="i > milSendMax"
-                :aria-pressed="i <= milSend"
-                :title="
-                  i > milSendMax ? 'plus de place pour un milicien sur ce lieu' : MILITIA_NAME
-                "
-                @click="pickMilitia(i)"
+              <div v-if="milHome > 0" class="mil-pick">
+                <button
+                  v-for="i in milHome"
+                  :key="'mil' + i"
+                  type="button"
+                  class="mil-tile"
+                  :class="{ on: i <= milSend, off: i > milSendMax }"
+                  :disabled="i > milSendMax"
+                  :aria-pressed="i <= milSend"
+                  :title="
+                    i > milSendMax ? 'plus de place pour un milicien sur ce lieu' : MILITIA_NAME
+                  "
+                  @click="pickMilitia(i)"
+                >
+                  <span class="mil-tile-emo"><MilitiaPortrait /></span>
+                  <span class="mil-tile-n">{{ i }}</span>
+                </button>
+              </div>
+              <p v-else class="ctl-line ctl-dim">Aucun milicien à la base pour l’instant.</p>
+              <div v-if="milSend > 0" class="send-bar">
+                <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
+                  <span class="mil-inline"><MilitiaPortrait /></span> Envoyer
+                  {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }}
+                  ·
+                  {{ formatDurationMin(militiaLegMin) }}
+                </button>
+              </div>
+            </template>
+            <!-- 🎯 Le % AVEC le renfort choisi (champions ET miliciens), arrivée comprise. -->
+            <p v-if="defenseWithSel && defenseNow" class="ctl-line ctl-hold">
+              🛡️ Avec ce renfort : repousse environ <b>{{ defenseWithSel.pct }} %</b>
+              <span class="ctl-dim">(au lieu de {{ defenseNow.pct }} %)</span>
+              <span v-if="defenseWithSel.late > defenseNow.late" class="ctl-warn-inline">
+                · il arrivera trop tard</span
               >
-                <span class="mil-tile-emo"><MilitiaPortrait /></span>
-                <span class="mil-tile-n">{{ i }}</span>
-              </button>
-            </div>
-            <p v-else class="ctl-line ctl-dim">Aucun milicien à la base pour l’instant.</p>
-            <div v-if="milSend > 0" class="send-bar">
-              <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
-                <span class="mil-inline"><MilitiaPortrait /></span> Envoyer {{ milSend }} milicien{{
-                  milSend > 1 ? 's' : ''
-                }}
-                ·
-                {{ formatDurationMin(militiaLegMin) }}
+            </p>
+            <button
+              v-if="controlCount"
+              type="button"
+              class="ctl-recall"
+              :disabled="ctlBusy"
+              @click="recallCtl"
+            >
+              Rappeler toute la garnison
+            </button>
+          </div>
+          <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
+          <p v-else-if="liveControl" class="sh-note">
+            🏰 Prends-le avec 1 à 3 champions, sans le héros :
+            {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
+            garnison ({{ CONTROL_YIELD[liveControl.kind] }}), jusqu’à ce que l’ennemi le reprenne
+            (entre 1 et 3 jours). Chaque ennemi abattu, à la prise comme en défense, rapporte de
+            l’XP.
+            <template v-if="militiaBuilt"
+              >Une fois pris, des miliciens de ta Caserne peuvent y remplacer tes
+              champions.</template
+            >
+          </p>
+          <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
+             se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
+          <template v-if="offers.hero && !partyTarget">
+            <p v-if="riskHero && riskHero.worsens" class="sh-risk" :class="{ bad: riskHero.risky }">
+              ⚠️ Une armée arrive : sans le héros, « {{ ODDS_LABEL[riskHero.after] }} » au lieu de «
+              {{ ODDS_LABEL[riskHero.before] }} ».
+            </p>
+            <p v-else-if="riskHero && riskHero.covered" class="sh-ok">
+              ✅ Une armée arrive, mais il sera rentré avant elle.
+            </p>
+            <div class="send-bar">
+              <button class="sh-send" :disabled="!canSend" @click="send">
+                {{ sendLabel }}
               </button>
             </div>
           </template>
-          <!-- 🎯 Le % AVEC le renfort choisi (champions ET miliciens), arrivée comprise. -->
-          <p v-if="defenseWithSel && defenseNow" class="ctl-line ctl-hold">
-            🛡️ Avec ce renfort : repousse environ <b>{{ defenseWithSel.pct }} %</b>
-            <span class="ctl-dim">(au lieu de {{ defenseNow.pct }} %)</span>
-            <span v-if="defenseWithSel.late > defenseNow.late" class="ctl-warn-inline">
-              · il arrivera trop tard</span
-            >
-          </p>
-          <button
-            v-if="controlCount"
-            type="button"
-            class="ctl-recall"
-            :disabled="ctlBusy"
-            @click="recallCtl"
-          >
-            Rappeler toute la garnison
-          </button>
-        </div>
-        <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
-        <p v-else-if="liveControl" class="sh-note">
-          🏰 Prends-le avec 1 à 3 champions, sans le héros :
-          {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
-          garnison ({{ CONTROL_YIELD[liveControl.kind] }}), jusqu’à ce que l’ennemi le reprenne
-          (entre 1 et 3 jours). Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
-          <template v-if="militiaBuilt"
-            >Une fois pris, des miliciens de ta Caserne peuvent y remplacer tes champions.</template
-          >
-        </p>
-        <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
-             se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
-        <template v-if="offers.hero && !partyTarget">
-          <p v-if="riskHero && riskHero.worsens" class="sh-risk" :class="{ bad: riskHero.risky }">
-            ⚠️ Une armée arrive : sans le héros, « {{ ODDS_LABEL[riskHero.after] }} » au lieu de «
-            {{ ODDS_LABEL[riskHero.before] }} ».
-          </p>
-          <p v-else-if="riskHero && riskHero.covered" class="sh-ok">
-            ✅ Une armée arrive, mais il sera rentré avant elle.
-          </p>
-          <div class="send-bar">
-            <button class="sh-send" :disabled="!canSend" @click="send">
-              {{ sendLabel }}
-            </button>
-          </div>
-        </template>
-        <!-- 👥 UNE ÉQUIPE — 3 places, le héros en prend 2 (2026-09-21 : les équipes remplacent les
+          <!-- 👥 UNE ÉQUIPE — 3 places, le héros en prend 2 (2026-09-21 : les équipes remplacent les
              convois). Elle part sur un camp, une faille, une armée ou un lieu de RÉCOLTE. ⚠️ UN SEUL bloc pour les deux : le choix du groupe,
              la tuile du héros, le risque de départ et le bouton sont identiques — en écrire deux
              garantirait qu’ils divergent. Seuls la rangée de chips et la note changent.
              Les règles vivent dans `camp.ts` / `rift.ts` et `party.ts` ; l’écran les montre,
              et dit POURQUOI quelqu’un ne peut pas venir. -->
-        <template v-if="partyTarget">
-          <div v-if="offers.hero && !partyTarget" class="car-sep">ou bien — une équipe</div>
-          <!-- Le héros : une tuile comme les autres. Il est plafonné à HERO_PARTY_WORTH
+          <template v-if="partyTarget">
+            <div v-if="offers.hero && !partyTarget" class="car-sep">ou bien — une équipe</div>
+            <!-- Le héros : une tuile comme les autres. Il est plafonné à HERO_PARTY_WORTH
                champions au combat (v0.980), mais l'écran ne le dit plus (décision de
                l'utilisateur, v0.1263) : seul « sans XP » reste. Grisée avec la raison plutôt que cachée. -->
-          <!-- 📐 Le héros et « tout le vivier » sur UNE ligne : deux boutons empilés
+            <!-- 📐 Le héros et « tout le vivier » sur UNE ligne : deux boutons empilés
                prenaient ~100 px pour deux gestes. -->
-          <!-- 🏰 SORTIE (2026-09-29, demandé) : l'équipe peut partir d'un point fixe tenu — sa
+            <!-- 🏰 SORTIE (2026-09-29, demandé) : l'équipe peut partir d'un point fixe tenu — sa
                garnison y fournit les champions, et ils y reviennent. ⚔️🧭 PLUSIEURS départs
                cochés = une ATTAQUE COMBINÉE : chaque groupe part à son heure pour arriver
                ensemble (le plan s'affiche dessous). -->
-          <div v-if="originOptions.length" class="origin-pick">
-            <p class="car-cap">
-              🧭 Choisis tes champions dans chaque lieu, du plus proche au plus loin · plusieurs
-              lieux = une attaque combinée
-            </p>
-            <!-- ⚔️🧭 LE PLAN : qui part d'où, et QUAND, pour que tous arrivent ensemble. Un groupe
+            <div v-if="originOptions.length" class="origin-pick">
+              <p class="car-cap">
+                🧭 Choisis tes champions dans chaque lieu, du plus proche au plus loin · plusieurs
+                lieux = une attaque combinée
+              </p>
+              <!-- ⚔️🧭 LE PLAN : qui part d'où, et QUAND, pour que tous arrivent ensemble. Un groupe
                  qui attend reste chez lui (il produit, il défend) — s'il est battu avant de
                  partir, il ne vient pas. -->
-            <div v-if="combined && partySize" class="wing-plan">
-              <p class="car-cap">
-                ⚔️ <b>Attaque combinée</b> · tous arrivent dans
-                <b>{{ formatDurationMin(Math.max(...wingPlan.map((w) => w.legMin))) }}</b>
-              </p>
-              <div v-for="w in wingPlan" :key="w.id" class="wing-row" :class="{ empty: !w.n }">
-                <span class="wing-emo">{{ w.emo }}</span>
-                <span class="wing-name">{{ w.label }}</span>
-                <span class="wing-n">{{ w.n }} 🗡️</span>
-                <span class="wing-when">{{
-                  !w.n
-                    ? 'personne'
-                    : w.departInMin <= 0
-                      ? 'part maintenant'
-                      : `part dans ${formatDurationMin(w.departInMin)}`
-                }}</span>
-                <span
-                  v-if="w.n"
-                  class="wing-back"
-                  :title="
-                    w.wonMin < w.legMin
-                      ? 'Retour chez lui : si le point est pris / si l’assaut échoue'
-                      : 'Retour chez lui'
-                  "
-                  >↩ {{ controlReturnValue(w.legMin, w.wonMin) }}</span
-                >
+              <div v-if="combined && partySize" class="wing-plan">
+                <p class="car-cap">
+                  ⚔️ <b>Attaque combinée</b> · tous arrivent dans
+                  <b>{{ formatDurationMin(Math.max(...wingPlan.map((w) => w.legMin))) }}</b>
+                </p>
+                <div v-for="w in wingPlan" :key="w.id" class="wing-row" :class="{ empty: !w.n }">
+                  <span class="wing-emo">{{ w.emo }}</span>
+                  <span class="wing-name">{{ w.label }}</span>
+                  <span class="wing-n">{{ w.n }} 🗡️</span>
+                  <span class="wing-when">{{
+                    !w.n
+                      ? 'personne'
+                      : w.departInMin <= 0
+                        ? 'part maintenant'
+                        : `part dans ${formatDurationMin(w.departInMin)}`
+                  }}</span>
+                  <span
+                    v-if="w.n"
+                    class="wing-back"
+                    :title="
+                      w.wonMin < w.legMin
+                        ? 'Retour chez lui : si le point est pris / si l’assaut échoue'
+                        : 'Retour chez lui'
+                    "
+                    >↩ {{ controlReturnValue(w.legMin, w.wonMin) }}</span
+                  >
+                </div>
+                <p class="car-cap">
+                  Un groupe battu avant son départ (siège, reprise de son point) ne vient pas.
+                </p>
               </div>
-              <p class="car-cap">
-                Un groupe battu avant son départ (siège, reprise de son point) ne vient pas.
-              </p>
             </div>
-          </div>
-          <div class="party-top">
-            <button
-              type="button"
-              class="party-hero"
-              :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
-              :disabled="!!partyHeroBlock"
-              :aria-pressed="partyHeroOn"
-              @click="partyHero = !partyHero"
-            >
-              <span class="ph-emo">🧝</span>
-              <span class="ph-main">
-                <span class="ph-name">Ton héros</span>
-                <span class="ph-sub">{{
-                  partyHeroBlock
-                    ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                    : originOptions.length
-                      ? 'part de la base · sans XP'
-                      : 'sans XP'
-                }}</span>
-                <span
-                  v-if="partyGain.hero != null"
-                  class="ph-gain"
-                  :class="{ zero: partyGain.hero === 0, neg: partyGain.hero < 0 }"
-                  :title="
-                    partyHeroOn
-                      ? 'Ce que l’équipe perdrait en réussite sans lui.'
-                      : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'
-                  "
-                  >🎯 {{ partyGain.hero > 0 ? '+' : partyGain.hero < 0 ? '−' : ''
-                  }}{{ Math.abs(partyGain.hero) }} %</span
-                >
-              </span>
-              <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
-            </button>
-            <button
-              v-if="char.advList.length"
-              class="car-auto"
-              :disabled="!partyPoolSorted.length"
-              @click="togglePartyAll"
-            >
-              {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
-            </button>
-          </div>
-          <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
-               ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
-          <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
-               coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
-          <p
-            class="car-cap"
-            title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
-          >
-            👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions · XP partagée
-            <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
-            <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
-          </p>
-          <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
-          <div v-if="stayChoice" class="stay-pick">
-            <p class="car-cap">
-              🏰 <b>Qui reste ?</b> {{ stayIds.length }}/{{ stayCap }} en garnison · les autres
-              rentrent après la prise
-            </p>
-            <button
-              v-for="a in partyAdvs"
-              :key="a.id"
-              type="button"
-              class="stay-chip"
-              :class="{ on: stayIds.includes(a.id) }"
-              :aria-pressed="stayIds.includes(a.id)"
-              @click="toggleStay(a.id)"
-            >
-              {{ stayIds.includes(a.id) ? '🏰' : '↩' }} {{ a.name }}
-              <span v-if="stayHoldOf[a.id] !== undefined" class="stay-hold"
-                >🛡️ {{ stayHoldOf[a.id] }} %</span
+            <div class="party-top">
+              <button
+                type="button"
+                class="party-hero"
+                :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
+                :disabled="!!partyHeroBlock"
+                :aria-pressed="partyHeroOn"
+                @click="partyHero = !partyHero"
               >
-            </button>
-          </div>
-          <!-- 🛡️ Ce que la garnison choisie tiendra face aux reprises. ⚠️ Jamais plus de 90 % :
+                <span class="ph-emo">🧝</span>
+                <span class="ph-main">
+                  <span class="ph-name">Ton héros</span>
+                  <span class="ph-sub">{{
+                    partyHeroBlock
+                      ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                      : originOptions.length
+                        ? 'part de la base · sans XP'
+                        : 'sans XP'
+                  }}</span>
+                  <span
+                    v-if="partyGain.hero != null"
+                    class="ph-gain"
+                    :class="{ zero: partyGain.hero === 0, neg: partyGain.hero < 0 }"
+                    :title="
+                      partyHeroOn
+                        ? 'Ce que l’équipe perdrait en réussite sans lui.'
+                        : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'
+                    "
+                    >🎯 {{ partyGain.hero > 0 ? '+' : partyGain.hero < 0 ? '−' : ''
+                    }}{{ Math.abs(partyGain.hero) }} %</span
+                  >
+                </span>
+                <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
+              </button>
+              <button
+                v-if="char.advList.length"
+                class="car-auto"
+                :disabled="!partyPoolSorted.length"
+                @click="togglePartyAll"
+              >
+                {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
+              </button>
+            </div>
+            <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
+               ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
+            <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
+               coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
+            <p
+              class="car-cap"
+              title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
+            >
+              👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions · XP partagée
+              <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
+              <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
+            </p>
+            <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
+            <div v-if="stayChoice" class="stay-pick">
+              <p class="car-cap">
+                🏰 <b>Qui reste ?</b> {{ stayIds.length }}/{{ stayCap }} en garnison · les autres
+                rentrent après la prise
+              </p>
+              <button
+                v-for="a in partyAdvs"
+                :key="a.id"
+                type="button"
+                class="stay-chip"
+                :class="{ on: stayIds.includes(a.id) }"
+                :aria-pressed="stayIds.includes(a.id)"
+                @click="toggleStay(a.id)"
+              >
+                {{ stayIds.includes(a.id) ? '🏰' : '↩' }} {{ a.name }}
+                <span v-if="stayHoldOf[a.id] !== undefined" class="stay-hold"
+                  >🛡️ {{ stayHoldOf[a.id] }} %</span
+                >
+              </button>
+            </div>
+            <!-- 🛡️ Ce que la garnison choisie tiendra face aux reprises. ⚠️ Jamais plus de 90 % :
                au-delà, l'ennemi envoie plus de monde (`retakeBoost`) — il reste du suspense. -->
-          <p v-if="stayHold !== null" class="car-cap stay-hold-line">
-            🛡️ Garnison : repousse environ <b>{{ stayHold }} %</b> des attaques
-            <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
-          </p>
-          <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
+            <p v-if="stayHold !== null" class="car-cap stay-hold-line">
+              🛡️ Garnison : repousse environ <b>{{ stayHold }} %</b> des attaques
+              <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
+            </p>
+            <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
                sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
-          <div v-if="partyGroups.length" class="car-pick">
-            <template v-for="g in partyGroups" :key="g.id">
-              <div class="pool-head">
-                <span class="pool-emo">{{ g.emo }}</span>
-                <span class="pool-name">{{ g.label }}</span>
-                <span class="pool-leg">à {{ formatDurationMin(g.legMin) }}</span>
-                <span class="pool-n">{{ g.advs.length }} 🗡️</span>
-              </div>
+            <div v-if="partyGroups.length" class="car-pick">
+              <template v-for="g in partyGroups" :key="g.id">
+                <div class="pool-head">
+                  <span class="pool-emo">{{ g.emo }}</span>
+                  <span class="pool-name">{{ g.label }}</span>
+                  <span class="pool-leg">à {{ formatDurationMin(g.legMin) }}</span>
+                  <span class="pool-n">{{ g.advs.length }} 🗡️</span>
+                </div>
+                <AdvPickTile
+                  v-for="a in g.advs"
+                  :key="a.id"
+                  :adv="a"
+                  :on="partyEscort.includes(a.id)"
+                  :xp="partyXp[a.id]"
+                  :gain="partyGain[a.id]"
+                  @toggle="togglePartyAdv(a.id)"
+                />
+                <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
+              </template>
+              <template v-if="showBlocked">
+                <AdvPickTile
+                  v-for="b in partyBlocked"
+                  :key="b.adv.id"
+                  :adv="b.adv"
+                  :on="false"
+                  :reason="ADV_UNAVAILABLE_LABEL[b.why]"
+                />
+              </template>
+            </div>
+            <div v-else-if="char.advList.length" class="car-pick">
               <AdvPickTile
-                v-for="a in g.advs"
+                v-for="a in partyPoolSorted"
                 :key="a.id"
                 :adv="a"
                 :on="partyEscort.includes(a.id)"
@@ -938,118 +966,97 @@
                 :gain="partyGain[a.id]"
                 @toggle="togglePartyAdv(a.id)"
               />
-              <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
-            </template>
-            <template v-if="showBlocked">
-              <AdvPickTile
-                v-for="b in partyBlocked"
-                :key="b.adv.id"
-                :adv="b.adv"
-                :on="false"
-                :reason="ADV_UNAVAILABLE_LABEL[b.why]"
-              />
-            </template>
-          </div>
-          <div v-else-if="char.advList.length" class="car-pick">
-            <AdvPickTile
-              v-for="a in partyPoolSorted"
-              :key="a.id"
-              :adv="a"
-              :on="partyEscort.includes(a.id)"
-              :xp="partyXp[a.id]"
-              :gain="partyGain[a.id]"
-              @toggle="togglePartyAdv(a.id)"
-            />
-            <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
+              <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
                  de la grille pour des tuiles qu'on ne peut pas toucher. Le bouton dit combien il
                  y en a, et pourquoi chacun est indisponible reste écrit sur sa tuile. -->
-            <template v-if="showBlocked">
-              <AdvPickTile
-                v-for="b in partyBlocked"
-                :key="b.adv.id"
-                :adv="b.adv"
-                :on="false"
-                :reason="ADV_UNAVAILABLE_LABEL[b.why]"
-              />
-            </template>
-          </div>
-          <!-- 🔮 LA RÈGLE QUE PERSONNE NE POUVAIT DEVINER, dite une seule fois : sous son
+              <template v-if="showBlocked">
+                <AdvPickTile
+                  v-for="b in partyBlocked"
+                  :key="b.adv.id"
+                  :adv="b.adv"
+                  :on="false"
+                  :reason="ADV_UNAVAILABLE_LABEL[b.why]"
+                />
+              </template>
+            </div>
+            <!-- 🔮 LA RÈGLE QUE PERSONNE NE POUVAIT DEVINER, dite une seule fois : sous son
                niveau, un champion apprend beaucoup moins (mesuré v0.1102 : du simple au
                quadruple selon la destination). Affichée seulement s'il y a quelqu'un que ça
                concerne — sinon c'est du bruit. -->
-          <p v-if="partyLowXp" class="car-xp-note">
-            📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
-          </p>
-          <button
-            v-if="char.advList.length && partyBlocked.length"
-            type="button"
-            class="car-blocked-toggle"
-            :aria-expanded="showBlocked"
-            @click="showBlocked = !showBlocked"
-          >
-            {{
-              showBlocked
-                ? `Masquer les indisponibles`
-                : `Voir les ${partyBlocked.length} indisponible${partyBlocked.length > 1 ? 's' : ''}`
-            }}
-          </button>
-          <!-- ⚠️ Était un `v-else` du bouton des indisponibles : il s'affichait donc dès que
+            <p v-if="partyLowXp" class="car-xp-note">
+              📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
+            </p>
+            <button
+              v-if="char.advList.length && partyBlocked.length"
+              type="button"
+              class="car-blocked-toggle"
+              :aria-expanded="showBlocked"
+              @click="showBlocked = !showBlocked"
+            >
+              {{
+                showBlocked
+                  ? `Masquer les indisponibles`
+                  : `Voir les ${partyBlocked.length} indisponible${partyBlocked.length > 1 ? 's' : ''}`
+              }}
+            </button>
+            <!-- ⚠️ Était un `v-else` du bouton des indisponibles : il s'affichait donc dès que
                personne n'était indisponible, champions ou pas. -->
-          <p v-if="!char.advList.length" class="sh-away">
-            🏅 Aucun champion : invoque-les au Panthéon de ta base pour attaquer sans le héros.
-          </p>
-          <!-- 🎒 RAVITAILLEMENT — un de chaque consommable, pris dans le stock. ⚠️ Ils entrent
+            <p v-if="!char.advList.length" class="sh-away">
+              🏅 Aucun champion : invoque-les au Panthéon de ta base pour attaquer sans le héros.
+            </p>
+            <!-- 🎒 RAVITAILLEMENT — un de chaque consommable, pris dans le stock. ⚠️ Ils entrent
                dans le kit du groupe (`partyRoad`), donc le 🎯 % ci-dessus les voit comme le
                combat les verra. Ceux qui ne servent à rien ICI sont grisés AVEC la raison. -->
-          <!-- 🎒 Ravitaillement (cf. `SupplyPicker`) : le 🎯 % ci-dessus en tient compte. -->
-          <SupplyPicker :rows="supplyRows" @toggle="toggleSupply" />
-          <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
-          <details class="sh-rules">
-            <summary>ⓘ Règles de cette expédition</summary>
-            <p v-if="selectedCamp" class="sh-note">
-              Sans le héros : de l’or (et des pierres chez les morts-vivants). En cas de défaite,
-              les champions tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
+            <!-- 🎒 Ravitaillement (cf. `SupplyPicker`) : le 🎯 % ci-dessus en tient compte. -->
+            <SupplyPicker :rows="supplyRows" @toggle="toggleSupply" />
+            <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
+            <details class="sh-rules">
+              <summary>ⓘ Règles de cette expédition</summary>
+              <p v-if="selectedCamp" class="sh-note">
+                Sans le héros : de l’or (et des pierres chez les morts-vivants). En cas de défaite,
+                les champions tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
+              </p>
+              <p v-else-if="!teamOnly" class="sh-note">
+                Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe
+                ne ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des
+                bandits peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient.
+              </p>
+              <p v-else class="sh-note">Une faille ne rend que du 💠, jamais d’objet.</p>
+            </details>
+            <p
+              v-if="partyRisk && partyRisk.worsens"
+              class="sh-risk"
+              :class="{ bad: partyRisk.risky }"
+            >
+              ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[partyRisk.after] }} » au lieu de «
+              {{ ODDS_LABEL[partyRisk.before] }} ».
             </p>
-            <p v-else-if="!teamOnly" class="sh-note">
-              Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe
-              ne ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des
-              bandits peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient.
+            <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
+              ✅ Une armée arrive, mais ils seront rentrés avant elle.
             </p>
-            <p v-else class="sh-note">Une faille ne rend que du 💠, jamais d’objet.</p>
-          </details>
-          <p
-            v-if="partyRisk && partyRisk.worsens"
-            class="sh-risk"
-            :class="{ bad: partyRisk.risky }"
-          >
-            ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[partyRisk.after] }} » au lieu de «
-            {{ ODDS_LABEL[partyRisk.before] }} ».
-          </p>
-          <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
-            ✅ Une armée arrive, mais ils seront rentrés avant elle.
-          </p>
-          <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
+            <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
-          <p v-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
-            ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
-          </p>
-          <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>
-          <p v-else-if="partySize && !progress.ready.value" class="sh-away">
-            ⏳ Chargement de ta progression…
-          </p>
-          <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
-          <div class="send-bar">
-            <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
-              {{ partySendLabel }}
-            </button>
+            <p v-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
+              ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
+            </p>
+            <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>
+            <p v-else-if="partySize && !progress.ready.value" class="sh-away">
+              ⏳ Chargement de ta progression…
+            </p>
+            <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
+            <div class="send-bar">
+              <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
+                {{ partySendLabel }}
+              </button>
+            </div>
+          </template>
+          <div v-if="!offers.hero && !partyTarget && heroHealIn > 0" class="sh-away">
+            🤕 Ton héros est à l’infirmerie — de retour dans {{ formatDuration(heroHealIn) }}.
+          </div>
+          <div v-else-if="!offers.hero && !partyTarget" class="sh-away">
+            🧭 Ton héros est en expédition. Une équipe de champions, elle, peut partir sans lui.
           </div>
         </template>
-        <div v-if="!offers.hero && !partyTarget && heroHealIn > 0" class="sh-away">
-          🤕 Ton héros est à l’infirmerie — de retour dans {{ formatDuration(heroHealIn) }}.
-        </div>
-        <div v-else-if="!offers.hero && !partyTarget" class="sh-away">
-          🧭 Ton héros est en expédition. Une équipe de champions, elle, peut partir sans lui.
-        </div>
       </div>
     </transition>
 
@@ -3387,6 +3394,17 @@ const poiFacts = computed<PoiFact[]>(() => {
         title: 'Ce qu’on dépèce sur les bêtes abattues, en moyenne',
       });
   }
+  // ⚔️ Déjà attaqué : ce qu'il rapporte suffit — trajets, % et échéances servaient à l'envoi.
+  if (engagedTrip.value) {
+    if (rift)
+      out.push({
+        icon: '💠',
+        label: 'Si refermée',
+        value: `~${rift.clearMana}`,
+        title: 'Mana si tu la refermes — gardien compris',
+      });
+    return out;
+  }
   if (rift) {
     out.push({
       icon: '⏳',
@@ -3655,6 +3673,26 @@ const veiledKey = computed(() =>
         .join('|')
     : '',
 );
+/** ⚔️ LE LIEU SÉLECTIONNÉ EST DÉJÀ ATTAQUÉ : c'est la cible dessinée d'un voyage en cours
+ *  (héros ou équipe). La fiche se réduit alors (demandé) : qui y est, quand il rentre, ce
+ *  qu'il rapporte. ⚠️ Mêmes listes que les cibles DESSINÉES : un lieu non terrassé revenu
+ *  sur la carte dès le rapport est de nouveau un lieu ordinaire, réattaquable. */
+const engagedTrip = computed(() => {
+  const p = selected.value;
+  if (!p) return null;
+  const t = now.value;
+  const back = (midAt: number, returnAt: number) =>
+    (t >= midAt ? 'sur le retour' : 'en route') +
+    ', de retour en ville dans ' +
+    formatDuration(Math.max(0, returnAt - t));
+  const a = active.value;
+  if (a && a.poi.id === p.id && voyageTargetShown(a, t) && t < a.returnAt)
+    return 'Ton héros y est parti — ' + back(a.midAt, a.returnAt);
+  const v = travelTargets.value.find((x) => x.poi.id === p.id);
+  const g = v ? char.partyList.find((x) => x.id === v.id) : null;
+  if (g) return 'Une équipe y est partie — ' + back(g.midAt, g.returnAt);
+  return v ? 'Une équipe y est partie' : null;
+});
 const travelTargets = stableBy(
   () =>
     travelersOnMap.value

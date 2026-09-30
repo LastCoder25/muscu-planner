@@ -39,6 +39,9 @@
       <button class="sh-x" aria-label="Fermer" @click="emit('close')">✕</button>
     </div>
 
+    <!-- ⚔️ DÉJÀ ATTAQUÉ (demandé) : qui y est et quand il rentre ; les options d'envoi, les %
+         et les notes ne servent plus, la page ne passe que ce qu'il rapporte. -->
+    <div v-if="engaged" class="pc-engaged">⚔️ {{ engaged }}</div>
     <div class="pc-grid">
       <span v-for="f in factsInfo" :key="f.label" class="pc-fact" :class="f.cls" :title="f.title">
         <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
@@ -58,60 +61,62 @@
     <!-- 🕳️ DEUX CAUSES, DEUX MESSAGES — « route dangereuse » est tirée au spawn : on la
          subit, on choisit ailleurs. L'embuscade d'une faille (v0.1009) se PRÉVIENT —
          refermer ses failles avant 7 jours — puis s'attend : elle dure deux jours. -->
-    <div v-if="poi.riftPeril" class="pc-alert">
-      🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template v-if="ambushLeft">
-        encore {{ formatDuration(ambushLeft) }}</template
-      >
-    </div>
-    <div v-else-if="poi.perilous" class="pc-alert">
-      ⚠️ Route dangereuse — embuscades doublées, butin renforcé
-    </div>
+    <template v-if="!engaged">
+      <div v-if="poi.riftPeril" class="pc-alert">
+        🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template v-if="ambushLeft">
+          encore {{ formatDuration(ambushLeft) }}</template
+        >
+      </div>
+      <div v-else-if="poi.perilous" class="pc-alert">
+        ⚠️ Route dangereuse — embuscades doublées, butin renforcé
+      </div>
 
-    <!-- ⓘ L'explication d'une faille est REPLIÉE : elle faisait cinq lignes à chaque ouverture. -->
-    <details v-if="isRift" class="pc-more">
-      <summary>ⓘ Comment marche une faille</summary>
-      <p class="pc-note">
-        Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros. Les
-        monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille ajoute la
-        prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie. Laissée mûrir, elle
-        déborde : une partie de ses monstres s’embusque deux jours autour d’elle, le reste marche
-        sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
-      </p>
-    </details>
-    <!-- 🧿 LE SCEAU DE BRÈCHE se pose ICI, sur la faille — il n'accompagne aucun voyage. -->
-    <template v-if="isRift">
-      <p v-if="poi.sealed" class="pc-note">🧿 Scellée : cette faille a déjà reçu son répit.</p>
-      <button
-        v-else-if="sealStock > 0"
-        type="button"
-        class="sup-seal"
-        :disabled="busySeal"
-        @click="emit('seal')"
-      >
-        🧿 Poser un sceau de brèche — 24 h de répit ({{ sealStock }} en stock)
-      </button>
-    </template>
-    <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne est une PERTE ÉVITÉE, et on DIT quand ça
+      <!-- ⓘ L'explication d'une faille est REPLIÉE : elle faisait cinq lignes à chaque ouverture. -->
+      <details v-if="isRift" class="pc-more">
+        <summary>ⓘ Comment marche une faille</summary>
+        <p class="pc-note">
+          Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros. Les
+          monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille ajoute la
+          prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie. Laissée mûrir,
+          elle déborde : une partie de ses monstres s’embusque deux jours autour d’elle, le reste
+          marche sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
+        </p>
+      </details>
+      <!-- 🧿 LE SCEAU DE BRÈCHE se pose ICI, sur la faille — il n'accompagne aucun voyage. -->
+      <template v-if="isRift">
+        <p v-if="poi.sealed" class="pc-note">🧿 Scellée : cette faille a déjà reçu son répit.</p>
+        <button
+          v-else-if="sealStock > 0"
+          type="button"
+          class="sup-seal"
+          :disabled="busySeal"
+          @click="emit('seal')"
+        >
+          🧿 Poser un sceau de brèche — 24 h de répit ({{ sealStock }} en stock)
+        </button>
+      </template>
+      <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne est une PERTE ÉVITÉE, et on DIT quand ça
          n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
-    <template v-if="warband?.army">
-      <p class="pc-note">
-        ⚔️ Elle marche sur <b>{{ warband.target }}</b
-        >. Chaque ennemi abattu <b>n'arrivera pas</b> ; la battre entièrement
-        <b>annule l'attaque</b>. Même vaincus, tes champions rentrent avec le butin des ennemis
-        abattus — les tombés passent par l'infirmerie. Elle est trop forte pour une seule équipe :
-        attaque-la en combiné depuis la base et tes points fixes.
-      </p>
-    </template>
-    <template v-else-if="warband">
-      <p v-if="warband.utile" class="pc-note">
-        ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
-        tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part à
-        l'infirmerie.
-      </p>
-      <p v-else class="pc-note warn">
-        ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et garde la
-        force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du 💠.
-      </p>
+      <template v-if="warband?.army">
+        <p class="pc-note">
+          ⚔️ Elle marche sur <b>{{ warband.target }}</b
+          >. Chaque ennemi abattu <b>n'arrivera pas</b> ; la battre entièrement
+          <b>annule l'attaque</b>. Même vaincus, tes champions rentrent avec le butin des ennemis
+          abattus — les tombés passent par l'infirmerie. Elle est trop forte pour une seule équipe :
+          attaque-la en combiné depuis la base et tes points fixes.
+        </p>
+      </template>
+      <template v-else-if="warband">
+        <p v-if="warband.utile" class="pc-note">
+          ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
+          tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part à
+          l'infirmerie.
+        </p>
+        <p v-else class="pc-note warn">
+          ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et garde
+          la force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du 💠.
+        </p>
+      </template>
     </template>
   </div>
 </template>
@@ -132,6 +137,8 @@ const props = defineProps<{
   rank: ReturnType<typeof poiRank>;
   /** La ligne sous le nom : les ennemis et la ressource. */
   sub: { foe: string; res: string };
+  /** ⚔️ Le lieu est déjà attaqué : « qui · quand il rentre ». La fiche se réduit alors. */
+  engaged?: string | null;
   facts: PoiFact[];
   /** Temps restant d'une embuscade de faille autour du lieu (ms), 0 sinon. */
   ambushLeft: number;
@@ -294,6 +301,15 @@ const factsGo = computed(() => props.facts.filter((f) => f.go));
 }
 .pc-fact.wp-bad .pc-fact-val {
   color: #ff6a45;
+}
+.pc-engaged {
+  margin-top: 7px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: color-mix(in srgb, #b57bff 14%, transparent);
+  border: 1px solid color-mix(in srgb, #b57bff 50%, transparent);
 }
 .pc-alert {
   margin-top: 7px;
