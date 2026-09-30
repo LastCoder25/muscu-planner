@@ -9,8 +9,10 @@ import {
   reinforceControl,
   seatsOf,
   controlFilterOf,
+  garrisonDots,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
+import { MILITIA_PREFIX } from '@/lib/militia';
 
 const H = 3600_000;
 const L = 30;
@@ -84,5 +86,23 @@ describe('🔎 les filtres de la liste', () => {
     expect(controlFilterOf('empty')).toBe('empty');
     expect(controlFilterOf('enemy')).toBe('notHeld');
     expect(controlFilterOf('assault')).toBe('notHeld');
+  });
+});
+
+describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
+  it('ennemi : rien (on ne connaît pas sa garnison)', () => {
+    expect(garrisonDots(row(controlRoster(base(), [], 0, L), MINE))).toBe('');
+  });
+
+  it('tenu : champions, miliciens, renforts en route, puis places libres', () => {
+    const mil = `${MILITIA_PREFIX}1`;
+    let m = captureControl(base(), MINE, ['a', mil], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    m = reinforceControl(m, MINE, ['b'], 4 * H, H);
+    const r = row(controlRoster(m, [], 2 * H, L), MINE);
+    const dots = garrisonDots(r);
+    expect(dots.length).toBe(Math.max(r.seats, 3));
+    expect(dots.startsWith('cmr')).toBe(true);
+    expect(dots.slice(3)).toBe('f'.repeat(Math.max(0, r.seats - 3)));
   });
 });

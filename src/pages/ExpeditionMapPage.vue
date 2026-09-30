@@ -219,6 +219,7 @@
             :down-key="downKey"
             :imminent-key="imminentKey"
             :tier-key="tierKey"
+            :garrison-key="garrisonKey"
             :target="active && voyageTargetShown(active, now) ? active.poi : null"
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
@@ -1264,6 +1265,7 @@ import {
   controlFreeSeats,
   militiaFreeSeats,
   controlRoster,
+  garrisonDots,
   controlTravelMult,
   controlYieldCard,
   controlTier,
@@ -1893,6 +1895,15 @@ const tierKey = computed(() =>
     .filter((p) => p.control)
     .map((p) => `${p.id}:${controlTier(p.control, coarseNow.value)}`)
     .filter((s) => !s.endsWith(':0'))
+    .join('|'),
+);
+/** ⚫ La garnison de chaque point tenu, en points sous le fort (`garrisonDots`), « id:lettres »
+ *  joints par « | » — une chaîne, pour ne re-dessiner les lieux que si elle change. Lue sur
+ *  la MÊME liste que « Places fortes » : les deux ne peuvent pas se contredire. */
+const garrisonKey = computed(() =>
+  ctlRoster.value
+    .map((r) => `${r.poi.id}:${garrisonDots(r)}`)
+    .filter((s) => !s.endsWith(':'))
     .join('|'),
 );
 const livePoi = computed(() =>
@@ -3765,7 +3776,9 @@ const travelTargets = stableBy(
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 // 🗼 Les tours de guet tenues raccourcissent les trajets APRÈS l'Avant-poste.
 const travelMult = computed(
-  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map, now.value),
+  () =>
+    travelTimeMult(char.row?.buildings ?? []) *
+    controlTravelMult(char.row?.expedition_map, now.value),
 );
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);

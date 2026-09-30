@@ -425,6 +425,43 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await render('c1')).toContain('ctl-alert');
     expect(await render('')).not.toContain('ctl-alert');
   }, 30_000);
+  it('⚫ MapPoiLayer dessine la garnison en points sous le fort', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    const fort = {
+      ...MAP_POIS[0],
+      id: 'c1',
+      type: 'control',
+      control: { kind: 'mine', owner: 'player', garrison: ['a'], collectedAt: 0 },
+    } as unknown as (typeof MAP_POIS)[number];
+    const render = async (garrisonKey: string) => {
+      let out = '';
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: [fort],
+          selectedId: null,
+          dimmedKey: '',
+          veiledKey: '',
+          imminentKey: '',
+          garrisonKey,
+          target: null,
+          travelTargets: [],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      return out;
+    };
+    const held = await render('c1:cmrff');
+    expect(held.match(/class="d-[cmrf]"/g)?.length).toBe(5);
+    expect(held).toContain('class="d-r"');
+    expect(held).not.toMatch(/ctl-dots[^"]*empty/);
+    // Personne ne tient le point : les places libres le disent en rouge.
+    expect(await render('c1:fff')).toMatch(/ctl-dots[^"]*empty/);
+    expect(await render('')).not.toContain('ctl-dots');
+  }, 30_000);
 
   it('🎚️ MapFilterBar montre une puce par rang et par type', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');

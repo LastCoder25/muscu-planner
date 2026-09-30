@@ -1869,3 +1869,18 @@ export function ascensionMessage(
     read: false,
   };
 }
+
+/**
+ * ⚫ LA GARNISON EN POINTS, sous le fort sur la carte (demandé : « voir d'un coup d'œil les
+ * garnisons »). Une lettre par place, dans l'ordre de la liste « Places fortes » : `c` champion,
+ * `m` milicien, `r` renfort en route (sa place est déjà prise), `f` libre. Rien pour un point
+ * ennemi : on ne connaît pas sa garnison. Une CHAÎNE, pour une prop à identité stable
+ * (la couche des lieux ne se re-dessine que si elle change).
+ */
+export function garrisonDots(row: ControlRosterRow): string {
+  if (row.poi.control?.owner !== 'player') return '';
+  const champs = row.garrison.filter((id) => !isMilitiaId(id)).length;
+  const mil = row.garrison.length - champs;
+  const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(row.reinforcing.length);
+  return filled + 'f'.repeat(Math.max(0, row.seats - filled.length));
+}
