@@ -34,7 +34,7 @@ import {
   type PartyHero,
   type EscortKit,
 } from './caravan';
-import { SUPPLY_IDS, supplyFx, type SupplyStock } from './supplies';
+import { pickSupply, supplyFx, type SupplyStock } from './supplies';
 import { militiaLost } from './militia';
 import {
   campSpecOf,
@@ -274,7 +274,7 @@ export function bodyLoot(
     if (spec.faction === 'bandits') gold += purseGold(poi.level) * w;
     else if (spec.faction === 'mortsvivants') stones += undeadStones(poi.level) * w;
     else if (rng() < Math.min(1, LOOT.beastDrop * w)) {
-      const sid = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
+      const sid = pickSupply(rng());
       supplies[sid] = (supplies[sid] ?? 0) + 1;
     }
   }

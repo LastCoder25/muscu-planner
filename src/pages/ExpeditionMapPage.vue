@@ -434,7 +434,9 @@
       :trips="trips"
       :hero-profile="character.profile"
       :recallable="recallableTrips"
+      :boosts="focusBoosts"
       @recall="recallTripByKey"
+      @boost="boostTrip"
     />
 
     <!-- Panneau POI sélectionné -->
@@ -1109,7 +1111,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
-import { attackWingVoyages } from '@/lib/combinedAttack';
+import { attackWingVoyages, type CombinedAttack } from '@/lib/combinedAttack';
+import { attackBoostPlan, boostChoices, voyageBoostPlan } from '@/lib/speedBoost';
+import type { ActiveExpedition } from '@/lib/expedition';
 import {
   fogRevealPlan,
   fogRadiusAt,
@@ -1124,7 +1128,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
 import type { RuneTier } from '@/lib/skillRunes';
-import type { SupplyStock } from '@/lib/supplies';
+import { BOOST_IDS, type BoostId, type SupplyStock } from '@/lib/supplies';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
@@ -3062,6 +3066,81 @@ function tripRecall(key: string) {
 const recallableTrips = computed(
   () => new Set(trips.value.map((t) => t.key).filter((k) => !!tripRecall(k))),
 );
+/** ⚡ LES BOOSTS DE VITESSE (demandé) : la cible d'une tuile de voyage — le héros, une équipe
+ *  (`g` + id) ou une attaque combinée pas encore toute partie (`a` + id + `:` + groupe). */
+function boostTarget(
+  key: string,
+):
+  | { kind: 'hero'; v: ActiveExpedition }
+  | { kind: 'party'; id: string; v: ActiveExpedition }
+  | { kind: 'attack'; id: string; a: CombinedAttack }
+  | null {
+  if (key === 'hero') {
+    const v = char.row?.expedition;
+    return v ? { kind: 'hero', v } : null;
+  }
+  if (key.startsWith('g')) {
+    const v = char.partyList.find((p) => p.id === key.slice(1));
+    return v ? { kind: 'party', id: v.id, v } : null;
+  }
+  if (key.startsWith('a')) {
+    const id = key.slice(1, key.lastIndexOf(':'));
+    const a = char.attackList.find((x) => x.id === id);
+    return a ? { kind: 'attack', id, a } : null;
+  }
+  return null;
+}
+const focusBoosts = computed(() => {
+  const key = focusTrip.value;
+  const stock = char.row?.supplies ?? {};
+  if (!key || !BOOST_IDS.some((id) => (stock[id] ?? 0) > 0)) return null;
+  const t = boostTarget(key);
+  if (!t) return null;
+  const at = now.value;
+  return {
+    key,
+    plan: boostChoices(stock, (min) =>
+      t.kind === 'attack' ? attackBoostPlan(t.a, min, at) : voyageBoostPlan(t.v, min, at),
+    ),
+  };
+});
+const boostBusy = ref(false);
+function boostTrip(key: string, id: BoostId) {
+  const t = boostTarget(key);
+  const b = focusBoosts.value;
+  const choice = b && 'choices' in b.plan ? b.plan.choices.find((c) => c.id === id) : undefined;
+  if (!t || !choice) return;
+  const run = async () => {
+    const uid = auth.user?.id;
+    if (!uid || boostBusy.value) return;
+    boostBusy.value = true;
+    try {
+      const why = await char.applySpeedBoost(
+        uid,
+        t.kind === 'hero' ? { kind: 'hero' } : { kind: t.kind, id: t.id },
+        id,
+        Date.now(),
+      );
+      if (why) $q.notify({ type: 'warning', message: why });
+      else
+        $q.notify({
+          type: 'positive',
+          message: `⚡ ${formatDuration(choice.gainMs)} de gagnées.`,
+        });
+    } finally {
+      boostBusy.value = false;
+    }
+  };
+  // ⚠️ Des minutes seraient PERDUES (l'étape finit avant) : on le dit avant de valider.
+  if (choice.lostMs > 0)
+    $q.dialog({
+      title: '⚡ Utiliser ce boost ?',
+      message: `L'étape finit dans ${formatDuration(choice.gainMs)} : le boost n'en rendra que ${formatDuration(choice.gainMs)}, ${formatDuration(choice.lostMs)} seront perdues.`,
+      cancel: { label: 'Annuler', flat: true },
+      ok: { label: 'Utiliser', color: 'primary', textColor: 'dark' },
+    }).onOk(() => void run());
+  else void run();
+}
 function recallTripByKey(key: string) {
   const r = tripRecall(key);
   if (r) askRecall(r.target, r.info);

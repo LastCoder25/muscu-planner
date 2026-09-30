@@ -67,6 +67,29 @@
     <p v-if="crew.gone" class="tc-none">
       {{ crew.gone }} champion{{ crew.gone > 1 ? 's ne sont' : " n'est" }} plus dans ton vivier.
     </p>
+    <!-- ⚡ ACCÉLÉRER (demandé) : les boosts du stock, chiffrés pour CE voyage. Les minutes
+         qu'un boost ne peut pas donner (l'étape finit avant) sont dites AVANT de toucher. -->
+    <div v-if="crewBoosts" class="tc-boost">
+      <span class="tc-haul-lab">⚡ Accélérer</span>
+      <p v-if="crewBoosts.block" class="tc-none">{{ crewBoosts.block }}</p>
+      <div v-else class="tc-bst-row">
+        <button
+          v-for="b in crewBoosts.choices"
+          :key="b.id"
+          type="button"
+          class="tc-bst"
+          :class="{ lossy: b.lostMs > 0 }"
+          @click="emit('boost', crewBoosts.key, b.id)"
+        >
+          <b>⚡ {{ boostLabel(b.minutes) }}</b>
+          <span class="tc-bst-n">×{{ b.count }}</span>
+          <small v-if="b.lostMs > 0"
+            >−{{ formatDuration(b.gainMs) }} · {{ formatDuration(b.lostMs) }} perdues</small
+          >
+          <small v-else>−{{ formatDuration(b.gainMs) }}</small>
+        </button>
+      </div>
+    </div>
     <!-- 🔙 FAIRE DEMI-TOUR depuis la tuile (demandé) : même feuille que sur la carte, la page
          décide de ce qui peut rebrousser chemin (`recallable`). -->
     <button
@@ -116,6 +139,9 @@ import type { Adventurer } from '@/lib/adventurers';
 import { militiaIn } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import HaulPills from '@/components/HaulPills.vue';
+import { formatDuration } from '@/lib/duration';
+import { BOOST_BLOCK_LABEL, type BoostBlock, type BoostChoice } from '@/lib/speedBoost';
+import type { BoostId } from '@/lib/supplies';
 
 const props = defineProps<{
   trips: MapTrip[];
@@ -123,8 +149,25 @@ const props = defineProps<{
   heroProfile: CharacterProfile;
   /** 🔙 Les voyages (par `key`) qui peuvent encore faire demi-tour. */
   recallable?: ReadonlySet<string>;
+  /** ⚡ Les boosts pour le voyage touché (`boostChoices`), avec la clé de ce voyage. */
+  boosts?: { key: string; plan: { block: BoostBlock } | { choices: BoostChoice[] } } | null;
 }>();
-const emit = defineEmits<{ 'update:focus': [key: string | null]; recall: [key: string] }>();
+const emit = defineEmits<{
+  'update:focus': [key: string | null];
+  recall: [key: string];
+  boost: [key: string, id: BoostId];
+}>();
+
+const boostLabel = (min: number) => (min >= 60 ? `${min / 60} h` : `${min} min`);
+/** ⚡ La page ne passe `boosts` que si on POSSÈDE un boost : sans stock, la section serait
+ *  du bruit. Un voyage qu'on ne peut pas presser dit pourquoi (un gris muet se lit comme une
+ *  panne). */
+const crewBoosts = computed(() => {
+  const b = props.boosts;
+  if (!b || b.key !== props.focus) return null;
+  if ('block' in b.plan) return { key: b.key, block: BOOST_BLOCK_LABEL[b.plan.block], choices: [] };
+  return b.plan.choices.length ? { key: b.key, block: null, choices: b.plan.choices } : null;
+});
 const char = useCharacterStore();
 
 /** 👥 L'équipe naît SOUS la carte et la rangée de tuiles : sur un téléphone elle était hors de
@@ -255,6 +298,53 @@ const crew = computed(() => {
 }
 .tc-recall:active {
   transform: scale(0.98);
+}
+.tc-boost {
+  margin-top: 10px;
+}
+.tc-bst-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+.tc-bst {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 44px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tc-bst small {
+  font-size: 11px;
+  color: var(--dim);
+}
+/* Des minutes seraient perdues : on le voit avant de toucher. */
+.tc-bst.lossy {
+  border-color: var(--d3);
+  border-style: dashed;
+}
+.tc-bst.lossy small {
+  color: var(--d3);
+}
+.tc-bst-n {
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 10px;
+  color: var(--dim);
+}
+.tc-bst:active {
+  transform: scale(0.97);
 }
 .tc-none {
   margin: 6px 0 0;

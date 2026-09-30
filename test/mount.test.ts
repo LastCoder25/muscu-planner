@@ -616,6 +616,47 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(tip).toContain('Ramène');
     expect(tip).toContain('🪙 Or');
     expect(tip).toContain('Construire et améliorer les bâtiments');
+    // ⚡ Les boosts possédés, chiffrés : les minutes perdues sont dites AVANT de toucher.
+    let bst = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [trip],
+        focus: 'g1',
+        heroProfile: 'polyvalent',
+        boosts: {
+          key: 'g1',
+          plan: {
+            choices: [
+              { id: 'boost10', count: 2, minutes: 10, gainMs: 600_000, lostMs: 0 },
+              { id: 'boost60', count: 1, minutes: 60, gainMs: 600_000, lostMs: 3_000_000 },
+            ],
+          },
+        },
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (bst = h),
+    );
+    expect(bst).toContain('⚡ 10 min');
+    expect(bst).toContain('⚡ 1 h');
+    expect(bst).toContain('perdues');
+    let blk = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [trip],
+        focus: 'g1',
+        heroProfile: 'polyvalent',
+        boosts: { key: 'g1', plan: { block: 'intercept' } },
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (blk = h),
+    );
+    expect(blk).toContain('on ne presse pas une interception');
   }, 30_000);
 
   // 👥 Signalé : « quand je clique sur une tuile d'expédition il faut faire défiler l'écran

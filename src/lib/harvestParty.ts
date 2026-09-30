@@ -50,7 +50,7 @@ import {
   type Poi,
 } from './expedition';
 import { FACTION_EMOJI } from './raid';
-import { addSupplies, supplyFx, SUPPLY_IDS, type SupplyStock } from './supplies';
+import { addSupplies, supplyFx, pickSupply, type SupplyStock } from './supplies';
 import { teamRuneValue, type Adventurer } from './adventurers';
 
 /** Le « combat » d'un lieu sans gardes : personne à abattre, victoire acquise. */
@@ -110,7 +110,7 @@ function withSiteLoot(out: ExpeditionOutcome, input: HarvestPartyInput): Expedit
   const rng = mulberry32((input.seed ^ 0x61c88647) >>> 0 || 1);
   const found: SupplyStock = {};
   for (let i = 0; i < fallenSupplyCount(poi.level); i++) {
-    const id = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
+    const id = pickSupply(rng());
     found[id] = (found[id] ?? 0) + 1;
   }
   return {
