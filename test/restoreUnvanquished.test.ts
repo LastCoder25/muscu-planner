@@ -6,7 +6,9 @@ import {
   type Poi,
 } from '@/lib/expedition';
 
-const poi = (id: string, type = 'camp', extra: Partial<Poi> = {}) =>
+// Un lieu SANS gardes (ruines d'un héros tombé) : il quitte la carte au départ. Un lieu gardé,
+// lui, y reste pendant l'assaut (test/multiAttack.test.ts).
+const poi = (id: string, type = 'fallen', extra: Partial<Poi> = {}) =>
   ({ id, type, x: 10, y: 10, level: 5, expiresAt: 10_000, ...extra }) as unknown as Poi;
 const map = (pois: Poi[]) => ({ pois }) as unknown as ExpeditionMap;
 const trip = (
@@ -68,7 +70,7 @@ describe('restoreUnvanquished — un lieu non terrassé reste sur la carte', () 
       [
         trip(poi('ar', 'arena'), false),
         trip(poi('c', 'control'), false),
-        trip(poi('e', 'camp', { expiresAt: 1500 }), false),
+        trip(poi('e', 'fallen', { expiresAt: 1500 }), false),
         trip(here, false),
       ],
       2000,

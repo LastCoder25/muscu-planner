@@ -246,7 +246,9 @@ export function partySendBlocker(
   // (v0.1239, demandé par l'utilisateur) : on choisit ensuite qui y RESTE (1 à 3, le héros
   // jamais — il rentre). Il faut donc au moins un champion pour l'occuper.
   if (poi.type === 'control') {
-    if (poi.control?.owner !== 'enemy' || poi.control.assault) return 'controlHeld';
+    // ⚔️ Une équipe qui y marche déjà ne bloque plus : on peut l'attaquer plusieurs fois à la
+    // fois, la première qui le prend l'emporte (`supersedeLate`).
+    if (poi.control?.owner !== 'enemy') return 'controlHeld';
     // 🏯 Cachée dans le brouillard : on ne l'atteint pas avant que l'Avant-poste la découvre.
     if (poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined)
       return 'citadelHidden';
@@ -278,7 +280,7 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
   citadelHidden:
     'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
-  controlHeld: 'ce point n’est pas à prendre (déjà à toi, ou une équipe y marche)',
+  controlHeld: 'ce point n’est pas à prendre : il est déjà à toi',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',
 };
@@ -868,21 +870,23 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
     factionLabel: FACTION_LABEL[party.faction],
     factionEmoji: FACTION_EMOJI[party.faction],
     isRift: !!party.rift,
-    verdict: party.rift
-      ? party.win
-        ? 'faille refermée'
-        : 'la faille tient'
-      : party.battle
+    verdict: party.late
+      ? 'arrivés trop tard'
+      : party.rift
         ? party.win
-          ? 'bande rompue'
-          : 'la bande passe'
-        : party.win
-          ? 'camp pris'
-          : party.turnedBack
-            ? 'demi-tour en chemin'
-            : party.roadLost
-              ? 'pris, embuscade perdue'
-              : 'repoussé',
+          ? 'faille refermée'
+          : 'la faille tient'
+        : party.battle
+          ? party.win
+            ? 'bande rompue'
+            : 'la bande passe'
+          : party.win
+            ? 'camp pris'
+            : party.turnedBack
+              ? 'demi-tour en chemin'
+              : party.roadLost
+                ? 'pris, embuscade perdue'
+                : 'repoussé',
     slain: party.slain,
     foes: party.foes,
     heroKills: party.heroKills,

@@ -113,6 +113,8 @@ import {
   type ExpeditionOutcome,
   type Poi,
   restoreUnvanquished,
+  supersedeLate,
+  staysUnderAttack,
   recordDeparture,
 } from '@/lib/expedition';
 import {
@@ -2307,8 +2309,10 @@ export const useCharacterStore = defineStore('character', () => {
     activeDays7: number,
   ): Promise<ExpeditionMessage | null> {
     const cur = row.value;
-    const exp = cur?.expedition;
-    if (!cur || !exp || now < exp.midAt || exp.reported) return null;
+    const exp0 = cur?.expedition;
+    if (!cur || !exp0 || now < exp0.midAt || exp0.reported) return null;
+    // ⚔️ Arrivé après la chute de sa cible : il ne trouve plus rien (`supersedeLate`).
+    const exp = lateAware(cur, now).expedition ?? exp0;
     const msg = buildMessage(exp);
     const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg], advList.value);
     // ⚔️ Une interception AVEC le héros vit ici, pas dans `partyTick` : elle ne levait
@@ -2355,8 +2359,9 @@ export const useCharacterStore = defineStore('character', () => {
     activeDays7: number,
   ): Promise<ExpeditionMessage | null> {
     const cur = row.value;
-    const exp = cur?.expedition;
-    if (!cur || !exp || settleClock(cur, now) < exp.returnAt) return null;
+    const exp0 = cur?.expedition;
+    if (!cur || !exp0 || settleClock(cur, now) < exp0.returnAt) return null;
+    const exp = exp0.reported ? exp0 : (lateAware(cur, now).expedition ?? exp0);
     // Le rapport a pu être déposé à l'arrivée sur l'objectif (`expeTick`) ; sinon (app
     // fermée tout du long) on le dépose maintenant. Dans les deux cas il porte le butin.
     const msg = buildMessage({ ...exp, reported: true });
@@ -3551,6 +3556,8 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚔️🗼 Une armée en campagne continue sa marche : d'autres équipes peuvent encore la
     // croiser. Elle quitte la carte à son arrivée (`syncFieldArmies`).
     if (isFieldArmyPoi(poi)) return map;
+    // ⚔️ Un lieu gardé reste attaquable par d'autres équipes tant qu'il n'est pas tombé.
+    if (staysUnderAttack(poi)) return map;
     return poi.type === 'control'
       ? markAssault(map, poi.id, true)
       : { ...map, pois: map.pois.filter((p) => p.id !== poi.id) };
@@ -4107,6 +4114,23 @@ export const useCharacterStore = defineStore('character', () => {
    *  La règle vit dans `settleParties` (lib, testée). ⚠️ Une seule écriture, et seulement si
    *  quelque chose change : ce tick bat chaque seconde. Rend les messages nouvellement déposés. */
   /** ⚠️ `activeDays7` REQUIS : il règle le délai de reprise d'un point de contrôle pris. */
+  /** ⚔️ Les voyages (groupes + expédition du héros) avec l'issue des arrivés trop tard remplacée
+   *  (`supersedeLate`) : ils ne la découvrent qu'en arrivant, le lieu déjà tombé. */
+  function lateAware(
+    cur: CharacterRow,
+    now: number,
+  ): { parties: ActiveParty[]; expedition: ActiveExpedition | null; changed: boolean } {
+    const exp = cur.expedition ?? null;
+    const all = supersedeLate([...partyList.value, ...(exp ? [exp] : [])], now);
+    const n = partyList.value.length;
+    const parties = all.slice(0, n) as ActiveParty[];
+    const expedition = exp ? all[n]! : null;
+    return {
+      parties,
+      expedition,
+      changed: parties.some((p, i) => p !== partyList.value[i]) || expedition !== exp,
+    };
+  }
   async function partyTick(
     userId: string,
     now: number,
@@ -4122,23 +4146,26 @@ export const useCharacterStore = defineStore('character', () => {
     }
     const box = boxWith(cur, [], MESSAGES_CAP);
     const clock = settleClock(cur, now);
-    const t0 = settleParties(partyList.value, box, clock, MESSAGES_CAP);
+    // ⚔️ Arrivés APRÈS la chute de leur cible : ils ne trouvent plus rien (`supersedeLate`).
+    const late = lateAware(cur, clock);
+    const partiesIn = late.parties;
+    const t0 = settleParties(partiesIn, box, clock, MESSAGES_CAP);
     // 🏥 À l'arrivée d'une SORTIE (point fixe, attaque combinée comprise) : les blessés — et
     // tout le monde si le point est perdu — partent DIRECTEMENT à la base (`splitSorties`).
     // ⚠️ APRÈS `settleParties` : le rapport est déjà bâti sur l'escorte complète (XP,
     // blessures) ; on ne retouche que le voyage. Les voyages rentrés dans ce même tick y
     // passent aussi, pour que leurs blessés ne soient pas renvoyés du point.
-    const gone = partyList.value
+    const gone = partiesIn
       .filter((p) => !t0.parties.some((q) => q.id === p.id))
       .map((p) => ({ ...p, reported: true as const }));
     const sp = splitSorties(cur, [...t0.parties, ...gone], advList.value, clock);
     const t = sp.changed
       ? { ...t0, parties: sp.list.filter((p) => clock < p.returnAt), changed: true }
       : t0;
-    if (!t.changed) {
+    if (!t.changed && !late.changed) {
       // ⚔️🏰 Rien d'autre ne bouge : on accorde quand même les places gardées aux voyages (une
       // sortie partie avant la règle reprend la sienne dès qu'elle est libre).
-      await persistAwaySync(userId, cur, partyList.value);
+      await persistAwaySync(userId, cur, partiesIn);
       return [];
     }
     const splitGone = sp.changed ? sp.list.filter((p) => clock >= p.returnAt) : gone;
@@ -4179,7 +4206,7 @@ export const useCharacterStore = defineStore('character', () => {
     const advsBase =
       ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? sp.advs;
     let advsBack = advsBase;
-    for (const p of partyList.value) {
+    for (const p of partiesIn) {
       const q = t.parties.find((r) => r.id === p.id);
       if (q && q.returnAt !== p.returnAt)
         advsBack = rescheduleReturners(advsBack, tripCrew(q), p.returnAt, q.returnAt);
@@ -4189,7 +4216,7 @@ export const useCharacterStore = defineStore('character', () => {
     const mapBase = ctl?.map ?? cur.expedition_map;
     const mapRestored = restoreUnvanquished(
       mapBase,
-      [...partyList.value, ...(cur.expedition ? [cur.expedition] : [])],
+      [...partiesIn, ...(late.expedition ? [late.expedition] : [])],
       clock,
     );
     // ⚔️🏰 Une place gardée n'appartient qu'à qui revient VRAIMENT sur son point : les blessés
@@ -4197,6 +4224,7 @@ export const useCharacterStore = defineStore('character', () => {
     const mapOut = mapRestored && syncAwayOf(cur, mapRestored, t.parties, advsBack);
     await persist(userId, {
       parties: t.parties,
+      ...(late.expedition !== cur.expedition ? { expedition: late.expedition } : {}),
       ...(base ? { base } : {}),
       ...(ctl?.map || mapOut !== mapBase ? { expedition_map: mapOut } : {}),
       ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
@@ -4397,6 +4425,12 @@ export const useCharacterStore = defineStore('character', () => {
     return any ? { map, adventurers: advs } : null;
   }
 
+  /** ⚔️ Une autre équipe marche-t-elle encore sur ce lieu (arrivée après `at`) ? */
+  function stillMarching(cur: CharacterRow, id: string, at: number): boolean {
+    return [...partyList.value, ...(cur.expedition ? [cur.expedition] : [])].some(
+      (v) => v.poi.id === id && v.midAt > at,
+    );
+  }
   /** 🏰 Les rapports frais d'un assaut de point de contrôle : pris → la garnison est postée
    *  (et libérée de sa « route ») ; raté → l'assaut se lève. `null` si aucun. */
   function settleControlAssaults(
@@ -4425,7 +4459,7 @@ export const useCharacterStore = defineStore('character', () => {
         map = captureControl(map, id, stay, m.resolvedAt, activeDays7);
         const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
         advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
-      } else map = markAssault(map, id, false);
+      } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
     }
     return touched ? { map, adventurers: advs } : null;
   }

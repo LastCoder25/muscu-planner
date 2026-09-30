@@ -456,6 +456,9 @@ export interface PartyResult {
   /** 🗼 Ce que la victoire a changé au siège, posé à l'ARRIVÉE du rapport (`dispelOverflow`).
    *  Absent : pas une interception gagnée, ou aucune armée marquée. */
   dispel?: 'dispersed' | 'late';
+  /** ⚔️ ARRIVÉE TROP TARD (`supersedeLate`) : une autre équipe, arrivée avant, avait déjà
+   *  terrassé le lieu. Rien à combattre, rien à prendre, rien d'appris. */
+  late?: true;
 }
 
 /** FNV-1a 32 bits : un id de POI → une graine. */
@@ -2609,12 +2612,99 @@ type RestoreVoyage = {
 function leavesMapOnDeparture(p: Poi): boolean {
   return !(isFieldArmyPoi(p) || p.type === 'control' || p.type === 'arena');
 }
+/**
+ * ⚔️ ATTAQUER UN LIEU PLUSIEURS FOIS EN MÊME TEMPS (demandé : « je dois pouvoir attaquer un
+ * lieu ou une armée plusieurs fois en même temps si les attaques précédentes n'ont pas réussi
+ * à la battre »). Un lieu GARDÉ (camp, repaire, tanière, faille, bande, récolte gardée) ne
+ * quitte plus la carte au départ : il reste attaquable tant qu'aucune équipe ne l'a terrassé.
+ * Il ne disparaît qu'au rapport d'une VICTOIRE (`restoreUnvanquished`). Un lieu sans gardes
+ * (récolte libre, filon, ruines d'un héros tombé) quitte la carte au départ comme avant :
+ * deux équipes y récolteraient deux fois la même chose.
+ */
+export function staysUnderAttack(p: Poi): boolean {
+  if (!leavesMapOnDeparture(p)) return false;
+  return !!(campSpecOf(p) || harvestGuardOf(p) || isRiftPoi(p) || isWarbandPoi(p));
+}
+
+/** Un voyage vers un lieu, tel que `supersedeLate` le lit. */
+type LateVoyage = {
+  poi: Pick<Poi, 'id'>;
+  midAt: number;
+  reported?: boolean;
+  turnBack?: number;
+  outcome: ExpeditionOutcome;
+};
+/** ⚔️ L'issue d'une équipe ARRIVÉE TROP TARD : le lieu était déjà tombé. Aucun combat, aucun
+ *  butin, aucune XP, aucun blessé — elle rentre simplement. */
+export function lateOutcome(o: ExpeditionOutcome): ExpeditionOutcome {
+  const text = 'Arrivés trop tard : une autre équipe avait déjà terrassé le lieu.';
+  return {
+    win: false,
+    gold: 0,
+    energy: 0,
+    summonStones: 0,
+    mana: 0,
+    item: null,
+    key: 0,
+    reconBonus: 0,
+    returnMult: o.returnMult,
+    text,
+    ...(o.party
+      ? {
+          party: {
+            hero: o.party.hero,
+            faction: o.party.faction,
+            escort: o.party.escort,
+            ...(o.party.from ? { from: o.party.from } : {}),
+            win: false,
+            foes: 0,
+            slain: 0,
+            kills: {},
+            heroKills: 0,
+            xp: {},
+            hurt: [],
+            journal: [text],
+            late: true as const,
+          },
+        }
+      : {}),
+  };
+}
+/**
+ * ⚔️ Les voyages ARRIVÉS APRÈS la chute de leur cible : leur issue, tirée au départ, supposait
+ * le lieu debout — elle est remplacée par `lateOutcome`. Un voyage est en retard si un AUTRE
+ * voyage vers le même lieu l'a terrassé en arrivant STRICTEMENT avant lui (les groupes d'une
+ * attaque combinée arrivent ensemble : ils ne se supplantent pas). Seuls les voyages arrivés
+ * (`now >= midAt`) et pas encore rapportés sont touchés. Rend la MÊME liste si rien ne change.
+ */
+export function supersedeLate<V extends LateVoyage>(voyages: readonly V[], now: number): V[] {
+  let changed = false;
+  const out = voyages.map((v) => {
+    if (v.reported || now < v.midAt || v.outcome.party?.late) return v;
+    if (v.turnBack !== undefined || v.outcome.turnBack !== undefined) return v;
+    const beaten = voyages.some(
+      (u) => u !== v && u.poi.id === v.poi.id && u.midAt < v.midAt && voyageVanquished(u, now),
+    );
+    if (!beaten) return v;
+    changed = true;
+    return { ...v, outcome: lateOutcome(v.outcome) };
+  });
+  return changed ? out : (voyages as V[]);
+}
+
 export function restoreUnvanquished(
   map: ExpeditionMap | null,
   voyages: readonly RestoreVoyage[],
   now: number,
 ): ExpeditionMap | null {
   if (!map) return map;
+  // ⚔️ Un lieu resté sur la carte pendant l'assaut (`staysUnderAttack`) la quitte dès le
+  // rapport d'une VICTOIRE.
+  const fallen = new Set(
+    voyages.filter((v) => staysUnderAttack(v.poi) && voyageVanquished(v, now)).map((v) => v.poi.id),
+  );
+  if (fallen.size && map.pois.some((p) => fallen.has(p.id)))
+    map = { ...map, pois: map.pois.filter((p) => !fallen.has(p.id)) };
   const blocked = new Set(
     voyages.filter((v) => now < v.midAt || voyageVanquished(v, now)).map((v) => v.poi.id),
   );
@@ -2622,6 +2712,8 @@ export function restoreUnvanquished(
   for (const v of voyages) {
     const p = v.poi;
     // (Un voyage qui n'a pas encore tranché bloque déjà son propre lieu, via `blocked`.)
+    // (Un lieu gardé, resté sur la carte, est écarté par le dédoublonnage ; retiré par une
+    // version d'avant, il revient comme avant.)
     if (!leavesMapOnDeparture(p)) continue;
     if (blocked.has(p.id) || p.expiresAt <= now) continue;
     if (map.pois.some((q) => q.id === p.id) || back.some((q) => q.id === p.id)) continue;
@@ -2635,6 +2727,8 @@ export function restoreUnvanquished(
  *  revenu sur la carte (`restoreUnvanquished`) : il serait dessiné deux fois. */
 export function voyageTargetShown(v: RestoreVoyage, now: number): boolean {
   if (!leavesMapOnDeparture(v.poi)) return true;
+  // ⚔️ Resté sur la carte pendant l'assaut : il n'est dessiné à part qu'une fois TERRASSÉ.
+  if (staysUnderAttack(v.poi)) return voyageVanquished(v, now);
   return now < v.midAt || voyageVanquished(v, now);
 }
 
