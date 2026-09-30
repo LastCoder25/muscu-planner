@@ -49,6 +49,19 @@
             <span class="ats-pill"
               >≈ {{ fmtSize(r.size) }} champion{{ r.size >= 2 ? 's' : '' }}</span
             >
+            <span
+              v-if="holdOf(r) !== null"
+              class="ats-pill hold"
+              :class="siegeOdds(holdOf(r)! / 100)"
+              :title="`Ta défense actuelle repousse environ ${holdOf(r)} % de ces attaques`"
+              >🛡️ tu tiens {{ holdOf(r) }} %</span
+            >
+            <span
+              v-else-if="r.kind === 'siege'"
+              class="ats-pill"
+              title="Sans renseignement de la Tour de guet, on ne sait pas si tu tiens"
+              >🛡️ tenue ?</span
+            >
           </span>
         </span>
         <span class="ats-time">
@@ -63,18 +76,25 @@
 <script setup lang="ts">
 import { poiRank } from '@/lib/poiRank';
 import { poiLabel, type Poi } from '@/lib/expedition';
-import { FACTION_EMOJI, FACTION_LABEL } from '@/lib/raid';
+import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import type { ActiveAttack } from '@/lib/fieldArmy';
 
 import SheetShell from '@/components/SheetShell.vue';
 
-defineProps<{ modelValue: boolean; rows: ActiveAttack[]; inline?: boolean }>();
+const props = defineProps<{
+  modelValue: boolean;
+  rows: ActiveAttack[];
+  /** 🛡️ % de tenue de ta défense actuelle, par armée (`null` = inconnu). */
+  holds?: Record<string, number | null>;
+  inline?: boolean;
+}>();
 const emit = defineEmits<{ 'update:modelValue': [boolean]; open: [Poi] }>();
 
 /** Moins d'une heure : la tuile passe au rouge. */
 const SOON_MS = 3_600_000;
 const targetName = (r: ActiveAttack) => (r.target ? poiLabel(r.target) : 'un point fixe');
+const holdOf = (r: ActiveAttack): number | null => props.holds?.[r.army.id] ?? null;
 const fmtSize = (n: number) => (Math.round(n * 10) / 10).toLocaleString('fr-FR');
 </script>
 
@@ -183,6 +203,22 @@ const fmtSize = (n: number) => (Math.round(n * 10) / 10).toLocaleString('fr-FR')
   border-radius: 999px;
   border: 1px solid var(--line);
   color: var(--dim);
+}
+/* 🛡️ Mêmes bandes que le pronostic de la Base (`siegeOdds`) : couleur ET texte. */
+.ats-pill.hold {
+  font-weight: 700;
+}
+.ats-pill.hold.tenu {
+  color: var(--d1);
+  border-color: color-mix(in srgb, var(--d1) 55%, transparent);
+}
+.ats-pill.hold.serre {
+  color: var(--d3);
+  border-color: color-mix(in srgb, var(--d3) 55%, transparent);
+}
+.ats-pill.hold.perdu {
+  color: var(--d4);
+  border-color: color-mix(in srgb, var(--d4) 55%, transparent);
 }
 .ats-pill.rk {
   color: var(--rk);

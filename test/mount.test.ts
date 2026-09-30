@@ -2718,6 +2718,26 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('Siège de ta base');
     expect(out).toContain('40 min');
     expect(out).toContain('soon');
+    // 🛡️ Sans pronostic (siège sans renseignement) : on le DIT, sans inventer de %.
+    expect(out).toContain('tenue ?');
+    let held = '';
+    await mountIt(
+      AttacksSheet,
+      {
+        modelValue: true,
+        holds: { a: 82 },
+        rows: [
+          { army, kind: 'siege', target: null, inMs: 40 * 60_000, size: 3, faction: 'bandits' },
+        ],
+      },
+      undefined,
+      undefined,
+      '/',
+      (h) => (held = h),
+    );
+    expect(held).toContain('tu tiens 82 %');
+    expect(held).toContain('hold tenu');
+    expect(held).not.toContain('tenue ?');
     let empty = '';
     await mountIt(
       AttacksSheet,

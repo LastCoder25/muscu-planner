@@ -382,6 +382,7 @@
       :model-value="true"
       inline
       :rows="attacks"
+      :holds="attackHolds"
       @open="openAttack"
     />
     <ControlPointsSheet
@@ -1249,6 +1250,9 @@ import {
   departureRisk,
   heroDefends,
   guardUnits,
+  siegeHoldChance,
+  scoutClarity,
+  scoutLevel,
   ODDS_LABEL,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -2883,6 +2887,42 @@ function toggleMapPanel(id: MapPanel) {
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
+/** 🛡️ Ce que TA défense actuelle tiendrait face à chaque armée de la liste (demandé : « le
+ *  % de défense de ces armées selon l'endroit qu'elles attaquent et la défense actuelle »).
+ *  ⚠️ Aucune règle nouvelle : un SIÈGE rejoue `siegeHoldChance` (le pronostic de la Base,
+ *  héros présent à l'heure de l'assaut compris), une REPRISE `defenseOf` (celui de la fiche
+ *  du point, défenseurs présents à l'heure de l'attaque). `null` = inconnu : un siège sans
+ *  renseignement de la Tour de guet n'annonce rien — même garde que la Base. Horloge
+ *  grossière, et calculé seulement quand la liste est dépliée (prop lue sous `v-if`). */
+const attackHolds = computed<Record<string, number | null>>(() => {
+  const out: Record<string, number | null> = {};
+  const b = base.value;
+  const raid = incoming.value;
+  for (const r of attacks.value) {
+    if (r.kind === 'retake') {
+      out[r.army.id] = r.target ? (defenseOf(r.target)?.pct ?? null) : null;
+      continue;
+    }
+    const known =
+      !!b &&
+      !!raid &&
+      r.army.army?.targetId === raid.id &&
+      scoutClarity(scoutLevel(b.defenses), raid.level, heroLevel.value, raid.seed) > 0;
+    out[r.army.id] =
+      known && b && raid
+        ? Math.round(
+            siegeHoldChance(
+              b.defenses,
+              heroLevel.value,
+              heroDefendsNow.value,
+              guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value, milHome.value),
+              raid,
+            ) * 100,
+          )
+        : null;
+  }
+  return out;
+});
 /** ⚔️ L'armée entourée d'une aura (touchée dans la liste) ; elle s'éteint si l'armée n'est
  *  plus sur la carte. */
 const focusArmy = ref<string | null>(null);
