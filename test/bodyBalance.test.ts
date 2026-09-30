@@ -8,6 +8,7 @@ import {
   doneSetsByWeek,
   doneVolume,
   muscleBreakdown,
+  needsChallenge,
   weekMuscleSeries,
   type BalanceInput,
   type BalancePeriod,
@@ -860,5 +861,27 @@ describe('l’entrée partagée charge ce qu’elle lit', () => {
     expect(src).toMatch(/library\.fetchSecondaries\(\)/);
     // Le muscle principal ne se charge pas à part : `fetchSecondaries` le ramène aussi.
     expect(src).not.toMatch(/fetchPrimaries/);
+  });
+});
+
+describe('needsChallenge — on propose un challenge dès que le prévu reste sous la cible', () => {
+  it('sous la cible, même au-dessus du seuil bas de 60 %', () => {
+    expect(needsChallenge({ value: 8, target: 10 })).toBe(true);
+    expect(needsChallenge({ value: 2, target: 10 })).toBe(true);
+  });
+  it('rien à proposer quand le prévu atteint ou dépasse la cible', () => {
+    expect(needsChallenge({ value: 10, target: 10 })).toBe(false);
+    expect(needsChallenge({ value: 14, target: 10 })).toBe(false);
+  });
+  it('ni sur un muscle sans cible', () => {
+    expect(needsChallenge({ value: 0, target: 0 })).toBe(false);
+  });
+  it('un groupe ok (≥ 60 %) mais sous la cible est proposé — c’est le changement', () => {
+    const r = bodyBalance(
+      input({ targets: { dos: 10 }, sessions: [session('2026-09-15', [{ id: 'row', muscle: 'dos', sets: 7 }])] }),
+      'week',
+    )[0]!;
+    expect(r.state).toBe('ok');
+    expect(needsChallenge(r)).toBe(true);
   });
 });

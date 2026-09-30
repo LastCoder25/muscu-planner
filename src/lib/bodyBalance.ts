@@ -429,6 +429,15 @@ export function bodyBalance(i: BalanceInput, period: BalancePeriod): MuscleBalan
   return out.sort((a, b) => a.pct - b.pct || b.target - a.target);
 }
 
+/**
+ * Un challenge est proposé dès que le PRÉVU (fait + ce que le 360 et les challenges
+ * actifs demandent) reste sous la cible. L'état « bas » (sous 60 %) ne sert plus qu'à
+ * la couleur : un groupe à 80 % peut encore mériter un défi pour boucler sa cible.
+ */
+export function needsChallenge(r: Pick<MuscleBalance, 'value' | 'target'>): boolean {
+  return r.target > 0 && r.value < r.target;
+}
+
 /** Une ligne du détail d'un muscle : un exercice d'une source. */
 export interface BalanceContribution {
   exerciseId: string;
