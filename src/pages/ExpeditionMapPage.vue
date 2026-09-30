@@ -2801,7 +2801,6 @@ const trips = computed(() => {
       key: r.id,
       kind: 'van',
       who: '🛡️',
-      faces: true,
       poi: r.poi,
       time: formatDuration(r.arriveIn),
       pct: r.prog.overall * 100,
