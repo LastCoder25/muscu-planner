@@ -83,8 +83,19 @@
     <g
       v-if="target"
       class="poi target"
-      :class="{ 'rift-target': isRiftPoi(target), down: targetDown }"
+      :class="{ 'rift-target': isRiftPoi(target), down: targetDown, sel: selectedId === target.id }"
+      @click="emit('select', target)"
     >
+      <!-- ⚔️ Un lieu qu'on attaque reste TOUCHABLE : on y voit ce qu'il rapporte (la fiche
+           se réduit alors au minimum, cf. `engagedTrip` de la page). -->
+      <ellipse
+        v-if="isRiftPoi(target)"
+        :cx="target.x"
+        :cy="target.y"
+        rx="4.4"
+        ry="6.4"
+        class="rift-hit"
+      />
       <RiftPortal
         v-if="isRiftPoi(target)"
         :color="rankOf(target).color"
@@ -106,8 +117,20 @@
       v-for="v in travelTargets"
       :key="'vg' + v.id"
       class="poi target van-target"
-      :class="[v.kind, { 'rift-target': isRiftPoi(v.poi), down: v.down }]"
+      :class="[
+        v.kind,
+        { 'rift-target': isRiftPoi(v.poi), down: v.down, sel: selectedId === v.poi.id },
+      ]"
+      @click="emit('select', v.poi)"
     >
+      <ellipse
+        v-if="isRiftPoi(v.poi)"
+        :cx="v.poi.x"
+        :cy="v.poi.y"
+        rx="4.4"
+        ry="6.4"
+        class="rift-hit"
+      />
       <RiftPortal
         v-if="isRiftPoi(v.poi)"
         :color="rankOf(v.poi).color"
@@ -315,5 +338,11 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .van-target.party .poi-bg {
   stroke-width: 1;
   stroke-dasharray: 1.2 0.9;
+}
+/* ⚔️ Un lieu attaqué qu'on a touché : le liseré de sélection, par-dessus celui du voyage. */
+.poi.target.sel .poi-bg {
+  stroke: var(--accent);
+  stroke-width: 1.7;
+  stroke-dasharray: none;
 }
 </style>

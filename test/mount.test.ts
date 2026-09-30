@@ -540,6 +540,61 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Poser un sceau de brèche');
   }, 30_000);
 
+  it('⚔️ PoiCard : un lieu déjà attaqué garde ce qu’il rapporte, sans notes ni sceau', async () => {
+    const { default: PoiCard } = await import('@/components/PoiCard.vue');
+    const { poiRank } = await import('@/lib/poiRank');
+    const rift = { ...MAP_POIS[0], id: 'r1', type: 'rift' as const, riftPeril: true };
+    let out = '';
+    await mountIt(
+      PoiCard,
+      {
+        poi: rift,
+        rank: poiRank(rift),
+        sub: { foe: '🐺 Bêtes ×4/12', res: 'mana 💠' },
+        engaged: 'Une équipe y est partie — en route',
+        facts: [{ icon: '💠', label: 'Si refermée', value: '~120' }],
+        ambushLeft: 0,
+        isRift: true,
+        warband: null,
+        sealStock: 2,
+        busySeal: false,
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
+    expect(out).toContain('Une équipe y est partie');
+    expect(out).toContain('Si refermée');
+    expect(out).not.toContain('Poser un sceau de brèche');
+    expect(out).not.toContain('Comment marche une faille');
+    expect(out).not.toContain('pc-alert');
+  }, 30_000);
+
+  it('⚔️ MapPoiLayer : la cible d’un voyage est sélectionnable', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    let out = '';
+    await mountIt(
+      MapPoiLayer,
+      {
+        pois: MAP_POIS,
+        selectedId: 'p9',
+        dimmedKey: '',
+        veiledKey: '',
+        imminentKey: '',
+        target: null,
+        travelTargets: [
+          { id: 'g1', poi: { ...MAP_POIS[0], id: 'p9' }, kind: 'party', down: false },
+        ],
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
+    expect(out).toMatch(/van-target party sel/);
+  }, 30_000);
+
   it('🎒 SupplyPicker : utiles en tuiles, inutiles repliés avec leur raison', async () => {
     const { default: SupplyPicker } = await import('@/components/SupplyPicker.vue');
     const { SUPPLIES } = await import('@/lib/supplies');
