@@ -325,7 +325,7 @@ import {
   loseControl,
   controlTier,
   tierLostLabel,
-  CITADEL_ID,
+  isCitadelId,
   razeCitadel,
   repelledAtCitadel,
   markAssault,
@@ -4379,8 +4379,8 @@ export const useCharacterStore = defineStore('character', () => {
       if (!id || m.party?.defense) continue;
       touched = true;
       // 🏯 La citadelle ne se prend pas : gagnée, elle tombe (palier +1, trêve) ; perdue, palier −1.
-      if (id === CITADEL_ID) {
-        map = m.win ? razeCitadel(map, m.resolvedAt) : repelledAtCitadel(map, m.resolvedAt);
+      if (isCitadelId(id)) {
+        map = m.win ? razeCitadel(map, id, m.resolvedAt) : repelledAtCitadel(map, id, m.resolvedAt);
         continue;
       }
       if (m.win) {

@@ -2328,7 +2328,10 @@ export function advanceWorld(
     pois: withMines.filter(
       (p) =>
         p.id === protectedPoiId ||
-        (p.type !== 'wreck' && p.expiresAt > now && withinLand(p, reach)),
+        (p.type !== 'wreck' &&
+          p.expiresAt > now &&
+          // 🏯 Les citadelles sont posées LOIN, hors du disque révélé : c'est voulu.
+          (withinLand(p, reach) || p.control?.kind === 'citadel')),
     ),
   };
   // ⚠️ LES QUOTAS SE COMPTENT SÉPARÉMENT (`isQuotaPoi`) : une faille ou une mine qui

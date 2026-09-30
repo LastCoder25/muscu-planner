@@ -1904,7 +1904,7 @@ const liveControl = computed(() => {
  *  trêve : titre et détail, à la minute. */
 const tierLine = computed(() =>
   liveControl.value?.kind === 'citadel'
-    ? citadelLabel(char.row?.expedition_map, coarseNow.value)
+    ? citadelLabel(char.row?.expedition_map, selected.value!.id, coarseNow.value)
     : controlTierLabel(liveControl.value ?? undefined, coarseNow.value),
 );
 /** 🏅 Les crans des points de la carte, en CHAÎNE « id:cran » (le calque ne se redessine que si
