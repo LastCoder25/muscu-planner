@@ -325,6 +325,9 @@ import {
   loseControl,
   controlTier,
   tierLostLabel,
+  CITADEL_ID,
+  razeCitadel,
+  repelledAtCitadel,
   markAssault,
   recallReinforcements,
   canTurnBack,
@@ -4319,6 +4322,11 @@ export const useCharacterStore = defineStore('character', () => {
       const id = m.party?.controlId;
       if (!id || m.party?.defense) continue;
       touched = true;
+      // 🏯 La citadelle ne se prend pas : gagnée, elle tombe (palier +1, trêve) ; perdue, palier −1.
+      if (id === CITADEL_ID) {
+        map = m.win ? razeCitadel(map, m.resolvedAt) : repelledAtCitadel(map, m.resolvedAt);
+        continue;
+      }
       if (m.win) {
         // 🏰 Ceux qu'on a choisis pour rester (sinon l'escorte), coupés aux places du point :
         // on relit la garnison POSÉE, sinon un champion en trop serait « posté » hors garnison.

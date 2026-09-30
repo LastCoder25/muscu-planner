@@ -1270,6 +1270,8 @@ import {
   controlYieldCard,
   controlTier,
   controlTierLabel,
+  citadelLabel,
+  citadelPalier,
   trainingCapLevel,
   seatsOf,
   attackImminent,
@@ -1886,14 +1888,22 @@ const liveControl = computed(() => {
   const id = selected.value?.id;
   return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
 });
-/** 🏅 Le cran du point sélectionné (ancienneté) : titre et détail, à la minute. */
-const tierLine = computed(() => controlTierLabel(liveControl.value ?? undefined, coarseNow.value));
+/** 🏅 Le cran du point sélectionné (ancienneté) — ou, pour la citadelle, son palier et sa
+ *  trêve : titre et détail, à la minute. */
+const tierLine = computed(() =>
+  liveControl.value?.kind === 'citadel'
+    ? citadelLabel(char.row?.expedition_map, coarseNow.value)
+    : controlTierLabel(liveControl.value ?? undefined, coarseNow.value),
+);
 /** 🏅 Les crans des points de la carte, en CHAÎNE « id:cran » (le calque ne se redessine que si
  *  un cran change). Seuls les crans > 0 sont dessinés. */
 const tierKey = computed(() =>
   (char.row?.expedition_map?.pois ?? [])
     .filter((p) => p.control)
-    .map((p) => `${p.id}:${controlTier(p.control, coarseNow.value)}`)
+    .map(
+      (p) =>
+        `${p.id}:${p.control!.kind === 'citadel' ? citadelPalier(p.control, coarseNow.value) : controlTier(p.control, coarseNow.value)}`,
+    )
     .filter((s) => !s.endsWith(':0'))
     .join('|'),
 );
@@ -3831,7 +3841,9 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
     p.control
       ? p.control.owner === 'player'
         ? `${CONTROL_YIELD[p.control.kind]} tant que tu le tiens`
-        : `à prendre · ${CONTROL_YIELD[p.control.kind]}`
+        : p.control.kind === 'citadel'
+          ? `à abattre · ${CONTROL_YIELD.citadel}`
+          : `à prendre · ${CONTROL_YIELD[p.control.kind]}`
       : '',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */

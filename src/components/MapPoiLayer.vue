@@ -53,7 +53,7 @@
           :class="p.control.owner"
         />
         <!-- ⚫ SA GARNISON EN POINTS, sous le fort (demandé : « voir d'un coup d'œil ») : un
-             point par place — plein violet un champion, plein clair un milicien, cerclé
+             point par place — plein cyan un champion, plein clair un milicien, cerclé
              d'accent un renfort en route, vide une place libre (rouge si personne ne tient
              le point). -->
         <g v-if="dots.get(p.id)" class="ctl-dots" :class="{ empty: !/[cm]/.test(dots.get(p.id)!) }">
@@ -66,7 +66,8 @@
             :class="'d-' + d"
           />
         </g>
-        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. -->
+        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. La citadelle, elle,
+             montre son PALIER (« P3 »). -->
         <text
           v-if="tiers.get(p.id)"
           :x="p.x"
@@ -74,7 +75,7 @@
           class="ctl-tier"
           :class="p.control.owner"
         >
-          🏅{{ tiers.get(p.id) }}
+          {{ p.control.kind === 'citadel' ? 'P' : '🏅' }}{{ tiers.get(p.id) }}
         </text>
         <!-- ⚔️ Bataille imminente : un petit avertissement au coin du fort, qui palpite. -->
         <g v-if="imminent.has(p.id)" class="ctl-alert">
@@ -355,7 +356,7 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   stroke-width: 0.35;
 }
 .ctl-dots .d-c {
-  fill: #b57bff;
+  fill: #5fd0ff; /* cyan : lisible sur prairie et mer, distinct du violet du fort */
 }
 .ctl-dots .d-m {
   fill: var(--text);
