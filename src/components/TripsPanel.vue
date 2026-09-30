@@ -19,7 +19,7 @@
       :key="o.id"
       type="button"
       class="trf"
-      :class="[o.id, { on: shown === o.id }]"
+      :class="[`trf-${o.id}`, { on: shown === o.id }]"
       :aria-pressed="shown === o.id"
       :disabled="o.n === 0"
       @click="filter = o.id"
@@ -377,6 +377,16 @@ const crew = computed(() => {
   padding: 2px 2px 8px;
 }
 .trf {
+  /* ⚠️ « Expéditions » n'était pas centré (signalé) : le bouton portait la classe `trips`,
+     celle de la GRILLE des tuiles plus bas, qui lui imposait `padding: 2px 2px 6px` (texte
+     remonté de 2 px). Une classe construite à partir d'une donnée se PRÉFIXE (`trf-…`).
+     Centré en flex en plus : libellé et compte au même centre. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  line-height: 1;
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -387,7 +397,6 @@ const crew = computed(() => {
   font-weight: 600;
   cursor: pointer;
   b {
-    margin-left: 2px;
     color: var(--dim);
   }
   &.on {
@@ -397,7 +406,7 @@ const crew = computed(() => {
       color: var(--accent);
     }
   }
-  &.attacks.on {
+  &.trf-attacks.on {
     border-color: var(--d4);
     background: color-mix(in srgb, var(--d4) 18%, var(--surface));
     b {
