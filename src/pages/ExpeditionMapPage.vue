@@ -1,23 +1,10 @@
 <template>
-  <component :is="embedded ? 'div' : 'q-page'" class="emap" :class="{ embedded }">
-    <GameLoader :show="booting" icon="🗺️" label="Chargement de la carte…" />
-    <header class="top">
-      <button class="iconbtn" aria-label="Retour" @click="back()">‹</button>
-      <div class="top-title font-display">Carte des expéditions</div>
-      <div class="iconbtn" />
-    </header>
-
-    <!-- UNE seule ligne pour le trajet et les filtres (demandé : voir les deux premières
-         lignes de voyages en bas de l'écran). Le niveau, « En expédition » et l'or sont
-         retirés : la tuile du héros, en bas, dit déjà qu'il voyage, et envoyer ne coûte
-         plus d'or (v0.1069). -->
-    <!-- 🧭 QUI PEUT PARTIR (demandé : voir d'un coup d'œil les effectifs qu'on peut envoyer),
-         les champions détaillés par rang : c'est le rang qui décide du lieu à viser. -->
-    <!-- 💰 LES RESSOURCES, au-dessus des effectifs (demandé : « comme ailleurs ») — le même
-         plateau que l'Aventure (`ResourceTray`), ici en simple indicateur. -->
-    <div class="res-row"><ResourceTray :energy="character.energy" /></div>
-    <div class="dispo-row"><AvailabilityLine :now="now" by-rank /></div>
-
+  <!-- 🗺️ LA CARTE D'EXPÉDITION, hébergée DANS l'Aventure (demandé : « switcher juste cette
+       partie sans perdre le haut de la page ») : ressources, effectifs et boîte sont ceux de
+       l'Aventure, au-dessus ; on revient au jeu par son sélecteur. ⚠️ C'est l'Aventure qui
+       fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
+       ici aussi doublerait chaque notification. -->
+  <div class="emap">
     <!-- 🎚️🗺️ Filtres par rang et par type (état + mémorisation : `usePoiFilters`). -->
     <MapFilterBar
       :rank-options="rankOptions"
@@ -1143,7 +1130,7 @@
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
     </div>
-  </component>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -1168,10 +1155,6 @@ import { useGameFx } from '@/composables/useGameFx';
 import type { RuneTier } from '@/lib/skillRunes';
 import { BOOST_IDS, type BoostId, type SupplyStock } from '@/lib/supplies';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
-import { useGamePanel } from '@/composables/useGamePanel';
-import GameLoader from '@/components/GameLoader.vue';
-import AvailabilityLine from '@/components/AvailabilityLine.vue';
-import ResourceTray from '@/components/ResourceTray.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
@@ -1342,25 +1325,8 @@ import {
 import { MILITIA, MILITIA_NAME, MILITIA_PREFIX, isMilitiaId, militiaIn } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
-const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
 const route = useRoute();
-const { openPath } = useGamePanel();
-/**
- * 🏰 RETOUR = L'ÉCRAN DE LA BASE (demandé par l'utilisateur). On entre sur la carte par la
- * PORTE du rempart sud : on en ressort par là, pas sur l'onglet Héros.
- *
- * ⚠️ On ne peut PAS s'en remettre à `router.back()` : l'onglet de l'Aventure ne vit pas dans
- * l'URL (`/aventure` tout court ouvre « Héros »), donc revenir en arrière rouvrirait le mauvais
- * onglet. Il faut viser `?tab=base`, que l'Aventure lit.
- *
- * ⚠️ `openPath` est la SOURCE UNIQUE de « volet droit en cockpit, route plein écran sinon » :
- * la réécrire ici en ferait une troisième copie, aveugle au cockpit — le défaut exact corrigé
- * en v0.748. Elle reporte la query sur la route courante quand l'Aventure est déjà montée.
- */
-function back() {
-  openPath(router, '/aventure?tab=base', props.embedded);
-}
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
@@ -1522,15 +1488,8 @@ function liftFog(from: number | null) {
     };
     fogRaf = requestAnimationFrame(step);
   };
-  // ⚠️ Pas sous l'écran de chargement : on en raterait le départ (vu au banc). L'ancien
-  // rayon reste posé en dessous, le recul part quand la carte se découvre.
-  if (booting.value) {
-    const stop = watch(booting, (b) => {
-      if (b) return;
-      stop();
-      fogWait = setTimeout(start, 250);
-    });
-  } else start();
+  // Un court délai : le recul part une fois la carte affichée, pas pendant son montage.
+  fogWait = setTimeout(start, 250);
 }
 let fogWait: ReturnType<typeof setTimeout> | undefined;
 // Monter l'Avant-poste pendant que la carte est ouverte (volet droit du cockpit).
@@ -2951,17 +2910,6 @@ function openOvfReport() {
 const lastState = computed(() =>
   lastOutcome.value ? claimState(lastOutcome.value, now.value) : 'done',
 );
-/** 🎁 Un retour d'expédition est ENCAISSÉ TOUT SEUL (`expeAutoClaim`, dans `lifecycle`) : la
- *  modale s'ouvre alors en simple compte rendu de ce qui vient d'être crédité — dans les deux
- *  cas qui comptent : le héros rentre pendant qu'on regarde la carte, ou on arrive par la
- *  notification « ton héros est rentré ». */
-function showReturned(done: NonNullable<Awaited<ReturnType<typeof char.expeClaim>>>) {
-  advXpFx.show(done.advTracks);
-  celebrateTopDrop(done);
-  if (collectOpen.value) return;
-  lastOutcome.value = { ...done, claimed: true };
-  collectOpen.value = true;
-}
 /** 🔔 Tap sur « ton héros / ton groupe est rentré » (`?report=1`). ⚠️ Sans ce drapeau, être
  *  DÉJÀ sur la carte ne faisait rien : l'URL ne changeait pas, et un rapport déjà vu puis
  *  fermé ne se rouvrait pas. On ouvre le rapport encore à prendre, sinon le plus récent,
@@ -4022,74 +3970,6 @@ async function send() {
   }
 }
 
-// Cycle de vie : dépose le rapport à l'arrivée, crédite le butin au retour.
-let busy = false;
-async function lifecycle() {
-  const uid = auth.user?.id;
-  if (!uid || busy) return;
-  busy = true;
-  try {
-    // ⚠️ AVANT les retours : un voyage réglé efface la trace de qui était dehors.
-    await settleDueSiege();
-    const msg = await char.expeTick(uid, Date.now(), progress.activeDaysInLast(7));
-    if (msg)
-      $q.notify({
-        type: msg.win ? 'positive' : 'warning',
-        message: `📬 ${msg.win ? 'Rapport : victoire' : 'Rapport : échec'} — le héros rentre.`,
-      });
-    // Le héros rentre : il redevient disponible.
-    await char.expeSettle(uid, Date.now(), progress.activeDaysInLast(7));
-    // ⚔️ Les groupes partis sans le héros : rapport à l'arrivée, retour au bout du chemin.
-    const partyMsgs = await char.partyTick(uid, Date.now(), progress.activeDaysInLast(7));
-    // Un rapport déposé AVANT le retour se dit ; un retour, c'est la modale qui le montre.
-    if (partyMsgs.length && !partyMsgs.every((m) => isClaimable(m, Date.now())))
-      $q.notify({
-        type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-        message: '📬 Rapport de ton groupe — il rentre en ville.',
-      });
-    // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
-    // défend plus son point).
-    if (char.attackList.length) {
-      const r = await char.attackTick(uid, Date.now(), {
-        name: char.row?.pseudo ?? 'Toi',
-        level: heroLevel.value,
-        combatant: fighter.value,
-      });
-      if (r.dropped)
-        $q.notify({
-          type: 'warning',
-          message: `⚔️ ${r.dropped} membre${r.dropped > 1 ? 's' : ''} de ton attaque combinée n’${r.dropped > 1 ? 'ont' : 'a'} pas pu partir.`,
-        });
-      if (r.cancelled)
-        $q.notify({
-          type: 'warning',
-          message: '⚔️ Attaque combinée annulée : personne n’a pu partir.',
-        });
-    }
-    // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctl = await char.controlTick(
-      uid,
-      Date.now(),
-      heroLevel.value,
-      progress.activeDaysInLast(7),
-    );
-    for (const message of ctl.notices) $q.notify({ type: 'positive', message });
-    const ctlMsgs = ctl.attacks;
-    if (ctlMsgs.length)
-      $q.notify({
-        type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
-        message: ctlMsgs.every((m) => m.win)
-          ? '🏰 Attaque repoussée sur ton point de contrôle.'
-          : '🏰 Un point de contrôle a été repris par l’ennemi.',
-      });
-    // 🎁 Au retour en ville, le butin s'encaisse tout seul.
-    for (const done of await char.expeAutoClaim(uid, Date.now())) showReturned(done);
-    await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
-  } finally {
-    busy = false;
-  }
-}
-
 /** Encaisse le rapport ouvert. La CÉLÉBRATION est ici et non au retour : le butin se
  *  découvre au moment où on le prend, pas pendant qu'on regardait ailleurs. */
 async function doClaim() {
@@ -4205,12 +4085,9 @@ const controlReturnNote = computed(() =>
       )
     : null,
 );
-const booting = ref(true);
 onMounted(async () => {
-  setTimeout(() => (booting.value = false), 750);
-  const uid = auth.user?.id;
-  if (uid && !char.row) await char.fetchMine().catch(() => undefined);
-  if (uid) await char.expeSyncMap(uid, Date.now(), progressionLevel.value).catch(() => undefined);
+  // La carte est tenue à jour par l'Aventure qui l'héberge (`expeSyncMap` dans sa boucle).
+  if (auth.user?.id && !char.row) await char.fetchMine().catch(() => undefined);
   await nextTick();
   measure();
   // Vue de départ : le disque révélé tient dans la largeur (la carte grandit avec
@@ -4227,10 +4104,7 @@ onMounted(async () => {
   el?.addEventListener('touchmove', onTouchMove, { passive: false });
   el?.addEventListener('touchend', onTouchEnd, { passive: true });
   el?.addEventListener('touchcancel', onTouchEnd, { passive: true });
-  timer = setInterval(() => {
-    now.value = Date.now();
-    void lifecycle();
-  }, 1000);
+  timer = setInterval(() => (now.value = Date.now()), 1000);
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
@@ -4725,43 +4599,10 @@ onUnmounted(() => {
   margin-top: 2px;
 }
 
+/* Hébergée sous le haut de page de l'Aventure : pas de fond ni de hauteur propres. */
 .emap {
-  background: var(--bg);
-  min-height: 100vh;
   color: var(--text);
   padding-bottom: 24px;
-}
-.emap.embedded {
-  min-height: 0;
-}
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 8px;
-}
-.top-title {
-  font-size: 18px;
-  font-weight: 800;
-}
-.iconbtn {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  font-size: 24px;
-  background: none;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-}
-.res-row {
-  display: flex;
-  padding: 0 12px 6px;
-}
-.dispo-row {
-  display: flex;
-  padding: 0 12px 6px;
 }
 /* ⚔️🏰 Un champion en SORTIE : sa place l'attend. Contour pointillé à l'accent (la place est
    PRISE, pas bloquée) et moins estompé qu'une tuile indisponible : il fait partie du point. */

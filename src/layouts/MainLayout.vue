@@ -218,7 +218,6 @@ import { useQuasar } from 'quasar';
 // Chargés à la demande : le volet jeu n'existe qu'en cockpit → un téléphone ne
 // télécharge jamais ces (gros) chunks via le layout.
 const AventurePage = defineAsyncComponent(() => import('@/pages/AventurePage.vue'));
-const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionMapPage.vue'));
 const ExpeditionPage = defineAsyncComponent(() => import('@/pages/ExpeditionPage.vue'));
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -282,7 +281,6 @@ watch(isCockpit, (v) => (cockpit.value = v), { immediate: true });
 onUnmounted(() => (cockpit.value = false));
 const GAME_PANES = {
   aventure: AventurePage,
-  'expedition-map': ExpeditionMapPage,
   expedition: ExpeditionPage,
 };
 const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);

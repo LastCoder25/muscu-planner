@@ -92,10 +92,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/ExpeditionPage.vue') }],
   },
+  // 🗺️ La carte vit dans l'Aventure (sous son haut de page) : l'ancienne route y mène,
+  // query comprise (`?report=1` d'une notification).
   {
     path: '/expedition-map',
-    component: () => import('@/layouts/BlankLayout.vue'),
-    children: [{ path: '', component: () => import('@/pages/ExpeditionMapPage.vue') }],
+    redirect: (to) => ({ path: '/aventure', query: { ...to.query, view: 'map' } }),
   },
 
   // App authentifiée

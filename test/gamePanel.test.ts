@@ -24,11 +24,11 @@ describe('🕹️ openPath — volet droit en cockpit, route plein écran sinon'
   it('hors cockpit : une route, avec sa query', () => {
     const { r, calls } = fakeRouter();
     const { openPath, view } = useGamePanel();
-    view.value = 'expedition-map';
+    view.value = 'expedition';
     openPath(r, '/aventure?tab=base', false);
     expect(calls).toEqual([{ kind: 'push', to: '/aventure?tab=base' }]);
     // ⚠️ La vue du volet n'est PAS touchée : on quitte l'écran, on ne le réarrange pas.
-    expect(view.value).toBe('expedition-map');
+    expect(view.value).toBe('expedition');
   });
 
   it('en cockpit : le volet change de vue, et la query part sur la route COURANTE', () => {
@@ -37,7 +37,7 @@ describe('🕹️ openPath — volet droit en cockpit, route plein écran sinon'
     // dirait rien — et emporterait au passage l'écran sport de gauche.
     const { r, calls } = fakeRouter('/stats', { autre: '1' });
     const { openPath, view } = useGamePanel();
-    view.value = 'expedition-map';
+    view.value = 'expedition';
     openPath(r, '/aventure?tab=base', true);
     expect(view.value).toBe('aventure');
     expect(calls).toEqual([
@@ -49,9 +49,21 @@ describe('🕹️ openPath — volet droit en cockpit, route plein écran sinon'
     const { r, calls } = fakeRouter('/stats');
     const { openPath, view } = useGamePanel();
     view.value = 'aventure';
-    openPath(r, '/expedition-map', true);
-    expect(view.value).toBe('expedition-map');
+    openPath(r, '/expedition', true);
+    expect(view.value).toBe('expedition');
     expect(calls).toEqual([]);
+  });
+
+  it('🗺️ la carte vit DANS l’Aventure : son ancien chemin ouvre l’Aventure en mode carte', () => {
+    // En cockpit : l'Aventure du volet, `?view=map` posé sur la route courante (qu'elle lit).
+    const { r, calls } = fakeRouter('/stats');
+    const { openPath, view } = useGamePanel();
+    view.value = 'expedition';
+    openPath(r, '/expedition-map?report=1', true);
+    expect(view.value).toBe('aventure');
+    expect(calls).toEqual([
+      { kind: 'replace', to: { path: '/stats', query: { report: '1', view: 'map' } } },
+    ]);
   });
 
   it('un chemin qui n’est pas un écran de jeu part en route, même en cockpit', () => {
@@ -64,17 +76,25 @@ describe('🕹️ openPath — volet droit en cockpit, route plein écran sinon'
     expect(view.value).toBe('aventure');
   });
 
-  it('🏰 le RETOUR de la carte est bien câblé sur la Base', () => {
-    // ⚠️ Test de CÂBLAGE, assumé comme tel : une mutation a montré que vérifier `openPath`
-    // isolément ne dit RIEN de ce que la page lui demande — et aucune porte ne voit cet
-    // écran : le smoke passe la connexion depuis la v0.1103, mais il ne visite pas
-    // `/expedition-map`. On lit donc le composant.
+  it('🗺️ hors cockpit, l’ancienne route redirige vers l’Aventure en mode carte, query gardée', async () => {
+    // Les notifications déjà programmées portent encore `/expedition-map?report=1`.
+    const { default: routes } = await import('@/router/routes');
+    const r = routes.find((x) => x.path === '/expedition-map')!;
+    const to = (r.redirect as (t: { query: Record<string, string> }) => unknown)({
+      query: { report: '1' },
+    });
+    expect(to).toEqual({ path: '/aventure', query: { report: '1', view: 'map' } });
+  });
+
+  it('🗺️ la carte hébergée ne fait PAS tourner sa propre boucle (l’Aventure s’en charge)', () => {
+    // ⚠️ Test de CÂBLAGE : deux boucles doubleraient chaque notification de rapport.
     const sfc = fs.readFileSync('src/pages/ExpeditionMapPage.vue', 'utf8');
-    const back = sfc.slice(sfc.indexOf('function back()'), sfc.indexOf('function back()') + 200);
-    expect(back).toContain('/aventure?tab=base');
-    // …et par `openPath`, la source unique de « volet en cockpit, route sinon » : la
-    // réécrire ici en ferait une copie aveugle au cockpit.
-    expect(back).toContain('openPath(');
+    expect(sfc).not.toContain('char.expeTick(');
+    expect(sfc).not.toContain('char.partyTick(');
+    expect(sfc).not.toContain('char.expeSyncMap(');
+    const adv = fs.readFileSync('src/pages/AventurePage.vue', 'utf8');
+    expect(adv).toContain('<ExpeditionMapPage v-if="mapView"');
+    expect(adv).toContain('char.expeSyncMap(');
   });
 
   it('🏰 la carte revient à la BASE : le chemin de retour porte bien son onglet', () => {

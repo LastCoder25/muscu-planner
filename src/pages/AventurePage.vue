@@ -67,7 +67,31 @@
           <ResourceTray part="rest" :energy="c.energy" interactive @pick="pickResource" />
         </div>
         <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
-        <AvailabilityLine :now="expeNow" interactive by-rank @open="openGame('/expedition-map')" />
+        <AvailabilityLine :now="expeNow" interactive by-rank @open="mapView = true" />
+      </div>
+
+      <!-- 🗺️ LA CARTE VIT ICI (demandé : « switcher juste cette partie, sans perdre le haut
+           de la page ») : le haut — ressources, effectifs, boîte — reste en place, et seul le
+           bloc du dessous bascule entre le jeu (onglets) et la carte d'expédition. -->
+      <div class="view-switch" role="tablist" aria-label="Aventure ou carte">
+        <button
+          class="vs-b"
+          role="tab"
+          :aria-selected="!mapView"
+          :class="{ on: !mapView }"
+          @click="mapView = false"
+        >
+          ⚔️ Aventure
+        </button>
+        <button
+          class="vs-b"
+          role="tab"
+          :aria-selected="mapView"
+          :class="{ on: mapView }"
+          @click="mapView = true"
+        >
+          🗺️ Carte
+        </button>
       </div>
 
       <div v-if="c.energy < 0" class="deficit-banner">
@@ -112,7 +136,7 @@
         <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
       </div>
 
-      <div class="seg">
+      <div v-if="!mapView" class="seg">
         <button class="seg-b" :class="{ on: tab === 'hero' }" @click="tab = 'hero'">
           <q-icon name="person" size="18px" /> Héros
         </button>
@@ -132,7 +156,10 @@
 
       <!-- ONGLET HÉROS — accès Talents/Familier UNIQUEMENT par clic sur l'avatar
            (familier à droite, badge talent en bas-gauche), ticket d06b6998. -->
-      <template v-if="tab === 'hero'">
+      <!-- La carte, hébergée : le haut de page est celui de l'Aventure, et c'est l'Aventure qui
+           fait tourner la boucle de mise à jour (une seule pour les deux). -->
+      <ExpeditionMapPage v-if="mapView" />
+      <template v-else-if="tab === 'hero'">
         <template v-if="persoSub === 'perso'">
           <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
                d'ÉTOILES (pleines = gagnées) au premier plan sur l'anneau. Niveau (bas-gauche)
@@ -3054,6 +3081,7 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { usePush } from '@/composables/usePush';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
+const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionMapPage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -3340,11 +3368,27 @@ const route = useRoute();
  *  URL). Lu à l'arrivée ET à chaque changement de route : en cockpit l'Aventure est déjà
  *  montée à droite, la notification n'arrive donc pas par un montage. Une fois appliqué,
  *  le paramètre est retiré — sinon un retour arrière rejouerait le saut d'onglet. */
+/** 🗺️ Le bloc du bas montre la carte au lieu des onglets. `?view=map` l'ouvre (la route
+ *  `/expedition-map` y redirige : notifications, porte de la Base). */
+const mapView = ref(false);
+watch(
+  () => route.query.view,
+  (v) => {
+    if (v !== 'map') return;
+    mapView.value = true;
+    const rest = { ...route.query };
+    delete rest.view;
+    void router.replace({ path: route.path, query: rest });
+  },
+  { immediate: true },
+);
 watch(
   () => route.query.tab,
   (t) => {
     if (typeof t !== 'string' || !TAB_IDS.includes(t as TabId)) return;
     tab.value = t as TabId;
+    // Un onglet demandé (« va construire X », une notification de siège) : on revient au jeu.
+    mapView.value = false;
     const rest = { ...route.query };
     delete rest.tab;
     void router.replace({ path: route.path, query: rest });
@@ -7274,6 +7318,37 @@ onUnmounted(() => {
 }
 /* Icône AU-DESSUS du libellé, largeur qui suit le contenu : en ligne à parts
    égales, « Équipement » (le plus long) était coupé dès 344 px. */
+/* 🗺️ Aventure / Carte : bascule le bloc sous le haut de page. Deux grandes tuiles (mobile :
+   cibles ≥ 44 px), l'active en accent — comme les onglets, un cran plus marquée : c'est le
+   choix de premier niveau. */
+.view-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 8px 0 10px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.vs-b {
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.vs-b.on {
+  background: var(--accent);
+  color: #15120e;
+}
+.vs-b:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .seg-b {
   flex: 1 1 auto;
   min-width: 0;

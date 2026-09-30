@@ -6,12 +6,12 @@
 import { ref } from 'vue';
 import type { Router } from 'vue-router';
 
-export type GameView = 'aventure' | 'expedition-map' | 'expedition';
+// 🗺️ La carte d'expédition n'est plus une vue à part : elle vit DANS l'Aventure (`?view=map`).
+export type GameView = 'aventure' | 'expedition';
 
 // Correspondance route ↔ vue du volet (pour réutiliser les liens existants).
 const PATH_TO_VIEW: Record<string, GameView> = {
   '/aventure': 'aventure',
-  '/expedition-map': 'expedition-map',
   '/expedition': 'expedition',
 };
 
@@ -41,7 +41,12 @@ export function useGamePanel() {
    * épinglée la lit, quelle que soit la route sous laquelle elle est montée.
    */
   function openPath(router: Router, path: string, inPane = cockpit.value): void {
-    const [p = '', q = ''] = path.split('?');
+    let [p = '', q = ''] = path.split('?');
+    // 🗺️ La carte vit dans l'Aventure : son ancien chemin ouvre l'Aventure en mode carte.
+    if (p === '/expedition-map') {
+      p = '/aventure';
+      q = q ? `${q}&view=map` : 'view=map';
+    }
     const v = inPane ? viewForPath(p) : null;
     if (!v) return void router.push(path);
     goGame(v);
