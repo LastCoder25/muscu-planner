@@ -25,6 +25,17 @@
         t.from ? poiEmo(t.from) : '🏰'
       }}</span>
       <span class="tr-who">{{ t.who }}</span>
+      <!-- 🛡️ QUI PART EN RENFORT (demandé) : leurs portraits sous l'icône, sur une ligne
+           centrée — on voit d'un coup d'œil qui arrive sur le lieu. -->
+      <span v-if="t.faces" class="tr-faces">
+        <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
+          <MilitiaPortrait v-if="f.militia" />
+          <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
+        </span>
+        <span v-if="t.members.length > FACES_MAX" class="tr-face-more"
+          >+{{ t.members.length - FACES_MAX }}</span
+        >
+      </span>
       <span class="tr-poi">
         <span v-if="isRiftPoi(t.poi)" class="tr-rift">
           <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
@@ -127,6 +138,8 @@ export interface MapTrip {
   haul: HaulPill[];
   /** 🧭 D'où part la troupe : un point fixe, ou `null` = la base. */
   from: Poi | null;
+  /** 🛡️ Montrer les portraits des membres sous l'icône (tuiles de renfort). */
+  faces?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
   legs?: { go: string | null; back: string; detail: string } | null;
 }
@@ -143,7 +156,9 @@ import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import type { CharacterProfile } from '@/lib/character';
 import type { Adventurer } from '@/lib/adventurers';
-import { militiaIn } from '@/lib/militia';
+import { isMilitiaId, militiaIn, MILITIA_NAME } from '@/lib/militia';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import { advTitle } from '@/lib/adventurers';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import HaulPills from '@/components/HaulPills.vue';
 import { formatDuration } from '@/lib/duration';
@@ -192,6 +207,25 @@ watch(
   },
 );
 
+/** 🛡️ Au plus ce nombre de portraits sur une tuile (au-delà : « +N »), pour tenir sur une
+ *  ligne dans une tuile de tiers de largeur à 344 px. */
+const FACES_MAX = 4;
+/** 🛡️ Les portraits d'un renfort : champions (portrait, repli emoji) et miliciens. */
+function facesOf(t: MapTrip) {
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  return t.members.slice(0, FACES_MAX).map((id) => {
+    if (isMilitiaId(id))
+      return { id, militia: true, name: MILITIA_NAME, championId: null, emoji: '' };
+    const a = byId.get(id);
+    return {
+      id,
+      militia: false,
+      name: a?.name ?? 'Champion',
+      championId: a?.championId ?? null,
+      emoji: a ? (advTitle(a)?.emoji ?? '🧑') : '❔',
+    };
+  });
+}
 /** 👥 Les membres du voyage touché (demandé : « quand je clique sur une expédition, voir les
  *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est
  *  compté à part plutôt que de faire tomber l'écran. */
@@ -390,6 +424,23 @@ const crew = computed(() => {
 }
 .tr-who {
   font-size: 17px;
+}
+/* 🛡️ Les portraits du renfort : une ligne pleine largeur, centrée, sous l'icône. */
+.tr-faces {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  font-size: 16px;
+  line-height: 1;
+}
+.tr-face {
+  display: inline-flex;
+}
+.tr-face-more {
+  font-size: 10.5px;
+  color: var(--dim);
 }
 /* 🎯 L'objectif du voyage, en encart dans le coin haut-droit : collé au bord EXTÉRIEUR
    de la tuile (top/right 0), seuls ses côtés intérieurs sont tracés, dans la couleur
