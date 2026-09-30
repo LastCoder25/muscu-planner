@@ -145,6 +145,11 @@ export interface ControlState {
    *  un milicien rejoint la base à `at`. Rangés sur le POINT, pas sur la carte : le point est
    *  fixe, alors que `advanceWorld` reconstruit la carte champ par champ. */
   returning?: { id: string; from: number; at: number; turnBack?: number }[];
+  /** ⚔️🏰 Champions partis en SORTIE depuis ce point, qui y REVIENNENT (2026-09-30, demandé :
+   *  « leur garder leur slot »). Leur place reste prise pendant qu'ils sont dehors : ils ne
+   *  produisent ni ne défendent, mais personne ne peut la leur prendre. Levée à leur retour
+   *  (`rejoinHome`), ou si leur voyage ne revient plus ici (`pruneAway`). Absente = personne. */
+  away?: string[];
   /** ⛏️ L'or déjà sorti de terre quand l'effectif a changé (renfort arrivé, champion
    *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
    *  recalculé au mauvais débit. */

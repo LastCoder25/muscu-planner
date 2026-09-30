@@ -2455,6 +2455,36 @@ describe('🔀 FusionPanel', () => {
     expect(out.match(/class="pill rk"/g)?.length).toBe(5);
   }, 30_000);
 
+  it('⚔️🏰 un champion en sortie garde sa case, marquée « en sortie »', async () => {
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    const { captureControl, controlIdOf, controlRoster, ensureControls, sortieLeaves } =
+      await import('@/lib/controlPoints');
+    const { createMap } = await import('@/lib/expedition');
+    const id = controlIdOf('mine');
+    const map = sortieLeaves(
+      captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), id, ['a1'], 0, 7),
+      id,
+      ['a1'],
+      1000,
+      30,
+    );
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30), advs: ROW.adventurers },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('class="mini away"');
+    expect(out).toContain('en sortie, revient sur ce point');
+    // Sa case n'est pas libre : toujours 4 places libres sur 5.
+    expect(out.match(/class="mini free"/g)?.length).toBe(4);
+  }, 30_000);
+
   it('🛡️ la garnison montre les MILICIENS, et toucher un lieu ouvre sa gestion', async () => {
     // Signalé : « dans la liste de garnison des lieux fixes on ne voit pas les miliciens ».
     // Puis (demandé) : toucher un lieu ouvre DIRECTEMENT sa gestion — la tuile ne se déplie plus.

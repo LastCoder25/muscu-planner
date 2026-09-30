@@ -502,9 +502,10 @@
             <p class="ctl-line">
               🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
               <span class="ctl-dim">
-                · {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }} champion{{
-                  seatsOf(liveControl.kind) > 1 ? 's' : ''
-                }}</span
+                · {{ controlMembers.length + controlAway.length }}/{{
+                  seatsOf(liveControl.kind)
+                }}
+                champion{{ seatsOf(liveControl.kind) > 1 ? 's' : '' }}</span
               >
               <span class="ctl-dim"> · touche un membre pour le ramener ou le remplacer</span>
             </p>
@@ -519,6 +520,17 @@
                 :gain="occupantLoss[m.adv.id] ? -occupantLoss[m.adv.id]!.loss : null"
                 :gain-title="lossTitle(m.adv.id)"
                 @toggle="toggleRecall(m.adv.id)"
+              />
+              <!-- ⚔️🏰 En SORTIE (demandé) : ils reviendront, leur place les attend — la tuile le
+                 dit au lieu de laisser croire la place libre. Pas sélectionnables : ils ne sont
+                 pas là. -->
+              <AdvPickTile
+                v-for="m in controlAway"
+                :key="'away' + m.adv.id"
+                class="away-tile"
+                :adv="m.adv"
+                :on="false"
+                :reason="`⚔️ en sortie · revient ${m.backIn > 0 ? 'dans ' + formatDuration(m.backIn) : 'bientôt'}`"
               />
               <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
               <button
@@ -1967,7 +1979,21 @@ const recallSelLabel = computed(() => {
   if (t === n) return `🔙 Demi-tour : ${n} renfort${n > 1 ? 's' : ''}`;
   return `↩️ Ramener ${n} membre${n > 1 ? 's' : ''}${t ? ` (dont ${t} en demi-tour)` : ''}`;
 });
-const controlCount = computed(() => controlMembers.value.length + controlMilitia.value.length);
+/** ⚔️🏰 Les champions partis en SORTIE depuis ce point, qui y reviennent : leur place leur est
+ *  gardée (`away`). `backIn` = leur retour sur le point (leur `busyUntil`, que le voyage tient
+ *  à jour s'il est raccourci). */
+const controlAway = computed(() => {
+  const c = liveControl.value;
+  if (!c?.away?.length) return [];
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  return c.away.flatMap((id) => {
+    const adv = byId.get(id);
+    return adv ? [{ adv, backIn: Math.max(0, (adv.busyUntil ?? 0) - now.value) }] : [];
+  });
+});
+const controlCount = computed(
+  () => controlMembers.value.length + controlAway.value.length + controlMilitia.value.length,
+);
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
 /** ➕ Les cases vides de la garnison de 5 : les premières prennent un champion, les
  *  suivantes (au-delà des places de champion du lieu) seulement un milicien. */
@@ -4630,6 +4656,12 @@ onUnmounted(() => {
 .dispo-row {
   display: flex;
   padding: 0 12px 6px;
+}
+/* ⚔️🏰 Un champion en SORTIE : sa place l'attend. Contour pointillé à l'accent (la place est
+   PRISE, pas bloquée) et moins estompé qu'une tuile indisponible : il fait partie du point. */
+.away-tile.car-adv {
+  border-color: var(--accent);
+  opacity: 0.8;
 }
 /* 🛡️ Un milicien dans la garnison : une tuile anonyme, sélectionnable pour le ramener. */
 .slot-tile {

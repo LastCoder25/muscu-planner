@@ -1521,11 +1521,12 @@ function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
  *  Deux limites : la garnison ENTIÈRE ne dépasse pas `MILITIA.perPoint` (5), et les champions
  *  ne dépassent pas les places du point (`seatsOf` : 5, ou 3 au camp et à la forge). */
 function occupants(c: ControlState): { champs: number; militia: number } {
-  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)];
+  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id), ...(c.away ?? [])];
   const militia = ids.filter(isMilitiaId).length;
   return { champs: ids.length - militia, militia };
 }
-/** 🏰 Les places de CHAMPION occupées d'un point : la garnison et les renforts en route. */
+/** 🏰 Les places de CHAMPION occupées d'un point : la garnison, les renforts en route et
+ *  ceux partis en sortie qui y reviennent (`away`, leur place leur est gardée). */
 export function controlSeats(c: ControlState | undefined | null): number {
   return c ? occupants(c).champs : 0;
 }
@@ -1907,6 +1908,68 @@ export function releaseFromControl(
   });
 }
 
+/** Réécrit la liste des sortants d'un point : clé ABSENTE quand elle est vide (la carte se
+ *  compare par JSON, et un point sans sortie ne doit pas différer d'avant la règle). */
+function withAway(p: Poi, away: readonly string[]): Poi {
+  const c = { ...p.control! };
+  if (away.length) c.away = [...away];
+  else delete c.away;
+  return { ...p, control: c };
+}
+
+/**
+ * ⚔️🏰 UNE SORTIE PART D'UN POINT FIXE (2026-09-30, demandé : « leur garder leur slot ») :
+ * les champions quittent la garnison — ils ne produisent ni ne défendent plus, ce qui est
+ * déjà produit reste en réserve — mais leur PLACE leur reste (`away`). Sans elle, un renfort
+ * pouvait la prendre pendant qu'ils étaient dehors, et ils rentraient à pied à la base.
+ */
+export function sortieLeaves(
+  map: ExpeditionMap,
+  id: string,
+  ids: readonly string[],
+  now: number,
+  playerLevel: number,
+): ExpeditionMap {
+  const m = releaseFromControl(map, id, ids, now, playerLevel);
+  return withControl(m, id, (p) => withAway(p, [...new Set([...(p.control!.away ?? []), ...ids])]));
+}
+
+/** ⚔️🏰 Rend les places gardées de ces sortants (retour, ou départ vers la base). Rend la
+ *  MÊME carte si aucun n'en avait une (le store n'écrit pas à vide). */
+export function freeAway(map: ExpeditionMap, id: string, ids: readonly string[]): ExpeditionMap {
+  const p = map.pois.find((q) => q.id === id);
+  const away = p?.control?.away ?? [];
+  const gone = new Set(ids);
+  if (!away.some((x) => gone.has(x))) return map;
+  return withControl(map, id, (q) =>
+    withAway(
+      q,
+      away.filter((x) => !gone.has(x)),
+    ),
+  );
+}
+
+/**
+ * ⚔️🏰 Ne garde que les places dont le sortant revient VRAIMENT ici. `stillAway(point, id)`
+ * est la vérité du store (un voyage en cours revient sur ce point avec lui) : un blessé
+ * renvoyé à la base, un champion posté ailleurs par la mission, un voyage disparu libèrent
+ * leur place. Ne fait que RETIRER — une place n'est gardée qu'au départ (`sortieLeaves`).
+ * Rend la MÊME carte si rien ne change.
+ */
+export function pruneAway(
+  map: ExpeditionMap,
+  stillAway: (pointId: string, advId: string) => boolean,
+): ExpeditionMap {
+  let out = map;
+  for (const p of map.pois) {
+    const away = p.control?.away;
+    if (!away?.length) continue;
+    const keep = away.filter((x) => stillAway(p.id, x));
+    if (keep.length !== away.length) out = withControl(out, p.id, (q) => withAway(q, keep));
+  }
+  return out;
+}
+
 /** ⚔️ Une reprise approche : point tenu par nous, attaque dans moins de `CONTROL.imminentMs`
  *  (ou déjà due, le temps que le tick la résolve). */
 export function attackImminent(p: Poi, now: number): boolean {
@@ -1975,6 +2038,8 @@ export interface ControlRosterRow {
   seats: number;
   garrison: string[];
   reinforcing: { id: string; inMs: number }[];
+  /** ⚔️🏰 Partis en sortie, ils reviennent : leur place est gardée (`away`). */
+  away: string[];
   assault: { ids: string[]; inMs: number } | null;
   /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
   progress: ControlProgress | null;
@@ -2025,6 +2090,7 @@ export function controlRoster(
               .filter((r) => r.at > now)
               .map((r) => ({ id: r.id, inMs: r.at - now }))
           : [],
+        away: held ? [...(c.away ?? [])] : [],
         assault,
         progress: held ? controlProgress(p, now, playerLevel) : null,
       };
