@@ -3141,7 +3141,9 @@ function toggleMapPanel(id: MapPanel) {
   mapPanel.value = mapPanel.value === id ? null : id;
   // Un seul affichage ouvert à la fois : ouvrir un onglet referme la fiche d'un lieu.
   if (mapPanel.value) selected.value = null;
-  if (mapPanel.value) void nextTick(revealTiles);
+  // Ouvrir cale les tuiles en bas ; RE-toucher l'onglet le replie et cale le bas de la
+  // carte en bas de l'écran (demandé : sinon il fallait remonter à la main).
+  void nextTick(mapPanel.value ? revealTiles : revealTabs);
 }
 /** Cale en bas de l'écran la dernière tuile affichée sous la carte : celle de la partie
  *  dépliée, sinon la rangée des onglets elle-même. */
