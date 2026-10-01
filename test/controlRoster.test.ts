@@ -114,6 +114,20 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     expect(dots.startsWith('crr')).toBe(true);
   });
 
+  it('des champions PARTIS EN SORTIE gardent leur place (cas réel : 2 miliciens + 3 dehors = complet)', () => {
+    const mil = (n: number) => `${MILITIA_PREFIX}${n}`;
+    let m = captureControl(base(), MINE, [mil(1), mil(2)], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    m = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === MINE ? { ...p, control: { ...p.control!, away: ['x', 'y', 'z'] } } : p,
+      ),
+    };
+    const r = row(controlRoster(m, [], 2 * H, L), MINE);
+    expect(garrisonDots(r)).toBe('mmrrr' + 'f'.repeat(Math.max(0, r.seats - 5)));
+  });
+
   it('ennemi ATTAQUÉ : nos champions en marche prennent leurs places, au plus celles du point', () => {
     const march = (ids: string[]) =>
       garrisonDots(
