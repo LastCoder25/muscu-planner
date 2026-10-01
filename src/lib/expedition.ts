@@ -1499,6 +1499,28 @@ export function poiRewardLevel(p: Pick<Poi, 'id' | 'type' | 'level'>): number {
  * ⚠️ Un RE-CALAGE déterministe du tirage (modulo), jamais un tirage de plus : la carte de chacun
  * reste reproductible, et au-delà du seuil rien ne change.
  */
+/**
+ * 🐺 LA TANIÈRE, UN COMBAT DIFFICILE (2026-10-01, décision de l'utilisateur : « un combat
+ * difficile, lié au rang, et plus d'XP qu'ailleurs — plein de champions Argent doivent bien
+ * battre une tanière Or »). Son rang affiché reste HONNÊTE (la difficulté, comme tout lieu) :
+ * c'est son TIRAGE qui monte — elle apparaît dans le rang JUSTE AU-DESSUS du joueur.
+ * Mesuré (bête de force 2, champions de référence équipés, gardes seuls) : il faut 6 à 8
+ * champions du rang du joueur pour l'abattre (3-4 : 0 %), 10 à 14 d'un rang plus bas ; et
+ * chacun y gagne 2 à 5× l'XP d'un camp à 3 (niveau 25 : 299 contre 62), partage compris.
+ * ⚠️ En début de partie (`earlySpawnLevel`, sous le niveau 10), elle reste à la portée du
+ * joueur comme tout lieu. Au dernier rang, l'écart proportionnel des lieux « au-dessus ».
+ * ⚠️ Générateur DÉRIVÉ DE L'ID : déterministe, et il ne consomme rien du flux de la carte.
+ */
+export function denLevelFor(id: string, playerLevel: number): number {
+  const L = Math.max(1, playerLevel);
+  const rng = mulberry32((hashId(id) ^ 0x2545f491) >>> 0 || 1);
+  const above = characterRank(L).rankIndex + 1;
+  if (above >= CHARACTER_RANKS.length) return L + 1 + Math.floor(rng() * riftAboveSpan(L));
+  const lo = rankStartLevel(above);
+  const hi = above + 1 < CHARACTER_RANKS.length ? rankStartLevel(above + 1) - 1 : lo + 9;
+  return Math.max(L + 1, lo + Math.floor(rng() * (hi - lo + 1)));
+}
+
 function earlySpawnLevel(tire: number, playerLevel: number): number {
   const L = Math.max(1, playerLevel);
   if (L >= EXPE.earlySpawnCapLevel || tire <= L) return tire;
@@ -2199,7 +2221,11 @@ function placePoiOfType(
   // sienne, sans migration). C’est le NIVEAU qui compense — donc un lieu à 1 ennemi aligne
   // un ennemi plus fort, et « peu de forts » ou « beaucoup de faibles » remplissent le même
   // rang. Exactement ce que le joueur lit.
-  const tire = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  const tire0 =
+    forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  // 🐺 Une tanière apparaît au RANG AU-DESSUS du joueur (`denLevelFor`), tirée sur un générateur
+  // à part : le tirage ci-dessus est consommé quand même, sinon le reste de la carte décale.
+  const tire = forcedLevel === undefined && type === 'den' ? denLevelFor(id, playerLevel) : tire0;
   const vise =
     forcedLevel === undefined && type !== 'arena' ? earlySpawnLevel(tire, playerLevel) : tire;
   // ⚠️ Les gardes d’une récolte ont une RAMPE de début de partie qui lit le niveau : on

@@ -1,8 +1,8 @@
 // 🏛️🏚️🐺 RUINES ANCIENNES, RUINES D'UN HÉROS TOMBÉ, TANIÈRE (2026-09-27, décisions de
 // l'utilisateur) : les sceaux ne viennent plus que des ruines anciennes (gardées), les failles
 // ne rendent que du mana, les camps l'XP et la ressource de leur faction ; les ruines d'un
-// héros tombé rendent des consommables sans combat ; la tanière, une bête seule et deux
-// champions au plus, beaucoup d'XP.
+// héros tombé rendent des consommables sans combat ; la tanière, une bête seule au rang
+// au-dessus du joueur, qu'on abat en surnombre, beaucoup d'XP.
 import { describe, expect, it } from 'vitest';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveCamp } from '@/lib/camp';
@@ -13,6 +13,7 @@ import {
   DEN_XP_MULT,
   partyAllies,
   missionXp,
+  missionXpFor,
   refAdvGear,
   refChampionAdv,
   type PartyHero,
@@ -22,6 +23,7 @@ import {
   advanceWorld,
   campSpecOf,
   createMap,
+  denLevelFor,
   fallenSupplyCount,
   harvestGuardOf,
   ruinsSealKind,
@@ -31,6 +33,7 @@ import {
 import { partyCapFor, partySendBlocker } from '@/lib/party';
 import { CAMP_SAMPLE_MULT, partyWinChance } from '@/lib/partyForecast';
 import { characterRank } from '@/lib/characterRank';
+import { levelForDifficulty } from '@/lib/poiDifficulty';
 import { refFighter } from '@/lib/proceduralContent';
 import type { Adventurer } from '@/lib/adventurers';
 
@@ -253,6 +256,41 @@ describe('🐺 la tanière', () => {
     // Le % AFFICHÉ affronte la MÊME bête que le combat : celle de base.
     const allies = partyAllies(team(6, 45), kit(6), null);
     expect(campWinPct(p, base, allies, 40 * CAMP_SAMPLE_MULT)).toBe(six);
+  }, 60000);
+  it('elle apparaît au rang AU-DESSUS du joueur, et son rang affiché le dit', () => {
+    for (const L of [15, 30, 55, 80]) {
+      const r = characterRank(L).rankIndex;
+      for (const id of ['den_a', 'den_b', 'den_c', 'den_d']) {
+        const lv = denLevelFor(id, L);
+        expect(lv).toBeGreaterThan(L);
+        expect(characterRank(lv).rankIndex).toBe(r + 1);
+      }
+    }
+    // Sur une vraie carte : la difficulté affichée d'une tanière dépasse le rang du joueur.
+    const L = 35;
+    let seen = 0;
+    for (let s = 1; s <= 40 && seen < 3; s++) {
+      let map = createMap(s, 0, L, 0);
+      for (let t = 1; t <= 14; t++) map = advanceWorld(map, t * 86_400_000, L, 0);
+      for (const d of map.pois.filter((p) => p.type === 'den')) {
+        seen++;
+        expect(characterRank(poiDifficultyLevel(d)).rankIndex).toBe(characterRank(L).rankIndex + 1);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  }, 60000);
+  it('un combat difficile, gagné en surnombre — et plus d’XP qu’un camp', () => {
+    const L = 35;
+    const id = 'den_q';
+    const den = poi('den', { id, level: levelForDifficulty(denLevelFor(id, L), 2) });
+    const win = (n: number, lv: number) =>
+      partyWinChance(den, team(n, lv), { advGear: refAdvGear(lv, n) }, null, 0, 40, false)!;
+    expect(win(3, L)).toBeLessThan(0.2);
+    expect(win(10, L)).toBeGreaterThan(0.95);
+    const camp = poi('camp', { id: 'camp_q', level: L });
+    const denXp = missionXpFor(team(8, L), den, true, {}, L, false, null).a0!;
+    const campXp = missionXpFor(team(3, L), camp, true, {}, L, false, null).a0!;
+    expect(denXp).toBeGreaterThan(2 * campXp);
   }, 60000);
   it('beaucoup d’XP — sur une victoire seulement', () => {
     // Champion au niveau de la tanière : ni prime de danger ni rendement décroissant. Une

@@ -794,13 +794,14 @@ export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
   const L = Math.max(1, adv.level);
   const ratio = Math.max(0.15, Math.min(2, d / L));
   const issue = won ? dangerMult(L, d) : CARAVAN.xpLossShare;
-  // 🐺 LA TANIÈRE (2026-09-27) : une bête seule, deux champions au plus — on y vient pour
-  // apprendre. Sur une VICTOIRE seulement, comme la prime de danger.
+  // 🐺 LA TANIÈRE (2026-09-27) : une bête seule, au rang au-dessus du joueur, qu'on abat en
+  // surnombre — on y vient pour apprendre. Sur une VICTOIRE seulement, comme la prime de danger.
   const den = won && poi.type === 'den' ? DEN_XP_MULT : 1;
   return Math.max(1, Math.round(trialXpBase(d) * Math.min(1, ratio) ** 1.5 * issue * den));
 }
 /** 🐺 Multiplicateur d'XP d'une tanière gagnée : une seule bête à abattre (donc presque rien
- *  en part d'abattus) et deux champions au plus — elle doit valoir le détour pour monter. */
+ *  en part d'abattus), et il faut s'y mettre à plusieurs (le partage d'XP s'applique) — elle
+ *  doit valoir le détour pour monter. */
 export const DEN_XP_MULT = 3;
 
 /** Niveaux par rang de l'échelle de prestige (10) — ⚠️ DÉRIVÉ, jamais écrit :
