@@ -9,12 +9,17 @@ import {
   controlIdOf,
   controlStock,
   controlTier,
+  controlTierLabel,
   controlTravelMult,
   ensureControls,
   garrisonHold,
   loseControl,
   nextTierInMs,
+  reinforceControl,
+  releaseFromControl,
   retakeForce,
+  settleReinforcements,
+  tierStepMs,
   tierThreatMult,
   tierYieldMult,
 } from '@/lib/controlPoints';
@@ -51,7 +56,8 @@ describe('🏅 le cran monte tant qu’on tient', () => {
 });
 
 describe('🏅 le cran baisse quand on perd', () => {
-  const held = captureControl(base(), ID, ['a0'], 0, 7);
+  // 3 en garnison : le rythme de référence, un cran par 24 h.
+  const held = captureControl(base(), ID, ['a0', 'a1', 'a2'], 0, 7);
   const lost = loseControl(held, ID, 30, 3 * D + H);
   const c = pt(lost).control!;
   it('−1 tout de suite, puis −1 toutes les 24 h', () => {
@@ -63,7 +69,7 @@ describe('🏅 le cran baisse quand on perd', () => {
     expect(nextTierInMs(c, 9 * D)).toBeNull();
   });
   it('reprendre vite coûte un cran, pas tout', () => {
-    const back = captureControl(lost, ID, ['a0'], 3 * D + 2 * H, 7);
+    const back = captureControl(lost, ID, ['a0', 'a1', 'a2'], 3 * D + 2 * H, 7);
     const b = pt(back).control!;
     expect(controlTier(b, 3 * D + 2 * H)).toBe(2);
     expect(controlTier(b, 4 * D + 2 * H)).toBe(3);
@@ -119,4 +125,65 @@ describe('🏅 un point ancien est plus convoité', () => {
     expect(y).toBeLessThanOrEqual(0.9);
     expect(o).toBeLessThan(y);
   }, 60_000);
+});
+
+// 🏅👥 Le rythme suit la garnison (2026-10-01, demandé par l'utilisateur) : vide, bloqué ;
+// plus de monde, plus vite (la courbe `garrisonShare` de la production).
+describe('🏅👥 le cran se charge au rythme de la garnison', () => {
+  const held = (ids: string[]) => pt(captureControl(base(), ID, ids, 0, 7)).control!;
+  it('sans personne, il est bloqué', () => {
+    const c = held([]);
+    expect(controlTier(c, 30 * D)).toBe(0);
+    expect(nextTierInMs(c, 30 * D)).toBeNull();
+    expect(tierStepMs(0)).toBeNull();
+    expect(controlTierLabel(c, 30 * D)!.detail).toContain('bloqué');
+  });
+  it('1 : 48 h · 3 : 24 h · 5 : plus vite encore', () => {
+    expect(tierStepMs(1)).toBe(2 * D);
+    expect(tierStepMs(3)).toBe(D);
+    expect(tierStepMs(5)!).toBeLessThan(tierStepMs(4)!);
+    expect(tierStepMs(4)!).toBeLessThan(D);
+    const one = held(['a0']);
+    expect(controlTier(one, 2 * D - 1)).toBe(0);
+    expect(controlTier(one, 2 * D)).toBe(1);
+    const five = held(['a0', 'a1', 'a2', 'mil:1', 'mil:2']);
+    expect(controlTier(five, tierStepMs(5)!)).toBe(1);
+    expect(controlTier(five, tierStepMs(5)! - 1)).toBe(0);
+  });
+  it('vider la garnison fige la charge, la remplir la reprend où elle était', () => {
+    let m = captureControl(base(), ID, ['a0', 'a1', 'a2'], 0, 7);
+    m = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === ID ? { ...p, control: { ...p.control!, attackAt: 9e15 } } : p,
+      ),
+    };
+    // 12 h à 3 : un demi-cran chargé, puis tout le monde rentre.
+    m = releaseFromControl(m, ID, ['a0', 'a1', 'a2'], D / 2, 30);
+    const empty = pt(m).control!;
+    expect(controlTier(empty, 10 * D)).toBe(0);
+    // Un renfort de 3 arrive au jour 10 : il ne reste qu'un demi-cran à charger.
+    m = reinforceControl(m, ID, ['b0', 'b1', 'b2'], 10 * D);
+    m = settleReinforcements(m, 10 * D, 30);
+    const back = pt(m).control!;
+    expect(controlTier(back, 10 * D + D / 2 - 1)).toBe(0);
+    expect(controlTier(back, 10 * D + D / 2)).toBe(1);
+  });
+  it('la production d’avant le changement garde les crans qu’elle avait', () => {
+    let m = captureControl(base(), ID, ['a0', 'a1', 'a2'], 0, 7);
+    m = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === ID ? { ...p, control: { ...p.control!, attackAt: 9e15 } } : p,
+      ),
+    };
+    const perH = controlGoldPerHour(pt(m), 3, 30);
+    // 2 jours à 3 (crans 0 puis 1), puis un départ : la réserve ne bouge pas.
+    const before = controlStock(pt(m), 2 * D, 30);
+    m = releaseFromControl(m, ID, ['a2'], 2 * D, 30);
+    expect(Math.abs(controlStock(pt(m), 2 * D, 30) - before)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(before - perH * 24 * (tierYieldMult(0) + tierYieldMult(1))),
+    ).toBeLessThanOrEqual(1);
+  });
 });
