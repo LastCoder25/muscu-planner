@@ -173,7 +173,7 @@
               >
             </button>
             <button type="button" class="pan-tile runes" @click="emit('open-runes')">
-              <span class="pan-emo"><RuneIcon size="48px" /></span>
+              <span class="pan-emo"><RuneIcon size="36px" /></span>
               <span class="pan-t font-display">Runes</span>
               <span class="pan-s">{{ runeSummary }}</span>
               <span v-if="runesToOpen" class="pan-asc runes">🪬 {{ runesToOpen }} à ouvrir</span>
@@ -872,20 +872,20 @@ function collectAll() {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 8px;
+  margin-top: 10px;
 }
 .pan-tile {
   position: relative;
   flex: 1;
-  min-height: 120px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 14px;
-  border-radius: 16px;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
   background: radial-gradient(
     circle at 50% 30%,
@@ -920,11 +920,11 @@ function collectAll() {
   );
 }
 .pan-emo {
-  font-size: 48px;
+  font-size: 34px;
   line-height: 1;
 }
 .pan-t {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
