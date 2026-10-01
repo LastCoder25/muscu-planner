@@ -42,7 +42,12 @@
          selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
-      <span v-if="(xp || gain != null) && !reason" class="ca-row">
+      <span v-if="(xp || gain != null || travelMin != null) && !reason" class="ca-row">
+        <!-- 🧭 SON TRAJET jusqu'au lieu visé (demandé : on le choisissait sans savoir quand il
+             arriverait). -->
+        <span v-if="travelMin != null" class="ca-trip" title="Trajet jusqu’au lieu"
+          >🧭 {{ formatDurationMin(travelMin) }}</span
+        >
         <span v-if="xp" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
           {{ xp.win != null && xp.win < 1 ? '≈' : '' }}+{{ xp.xp }} XP<b v-if="xp.catchUp > 1"
             >×{{ fmtMult(xp.catchUp) }}</b
@@ -88,6 +93,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
+import { formatDurationMin } from '@/lib/duration';
 import type { MissionXpPreview } from '@/lib/caravan';
 
 const props = defineProps<{
@@ -101,6 +107,8 @@ const props = defineProps<{
   /** L'explication du chiffre 🎯, quand elle n'est pas celle d'une équipe à cocher (ex. la
    *  tenue d'un point fixe sans ce membre). */
   gainTitle?: string | null;
+  /** 🧭 Son trajet jusqu'au lieu visé, en minutes (absent = rien à afficher). */
+  travelMin?: number | null;
   /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
   readonly?: boolean;
 }>();
@@ -273,6 +281,13 @@ const rar = computed(() => advGradeBadge(props.adv));
 }
 .ca-gain.neg {
   color: var(--d3, #ffb23f);
+}
+.ca-trip {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
 }
 .ca-xp {
   font-size: 12px;

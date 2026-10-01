@@ -2932,6 +2932,8 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
           departLabel: null,
           planned: [],
           sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
+          champMin: { [ROW.adventurers[0].id]: 80 },
+          arrival: { min: 80, at: '21:40' },
           selHold: { pct: 78, late: 1 },
           hold: { pct: 62, mil: 4, champ: { [ROW.adventurers[0].id]: 11 }, trans: { a2: -3 } },
           onToggleChamp: (a: string) => champs.push(a),
@@ -2961,6 +2963,13 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(out).toContain('(+16)');
     expect(out).toContain('1 arrivera trop tard');
     expect(out).toContain('Envoyer 2 renforts');
+    // 🧭 Le trajet de chaque champion, et celui de la sélection, AVANT de valider.
+    expect(out).toContain('🧭 1 h 20');
+    const trip = out.slice(out.indexOf('class="qr-trip"'));
+    const tripLine = trip.slice(0, trip.indexOf('</p>'));
+    expect(tripLine).toContain('1 h 20');
+    expect(tripLine).toContain('arrivée vers');
+    expect(tripLine).toContain('21:40');
     expect(champs).toEqual([ROW.adventurers[0].id]);
     // ⇄ Depuis un autre lieu : le lieu, ses membres, et un toucher lance le transfert.
     expect(out).toContain('Depuis un autre lieu');
@@ -2997,6 +3006,8 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
           departLabel: '22:45',
           planned: [{ id: 'plan_1', count: 3, departIn: '2 h 10', departAt: '23:30' }],
           sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
+          champMin: {},
+          arrival: null,
           selHold: { pct: 78, late: 0 },
           hold: null,
           onDelay: (n: number) => delays.push(n),

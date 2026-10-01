@@ -81,6 +81,7 @@
             :adv="a"
             :on="sel.champs.includes(a.id)"
             :gain="hold?.champ[a.id] ?? null"
+            :travel-min="champMin[a.id] ?? null"
             :gain-title="gainTitle(sel.champs.includes(a.id))"
             :reason="busy ? '…' : !sel.champs.includes(a.id) && !canChamp ? 'plus de place' : null"
             @toggle="emit('toggleChamp', a.id)"
@@ -139,6 +140,12 @@
           <span v-if="selHold.late > 0" class="qr-late">
             · {{ selHold.late }} arrivera{{ selHold.late > 1 ? 'ont' : '' }} trop tard</span
           >
+        </p>
+        <!-- 🧭 LE TRAJET DE LA SÉLECTION, avant de valider (demandé) : les champions de la base
+             partent ensemble, au pas du plus lent ; l'arrivée tient compte d'un départ différé. -->
+        <p v-if="arrival" class="qr-trip">
+          🧭 Trajet <b>{{ formatDurationMin(arrival.min) }}</b> · arrivée vers
+          <b>{{ arrival.at }}</b>
         </p>
         <!-- ⏳ LE DÉPART (demandé : « dans combien de temps, heures/minutes — si une attaque
              arrive dans 1 h 30 on les envoie dans 1 h 25 », ou tout de suite). -->
@@ -208,6 +215,10 @@ const props = defineProps<{
   maxDelayMin: number;
   /** L'heure de départ, lisible (« 21 h 40 »), quand elle est programmée. */
   departLabel: string | null;
+  /** 🧭 Le trajet de chaque champion de la base jusqu'au lieu, en minutes. */
+  champMin: Record<string, number>;
+  /** 🧭 Le trajet le plus long de la sélection et l'heure d'arrivée (null = rien coché). */
+  arrival: { min: number; at: string } | null;
   /** ⏳ Les départs déjà programmés vers ce lieu. */
   planned: { id: string; count: number; departIn: string; departAt: string }[];
 }>();
@@ -242,6 +253,11 @@ const emit = defineEmits<{
   background: var(--surface);
   border-radius: 16px 16px 0 0;
   padding: 12px 12px 20px;
+}
+.qr-trip {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--text);
 }
 .qr-hold {
   margin: 4px 0 8px;

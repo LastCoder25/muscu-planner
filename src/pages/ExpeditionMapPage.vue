@@ -415,6 +415,8 @@
       :mil-free="quickFree.total"
       :mil-home="milHomeFree"
       :militia-min="quickMilitiaMin"
+      :champ-min="quickChampMin"
+      :arrival="quickArrival"
       :sources="quickSources"
       :hold="quickHold"
       :sel="quickSel"
@@ -3180,6 +3182,26 @@ const quickDepartLabel = computed(() =>
       })
     : null,
 );
+/** 🧭 Le trajet de chaque champion disponible jusqu'au lieu, seul (la règle d'un renfort). */
+const quickChampMin = computed<Record<string, number>>(() => {
+  const p = quickPoi.value;
+  if (!p) return {};
+  return Object.fromEntries(freeSorted.value.map((a) => [a.id, legOfMember(a)(p)]));
+});
+/** 🧭 Le trajet de la sélection (le plus long, départ différé non compris) et son heure
+ *  d'arrivée — lus sur les mêmes arrivées que la tenue (`quickExtra`), donc ceux du départ réel. */
+const quickArrival = computed(() => {
+  const p = quickPoi.value;
+  if (!p || !reinfCount(quickSel.value)) return null;
+  const arr = quickExtra(p, quickSel.value);
+  if (!arr.length) return null;
+  const last = Math.max(...arr.map((x) => x.at));
+  const start = coarseNow.value + quickDelayMin.value * 60_000;
+  return {
+    min: Math.max(0, Math.round((last - start) / 60_000)),
+    at: new Date(last).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+  };
+});
 /** ⏳ Les départs déjà programmés vers ce lieu. */
 const quickPlanned = computed(() =>
   char.plannedList
