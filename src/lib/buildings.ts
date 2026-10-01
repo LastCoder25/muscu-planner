@@ -176,7 +176,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     // Calé à **~1 run par jour pour 7 niveaux de Porte** : 1,4/jour au niveau 10,
     // 4,0 au 28, 14,4 au 100. ⚠️ Calé quand chaque champion portait un familier (v0.777) :
     // depuis la v0.996 ils sont réservés au héros, donc la DEMANDE a baissé — à re-mesurer.
-    prodPerHrPerLvl: 0.006,
+    prodPerHrPerLvl: 0.003,
     buildGold: 500,
     unlockLevel: 2,
     unique: true,

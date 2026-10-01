@@ -97,6 +97,7 @@ import {
   type LabyStats,
 } from '@/data/labyrinths';
 import { normalizeRunStats, runAttempt, type RunStats } from '@/lib/runStats';
+import { bossKeyDrop, dungeonKeyDrop } from '@/lib/keyDrops';
 import {
   PARTY_TARGETS,
   HARVEST_TYPES,
@@ -1291,9 +1292,11 @@ export const useCharacterStore = defineStore('character', () => {
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
-    // Clé d'expédition : ~2 % sur un donjon NETTOYÉ (raréfié 2026‑08‑18 : les gros
-    // volumes de runs inondaient les clés → le Labyrinthe redevient un événement rare).
-    const gotKey = input.clearedDungeonId && Math.random() < 0.02 ? 1 : 0;
+    // Clé d'expédition : ~2 % sur un donjon NETTOYÉ, en RUNS du palier de son niveau
+    // (`dungeonKeyDrop`, v1.8.19).
+    const gotKey = input.clearedDungeonId
+      ? dungeonKeyDrop(input.clearedDungeonId, Math.random())
+      : 0;
     return persist(userId, {
       gold: cur.gold + input.gold,
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
@@ -1340,8 +1343,8 @@ export const useCharacterStore = defineStore('character', () => {
     // la carte — aucune ressource de champion ne se farme dans la partie héros.
     const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
-    // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
-    const keyGain = firstDefeat ? 1 : input.defeated && Math.random() < 0.06 ? 1 : 0;
+    // réaffrontements, en RUNS du palier de son niveau (`bossKeyDrop`, v1.8.19).
+    const keyGain = bossKeyDrop(input.bossId, firstDefeat, input.defeated, Math.random());
     // Butin de boss. Les pièces de SET DE VOIE vont au SAC : c'est l'écran qui les RANGE dans
     // leur set (`fileSetPieces`), une fois le drop révélé — lui seul a de quoi les juger au
     // barème du set, et une seule règle de rangement vaut pour toutes les sources (v0.839).

@@ -52,6 +52,7 @@ import {
 // l'exécution (`escortCombatant`, `unitEffects`…), donc un import de valeur dans l'autre
 // sens créerait un cycle. Le projet applique déjà cette règle entre `data/familiars` et `items`.
 import { REF_CHAMPIONS_BY_RANK, type Champion } from '../data/champions';
+import { labyKeyPriceAt } from '../data/labyrinths';
 import {
   PARTY_TARGETS,
   HARVEST_TYPES,
@@ -1472,7 +1473,7 @@ export function resolveCaravan(
     } else if (roll >= base && roll < 0.34) {
       events.push({ kind: 'cache', text: 'Une cache oubliée le long de la route.' });
       mult *= 1.1;
-      keysBonus += rng() < 0.25 ? 1 : 0;
+      keysBonus += rng() < 0.25 ? labyKeyPriceAt(heroRewardLevel(poi, playerLevel)) : 0;
     } else if (roll >= base && roll < 0.42) {
       events.push({ kind: 'detour', text: 'Un pont coupé : le trajet s’allonge.' });
       mult *= 0.92;
@@ -1513,7 +1514,7 @@ export function resolveCaravan(
     harvestGuardOf(poi)?.size ?? 0,
   );
   // ⚠️ Tirée APRÈS la route : un tirage de plus avant aurait décalé toutes les rencontres.
-  const keyLuck = rng() < HARVEST.keyChance ? 1 : 0;
+  const keyLuck = rng() < HARVEST.keyChance ? labyKeyPriceAt(heroRewardLevel(poi, playerLevel)) : 0;
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
   // Un convoi part toujours sans le héros.
   const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel, false, null);

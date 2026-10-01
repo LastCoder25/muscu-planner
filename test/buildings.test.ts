@@ -527,14 +527,13 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // retirée et son plancher réduit, à la demande de l’utilisateur (v0.799). On ne nerfe
     // jamais en silence — celui-ci est voulu, mesuré et documenté.
   });
-
-
 });
 
 describe('🗝️ LA PORTE DU LABYRINTHE EST UN COMPLÉMENT, PAS LA SOURCE', () => {
-  /** Runs de Labyrinthe qu’elle finance à elle seule en 24 h — le Labyrinthe est gaté
-   *  à UNE clé, donc une clé produite EST un run. Deux récoltes par jour : le plafond
-   *  de stockage (18 h) ne mord pas, on mesure bien le débit. */
+  /** CLÉS qu’elle produit en 24 h. ⚠️ Plus des runs : depuis la v0.799 un palier profond
+   *  coûte jusqu’à 4 clés, et depuis la v1.8.19 les autres sources paient en runs du palier
+   *  de leur niveau — la bande « 2 à 5 runs/jour au palier de pointe » est tenue par
+   *  `labyrinths.test`. Deux récoltes par jour : le plafond de stockage (18 h) ne mord pas. */
   const runsPerDay = (level: number) => {
     const b = { id: 'g', typeId: 'labyrinth_gate', level, collectedAt: 0 };
     return Math.min(buildingProdPerHour(b) * 12, buildingStorageCap(b)) * 2;
@@ -546,19 +545,21 @@ describe('🗝️ LA PORTE DU LABYRINTHE EST UN COMPLÉMENT, PAS LA SOURCE', () 
     // commentaire disait pourtant « complément, pas la source ». Le Labyrinthe est le
     // contenu le plus riche du jeu (familier GARANTI au clear, seule source du jeu) :
     // le financer en continu, c'est le faire passer d'événement à boucle de farm.
-    expect(runsPerDay(28)).toBeLessThan(6);
-    expect(runsPerDay(28)).toBeGreaterThan(2);
+    // v1.8.19 : 0,006 → 0,003, les drops de la carte, des donjons et des boss étant passés
+    // au prix du palier — sans ça le palier de pointe montait à 6 runs/jour en fin de partie.
+    expect(runsPerDay(28)).toBeLessThan(3);
+    expect(runsPerDay(28)).toBeGreaterThan(1.5);
   });
 
   it('⚠️ …et le débit reste calé sur le niveau, du début à la fin', () => {
-    // ~1 run par jour pour 7 niveaux de Porte. La borne est un RAPPORT, pas une valeur :
+    // ~1 clé par jour pour 14 niveaux de Porte (v1.8.19). La borne est un RAPPORT, pas une valeur :
     // elle tient à tous les niveaux et se lit sans connaître le coefficient. La demande
     // monte avec le joueur (depuis la v0.777 il faut un compagnon PAR aventurier, soit
     // 15 au niveau 28 et 51 au 100) — d'où un robinet linéaire, jamais plat.
     for (const L of [10, 20, 28, 40, 60, 100]) {
       const parNiveau = runsPerDay(L) / L;
-      expect(parNiveau, `niveau ${L}`).toBeGreaterThan(0.12);
-      expect(parNiveau, `niveau ${L}`).toBeLessThan(0.17);
+      expect(parNiveau, `niveau ${L}`).toBeGreaterThan(0.06);
+      expect(parNiveau, `niveau ${L}`).toBeLessThan(0.085);
     }
   });
 

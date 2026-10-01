@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { harvestYield } from '../src/lib/expedition';
+import { DUNGEONS } from '../src/data/dungeons';
+import { BOSSES } from '../src/data/bosses';
+import { bossKeyDrop, dungeonKeyDrop, DUNGEON_KEY_CHANCE } from '../src/lib/keyDrops';
 import {
   LABYRINTHS,
   labyClearId,
@@ -8,6 +12,7 @@ import {
   deathKeepFraction,
   labyKeyCost,
   keysAfterPaying,
+  labyKeyPriceAt,
   replayKeysInfo,
   normalizeLabyStats,
   labyRunStarted,
@@ -77,11 +82,15 @@ describe('labyrinths — ladder de paliers', () => {
 
 describe('🗝️ UNE CLÉ EST UNE MONNAIE : le prix suit la profondeur', () => {
   /** Clés gagnées par jour au niveau L : la Porte du Labyrinthe au niveau du joueur (deux
-   *  récoltes), plus ~2,7 venant de tout le reste — mesuré en v0.794 (donjons 2 %, boss 6 %,
-   *  archives, convois). */
+   *  récoltes), plus ~1,8 RUN venant de tout le reste. ⚠️ Depuis la v1.8.19 les drops (archives,
+   *  donjons, boss, caches) se comptent en runs du palier de leur niveau : mesuré sur de vraies
+   *  cartes (6 × 14 jours, toutes les archives prises), ils rendent 1,7 à 1,8 run par jour du
+   *  niveau 3 au 100 — donc ~1,8 × le prix en clés. */
   const clesParJour = (L: number) => {
     const b = { id: 'g', typeId: 'labyrinth_gate', level: L, collectedAt: 0 };
-    return Math.min(buildingProdPerHour(b) * 12, buildingStorageCap(b)) * 2 + 2.7;
+    return (
+      Math.min(buildingProdPerHour(b) * 12, buildingStorageCap(b)) * 2 + 1.8 * labyKeyPriceAt(L)
+    );
   };
   /** Le palier le plus profond dont le niveau conseillé est atteint. */
   const pointe = (L: number) => {
@@ -209,5 +218,34 @@ describe('labyrinths — % de réussite RÉEL du joueur', () => {
     expect(labyIdOfClear(labyClearId('gouffre'))).toBe('gouffre');
     expect(labyIdOfClear('caverne')).toBeNull();
     expect(labyIdOfClear(undefined)).toBeNull();
+  });
+});
+
+describe('🗝️ UNE CLÉ TOMBÉE VAUT UN RUN DU PALIER DE SON NIVEAU (v1.8.19)', () => {
+  it('le prix au niveau L est celui du palier de pointe atteint', () => {
+    expect(labyKeyPriceAt(1)).toBe(1);
+    for (const l of LABYRINTHS) expect(labyKeyPriceAt(l.recoLevel)).toBe(labyKeyCost(l.id));
+    expect(labyKeyPriceAt(100)).toBe(labyKeyCost(LABYRINTHS[LABYRINTHS.length - 1]!.id));
+  });
+  it('une archive de haut niveau rend le prix du palier, deux fois si gardée en nombre', () => {
+    expect(harvestYield('archive', 3, 0).keys).toBe(1);
+    expect(harvestYield('archive', 90, 0).keys).toBe(labyKeyPriceAt(90));
+    expect(harvestYield('archive', 90, 3).keys).toBe(2 * labyKeyPriceAt(90));
+  });
+  it('donjon : rare, et au prix du palier du niveau du donjon', () => {
+    const deep = [...DUNGEONS].sort((a, b) => b.recoLevel - a.recoLevel)[0]!;
+    expect(dungeonKeyDrop(deep.id, DUNGEON_KEY_CHANCE)).toBe(0);
+    expect(dungeonKeyDrop(deep.id, 0)).toBe(labyKeyPriceAt(deep.recoLevel));
+    expect(dungeonKeyDrop(deep.id, 0)).toBeGreaterThan(1);
+    expect(dungeonKeyDrop(DUNGEONS[0]!.id, 0)).toBe(1);
+  });
+  it('boss : garanti à la 1re victoire, rare ensuite, rien sur une défaite', () => {
+    const b = [...BOSSES].sort((x, y) => y.unlockLevel - x.unlockLevel)[0]!;
+    const prix = labyKeyPriceAt(b.unlockLevel);
+    expect(prix).toBeGreaterThan(1);
+    expect(bossKeyDrop(b.id, true, true, 0.99)).toBe(prix);
+    expect(bossKeyDrop(b.id, false, true, 0.99)).toBe(0);
+    expect(bossKeyDrop(b.id, false, true, 0)).toBe(prix);
+    expect(bossKeyDrop(b.id, false, false, 0)).toBe(0);
   });
 });

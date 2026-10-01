@@ -894,9 +894,9 @@
               class="car-cap"
               title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
             >
-              👥 <b>{{ partyAdvs.length
-              }}{{ Number.isFinite(partyMax) ? '/' + partyMax : '' }}</b> champions · XP partagée
-              <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
+              👥
+              <b>{{ partyAdvs.length }}{{ Number.isFinite(partyMax) ? '/' + partyMax : '' }}</b>
+              champions · XP partagée <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
               <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
             </p>
             <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
@@ -2616,7 +2616,11 @@ const partiesOnMap = computed(() =>
       id: g.id,
       poi: g.poi,
       recallable: !recallBlocker(g, now.value),
-      ...recallWindow(g),
+      // 🔙 La fenêtre COMPLÈTE d'avant un demi-tour, pour la feuille de rappel seulement.
+      // ⚠️ Rangée à part : étalée ici, elle écrasait `returnAt` et une équipe rappelée se
+      // triait sur son ANCIEN retour au lieu de passer en tête des voyages (v1.8.19).
+      win: recallWindow(g),
+      returnAt: g.returnAt,
       escort: tripCrew(g).length,
       members: tripCrew(g),
       hero: partyCarriesHero(g),
@@ -2741,9 +2745,7 @@ const travelersOnMap = computed(() => [
       poi: g.poi,
       hero: g.hero,
       members: g.members,
-      sentAt: g.sentAt,
-      arriveAt: g.arriveAt,
-      returnAt: g.returnAt,
+      ...g.win,
     } as RecallInfo,
   })),
   // 🔙 Seuls les renforts partis de la base peuvent rebrousser chemin (un transfert devrait

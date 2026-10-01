@@ -16,6 +16,7 @@ import type { RaidFaction } from './raid';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
+import { labyKeyPriceAt } from '../data/labyrinths';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -3094,7 +3095,7 @@ export function rollTravelEncounters(
       // Trouvaille pacifique : pas de combat, juste une bonne surprise.
       encounters.push({ leg, kind: 'cache', won: true });
       both(TRAVEL.cacheMult);
-      keys += 1;
+      keys += labyKeyPriceAt(heroRewardLevel(poi, playerLevel));
       text += ` 🗝️ Cache oubliée repérée ${LEG_FR[leg]} — clé et vivres récupérés.`;
     } else if (roll < (acc += TRAVEL.merchantChance)) {
       // Marchand errant : convertit de l'or en ressources → puits d'or de plus.
@@ -3249,7 +3250,9 @@ export function harvestYield(
     // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
     // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
     // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
-    keys = 1 + (guardSize >= HARVEST.archiveBigGuardAt ? 1 : 0);
+    // 🗝️ Comptées en RUNS du palier de ce niveau (`labyKeyPriceAt`) : un palier profond
+    // coûte 3 ou 4 clés, une archive de haut niveau en rend autant (v1.8.19).
+    keys = (1 + (guardSize >= HARVEST.archiveBigGuardAt ? 1 : 0)) * labyKeyPriceAt(L);
   }
   return { energy, summonStones, keys, mana };
 }
@@ -3292,7 +3295,10 @@ export function resolveOutcome(
       mana: Math.round(mana * k),
       item: tr.drops[0] ?? null,
       items: tr.drops,
-      key: keys + (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
+      key:
+        keys +
+        (rng() < HARVEST.keyChance ? labyKeyPriceAt(heroRewardLevel(poi, playerLevel)) : 0) +
+        tr.keys,
       reconBonus: 0,
       returnMult: tr.returnMult,
       text: pick(rng, WIN_TEXT[poi.type]) + tr.text,

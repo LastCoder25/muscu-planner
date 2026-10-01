@@ -190,6 +190,18 @@ export function labyKeyCost(id: string): number {
 }
 
 /**
+ * 🗝️ Le prix, en clés, du palier le plus profond qu'on peut viser au niveau `level` (son
+ * niveau conseillé atteint). C'est l'unité des DROPS de clés (donjons, boss, carte) : une
+ * clé tombée vaut « un run » du palier de ce niveau, pas une clé brute — sans ça, une clé
+ * gagnée au niveau 80 ne payait qu'un tiers d'entrée (v1.8.19).
+ */
+export function labyKeyPriceAt(level: number): number {
+  let t = LABYRINTHS[0]!;
+  for (const l of LABYRINTHS) if (l.recoLevel <= level) t = l;
+  return labyKeyCost(t.id);
+}
+
+/**
  * Les clés qui restent après avoir payé `cost`, ou `null` si le compte n’y est pas.
  *
  * ⚠️ LE PRIX ENTIER, jamais « au moins une » : un palier profond coûte plusieurs clés, et un
