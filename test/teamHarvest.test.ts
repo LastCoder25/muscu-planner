@@ -6,7 +6,8 @@
  * pour l'énergie (v0.1201) : l'énergie valait jusqu'à 2,2× une journée de sport et les pierres
  * jusqu'à 246 % d'une journée de donjons. D'où `CARAVAN.energyShare` et `stonesShare` à 0,2.
  * Mesuré après : énergie 0,19 / 0,42 / 0,59 / 0,87× le sport, pierres 31 / 36 / 39 / 49 % des
- * donjons (niveaux 12 / 30 / 60 / 100). ⚠️ Toucher aux parts, aux sources ou aux sanctuaires
+ * donjons (niveaux 12 / 30 / 60 / 100). v1.8.0 : sanctuaires 2× plus rares et 2,5× plus riches
+ * → 47 / 35 / 47 / 45 %. ⚠️ Toucher aux parts, aux sources ou aux sanctuaires
  * sans relancer ce fichier, c'est rouvrir « complément, jamais substitut au sport ».
  */
 import { describe, it, expect } from 'vitest';
