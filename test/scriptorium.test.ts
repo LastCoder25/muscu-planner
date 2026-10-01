@@ -11,6 +11,7 @@ import {
   seatsOf,
   TIER,
   tierYieldMult,
+  tierStepMs,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 import { placeRuneOdds, type RuneTier } from '@/lib/skillRunes';
@@ -56,15 +57,15 @@ describe('📜 le Scriptorium', () => {
   it('sans plafond : dix jours d’absence rendent dix jours de copie', () => {
     // ⚠️ 2026-09-29 (demandé : « supprime le plafond de 24 h ») : les runes ne s’arrêtent
     // plus à une seule en attente — tout ce qui a été copié arrive au retour.
-    // 🏅 Chaque jour tenu à SON cran (+1 par 24 h, plafond 10 — 2026-09-30).
-    const days = (n: number) =>
-      Array.from({ length: n }, (_, d) => tierYieldMult(Math.min(TIER.max, d))).reduce(
-        (x, y) => x + y,
-        0,
-      );
+    // 🏅 Chaque jour tenu à SON cran (plafond 10 — 2026-09-30), qui se charge au rythme de la
+    // garnison (2026-10-01) : un cran par 24 h à 3, par 48 h seul.
+    const days = (n: number, k: number) =>
+      Array.from({ length: n }, (_, d) =>
+        tierYieldMult(Math.min(TIER.max, Math.floor((d * TIER.dayMs) / tierStepMs(k)!))),
+      ).reduce((x, y) => x + y, 0);
     const perDay = (k: number) => 24 / runeHoursFor(k)!;
-    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(Math.floor(days(10) * perDay(3) + 1e-9));
-    expect(at(['a'], 20 * 24).n).toBe(Math.floor(days(20) * perDay(1) + 1e-9));
+    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(Math.floor(days(10, 3) * perDay(3) + 1e-9));
+    expect(at(['a'], 20 * 24).n).toBe(Math.floor(days(20, 1) * perDay(1) + 1e-9));
   });
 
   it('ramasser rend une rune MULTICOLORE (sa couleur se tire à l’ouverture)', () => {

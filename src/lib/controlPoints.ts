@@ -168,7 +168,8 @@ export const CONTROL = {
 /**
  * 🏅 LES CRANS D'UN POINT FIXE (2026-09-30, décisions de l'utilisateur) : l'ANCIENNETÉ.
  *
- * - Tenu : **+1 cran toutes les 24 h**, jusqu'à `TIER.max` (10).
+ * - Tenu : **+1 cran par charge** — 24 h avec 3 en garnison, plus vite ou plus lentement
+ *   selon l'effectif, bloqué sans personne (cf. plus bas) —, jusqu'à `TIER.max` (10).
  * - Perdu (reprise ou abandon) : **−1 tout de suite**, puis **−1 toutes les 24 h** tant que
  *   l'ennemi le tient. Repris par le joueur, il repart des crans qui lui restent.
  * - Chaque cran : `yieldPerTier` de production en plus (or, mana, consommables, runes, XP du
@@ -180,8 +181,17 @@ export const CONTROL = {
  *   garnison forte, ramenée à ~89 %, tient ~75 % face à une troupe ×1,4 et ~72 % à ×1,5 ; une
  *   garnison à niveau passe de ~63 % à ~48 % — une pente, pas un mur.
  * ⚠️ Le cran se DÉDUIT du temps (`controlTier`) : l'état ne retient que la valeur posée au
- * dernier changement de camp (`tier`) et son instant (`tierAt`). Un point tenu d'avant la règle
- * (sans `tierAt`) compte depuis sa prise (`since`) : son ancienneté est reconnue.
+ * dernier changement (`tier`), la part du cran suivant déjà chargée (`tierCharge`) et leur
+ * instant (`tierAt`). Un point tenu d'avant la règle (sans `tierAt`) compte depuis sa prise
+ * (`since`) : son ancienneté est reconnue.
+ *
+ * 🏅👥 LE RYTHME SUIT LA GARNISON (2026-10-01, demandé par l'utilisateur : « sans personne, le
+ * délai est bloqué ; plus il y a de garnison, plus il est rapide ») : un cran tenu se charge à
+ * la vitesse `garrisonShare` (la courbe de la production, champions ET miliciens) — vide :
+ * BLOQUÉ · 1 : 48 h · 2 : 30 h · 3 : 24 h (l'ancienne règle) · 4 : ~20 h 52 · 5 : ~18 h 28.
+ * ⚠️ Le rythme est celui de la garnison ACTUELLE : chaque changement d'effectif fige la
+ * progression (`rebaseTier`, appelé par `bankAt`), comme la production. La baisse chez
+ * l'ennemi, elle, reste −1 par 24 h.
  */
 export const TIER = {
   max: 10,
@@ -194,14 +204,55 @@ export const TIER = {
 const tierRef = (c: ControlState): number | undefined =>
   c.tierAt ?? (c.owner === 'player' ? c.since : undefined);
 
+/** 🏅👥 La vitesse de charge d'un cran (1 = un cran par 24 h). Tenu : selon la garnison
+ *  (0 sans personne) ; chez l'ennemi : la baisse, toujours 1. */
+export function tierRate(c: ControlState): number {
+  return c.owner === 'player' ? shareOf(c.garrison.length) : 1;
+}
+
+/** 🏅👥 La durée d'un cran pour une garnison de `n` (champions ET miliciens) ; `null` : bloqué. */
+export function tierStepMs(n: number): number | null {
+  const r = shareOf(n);
+  return r > 0 ? TIER.dayMs / r : null;
+}
+
+/** La progression (en crans, fractionnaire) accumulée depuis `tierRef`, charge comprise. */
+function tierProgress(c: ControlState, ref: number, at: number): number {
+  return (c.tierCharge ?? 0) + (Math.max(0, at - ref) * tierRate(c)) / TIER.dayMs;
+}
+
 /** 🏅 Le cran d'un point à `at`. */
 export function controlTier(c: ControlState | undefined, at: number): number {
   if (!c) return 0;
   const base = Math.max(0, Math.min(TIER.max, c.tier ?? 0));
   const ref = tierRef(c);
   if (ref === undefined) return base;
-  const days = Math.floor(Math.max(0, at - ref) / TIER.dayMs);
-  return c.owner === 'player' ? Math.min(TIER.max, base + days) : Math.max(0, base - days);
+  const steps = Math.floor(tierProgress(c, ref, at));
+  return c.owner === 'player' ? Math.min(TIER.max, base + steps) : Math.max(0, base - steps);
+}
+
+/** 🏅👥 L'effectif va changer à `at` : on FIGE le cran et la part déjà chargée, pour que la
+ *  suite se charge au rythme de la nouvelle garnison. Rien n'est perdu ni gagné. */
+export function rebaseTier(c: ControlState, at: number): ControlState {
+  const ref = tierRef(c);
+  if (c.owner !== 'player' || ref === undefined) return c;
+  const tier = controlTier(c, at);
+  const p = tierProgress(c, ref, at);
+  const charge = tier >= TIER.max ? 0 : p - Math.floor(p);
+  return { ...c, tier, tierAt: at, tierCharge: charge };
+}
+
+/** L'instant du prochain changement de cran après `t` ; `null` si rien ne bouge plus. */
+function nextTierAt(c: ControlState, t: number): number | null {
+  const ref = tierRef(c);
+  if (ref === undefined) return null;
+  const tier = controlTier(c, t);
+  if (c.owner === 'player' ? tier >= TIER.max : tier <= 0) return null;
+  const rate = tierRate(c);
+  if (rate <= 0) return null;
+  const k = Math.floor(tierProgress(c, ref, t)) + 1;
+  // ⚠️ Arrondi flottant : jamais à `t` lui-même, sinon la boucle d'intégration piétinerait.
+  return Math.max(t + 1, ref + ((k - (c.tierCharge ?? 0)) * TIER.dayMs) / rate);
 }
 
 /** 🏅 Le multiplicateur de production d'un cran. */
@@ -210,34 +261,27 @@ export const tierYieldMult = (tier: number): number => 1 + TIER.yieldPerTier * t
 export const tierThreatMult = (tier: number): number => 1 + TIER.threatPerTier * tier;
 
 /** 🏅 Les HEURES pondérées par le cran entre `from` et `to` : ∫ `tierYieldMult` dt. Le cran
- *  change en route (+1 par jour tenu) : on intègre jour par jour, sinon récolter tard paierait
- *  tout le passé au cran d'aujourd'hui. */
+ *  change en route : on intègre cran par cran, sinon récolter tard paierait tout le passé au
+ *  cran d'aujourd'hui. */
 function tierHours(c: ControlState, from: number, to: number): number {
   if (to <= from) return 0;
-  const ref = tierRef(c);
-  if (ref === undefined) return (tierYieldMult(controlTier(c, from)) * (to - from)) / 3600_000;
   let acc = 0;
   let t = from;
   while (t < to) {
-    const tier = controlTier(c, t);
-    const k = Math.floor((t - ref) / TIER.dayMs);
-    const end = tier >= TIER.max ? to : Math.min(to, ref + (k + 1) * TIER.dayMs);
-    acc += tierYieldMult(tier) * (end - t);
+    const next = nextTierAt(c, t);
+    const end = next === null ? to : Math.min(to, next);
+    acc += tierYieldMult(controlTier(c, t)) * (end - t);
     t = end;
   }
   return acc / 3600_000;
 }
 
 /** 🏅 Le temps avant le prochain changement de cran (montée si tenu, baisse si ennemi) ;
- *  `null` quand plus rien ne bouge (au plafond, ou à 0 chez l'ennemi). */
+ *  `null` quand plus rien ne bouge (au plafond, à 0 chez l'ennemi, ou garnison vide). */
 export function nextTierInMs(c: ControlState | undefined, now: number): number | null {
   if (!c) return null;
-  const tier = controlTier(c, now);
-  if (c.owner === 'player' ? tier >= TIER.max : tier <= 0) return null;
-  const ref = tierRef(c);
-  if (ref === undefined) return null;
-  const k = Math.floor(Math.max(0, now - ref) / TIER.dayMs);
-  return ref + (k + 1) * TIER.dayMs - now;
+  const next = nextTierAt(c, now);
+  return next === null ? null : next - now;
 }
 
 /** 🏅 Ce que la fiche d'un point dit de son cran : titre et détail. `null` pour un point ennemi
@@ -254,7 +298,12 @@ export function controlTierLabel(
     const gain = tier
       ? `+${pct(tierYieldMult(tier))} % de production · assaillants +${pct(tierThreatMult(tier))} %`
       : 'aucun bonus encore';
-    const up = next !== null ? ` · prochain cran dans ${formatDuration(next)}` : ' · au maximum';
+    const up =
+      tier >= TIER.max
+        ? ' · au maximum'
+        : next !== null
+          ? ` · prochain cran dans ${formatDuration(next)}`
+          : ' · bloqué : personne en garnison';
     return { title: `🏅 Cran ${tier}/${TIER.max}`, detail: gain + up };
   }
   if (tier <= 0) return null;
@@ -978,6 +1027,7 @@ export function captureControl(
       // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
       tier: controlTier(p.control, at),
       tierAt: at,
+      tierCharge: 0,
     },
   }));
 }
@@ -1787,10 +1837,13 @@ export function controlYieldCard(
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
+  // 🏅👥 Le cran aussi : la suite se charge au rythme de la NOUVELLE garnison. ⚠️ Figé APRÈS
+  // le calcul de la réserve, qui doit voir les crans passés tels qu'ils étaient.
+  const c = rebaseTier(p.control!, at);
   // ⚒️🎯 À la forge et au camp, chacun met de côté SA réserve : le nouveau venu part de zéro.
-  if (isPerChampKind(p.control!.kind))
-    return { ...p.control!, perXp: champStockBy(p, at, playerLevel), banked: 0, collectedAt: at };
-  return { ...p.control!, banked: stockUnits(p, at, playerLevel), collectedAt: at };
+  if (isPerChampKind(c.kind))
+    return { ...c, perXp: champStockBy(p, at, playerLevel), banked: 0, collectedAt: at };
+  return { ...c, banked: stockUnits(p, at, playerLevel), collectedAt: at };
 }
 
 /** 🏰 Qui occupe un point, garnison ET renforts en route, séparés en champions et miliciens.

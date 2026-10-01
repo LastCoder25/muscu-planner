@@ -107,9 +107,12 @@ export interface ControlState {
   since?: number;
   collectedAt?: number;
   /** 🏅 Le cran posé au dernier changement de camp, et son instant : le cran courant s'en
-   *  DÉDUIT (`controlTier`, +1/24 h tenu, −1/24 h chez l'ennemi). Absents avant la règle. */
+   *  DÉDUIT (`controlTier` : tenu, au rythme de la garnison ; −1/24 h chez l'ennemi).
+   *  Absents avant la règle. Reposés à chaque changement d'effectif (`bankAt`). */
   tier?: number;
   tierAt?: number;
+  /** 🏅 La part du cran suivant déjà chargée à `tierAt` (0..1). Absente = 0. */
+  tierCharge?: number;
   /** 🏯 Citadelle : son PALIER (+1 à chaque destruction, −1 à un échec ou par 7 jours sans
    *  la battre, cf. `citadelPalier`), l'instant où il a été posé, et la TRÊVE qu'elle laisse
    *  une fois abattue (aucune reprise de point fixe avant `truceUntil`). */
@@ -2221,8 +2224,7 @@ function placePoiOfType(
   // sienne, sans migration). C’est le NIVEAU qui compense — donc un lieu à 1 ennemi aligne
   // un ennemi plus fort, et « peu de forts » ou « beaucoup de faibles » remplissent le même
   // rang. Exactement ce que le joueur lit.
-  const tire0 =
-    forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  const tire0 = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
   // 🐺 Une tanière apparaît au RANG AU-DESSUS du joueur (`denLevelFor`), tirée sur un générateur
   // à part : le tirage ci-dessus est consommé quand même, sinon le reste de la carte décale.
   const tire = forcedLevel === undefined && type === 'den' ? denLevelFor(id, playerLevel) : tire0;
