@@ -211,7 +211,10 @@ export const LOOT = {
   purseShare: 0.033,
   /** Pierres d'un mort-vivant de troupe, en part d'une visite de sanctuaire de son niveau.
    *  ⚠️ Un peu PLUS qu'avant : les morts-vivants ne donnent plus d'or. */
-  stoneShare: 0.024,
+  /*  ⚠️ 0,024 → 0,0173 en v1.8.0 : la visite de sanctuaire vaut 2,5× plus et les
+   *  morts-vivants ne devaient que ~doubler — ×1,8 : à ×2 les camps dépassaient la borne de
+   *  `campEconomy` au niveau 90 (53 %) (décision de l'utilisateur). */
+  stoneShare: 0.0173,
   /** Chance qu'une bête de troupe laisse un consommable (× son poids, plafonné à 1). */
   beastDrop: 0.2,
 } as const;

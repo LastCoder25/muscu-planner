@@ -45,8 +45,8 @@ import {
 } from '@/lib/expedition';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
 import { resolveCamp, forceLootPreview } from '@/lib/camp';
-import { campSpecOf } from '@/lib/expedition';
-import { poiOffers } from '@/lib/caravan';
+import { campSpecOf, harvestYield } from '@/lib/expedition';
+import { poiOffers, CARAVAN } from '@/lib/caravan';
 import { SUPPLIES } from '@/lib/supplies';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
 // éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
@@ -240,12 +240,18 @@ describe('POI de récolte', () => {
     expect(o.energy).toBeLessThanOrEqual(HARVEST.wellEnergyMax);
   });
 
-  it('les pierres suivent le coût d’un boss (une visite ≈ une tentative)', () => {
+  // 🔮 v1.8.0 (« ça en donne très peu ») : sanctuaires deux fois plus rares, mais une visite
+  // d'ÉQUIPE vaut ~une tentative de boss, celle du héros plusieurs. Avant : 2 🔮 pour une
+  // équipe au niveau 30, quand un boss en coûte 7.
+  it('les pierres suivent le coût d’un boss (équipe ≈ une tentative, héros plusieurs)', () => {
     for (const L of [10, 26, 50]) {
       const o = resolveOutcome(hero, poi('shrine', L), 5, L);
       const coutBoss = 1 + Math.floor(L / 5);
-      expect(o.summonStones).toBeGreaterThanOrEqual(Math.floor(coutBoss * 0.8));
-      expect(o.summonStones).toBeLessThan(coutBoss * 3);
+      expect(o.summonStones).toBeGreaterThanOrEqual(coutBoss * 2);
+      expect(o.summonStones).toBeLessThan(coutBoss * 7);
+      const equipe = Math.round(harvestYield('shrine', L).summonStones * CARAVAN.stonesShare);
+      expect(equipe).toBeGreaterThanOrEqual(coutBoss * 0.6);
+      expect(equipe).toBeLessThanOrEqual(coutBoss * 2);
     }
   });
 

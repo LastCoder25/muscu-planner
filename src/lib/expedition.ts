@@ -1084,6 +1084,12 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
 /** Réglages des POI de RÉCOLTE (devises vivantes). Premier calage : à ajuster à l'usage. */
 export const HARVEST = {
+  /** 🔮 Multiplicateur de la récolte d'un SANCTUAIRE (v1.8.0, décision de l'utilisateur :
+   *  « ça en donne très peu »). Mesuré avant, niveau 30 : 12 🔮 au héros, 2 à une équipe,
+   *  pour ~5 h d'aller-retour, quand un boss en coûte 7. En échange les sanctuaires sont
+   *  DEUX fois plus rares (`SPAWN_TABLE`) : chaque visite compte, le total par jour reste
+   *  borné (`teamHarvest.test`). */
+  shrineStonesK: 2.5,
   /** 💎 Réserve de mana d'un filon éphémère : base + par niveau (cf. `harvestYield`). */
   veinManaBase: 9,
   veinManaPerLevel: 1.25,
@@ -1274,6 +1280,8 @@ export const EXPE = {
   },
   /** 🏴‍☠️ Chance qu'un lieu d'économie qui apparaît soit une caravane pillée (une à la fois). */
   plunderChance: 0.022,
+  /** 🔮 Part des sanctuaires tirés qui restent des sanctuaires (cf. `spawnOne`, v1.8.0). */
+  shrineKeep: 0.45,
   /** 💎 Chance qu'un camp ou un repaire qui apparaît soit un filon éphémère (un à la fois).
    *  Mesuré (`vein.test`, 8 cartes × 14 jours) : ~0,3 filon par jour. */
   veinChance: 0.12,
@@ -1945,6 +1953,20 @@ function spawnOne(
     mulberry32((map.seed ^ (map.spawnCount * 0x27d4eb2f)) >>> 0 || 1)() < EXPE.veinChance
   )
     type = 'vein';
+  // 🔮 SANCTUAIRES ~2× PLUS RARES (v1.8.0, 45 % gardés), et 2,5× plus riches (`HARVEST.shrineStonesK`).
+  // ⚠️ PAS en retirant des entrées de `SPAWN_TABLE` : sa longueur fixe les QUOTAS d'économie
+  // et de remplissage, et la retoucher rendait les ruines (sceaux) 13 % plus fréquentes. Le
+  // sanctuaire écarté devient un camp, un repaire ou une arène (même quota). ⚠️ Jamais une
+  // mine : leur or est l'étalon du puits d'or (mesuré : modèle de revenu +11 %, `goldSink`).
+  // Générateur à part.
+  if (
+    type === 'shrine' &&
+    mulberry32((map.seed ^ (map.spawnCount * 0x165667b1)) >>> 0 || 1)() >= EXPE.shrineKeep
+  )
+    type = pick(
+      mulberry32((map.seed ^ (map.spawnCount * 0xd3a2646c)) >>> 0 || 1),
+      ECON_TABLE.filter((t) => t !== 'shrine' && t !== 'mine'),
+    );
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   placePoiOfType(map, now, playerLevel, reach, type, rng, `poi_${map.seed}_${map.spawnCount}`);
@@ -3148,8 +3170,12 @@ export function harvestYield(
     // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
     energy = Math.min(HARVEST.wellEnergyMax, Math.round((8 + L * 2) * tfH));
   } else if (type === 'shrine') {
-    // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
-    summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
+    // ×`shrineStonesK` sur le coût d’un boss (`1 + ⌊niv/5⌋`) : une visite du héros ≈ 4
+    // tentatives, celle d’une équipe (`CARAVAN.stonesShare`) ≈ une.
+    summonStones = Math.max(
+      2,
+      Math.round((1 + L / 5) * (0.8 + tfH * 0.25) * HARVEST.shrineStonesK),
+    );
   } else if (type === 'mana_mine') {
     // 💠 Ce qu'une faille laisse en s'effondrant. ⚠️ La MAGNITUDE vit dans `rift.ts`
     // (`residualMineOf`), qui la calcule sur ce que la faille valait à maturité : une
