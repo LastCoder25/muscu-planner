@@ -3150,7 +3150,12 @@ function updateSlideDir() {
 }
 function slideMap() {
   if (slideDir.value === 'down') {
-    revealTiles();
+    // ↓ ouvre aussi la tuile des expéditions (demandé), puis cale ses dernières tuiles en bas.
+    if (mapPanel.value !== 'trips') {
+      mapPanel.value = 'trips';
+      selected.value = null;
+    }
+    void nextTick(revealTiles);
   } else {
     scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
   }
