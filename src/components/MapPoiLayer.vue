@@ -53,10 +53,15 @@
           :class="p.control.owner"
         />
         <!-- ⚫ SA GARNISON EN POINTS, sous le fort (demandé : « voir d'un coup d'œil ») : un
-             point par place — plein cyan un champion, plein clair un milicien, cerclé
-             d'accent un renfort en route, vide une place libre (rouge si personne ne tient
-             le point). -->
-        <g v-if="dots.get(p.id)" class="ctl-dots" :class="{ empty: !/[cm]/.test(dots.get(p.id)!) }">
+             point par place — plein cyan un champion, plein clair un milicien, orange
+             une troupe en route (renfort, transfert ou assaut : sa place est prise sans y être
+             encore), vide une place libre (rouge si personne ne tient ni ne rejoint le
+             point). -->
+        <g
+          v-if="dots.get(p.id)"
+          class="ctl-dots"
+          :class="{ empty: !/[cmr]/.test(dots.get(p.id)!) }"
+        >
           <circle
             v-for="(d, i) in dots.get(p.id)!"
             :key="i"
@@ -361,10 +366,10 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .ctl-dots .d-m {
   fill: var(--text);
 }
+/* 🚶 En route (renfort, transfert, assaut) : orange plein, hors du cyan des champions et du
+   clair des miliciens — la place est prise, la troupe n'y est pas encore. */
 .ctl-dots .d-r {
-  fill: var(--bg);
-  stroke: var(--accent);
-  stroke-width: 0.45;
+  fill: var(--d3, #ffb23f);
 }
 .ctl-dots .d-f {
   fill: color-mix(in srgb, var(--bg) 70%, transparent);

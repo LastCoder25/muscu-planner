@@ -105,4 +105,29 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     expect(dots.startsWith('cmr')).toBe(true);
     expect(dots.slice(3)).toBe('f'.repeat(Math.max(0, r.seats - 3)));
   });
+
+  it('un TRANSFERT depuis une autre place forte compte comme en route', () => {
+    let m = captureControl(base(), MINE, ['a'], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    m = reinforceControl(m, MINE, ['b', 'c'], 4 * H, H, TOWER);
+    const dots = garrisonDots(row(controlRoster(m, [], 2 * H, L), MINE));
+    expect(dots.startsWith('crr')).toBe(true);
+  });
+
+  it('ennemi ATTAQUÉ : nos champions en marche prennent leurs places, au plus celles du point', () => {
+    const march = (ids: string[]) =>
+      garrisonDots(
+        row(controlRoster(base(), [{ poiId: MINE, midAt: 5 * H, ids }], 2 * H, L), MINE),
+      );
+    const seats = seatsOf('mine');
+    expect(march(['a', 'b'])).toBe('rr' + 'f'.repeat(Math.max(0, seats - 2)));
+    const many = Array.from({ length: seats + 3 }, (_, i) => `x${i}`);
+    expect(march(many)).toBe('r'.repeat(seats));
+    // L'équipe déjà arrivée (assaut passé), on ne sait plus rien de la garnison ennemie.
+    expect(
+      garrisonDots(
+        row(controlRoster(base(), [{ poiId: MINE, midAt: H, ids: ['a'] }], 2 * H, L), MINE),
+      ),
+    ).toBe('');
+  });
 });
