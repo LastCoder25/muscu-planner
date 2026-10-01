@@ -13,7 +13,7 @@
   <!-- 🧭⚔️ FILTRE (demandé) : voyages et armées ennemies partagent la rangée ; on choisit ce
        qu'on regarde. Une catégorie vide est grisée, et un filtre qui se vide retombe sur
        « Tout » (`effectiveTripFilter`). -->
-  <div v-if="tiles.length" class="tr-filter" role="group" aria-label="Filtrer">
+  <div v-if="tiles.length" ref="topEl" class="tr-filter" role="group" aria-label="Filtrer">
     <button
       v-for="o in filterOpts"
       :key="o.id"
@@ -229,6 +229,7 @@ import { advTitle } from '@/lib/adventurers';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import HaulPills from '@/components/HaulPills.vue';
 import { formatDuration } from '@/lib/duration';
+import { revealScrollDelta } from '@/lib/reveal';
 import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { BOOST_BLOCK_LABEL, type BoostBlock, type BoostChoice } from '@/lib/speedBoost';
 import type { BoostId } from '@/lib/supplies';
@@ -345,16 +346,36 @@ const char = useCharacterStore();
 
 /** 👥 L'équipe naît SOUS la carte et la rangée de tuiles : sur un téléphone elle était hors de
  *  l'écran, il fallait faire défiler pour la voir (signalé). On la RÉVÈLE au toucher d'une
- *  tuile — même remède que la fiche d'un lieu (v0.738). `nearest` : rien ne bouge si elle
- *  est déjà visible. */
+ *  tuile — même remède que la fiche d'un lieu (v0.738). Le bas de l'équipe se cale sur le bas
+ *  de l'écran (le maximum de carte reste visible, rien de vide dessous), sans jamais cacher
+ *  le haut de la rangée de tuiles (`revealScrollDelta`). */
 const crewEl = ref<HTMLElement | null>(null);
+const topEl = ref<HTMLElement | null>(null);
+/** Le conteneur qui défile : le volet droit du cockpit, sinon la page. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
+}
 watch(
   () => props.focus,
   async (key) => {
     if (!key) return;
     await nextTick();
+    const crew = crewEl.value;
+    if (!crew) return;
+    const top = (topEl.value ?? crew).getBoundingClientRect().top;
+    const bottom = crew.getBoundingClientRect().bottom;
+    const box = scrollParent(crew);
+    const view = box
+      ? box.getBoundingClientRect()
+      : { top: 0, bottom: window.innerHeight };
+    const delta = revealScrollDelta({ top, bottom, viewTop: view.top, viewBottom: view.bottom });
+    if (Math.abs(delta) < 2) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    crewEl.value?.scrollIntoView?.({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+    (box ?? window).scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
   },
 );
 
