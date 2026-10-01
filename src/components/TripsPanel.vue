@@ -408,13 +408,12 @@ const crew = computed(() => {
 </script>
 
 <style scoped lang="scss">
-/* TROIS tuiles par ligne (demandé par l'utilisateur). En flex centré plutôt qu'en grille :
-   la dernière ligne, incomplète, se CENTRE toute seule quel que soit le reste (1 ou 2) —
-   laissée dans ses colonnes, elle se collait à gauche avec un trou, ce qui se lit comme un
-   élément manquant plutôt que comme la fin de la liste. */
+/* TROIS tuiles par ligne (demandé par l'utilisateur). Une ligne incomplète s'ALIGNE À
+   GAUCHE (v1.8.2, demandé : « aligne les tuiles à gauche et pas au centre ») — elle était
+   centrée depuis la v0.756. Même règle pour les filtres au-dessus. */
 .tr-filter {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
   flex-wrap: wrap;
   padding: 2px 2px 8px;
@@ -464,7 +463,7 @@ const crew = computed(() => {
 .trips {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   padding: 2px 2px 6px;
 }
