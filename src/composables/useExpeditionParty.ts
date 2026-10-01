@@ -645,6 +645,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             // 💀 Le 🎯 % déjà affiché : un départ perdu d'avance est refusé (sauf contre une
             // armée qu'on peut affaiblir) — le MÊME nombre que le store.
             partyGuardWin.value,
+            coarseNow.value,
           )
       : null,
   );

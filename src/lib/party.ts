@@ -40,6 +40,7 @@ import {
   type Poi,
   poiLabel,
   warbandAt,
+  citadelRestingUntil,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
@@ -230,6 +231,7 @@ export type PartySendBlock =
   | 'controlEmpty'
   | 'controlHeld'
   | 'citadelHidden'
+  | 'citadelResting'
   | 'veinHero'
   | 'veinFull';
 export function partySendBlocker(
@@ -242,6 +244,9 @@ export function partySendBlocker(
    *  par l'être, et l'omettre rouvrirait en silence le départ perdu d'avance.
    *  ⚠️ `null` ne vaut PAS zéro — le confondre interdirait la récolte. */
   winChance: number | null,
+  /** 🏯 L'instant du départ : une citadelle abattue est inattaquable pendant sa trêve.
+   *  ⚠️ REQUIS, comme `winChance`. */
+  now: number,
 ): PartySendBlock | null {
   if (!PARTY_TARGETS.has(poi.type)) return 'notTarget';
   // 🏰 Un point de contrôle s'attaque avec AUTANT de champions qu'on veut, héros compris
@@ -254,6 +259,8 @@ export function partySendBlocker(
     // 🏯 Cachée dans le brouillard : on ne l'atteint pas avant que l'Avant-poste la découvre.
     if (poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined)
       return 'citadelHidden';
+    // 🏯 Abattue : elle se reconstruit pendant sa trêve, on ne l'attaque pas.
+    if (citadelRestingUntil(poi, now) > 0) return 'citadelResting';
     // 🏯 La citadelle ne se tient pas : le héros seul peut l'attaquer.
     if (escortCount <= 0 && poi.control.kind !== 'citadel') return 'controlEmpty';
   }
@@ -282,6 +289,7 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
   citadelHidden:
     'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
+  citadelResting: 'cette citadelle vient d’être abattue — elle se reconstruit pendant sa trêve',
   controlHeld: 'ce point n’est pas à prendre : il est déjà à toi',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',
@@ -292,8 +300,9 @@ export function canSendParty(
   hero: boolean,
   cap: number,
   winChance: number | null,
+  now: number,
 ): boolean {
-  return partySendBlocker(poi, escortCount, hero, cap, winChance) === null;
+  return partySendBlocker(poi, escortCount, hero, cap, winChance, now) === null;
 }
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.

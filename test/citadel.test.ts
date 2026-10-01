@@ -38,6 +38,7 @@ import {
   revealRadius,
   recordDeparture,
   type ExpeditionMap,
+  citadelRestingUntil,
 } from '@/lib/expedition';
 import { partySendBlocker } from '@/lib/party';
 import { poiOffers } from '@/lib/caravan';
@@ -320,6 +321,21 @@ describe('🏯 on l’attaque en groupe, héros compris', () => {
     const p = byId(base(30), MINE_CIT);
     expect(partySendBlocker(p, 0, true, 3, 0.5)).toBeNull();
     expect(poiOffers(p, { heroAway: false, advsAvailable: 0, comptoirLevel: 0 }).party).toBe(true);
+  });
+  it('abattue, elle est grisée et inattaquable pendant ses 3 jours de trêve', () => {
+    const m = razeCitadel(base(30), MINE_CIT, 0);
+    const p = byId(m, MINE_CIT);
+    const offer = (now: number) =>
+      poiOffers(p, { heroAway: false, advsAvailable: 3, comptoirLevel: 0, now }).party;
+    expect(citadelRestingUntil(p, H)).toBe(CITADEL.truceMs);
+    expect(partySendBlocker(p, 3, true, 3, 0.5, H)).toBe('citadelResting');
+    expect(offer(H)).toBe(false);
+    // Juste avant la fin de la trêve : toujours inattaquable ; à la fin : de nouveau ouverte.
+    expect(partySendBlocker(p, 3, true, 3, 0.5, CITADEL.truceMs - 1)).toBe('citadelResting');
+    expect(partySendBlocker(p, 3, true, 3, 0.5, CITADEL.truceMs)).toBeNull();
+    expect(offer(CITADEL.truceMs)).toBe(true);
+    // Un point ordinaire n'a pas de « repos ».
+    expect(citadelRestingUntil(byId(m, controlIdOf('mine')), H)).toBe(0);
   });
   it('la fiche dit le palier, les points qu’elle attaque et la trêve', () => {
     const m = razeCitadel(base(30), MINE_CIT, 0);

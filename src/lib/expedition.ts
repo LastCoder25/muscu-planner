@@ -725,6 +725,15 @@ const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>([
  *  distance (`travelLevel`). */
 export const isQuotaPoi = (p: Pick<Poi, 'type'>): boolean => !OUT_OF_QUOTA.has(p.type);
 export const isRiftPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'rift';
+/** 🏯 Une citadelle ABATTUE se reconstruit pendant sa trêve (`truceUntil`, 3 jours) : elle est
+ *  INACTIVE — grisée sur la carte, et on ne peut pas l'attaquer (demandé par l'utilisateur).
+ *  Rend l'instant où elle redevient attaquable, 0 si elle l'est déjà. */
+export function citadelRestingUntil(p: Pick<Poi, 'control'>, now: number): number {
+  const c = p.control;
+  if (c?.kind !== 'citadel') return 0;
+  const t = c.truceUntil ?? 0;
+  return t > now ? t : 0;
+}
 
 /**
  * 🐫 Cette route est-elle dangereuse ? — **LE SEUL prédicat**, deux causes.

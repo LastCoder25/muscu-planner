@@ -65,6 +65,7 @@ import {
   routePerilous,
   heroRewardLevel,
   HARVEST,
+  citadelRestingUntil,
 } from './expedition';
 import {
   advBankedLevel,
@@ -1090,7 +1091,7 @@ export function missionXpPreview(
  *  dès que le héros part. */
 export function poiOffers(
   poi: Poi,
-  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number },
+  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number; now: number },
 ): { hero: boolean; caravan: boolean; party: boolean } {
   return {
     // ⚠️ `hero` = l'EXPÉDITION SOLO, et une faille n'en est pas une : on y entre EN GROUPE
@@ -1121,6 +1122,8 @@ export function poiOffers(
         ? poi.control?.owner === 'enemy' &&
           // 🏯 Une citadelle encore cachée ne s'atteint pas.
           !(poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined) &&
+          // 🏯 Abattue, elle se reconstruit pendant sa trêve : grisée, inattaquable.
+          citadelRestingUntil(poi, opts.now) === 0 &&
           // 🏯 La citadelle ne s'occupe pas : le héros seul peut y aller.
           (opts.advsAvailable > 0 || (poi.control.kind === 'citadel' && !opts.heroAway))
         : !opts.heroAway || opts.advsAvailable > 0),

@@ -778,6 +778,11 @@
               }}
             </button>
           </div>
+          <p v-else-if="citadelRestIn > 0" class="sh-note">
+            🏯 Abattue : elle se reconstruit, inattaquable encore
+            {{ formatDuration(citadelRestIn) }}. Pendant ce temps, aucune reprise sur les points
+            qu’elle attaque.
+          </p>
           <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
             🏯 Attaque-la avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout
             le monde rentre après l’assaut. Abattue, elle offre {{ CONTROL_YIELD.citadel }} et monte
@@ -1221,6 +1226,7 @@ import {
   harvestGold,
   poiForceOf,
   isRiftPoi,
+  citadelRestingUntil,
   isWarbandPoi,
   isClaimable,
   claimState,
@@ -1736,6 +1742,11 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
+/** 🏯 La citadelle sélectionnée vient d'être abattue : le temps qu'elle reste inattaquable. */
+const citadelRestIn = computed(() => {
+  const t = selected.value ? citadelRestingUntil(selected.value, now.value) : 0;
+  return t > 0 ? t - now.value : 0;
+});
 /** ⚔️ Les points sous attaque imminente, à la minute près (une chaîne stable pour la carte). */
 const imminentKey = computed(() =>
   imminentControlKey(char.row?.expedition_map ?? null, coarseNow.value),
@@ -1840,6 +1851,7 @@ const offers = computed(() =>
         heroAway: heroUnavailable.value,
         comptoirLevel: char.comptoirLevel,
         advsAvailable: freeAdvs.value.length,
+        now: coarseNow.value,
       })
     : { hero: false, caravan: false, party: false },
 );
@@ -3064,6 +3076,7 @@ function dimmed(p: Poi): boolean {
     // que la base grisait des lieux qu'une garnison pouvait attaquer (signalé). Même règle
     // que l'écran d'envoi (`readyGarrisons`).
     advsAvailable: championsAbleToGo(freeAdvs.value.length, readyGarrisonMap.value, p.id),
+    now: coarseNow.value,
   });
   // 👥 Un lieu reste ouvert tant que le HÉROS SEUL ou une ÉQUIPE peut y aller (2026-09-21 :
   // les équipes remplacent les convois). Même règle que le test « ce qui est GRISÉ ».

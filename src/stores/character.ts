@@ -3527,6 +3527,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le GARANTIR.
       // ⚠️ La MÊME dispatch que la résolution, sur la MÊME cible (colonne déjà amputée).
       partyWinChance(withRiftCut(poi, cur.base), escort, road, hero, now, FORECAST_SAMPLES, false),
+      now,
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
@@ -3866,6 +3867,7 @@ export const useCharacterStore = defineStore('character', () => {
       !!hero,
       engageCap(pantheonLevel.value),
       partyWinChance(withRiftCut(poi, cur.base), all, road, hero, now, FORECAST_SAMPLES, false),
+      now,
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     const heroBlock = hero
