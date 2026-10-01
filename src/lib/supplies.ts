@@ -317,22 +317,15 @@ export interface SupplyTarget {
   type: PoiType;
   /** Le lieu se combat (camp, faille, bande, récolte gardée). */
   fights: boolean;
+  /** C'est un lieu de RÉCOLTE (`HARVEST_TYPES`). ⚠️ Fourni par l'appelant (`supplyTarget`) :
+   *  une copie locale de la liste avait oublié le filon (v1.8.4). */
+  harvest: boolean;
   hero: boolean;
   /** Champions envoyés (le héros non compris). */
   escort: number;
 }
 
 const CAMPS = new Set<PoiType>(['camp', 'lair', 'den']);
-const HARVESTS = new Set<PoiType>([
-  'mine',
-  'well',
-  'shrine',
-  'archive',
-  'mana_mine',
-  'ruins',
-  'fallen',
-  'plunder',
-]);
 /** Les lieux dont le butin n'est PAS une cargaison (sceaux, consommables trouvés sur place). */
 const NO_CARGO = new Set<PoiType>(['ruins', 'fallen']);
 
@@ -342,15 +335,19 @@ const NO_CARGO = new Set<PoiType>(['ruins', 'fallen']);
  * gaspillerait, et un gris sans raison se lit comme une panne (leçon du gris de la carte).
  */
 export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
-  const harvest = HARVESTS.has(t.type);
+  const harvest = t.harvest;
+  // 🗡️ Une équipe SANS le héros traverse des embuscades sur la route d'une récolte, gardée ou
+  // non (`resolveCaravan`) : potion, pierre et trousse y servent aussi.
+  const road = harvest && !t.hero && t.escort > 0;
+  const combat = t.fights || road;
   switch (id) {
     case 'rations':
       return null;
     case 'potion':
     case 'pierre':
-      return t.fights ? null : 'aucun combat ici';
+      return combat ? null : 'aucun combat ici';
     case 'trousse':
-      return !t.fights ? 'aucun combat ici' : t.escort ? null : 'le héros n’est jamais blessé';
+      return !combat ? 'aucun combat ici' : t.escort ? null : 'le héros n’est jamais blessé';
     case 'fumigene':
       return CAMPS.has(t.type) || (harvest && t.fights) ? null : 'ni camp ni gardes ici';
     case 'cor':

@@ -39,7 +39,7 @@ describe('⚡ consommables de vitesse', () => {
       expect(SUPPLY_IDS).toContain(id);
       expect(SUPPLIES[id].voyage).toBe(false);
       expect(
-        supplyUselessWhy(id, { type: 'camp', fights: true, hero: true, escort: 2 }),
+        supplyUselessWhy(id, { type: 'camp', fights: true, harvest: false, hero: true, escort: 2 }),
       ).not.toBeNull();
     }
   });

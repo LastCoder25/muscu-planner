@@ -21,6 +21,7 @@ import { LIGHT_HURT } from './skirmish';
 import { supplyFx, supplyUselessWhy, SUPPLIES, type SupplyId, type SupplyTarget } from './supplies';
 import {
   PARTY_TARGETS,
+  HARVEST_TYPES,
   isRiftPoi,
   isWarbandPoi,
   poiForceOf,
@@ -147,6 +148,7 @@ export function supplyTarget(poi: Poi, hero: boolean, escort: number): SupplyTar
   return {
     type: poi.type,
     fights: isRiftPoi(poi) || isWarbandPoi(poi) || !!poiForceOf(poi),
+    harvest: HARVEST_TYPES.has(poi.type),
     hero,
     escort,
   };

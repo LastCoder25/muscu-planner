@@ -33,7 +33,7 @@ import {
   suppliesBlocker,
   supplyTarget,
 } from '@/lib/party';
-import { haulPills, type PartyResult, type Poi } from '@/lib/expedition';
+import { HARVEST_TYPES, haulPills, type PartyResult, type Poi } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 
 const poiAt = (L: number, type: Poi['type'] = 'camp', id = 'p'): Poi => ({
@@ -349,6 +349,7 @@ describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
     const t = (type: Poi['type'], fights = true, hero = false, escort = 2) => ({
       type,
       fights,
+      harvest: HARVEST_TYPES.has(type),
       hero,
       escort,
     });
@@ -357,12 +358,29 @@ describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
     expect(supplyUselessWhy('bats', t('mine'))).toBeNull();
     expect(supplyUselessWhy('carte', t('mine', true, true))).not.toBeNull();
     expect(supplyUselessWhy('trousse', t('camp', true, true, 0))).not.toBeNull();
-    expect(supplyUselessWhy('potion', t('mine', false))).not.toBeNull();
+    // 🗡️ Une récolte SANS gardes se traverse quand même : une équipe sans le héros y subit des
+    // embuscades, où potion, pierre et trousse servent. Le héros seul n'en tire rien.
+    expect(supplyUselessWhy('potion', t('mine', false))).toBeNull();
+    expect(supplyUselessWhy('trousse', t('mine', false))).toBeNull();
+    expect(supplyUselessWhy('potion', t('mine', false, true, 0))).not.toBeNull();
+    // Avec le héros, c'est SON expédition qui fait la route : potion et pierre ne s'y appliquent pas.
+    expect(supplyUselessWhy('potion', t('mine', false, true, 2))).not.toBeNull();
+    expect(supplyUselessWhy('potion', t('camp', false))).not.toBeNull();
     expect(supplyUselessWhy('sceau', t('rift'))).not.toBeNull();
     // Le fumigène agit sur un camp ou des gardes — pas dans une faille, ni sur une récolte sans gardes.
     expect(supplyUselessWhy('fumigene', t('rift'))).not.toBeNull();
     expect(supplyUselessWhy('fumigene', t('mine', false))).not.toBeNull();
     expect(supplyUselessWhy('fumigene', t('mine'))).toBeNull();
+  });
+  it('💎 le filon (lieu de récolte) accepte carte, bâts, potion, pierre et trousse', () => {
+    const vein = supplyTarget(poiAt(20, 'vein'), false, 2);
+    for (const id of ['carte', 'bats', 'potion', 'pierre', 'trousse', 'rations'] as const)
+      expect(supplyUselessWhy(id, vein), id).toBeNull();
+    for (const id of ['cor', 'fumigene', 'lanterne'] as const)
+      expect(supplyUselessWhy(id, vein), id).not.toBeNull();
+    // Et chaque lieu de récolte est reconnu comme tel : pas de liste à part qui oublie un type.
+    for (const type of HARVEST_TYPES)
+      expect(supplyUselessWhy('carte', supplyTarget(poiAt(20, type), false, 2)), type).toBeNull();
   });
   it('le store refuse ce que l’écran grise — une seule règle', () => {
     const target = supplyTarget(poiAt(20, 'camp'), false, 2);
