@@ -355,6 +355,15 @@
 
       <!-- Zoom -->
       <div class="zoom-ctl">
+        <!-- ↕️ Descend jusqu'aux tuiles sous la carte, ou remonte en haut si on les voit. -->
+        <button
+          class="zoom-b slide-b"
+          :aria-label="slideDir === 'down' ? 'Descendre aux tuiles' : 'Remonter en haut'"
+          :title="slideDir === 'down' ? 'Descendre aux tuiles' : 'Remonter en haut'"
+          @click="slideMap"
+        >
+          {{ slideDir === 'down' ? '↓' : '↑' }}
+        </button>
         <div class="zoom-col">
           <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
           <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
@@ -1237,6 +1246,7 @@ import {
   plannedTransferIds,
 } from '@/lib/plannedMoves';
 import { poiTripCategory } from '@/lib/tripFilter';
+import { mapSlideDirection, scrollContainerOf, type MapSlide } from '@/lib/mapSlide';
 import {
   emptyReinfSelection,
   reinfCanAdd,
@@ -3066,6 +3076,35 @@ function toggleMapPanel(id: MapPanel) {
   if (mapPanel.value) selected.value = null;
   void nextTick(() => tabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
+/** ↕️ Le bouton à gauche du zoom (cf. `mapSlide.ts`) : le sens suit la place de la rangée de
+ *  tuiles à l'écran, relue à chaque défilement (en capture : le volet du cockpit défile seul). */
+const slideDir = ref<MapSlide>('down');
+let slideRaf = 0;
+function updateSlideDir() {
+  if (slideRaf) return;
+  slideRaf = requestAnimationFrame(() => {
+    slideRaf = 0;
+    const el = tabsEl.value;
+    if (el) slideDir.value = mapSlideDirection(el.getBoundingClientRect().top, window.innerHeight);
+  });
+}
+function slideMap() {
+  if (slideDir.value === 'down') {
+    tabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+onMounted(() => {
+  window.addEventListener('scroll', updateSlideDir, { capture: true, passive: true });
+  window.addEventListener('resize', updateSlideDir, { passive: true });
+  updateSlideDir();
+});
+onUnmounted(() => {
+  window.removeEventListener('scroll', updateSlideDir, { capture: true });
+  window.removeEventListener('resize', updateSlideDir);
+  if (slideRaf) cancelAnimationFrame(slideRaf);
+});
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
@@ -5254,6 +5293,11 @@ onUnmounted(() => {
   cursor: pointer;
   display: grid;
   place-items: center;
+}
+/* ↕️ Le bouton de glissement : en accent, c'est un déplacement de page, pas un zoom. */
+.slide-b {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 /* Décor de carte */
 /* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne
