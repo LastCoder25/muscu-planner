@@ -26,14 +26,20 @@ export function revealScrollDelta(r: {
 /** 📜 Fait défiler pour que le BAS de `bottomEl` tombe en bas de la vue, sans pousser le haut
  *  de `topEl` au-dessus (`revealScrollDelta`). Seule partie qui touche au DOM : la règle,
  *  elle, est la fonction pure ci-dessus. */
-export function revealBlock(topEl: Element, bottomEl: Element): void {
+export function revealBlock(topEl: Element, bottomEl: Element, margin?: number): void {
   const top = topEl.getBoundingClientRect().top;
   const bottom = bottomEl.getBoundingClientRect().bottom;
   // La page entière (`scrollingElement`) se mesure sur la fenêtre, pas sur son propre rect.
   const box = scrollContainerOf(bottomEl as HTMLElement);
   const page = !box || box === document.scrollingElement;
   const view = page ? { top: 0, bottom: window.innerHeight } : box.getBoundingClientRect();
-  const delta = revealScrollDelta({ top, bottom, viewTop: view.top, viewBottom: view.bottom });
+  const delta = revealScrollDelta({
+    top,
+    bottom,
+    viewTop: view.top,
+    viewBottom: view.bottom,
+    margin,
+  });
   if (Math.abs(delta) < 2) return;
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   (page ? window : box).scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
