@@ -1234,6 +1234,7 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
@@ -2956,7 +2957,19 @@ const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.valu
 /** Un seul affichage ouvert à la fois (demandé) : toucher un voyage referme la fiche d'un lieu. */
 watch(focusTrip, (k) => {
   if (k) selected.value = null;
+  if (k) frameTrip(k);
 });
+/** 🎯 Toucher une tuile centre la carte sur le trajet de sa troupe (départ → lieu, et la ville
+ *  si elle rentre à la base) ; dézoome s'il ne tient pas, ne zoome jamais (`tripFrame`). */
+function frameTrip(key: string) {
+  const t = trips.value.find((x) => x.key === key);
+  if (!t) return;
+  const pts = [t.poi, t.from ?? TOWN];
+  if (t.toBase) pts.push(TOWN);
+  const f = tripFrame(pts, mapPx.value, V.size, contW.value, contH.value);
+  mapPx.value = clampPx(f.px);
+  void nextTick(() => centerOn(f.cx, f.cy));
+}
 
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
