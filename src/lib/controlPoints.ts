@@ -2620,12 +2620,20 @@ export function ascensionMessage(
 /**
  * ⚫ LA GARNISON EN POINTS, sous le fort sur la carte (demandé : « voir d'un coup d'œil les
  * garnisons »). Une lettre par place, dans l'ordre de la liste « Places fortes » : `c` champion,
- * `m` milicien, `r` renfort en route (sa place est déjà prise), `f` libre. Rien pour un point
- * ennemi : on ne connaît pas sa garnison. Une CHAÎNE, pour une prop à identité stable
- * (la couche des lieux ne se re-dessine que si elle change).
+ * `m` milicien, `r` EN ROUTE vers le point — renfort, transfert depuis une autre place forte,
+ * ou équipe d'ASSAUT sur un point ennemi (sa place est déjà prise sans y être encore, demandé :
+ * « voir si un lieu fixe est complet avec les troupes en transfert ou en attaque ») —, `f`
+ * libre. Rien pour un point ennemi sans assaut : on ne connaît pas sa garnison. Une CHAÎNE,
+ * pour une prop à identité stable (la couche des lieux ne se re-dessine que si elle change).
  */
 export function garrisonDots(row: ControlRosterRow): string {
-  if (row.poi.control?.owner !== 'player') return '';
+  if (row.poi.control?.owner !== 'player') {
+    // ⚔️ Un point ennemi qu'on attaque : nos champions en marche occupent déjà leurs places
+    // (au plus celles du point — ceux en trop rentrent après la prise).
+    if (!row.assault) return '';
+    const go = Math.min(row.assault.ids.length, row.seats);
+    return 'r'.repeat(go) + 'f'.repeat(Math.max(0, row.seats - go));
+  }
   const champs = row.garrison.filter((id) => !isMilitiaId(id)).length;
   const mil = row.garrison.length - champs;
   const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(row.reinforcing.length);
