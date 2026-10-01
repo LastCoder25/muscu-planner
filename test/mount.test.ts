@@ -790,13 +790,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (pl = h),
     );
-    expect(pl).toMatch(/⏳ Programmés <b[^>]*>1</);
-    expect(pl).toMatch(/🧭 Expéditions <b[^>]*>1</);
+    expect(pl).toMatch(/⏳ <b[^>]*>1</);
+    expect(pl).toMatch(/🧭 <b[^>]*>1</);
     expect(pl).toMatch(/class="trip van[^"]*pending/);
     expect(pl).toContain('Annuler ce départ programmé');
     expect(pl).toContain('Partira vers');
     // 🛡️ Renfort programmé : compté dans « Programmés », pas dans « Renforts » (vide → absent).
-    expect(pl).not.toContain('🛡️ Renforts');
+    expect(pl).not.toContain('aria-label="Renforts');
     // 🛡️🗡️ Renforts et attaques du joueur ont leur filtre ; une catégorie vide n'est pas proposée.
     let cats = '';
     await mountIt(
@@ -816,11 +816,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (cats = h),
     );
-    expect(cats).toMatch(/🛡️ Renforts <b[^>]*>1</);
-    expect(cats).toMatch(/🗡️ Mes attaques <b[^>]*>2</);
-    expect(cats).toMatch(/🧭 Expéditions <b[^>]*>1</);
-    expect(cats).not.toContain('⚔️ Ennemis');
-    expect(cats).not.toContain('⏳ Programmés');
+    expect(cats).toMatch(/🛡️ <b[^>]*>1</);
+    expect(cats).toMatch(/🗡️ <b[^>]*>2</);
+    expect(cats).toMatch(/🧭 <b[^>]*>1</);
+    expect(cats).not.toContain('aria-label="Ennemis');
+    expect(cats).not.toContain('aria-label="Programmés');
     // Toucher « Renforts » ne garde que le renfort.
     let onlyReinf = '';
     await mountIt(

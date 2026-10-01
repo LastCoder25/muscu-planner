@@ -21,9 +21,14 @@
       class="trf"
       :class="[`trf-${o.id}`, { on: shown === o.id }]"
       :aria-pressed="shown === o.id"
+      :title="o.label"
+      :aria-label="o.id === 'all' ? o.label : `${o.label} (${o.n})`"
       @click="filter = o.id"
     >
-      {{ o.label }} <b v-if="o.id !== 'all'">{{ o.n }}</b>
+      <template v-if="o.id === 'all'">{{ o.label }}</template>
+      <template v-else
+        >{{ o.icon }} <b>{{ o.n }}</b></template
+      >
     </button>
   </div>
   <div v-if="tiles.length" class="trips">
@@ -284,16 +289,17 @@ const counts = computed(() => {
 });
 const shown = computed(() => effectiveTripFilter(filter.value, counts.value));
 /** Les catégories VIDES ne sont pas proposées (six pastilles dont trois grisées encombraient
- *  la rangée). */
-const filterOpts = computed<{ id: TripFilter; label: string; n: number }[]>(() =>
+ *  la rangée). Une seule ligne (demandé) : l'icône seule (sauf « Tout »), le nom en
+ *  infobulle et en aria-label. */
+const filterOpts = computed<{ id: TripFilter; icon: string; label: string; n: number }[]>(() =>
   (
     [
-      { id: 'all', label: 'Tout', n: tiles.value.length },
-      { id: 'trips', label: '🧭 Expéditions', n: counts.value.trips },
-      { id: 'raids', label: '🗡️ Mes attaques', n: counts.value.raids },
-      { id: 'reinf', label: '🛡️ Renforts', n: counts.value.reinf },
-      { id: 'planned', label: '⏳ Programmés', n: counts.value.planned },
-      { id: 'attacks', label: '⚔️ Ennemis', n: counts.value.attacks },
+      { id: 'all', icon: '', label: 'Tout', n: tiles.value.length },
+      { id: 'trips', icon: '🧭', label: 'Expéditions', n: counts.value.trips },
+      { id: 'raids', icon: '🗡️', label: 'Mes attaques', n: counts.value.raids },
+      { id: 'reinf', icon: '🛡️', label: 'Renforts', n: counts.value.reinf },
+      { id: 'planned', icon: '⏳', label: 'Programmés', n: counts.value.planned },
+      { id: 'attacks', icon: '⚔️', label: 'Ennemis', n: counts.value.attacks },
     ] as const
   ).filter((o) => o.id === 'all' || o.n > 0),
 );
@@ -369,9 +375,7 @@ watch(
     const top = (topEl.value ?? crew).getBoundingClientRect().top;
     const bottom = crew.getBoundingClientRect().bottom;
     const box = scrollParent(crew);
-    const view = box
-      ? box.getBoundingClientRect()
-      : { top: 0, bottom: window.innerHeight };
+    const view = box ? box.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
     const delta = revealScrollDelta({ top, bottom, viewTop: view.top, viewBottom: view.bottom });
     if (Math.abs(delta) < 2) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -436,7 +440,9 @@ const crew = computed(() => {
   display: flex;
   justify-content: flex-start;
   gap: 6px;
-  flex-wrap: wrap;
+  /* Une seule ligne (demandé) : icônes seules, six pastilles tiennent à 344 px. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
   padding: 2px 2px 8px;
 }
 .trf {
@@ -450,8 +456,10 @@ const crew = computed(() => {
   gap: 4px;
   white-space: nowrap;
   line-height: 1;
+  flex: none;
   min-height: 36px;
-  padding: 0 12px;
+  min-width: 44px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
