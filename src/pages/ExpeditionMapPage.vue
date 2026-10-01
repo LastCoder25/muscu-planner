@@ -1230,6 +1230,7 @@ import {
   voyageProgress,
   voyageTargetShown,
   voyageVanquished,
+  voyageFailure,
   poiCombatant,
   simulateArena,
   poiTravelLevel,
@@ -2633,6 +2634,7 @@ const partiesOnMap = computed(() =>
       legs: tripLegs(g, now.value),
       // 💀 Le lieu est terrassé dès le rapport : on le grise jusqu'au retour.
       down: voyageVanquished(g, now.value),
+      failed: voyageFailure(g, now.value),
     })),
 );
 /**
@@ -2832,6 +2834,7 @@ const trips = computed(() => {
       members: tripCrew(a),
       haul: expeHaul(a.outcome),
       legs: tripLegs(a, now.value),
+      failed: voyageFailure(a, now.value),
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${tripCrew(a).length ? ` · avec ${tripCrew(a).length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
@@ -2852,6 +2855,7 @@ const trips = computed(() => {
       members: g.members,
       haul: g.haul,
       legs: g.legs,
+      failed: g.failed,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
     });
   }

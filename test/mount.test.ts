@@ -775,6 +775,26 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (rc = h),
     );
     expect(rc).toContain('Faire demi-tour');
+    // ✖ Une mission ratée se voit sur la tuile, une réussite non.
+    expect(out).not.toContain('tr-fail');
+    let ko = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [
+          { ...trip, key: 'k1', back: true, failed: 'lost' },
+          { ...trip, key: 'k2', back: true, failed: 'turned' },
+        ],
+        heroProfile: 'polyvalent',
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (ko = h),
+    );
+    expect(ko).toContain('✖ Échec');
+    expect(ko).toContain('🔙 Demi-tour');
+    expect(ko).toMatch(/class="trip van back failed"/);
     // ⏳ Un départ PROGRAMMÉ : le filtre « Programmés » apparaît avec son compte, la tuile est
     // en pointillés, et l'équipe propose de l'annuler.
     let pl = '';

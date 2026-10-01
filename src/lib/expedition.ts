@@ -2653,6 +2653,29 @@ export function voyageVanquished(
   return now >= v.midAt && v.outcome.win;
 }
 
+/** Pourquoi un voyage a raté sa mission : battu sur place, ou forcé au demi-tour en route. */
+export type VoyageFailure = 'lost' | 'turned';
+
+/**
+ * ✖ LE VOYAGE A-T-IL RATÉ SA MISSION ? (demandé : « voir d'un coup d'œil les expéditions
+ * qu'il va falloir refaire »). ⚠️ Seulement une fois le rapport tombé (`midAt`) : l'issue
+ * est tirée au départ, la montrer avant trahirait le combat. Ne comptent PAS comme un
+ * échec : un demi-tour décidé par le joueur (`recalled`, rien n'a été tenté) et une
+ * arrivée trop tard (`late`, le lieu était déjà pris par une autre équipe — rien à refaire).
+ */
+export function voyageFailure(
+  v: {
+    midAt: number;
+    recalled?: true;
+    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack' | 'party'>;
+  },
+  now: number,
+): VoyageFailure | null {
+  if (v.recalled || now < v.midAt) return null;
+  if (v.outcome.win || v.outcome.party?.late) return null;
+  return v.outcome.turnBack !== undefined ? 'turned' : 'lost';
+}
+
 /**
  * 🗺️ LE LIEU N'EST EFFACÉ QUE S'IL A ÉTÉ TERRASSÉ (demandé : « on ne fait disparaître le lieu
  * ou l'armée que s'il a été abattu, sinon il reste sur la carte normalement »). Un lieu visé

@@ -37,7 +37,10 @@
         v-if="t"
         type="button"
         class="trip"
-        :class="[t.kind, { back: t.back, focus: focus === t.key, pending: t.pending }]"
+        :class="[
+          t.kind,
+          { back: t.back, focus: focus === t.key, pending: t.pending, failed: !!t.failed },
+        ]"
         :title="t.title"
         :aria-pressed="focus === t.key"
         @click="emit('update:focus', focus === t.key ? null : t.key)"
@@ -68,6 +71,10 @@
           <template v-else>{{ poiEmo(t.poi) }}</template>
         </span>
         <span class="tr-time">{{ t.time }}</span>
+        <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
+        <span v-if="t.failed" class="tr-fail">{{
+          t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
+        }}</span>
         <template v-if="t.legs">
           <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
           <span class="tr-legs">↩ {{ t.legs.back }}</span>
@@ -181,7 +188,7 @@
 </template>
 
 <script lang="ts">
-import type { HaulPill, Poi } from '@/lib/expedition';
+import type { HaulPill, Poi, VoyageFailure } from '@/lib/expedition';
 import type { ActiveAttack } from '@/lib/fieldArmy';
 import type { TripCategory } from '@/lib/tripFilter';
 /** Un voyage en cours, tel que la rangée le montre. */
@@ -213,6 +220,8 @@ export interface MapTrip {
   pending?: boolean;
   /** ⏳ Un départ programmé qu'on peut annuler : son id (`PlannedMove.id`). */
   cancelPlan?: string;
+  /** ✖ Mission ratée (rapport tombé) : la tuile le dit, pour voir ce qu'il faut refaire. */
+  failed?: VoyageFailure | null;
 }
 </script>
 
@@ -745,6 +754,25 @@ const crew = computed(() => {
 }
 .trip.back .tr-bar {
   background: #7bc86c;
+}
+/* ✖ Mission ratée : orange (d3), pas le rouge des attaques ennemies ; contour épais, fond
+   teinté et bandeau — la tuile ressort parmi les retours verts. */
+.trip.failed {
+  border-color: var(--d3);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--d3) 14%, var(--surface));
+}
+.trip.failed .tr-bar {
+  background: var(--d3);
+}
+.tr-fail {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: normal; /* 2 lignes plutôt que coupé quand la tuile est étroite */
+  color: var(--d3);
 }
 /* ⚔️ Une attaque ennemie : même tuile, en rouge (danger), fond teinté quand elle frappe bientôt. */
 .trip.attack {
