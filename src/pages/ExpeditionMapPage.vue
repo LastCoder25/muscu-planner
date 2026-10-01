@@ -2991,12 +2991,28 @@ const lastState = computed(() =>
  *  DÉJÀ sur la carte ne faisait rien : l'URL ne changeait pas, et un rapport déjà vu puis
  *  fermé ne se rouvrait pas. On ouvre le rapport encore à prendre, sinon le plus récent,
  *  puis on retire le drapeau (un retour arrière ne le rejoue pas, un second tap le repose). */
+/** 🔔 Le rapport nommé par la notification (`?report=msg_…`) n'est déposé qu'au premier
+ *  passage du cycle de vie après l'ouverture : on l'ATTEND un moment au lieu d'ouvrir
+ *  aussitôt « le plus récent » — qui était souvent celui d'un autre voyage. */
+const REPORT_WAIT_MS = 15_000;
+let reportWaitFrom = 0;
 watch(
-  () => [route.query.report, char.row?.messages?.length ?? -1] as const,
+  () => [route.query.report, char.row?.messages?.length ?? -1, now.value] as const,
   ([flag]) => {
-    if (!flag || !char.row) return;
+    if (!flag || !char.row) {
+      reportWaitFrom = 0;
+      return;
+    }
     const msgs = (char.row.messages ?? []).filter((m) => !m.chest);
+    const wanted = typeof flag === 'string' && flag !== '1' ? flag : null;
+    const exact = wanted ? msgs.find((x) => x.id === wanted) : undefined;
+    if (wanted && !exact) {
+      if (!reportWaitFrom) reportWaitFrom = Date.now();
+      if (Date.now() - reportWaitFrom < REPORT_WAIT_MS) return;
+    }
+    reportWaitFrom = 0;
     const m =
+      exact ??
       msgs.find((x) => isClaimable(x, Date.now())) ??
       [...msgs].sort((a, b) => b.resolvedAt - a.resolvedAt)[0];
     if (m) {

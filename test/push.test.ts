@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { planPushes, livePushKeys, type PushContext } from '@/lib/push';
+import { planPushes, livePushKeys, pushVoyage, type PushContext } from '@/lib/push';
+import { buildMessage } from '@/lib/expedition';
 import { __stampFrom } from '@/composables/useAppUpdate';
 import {
   FACTION_EMOJI,
@@ -11,6 +12,8 @@ import {
   type DefenseStructure,
 } from '@/lib/raid';
 
+/** Un voyage qui déposera un rapport. */
+const voy = (returnAt: number, reportId = 'msg_r') => ({ returnAt, reportId, reports: true });
 const H = 3_600_000;
 const NOW = 1_000_000_000_000;
 
@@ -64,7 +67,7 @@ describe('notifications push — ce qu’on programme', () => {
     // nommerait la faction, l'effectif ou le niveau offrirait gratuitement ce qu'elle
     // fait payer — et retirerait au joueur la raison d'ouvrir l'app.
     // ⚠️ Étendu au GROUPE rentré d'un camp (étape 3) : même doctrine, même vérification.
-    const plans = planPushes(ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }), NOW);
+    const plans = planPushes(ctx({ parties: [{ id: 'party_x', ...voy(NOW + 2 * H) }] }), NOW);
     for (const kind of ['siege', 'party_home'] as const) {
       const p = plans.find((x) => x.kind === kind)!;
       expect(p, kind).toBeTruthy();
@@ -82,22 +85,22 @@ describe('notifications push — ce qu’on programme', () => {
   });
 
   it('⚔️ un GROUPE rentré notifie, avare : ni faction ni effectif', () => {
-    const plans = planPushes(ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }), NOW);
+    const plans = planPushes(ctx({ parties: [{ id: 'party_x', ...voy(NOW + 2 * H) }] }), NOW);
     const p = plans.find((x) => x.kind === 'party_home');
     expect(p?.dedupe).toBe('party:party_x');
     expect(p?.sendAt).toBe(NOW + 2 * H);
-    expect(p?.url).toBe('/expedition-map?report=1');
+    expect(p?.url).toBe('/expedition-map?report=msg_r');
     for (const f of Object.values(FACTION_LABEL)) expect(`${p?.title} ${p?.body}`).not.toContain(f);
     // Aucun chiffre : ni effectif, ni niveau, ni abattus.
     expect(`${p?.title} ${p?.body}`).not.toMatch(/\d/);
     // ⚠️ Jamais dans le PASSÉ, et clé STABLE quand on replanifie.
     expect(
-      planPushes(ctx({ parties: [{ id: 'old', returnAt: NOW - H }] }), NOW).some(
+      planPushes(ctx({ parties: [{ id: 'old', ...voy(NOW - H) }] }), NOW).some(
         (x) => x.kind === 'party_home',
       ),
     ).toBe(false);
     const again = planPushes(
-      ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }),
+      ctx({ parties: [{ id: 'party_x', ...voy(NOW + 2 * H) }] }),
       NOW + 60_000,
     );
     expect(again.find((x) => x.kind === 'party_home')?.dedupe).toBe('party:party_x');
@@ -105,13 +108,44 @@ describe('notifications push — ce qu’on programme', () => {
     const two = planPushes(
       ctx({
         parties: [
-          { id: 'g1', returnAt: NOW + H },
-          { id: 'g2', returnAt: NOW + H },
+          { id: 'g1', ...voy(NOW + H) },
+          { id: 'g2', ...voy(NOW + H) },
         ],
       }),
       NOW,
     ).filter((x) => x.kind === 'party_home');
     expect(new Set(two.map((x) => x.dedupe)).size).toBe(2);
+  });
+
+  it('⚠️ un voyage SANS rapport ne s’annonce pas « rentré »', () => {
+    // Groupe-compagnon d'une attaque combinée, blessés qui rentrent à pied, demi-tour :
+    // aucun rapport n'est déposé. Les annoncer menait vers une boîte vide (signalé).
+    const sans = { returnAt: NOW + H, reportId: 'msg_x', reports: false };
+    const kinds = planPushes(ctx({ expedition: sans, parties: [{ id: 'w', ...sans }] }), NOW).map(
+      (p) => p.kind,
+    );
+    expect(kinds).not.toContain('hero_home');
+    expect(kinds).not.toContain('party_home');
+  });
+
+  it('🔔 la notification mène au rapport de CE voyage', () => {
+    const v = { poi: { id: 'poi_7' }, sentAt: 42, returnAt: NOW + H } as unknown as Parameters<
+      typeof pushVoyage
+    >[0];
+    const pv = pushVoyage(v);
+    // L'id est celui que `buildMessage` donnera au rapport : la carte le retrouve.
+    expect(pv.reportId).toBe(buildMessage({ ...v, outcome: { win: true, text: '' } } as never).id);
+    expect(pv.reports).toBe(true);
+    expect(pushVoyage({ ...v, wingOf: 'main' }).reports).toBe(false);
+    expect(pushVoyage({ ...v, recalled: true }).reports).toBe(false);
+    const hero = planPushes(ctx({ expedition: pv }), NOW).find((p) => p.kind === 'hero_home')!;
+    expect(hero.url).toBe(`/expedition-map?report=${pv.reportId}`);
+    // Deux groupes = deux rapports distincts, deux destinations distinctes.
+    const two = planPushes(
+      ctx({ parties: [{ id: 'a', ...voy(NOW + H, 'msg_a') }, { id: 'b', ...voy(NOW + H, 'msg_b') }] }),
+      NOW,
+    ).filter((p) => p.kind === 'party_home');
+    expect(new Set(two.map((p) => p.url)).size).toBe(2);
   });
 
   it('⚠️ AUCUN siège annoncé si les sièges ne sont pas ACTIVÉS', () => {
@@ -144,8 +178,8 @@ describe('notifications push — ce qu’on programme', () => {
     // pour un événement révolu, et une par ouverture de l'app puisqu'on replanifie.
     const c = ctx({
       base: base(28, { nextRaidAt: NOW - 5 * H }),
-      expedition: { returnAt: NOW - H },
-      parties: [{ id: 'g1', returnAt: NOW - H }],
+      expedition: voy(NOW - H),
+      parties: [{ id: 'g1', ...voy(NOW - H) }],
     });
     expect(planPushes(c, NOW)).toEqual([]);
   });
@@ -154,8 +188,8 @@ describe('notifications push — ce qu’on programme', () => {
     // L'app replanifie à chaque ouverture. Si la clé bougeait, chaque ouverture
     // ajouterait un doublon et le joueur recevrait N fois la même alerte.
     const c = ctx({
-      expedition: { returnAt: NOW + 3 * H },
-      parties: [{ id: 'g1', returnAt: NOW + 2 * H }],
+      expedition: voy(NOW + 3 * H),
+      parties: [{ id: 'g1', ...voy(NOW + 2 * H) }],
     });
     const a = livePushKeys(planPushes(c, NOW));
     const b = livePushKeys(planPushes(c, NOW + 60_000));
@@ -174,8 +208,8 @@ describe('notifications push — ce qu’on programme', () => {
 
   it('chaque message emmène quelque part', () => {
     const c = ctx({
-      expedition: { returnAt: NOW + 3 * H },
-      parties: [{ id: 'g1', returnAt: NOW + 2 * H }],
+      expedition: voy(NOW + 3 * H),
+      parties: [{ id: 'g1', ...voy(NOW + 2 * H) }],
     });
     for (const p of planPushes(c, NOW)) {
       expect(p.url, p.kind).toMatch(/^\//);

@@ -1047,11 +1047,24 @@ export function messageRankLevel(m: Pick<ExpeditionMessage, 'id' | 'poiType' | '
   return poiDifficultyLevel({ id, type: m.poiType, level: m.level });
 }
 
+/** 🔔 L'id du rapport qu'un voyage déposera dans la boîte : connu dès le DÉPART, ce qui
+ *  permet à une notification de mener à CE rapport (et pas au plus récent). */
+export function reportIdOf(exp: Pick<ActiveExpedition, 'poi' | 'sentAt'>): string {
+  return `msg_${exp.poi.id}_${exp.sentAt}`;
+}
+
+/** Ce voyage déposera-t-il un rapport ? Non pour un groupe-compagnon d'une attaque combinée
+ *  ou un retour de blessés vers la base (`wingOf`), ni pour un demi-tour demandé
+ *  (`recalled`) — aucune notification « rentré, ton rapport t'attend » pour eux. */
+export function voyageReports(exp: Pick<ActiveExpedition, 'wingOf' | 'recalled'>): boolean {
+  return !exp.wingOf && !exp.recalled;
+}
+
 /** Construit le message de rapport d'une expédition (déposé à l'arrivée à l'objectif). */
 export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
   const o = exp.outcome;
   return {
-    id: `msg_${exp.poi.id}_${exp.sentAt}`,
+    id: reportIdOf(exp),
     poiType: exp.poi.type,
     // 🏰 Un point de contrôle a son nom propre (mine, camp, jardin, tour).
     ...(exp.poi.control || exp.poi.army ? { title: poiLabel(exp.poi) } : {}),

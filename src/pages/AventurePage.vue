@@ -3084,6 +3084,7 @@ import { type AdvProgress, type AdvXpTrack } from '@/lib/adventurers';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { usePush } from '@/composables/usePush';
+import { pushVoyage } from '@/lib/push';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionMapPage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
@@ -5677,9 +5678,9 @@ async function syncPush(force = false) {
   await push
     .sync(uid, {
       base: char.row.base ?? null,
-      expedition: char.row.expedition ? { returnAt: char.row.expedition.returnAt } : null,
+      expedition: char.row.expedition ? pushVoyage(char.row.expedition) : null,
       // ⚔️ Les groupes partis SANS le héros (un groupe avec le héros est son expédition).
-      parties: char.partyList.map((g) => ({ id: g.id, returnAt: g.returnAt })),
+      parties: char.partyList.map((g) => ({ id: g.id, ...pushVoyage(g) })),
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       towerBoost: controlDetectBoost(char.row.expedition_map, now),
       activeDays7: activeDays7.value,
@@ -5704,6 +5705,16 @@ async function syncPush(force = false) {
     })
     .catch((e) => console.error('push sync', e));
 }
+/** 🔔 Un départ, un retour, un demi-tour ou un retour accéléré change ce qu'il faut
+ *  annoncer : on réaligne AUSSITÔT, sans attendre le frein de 5 min — sinon une
+ *  notification « rentré » partait pour un voyage qui n'avait plus lieu d'être. */
+watch(
+  () =>
+    [char.row?.expedition, ...char.partyList]
+      .map((v) => (v ? `${v.sentAt}:${v.returnAt}:${v.recalled ? 1 : 0}` : '-'))
+      .join('|'),
+  () => void syncPush(true),
+);
 
 let baseBusy = false;
 async function baseLifecycle() {

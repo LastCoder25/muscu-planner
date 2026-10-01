@@ -13,6 +13,7 @@
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
 import { baseLeadMs, raidIntervalMs, raidsEnabled, type BaseState } from './raid';
+import { reportIdOf, voyageReports, type ActiveExpedition } from './expedition';
 
 type PushKind =
   | 'siege'
@@ -39,13 +40,36 @@ export interface PushPlan {
   url: string;
 }
 
+/** 🔔 Un voyage vu par les notifications : quand il rentre, quel rapport il dépose, et
+ *  s'il en dépose un. ⚠️ `reports` est REQUIS : un groupe-compagnon d'une attaque combinée,
+ *  un retour de blessés vers la base ou un demi-tour ne déposent AUCUN rapport — les
+ *  annoncer « rentrés, ton rapport t'attend » menait vers une boîte où rien n'attendait. */
+export interface PushVoyage {
+  returnAt: number;
+  reportId: string;
+  reports: boolean;
+}
+
+/** Ce qu'un voyage en cours donne aux notifications (la règle vit ici, pas à l'appel). */
+export function pushVoyage(
+  v: Pick<ActiveExpedition, 'poi' | 'sentAt' | 'returnAt' | 'wingOf' | 'recalled'>,
+): PushVoyage {
+  return { returnAt: v.returnAt, reportId: reportIdOf(v), reports: voyageReports(v) };
+}
+
+/** Où mène « rentré » : la carte, qui ouvre CE rapport dès qu'il est déposé (et non « le
+ *  plus récent », qui pouvait être celui d'un autre voyage). */
+function reportUrl(id: string): string {
+  return `/expedition-map?report=${encodeURIComponent(id)}`;
+}
+
 export interface PushContext {
   base: BaseState | null;
-  /** Expédition du héros en cours (on ne lit que l'heure de retour). */
-  expedition: { returnAt: number } | null;
+  /** Expédition du héros en cours. */
+  expedition: PushVoyage | null;
   /** ⚔️ Groupes partis SANS le héros vers un camp (un groupe avec héros notifie par
    *  `expedition`). ⚠️ REQUIS : un groupe oublié rentrerait sans prévenir. */
-  parties: { id: string; returnAt: number }[];
+  parties: (PushVoyage & { id: string })[];
   /** Niveau de la Tour de guet : il achète le PRÉAVIS, donc l'heure du message. */
   watchtowerLevel: number;
   /** 🗼 Bonus de détection des Tours de guet tenues sur la carte (`controlDetectBoost`). */
@@ -115,18 +139,19 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
     });
   }
 
-  if (ctx.expedition) {
+  if (ctx.expedition?.reports) {
     add({
       kind: 'hero_home',
       dedupe: `hero:${ctx.expedition.returnAt}`,
       sendAt: ctx.expedition.returnAt,
       title: '🧭 Ton héros est rentré',
       body: 'Sa cargaison t’attend — elle ne se périme pas, mais il peut repartir.',
-      url: '/expedition-map?report=1',
+      url: reportUrl(ctx.expedition.reportId),
     });
   }
 
   for (const g of ctx.parties) {
+    if (!g.reports) continue;
     add({
       kind: 'party_home',
       // ⚠️ Clé liée à l'ID du groupe, jamais à l'heure : replanifier ne duplique pas.
@@ -136,7 +161,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       // boîte le dit, la notification donne seulement envie de l'ouvrir.
       title: '⚔️ Ton groupe est rentré',
       body: 'Son rapport t’attend dans la boîte 📬.',
-      url: '/expedition-map?report=1',
+      url: reportUrl(g.reportId),
     });
   }
 
