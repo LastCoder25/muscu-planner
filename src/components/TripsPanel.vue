@@ -21,7 +21,6 @@
       class="trf"
       :class="[`trf-${o.id}`, { on: shown === o.id }]"
       :aria-pressed="shown === o.id"
-      :disabled="o.n === 0"
       @click="filter = o.id"
     >
       {{ o.label }} <b v-if="o.id !== 'all'">{{ o.n }}</b>
@@ -179,6 +178,7 @@
 <script lang="ts">
 import type { HaulPill, Poi } from '@/lib/expedition';
 import type { ActiveAttack } from '@/lib/fieldArmy';
+import type { TripCategory } from '@/lib/tripFilter';
 /** Un voyage en cours, tel que la rangée le montre. */
 export interface MapTrip {
   key: string;
@@ -202,6 +202,8 @@ export interface MapTrip {
   legs?: { go: string | null; back: string; detail: string } | null;
   /** ⏱️ L'heure (ms) où se termine ce que la tuile décompte — l'ordre d'arrivée. */
   endsAt?: number;
+  /** 🧭🛡️🗡️ Expédition, renfort ou attaque du joueur (les filtres de la rangée). */
+  cat: TripCategory;
   /** ⏳ Programmé, pas encore parti (filtre « Programmés »). */
   pending?: boolean;
   /** ⏳ Un départ programmé qu'on peut annuler : son id (`PlannedMove.id`). */
@@ -269,31 +271,38 @@ const tiles = computed(() => {
   ];
   return list.sort((x, y) => x.at - y.at);
 });
-/** 🧭⚔️ Le filtre voyages / attaques (cf. `effectiveTripFilter`). */
+/** 🧭⚔️ Le filtre (cf. `effectiveTripFilter`). Un voyage programmé ne compte QUE dans
+ *  « Programmés » ; en route, il compte dans sa catégorie (`MapTrip.cat`). */
 const filter = ref<TripFilter>('all');
-const nPlanned = computed(() => props.trips.filter((t) => t.pending).length);
-const shown = computed(() =>
-  effectiveTripFilter(filter.value, {
-    trips: props.trips.length - nPlanned.value,
-    planned: nPlanned.value,
-    attacks: props.attacks?.length ?? 0,
-  }),
+const catOf = (t: MapTrip): Exclude<TripFilter, 'all' | 'attacks'> =>
+  t.pending ? 'planned' : (t.cat ?? 'trips');
+const counts = computed(() => {
+  const n = { trips: 0, reinf: 0, raids: 0, planned: 0, attacks: props.attacks?.length ?? 0 };
+  for (const t of props.trips) n[catOf(t)]++;
+  return n;
+});
+const shown = computed(() => effectiveTripFilter(filter.value, counts.value));
+/** Les catégories VIDES ne sont pas proposées (six pastilles dont trois grisées encombraient
+ *  la rangée). */
+const filterOpts = computed<{ id: TripFilter; label: string; n: number }[]>(() =>
+  (
+    [
+      { id: 'all', label: 'Tout', n: tiles.value.length },
+      { id: 'trips', label: '🧭 Expéditions', n: counts.value.trips },
+      { id: 'raids', label: '🗡️ Mes attaques', n: counts.value.raids },
+      { id: 'reinf', label: '🛡️ Renforts', n: counts.value.reinf },
+      { id: 'planned', label: '⏳ Programmés', n: counts.value.planned },
+      { id: 'attacks', label: '⚔️ Ennemis', n: counts.value.attacks },
+    ] as const
+  ).filter((o) => o.id === 'all' || o.n > 0),
 );
-const filterOpts = computed<{ id: TripFilter; label: string; n: number }[]>(() => [
-  { id: 'all', label: 'Tout', n: tiles.value.length },
-  { id: 'trips', label: '🧭 Expéditions', n: props.trips.length - nPlanned.value },
-  { id: 'planned', label: '⏳ Programmés', n: nPlanned.value },
-  { id: 'attacks', label: '⚔️ Attaques', n: props.attacks?.length ?? 0 },
-]);
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
-    shown.value === 'trips'
-      ? !!x.trip && !x.trip.pending
-      : shown.value === 'planned'
-        ? !!x.trip?.pending
-        : shown.value === 'attacks'
-          ? !!x.attack
-          : true,
+    shown.value === 'all'
+      ? true
+      : shown.value === 'attacks'
+        ? !!x.attack
+        : !!x.trip && catOf(x.trip) === shown.value,
   ),
 );
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */

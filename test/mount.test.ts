@@ -795,6 +795,49 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(pl).toMatch(/class="trip van[^"]*pending/);
     expect(pl).toContain('Annuler ce départ programmé');
     expect(pl).toContain('Partira vers');
+    // 🛡️ Renfort programmé : compté dans « Programmés », pas dans « Renforts » (vide → absent).
+    expect(pl).not.toContain('🛡️ Renforts');
+    // 🛡️🗡️ Renforts et attaques du joueur ont leur filtre ; une catégorie vide n'est pas proposée.
+    let cats = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [
+          trip,
+          { ...trip, key: 'r1', cat: 'reinf' },
+          { ...trip, key: 'g2', cat: 'raids' },
+          { ...trip, key: 'g3', cat: 'raids' },
+        ],
+        focus: null,
+        heroProfile: 'polyvalent',
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (cats = h),
+    );
+    expect(cats).toMatch(/🛡️ Renforts <b[^>]*>1</);
+    expect(cats).toMatch(/🗡️ Mes attaques <b[^>]*>2</);
+    expect(cats).toMatch(/🧭 Expéditions <b[^>]*>1</);
+    expect(cats).not.toContain('⚔️ Ennemis');
+    expect(cats).not.toContain('⏳ Programmés');
+    // Toucher « Renforts » ne garde que le renfort.
+    let onlyReinf = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [trip, { ...trip, key: 'r1', cat: 'reinf', time: 'RENFORT' }],
+        focus: null,
+        heroProfile: 'polyvalent',
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (onlyReinf = h),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-reinf')?.click(),
+    );
+    expect(onlyReinf).toContain('RENFORT');
+    expect(onlyReinf).not.toContain('→ 1 h 20');
     // 🧭 Partie d'un point fixe : l'encart montre SON emoji, plus la base.
     const mine = {
       id: 'ctl_mine',
@@ -3189,12 +3232,13 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       '/',
       (h) => (out = h),
     );
-    // Le filtre est là, « Expéditions » grisé (vide), et « Tout » actif.
+    // Le filtre est là, « Expéditions » absent (vide), et « Tout » actif.
     expect(out).toContain('tr-filter');
     // ⚠️ Jamais la classe nue de la catégorie : `trips` est celle de la GRILLE des tuiles,
     // dont le padding décentrait « Expéditions » dans sa pastille (signalé).
     expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
-    expect(out).toMatch(/class="trf trf-trips"[^>]*disabled/);
+    expect(out).not.toContain('trf-trips');
+    expect(out).toMatch(/class="trf trf-attacks"/);
     expect(out).toMatch(/class="trf trf-all on"/);
     expect(out).toContain('trip attack soon');
     expect(out).toContain('🛡️ 82 %');

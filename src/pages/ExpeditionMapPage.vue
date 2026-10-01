@@ -1234,6 +1234,7 @@ import {
   plannedSeatsTo,
   plannedTransferIds,
 } from '@/lib/plannedMoves';
+import { poiTripCategory } from '@/lib/tripFilter';
 import {
   emptyReinfSelection,
   reinfCanAdd,
@@ -2773,6 +2774,7 @@ const trips = computed(() => {
       key: 'hero',
       kind: 'hero',
       who: '🧝',
+      cat: poiTripCategory(a.poi.type),
       poi: a.poi,
       time: tripTimeLabel(h).time,
       pct: heroProg.value.overall * 100,
@@ -2792,6 +2794,7 @@ const trips = computed(() => {
       key: 'g' + g.id,
       kind: 'van',
       who: '⚔️',
+      cat: poiTripCategory(g.poi.type),
       poi: g.poi,
       time: tripTimeLabel(g.at).time,
       pct: g.prog.overall * 100,
@@ -2810,6 +2813,7 @@ const trips = computed(() => {
       key: w.id,
       kind: 'van',
       who: w.waiting ? '⏳' : '⚔️',
+      cat: 'raids',
       pending: w.waiting,
       poi: w.poi,
       time: w.waiting
@@ -2834,6 +2838,7 @@ const trips = computed(() => {
       key: r.id,
       kind: 'van',
       who: '🛡️',
+      cat: 'reinf',
       poi: r.poi,
       time: formatDuration(r.arriveIn),
       pct: r.prog.overall * 100,
@@ -2851,6 +2856,7 @@ const trips = computed(() => {
       key: r.id,
       kind: 'van',
       who: '🏠',
+      cat: 'reinf',
       poi: r.poi,
       time: `↩ ${formatDuration(r.arriveIn)}`,
       pct: r.pct,
@@ -2896,6 +2902,7 @@ const trips = computed(() => {
       key,
       kind: 'van',
       who: '⏳',
+      cat: 'reinf',
       pending: true,
       cancelPlan: m.id,
       poi,
