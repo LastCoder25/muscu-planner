@@ -2645,12 +2645,26 @@ export function voyageVanquished(
   v: {
     midAt: number;
     turnBack?: number;
-    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
+    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack' | 'party'>;
   },
   now: number,
 ): boolean {
   if (v.turnBack !== undefined || v.outcome.turnBack !== undefined) return false;
-  return now >= v.midAt && v.outcome.win;
+  return now >= v.midAt && placeTaken(v.outcome);
+}
+
+/**
+ * ⛏️ LE LIEU A-T-IL ÉTÉ PRIS ? (signalé : « la mine a été abattue, pourquoi sur la carte ce
+ * n'est pas le cas ? »). Une récolte gardée n'est « gagnée » (`win`) que si les gardes
+ * tombent ET qu'aucune embuscade n'est perdue — la règle de l'XP. Mais une embuscade perdue
+ * au RETOUR (`roadLost` sans demi-tour) frappe APRÈS la prise : le lieu est bien tombé, seule
+ * une part de la cargaison est perdue. Il quitte donc la carte, et la mission ne se marque
+ * pas « à refaire ». Un demi-tour (`turnedBack`), lui, n'a jamais atteint le lieu.
+ */
+export function placeTaken(o: Pick<ExpeditionOutcome, 'win' | 'turnBack' | 'party'>): boolean {
+  if (o.win) return true;
+  const p = o.party;
+  return !!p?.roadLost && !p.turnedBack && o.turnBack === undefined;
 }
 
 /** Pourquoi un voyage a raté sa mission : battu sur place, ou forcé au demi-tour en route. */
@@ -2672,7 +2686,7 @@ export function voyageFailure(
   now: number,
 ): VoyageFailure | null {
   if (v.recalled || now < v.midAt) return null;
-  if (v.outcome.win || v.outcome.party?.late) return null;
+  if (placeTaken(v.outcome) || v.outcome.party?.late) return null;
   return v.outcome.turnBack !== undefined ? 'turned' : 'lost';
 }
 
