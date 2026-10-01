@@ -2621,7 +2621,8 @@ export function ascensionMessage(
  * ⚫ LA GARNISON EN POINTS, sous le fort sur la carte (demandé : « voir d'un coup d'œil les
  * garnisons »). Une lettre par place, dans l'ordre de la liste « Places fortes » : `c` champion,
  * `m` milicien, `r` EN ROUTE vers le point — renfort, transfert depuis une autre place forte,
- * ou équipe d'ASSAUT sur un point ennemi (sa place est déjà prise sans y être encore, demandé :
+ * champion PARTI EN SORTIE depuis ce point (il attaque ailleurs et y reviendra, `away`), ou
+ * équipe d'ASSAUT sur un point ennemi (sa place est déjà prise sans y être, demandé :
  * « voir si un lieu fixe est complet avec les troupes en transfert ou en attaque ») —, `f`
  * libre. Rien pour un point ennemi sans assaut : on ne connaît pas sa garnison. Une CHAÎNE,
  * pour une prop à identité stable (la couche des lieux ne se re-dessine que si elle change).
@@ -2636,6 +2637,7 @@ export function garrisonDots(row: ControlRosterRow): string {
   }
   const champs = row.garrison.filter((id) => !isMilitiaId(id)).length;
   const mil = row.garrison.length - champs;
-  const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(row.reinforcing.length);
+  const enRoute = row.reinforcing.length + row.away.length;
+  const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute);
   return filled + 'f'.repeat(Math.max(0, row.seats - filled.length));
 }

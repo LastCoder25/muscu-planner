@@ -54,7 +54,7 @@
         />
         <!-- ⚫ SA GARNISON EN POINTS, sous le fort (demandé : « voir d'un coup d'œil ») : un
              point par place — plein cyan un champion, plein clair un milicien, orange
-             une troupe en route (renfort, transfert ou assaut : sa place est prise sans y être
+             une troupe en route (renfort, transfert, sortie qui reviendra ou assaut : sa place est prise sans y être
              encore), vide une place libre (rouge si personne ne tient ni ne rejoint le
              point). -->
         <g
