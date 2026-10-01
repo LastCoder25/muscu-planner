@@ -261,7 +261,6 @@ import {
 } from '@/lib/advGear';
 import {
   partySendBlocker,
-  denForce,
   suppliesBlocker,
   supplyTarget,
   PARTY_SEND_BLOCK_LABEL,
@@ -3666,9 +3665,8 @@ export const useCharacterStore = defineStore('character', () => {
       stayIds: a.stayIds,
       escortIds: escort.map((x) => x.id),
     };
-    // 🐺 Une tanière : la bête prend la force du groupe envoyé (`denForce`).
-    const baseSpec = campSpecOf(poi);
-    const spec = baseSpec ? denForce(poi, baseSpec, escort.length, !!hero) : null;
+    // 🐺 Une tanière : une bête de force FIXE, qu'on peut attaquer en surnombre.
+    const spec = campSpecOf(poi);
     const outcome = isRiftPoi(poi)
       ? resolveIncursion({ poi, escort, road, hero, seed, now, pantheonLevel: pantheonLevel.value })
       : isFieldArmyPoi(poi)

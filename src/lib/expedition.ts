@@ -351,9 +351,9 @@ export const CAMP_SIZES: {
 } = {
   camp: [1, 2],
   lair: [2, 3],
-  // 🐺 La tanière : UNE bête, de la force de deux champions de référence AU MOINS. Elle
-  // grossit à la taille du groupe envoyé (`denForce`, party.ts) : c'est la force AFFICHÉE
-  // et celle d'un duo.
+  // 🐺 La tanière : UNE bête, de la force de deux champions de référence. Elle NE grossit
+  // PAS avec le groupe (2026-10-01, décision de l'utilisateur) : on peut l'attaquer en
+  // surnombre, et le partage d'XP (`missionXpSplit`) fait payer le nombre.
   den: [2],
 };
 

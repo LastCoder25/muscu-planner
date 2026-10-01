@@ -8,7 +8,7 @@ import {
   poiForceOf,
   type Poi,
 } from './expedition';
-import { denForce, partyForecastSeed } from './party';
+import { partyForecastSeed } from './party';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 import { supplyFx } from './supplies';
@@ -73,9 +73,8 @@ export function partyWinChance(
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
-  // 🐺 Une tanière : la bête a la force du groupe (`denForce`), comme au combat.
-  const base = poiForceOf(poi);
-  const spec = base ? denForce(poi, base, escort.length, !!hero) : null;
+  // 🐺 Une tanière : la bête garde SA force, quel que soit le nombre envoyé.
+  const spec = poiForceOf(poi);
   const guards = spec
     ? campWinPct(poi, spec, allies, samples * CAMP_SAMPLE_MULT, fx.guardMult)
     : null;

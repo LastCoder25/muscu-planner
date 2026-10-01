@@ -15,7 +15,7 @@
 //
 // ⚠️ Aucun cycle : ce module importe `expedition`, `caravan` et `adventurers` ; aucun des
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
-import { caravanHurtMs, caravanLegMin, HERO_PARTY_WORTH, type PartyHero } from './caravan';
+import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
 import { sinceEvent } from './sinceEvent';
 import { LIGHT_HURT } from './skirmish';
 import { supplyFx, supplyUselessWhy, SUPPLIES, type SupplyId, type SupplyTarget } from './supplies';
@@ -185,30 +185,15 @@ export function partyCapFor(
   /** Le lieu visé : un filon plafonne à `VEIN_MAX_CHAMPIONS`. */
   poi?: Pick<Poi, 'type'> | null,
 ): number {
+  // 🐺 Une tanière : AUCUN plafond (2026-10-01, décision de l'utilisateur : « c'est un monstre
+  // qui donne de l'XP et qui peut être attaqué en surnombre »). Ni le Panthéon ni la taille du
+  // groupe ne la bornent ; la bête garde sa force (`CAMP_SIZES.den`), c'est le partage d'XP
+  // (`missionXpSplit`) qui fait payer le surnombre.
+  if (poi?.type === 'den') return Number.POSITIVE_INFINITY;
   const panth = Math.max(0, Math.floor(engage));
   // 💎 Un filon : 3 champions au plus (le héros n'y va pas, cf. `partyHeroBlocker`).
   if (poi?.type === 'vein') return Math.min(panth, VEIN_MAX_CHAMPIONS);
   return panth;
-}
-
-/**
- * 🐺 LA BÊTE D'UNE TANIÈRE GROSSIT AVEC LE GROUPE (2026-09-29, décision de l'utilisateur :
- * plus de plafond de 2 places). Sa force vaut le poids du groupe envoyé — un champion compte 1,
- * le héros `HERO_PARTY_WORTH` —, jamais moins que sa force de base (2). Envoyer plus de monde
- * ne rend donc pas le duel gagné d'avance : il reste disputé à toute taille, et l'XP ×3 se
- * partage au-delà de 3 membres (`missionXpSplit`).
- * ⚠️ SOURCE UNIQUE du combat (store) et du pronostic (`partyWinChance`) : l'un sans l'autre,
- * l'écran annoncerait un % contre une bête que le combat ne fait pas affronter.
- */
-export function denForce<S extends { size: number }>(
-  poi: Pick<Poi, 'type'>,
-  spec: S,
-  champions: number,
-  hero: boolean,
-): S {
-  if (poi.type !== 'den') return spec;
-  const weight = Math.max(0, champions) + (hero ? HERO_PARTY_WORTH : 0);
-  return weight > spec.size ? { ...spec, size: weight } : spec;
 }
 
 /** ⚔️ UNE CIBLE QU'ON PEUT AFFAIBLIR sans la battre : une armée en marche — celle d'un siège
@@ -271,7 +256,7 @@ export function partySendBlocker(
   }
   if (!hero && escortCount <= 0) return 'empty';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
-  if (escortCount > partyCapFor(cap)) return 'tooMany';
+  if (escortCount > partyCapFor(cap, poi)) return 'tooMany';
   // 💀 PERDU D'AVANCE (rétabli en v0.1375, demandé par l'utilisateur) : aucune victoire sur
   // tout l'échantillon de pronostic. ⚠️ SAUF contre une ARMÉE EN MARCHE (`canWeaken`) : là,
   // un échec ampute durablement l'armée — c'est la raison d'y aller, même à 0 %. Partout

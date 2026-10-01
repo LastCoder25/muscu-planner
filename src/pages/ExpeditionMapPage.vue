@@ -894,7 +894,8 @@
               class="car-cap"
               title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
             >
-              👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions · XP partagée
+              👥 <b>{{ partyAdvs.length
+              }}{{ Number.isFinite(partyMax) ? '/' + partyMax : '' }}</b> champions · XP partagée
               <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
               <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
             </p>
@@ -1202,7 +1203,6 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,
   partyLegMin,
-  denForce,
   tripCrew,
   recallBlocker,
   recallWindow,
@@ -3874,17 +3874,15 @@ const poiFacts = computed<PoiFact[]>(() => {
   // (`poiTeamHaul`). Une faille
   // l'annonce déjà (« Si refermée »).
   if (!rift) pushHaul(out, p, force ?? null);
-  // 🐺 La bête d'une tanière prend la force du groupe choisi (`denForce`, la même que le combat).
-  if (force && p.type === 'den') {
-    const n = denForce(p, force, partyAdvs.value.length, partyHeroOn.value).size;
+  // 🐺 La bête d'une tanière a une force FIXE : on peut l'attaquer en surnombre.
+  if (force && p.type === 'den')
     out.push({
       icon: '🐺',
       label: 'Force de la bête',
-      value: `≈ ${n} champions`,
+      value: `≈ ${force.size} champions`,
       title:
-        'Elle grandit avec ton équipe : autant de champions que tu en envoies (le héros en vaut 2), 2 au moins',
+        'Une seule bête, de force fixe : envoie autant de champions que tu veux (l’XP se partage entre eux)',
     });
-  }
   if (force) {
     const l = forceLootPreview(p, force);
     if (l.supplies)
