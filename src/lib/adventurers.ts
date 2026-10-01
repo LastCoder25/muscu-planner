@@ -2338,6 +2338,22 @@ export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): 
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
  *  Ordre : sur la route, puis à l'infirmerie (le premier qui s'applique). */
 export type AdvUnavailable = 'busy' | 'hurt' | 'posted';
+/**
+ * 🏥 À L'INFIRMERIE = blessé ET rentré (2026-10-01, signalé : « sur le lieu ils repartent
+ * blessés vers la base, mais ils sont déjà à l'infirmerie »). Depuis la v0.1396, un blessé
+ * encore en route porte déjà son `hurtUntil` (posé au rapport, compté depuis son ARRIVÉE).
+ * Tant qu'il marche (`busyUntil` à venir), il n'est pas à l'infirmerie : on ne l'y liste pas,
+ * on ne fait pas payer des soins sur son temps de marche, on ne le compte pas parmi les alités.
+ * ⚠️ La SEULE définition : Infirmerie, Guilde et ligne des disponibilités la lisent.
+ */
+export function advAtInfirmary(adv: Adventurer, now: number): boolean {
+  return (adv.hurtUntil ?? 0) > now && (adv.busyUntil ?? 0) <= now;
+}
+/** 🤕 Il rentre BLESSÉ : encore en route, sa convalescence l'attend à l'arrivée. */
+export function advWalkingHurt(adv: Adventurer, now: number): boolean {
+  return (adv.busyUntil ?? 0) > now && (adv.hurtUntil ?? 0) > (adv.busyUntil ?? 0);
+}
+
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
   if ((adv.busyUntil ?? 0) > now) return 'busy';
   if ((adv.hurtUntil ?? 0) > now) return 'hurt';

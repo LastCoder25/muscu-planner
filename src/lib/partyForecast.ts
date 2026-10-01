@@ -38,6 +38,17 @@ import { fieldArmySpec } from './fieldArmy';
  *  le héros annonçait « +45 % » quand le % de l'équipe passait de 0 à 53 % (signalé). */
 export const FORECAST_SAMPLES = 40;
 
+/**
+ * 🎲 UN COMBAT DE CAMP COÛTE ~0,3 MS : on en simule `CAMP_SAMPLE_MULT` fois plus (2026-10-01, signalé :
+ * « j'attaque à 98 % et je rate souvent »). À 40 graines fixes, l'écart au vrai taux allait
+ * jusqu'à ~6 points au-dessus (mesuré sur 390 lieux de 85 % et plus ; un cas réel : 98 %
+ * affiché pour ~88 % de vrais combats gagnés), et le joueur choisit justement les équipes qui
+ * affichent le plus — il récoltait les surestimations. À ×6 : pire écart 2,6 points, 0,75 ms.
+ * ⚠️ Les deux côtés de `winGain` passent ici : l'apport reste la différence de deux % affichés.
+ * Les failles (jusqu'à 13 combats) et l'interception gardent leur nombre.
+ */
+export const CAMP_SAMPLE_MULT = 6;
+
 export function partyWinChance(
   poi: Poi,
   escort: Adventurer[],
@@ -58,14 +69,16 @@ export function partyWinChance(
   // ⚔️🗼 Une armée en campagne se bat comme un camp de SA force de campagne — la MÊME spec
   // que la résolution (`fieldArmySpec`, `resolveFieldArmy`).
   const army = isFieldArmyPoi(poi) ? fieldArmySpec(poi) : null;
-  if (army) return campWinPct(poi, army, allies, samples, fx.guardMult);
+  if (army) return campWinPct(poi, army, allies, samples * CAMP_SAMPLE_MULT, fx.guardMult);
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
   // 🐺 Une tanière : la bête a la force du groupe (`denForce`), comme au combat.
   const base = poiForceOf(poi);
   const spec = base ? denForce(poi, base, escort.length, !!hero) : null;
-  const guards = spec ? campWinPct(poi, spec, allies, samples, fx.guardMult) : null;
+  const guards = spec
+    ? campWinPct(poi, spec, allies, samples * CAMP_SAMPLE_MULT, fx.guardMult)
+    : null;
   // 🛣️ UNE RÉCOLTE SANS LE HÉROS VOYAGE COMME UN CONVOI (`resolveHarvestParty`) : sa
   // « réussite » = les gardes abattus ET aucune embuscade PERDUE sur la route. Ne compter que
   // les gardes annonçait 100 % à deux champions pour ~65 % de rapports gagnés (11-17 % sur

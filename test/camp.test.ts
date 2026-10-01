@@ -31,7 +31,7 @@ import {
   partyFightSeed,
   partyForecastSeed,
 } from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
+import { CAMP_SAMPLE_MULT, partyWinChance } from '@/lib/partyForecast';
 import {
   HERO_UNIT_ID,
   HERO_PARTY_WORTH,
@@ -304,7 +304,10 @@ describe('🎯 un 0 % de victoire ne bloque PAS le départ', () => {
     const esc = team(3, L);
     const rd = road(L, 3);
     const spec = campSpecOf(p)!;
-    expect(partyWinChance(p, esc, rd, null, 0, 40)).toBe(campWinPct(p, spec, units(esc, rd), 40));
+    // 🎲 Sur `CAMP_SAMPLE_MULT` fois plus de combats (à 40, ce repaire annonçait 100 % pour 99,6 %).
+    expect(partyWinChance(p, esc, rd, null, 0, 40)).toBe(
+      campWinPct(p, spec, units(esc, rd), 40 * CAMP_SAMPLE_MULT),
+    );
   });
 
   it('🎯 un lieu de RÉCOLTE gardé se pronostique aussi — sinon on y enverrait mourir', () => {
@@ -317,7 +320,7 @@ describe('🎯 un 0 % de victoire ne bloque PAS le départ', () => {
     const esc = team(3, L);
     const rd = road(L, 3);
     // Le refus lit les GARDES seuls (`withRoad` faux) : le combat des gardes, au chiffre près.
-    const guards = campWinPct(p, spec, units(esc, rd), 40);
+    const guards = campWinPct(p, spec, units(esc, rd), 40 * CAMP_SAMPLE_MULT);
     expect(partyWinChance(p, esc, rd, null, 0, 40, false)).toBe(guards);
     // Le % affiché y ajoute la ROUTE (v0.1284) : jamais plus que les gardes seuls.
     expect(partyWinChance(p, esc, rd, null, 0, 40)!).toBeLessThanOrEqual(guards);

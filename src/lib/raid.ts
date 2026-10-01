@@ -53,6 +53,7 @@ import {
 } from './militia';
 import {
   advAscendedRank,
+  advAtInfirmary,
   advStats,
   advTitle,
   ascensionRankAt,
@@ -1987,9 +1988,11 @@ export function siegeHurtIds(report: RaidReport): string[] {
   return report.held ? [] : [...(report.wounded ?? [])];
 }
 
-/** Repos qu’il reste à un aventurier (siège perdu OU convoi), 0 s’il est sur pied. */
+/** Repos qu’il reste à un aventurier À L’INFIRMERIE (siège perdu OU mission), 0 s’il est sur
+ *  pied — ou encore en route : on ne liste pas, et on ne fait pas payer, son temps de marche
+ *  (`advAtInfirmary`). */
 export function advHurtMs(adv: Adventurer, now: number): number {
-  return Math.max(0, (adv.hurtUntil ?? 0) - now);
+  return advAtInfirmary(adv, now) ? (adv.hurtUntil ?? 0) - now : 0;
 }
 
 /** Soins d’urgence d’un aventurier : le QUART du tarif du héros (`RAID.advHealShare`,

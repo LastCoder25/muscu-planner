@@ -636,7 +636,7 @@
           🛏️ à l'infirmerie · {{ leftOf(hurtOf(detailAdv)) }}
         </template>
         <template v-else-if="busyOf(detailAdv)">
-          🐫 en route · {{ leftOf(busyOf(detailAdv)) }}
+          🐫 en route · {{ leftOf(busyOf(detailAdv)) }}{{ walkHurt(detailAdv) }}
         </template>
         <template v-else>✅ disponible</template>
       </div>
@@ -973,7 +973,15 @@ import {
   gearAscentOffer,
   readyAscensionIds,
 } from '@/lib/ascension';
-import { AWAKEN, ascendAdventurer, advAwaken, advSubtitle, engageCap } from '@/lib/adventurers';
+import {
+  AWAKEN,
+  ascendAdventurer,
+  advAtInfirmary,
+  advAwaken,
+  advSubtitle,
+  advWalkingHurt,
+  engageCap,
+} from '@/lib/adventurers';
 import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
 import {
@@ -1478,7 +1486,10 @@ function statusOf(a: Adventurer) {
   return advStatus(a, now.value);
 }
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
-const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil! : 0);
+// 🏥 L'infirmerie ne commence qu'à l'ARRIVÉE à la base (`advAtInfirmary`).
+const hurtOf = (a: Adventurer) => (advAtInfirmary(a, now.value) ? a.hurtUntil! : 0);
+/** 🤕 « rentre blessé » : encore en route, la convalescence l'attend à l'arrivée. */
+const walkHurt = (a: Adventurer) => (advWalkingHurt(a, now.value) ? ' · 🤕 rentre blessé' : '');
 /** Ce qu’il fait en ce moment, en une ligne.
  *  ⚠️ DÉRIVÉ de `advStatus` (donc de `advUnavailableReason`, la source unique) : cette
  *  fonction refaisait la règle avec un ordre à elle, et le filtre l’aurait contredite.
@@ -1487,7 +1498,7 @@ const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil!
 function stateOf(a: Adventurer): string {
   switch (statusOf(a)) {
     case 'busy':
-      return `🐫 en route · ${leftOf(busyOf(a))}`;
+      return `🐫 en route · ${leftOf(busyOf(a))}${walkHurt(a)}`;
     case 'hurt':
       return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}`;
     case 'posted':

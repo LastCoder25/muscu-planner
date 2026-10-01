@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
-import { advAvailable, rankAvailability } from '@/lib/adventurers';
+import { advAtInfirmary, advAvailable, rankAvailability } from '@/lib/adventurers';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
@@ -93,7 +93,8 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
 /** 🏅 Champions libres / possédés (hors blessés). */
 const d = computed(() => {
   const advs = char.advList;
-  const champHurt = advs.filter((a) => (a.hurtUntil ?? 0) > props.now).length;
+  // 🏥 À l'infirmerie seulement : un blessé qui rentre encore à pied est « en route ».
+  const champHurt = advs.filter((a) => advAtInfirmary(a, props.now)).length;
   return {
     champFree: advs.filter((a) => advAvailable(a, props.now)).length,
     // ⛑️ Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
@@ -106,7 +107,7 @@ const d = computed(() => {
  *  sur possédés, blessés exclus (ils sont comptés à part). */
 const rankRows = computed(() =>
   rankAvailability(
-    char.advList.filter((a) => (a.hurtUntil ?? 0) <= props.now),
+    char.advList.filter((a) => !advAtInfirmary(a, props.now)),
     (a) => advAvailable(a, props.now),
   ),
 );
