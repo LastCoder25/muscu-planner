@@ -1247,6 +1247,7 @@ import {
 } from '@/lib/plannedMoves';
 import { poiTripCategory } from '@/lib/tripFilter';
 import { mapSlideDirection, scrollContainerOf, type MapSlide } from '@/lib/mapSlide';
+import { revealBlock } from '@/lib/reveal';
 import {
   emptyReinfSelection,
   reinfCanAdd,
@@ -3063,18 +3064,31 @@ function dimmed(p: Poi): boolean {
  *  restent en garnison à l'arrivée (`midAt`). */
 type MapPanel = 'trips' | 'ctl';
 const mapPanel = ref<MapPanel | null>(null);
-/** 📜 Toucher une tuile REMONTE la rangée en haut de l'écran (demandé : « remonter la tuile le
- *  plus haut possible selon ce qu'il y a dessous, en la voyant en entier »). `block: 'start'`
- *  la cale en haut ; s'il n'y a pas assez de contenu dessous, le navigateur s'arrête au bas de
- *  la page et la rangée reste entière à l'écran. Après le rendu du panneau déplié, sinon la
- *  page n'a pas encore la hauteur qui permet de remonter. `scrollIntoView` suit aussi le
- *  volet droit du cockpit, qui est son propre conteneur de défilement. */
+/** 📜 Ouvrir une tuile (Expéditions, Places fortes) cale la DERNIÈRE tuile de la partie
+ *  dépliée en bas de l'écran (demandé : toutes les tuiles visibles, rien de vide dessous, le
+ *  maximum de carte au-dessus). Si la partie est plus haute que l'écran, la rangée des onglets
+ *  reste visible en haut (`revealBlock`). Après le rendu du panneau déplié, sinon il n'a pas
+ *  encore de hauteur. Suit aussi le volet droit du cockpit. */
 const tabsEl = ref<HTMLElement | null>(null);
 function toggleMapPanel(id: MapPanel) {
   mapPanel.value = mapPanel.value === id ? null : id;
   // Un seul affichage ouvert à la fois : ouvrir un onglet referme la fiche d'un lieu.
   if (mapPanel.value) selected.value = null;
-  void nextTick(() => tabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  if (mapPanel.value) void nextTick(revealTiles);
+}
+/** Cale en bas de l'écran la dernière tuile affichée sous la carte : celle de la partie
+ *  dépliée, sinon la rangée des onglets elle-même. */
+function revealTiles() {
+  const tabs = tabsEl.value;
+  if (!tabs) return;
+  const root = tabs.parentElement ?? tabs;
+  const last =
+    mapPanel.value === 'ctl'
+      ? root.querySelector('.cps')
+      : mapPanel.value === 'trips'
+        ? (root.querySelector('.trips:not(.map-tab)') ?? root.querySelector('.map-tab-empty'))
+        : null;
+  revealBlock(tabs, last ?? tabs);
 }
 /** ↕️ Le bouton à gauche du zoom (cf. `mapSlide.ts`) : le sens suit la place de la rangée de
  *  tuiles à l'écran, relue à chaque défilement (en capture : le volet du cockpit défile seul). */
@@ -3090,7 +3104,7 @@ function updateSlideDir() {
 }
 function slideMap() {
   if (slideDir.value === 'down') {
-    tabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    revealTiles();
   } else {
     scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
   }
