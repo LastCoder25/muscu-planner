@@ -977,21 +977,30 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(blk).toContain('on ne presse pas une interception');
   }, 30_000);
 
-  // 👥 Signalé : « quand je clique sur une tuile d'expédition il faut faire défiler l'écran
-  // pour voir les membres ». L'équipe naît sous la carte : elle doit être AMENÉE à l'écran.
-  it('🧭 TripsPanel : toucher une tuile amène l’équipe à l’écran', async () => {
+  // 📜 Demandé : toucher une tuile cale la DERNIÈRE tuile en bas de l'écran (toutes les tuiles
+  // visibles, le maximum de carte au-dessus). On mesure la RANGÉE, jamais le détail dessous.
+  it('🧭 TripsPanel : toucher une tuile cale la dernière tuile en bas de l’écran', async () => {
+    const { revealScrollDelta } = await import('@/lib/reveal');
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     const { reactive } = await import('vue');
     const pinia = createPinia();
     setActivePinia(pinia);
     const { useCharacterStore } = await import('@/stores/character');
     (useCharacterStore() as unknown as { row: unknown }).row = ROW;
-    const scrolled: Element[] = [];
-    const proto = HTMLElement.prototype as unknown as { scrollIntoView: () => void };
-    const before = proto.scrollIntoView;
-    proto.scrollIntoView = function (this: Element) {
-      scrolled.push(this);
+    // La rangée sous l'écran, les filtres au-dessus ; le reste (dont le détail) à 0.
+    const RECT: Record<string, { top: number; bottom: number }> = {
+      trips: { top: 900, bottom: 1100 },
+      'tr-filter': { top: 860, bottom: 890 },
     };
+    const rectProto = Element.prototype as unknown as { getBoundingClientRect: () => unknown };
+    const beforeRect = rectProto.getBoundingClientRect;
+    rectProto.getBoundingClientRect = function (this: Element) {
+      const r = RECT[this.className.split(' ')[0] ?? ''] ?? { top: 0, bottom: 0 };
+      return { ...r, left: 0, right: 0, width: 0, height: r.bottom - r.top, x: 0, y: r.top };
+    };
+    const scrolled: number[] = [];
+    const beforeScroll = window.scrollBy;
+    window.scrollBy = ((o: ScrollToOptions) => scrolled.push(o.top ?? 0)) as typeof window.scrollBy;
     const state = reactive({
       trips: [
         {
@@ -1022,14 +1031,17 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       expect(scrolled).toHaveLength(0); // rien au montage
       host.querySelector<HTMLElement>('.trip')!.click();
       for (let i = 0; i < 4; i++) await nextTick();
-      expect(scrolled.map((e) => e.className)).toEqual(['trip-crew']);
+      expect(scrolled).toEqual([
+        revealScrollDelta({ top: 860, bottom: 1100, viewTop: 0, viewBottom: window.innerHeight }),
+      ]);
       // Retoucher la tuile referme l'équipe : on ne fait rien défiler.
       host.querySelector<HTMLElement>('.trip')!.click();
       for (let i = 0; i < 4; i++) await nextTick();
       expect(scrolled).toHaveLength(1);
     } finally {
       app.unmount();
-      proto.scrollIntoView = before;
+      rectProto.getBoundingClientRect = beforeRect;
+      window.scrollBy = beforeScroll;
     }
   }, 30_000);
 

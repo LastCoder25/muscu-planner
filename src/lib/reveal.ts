@@ -1,7 +1,7 @@
 /**
  * 📜 DE COMBIEN FAIRE DÉFILER pour montrer un bloc en gardant le plus possible de ce qui est
- * AU-DESSUS (la carte, sous les voyages en cours). Demandé : toucher une tuile montre son
- * détail, en voyant toutes les tuiles, sans rien de vide dessous, et le maximum de carte.
+ * AU-DESSUS (la carte, sous les voyages en cours). Demandé : toucher une tuile cale la
+ * dernière tuile en bas de l'écran, toutes les tuiles visibles, le maximum de carte au-dessus.
  *
  * On cale le BAS du bloc (`bottom`) sur le bas de la vue — ce qui remonte la carte autant que
  * possible, dans un sens comme dans l'autre — sans jamais pousser son HAUT (`top`, la rangée

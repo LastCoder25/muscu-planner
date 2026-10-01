@@ -31,7 +31,7 @@
       >
     </button>
   </div>
-  <div v-if="tiles.length" class="trips">
+  <div v-if="tiles.length" ref="tilesEl" class="trips">
     <template v-for="{ key, trip: t, attack: r } in shownTiles" :key="key">
       <button
         v-if="t"
@@ -101,7 +101,7 @@
   </div>
 
   <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
-  <div v-if="crew" ref="crewEl" class="trip-crew">
+  <div v-if="crew" class="trip-crew">
     <div class="tc-head">
       👥 {{ crew.pending ? 'Partira vers' : 'En route vers' }}
       {{ crew.toBase ? 'la base' : `${poiLabel(crew.poi)} niv ${crew.poi.level}` }}
@@ -350,12 +350,11 @@ const crewBoosts = computed(() => {
 });
 const char = useCharacterStore();
 
-/** 👥 L'équipe naît SOUS la carte et la rangée de tuiles : sur un téléphone elle était hors de
- *  l'écran, il fallait faire défiler pour la voir (signalé). On la RÉVÈLE au toucher d'une
- *  tuile — même remède que la fiche d'un lieu (v0.738). Le bas de l'équipe se cale sur le bas
- *  de l'écran (le maximum de carte reste visible, rien de vide dessous), sans jamais cacher
- *  le haut de la rangée de tuiles (`revealScrollDelta`). */
-const crewEl = ref<HTMLElement | null>(null);
+/** 📜 Toucher une tuile cale la DERNIÈRE tuile en bas de l'écran (demandé) : toute la rangée
+ *  se voit, le maximum de carte reste au-dessus, et le détail du voyage se lit en faisant
+ *  défiler dessous. Si la rangée est plus haute que l'écran, son haut reste visible
+ *  (`revealScrollDelta`). */
+const tilesEl = ref<HTMLElement | null>(null);
 const topEl = ref<HTMLElement | null>(null);
 /** Le conteneur qui défile : le volet droit du cockpit, sinon la page. */
 function scrollParent(el: HTMLElement): HTMLElement | null {
@@ -370,11 +369,11 @@ watch(
   async (key) => {
     if (!key) return;
     await nextTick();
-    const crew = crewEl.value;
-    if (!crew) return;
-    const top = (topEl.value ?? crew).getBoundingClientRect().top;
-    const bottom = crew.getBoundingClientRect().bottom;
-    const box = scrollParent(crew);
+    const row = tilesEl.value;
+    if (!row) return;
+    const top = (topEl.value ?? row).getBoundingClientRect().top;
+    const bottom = row.getBoundingClientRect().bottom;
+    const box = scrollParent(row);
     const view = box ? box.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
     const delta = revealScrollDelta({ top, bottom, viewTop: view.top, viewBottom: view.bottom });
     if (Math.abs(delta) < 2) return;
