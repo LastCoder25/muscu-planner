@@ -929,12 +929,32 @@
                sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
             <div v-if="partyGroups.length" class="car-pick">
               <template v-for="g in partyGroups" :key="g.id">
-                <div class="pool-head">
+                <!-- 🧭 Toucher le lieu coche tous ses champions, ou les décoche tous (demandé). -->
+                <button
+                  type="button"
+                  class="pool-head"
+                  :class="`pool-${partyGroupState(g.advs.map((a) => a.id))}`"
+                  :disabled="!g.advs.length"
+                  :aria-pressed="partyGroupState(g.advs.map((a) => a.id)) === 'all'"
+                  :title="
+                    partyGroupState(g.advs.map((a) => a.id)) === 'all'
+                      ? `Décocher tous les champions de ${g.label}`
+                      : `Cocher tous les champions de ${g.label}`
+                  "
+                  @click="togglePartyGroup(g.advs.map((a) => a.id))"
+                >
                   <span class="pool-emo">{{ g.emo }}</span>
                   <span class="pool-name">{{ g.label }}</span>
                   <span class="pool-leg">à {{ formatDurationMin(g.legMin) }}</span>
                   <span class="pool-n">{{ g.advs.length }} 🗡️</span>
-                </div>
+                  <span v-if="g.advs.length" class="pool-check">{{
+                    partyGroupState(g.advs.map((a) => a.id)) === 'all'
+                      ? '✓ tous'
+                      : partyGroupState(g.advs.map((a) => a.id)) === 'some'
+                        ? '◐'
+                        : '＋ tous'
+                  }}</span>
+                </button>
                 <HeroPickTile
                   v-if="g.id === 'base'"
                   :on="partyHeroOn"
@@ -4388,6 +4408,8 @@ const {
   partyXp,
   partyLowXp,
   togglePartyAdv,
+  togglePartyGroup,
+  partyGroupState,
   partyAllIds,
   partyAllOn,
   togglePartyAll,
@@ -4695,13 +4717,47 @@ onUnmounted(() => {
   background: var(--surface-2);
   border: 1px solid var(--line);
   font-size: 13px;
+  width: 100%;
+  min-height: 44px;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pool-head:disabled {
+  cursor: default;
+}
+.pool-head.pool-all {
+  border-color: var(--accent);
+}
+.pool-check {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.pool-all .pool-check {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .pool-emo {
   font-size: 16px;
 }
 .pool-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 700;
   color: var(--text);
+}
+.pool-leg {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .pool-leg {
   color: var(--dim);
@@ -4709,6 +4765,8 @@ onUnmounted(() => {
 }
 .pool-n {
   margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
 }

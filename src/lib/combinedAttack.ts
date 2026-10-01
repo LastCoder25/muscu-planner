@@ -314,3 +314,25 @@ export function attackWingVoyages(
     }
   return out;
 }
+
+/**
+ * 🧭 Toucher un LIEU de départ coche tous ses champions, ou les décoche tous s'ils sont
+ * déjà tous cochés (demandé par l'utilisateur). Les champions des AUTRES lieux ne bougent
+ * pas. On n'ajoute jamais au-delà de `max` (le plafond de l'équipe) : les premiers du lieu,
+ * dans l'ordre de l'écran, passent d'abord. Rend la nouvelle sélection.
+ */
+export function toggleOriginGroup(
+  selected: readonly string[],
+  groupIds: readonly string[],
+  max: number,
+): string[] {
+  if (!groupIds.length) return [...selected];
+  if (groupIds.every((id) => selected.includes(id)))
+    return selected.filter((id) => !groupIds.includes(id));
+  const out = [...selected];
+  for (const id of groupIds) {
+    if (out.length >= max) break;
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}

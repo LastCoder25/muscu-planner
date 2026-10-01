@@ -32,7 +32,13 @@ import {
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { plannedTransferIds } from '@/lib/plannedMoves';
-import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker, wingOriginId } from '@/lib/combinedAttack';
+import {
+  COMBINED_BLOCK_LABEL,
+  byReach,
+  combinedBlocker,
+  toggleOriginGroup,
+  wingOriginId,
+} from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
@@ -712,6 +718,16 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (partyFull.value) return;
     partyEscort.value = [...partyEscort.value, id];
   }
+  /** 🧭 Toucher un lieu de départ : tous ses champions cochés, ou tous décochés s'ils l'étaient
+   *  déjà (demandé). Borné par le plafond de l'équipe, comme un toucher par champion. */
+  function togglePartyGroup(ids: readonly string[]) {
+    partyEscort.value = toggleOriginGroup(partyEscort.value, ids, partyMax.value);
+  }
+  /** État d'un lieu pour son titre : 'all' tout coché, 'some' en partie, 'none' rien. */
+  function partyGroupState(ids: readonly string[]): 'all' | 'some' | 'none' {
+    const n = ids.filter((id) => partyEscort.value.includes(id)).length;
+    return n === 0 ? 'none' : n === ids.length ? 'all' : 'some';
+  }
   /** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
    *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
   /** Ce que « tout le vivier » peut réellement prendre ici. */
@@ -880,6 +896,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyXp,
     partyLowXp,
     togglePartyAdv,
+    togglePartyGroup,
+    partyGroupState,
     partyAllIds,
     partyAllOn,
     togglePartyAll,
