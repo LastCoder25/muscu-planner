@@ -2997,6 +2997,19 @@ watch(focusTrip, (k) => {
   if (k) selected.value = null;
   if (k) frameTrip(k);
 });
+/** 📜 Désélectionner un voyage ou un lieu fait disparaître son détail sous la carte : la page
+ *  raccourcit et les tuiles Expéditions / Places fortes quittaient le bas de l'écran (signalé :
+ *  il fallait remonter à la main). Quand le DERNIER affichage se ferme, on remonte juste sous
+ *  la carte : la rangée des onglets en bas de l'écran, toute la carte au-dessus (demandé).
+ *  Rien si un autre affichage vient de s'ouvrir à la place. */
+watch([focusTrip, selected], ([k, s], [k0, s0]) => {
+  const closed = (k0 && !k) || (s0 && !s);
+  if (closed && !k && !s) void nextTick(revealTabs);
+});
+function revealTabs() {
+  const tabs = tabsEl.value;
+  if (tabs) revealBlock(tabs, tabs);
+}
 /** 🎯 Toucher une tuile centre la carte sur le trajet de sa troupe (départ → lieu, et la ville
  *  si elle rentre à la base) ; dézoome s'il ne tient pas, ne zoome jamais (`tripFrame`). */
 function frameTrip(key: string) {
