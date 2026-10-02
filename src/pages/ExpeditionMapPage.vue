@@ -1801,8 +1801,11 @@ function panToPoi(p: Poi) {
 function zoom(dir: number) {
   const el = scrollEl.value;
   // Fraction du centre du viewport (0..1) → on la conserve après le zoom.
-  const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
-  const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
+  // ⚠️ La taille du cadre se lit ICI, jamais dans `contW`/`contH` : mesurés trop tôt (carte
+  // montée avant d'avoir sa taille), ils valaient ~0 et le zoom se recentrait sur le coin
+  // haut-gauche de la carte (signalé : « ça me plaque la carte dans un coin »).
+  const cx = ((el?.scrollLeft ?? 0) + (el?.clientWidth ?? contW.value) / 2) / mapPx.value;
+  const cy = ((el?.scrollTop ?? 0) + (el?.clientHeight ?? contH.value) / 2) / mapPx.value;
   mapPx.value = clampPx(mapPx.value + dir * ZOOM_STEP);
   void nextTick(() => centerOn(V.value.x + cx * V.value.size, V.value.y + cy * V.value.size));
 }
@@ -4701,6 +4704,34 @@ onMounted(async () => {
   if (auth.user?.id && !char.row) await char.fetchMine().catch(() => undefined);
   await nextTick();
   measure();
+  await initialFit();
+  liftFog(readFogSeen());
+  window.addEventListener('resize', measure);
+  const el = scrollEl.value;
+  // 📐 Le cadre peut n'avoir sa vraie taille qu'APRÈS le montage (l'onglet Carte pivote,
+  // la page finit sa mise en page) : on re-mesure à chaque changement, et le cadrage de
+  // départ se fait à la PREMIÈRE vraie mesure s'il n'a pas pu se faire au montage.
+  if (el && typeof ResizeObserver !== 'undefined') {
+    resizeObs = new ResizeObserver(() => {
+      measure();
+      if (!fitted) void initialFit();
+    });
+    resizeObs.observe(el);
+  }
+  el?.addEventListener('touchstart', onTouchStart, { passive: true });
+  el?.addEventListener('touchmove', onTouchMove, { passive: false });
+  el?.addEventListener('touchend', onTouchEnd, { passive: true });
+  el?.addEventListener('touchcancel', onTouchEnd, { passive: true });
+  timer = setInterval(() => (now.value = Date.now()), 1000);
+});
+/** Le cadrage tient-il compte d'un cadre de taille réelle ? */
+let fitted = false;
+let resizeObs: ResizeObserver | null = null;
+/** 🧭 Vue de départ. ⚠️ Ne se fait que sur un cadre MESURÉ : sur un cadre encore à ~0 px,
+ *  la formule rendait le dézoom maximal et centrait de travers. */
+async function initialFit() {
+  if (contW.value < 50) return;
+  fitted = true;
   // Vue de départ : le disque révélé tient dans la largeur (la carte grandit avec
   // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie),
   // puis UN CRAN de plus (demandé par l'utilisateur : le disque entier était un cran trop
@@ -4711,16 +4742,9 @@ onMounted(async () => {
   await nextTick();
   if (island.value) centerOn(V.value.x + V.value.size / 2, V.value.y + V.value.size / 2);
   else centerTown();
-  liftFog(readFogSeen());
-  window.addEventListener('resize', measure);
-  const el = scrollEl.value;
-  el?.addEventListener('touchstart', onTouchStart, { passive: true });
-  el?.addEventListener('touchmove', onTouchMove, { passive: false });
-  el?.addEventListener('touchend', onTouchEnd, { passive: true });
-  el?.addEventListener('touchcancel', onTouchEnd, { passive: true });
-  timer = setInterval(() => (now.value = Date.now()), 1000);
-});
+}
 onUnmounted(() => {
+  resizeObs?.disconnect();
   if (timer) clearInterval(timer);
   cancelAnimationFrame(fogRaf);
   clearTimeout(fogWait);
