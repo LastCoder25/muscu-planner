@@ -19,7 +19,7 @@
  */
 import { formatDuration } from './duration';
 import { activeIsland, islandPacified } from './archipelago';
-import { islandRing } from './islandShape';
+import { islandPoint } from './islandShape';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -999,14 +999,14 @@ function controlLevel(
 }
 
 /** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. Sur une île, à
- *  `CONTROL.islandFrac` de la terre utile à son angle (`islandRing`). */
+ *  `CONTROL.islandFrac` de la terre utile à son angle (`islandPoint`). */
 export function controlSpot(
   map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
   kind: ControlKind,
 ): Pick<Poi, 'x' | 'y' | 'distNorm'> {
   const id = map.archipel?.island;
   if (id !== undefined)
-    return spotAt(map, CONTROL_QUARTER[kind], (ang) => islandRing(id, ang, CONTROL.islandFrac));
+    return spotAt(map, CONTROL_QUARTER[kind], (ang) => islandPoint(id, ang, CONTROL.islandFrac));
   // Chaque point a son angle, en quarts de tour à partir de l'angle de la MINE (tiré comme
   // avant : une mine déjà posée ne bouge pas). ⚠️ UNE TABLE, pas l'index dans `kinds` : un
   // cinquième type divisait le tour en cinq, et le nouveau point tombait à 18° d'un point
@@ -1018,21 +1018,22 @@ export function controlSpot(
   );
 }
 
-/** Un lieu fixe : à `quarter` quarts de tour de l'angle de la mine, à la distance `d`
- *  (ou `d(angle)`, pour suivre la côte d'une île). */
+/** Un lieu fixe : à `quarter` quarts de tour de l'angle de la mine, à la distance `d` de la
+ *  ville (ou au point `d(angle)`, vu du centre d'une île pour suivre sa côte). */
 function spotAt(
   map: Pick<ExpeditionMap, 'seed'>,
   quarter: number,
-  dist: number | ((ang: number) => number),
+  dist: number | ((ang: number) => { x: number; y: number }),
 ): Pick<Poi, 'x' | 'y' | 'distNorm'> {
   const rng = mulberry32((map.seed ^ seedOf('ctl:mine:0')) >>> 0 || 1);
   const ang = rng() * Math.PI * 2 + (quarter * Math.PI) / 2;
-  const d = typeof dist === 'number' ? dist : dist(ang);
-  return {
-    x: Math.round(EXPE.town.x + Math.cos(ang) * d),
-    y: Math.round(EXPE.town.y + Math.sin(ang) * d),
-    distNorm: distNormAt(d),
-  };
+  const p =
+    typeof dist === 'number'
+      ? { x: EXPE.town.x + Math.cos(ang) * dist, y: EXPE.town.y + Math.sin(ang) * dist }
+      : dist(ang);
+  const x = Math.round(p.x);
+  const y = Math.round(p.y);
+  return { x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
 }
 
 /** 🏰 TOUS les types de points qui produisent (carte ordinaire et îles). */

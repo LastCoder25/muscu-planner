@@ -15,7 +15,6 @@ import {
   holdControl,
 } from '@/lib/controlPoints';
 import {
-  ISLAND_OUTPOSTS,
   BRIGANDS,
   FORTRESS_ID,
   ISLAND_CONQUEST,
@@ -132,13 +131,14 @@ describe('🏝️ conquête — la carte', () => {
   it('une forteresse verrouillée refuse l’envoi', () => {
     const m = island1();
     expect(partySendBlocker(poi(m, FORTRESS_ID)!, 8, true, 20, 0.9, NOW)).toBe('fortressLocked');
-    // 🏝️ Un objectif attend que les deux avant-postes soient tenus (étape 3)…
+    // 🏝️ Un objectif attend que deux lieux fixes soient tenus (étape 6 bis)…
     expect(partySendBlocker(poi(m, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBe(
       'objectiveLocked',
     );
     // …puis s'attaque, héros seul compris.
     let held = m;
-    for (const k of ISLAND_OUTPOSTS) held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
+    for (const k of ['mine', 'training'] as const)
+      held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
     held = ensureIslandConquest(held, NOW, LV);
     expect(partySendBlocker(poi(held, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBeNull();
   });

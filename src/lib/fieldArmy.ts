@@ -44,6 +44,7 @@ import {
   type RaidGroup,
 } from './raid';
 import { BATTLE } from './siegeBattle';
+import { islandCenter, islandVia, onIsland } from './islandShape';
 import { CONTROL, attackerLevel, citadelIdFor, retakeBoost, retakeForce } from './controlPoints';
 import {
   campHurt,
@@ -104,6 +105,8 @@ function marching(
   playerLevel: number,
   army: FieldArmyTag,
   now: number,
+  /** 🧭 Le point de passage (centre d'une île 2 à 5) : elle ne coupe pas la mer. */
+  via?: { x: number; y: number },
 ): Poi {
   const p: Poi = {
     id,
@@ -114,6 +117,7 @@ function marching(
     faction: army.faction,
     from: { x: from.x, y: from.y },
     to: { x: to.x, y: to.y },
+    ...(via ? { via: { x: via.x, y: via.y } } : {}),
     x: from.x,
     y: from.y,
     distNorm: distNormAt(Math.hypot(from.x - EXPE.town.x, from.y - EXPE.town.y)),
@@ -124,6 +128,23 @@ function marching(
   return warbandAt(p, Math.floor(now / EXPE.warbandStepMs) * EXPE.warbandStepMs);
 }
 
+/** 🏝️ Sur une île, une armée part de la TERRE : si son point de départ tombe en mer, on le
+ *  ramène vers sa cible jusqu'à la côte (au pas d'une unité). Hors île, rien ne change. */
+function ashore(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  island: number | undefined,
+): { x: number; y: number } {
+  if (island === undefined) return from;
+  const d = Math.hypot(to.x - from.x, to.y - from.y);
+  for (let k = 0; k < d; k++) {
+    const t = k / d;
+    const p = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+    if (onIsland(island, p.x, p.y, 4)) return p;
+  }
+  return { x: to.x, y: to.y };
+}
+
 /** 🏰 L'armée d'un SIÈGE sur la carte, ou `null` tant qu'on ne la voit pas. Elle part du bord
  *  du rayon de détection, du côté où elle frappera l'enceinte (`raidFirstSector`). */
 export function siegeArmyPoi(
@@ -131,14 +152,28 @@ export function siegeArmyPoi(
   reach: number,
   now: number,
   playerLevel: number,
+  /** 🏝️ L'île de la carte : l'armée y vient de l'INTÉRIEUR des terres, jamais de la mer. */
+  island?: number,
 ): Poi | null {
   if (now >= raid.arrivesAt || !raid.groups.length) return null;
   const lead = detectRadius(raid.arrivesAt - raid.detectedAt);
   const dist = Math.max(1, seenRadius(lead, reach));
   const spawnedAt = raid.arrivesAt - (dist / FIELD_ARMY.speedPerHour) * H;
   if (now < Math.max(spawnedAt, raid.detectedAt)) return null;
-  const ang = (raidFirstSector(raid.seed) * 2 * Math.PI) / BATTLE.sectors;
-  const from = { x: EXPE.town.x + Math.cos(ang) * dist, y: EXPE.town.y + Math.sin(ang) * dist };
+  const sector = raidFirstSector(raid.seed) / BATTLE.sectors;
+  // 🏝️ Îles 2 à 5 : le port est au bord de l'île, l'armée vient de l'intérieur (un demi-cercle
+  // tourné vers le centre de l'île), jamais de la mer.
+  const c = island === undefined ? null : islandCenter(island);
+  const inland =
+    c && (c.x !== EXPE.town.x || c.y !== EXPE.town.y)
+      ? Math.atan2(c.y - EXPE.town.y, c.x - EXPE.town.x)
+      : null;
+  const ang = inland === null ? sector * 2 * Math.PI : inland + (sector - 0.5) * Math.PI * 0.8;
+  const from = ashore(
+    { x: EXPE.town.x + Math.cos(ang) * dist, y: EXPE.town.y + Math.sin(ang) * dist },
+    EXPE.town,
+    island,
+  );
   const size = Math.max(FIELD_ARMY.minSize, FIELD_ARMY.siegeSize * (1 - (raid.fieldCut ?? 0)));
   return marching(
     `army_${raid.id}`,
@@ -160,6 +195,7 @@ export function siegeArmyPoi(
       ...(raid.overflow ? { rift: true as const } : {}),
     },
     now,
+    islandVia(island, from, EXPE.town),
   );
 }
 
@@ -190,7 +226,11 @@ export function retakeArmyPoi(
     x: EXPE.town.x + ((p.x - EXPE.town.x) / d) * vis,
     y: EXPE.town.y + ((p.y - EXPE.town.y) / d) * vis,
   };
-  const from = (d < vis && origin && entryPoint(origin, p, vis)) || axis;
+  const from = ashore(
+    (d < vis && origin && entryPoint(origin, p, vis)) || axis,
+    p,
+    map.archipel?.island,
+  );
   const march = d < vis ? Math.hypot(p.x - from.x, p.y - from.y) : vis - d;
   const spawnedAt = c.attackAt - (march / FIELD_ARMY.speedPerHour) * H;
   if (now < spawnedAt) return null;
@@ -206,6 +246,7 @@ export function retakeArmyPoi(
     playerLevel,
     { kind: 'retake', targetId: p.id, at: c.attackAt, faction: force.faction, size },
     now,
+    islandVia(map.archipel?.island, from, p),
   );
 }
 
@@ -250,7 +291,7 @@ export function syncFieldArmies(
 ): ExpeditionMap {
   const want0: Poi[] = [];
   if (ctx.raid) {
-    const s = siegeArmyPoi(ctx.raid, ctx.reach, ctx.now, ctx.playerLevel);
+    const s = siegeArmyPoi(ctx.raid, ctx.reach, ctx.now, ctx.playerLevel, map.archipel?.island);
     if (s) want0.push(s);
   }
   for (const p of map.pois) {

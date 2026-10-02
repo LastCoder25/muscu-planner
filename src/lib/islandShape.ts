@@ -33,8 +33,22 @@ export interface Shape {
   capeHeight: number;
 }
 
+/** ⛵ Les îles sont EN LIGNE, d'ouest en est (décisions de l'utilisateur, 2026-10-02) : on
+ *  débarque côté OUEST — au sud-ouest par défaut — au port d'arrivée, et la forteresse portuaire
+ *  ennemie, d'où part la traversée vers l'île suivante, est à l'OPPOSÉ exact, côté EST (nord-est
+ *  par défaut). L'angle varie d'une île à l'autre pour changer, sans jamais quitter son côté. */
+const PORT_ANGLE: Record<number, number> = {
+  1: (3 * Math.PI) / 4, // sud-ouest → forteresse au nord-est
+  2: Math.PI - 0.25, // ouest, un peu au sud → est, un peu au nord
+  3: -(3 * Math.PI) / 4, // nord-ouest → sud-est
+  4: (3 * Math.PI) / 4 + 0.3, // sud-sud-ouest → nord-nord-est
+  5: Math.PI + 0.35, // ouest, un peu au nord → est, un peu au sud
+};
+const port = (id: number) => PORT_ANGLE[id]!;
+const fort = (id: number) => PORT_ANGLE[id]! - Math.PI;
+
 const SHAPES: Record<number, Shape> = {
-  // 🗡️ Brigands : une île ronde et bonhomme, une large baie au sud.
+  // 🗡️ Brigands : une île ronde et bonhomme, une large baie.
   1: {
     base: 76,
     harm: [
@@ -42,10 +56,10 @@ const SHAPES: Record<number, Shape> = {
       [3, 0.05, 1.9],
       [5, 0.03, 0.7],
     ],
-    bay: Math.PI / 2,
+    bay: port(1),
     bayDepth: 0.2,
     bayWidth: 0.45,
-    cape: -Math.PI / 2 + 0.6,
+    cape: fort(1),
     capeHeight: 0.14,
   },
   // 🐺 Bêtes : longue, couchée d'est en ouest, côte déchiquetée.
@@ -57,13 +71,13 @@ const SHAPES: Record<number, Shape> = {
       [7, 0.035, 0.3],
       [11, 0.02, 1.1],
     ],
-    bay: Math.PI / 2 + 0.5,
+    bay: port(2),
     bayDepth: 0.18,
     bayWidth: 0.35,
-    cape: 0.15,
+    cape: fort(2),
     capeHeight: 0.1,
   },
-  // 💀 Morts : un croissant — un grand golfe mangé au nord-est.
+  // 💀 Morts : un croissant — un grand golfe à l'ouest, le port au fond.
   3: {
     base: 80,
     harm: [
@@ -71,10 +85,10 @@ const SHAPES: Record<number, Shape> = {
       [4, 0.04, 0.9],
       [6, 0.025, 2.1],
     ],
-    bay: -Math.PI / 4,
+    bay: port(3),
     bayDepth: 0.24,
     bayWidth: 0.7,
-    cape: Math.PI - 0.4,
+    cape: fort(3),
     capeHeight: 0.16,
   },
   // ⚔️ Seigneur de guerre : trois lobes anguleux, comme une place forte.
@@ -85,10 +99,10 @@ const SHAPES: Record<number, Shape> = {
       [6, 0.04, 1.3],
       [9, 0.02, 0.2],
     ],
-    bay: Math.PI / 2 + 0.52,
+    bay: port(4),
     bayDepth: 0.16,
     bayWidth: 0.3,
-    cape: -Math.PI / 2 - 0.5,
+    cape: fort(4),
     capeHeight: 0.12,
   },
   // 🌑 Maudite : hérissée de pointes, comme brisée.
@@ -99,10 +113,10 @@ const SHAPES: Record<number, Shape> = {
       [8, 0.04, 1.7],
       [13, 0.03, 0.6],
     ],
-    bay: Math.PI / 2 - 0.3,
+    bay: port(5),
     bayDepth: 0.2,
     bayWidth: 0.32,
-    cape: -Math.PI / 2 + 0.3,
+    cape: fort(5),
     capeHeight: 0.15,
   },
 };
@@ -128,10 +142,54 @@ export function islandRadiusAt(id: number, t: number): number {
   return Math.min(ISLAND_MAX_R, Math.max(ISLAND_MIN_R, s.base * (1 + k)));
 }
 
+/** Le village de pêcheurs est à cette distance de la côte, au fond de la baie. */
+export const PORT_INSET = 6;
+
+const centers = new Map<number, { x: number; y: number }>();
+/**
+ * 🏝️ Le CENTRE de l'île `id`. ⚠️ Le point de départ (la ville, en (100, 100)) ne bouge jamais :
+ * c'est l'île qui se place autour. L'île 1 est la CAPITALE — la base est en son centre. Sur les
+ * îles 2 à 5 on DÉBARQUE (décision de l'utilisateur, étape 6 bis) : le point de départ est le
+ * VILLAGE DE PÊCHEURS au fond de la baie, et l'île s'étend DEVANT lui.
+ */
+export function islandCenter(id: number): { x: number; y: number } {
+  if (id <= 1) return { x: TOWN, y: TOWN };
+  const hit = centers.get(id);
+  if (hit) return hit;
+  const bay = islandShape(id).bay;
+  const r = islandRadiusAt(id, bay) - PORT_INSET;
+  const c = { x: TOWN - Math.cos(bay) * r, y: TOWN - Math.sin(bay) * r };
+  centers.set(id, c);
+  return c;
+}
+
+/** 🧭 Le point de passage d'une armée qui marche de `from` à `to` sur l'île `id`. Les
+ *  attaques vont TOUT DROIT (décision de l'utilisateur : « les cartes d'îles sont assez simples
+ *  pour des trajets directs ») ; seulement si la ligne droite coupe la mer — une faille de
+ *  l'autre côté de la baie du port — elle passe par le CENTRE de l'île. ⚠️ Une île est tracée
+ *  en RAYONS depuis son centre : deux lignes droites par lui restent toujours sur la terre. */
+export function islandVia(
+  id: number | undefined,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): { x: number; y: number } | undefined {
+  if (id === undefined) return undefined;
+  const d = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(d));
+  for (let k = 0; k <= steps; k++) {
+    const t = k / steps;
+    const x = from.x + (to.x - from.x) * t;
+    const y = from.y + (to.y - from.y) * t;
+    if (!onIsland(id, x, y, 1)) return islandCenter(id);
+  }
+  return undefined;
+}
+
 /** Le point (x, y) est-il sur l'île, à `margin` au moins de la côte ? */
 export function onIsland(id: number, x: number, y: number, margin = 0): boolean {
-  const dx = x - TOWN;
-  const dy = y - TOWN;
+  const c = islandCenter(id);
+  const dx = x - c.x;
+  const dy = y - c.y;
   return Math.hypot(dx, dy) <= islandRadiusAt(id, Math.atan2(dy, dx)) - margin;
 }
 
@@ -145,19 +203,34 @@ function islandUsable(id: number, t: number): number {
   return islandRadiusAt(id, t) - LAND_MARGIN;
 }
 
-/** La distance d'un lieu fixe posé à la part `frac` (0..1) de la terre utile à l'angle `t`,
- *  depuis la distance mini de la ville. Suit la côte : un lieu sur un lobe va plus loin. */
-export function islandRing(id: number, t: number, frac: number): number {
-  return NEAR + frac * (islandUsable(id, t) - NEAR);
+/** Un lieu FIXE posé à la part `frac` (0..1) de la terre utile, dans la direction `t` vue du
+ *  CENTRE de l'île (depuis `NEAR` du centre). Suit la côte : un lieu sur un lobe va plus loin.
+ *  Sur l'île 1, le centre est la ville : rien ne change. */
+export function islandPoint(id: number, t: number, frac: number): { x: number; y: number } {
+  const c = islandCenter(id);
+  const d = NEAR + frac * (islandUsable(id, t) - NEAR);
+  return { x: c.x + Math.cos(t) * d, y: c.y + Math.sin(t) * d };
 }
 
 const spans = new Map<number, number>();
-/** Le rayon utile le plus grand de l'île (la zone où l'on tire les lieux). */
+/** La plus grande distance entre le point de départ et la terre utile (la zone où l'on tire les
+ *  lieux). Sur l'île 1, c'est le rayon utile ; ailleurs, jusqu'à l'autre bout de l'île. */
 export function islandSpan(id: number): number {
   const hit = spans.get(id);
   if (hit !== undefined) return hit;
+  const c = islandCenter(id);
   let m = 0;
-  for (let i = 0; i < 360; i++) m = Math.max(m, islandUsable(id, (i / 360) * Math.PI * 2));
+  for (let i = 0; i < 360; i++) {
+    const t = (i / 360) * Math.PI * 2;
+    const r = islandUsable(id, t);
+    m = Math.max(m, Math.hypot(c.x + Math.cos(t) * r - TOWN, c.y + Math.sin(t) * r - TOWN));
+  }
   spans.set(id, m);
   return m;
+}
+
+/** 🗺️ La fenêtre dessinée d'une île : un carré de demi-côté `half` autour de son centre. */
+export function islandView(id: number, half: number): { x: number; y: number; size: number } {
+  const c = islandCenter(id);
+  return { x: c.x - half, y: c.y - half, size: 2 * half };
 }

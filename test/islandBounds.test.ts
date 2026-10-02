@@ -5,6 +5,7 @@ import { captureControl, controlIdOf, ensureControls, isCitadel } from '@/lib/co
 import { ensureIslandConquest } from '@/lib/islandConquest';
 import { syncFieldArmies } from '@/lib/fieldArmy';
 import { onIsland } from '@/lib/islandTerrain';
+import { islandCenter, islandVia } from '@/lib/islandShape';
 import { rollRaid } from '@/lib/raid';
 
 /**
@@ -59,5 +60,40 @@ describe('🏝️ les îles sont bien délimitées', () => {
     expect(plain.pois.some(isCitadel)).toBe(true);
     const isl = ensureControls({ ...plain, archipel: archipelOn(1) }, NOW, 20, OUT);
     expect(isl.pois.some(isCitadel)).toBe(false);
+  });
+});
+
+describe('🧭 une armée va tout droit, sauf si la ligne coupe la mer', () => {
+  it('tout droit quand la terre suffit ; par le centre quand la ligne traverse la baie', () => {
+    const town = { x: 100, y: 100 };
+    let crossed = 0;
+    for (const isl of ISLANDS) {
+      const c = islandCenter(isl.id);
+      for (let i = 0; i < 72; i++) {
+        const t = (i / 72) * Math.PI * 2;
+        for (const r of [20, 40, 60, 75]) {
+          const from = { x: c.x + Math.cos(t) * r, y: c.y + Math.sin(t) * r };
+          if (!onIsland(isl.id, from.x, from.y, 4)) continue;
+          const via = islandVia(isl.id, from, town);
+          const legs = via
+            ? [
+                [from, via],
+                [via, town],
+              ]
+            : [[from, town]];
+          if (via) crossed++;
+          for (const [a, b] of legs)
+            for (let k = 0; k <= 50; k++) {
+              const x = a!.x + ((b!.x - a!.x) * k) / 50;
+              const y = a!.y + ((b!.y - a!.y) * k) / 50;
+              expect(onIsland(isl.id, x, y, 0), `île ${isl.id} ${x},${y}`).toBe(true);
+            }
+        }
+      }
+      // Près du village, tout droit.
+      expect(islandVia(isl.id, { x: c.x * 0.8 + 20, y: c.y * 0.8 + 20 }, town)).toBeUndefined();
+    }
+    // La baie du port fait bien faire le détour à quelques armées.
+    expect(crossed).toBeGreaterThan(0);
   });
 });

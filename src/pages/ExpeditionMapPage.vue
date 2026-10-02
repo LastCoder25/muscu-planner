@@ -48,7 +48,7 @@
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
         <svg
-          :viewBox="`${V.min} ${V.min} ${V.size} ${V.size}`"
+          :viewBox="`${V.x} ${V.y} ${V.size} ${V.size}`"
           class="map"
           :style="{ width: mapPx + 'px', height: mapPx + 'px' }"
         >
@@ -60,7 +60,7 @@
             :view="V"
             :fortress-name="island.fortress"
           />
-          <MapTerrain v-else :terrain="terrain" :view="V" />
+          <MapTerrain v-else :terrain="terrain" :view="{ min: V.x, size: V.size }" />
 
           <!-- 🌫️ BROUILLARD DE GUERRE (v0.1047) : l'Avant-poste révèle un disque autour de la
                ville, qui grandit à chaque niveau. Au-delà, on devine le relief sans voir
@@ -80,8 +80,8 @@
           <!-- ⚠️ Pas de brouillard sur une île : c'est la MER qui la borne. -->
           <rect
             v-if="!island"
-            :x="V.min"
-            :y="V.min"
+            :x="V.x"
+            :y="V.y"
             :width="V.size"
             :height="V.size"
             fill="url(#fog-edge)"
@@ -117,22 +117,22 @@
 
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
           <rect
-            :x="V.min + 1.5"
-            :y="V.min + 1.5"
+            :x="V.x + 1.5"
+            :y="V.y + 1.5"
             :width="V.size - 3"
             :height="V.size - 3"
             rx="2"
             class="map-frame"
           />
           <rect
-            :x="V.min + 3.5"
-            :y="V.min + 3.5"
+            :x="V.x + 3.5"
+            :y="V.y + 3.5"
             :width="V.size - 7"
             :height="V.size - 7"
             rx="1"
             class="map-frame thin"
           />
-          <g class="compass" :transform="`translate(${V.min + V.size - 100} ${V.min})`">
+          <g class="compass" :transform="`translate(${V.x + V.size - 100} ${V.y})`">
             <circle cx="90" cy="10" r="5.5" class="comp-bg" />
             <path d="M 90 5 L 91.4 10 L 90 8.7 L 88.6 10 Z" class="comp-needle" />
             <text x="90" y="4" class="comp-n">N</text>
@@ -1306,7 +1306,7 @@ import {
   poiTravelLevel,
   travelOneWayMin,
   expeditionTerrain,
-  MAP_VIEW,
+  mapViewOf,
   mapReach,
   travelHourRings,
   type Poi,
@@ -1535,7 +1535,7 @@ const terrain = computed(() =>
     : { features: [], rivers: [], tufts: [], patches: [] },
 );
 /** 🗺️ Fenêtre dessinée (la ville reste en 100,100 ; la carte s'étend en négatif autour). */
-const V = MAP_VIEW;
+const V = computed(() => mapViewOf(char.row?.expedition_map));
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 // 🏝️ En mode archipel, la carte a la taille de l'île : l'Avant-poste ne règle que la vitesse.
 const island = computed(() => activeIsland(char.row?.expedition_map));
@@ -1772,8 +1772,8 @@ function onScroll() {
 function centerOn(svgX: number, svgY: number) {
   const el = scrollEl.value;
   if (!el) return;
-  el.scrollLeft = ((svgX - V.min) / V.size) * mapPx.value - el.clientWidth / 2;
-  el.scrollTop = ((svgY - V.min) / V.size) * mapPx.value - el.clientHeight / 2;
+  el.scrollLeft = ((svgX - V.value.x) / V.value.size) * mapPx.value - el.clientWidth / 2;
+  el.scrollTop = ((svgY - V.value.y) / V.value.size) * mapPx.value - el.clientHeight / 2;
   onScroll();
 }
 function centerTown() {
@@ -1788,7 +1788,7 @@ function zoom(dir: number) {
   const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
   const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
   mapPx.value = clampPx(mapPx.value + dir * ZOOM_STEP);
-  void nextTick(() => centerOn(V.min + cx * V.size, V.min + cy * V.size));
+  void nextTick(() => centerOn(V.value.x + cx * V.value.size, V.value.y + cy * V.value.size));
 }
 
 // ── 🤏 Zoom à deux doigts (pincer / écarter) ──
@@ -1838,8 +1838,8 @@ const edgeIndicators = computed(() => {
   const src = [...mapPois.value, ...(active.value ? [active.value.poi] : [])];
   const out: { id: string; poi: Poi; x: number; y: number; deg: number }[] = [];
   for (const p of src) {
-    const px = ((p.x - V.min) / V.size) * mapPx.value - scrollX.value;
-    const py = ((p.y - V.min) / V.size) * mapPx.value - scrollY.value;
+    const px = ((p.x - V.value.x) / V.value.size) * mapPx.value - scrollX.value;
+    const py = ((p.y - V.value.y) / V.value.size) * mapPx.value - scrollY.value;
     if (px >= 0 && px <= cw && py >= 0 && py <= ch) continue; // visible
     const dx = px - cw / 2;
     const dy = py - ch / 2;
@@ -3206,7 +3206,7 @@ function frameTrip(key: string) {
   if (!t) return;
   const pts = [t.poi, t.from ?? TOWN];
   if (t.toBase) pts.push(TOWN);
-  const f = tripFrame(pts, mapPx.value, V.size, contW.value, contH.value);
+  const f = tripFrame(pts, mapPx.value, V.value.size, contW.value, contH.value);
   mapPx.value = clampPx(f.px);
   void nextTick(() => centerOn(f.cx, f.cy));
 }
@@ -4685,9 +4685,12 @@ onMounted(async () => {
   // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie),
   // puis UN CRAN de plus (demandé par l'utilisateur : le disque entier était un cran trop
   // dézoomé — on voit la ville et ses abords, le reste se trouve en faisant glisser ou au −).
-  mapPx.value = clampPx(Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP);
+  // 🏝️ Sur une île, le village du port est AU BORD : on cadre l'île entière, centrée sur elle.
+  const fitR = island.value ? V.value.size / 2 - 20 : reveal.value;
+  mapPx.value = clampPx(Math.round((contW.value * V.value.size) / (2 * (fitR + 6))) + ZOOM_STEP);
   await nextTick();
-  centerTown();
+  if (island.value) centerOn(V.value.x + V.value.size / 2, V.value.y + V.value.size / 2);
+  else centerTown();
   liftFog(readFogSeen());
   window.addEventListener('resize', measure);
   const el = scrollEl.value;

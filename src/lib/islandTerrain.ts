@@ -12,7 +12,15 @@
  */
 import { mulberry32 } from './combat';
 import { EXPE, MAP_VIEW } from './expedition';
-import { angDiff, islandRadiusAt, islandShape, onIsland, ISLAND_MAX_R } from './islandShape';
+import {
+  angDiff,
+  islandCenter,
+  islandRadiusAt,
+  islandShape,
+  islandView,
+  onIsland,
+  ISLAND_MAX_R,
+} from './islandShape';
 
 // La silhouette vit dans `islandShape.ts` (la carte en a besoin pour poser les lieux, et
 // `expedition.ts` ne peut pas importer ce fichier-ci sans cycle).
@@ -142,13 +150,19 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
   },
 };
 
+/** Le point de départ : la base (île 1) ou le village de pêcheurs (îles 2 à 5). */
 const C = EXPE.town.x;
 const f1 = (v: number) => +v.toFixed(1);
 
 const COAST_STEPS = 144;
 
 /** Le contour lissé d'une île centrée en (cx, cy), à l'échelle `scale`. */
-export function islandOutline(id: number, cx: number = C, cy: number = C, scale = 1): string {
+export function islandOutline(
+  id: number,
+  cx: number = islandCenter(id).x,
+  cy: number = islandCenter(id).y,
+  scale = 1,
+): string {
   const pts: [number, number][] = [];
   for (let i = 0; i < COAST_STEPS; i++) {
     const t = (i / COAST_STEPS) * Math.PI * 2;
@@ -380,25 +394,30 @@ export function islandTerrain(id: number): IslandTerrainData {
   const style = ISLAND_STYLES[id] ?? ISLAND_STYLES[1]!;
   const biome = BIOMES[id] ?? BIOMES[1]!;
   const rng = mulberry32((id * 2654435761) >>> 0 || 1);
+  // ⚠️ Le CENTRE de l'île n'est la ville que sur l'île 1 : ailleurs le point de départ est le
+  // village du port, et l'île s'étend devant lui (`islandCenter`).
+  const { x: ox, y: oy } = islandCenter(id);
 
   // ⚓ Le port au fond de la baie, la forteresse sur le cap.
   const anchor = (t: number, inset: number): CoastAnchor => {
     const r = islandRadiusAt(id, t) - inset;
-    return { x: f1(C + Math.cos(t) * r), y: f1(C + Math.sin(t) * r), angle: t };
+    return { x: f1(ox + Math.cos(t) * r), y: f1(oy + Math.sin(t) * r), angle: t };
   };
   const port = anchor(shape.bay, 3);
   const fortress = anchor(shape.cape, 9);
-  // La route : de la base au port, une courbe douce (pas une règle).
+  // La route, une courbe douce (pas une règle) : de la base au port sur l'île 1 ; ailleurs,
+  // du village vers l'intérieur de l'île.
+  const end = id <= 1 ? port : { x: f1(C + (ox - C) * 0.55), y: f1(C + (oy - C) * 0.55) };
   const bend = (rng() - 0.5) * 18;
-  const mx = (C + port.x) / 2 + Math.cos(shape.bay + Math.PI / 2) * bend;
-  const my = (C + port.y) / 2 + Math.sin(shape.bay + Math.PI / 2) * bend;
-  const road = `M${C} ${C}Q${f1(mx)} ${f1(my)} ${port.x} ${port.y}`;
+  const mx = (C + end.x) / 2 + Math.cos(shape.bay + Math.PI / 2) * bend;
+  const my = (C + end.y) / 2 + Math.sin(shape.bay + Math.PI / 2) * bend;
+  const road = `M${C} ${C}Q${f1(mx)} ${f1(my)} ${end.x} ${end.y}`;
   // Ce qui reste dégagé : la base, la route, le port et la forteresse.
   const roadPts = Array.from({ length: 13 }, (_, i) => {
     const u = i / 12;
     return [
-      (1 - u) * (1 - u) * C + 2 * (1 - u) * u * mx + u * u * port.x,
-      (1 - u) * (1 - u) * C + 2 * (1 - u) * u * my + u * u * port.y,
+      (1 - u) * (1 - u) * C + 2 * (1 - u) * u * mx + u * u * end.x,
+      (1 - u) * (1 - u) * C + 2 * (1 - u) * u * my + u * u * end.y,
     ];
   });
   const free = (x: number, y: number, pad = 0) =>
@@ -416,12 +435,12 @@ export function islandTerrain(id: number): IslandTerrainData {
   const rivers: string[] = [];
   const centers: [number, number][] = [];
   const pickCenter = (): [number, number] => {
-    let best: [number, number] = [C, C];
+    let best: [number, number] = [ox, oy];
     let bestGap = -1;
     for (let k = 0; k < 40; k++) {
       const t = rng() * Math.PI * 2;
       const rr = 20 + rng() * (islandRadiusAt(id, t) - 30);
-      const p: [number, number] = [C + Math.cos(t) * rr, C + Math.sin(t) * rr];
+      const p: [number, number] = [ox + Math.cos(t) * rr, oy + Math.sin(t) * rr];
       if (!free(p[0], p[1], 2)) continue;
       const gap = centers.length
         ? Math.min(...centers.map(([a, b]) => Math.hypot(a - p[0], b - p[1])))
@@ -527,14 +546,14 @@ export function islandTerrain(id: number): IslandTerrainData {
   // Rivières : d'un relief jusqu'à la mer.
   for (let i = 0; i < biome.rivers; i++) {
     const t0 = rng() * Math.PI * 2;
-    let px = C + Math.cos(t0) * 26;
-    let py = C + Math.sin(t0) * 26;
+    let px = ox + Math.cos(t0) * 26;
+    let py = oy + Math.sin(t0) * 26;
     let a = t0 + (rng() - 0.5) * 0.6;
     let d = `M${f1(px)} ${f1(py)}`;
     for (let k = 0; k < 40; k++) {
       a += (rng() - 0.5) * 0.7;
       // Toujours vers le large : on ne remonte pas vers la base.
-      a += angDiff(Math.atan2(py - C, px - C), a) * 0.25;
+      a += angDiff(Math.atan2(py - oy, px - ox), a) * 0.25;
       const nx = px + Math.cos(a) * 4;
       const ny = py + Math.sin(a) * 4;
       d += `Q${f1(px + Math.cos(a) * 2)} ${f1(py + Math.sin(a) * 2)} ${f1(nx)} ${f1(ny)}`;
@@ -547,11 +566,12 @@ export function islandTerrain(id: number): IslandTerrainData {
   // Prairie : taches et touffes, sur la terre ferme seulement.
   const dec = mulberry32((id * 0x5bd1e995) >>> 0 || 7);
   const span = ISLAND_MAX_R;
-  const rp = () => C + (dec() * 2 - 1) * span;
+  const rpx = () => ox + (dec() * 2 - 1) * span;
+  const rpy = () => oy + (dec() * 2 - 1) * span;
   const tufts: string[] = [];
   for (let i = 0; i < 1600 && tufts.length < 240; i++) {
-    const x = rp();
-    const y = rp();
+    const x = rpx();
+    const y = rpy();
     if (!onIsland(id, x, y, 2) || Math.hypot(x - C, y - C) < 14) continue;
     const h = 1.6 + dec() * 1.2;
     tufts.push(
@@ -560,27 +580,26 @@ export function islandTerrain(id: number): IslandTerrainData {
   }
   const patches: IslandTerrainData['patches'] = [];
   for (let i = 0; i < 500 && patches.length < 40; i++) {
-    const cx = rp();
-    const cy = rp();
+    const cx = rpx();
+    const cy = rpy();
     if (!onIsland(id, cx, cy, 8) || Math.hypot(cx - C, cy - C) < 16) continue;
     patches.push({ cx: f1(cx), cy: f1(cy), rx: f1(5 + dec() * 8), ry: f1(2.5 + dec() * 3.5) });
   }
   const pools: IslandTerrainData['pools'] = [];
   for (let i = 0; i < 200 && pools.length < biome.pools; i++) {
-    const cx = rp();
-    const cy = rp();
+    const cx = rpx();
+    const cy = rpy();
     if (!onIsland(id, cx, cy, 8) || !free(cx, cy, 2)) continue;
     pools.push({ cx: f1(cx), cy: f1(cy), rx: f1(3 + dec() * 4), ry: f1(1.6 + dec() * 2) });
   }
   // Vaguelettes : en mer, dans la fenêtre dessinée.
   const waves: string[] = [];
-  const lo = MAP_VIEW.min + 4;
-  const sz = MAP_VIEW.size - 8;
+  const view = islandView(id, MAP_VIEW.size / 2);
   for (let i = 0; i < 600 && waves.length < 60; i++) {
-    const x = lo + dec() * sz;
-    const y = lo + dec() * sz;
-    const dx = x - C;
-    const dy = y - C;
+    const x = view.x + 4 + dec() * (view.size - 8);
+    const y = view.y + 4 + dec() * (view.size - 8);
+    const dx = x - ox;
+    const dy = y - oy;
     if (Math.hypot(dx, dy) < islandRadiusAt(id, Math.atan2(dy, dx)) + 6) continue;
     waves.push(`M${f1(x - 2.4)} ${f1(y)}q1.2 -1.1 2.4 0q1.2 1.1 2.4 0`);
   }

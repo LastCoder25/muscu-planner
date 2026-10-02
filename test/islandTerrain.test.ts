@@ -9,7 +9,7 @@ import {
 } from '@/lib/islandTerrain';
 import { ISLANDS, ISLAND_OUTPOST_LEVEL, ISLAND_REACH, archipelOn } from '@/lib/archipelago';
 import { EXPE, MAP_VIEW, createMap } from '@/lib/expedition';
-import { LAND_MARGIN, NEAR, TOWN } from '@/lib/islandShape';
+import { LAND_MARGIN, NEAR, TOWN, angDiff, islandCenter } from '@/lib/islandShape';
 
 const IDS = ISLANDS.map((i) => i.id);
 const ANGLES = Array.from({ length: 360 }, (_, i) => (i / 360) * Math.PI * 2);
@@ -96,17 +96,29 @@ describe('🏝️ le décor', () => {
 });
 
 describe('🏝️ port et forteresse', () => {
-  it('sont sur la côte, aux deux bouts de l’île', () => {
+  it('sont sur la côte, aux deux bouts de l’île : le port à l’ouest, la forteresse à l’opposé exact', () => {
     for (const id of IDS) {
       const { port, fortress } = islandTerrain(id);
+      const c = islandCenter(id);
       for (const a of [port, fortress]) {
-        const r = Math.hypot(a.x - 100, a.y - 100);
+        const r = Math.hypot(a.x - c.x, a.y - c.y);
         expect(r).toBeGreaterThan(islandRadiusAt(id, a.angle) - 12);
         expect(r).toBeLessThanOrEqual(islandRadiusAt(id, a.angle));
       }
-      let d = Math.abs(port.angle - fortress.angle) % (Math.PI * 2);
-      if (d > Math.PI) d = Math.PI * 2 - d;
-      expect(d).toBeGreaterThan(Math.PI / 2);
+      // ⛵ Les îles sont en ligne, d’ouest en est : on arrive côté ouest, on repart côté est.
+      expect(Math.cos(port.angle)).toBeLessThan(0);
+      expect(Math.cos(fortress.angle)).toBeGreaterThan(0);
+      expect(Math.abs(angDiff(port.angle, fortress.angle))).toBeCloseTo(Math.PI, 6);
+    }
+  });
+
+  it('îles 2 à 5 : on débarque au port, l’île s’étend devant le village ; l’île 1 est la capitale', () => {
+    expect(islandCenter(1)).toEqual({ x: 100, y: 100 });
+    for (const id of IDS.filter((i) => i > 1)) {
+      const { port } = islandTerrain(id);
+      // Le point de départ (la ville, 100,100) est le village, tout près du port.
+      expect(Math.hypot(port.x - 100, port.y - 100)).toBeLessThan(6);
+      expect(onIsland(id, 100, 100)).toBe(true);
     }
   });
 });

@@ -12,6 +12,7 @@ import {
   takeFortress,
 } from '@/lib/islandConquest';
 import { onIsland } from '@/lib/islandTerrain';
+import { islandView } from '@/lib/islandShape';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
 const DAY = 86_400_000;
@@ -107,8 +108,10 @@ describe('🪺 la place d’un nid', () => {
   it('aucune place à 10 unités des autres : pas de nid (jamais posé sur un autre)', () => {
     const m = islandMap(2);
     const crowd: Poi[] = [];
-    for (let x = 20; x <= 180; x += 6)
-      for (let y = 20; y <= 180; y += 6)
+    // Toute la fenêtre de l'île : elle s'étend devant le village du port (v1.29.0).
+    const v = islandView(2, 110);
+    for (let x = v.x; x <= v.x + v.size; x += 6)
+      for (let y = v.y; y <= v.y + v.size; y += 6)
         crowd.push({ ...m.pois.find((p) => p.control)!, id: `c${x}_${y}`, x, y });
     expect(nestSpot({ pois: crowd }, 2, [])).toBeNull();
     expect(nestSpot(m, 2, [])).not.toBeNull();

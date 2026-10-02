@@ -18,7 +18,7 @@ import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 import { labyKeyPriceAt } from '../data/labyrinths';
-import { islandSpan, onIsland, LAND_MARGIN } from './islandShape';
+import { islandSpan, islandVia, islandView, onIsland, LAND_MARGIN } from './islandShape';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -711,6 +711,8 @@ export interface Poi {
   /** ⚔️ Où la marche S'ARRÊTE : la ville par défaut (bande de faille, armée de siège), le
    *  point fixe qu'elle vient reprendre pour une reprise (`fieldArmy.ts`). */
   to?: { x: number; y: number };
+  /** 🧭 Point de passage d'une marche (centre d'une île 2 à 5) : `from` → `via` → `to`. */
+  via?: { x: number; y: number };
   /** ⚔️🗼 ARMÉE EN CAMPAGNE (`fieldArmy.ts`) : l'armée d'un siège de la base ou d'une
    *  reprise de point fixe, repérée dans le rayon de détection, qu'on peut attaquer avant
    *  qu'elle n'arrive. Absent = bande de faille ordinaire. */
@@ -817,18 +819,6 @@ export interface Crossing {
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de
  *  niveau (`travelOneWayMin`) — sur une île, le temps ne dépend que de la distance. */
 export const ARCHIPEL_TRAVEL_LEVEL = 0;
-
-/** 🏝️ L'aller d'un RELAIS d'île (les avant-postes, et la forteresse quand ils sont tenus) :
- *  2 h. ⚠️ Ce n'est plus le bord de l'île : les lieux se posent sur TOUTE la terre ferme
- *  (v1.28.0, décision de l'utilisateur : « utilise tout l'espace de la carte disponible même
- *  si ça dépasse 4 h »), jusqu'à ~4 h d'aller sur les grands lobes. */
-export const ISLAND_MAX_LEG_MIN = 120;
-
-/** 🏝️ La distance normalisée d'un lieu d'île : celle de sa distance, SANS plafond (v1.28.0 ;
- *  avant, l'aller était plafonné à 2 h et les lieux tenaient dans 54 unités). */
-export function islandDistNorm(d: number): number {
-  return distNormAt(d);
-}
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
@@ -1821,6 +1811,19 @@ export const MAP_VIEW = (() => {
   return { min: EXPE.town.x - half, size: 2 * half };
 })();
 
+/** 🗺️ La fenêtre dessinée d'UNE carte. Sur une île 2 à 5, le point de départ est le village du
+ *  port (au bord) : la fenêtre se centre sur l'ÎLE, pas sur la ville. Ailleurs, `MAP_VIEW`. */
+export function mapViewOf(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): {
+  x: number;
+  y: number;
+  size: number;
+} {
+  const id = map?.archipel?.island;
+  return id === undefined
+    ? { x: MAP_VIEW.min, y: MAP_VIEW.min, size: MAP_VIEW.size }
+    : islandView(id, MAP_VIEW.size / 2);
+}
+
 /** Distance normalisée d'un point à la ville : 0 à `distMin`, 1 à `distMax`, et AU-DELÀ
  *  sans plafond — c'est ce qui allonge le trajet vers les terres révélées plus tard. */
 export function distNormAt(d: number): number {
@@ -1832,16 +1835,30 @@ export function distNormAt(d: number): number {
  * ligne droite de `from` (sa faille) vers la ville, sur toute sa durée de vie. Lue par
  * `advanceWorld` (la carte), par le point de rencontre d'une interception
  * (`interceptLeg`) et par le dessin de la bande qui marche à la rencontre du groupe.
- * Sans `from` (pas une bande), le lieu ne bouge pas.
+ * Sans `from` (pas une bande), le lieu ne bouge pas. 🧭 Avec `via`, la marche passe par ce
+ * point (deux lignes droites, au même pas).
  */
 export function warbandAt<
-  P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'to' | 'spawnedAt' | 'expiresAt'>,
+  P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'to' | 'via' | 'spawnedAt' | 'expiresAt'>,
 >(p: P, t: number): P {
   if (!p.from) return p;
   const k = clamp01((t - p.spawnedAt) / Math.max(1, p.expiresAt - p.spawnedAt));
   const to = p.to ?? EXPE.town;
-  const x = p.from.x + (to.x - p.from.x) * k;
-  const y = p.from.y + (to.y - p.from.y) * k;
+  const a = p.from;
+  const v = p.via;
+  let x: number;
+  let y: number;
+  if (v) {
+    const l1 = Math.hypot(v.x - a.x, v.y - a.y);
+    const l2 = Math.hypot(to.x - v.x, to.y - v.y);
+    const s = k * (l1 + l2);
+    const [u, b, e] = s <= l1 ? [l1 ? s / l1 : 1, a, v] : [l2 ? (s - l1) / l2 : 1, v, to];
+    x = b.x + (e.x - b.x) * u;
+    y = b.y + (e.y - b.y) * u;
+  } else {
+    x = a.x + (to.x - a.x) * k;
+    y = a.y + (to.y - a.y) * k;
+  }
   return { ...p, x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
 }
 
@@ -2052,7 +2069,9 @@ function placePoi(
   // Tiers visé (ignoré si un plancher explicite a déjà resserré la fenêtre).
   const nb = EXPE.distBands;
   const b = band === undefined || minFrac > 0 ? null : ((band % nb) + nb) % nb;
-  for (let tries = 0; tries < 40; tries++) {
+  // 🏝️ Sur une île au bord de laquelle on débarque, une bonne part du disque est la mer.
+  const maxTries = land ? 160 : 40;
+  for (let tries = 0; tries < maxTries; tries++) {
     const ang = rng() * Math.PI * 2; // angle libre → POI dans tous les sens
     const span = reach - lo;
     const dd = b === null ? lo + rng() * span : lo + ((b + rng()) / nb) * span;
@@ -2674,6 +2693,8 @@ export function advanceWorld(
   // courante à chaque tick et n'avancerait jamais.
   const warbands: Poi[] = over.map((p) => {
     const at = p.spawnedAt + EXPE.lifespanMs.rift;
+    // 🧭 Tout droit, sauf si la ligne coupe la mer (`islandVia`).
+    const via = islandVia(map.archipel?.island, p, EXPE.town);
     return {
       id: `${p.id}_war`,
       type: 'warband',
@@ -2681,6 +2702,7 @@ export function advanceWorld(
       ...(p.travelLevel !== undefined ? { travelLevel: p.travelLevel } : {}),
       faction: riftFactionOf(p.id),
       from: { x: p.x, y: p.y },
+      ...(via ? { via } : {}),
       x: p.x,
       y: p.y,
       distNorm: p.distNorm,

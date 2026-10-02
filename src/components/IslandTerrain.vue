@@ -8,8 +8,8 @@
       <radialGradient
         :id="`it-sea-${t.island}`"
         gradientUnits="userSpaceOnUse"
-        cx="100"
-        cy="100"
+        :cx="view.x + view.size / 2"
+        :cy="view.y + view.size / 2"
         :r="view.size * 0.62"
       >
         <stop offset="0.35" :stop-color="t.style.sea0" />
@@ -18,8 +18,8 @@
       <radialGradient
         :id="`it-land-${t.island}`"
         gradientUnits="userSpaceOnUse"
-        cx="100"
-        cy="100"
+        :cx="view.x + view.size / 2"
+        :cy="view.y + view.size / 2"
         r="95"
       >
         <stop offset="0" :stop-color="t.style.land0" />
@@ -32,8 +32,8 @@
 
     <!-- La mer, et ses vaguelettes. -->
     <rect
-      :x="view.min - 10"
-      :y="view.min - 10"
+      :x="view.x - 10"
+      :y="view.y - 10"
       :width="view.size + 20"
       :height="view.size + 20"
       :fill="`url(#it-sea-${t.island})`"
@@ -53,7 +53,7 @@
       <path v-for="(rv, i) in t.rivers" :key="'rw' + i" :d="rv" class="it-river-in" />
     </g>
 
-    <!-- La route de la base au port. -->
+    <!-- La route : de la base au port (île 1), du village vers l'intérieur (îles 2 à 5). -->
     <path :d="t.road" class="it-road" />
     <path :d="t.road" class="it-road-in" />
 
@@ -111,7 +111,7 @@ import type { IslandTerrainData } from '@/lib/islandTerrain';
 
 const props = defineProps<{
   t: IslandTerrainData;
-  view: { min: number; size: number };
+  view: { x: number; y: number; size: number };
   fortressName: string;
 }>();
 

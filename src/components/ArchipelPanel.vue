@@ -114,8 +114,11 @@
         <div class="at-fort">🏰 {{ selTile.fortress }}</div>
         <!-- 🏝️ La conquête de l'île active : objectifs abattus, forteresse, pacification. -->
         <div v-if="selTile.active && conquest" class="at-conq">
-          <span class="at-pill" :class="{ done: conquest.outpostsHeld >= 2 }"
-            >🗼 {{ conquest.outpostsHeld }}/2 avant-postes</span
+          <span class="at-pill" :class="{ done: conquest.pointsHeld >= OBJECTIVES_AFTER_HELD }"
+            >🏳️ {{ Math.min(conquest.pointsHeld, OBJECTIVES_AFTER_HELD) }}/{{
+              OBJECTIVES_AFTER_HELD
+            }}
+            lieux tenus</span
           >
           <span
             class="at-pill"
@@ -186,13 +189,14 @@ import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import { ISLAND_STYLES, islandOutline } from '@/lib/islandTerrain';
+import { OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
 
 const props = defineProps<{
   island: Island | null;
   busy?: boolean;
   /** 🏝️ Où en est la conquête de l'île active (`islandConquest`). */
   conquest?: {
-    outpostsHeld: number;
+    pointsHeld: number;
     objectivesDown: number;
     objectivesTotal: number;
     fortressDown: boolean;
@@ -226,16 +230,16 @@ const prevFortress = (id: number) => ISLANDS.find((i) => i.id === id - 1)?.fortr
 
 const open = ref(false);
 
-/** Où chaque île se pose sur la carte de l'archipel (une chaîne, d'ouest en est). */
+/** Où chaque île se pose sur la carte de l'archipel (en ligne, d'ouest en est). */
 const POS: Record<number, [number, number]> = {
-  1: [44, 112],
-  2: [108, 56],
-  3: [168, 120],
-  4: [228, 56],
-  5: [290, 114],
+  1: [44, 88],
+  2: [105, 88],
+  3: [166, 88],
+  4: [227, 88],
+  5: [288, 88],
 };
-/** Échelle d'une silhouette : une île (rayon ≤ 100) tient dans ~34 unités. */
-const SCALE = 0.34;
+/** Échelle d'une silhouette : une île (rayon ≤ 100) tient dans ~29 unités : elles ne se touchent pas, en ligne. */
+const SCALE = 0.29;
 const SEA_WAVES = [
   'M18 30q3 -2.4 6 0q3 2.4 6 0',
   'M150 20q3 -2.4 6 0q3 2.4 6 0',
