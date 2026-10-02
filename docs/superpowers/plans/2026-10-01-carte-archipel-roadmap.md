@@ -306,7 +306,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       **autel des runes** (sceaux de champion 🔱 au rang du joueur : la part de champion d’une
       ruine toutes les 72 h au complet). ⚠️ Le « puis sans fin » de la Citadelle maudite n’est
       pas fait. Tests `islandCursed.test.ts` (10, 12 mutations rouges).
-- [ ] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
+- [x] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
       défense, durée de chaque île, 5 îles de rente).
       **6a livrée v1.27.0 — les spécialités réalignées sur l’étape 0.** Les v1.24-1.26 avaient
       mal lu le tableau « Les lieux fixes » : les produits ET les débits sont remis à ceux décidés
@@ -330,6 +330,14 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       dès le niveau d’entrée (un rang pèse peu en fin de partie, déjà vu à l’étape 0) — leur
       durée est donc bornée par le NIVEAU, pas par la forteresse. Gardé par
       `archipelFortress.test.ts` (8 champions au plafond la prennent affaiblie, 5 non, intacte
-      elle tient ; 3 mutations rouges). Reste : la défense des ports et lieux tenus sous les
-      armées des îles 4-5 (non simulée).
+      elle tient ; 3 mutations rouges).
+      **6d v1.27.3 — la défense des lieux tenus sous les menaces des îles 4 et 5, mesurée**
+      (`garrisonHold`, champions de référence, niveaux 70 et 90) : un lieu repousse une reprise
+      **22-25 %** avec 1 champion, **77-79 %** avec 3, **90 %** avec 5 (le plafond de
+      suspense). Une reprise tombe d’ordinaire tous les 1 à 3 jours par lieu ; l’armée mobile
+      de l’île 4 (3 camps : une sortie / 12 h) porte le lieu le MOINS défendu à ~2 attaques
+      par jour, les invasions de l’île 5 (3 sanctuaires : une / 24 h) portent TOUS les lieux à
+      ~1 par jour. Avec 3 champions par lieu, ~0,4 lieu perdu de plus par jour sur l’île 4,
+      ~1 sur l’île 5 — une vraie pression, mais BRÈVE : les objectifs de ces îles se prennent
+      dès l’entrée (6c), et les abattre éteint la menace. Aucun réglage changé.
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.
