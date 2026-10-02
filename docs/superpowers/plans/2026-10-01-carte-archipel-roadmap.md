@@ -316,4 +316,10 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       🪬 autel des runes = 1 rune multicolore / 2 jours (il donnait des sceaux de champion ;
       « à partir du bleu » non fait). Tests réécrits (récolte toutes les 6 h comme le jeu,
       `test/helpers/controlHarvest.ts`), 7 mutations rouges.
+      **6b v1.27.1 — la rente des cinq îles pacifiées, mesurée et gardée** (`archipelRent.test.ts`) :
+      garnisons pleines, crans montés, au niveau 100 : or **+28 %** du revenu complet (dans la
+      fourchette de l’étape 0, +7 à +41 %), mana **+25 %** de deux failles/jour (un peu au-dessus
+      des +4 à +15 % de l’étape 0, mesurés à garnison 3 : 19 % à 3), pierres d’invocation
+      **+30 %** d’une journée de donjons, **~0,7 run** de Labyrinthe/jour. Aucun réglage changé.
+      Reste : parties simulées complètes (durée de chaque île, défense).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.
