@@ -383,4 +383,24 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       + autel (5 chacune). Avant-postes : le camp et la MINE (ISLAND_OUTPOSTS), relais
       inchangé. Une tour TENUE au moment de la bascule reste jusqu’au rappel ou à sa perte (sa
       garnison, miliciens compris, n’a nulle part où aller).
+- [ ] **6 bis. Débarquer et s'étendre** (décisions de l'utilisateur, 2026-10-02) — sur une île,
+      on n'arrive pas dans une base centrale mais dans un **village de pêcheurs au port**, et on
+      s'étend en prenant les lieux clés un par un.
+      - **Île 1 = la capitale** : la base, ses bâtiments et son enceinte (sièges) restent au
+        centre. **Îles 2 à 5 : un village au port**, point d'appui (trajets, milice de l'île,
+        infirmerie), **sans bâtiment ni siège** — remplace « Panthéon et Guilde dans chaque
+        base » (règle 4) et le port assiégé (règle 6). Les bâtiments restent communs.
+      - **L'île est dessinée DEVANT le village**, depuis la côte : le port tombe sur le point de
+        départ, l'île s'étend vers l'intérieur (fenêtre de carte agrandie, îles non réduites).
+      - **Le rang des lieux fixes monte en s'éloignant du port** (bas rang de l'île près du
+        village, haut rang vers l'intérieur et la forteresse) : la progression se lit sur la
+        carte. Exception assumée à « la difficulté ne dépend pas de la distance », qui reste
+        vraie pour les lieux tirés.
+      - **Les trajets partent du lieu tenu le plus proche** (champions ET héros) : chaque lieu
+        pris rapproche le reste. Plus de règle spéciale de forteresse (3 h / 2 h en relais) ni
+        d'avant-postes désignés : tout lieu tenu en est un.
+      - **Le héros peut tenir garnison partout** et partir d'un lieu tenu.
+      - Un blessé rentre se soigner au village ; la milice y est produite et se transfère.
+      - À trancher : 4 lieux fixes par île (socle + 1 spécialité) ; milice plafonnée à 3
+        places sur 5 par lieu ; récompenses d'une nouvelle île (pas de tickets : règle 9).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.
