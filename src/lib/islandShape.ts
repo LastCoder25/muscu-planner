@@ -229,6 +229,33 @@ export function islandSpan(id: number): number {
   return m;
 }
 
+/** ⚓ Le PORT D'ARRIVÉE de l'île `id` : au fond de sa baie, à `PORT_DOCK` de la côte. Sur les
+ *  îles 2 à 5, c'est le village (le point de départ, à 3 unités près). */
+export const PORT_DOCK = 3;
+export function islandPort(id: number): { x: number; y: number } {
+  const c = islandCenter(id);
+  const bay = islandShape(id).bay;
+  const r = islandRadiusAt(id, bay) - PORT_DOCK;
+  return { x: c.x + Math.cos(bay) * r, y: c.y + Math.sin(bay) * r };
+}
+
+const portSpans = new Map<number, number>();
+/** La plus grande distance entre le port d'arrivée et la terre utile de l'île. */
+export function islandPortSpan(id: number): number {
+  const hit = portSpans.get(id);
+  if (hit !== undefined) return hit;
+  const c = islandCenter(id);
+  const p = islandPort(id);
+  let m = 0;
+  for (let i = 0; i < 360; i++) {
+    const t = (i / 360) * Math.PI * 2;
+    const r = islandUsable(id, t);
+    m = Math.max(m, Math.hypot(c.x + Math.cos(t) * r - p.x, c.y + Math.sin(t) * r - p.y));
+  }
+  portSpans.set(id, m);
+  return m;
+}
+
 /** 🗺️ La fenêtre dessinée d'une île : un carré de demi-côté `half` autour de son centre. */
 export function islandView(id: number, half: number): { x: number; y: number; size: number } {
   const c = islandCenter(id);

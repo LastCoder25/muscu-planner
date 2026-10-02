@@ -18,6 +18,7 @@ import {
   islandRadiusAt,
   islandShape,
   islandView,
+  PORT_DOCK,
   onIsland,
   ISLAND_MAX_R,
 } from './islandShape';
@@ -403,7 +404,7 @@ export function islandTerrain(id: number): IslandTerrainData {
     const r = islandRadiusAt(id, t) - inset;
     return { x: f1(ox + Math.cos(t) * r), y: f1(oy + Math.sin(t) * r), angle: t };
   };
-  const port = anchor(shape.bay, 3);
+  const port = anchor(shape.bay, PORT_DOCK);
   const fortress = anchor(shape.cape, 9);
   // La route, une courbe douce (pas une règle) : de la base au port sur l'île 1 ; ailleurs,
   // du village vers l'intérieur de l'île.

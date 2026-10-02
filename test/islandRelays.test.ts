@@ -19,8 +19,9 @@ import {
   OBJECTIVES_AFTER_HELD,
   withRelays,
 } from '@/lib/islandConquest';
-import { ensureControls } from '@/lib/controlPoints';
+import { ensureControls, islandControlLevel } from '@/lib/controlPoints';
 import { partySendBlocker } from '@/lib/party';
+import { islandPort } from '@/lib/islandShape';
 
 /**
  * 🧭 ÉTAPE 6 BIS (décisions de l'utilisateur, 2026-10-02) : on débarque au village du port et
@@ -171,5 +172,36 @@ describe('🏳️ les objectifs s’ouvrent une fois DEUX lieux tenus, n’impor
     };
     const out = ensureIslandConquest(marked, DAY * 7, 20);
     expect(out.pois.some((p) => p.control?.outpost)).toBe(false);
+  });
+});
+
+describe('🏅 le rang d’un lieu fixe monte en s’éloignant du port', () => {
+  it('jamais pris : niveau croissant avec la distance au port d’arrivée, dans la tranche de l’île', () => {
+    for (const isl of ISLANDS) {
+      const lv = archipelOn(isl.id).levelCap;
+      const port = islandPort(isl.id);
+      const m = island(isl.id, 6);
+      const pts = ordinary(m)
+        .filter((p) => p.control!.owner === 'enemy')
+        .sort(
+          (a, b) => Math.hypot(a.x - port.x, a.y - port.y) - Math.hypot(b.x - port.x, b.y - port.y),
+        );
+      expect(pts.length).toBeGreaterThan(2);
+      for (let i = 1; i < pts.length; i++)
+        expect(pts[i]!.level, `île ${isl.id}`).toBeGreaterThanOrEqual(pts[i - 1]!.level);
+      for (const p of pts) {
+        expect(p.level).toBeGreaterThanOrEqual(isl.minLevel);
+        expect(p.level).toBeLessThanOrEqual(lv);
+        expect(p.level).toBe(islandControlLevel(m, p, lv));
+      }
+      // Le plus proche est bas dans la tranche, le plus loin haut.
+      expect(pts.at(-1)!.level - pts[0]!.level, `île ${isl.id}`).toBeGreaterThan(
+        (lv - isl.minLevel) * 0.2,
+      );
+    }
+  });
+  it('jamais au-dessus du joueur', () => {
+    const m = archipelOn(3);
+    expect(islandControlLevel(m, { x: 400, y: 400 }, m.levelFloor + 1)).toBe(m.levelFloor + 1);
   });
 });

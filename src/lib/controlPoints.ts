@@ -19,7 +19,7 @@
  */
 import { formatDuration } from './duration';
 import { activeIsland, islandPacified } from './archipelago';
-import { islandPoint } from './islandShape';
+import { islandPoint, islandPort, islandPortSpan } from './islandShape';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -982,6 +982,27 @@ export function citadelLabel(
   };
 }
 
+/** 🏝️ Le niveau d'un point fixe ENNEMI sur une île (étape 6 bis, décision de l'utilisateur) :
+ *  il MONTE EN S'ÉLOIGNANT DU PORT D'ARRIVÉE — le bas de la tranche de l'île près du port, le haut
+ *  vers l'intérieur et la forteresse. La progression se lit sur la carte. ⚠️ Exception
+ *  assumée à « la difficulté ne dépend pas de la distance », qui reste vraie pour les lieux
+ *  tirés et pour les ASSAILLANTS (`attackerLevel`). Jamais au-dessus du joueur. */
+export function islandControlLevel(
+  map: Pick<ExpeditionMap, 'archipel'>,
+  at: { x: number; y: number },
+  playerLevel: number,
+): number {
+  const id = map.archipel?.island ?? 1;
+  const floor = archipelFloor(map);
+  const top = Math.max(floor, Math.max(1, playerLevel));
+  // ⚓ Mesuré depuis le PORT D'ARRIVÉE (le village sur les îles 2 à 5) : sur l'île 1, la base
+  // est au centre et les lieux fixes l'entourent à égale distance — c'est la route du port à
+  // la forteresse qui y donne la progression.
+  const port = islandPort(id);
+  const frac = Math.min(1, Math.hypot(at.x - port.x, at.y - port.y) / islandPortSpan(id));
+  return Math.min(Math.max(1, playerLevel), Math.round(floor + frac * (top - floor)));
+}
+
 /** Le niveau (donc le rang) d'un point : tiré comme celui d'une faille — entre Bronze et le
  *  rang du joueur, jamais lié à la distance. Re-tiré à chaque reprise. */
 function controlLevel(
@@ -1087,13 +1108,16 @@ export function ensureControls(
   for (const kind of kinds) {
     const id = controlIdOf(kind);
     if (map.pois.some((p) => p.id === id)) continue;
+    const spot = controlSpot(map, kind);
     add.push({
       id,
       type: 'control',
-      level: controlLevel(`${map.seed}:${id}`, 0, playerLevel, archipelFloor(map)),
+      level: map.archipel
+        ? islandControlLevel(map, spot, playerLevel)
+        : controlLevel(`${map.seed}:${id}`, 0, playerLevel, archipelFloor(map)),
       // Le trajet suit la DISTANCE (le lieu est fixe), pas le rang tiré.
       travelLevel: map.archipel ? ARCHIPEL_TRAVEL_LEVEL : Math.max(1, playerLevel),
-      ...controlSpot(map, kind),
+      ...spot,
       spawnedAt: now,
       expiresAt: EXPE.lifespanMs.control,
       control: {
@@ -1110,6 +1134,15 @@ export function ensureControls(
   const healed = map.pois.map((p) => {
     const c = p.control;
     if (!c || c.owner !== 'enemy' || RAZE_KINDS.has(c.kind)) return p;
+    // 🏝️ Sur une île, un point jamais pris suit sa distance au port (un point repris garde
+    // le rang de ses assaillants).
+    if (map.archipel && !c.retakes) {
+      const lv = islandControlLevel(map, p, playerLevel);
+      const big = c.size > Math.max(...CONTROL.captureSizes);
+      if (lv === p.level && !big) return p;
+      const key = `${map.seed}:${p.id}`;
+      return { ...p, level: lv, control: big ? { ...c, ...enemyForce(key, c.retakes) } : c };
+    }
     const tooHigh = p.level > Math.max(1, playerLevel);
     // 🏝️ Sous le rang d'entrée de l'île (carte qui change d'île) : re-tiré aussi, si le joueur
     // a lui-même atteint ce rang.
