@@ -30,7 +30,7 @@ import {
 } from '@/lib/islandConquest';
 import { onIsland } from '@/lib/islandTerrain';
 import { partySendBlocker } from '@/lib/party';
-import { raidsEnabled, type BaseState } from '@/lib/raid';
+import { advanceBase, emptyBase, raidsEnabled, rollRaid, type BaseState } from '@/lib/raid';
 import { collectable, type Building } from '@/lib/buildings';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
@@ -262,7 +262,7 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
     expect(attackerHidden(m, 'mine')).toBe(false);
   });
 
-  it('une île pacifiée ne voit plus aucun siège', () => {
+  it('🏝️ sur une île, aucun siège venu de la mer', () => {
     const base = {
       defenses: [
         { typeId: 'wall', level: 26 },
@@ -271,6 +271,23 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
     } as BaseState;
     expect(raidsEnabled(base, 7, 26, false)).toBe(true);
     expect(raidsEnabled(base, 7, 26, true)).toBe(false);
+  });
+
+  it('🏝️ un siège déjà en marche se disperse en passant sur une île', () => {
+    const b0 = emptyBase(3, NOW);
+    const base: BaseState = {
+      ...b0,
+      defenses: [
+        { typeId: 'wall', level: 26 },
+        { typeId: 'turret', level: 26 },
+      ] as BaseState['defenses'],
+      raid: rollRaid(7, 26, NOW + 4 * H, H, null, null),
+    };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, towerBoost: 0, levelBand: null };
+    expect(advanceBase(base, { ...ctx, onIsland: false }, NOW).base.raid).not.toBe(null);
+    const r = advanceBase(base, { ...ctx, onIsland: true }, NOW);
+    expect(r.base.raid).toBe(null);
+    expect(r.dueRaid).toBe(null);
   });
 
   /** Une Dynamo et une Porte, jamais récoltées depuis 20 h. */

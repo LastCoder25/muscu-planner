@@ -76,8 +76,8 @@ export interface PushContext {
   towerBoost: number;
   /** Jours d'entraînement sur 7 — un siège n'arrive qu'à un joueur actif. */
   activeDays7: number;
-  /** 🕊️ Île active pacifiée (archipel) : aucun siège à annoncer. ⚠️ REQUIS. */
-  pacified: boolean;
+  /** 🏝️ Mode archipel : aucun siège venu de la mer à annoncer. ⚠️ REQUIS. */
+  onIsland: boolean;
   /** ⚠️ EXPLICITE, jamais deviné depuis l'enceinte. `defenseReadiness` compare les
    *  structures au niveau du JOUEUR : le déduire du plus haut niveau bâti ferait passer
    *  une enceinte de niveau 5 sur un compte niveau 28 pour « prête », et on programmerait
@@ -115,7 +115,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
   // ⚠️ On ne programme un siège que si les sièges sont ACTIVÉS. Sans enceinte prête,
   // aucune armée ne vient (règle 3 des sièges, `raidsEnabled`) : annoncer un assaut qui
   // n'aura pas lieu serait un mensonge, et une inquiétude gratuite.
-  if (b && raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.pacified)) {
+  if (b && raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.onIsland)) {
     // ⚠️ Le préavis est une PART de l’intervalle : sans lui, on programmerait la
     // détection à une heure qui ne correspond à aucun rythme.
     const lead = baseLeadMs(ctx.watchtowerLevel, raidIntervalMs(ctx.activeDays7), ctx.towerBoost);

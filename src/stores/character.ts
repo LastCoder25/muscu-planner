@@ -130,13 +130,7 @@ import {
   recordDeparture,
   archipelFloor,
 } from '@/lib/expedition';
-import {
-  archipelOn,
-  islandById,
-  islandPacified,
-  mapOutpostLevel,
-  mapPlayerLevel,
-} from '@/lib/archipelago';
+import { archipelOn, islandById, mapOutpostLevel, mapPlayerLevel } from '@/lib/archipelago';
 import {
   boardTravellers,
   CROSSING_BLOCK_LABEL,
@@ -2998,7 +2992,7 @@ export const useCharacterStore = defineStore('character', () => {
         ...ctx,
         towerBoost: controlDetectBoost(cur.expedition_map, now),
         // 🕊️ Île pacifiée : plus aucun siège.
-        pacified: islandPacified(cur.expedition_map),
+        onIsland: !!cur.expedition_map?.archipel,
         // 🏝️ Sur une île, l'armée reste dans la tranche de l'île, jamais au-dessus du joueur.
         levelBand: islandRaidBand(
           cur.expedition_map?.archipel ? archipelFloor(cur.expedition_map) : null,

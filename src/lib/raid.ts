@@ -3164,15 +3164,18 @@ export function defenseReadiness(defenses: DefenseStructure[], playerLevel: numb
  *  et ils reprennent tout seuls une fois rattrapé. C’est cohérent avec la règle 1 (on ne
  *  punit jamais) — et sans exploit, un siège étant un ROBINET (butin, cadavres, ferraille) :
  *  s’en priver coûte du contenu, ça n’achète pas de la sécurité. */
-/** ⚠️ `pacified` REQUIS : 🕊️ sur une île pacifiée (archipel), plus aucune armée ne vient. */
+/** ⚠️ `onIsland` REQUIS : 🏝️ sur une île (archipel), AUCUN siège « venu de la mer » — les
+ *  attaques n'y partent que des points fixes ennemis (camps, objectifs, forteresse), et
+ *  plus rien une fois l'île pacifiée (décision de l'utilisateur, 2026-10-02 : « enlève les
+ *  attaques liées à aucun point fixe »). */
 export function raidsEnabled(
   base: BaseState,
   activeDays7: number,
   playerLevel: number,
-  pacified: boolean,
+  onIsland: boolean,
 ): boolean {
   return (
-    !pacified &&
+    !onIsland &&
     playerLevel >= RAID.minRaidLevel &&
     defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare &&
     activeDays7 >= 1
@@ -3220,8 +3223,8 @@ export function advanceBase(
     globalXp: number;
     /** 🗼 Bonus de détection des Tours de guet tenues (`controlDetectBoost`). */
     towerBoost: number;
-    /** 🕊️ L'île active est pacifiée : plus de siège (`raidsEnabled`). */
-    pacified: boolean;
+    /** 🏝️ Mode archipel : pas de siège venu de la mer (`raidsEnabled`). */
+    onIsland: boolean;
     /** 🏝️ La tranche de niveaux des armées sur l'île active (`islandRaidBand`), `null` hors archipel. */
     levelBand: RaidLevelBand | null;
   },
@@ -3257,7 +3260,13 @@ export function advanceBase(
     changed = true;
   }
 
-  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.pacified)) {
+  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.onIsland)) {
+    // 🏝️ Sur une île, un siège déjà en marche (détecté avant la bascule ou la pacification)
+    // n'a plus de point fixe d'origine : il se disperse au lieu d'arriver.
+    if (ctx.onIsland && b.raid) {
+      b = { ...b, raid: null };
+      changed = true;
+    }
     // Enceinte pas prête (ou joueur inactif) : on repousse l'échéance pour ne JAMAIS
     // accumuler un arriéré pendant l'absence.
     if (b.nextRaidAt < now) {
