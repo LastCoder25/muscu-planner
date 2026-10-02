@@ -78,12 +78,6 @@ describe('🧺 la tuile de production', () => {
     expect(c.gauge).toMatch(/production est arrêtée/);
     expect(c.rate).toContain('0/5 mineurs');
   });
-  it('🗼 la tour n’a rien à récolter : sa réduction, sans jauge', () => {
-    const c = controlYieldCard(held('tower'), 6 * H, L)!;
-    expect(c.pct).toBeNull();
-    expect(c.value).toMatch(/^−\d+ %$/);
-    expect(c.ready).toBe(false);
-  });
   it('un point ennemi n’a pas de tuile', () => {
     const m = ensureControls(createMap(3, 0, L, 1), 0, L);
     expect(controlYieldCard(m.pois.find((q) => q.id === controlIdOf('mine'))!, 0, L)).toBeNull();

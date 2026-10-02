@@ -143,35 +143,6 @@ describe('🏰 les quatre points', () => {
     expect(cc.collectedAt).toBe(15 * H);
     expect(cc.banked).toBeCloseTo(0.25, 5);
   });
-  it('🗼 la tour tenue raccourcit les trajets (×0,8 à 3), sans rien à récolter', () => {
-    const { map, id } = held('tower');
-    expect(controlTravelMult(mapAt(11), 0)).toBe(1);
-    expect(controlTravelMult(map, 0)).toBeCloseTo(0.8, 5);
-    expect(controlTravelMult(held('tower', ['a0']).map, 0)).toBeCloseTo(0.9, 5);
-    // Jusqu'à 5 : chaque présent de plus raccourcit encore les trajets.
-    const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
-    expect(controlTravelMult(held('tower', five).map, 0)).toBeCloseTo(1 - 0.2 * 1.3, 5);
-    expect(controlTravelMult(held('tower', five.slice(0, 4)).map, 0)).toBeLessThan(
-      controlTravelMult(map, 0),
-    );
-    expect(collectControl(map, id, 12 * H, 30).map).toBe(map);
-  });
-  it('🗼 la tour tenue allonge la détection de la base selon sa garnison', () => {
-    expect(controlDetectBoost(mapAt(11), 0)).toBe(0);
-    expect(controlDetectBoost(null, 0)).toBe(0);
-    expect(controlDetectBoost(held('tower').map, 0)).toBeCloseTo(CONTROL.towerDetect, 5);
-    expect(controlDetectBoost(held('tower', ['a0']).map, 0)).toBeCloseTo(
-      CONTROL.towerDetect * 0.5,
-      5,
-    );
-    const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
-    const par = (n: number) => controlDetectBoost(held('tower', five.slice(0, n)).map, 0);
-    // Chaque présent de plus voit plus loin — jusqu'à la garnison entière.
-    for (let n = 2; n <= 5; n++) expect(par(n)).toBeGreaterThan(par(n - 1));
-    expect(par(5)).toBeCloseTo(CONTROL.towerDetect * 1.3, 5);
-    // Une autre sorte de point tenu ne voit rien de plus.
-    expect(controlDetectBoost(held('mine').map, 0)).toBe(0);
-  });
 });
 
 describe('🏰 prise, production, reprise', () => {

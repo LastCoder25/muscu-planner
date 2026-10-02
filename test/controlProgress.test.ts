@@ -73,13 +73,6 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
     expect(controlProgress(vide, 0, L)!.text).toBe('🎒 0 %');
   });
 
-  it('🗼 la tour ne stocke rien : elle dit sa réduction de trajet, sans jauge', () => {
-    expect(controlProgress(held('tower'), 10 * H, L)).toEqual({
-      text: `🧭 −${Math.round(CONTROL.towerCut * 100)} % trajets · 👁️ +${Math.round(CONTROL.towerDetect * 100)} % détection`,
-      pct: null,
-    });
-  });
-
   it('un point ennemi n’a pas d’avancement', () => {
     const p = held('mine');
     expect(controlProgress({ ...p, control: { ...p.control!, owner: 'enemy' } }, 6 * H, L)).toBe(

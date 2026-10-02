@@ -95,11 +95,6 @@ describe('🏅 un cran rapporte plus', () => {
     const late = controlStock(p, 21 * D, 30) - controlStock(p, 20 * D, 30);
     expect(Math.abs(late - perH * 24 * tierYieldMult(TIER.max))).toBeLessThanOrEqual(1);
   });
-  it('la tour raccourcit davantage les trajets', () => {
-    const t = captureControl(base(), controlIdOf('tower'), ['a0', 'a1', 'a2'], 0, 7);
-    expect(controlTravelMult(t, 0)).toBeCloseTo(0.8, 5);
-    expect(controlTravelMult(t, 10 * D)).toBeCloseTo(1 - 0.2 * tierYieldMult(10), 5);
-  });
 });
 
 describe('🏅 un point ancien est plus convoité', () => {

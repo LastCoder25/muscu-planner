@@ -51,8 +51,11 @@ const occupied = (m: ExpeditionMap) =>
   ).length;
 
 describe('🏝️ densité des lieux sur une île', () => {
-  it('les points de contrôle de référence sont ceux du jeu', () => {
-    expect(EXPE.refControls).toBe(CONTROL.kinds.length);
+  it('la référence des points fixes reste celle du calage (la tour retirée ne la change pas)', () => {
+    // 🗼 La tour de guet est retirée (2026-10-02) : la carte ordinaire n'a plus que 5 points,
+    // mais la densité visée par les îles est gardée telle quelle.
+    expect(CONTROL.kinds.length).toBe(5);
+    expect(EXPE.refControls).toBe(6);
   });
 
   it('une île porte la densité de la carte ordinaire, lieux fixes compris', () => {

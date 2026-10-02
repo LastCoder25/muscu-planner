@@ -62,7 +62,7 @@ describe('🎯⚒️ le camp d’entraînement forme aussi l’équipement (la f
     };
     expect(quarter(controlIdOf('training'))).toBeCloseTo(1, 1);
     expect(quarter(controlIdOf('garden'))).toBeCloseTo(2, 1);
-    expect(quarter(controlIdOf('tower'))).toBeCloseTo(3, 1);
+    expect(quarter(controlIdOf('scriptorium'))).toBeCloseTo(3, 1);
     // Et aucun point ne se pose sur un autre.
     const ctl = m.pois.filter((p) => p.control);
     for (const a of ctl)

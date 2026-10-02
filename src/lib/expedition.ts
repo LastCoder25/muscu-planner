@@ -1335,7 +1335,8 @@ export const EXPE = {
    */
   riftRef: 6,
   riftFloor: 2,
-  /** 🏰 Points de contrôle d'une carte ordinaire (`CONTROL.kinds`, vérifié par un test) : ils
+  /** 🏰 Points de contrôle d'une carte ordinaire AU CALAGE (6 ; la tour de guet est retirée
+   *  depuis le 2026-10-02 mais la densité des îles ne bouge pas) : ils
    *  entrent dans la densité qu'une île vise (`ISLAND_DENSITY`). */
   refControls: 6,
   /** Rythme d'apparition d'une faille. ⚠️ Volontairement plus LENT que celui des POI

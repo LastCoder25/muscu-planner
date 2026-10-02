@@ -72,7 +72,8 @@ export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
    *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
-  kinds: ['mine', 'training', 'garden', 'tower', 'scriptorium', 'mana'] as readonly ControlKind[],
+  // 🗼 Plus de tour de guet sur la carte (retirée le 2026-10-02, demande de l'utilisateur).
+  kinds: ['mine', 'training', 'garden', 'scriptorium', 'mana'] as readonly ControlKind[],
   /** 📖 Les archives (île 2) : une entrée du palier de l'île toutes les 48 h, garnison au
    *  complet (étape 0 de l'archipel : +20 à +24 % de clés). */
   archiveHoursPerEntry: 48,
@@ -397,7 +398,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   training: 1,
   garden: 2,
   tower: 3,
-  scriptorium: 2.5,
+  // 📜 La place de la tour de guet, retirée le 2026-10-02 (sa citadelle garde une cible).
+  scriptorium: 3,
   // 📖 Île 2 : la place du jardin, qui n'y est pas.
   archives: 2,
   // ⚱️ Île 3 : la place du scriptorium, qui n'y est pas.
@@ -1096,6 +1098,24 @@ const UNIT_LOOK: Record<
   altar: { unit: '🪬', what: 'de la prochaine rune, versée directement' },
 };
 
+/** 🗑️ Un point d'un type retiré est-il encore occupé (garnison, renforts, retours, héros) ? */
+function retiredOccupied(c: ControlState): boolean {
+  return c.garrison.length > 0 || !!c.reinforcing?.length || !!c.returning?.length || !!c.hero;
+}
+
+/** 🗑️ Les points TENUS d'un type retiré (la tour de guet) où il reste une garnison ou le
+ *  héros : le store les rappelle, après quoi `ensureControls` les retire de la carte. */
+export function retiredHeld(map: ExpeditionMap): Poi[] {
+  const kinds = controlKindsOf(map);
+  return map.pois.filter(
+    (p) =>
+      p.control?.owner === 'player' &&
+      !RAZE_KINDS.has(p.control.kind) &&
+      !kinds.includes(p.control.kind) &&
+      (p.control.garrison.length > 0 || !!p.control.hero),
+  );
+}
+
 /** Pose les points de contrôle MANQUANTS sur la carte (tenus par l'ennemi). Rend la même
  *  carte quand il ne manque rien : le store n'écrit pas à vide. */
 export function ensureControls(
@@ -1164,14 +1184,15 @@ export function ensureControls(
   // 🗑️ Un point d'un type RETIRÉ (la Forge de campagne, fondue dans le camp le 2026-09-29)
   // quitte la carte. ⚠️ Sa garnison est libérée d'elle-même : la disponibilité d'un champion
   // se DÉDUIT de la carte. Vérifié en base avant le retrait : aucun joueur n'en tenait une.
-  // ⚠️ Sauf s'il est TENU : sa garnison (miliciens compris) n'a nulle part où aller. Il reste
-  // jusqu'à ce qu'on le rappelle ou qu'il soit perdu (la tour de guet d'une île, v1.28.1).
+  // ⚠️ Sauf s'il est OCCUPÉ : il reste tant qu'il a une garnison, des renforts en route, des
+  // champions qui en rentrent ou le héros (le store rappelle d'abord tout le monde,
+  // `retiredHeld`) — puis il part.
   const kept = healed.filter(
     (p) =>
       !p.control ||
       RAZE_KINDS.has(p.control.kind) ||
       kinds.includes(p.control.kind) ||
-      p.control.owner === 'player',
+      (p.control.owner === 'player' && retiredOccupied(p.control)),
   );
   // 🏯 Les citadelles quittent l'île SANS être perdues (mises de côté, rendues en sortant).
   const { pois: stashed, stash } = stashCitadels([...kept, ...add], map, now);

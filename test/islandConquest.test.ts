@@ -13,6 +13,7 @@ import {
   controlIdOf,
   ensureControls,
   holdControl,
+  retiredHeld,
 } from '@/lib/controlPoints';
 import {
   BRIGANDS,
@@ -114,14 +115,31 @@ describe('🏝️ conquête — la carte', () => {
     expect(poi(ensureIslandConquest(m, NOW + 30 * 24 * H, LV), objectiveIdOf(0))).toBeUndefined();
   });
 
-  it('🗼 une tour de guet TENUE (miliciens) reste en basculant sur une île ; à l’ennemi, elle part', () => {
-    const base = ensureControls(
+  it('🗼 une tour de guet TENUE (miliciens) reste tant qu’elle est occupée ; vide ou à l’ennemi, elle part', () => {
+    const base0 = ensureControls(
       createMap(9, NOW, LV, ISLAND_OUTPOST_LEVEL),
       NOW,
       LV,
       ISLAND_OUTPOST_LEVEL,
     );
+    // 🗼 Plus de tour posée (retirée le 2026-10-02) : on en pose une d'avant, à l'ennemi.
+    const mine = poi(base0, controlIdOf('mine'))!;
+    const base: ExpeditionMap = {
+      ...base0,
+      pois: [
+        ...base0.pois,
+        { ...mine, id: controlIdOf('tower'), control: { ...mine.control!, kind: 'tower' } },
+      ],
+    };
+    expect(poi(ensureControls(base, NOW, LV, ISLAND_OUTPOST_LEVEL), controlIdOf('tower'))).toBe(
+      undefined,
+    );
     const held = captureControl(base, controlIdOf('tower'), ['mil:1', 'mil:2'], NOW, 7);
+    expect(retiredHeld(held).map((p) => p.id)).toEqual([controlIdOf('tower')]);
+    const empty = captureControl(base, controlIdOf('tower'), [], NOW, 7);
+    expect(poi(ensureControls(empty, NOW, LV, ISLAND_OUTPOST_LEVEL), controlIdOf('tower'))).toBe(
+      undefined,
+    );
     const isl = (m: ExpeditionMap) =>
       ensureControls({ ...m, archipel: archipelOn(1) }, NOW, LV, ISLAND_OUTPOST_LEVEL);
     expect(poi(isl(held), controlIdOf('tower'))?.control?.garrison).toEqual(['mil:1', 'mil:2']);

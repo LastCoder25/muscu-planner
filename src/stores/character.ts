@@ -383,6 +383,7 @@ import {
   controlDetectBoost,
   trainingRoom,
   dueRetakes,
+  retiredHeld,
   retakeDelayMs,
   withLastAttack,
   mapHarass,
@@ -2306,6 +2307,19 @@ export const useCharacterStore = defineStore('character', () => {
   async function expeSyncMap(userId: string, now: number, level: number) {
     const cur = row.value;
     if (!cur) return;
+    // 🗼 Un point d'un type RETIRÉ encore tenu (la tour de guet) : sa garnison et le héros
+    // rentrent à pied d'abord ; il quitte la carte au tick suivant, une fois vide.
+    if (cur.expedition_map) {
+      const old = retiredHeld(cur.expedition_map);
+      if (old.length) {
+        for (const p of old) {
+          if (heroPostOf(row.value?.expedition_map)?.id === p.id)
+            await recallHeroFromPost(userId, now);
+          await recallControl(userId, p.id, now, level);
+        }
+        return;
+      }
+    }
     const orig = cur.expedition_map;
     // ⛵ DÉBARQUER d'abord (`crossing.ts`) : l'île quittée est rangée, l'île d'arrivée sort de
     // sa réserve ou naît neuve — tout le reste du tick travaille sur la carte d'arrivée.
