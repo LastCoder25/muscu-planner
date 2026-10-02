@@ -244,7 +244,8 @@ const fixedScale = (p: Poi) => {
 };
 /** 🔴 Le point d'attaque se pose sous tout ce que le lieu dessine (garnison, cran, faille). */
 const attackDotDy = (p: Poi) => {
-  if (isRiftPoi(p)) return RIFT_MAP_ICON.dy + 2;
+  // 🌀 Une faille : juste sous le bas de l'ovale (le bas de sa boîte est vide, mesuré au banc).
+  if (isRiftPoi(p)) return RIFT_MAP_ICON.h - RIFT_MAP_ICON.dy;
   if (!p.control) return 6.6;
   const below = tiers.value.get(p.id) ? 13.2 : dots.value.get(p.id) ? 9.2 : 7.2;
   return below * scaleOf(p);
