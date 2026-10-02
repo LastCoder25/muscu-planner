@@ -2048,7 +2048,8 @@ const garrisonKey = computed(() =>
 const ctlHidden = computed(() => {
   const c = liveControl.value;
   const pois = char.row?.expedition_map?.pois;
-  return !!c && !!pois && c.kind !== 'citadel' && attackerHidden(pois, c.kind);
+  const map = char.row?.expedition_map;
+  return !!c && !!pois && !!map && c.kind !== 'citadel' && attackerHidden(map, c.kind);
 });
 const livePoi = computed(() =>
   selected.value

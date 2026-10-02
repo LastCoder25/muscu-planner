@@ -129,9 +129,16 @@ import {
   staysUnderAttack,
   recordDeparture,
 } from '@/lib/expedition';
-import { archipelOn, islandById, mapOutpostLevel, mapPlayerLevel } from '@/lib/archipelago';
+import {
+  archipelOn,
+  islandById,
+  islandPacified,
+  mapOutpostLevel,
+  mapPlayerLevel,
+} from '@/lib/archipelago';
 import {
   FORTRESS_ID,
+  brigandPillage,
   ensureIslandConquest,
   isIslandTargetId,
   razeIslandTarget,
@@ -353,7 +360,7 @@ import {
   retakeDelayMs,
   withLastAttack,
   mapHarass,
-  attackerHidden,
+  attackSlow,
   ensureControls,
   holdControl,
   loseControl,
@@ -2297,13 +2304,17 @@ export const useCharacterStore = defineStore('character', () => {
     );
     // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
     // détection de la Tour de guet (`fieldArmy.ts`).
-    const map = syncFieldArmies(map0, {
+    const mapF = syncFieldArmies(map0, {
       raid: cur.base?.raid ?? null,
       detectR: detectRadiusOf(cur.base, map0),
       reach: revealRadius(outpost),
       now,
       playerLevel: level,
     });
+    // ⛺ Les camps de brigands (île 1) pillent la réserve non récoltée des bâtiments : la
+    // carte (prochaine échéance), les bâtiments et le rapport partent dans la MÊME écriture.
+    const pil = brigandPillage(mapF, cur.buildings, now);
+    const map = pil?.map ?? mapF;
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
@@ -2316,7 +2327,10 @@ export const useCharacterStore = defineStore('character', () => {
     if (!tickMayWrite(cur)) return;
     // 💥 Le débordement se DIT (v0.1218) : un message par faille, dans la même écriture que
     // la carte — son id vient de la faille, donc une resynchronisation ne le double pas.
-    const ovfMsgs = over.map((r) => overflowMessage(r, map, !!cur.base));
+    const ovfMsgs = [
+      ...over.map((r) => overflowMessage(r, map, !!cur.base)),
+      ...(pil?.msg ? [pil.msg] : []),
+    ];
     // ⚠️ UNE SEULE ÉCRITURE pour les deux. Persister la carte sans le marquage ferait
     // disparaître la faille en laissant son armée nulle part ; persister le marquage sans
     // la carte la ferait redéborder au tick suivant. Le marquage est idempotent
@@ -2325,6 +2339,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       ...(mapChanged ? { expedition_map: map } : {}),
       ...(baseChanged ? { base } : {}),
+      ...(pil?.msg ? { buildings: pil.buildings } : {}),
       ...(ovfMsgs.length ? { messages: boxWith(cur, ovfMsgs, MESSAGES_CAP) } : {}),
     });
     // 🏯 L'Avant-poste vient de découvrir une citadelle : elle sort du brouillard À L'ÉCRAN
@@ -2845,7 +2860,12 @@ export const useCharacterStore = defineStore('character', () => {
     knownActiveDays7 = ctx.activeDays7;
     const t = advanceBase(
       baseOf(cur, now),
-      { ...ctx, towerBoost: controlDetectBoost(cur.expedition_map, now) },
+      {
+        ...ctx,
+        towerBoost: controlDetectBoost(cur.expedition_map, now),
+        // 🕊️ Île pacifiée : plus aucun siège.
+        pacified: islandPacified(cur.expedition_map),
+      },
       now,
     );
     // ⚔️🗼 LES CHOCS EN RASE CAMPAGNE PASSENT AVANT LE SIÈGE : une équipe qui a croisé l'armée
@@ -4660,13 +4680,7 @@ export const useCharacterStore = defineStore('character', () => {
           settled,
           hit,
           at,
-          at +
-            retakeDelayMs(
-              p.id,
-              at,
-              mapHarass(settled, at),
-              attackerHidden(settled.pois, p.control.kind),
-            ),
+          at + retakeDelayMs(p.id, at, mapHarass(settled, at), attackSlow(settled, p.control.kind)),
         ).map;
       }
     }

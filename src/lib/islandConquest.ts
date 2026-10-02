@@ -22,7 +22,9 @@
  * le store n'écrit pas à vide).
  */
 import { activeIsland, islandPacified, type Island } from './archipelago';
+import { buildingType, collectable, type BuildResource, type Building } from './buildings';
 import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
+import { mulberry32, seedOf } from './combat';
 import { CONTROL, bankAt } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import {
@@ -32,6 +34,7 @@ import {
   type ControlKind,
   type ControlState,
   type ExpeditionMap,
+  type ExpeditionMessage,
   type Poi,
 } from './expedition';
 
@@ -338,6 +341,9 @@ export function islandTargetLabel(
       title: `${isl.objectiveEmoji} Objectif de l’île · ${down}/${n} abattus`,
       detail:
         `troupe de ${p.control.size} champions de référence · abattu, il ne revient pas` +
+        (PILLAGE_ISLANDS.has(isl.id)
+          ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
+          : ' · tant qu’il tient, il attaque tes lieux fixes') +
         ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} abattus ouvrent la forteresse, tous l’affaiblissent au plus bas.`,
     };
   const f = fortressForce(isl, down);
@@ -351,5 +357,100 @@ export function islandTargetLabel(
         ? ` · chaque objectif abattu l’affaiblit (${down}/${n})`
         : ' · affaiblie au plus bas') +
       ' · abattue avec tous les objectifs : l’île est pacifiée, plus aucune attaque.',
+  };
+}
+
+/**
+ * ⛺ LE PILLAGE DES BRIGANDS (île 1, roadmap : « ils pillent ce qui n'est pas récolté ») :
+ * tant qu'un camp de brigands tient, ils viennent prendre la RÉSERVE NON RÉCOLTÉE des
+ * bâtiments de la base (Dynamo, Porte du Labyrinthe, Autel), en moyenne toutes les
+ * `pillageMs` heures PAR CAMP debout (deux camps : deux fois plus souvent). Abattre un camp
+ * les espace, les abattre tous les arrête. ⚠️ On ne perd que ce qu'on n'avait pas ramassé :
+ * récolter souvent suffit à ne rien perdre — la règle des sièges. ⚠️ Un seul pillage par
+ * échéance, même après une longue absence : la réserve accumulée APRÈS lui reste à toi.
+ */
+export const BRIGANDS = { pillageMs: 36 * 3600_000, jitter: 0.25 } as const;
+/** Les îles dont les objectifs pillent (leur menace propre, roadmap). */
+const PILLAGE_ISLANDS: ReadonlySet<number> = new Set([1]);
+
+/** Les camps (objectifs) encore debout. */
+function standingCamps(map: Pick<ExpeditionMap, 'pois'>): number {
+  return map.pois.filter((p) => p.control?.owner === 'enemy' && p.control.kind === 'objective')
+    .length;
+}
+
+/** Le délai jusqu'au prochain pillage, à `standing` camps debout (graine : la carte, l'instant). */
+export function pillageDelayMs(seed: number, from: number, standing: number): number {
+  const r = mulberry32((seedOf(`${seed}:pillage:${from}`) ^ 0x6c8e9cf5) >>> 0 || 1)();
+  return (BRIGANDS.pillageMs / Math.max(1, standing)) * (1 + (r * 2 - 1) * BRIGANDS.jitter);
+}
+
+/**
+ * ⛺ Avance le pillage jusqu'à `now`. `null` quand rien ne change ; sinon la carte (prochaine
+ * échéance), les bâtiments (réserve prise) et ce qui a été pris, avec le rapport à déposer.
+ */
+export function brigandPillage(
+  map: ExpeditionMap,
+  buildings: readonly Building[],
+  now: number,
+): {
+  map: ExpeditionMap;
+  buildings: Building[];
+  stolen: Record<BuildResource, number>;
+  msg: ExpeditionMessage | null;
+} | null {
+  const isl = activeIsland(map);
+  const arch = map.archipel;
+  const camps = standingCamps(map);
+  const none = { energy: 0, summon: 0, keys: 0 } as Record<BuildResource, number>;
+  const active =
+    !!isl && !!arch && PILLAGE_ISLANDS.has(isl.id) && !islandPacified(map) && camps > 0;
+  if (!arch) return null;
+  if (!active) {
+    if (arch.pillageAt === undefined) return null;
+    const { pillageAt: _p, ...rest } = arch;
+    void _p;
+    return { map: { ...map, archipel: rest }, buildings: [...buildings], stolen: none, msg: null };
+  }
+  const at = arch.pillageAt;
+  if (at === undefined || at > now) {
+    if (at !== undefined) return null;
+    const next = now + pillageDelayMs(map.seed, now, camps);
+    return {
+      map: { ...map, archipel: { ...arch, pillageAt: next } },
+      buildings: [...buildings],
+      stolen: none,
+      msg: null,
+    };
+  }
+  const stolen = collectable([...buildings], at);
+  const robbed = buildings.map((b) =>
+    buildingType(b.typeId)?.resource && b.collectedAt < at ? { ...b, collectedAt: at } : b,
+  );
+  const next = now + pillageDelayMs(map.seed, now, camps);
+  const parts = [
+    stolen.energy ? `${stolen.energy} ⚡` : '',
+    stolen.keys ? `${stolen.keys} 🗝️` : '',
+    stolen.summon ? `${stolen.summon} 🔮` : '',
+  ].filter(Boolean);
+  const msg: ExpeditionMessage | null = parts.length
+    ? {
+        id: `pill_${at}`,
+        title: `${isl.objectiveEmoji} Les brigands ont pillé ta base`,
+        level: isl.maxLevel,
+        win: false,
+        text: `Des brigands sortis de leurs camps ont pris ce que tes bâtiments n'avaient pas encore livré : ${parts.join(', ')}. Récolte souvent pour ne rien leur laisser, ou abats leurs camps.`,
+        gold: 0,
+        energy: 0,
+        key: 0,
+        resolvedAt: at,
+        read: false,
+      }
+    : null;
+  return {
+    map: { ...map, archipel: { ...arch, pillageAt: next } },
+    buildings: robbed,
+    stolen,
+    msg,
   };
 }

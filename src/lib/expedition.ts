@@ -714,6 +714,8 @@ export interface ExpeditionMap {
     destroyed?: string[];
     /** 🏝️ L'île est PACIFIÉE depuis cet instant : plus aucune attaque. */
     pacifiedAt?: number;
+    /** ⛺ Prochain PILLAGE des camps de brigands (île 1) sur la réserve des bâtiments. */
+    pillageAt?: number;
   };
 }
 

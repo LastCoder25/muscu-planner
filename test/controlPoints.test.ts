@@ -185,7 +185,9 @@ describe('🏰 prise, production, reprise', () => {
   });
   it('les délais restent entre 1 et 3 jours, plus courts si le joueur utilise la carte', () => {
     const at = (h: number, hidden = false) =>
-      Array.from({ length: 300 }, (_, i) => retakeDelayMs(ID, i * 977, h, hidden));
+      Array.from({ length: 300 }, (_, i) =>
+        retakeDelayMs(ID, i * 977, h, hidden ? CITADEL.hiddenSlow : 1),
+      );
     const mean = (d: number[]) => d.reduce((x, y) => x + y, 0) / d.length;
     for (const h of [0, 0.5, 1]) {
       const d = at(h);

@@ -3057,6 +3057,7 @@
 
 <script setup lang="ts">
 import { controlDetectBoost, heldControls } from '@/lib/controlPoints';
+import { islandPacified } from '@/lib/archipelago';
 import {
   ref,
   computed,
@@ -5684,6 +5685,7 @@ async function syncPush(force = false) {
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       towerBoost: controlDetectBoost(char.row.expedition_map, now),
       activeDays7: activeDays7.value,
+      pacified: islandPacified(char.row.expedition_map),
       playerLevel: c.value.level.level,
       // 🌫️ Un point dont la citadelle est cachée n'a pas d'attaque prévue : rien à annoncer.
       controls: heldControls(char.row.expedition_map ?? null)

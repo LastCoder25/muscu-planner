@@ -377,7 +377,7 @@ describe('🌫️ une citadelle cachée attaque aussi, moins souvent', () => {
   const id = controlIdOf('mine');
   it('prendre un point sous une citadelle cachée programme une attaque, plus lointaine', () => {
     const m = captureControl(base(30, 1), id, ['a0'], 0, 7);
-    expect(attackerHidden(m.pois, 'mine')).toBe(true);
+    expect(attackerHidden(m, 'mine')).toBe(true);
     const at = byId(m, id).control!.attackAt!;
     expect(at).toBeGreaterThanOrEqual(CITADEL.hiddenSlow * CONTROL.retakeMinMs);
     expect(at).toBeLessThanOrEqual(CITADEL.hiddenSlow * CONTROL.retakeMaxMs);

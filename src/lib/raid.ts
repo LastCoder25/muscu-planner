@@ -3155,8 +3155,15 @@ export function defenseReadiness(defenses: DefenseStructure[], playerLevel: numb
  *  et ils reprennent tout seuls une fois rattrapé. C’est cohérent avec la règle 1 (on ne
  *  punit jamais) — et sans exploit, un siège étant un ROBINET (butin, cadavres, ferraille) :
  *  s’en priver coûte du contenu, ça n’achète pas de la sécurité. */
-export function raidsEnabled(base: BaseState, activeDays7: number, playerLevel: number): boolean {
+/** ⚠️ `pacified` REQUIS : 🕊️ sur une île pacifiée (archipel), plus aucune armée ne vient. */
+export function raidsEnabled(
+  base: BaseState,
+  activeDays7: number,
+  playerLevel: number,
+  pacified: boolean,
+): boolean {
   return (
+    !pacified &&
     playerLevel >= RAID.minRaidLevel &&
     defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare &&
     activeDays7 >= 1
@@ -3181,6 +3188,8 @@ export function advanceBase(
     globalXp: number;
     /** 🗼 Bonus de détection des Tours de guet tenues (`controlDetectBoost`). */
     towerBoost: number;
+    /** 🕊️ L'île active est pacifiée : plus de siège (`raidsEnabled`). */
+    pacified: boolean;
   },
   now: number,
 ): BaseTickResult {
@@ -3214,7 +3223,7 @@ export function advanceBase(
     changed = true;
   }
 
-  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel)) {
+  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.pacified)) {
     // Enceinte pas prête (ou joueur inactif) : on repousse l'échéance pour ne JAMAIS
     // accumuler un arriéré pendant l'absence.
     if (b.nextRaidAt < now) {

@@ -153,12 +153,20 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
   posée sur chaque lieu fixe (`yieldMult`, `flatTier`, réserve mise de côté avant tout changement) :
   mine à 24 h en mode archipel, socle (mine, source) à 25 % sans crans une fois pacifiée. Fiche du
   lieu et progression dans le panneau Archipel. Test `islandConquest.test.ts` (12, 11 mutations
-  rouges). ⚠️ Pas encore fait : le harcèlement propre aux camps de brigands (pillage, attaques
-  des lieux fixes : ce sont toujours les citadelles), les récompenses (étape 3), et les sièges de
-  la base ne sont pas coupés par la pacification. Non vu à l'écran (le compte de smoke n'est pas
+  rouges). **Complété v1.12.0** : sur une île, les reprises viennent des camps (`attackSlow` :
+  ×1 tous debout, puis (n+1)/debout, plus de ralentissement « citadelle cachée ») ; les camps de
+  brigands PILLENT la réserve non récoltée des bâtiments de la base (`brigandPillage`, en moyenne
+  toutes les 36 h par camp debout, rapport dans la boîte) ; plus aucun siège de la base sur une île
+  pacifiée (`raidsEnabled` prend `pacified`, requis). Reste : les récompenses (étape 3). Non vu à l'écran (le compte de smoke n'est pas
   en mode archipel).
 
 ### Traverser
+- [ ] **2 bis. Bien délimiter les îles** (demandé le 2026-10-02) — aucun lieu ne doit apparaître
+  hors de la côte. Aujourd'hui les lieux tirés restent dans 54 unités et la côte ne passe jamais
+  sous 60, mais ce qui est posé à part n'est pas borné par la côte : citadelles (55 à 100, cachées
+  sur une île), armées en marche, forteresse (sur le cap). À faire : un garde unique « sur l'île »
+  (`onIsland`) appliqué à tout ce qui est posé ou dessiné en mode archipel, avec un test qui balaie
+  les cinq îles.
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
   traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
   points tenus, avant-postes, récompenses (forteresse, premier débarquement).

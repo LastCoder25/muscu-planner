@@ -18,7 +18,7 @@
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
 import { formatDuration } from './duration';
-import { islandPacified } from './archipelago';
+import { activeIsland, islandPacified } from './archipelago';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -677,14 +677,21 @@ function syncCitadels(
   });
   const harass = mapHarass(map, now);
   // 🕊️ Île pacifiée : ni reprise, ni raid.
-  if (islandPacified(map)) return gateAttacks(stampAnger(out), now, harass, true);
-  return citadelRaids(gateAttacks(stampAnger(out), now, harass), now, harass);
+  const slowOf = (k: ControlKind) => attackSlow({ pois: out, archipel: map.archipel }, k);
+  if (islandPacified(map)) return gateAttacks(stampAnger(out), now, harass, slowOf, true);
+  return citadelRaids(gateAttacks(stampAnger(out), now, harass, slowOf), now, harass);
 }
 
 /** 🌫️ La citadelle du secteur de ce point est-elle encore CACHÉE ? Elle l'attaque quand même,
  *  2× moins souvent (`CITADEL.hiddenSlow`) — on ne peut pas encore l'abattre. Sans
  *  citadelle sur la carte (carte d'avant les citadelles) : non. */
-export function attackerHidden(pois: readonly Poi[], kind: ControlKind): boolean {
+export function attackerHidden(
+  map: Pick<ExpeditionMap, 'pois' | 'archipel'>,
+  kind: ControlKind,
+): boolean {
+  // 🏝️ Sur une île, ce sont les camps de l'île qui attaquent, pas une citadelle.
+  if (map.archipel) return false;
+  const pois = map.pois;
   const id = citadelIdFor(pois, kind);
   if (!id) return false;
   const cit = pois.find((p) => p.id === id);
@@ -694,7 +701,13 @@ export function attackerHidden(pois: readonly Poi[], kind: ControlKind): boolean
 /** ⚔️ Tout point tenu a une attaque prévue. Celui qui n'en a pas (la règle « une citadelle
  *  cachée n'attaque pas », v0.1388, est abandonnée le 2026-09-30) en reçoit une à partir de
  *  maintenant, au rythme du harcèlement (jamais pendant une trêve). N'écrit que ce qui change. */
-function gateAttacks(pois: Poi[], now: number, harass: number, pacified = false): Poi[] {
+function gateAttacks(
+  pois: Poi[],
+  now: number,
+  harass: number,
+  slowOf: (kind: ControlKind) => number,
+  pacified = false,
+): Poi[] {
   let out = pois;
   // 🕊️ Île pacifiée : plus aucune attaque — on RETIRE celles qui étaient prévues.
   if (pacified) {
@@ -714,8 +727,7 @@ function gateAttacks(pois: Poi[], now: number, harass: number, pacified = false)
     if (!c || c.owner !== 'player' || c.kind === 'citadel' || c.attackAt !== undefined) return;
     const id = citadelIdFor(pois, c.kind);
     const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
-    const hidden = attackerHidden(pois, c.kind);
-    const attackAt = Math.max(now + retakeDelayMs(p.id, now, harass, hidden), truce);
+    const attackAt = Math.max(now + retakeDelayMs(p.id, now, harass, slowOf(c.kind)), truce);
     if (out === pois) out = [...pois];
     out[k] = { ...p, control: { ...c, attackAt } };
   });
@@ -1010,10 +1022,32 @@ export function ensureControls(
  *  du point, ni par une notification de préavis — seule l'attaque elle-même se dit. Seule
  *  exception (2026-09-28) : `attackImminent`, qui prévient dans les `CONTROL.imminentMs`
  *  dernières heures, sans jamais donner l'heure. */
-export function retakeDelayMs(id: string, from: number, harass: number, hidden: boolean): number {
+/**
+ * ⚔️ Combien de fois plus LENTES sont les reprises d'un point (multiplie `retakeDelayMs`) :
+ * - hors archipel : 2 si la citadelle de son secteur est encore cachée (`hiddenSlow`), 1 sinon ;
+ * - 🏝️ sur une île : ce sont les CAMPS DE L'ÎLE (objectifs et forteresse) qui attaquent, et
+ *   chaque camp abattu les espace — tous debout ×1, puis (n+1)/(debout). Île 1 : ×1, ×1,5,
+ *   ×3 (la forteresse seule). Pacifiée, plus aucune (`gateAttacks`).
+ */
+export function attackSlow(
+  map: Pick<ExpeditionMap, 'pois' | 'archipel'>,
+  kind: ControlKind,
+): number {
+  const isl = activeIsland(map);
+  if (isl) {
+    const standing = map.pois.filter(
+      (p) =>
+        p.control?.owner === 'enemy' &&
+        (p.control.kind === 'objective' || p.control.kind === 'fortress'),
+    ).length;
+    return (isl.objectives + 1) / Math.max(1, standing);
+  }
+  return attackerHidden(map, kind) ? CITADEL.hiddenSlow : 1;
+}
+export function retakeDelayMs(id: string, from: number, harass: number, slowBy: number): number {
   const r = mulberry32((seedOf(`${id}:atk:${from}`) ^ 0x2c1b3c6d) >>> 0 || 1)();
   const h = Math.min(1, Math.max(0, harass));
-  const slow = hidden ? CITADEL.hiddenSlow : 1;
+  const slow = Math.max(1, slowBy);
   const { retakeMinMs: lo, retakeMaxMs: hi, retakeJitter: j } = CONTROL;
   const aim = hi - h * (hi - lo);
   return slow * Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * j)));
@@ -1050,8 +1084,7 @@ export function captureControl(
       attackAt: islandPacified(map)
         ? undefined
         : Math.max(
-            at +
-              retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
+            at + retakeDelayMs(id, at, mapHarass(map, at), attackSlow(map, p.control!.kind)),
             truceUntilFor(map, p.control!.kind),
           ),
       activity: activeDays7,
@@ -1176,8 +1209,7 @@ export function holdControl(
       attackAt: islandPacified(map)
         ? undefined
         : Math.max(
-            at +
-              retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
+            at + retakeDelayMs(id, at, mapHarass(map, at), attackSlow(map, p.control!.kind)),
             truceUntilFor(map, p.control!.kind),
           ),
       activity: activeDays7,

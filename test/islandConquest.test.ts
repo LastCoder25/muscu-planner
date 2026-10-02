@@ -3,6 +3,8 @@ import { ISLANDS, ISLAND_OUTPOST_LEVEL, archipelOn, islandPacified } from '@/lib
 import { createMap, poiLabel, type ExpeditionMap, type Poi } from '@/lib/expedition';
 import {
   CONTROL,
+  attackSlow,
+  attackerHidden,
   captureControl,
   collectControl,
   controlGoldPerHour,
@@ -12,8 +14,11 @@ import {
   holdControl,
 } from '@/lib/controlPoints';
 import {
+  BRIGANDS,
   FORTRESS_ID,
   ISLAND_CONQUEST,
+  brigandPillage,
+  pillageDelayMs,
   ensureIslandConquest,
   fortressForce,
   islandConquest,
@@ -23,6 +28,8 @@ import {
 } from '@/lib/islandConquest';
 import { onIsland } from '@/lib/islandTerrain';
 import { partySendBlocker } from '@/lib/party';
+import { raidsEnabled, type BaseState } from '@/lib/raid';
+import { collectable, type Building } from '@/lib/buildings';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
 const H = 3600_000;
@@ -199,5 +206,82 @@ describe('🕊️ île pacifiée', () => {
       (10 * controlGoldPerHour(poi(m, id)!, 3, LV) * CONTROL.mineHoursPerHaul) /
       ISLAND_CONQUEST.mineHours;
     expect(gain / base).toBeCloseTo(ISLAND_CONQUEST.socleShare, 2);
+  });
+});
+
+describe('⛺ les camps de brigands attaquent et pillent', () => {
+  it('les reprises viennent des camps : chaque camp abattu les espace', () => {
+    let m = island1();
+    expect(attackSlow(m, 'mine')).toBe(1);
+    m = razeIslandTarget(m, objectiveIdOf(0), NOW);
+    expect(attackSlow(m, 'mine')).toBeCloseTo(1.5);
+    m = razeIslandTarget(m, objectiveIdOf(1), NOW);
+    expect(attackSlow(m, 'mine')).toBe(3);
+    // Sur une île, aucune citadelle « cachée » ne ralentit quoi que ce soit.
+    expect(attackerHidden(m, 'mine')).toBe(false);
+  });
+
+  it('une île pacifiée ne voit plus aucun siège', () => {
+    const base = {
+      defenses: [
+        { typeId: 'wall', level: 26 },
+        { typeId: 'turret', level: 26 },
+      ],
+    } as BaseState;
+    expect(raidsEnabled(base, 7, 26, false)).toBe(true);
+    expect(raidsEnabled(base, 7, 26, true)).toBe(false);
+  });
+
+  /** Une Dynamo et une Porte, jamais récoltées depuis 20 h. */
+  const builds = (): Building[] => [
+    { typeId: 'energy_font', level: 20, slot: 0, collectedAt: NOW - 20 * H },
+    { typeId: 'labyrinth_gate', level: 20, slot: 1, collectedAt: NOW - 20 * H },
+  ];
+
+  it('programme un pillage, puis prend la réserve non récoltée à son heure', () => {
+    const m = island1();
+    const first = brigandPillage(m, builds(), NOW)!;
+    const at = first.map.archipel!.pillageAt!;
+    // Deux camps : en moyenne deux fois plus souvent qu'un seul.
+    expect(at - NOW).toBeGreaterThan((BRIGANDS.pillageMs / 2) * (1 - BRIGANDS.jitter) - 1);
+    expect(at - NOW).toBeLessThan((BRIGANDS.pillageMs / 2) * (1 + BRIGANDS.jitter) + 1);
+    expect(brigandPillage(first.map, builds(), NOW + H)).toBeNull();
+    const hit = brigandPillage(first.map, builds(), at + 5 * H)!;
+    const want = collectable(builds(), at);
+    expect(hit.stolen).toEqual(want);
+    expect(want.energy + want.keys).toBeGreaterThan(0);
+    // Pris À L'HEURE du pillage : ce qui a été produit depuis reste à toi.
+    expect(hit.buildings.every((b) => b.collectedAt === at)).toBe(true);
+    expect(collectable(hit.buildings, at + 5 * H).energy).toBeGreaterThan(0);
+    expect(hit.msg?.text).toContain('⚡');
+    expect(hit.map.archipel!.pillageAt!).toBeGreaterThan(at + 5 * H);
+  });
+
+  it('un camp abattu espace les pillages ; tous abattus, ils cessent', () => {
+    let m = razeIslandTarget(island1(), objectiveIdOf(0), NOW);
+    expect(pillageDelayMs(m.seed, NOW, 1)).toBeCloseTo(2 * pillageDelayMs(m.seed, NOW, 2));
+    m = brigandPillage(m, builds(), NOW)!.map;
+    expect(m.archipel!.pillageAt).toBeDefined();
+    m = razeIslandTarget(m, objectiveIdOf(1), NOW);
+    const off = brigandPillage(m, builds(), NOW + 1000 * H)!;
+    expect(off.map.archipel!.pillageAt).toBeUndefined();
+    expect(off.msg).toBeNull();
+    expect(off.buildings).toEqual(builds());
+  });
+
+  it('seule l’île des brigands pille, et jamais hors du mode archipel', () => {
+    const plain = ensureControls(createMap(7, NOW, LV, 3), NOW, LV, 3);
+    expect(brigandPillage(plain, builds(), NOW)).toBeNull();
+    const isl2 = ensureIslandConquest(
+      ensureControls(
+        createMap(7, NOW, 30, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(2)),
+        NOW,
+        30,
+        ISLAND_OUTPOST_LEVEL,
+      ),
+      NOW,
+      30,
+    );
+    expect(brigandPillage(isl2, builds(), NOW)).toBeNull();
   });
 });
