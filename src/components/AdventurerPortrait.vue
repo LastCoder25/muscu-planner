@@ -246,7 +246,7 @@ const props = defineProps<{
    *  ⚠️ Une PROP, plus une déduction faite sur la chaîne d'état : le portrait lisait
    *  `state.startsWith('✅')` pour savoir s'il était occupé — renommer le libellé aurait
    *  cassé le style en silence, et la même règle vivait alors à deux endroits. */
-  tone?: 'free' | 'busy' | 'hurt' | 'benched' | 'posted';
+  tone?: 'free' | 'busy' | 'hurt' | 'benched' | 'posted' | 'away';
   disabled?: boolean;
   /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
   gear: AdvGearCell[];
@@ -354,6 +354,11 @@ function starTf(i: number): string {
 .ap.tone-posted {
   /* 🏰 Posté sur un point de contrôle : le violet des équipes sur la carte. */
   --tone-c: #b57bff;
+}
+/* ⛵ Resté sur une autre île : bleu de la mer, pointillé (il n'est pas là). */
+.ap.tone-away {
+  --tone-c: #5aa9d6;
+  opacity: 0.6;
 }
 .ap.tone-hurt {
   --tone-c: var(--d4, #ff6a45);

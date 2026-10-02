@@ -138,6 +138,17 @@ import {
   mapPlayerLevel,
 } from '@/lib/archipelago';
 import {
+  boardTravellers,
+  CROSSING_BLOCK_LABEL,
+  crossingBlocker,
+  crossingTravellers,
+  fortressReward,
+  landAdventurers,
+  landCrossing,
+  landingChestMessage,
+  startCrossing,
+} from '@/lib/crossing';
+import {
   FORTRESS_ID,
   brigandPillage,
   ensureIslandConquest,
@@ -2281,7 +2292,11 @@ export const useCharacterStore = defineStore('character', () => {
   async function expeSyncMap(userId: string, now: number, level: number) {
     const cur = row.value;
     if (!cur) return;
-    const prev = cur.expedition_map;
+    const orig = cur.expedition_map;
+    // ⛵ DÉBARQUER d'abord (`crossing.ts`) : l'île quittée est rangée, l'île d'arrivée sort de
+    // sa réserve ou naît neuve — tout le reste du tick travaille sur la carte d'arrivée.
+    const land = orig ? landCrossing(orig, now, level) : null;
+    const prev = land?.map ?? orig;
     // 🕳️ LES FAILLES MÛRES SE LISENT ICI, AVANT `advanceWorld` — c'est le SEUL instant où
     // elles sont encore sur la carte : lui les remplace par leur mine de mana résiduel.
     // Après lui, il n'y a plus rien à voir, et l'armée disparaîtrait avec la faille.
@@ -2316,13 +2331,25 @@ export const useCharacterStore = defineStore('character', () => {
     // ⛺ Les camps de brigands (île 1) pillent la réserve non récoltée des bâtiments : la
     // carte (prochaine échéance), les bâtiments et le rapport partent dans la MÊME écriture.
     const pil = brigandPillage(mapF, cur.buildings, now);
-    const map = pil?.map ?? mapF;
+    const mapP = pil?.map ?? mapF;
+    // 🏰 La forteresse de l'île abattue : son coffre, une seule fois (marque dans la carte,
+    // même écriture). ⚓ Le premier débarquement sur une île : le sien.
+    const fort = fortressReward(mapP, now);
+    const map = fort?.map ?? mapP;
+    const landIsl = land?.crossing && land.firstTime ? islandById(land.crossing.to) : null;
+    const islandMsgs = [
+      ...(fort ? [fort.msg] : []),
+      ...(landIsl && landIsl.id > 1
+        ? [landingChestMessage(landIsl, land!.crossing!.arriveAt)]
+        : []),
+    ];
+    const advLanded = land?.crossing ? landAdventurers(advList.value, land.crossing) : null;
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
     // graine qui n'est pas celle que le tick de base lui aurait donnée.
     const base = over.length && cur.base ? markOverflow(cur.base, over.map(riftOverflowOf)) : null;
-    const mapChanged = JSON.stringify(map) !== JSON.stringify(prev);
+    const mapChanged = JSON.stringify(map) !== JSON.stringify(orig);
     // `markOverflow` rend la MÊME référence quand il n'y a rien de plus récent à poser.
     const baseChanged = !!base && base !== cur.base;
     if (!mapChanged && !baseChanged) return;
@@ -2332,6 +2359,7 @@ export const useCharacterStore = defineStore('character', () => {
     const ovfMsgs = [
       ...over.map((r) => overflowMessage(r, map, !!cur.base)),
       ...(pil?.msg ? [pil.msg] : []),
+      ...islandMsgs,
     ];
     // ⚠️ UNE SEULE ÉCRITURE pour les deux. Persister la carte sans le marquage ferait
     // disparaître la faille en laissant son armée nulle part ; persister le marquage sans
@@ -2342,8 +2370,20 @@ export const useCharacterStore = defineStore('character', () => {
       ...(mapChanged ? { expedition_map: map } : {}),
       ...(baseChanged ? { base } : {}),
       ...(pil?.msg ? { buildings: pil.buildings } : {}),
+      ...(advLanded ? { adventurers: advLanded } : {}),
       ...(ovfMsgs.length ? { messages: boxWith(cur, ovfMsgs, MESSAGES_CAP) } : {}),
     });
+    if (land?.crossing) {
+      const isl = islandById(land.crossing.to);
+      if (isl)
+        useGameFx().celebrate({
+          kind: 'unlock',
+          emoji: '⚓',
+          title: `Débarqué sur l'île ${isl.id}`,
+          subtitle: isl.name,
+          rarity: land.firstTime ? 'legendary' : 'rare',
+        });
+    }
     // 🏯 L'Avant-poste vient de découvrir une citadelle : elle sort du brouillard À L'ÉCRAN
     // (demandé par l'utilisateur). Après l'écriture : la carte d'après porte la découverte, un
     // tick suivant ne la rejoue donc pas.
@@ -2359,6 +2399,41 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🏝️ L'INTERRUPTEUR DU MODE ARCHIPEL (étape 1 de la roadmap) — réservé à l'admin pendant
    *  le développement. Le tick suivant de la carte (`advanceWorld`) retire les lieux au-dessus
    *  du rang de l'île et pose la règle de trajet ; quitter le mode rend la carte d'avant. */
+  /** ⛵ Des troupes marchent-elles vers un lieu fixe ou en reviennent-elles ? Leur arrivée
+   *  se règle sur la carte ACTIVE : la traversée attend qu'elles soient arrivées. */
+  function troopsMoving(cur: CharacterRow): boolean {
+    if (attackList.value.length) return true;
+    if (partyList.value.some((p) => p.homeId || p.poi.type === 'control')) return true;
+    return (cur.expedition_map?.pois ?? []).some(
+      (p) =>
+        !!p.control &&
+        ((p.control.reinforcing?.length ?? 0) > 0 || (p.control.returning?.length ?? 0) > 0),
+    );
+  }
+  /** ⛵ La raison qui empêche de traverser vers l'île `to` (null = possible). */
+  function crossingBlock(to: number) {
+    const cur = row.value;
+    if (!cur?.expedition_map) return 'noArchipel' as const;
+    return crossingBlocker(cur.expedition_map, to, {
+      heroBusy: !!cur.expedition || heroInAttack(attackList.value),
+      troopsMoving: troopsMoving(cur),
+    });
+  }
+  /** ⛵ RÉSERVE LA TRAVERSÉE vers l'île `to` : départ à l'heure pile suivante, arrivée 2 h
+   *  après ; le héros et TOUS les champions libres embarquent (décision de l'utilisateur). */
+  async function crossIsland(userId: string, to: number, now: number) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const why = crossingBlock(to);
+    if (why) throw new Error(CROSSING_BLOCK_LABEL[why]);
+    const ids = crossingTravellers(advList.value, now);
+    const map = startCrossing(cur.expedition_map, to, ids, now);
+    await persist(userId, {
+      expedition_map: map,
+      adventurers: boardTravellers(advList.value, map.crossing!),
+    });
+  }
   async function setArchipelMode(userId: string, on: boolean) {
     if (!useAuthStore().isAdmin) throw new Error('Mode archipel réservé à l’admin.');
     const cur = row.value;
@@ -2377,6 +2452,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
     if (heroInAttack(cur.attacks))
       throw new Error('Ton héros est réservé pour une attaque combinée.');
+    if (cur.expedition_map?.crossing) throw new Error('Ton héros est en traversée.');
     // ⚔️🕳️ Un camp ET une faille s'attaquent en GROUPE (`sendParty`) : même le héros seul y
     // passe, pour que l'issue soit le combat de faction ou l'incursion, et jamais l'ancien
     // gardien — ni, pour une faille, la MINE D’OR dans laquelle `resolveOutcome` la faisait
@@ -3491,7 +3567,13 @@ export const useCharacterStore = defineStore('character', () => {
   /** ⏳ Les renforts programmés vers les lieux fixes (migr. 0098). */
   const plannedList = computed<PlannedMove[]>(() => row.value?.planned_moves ?? []);
   /** 🧝 Le héros est engagé ailleurs : en expédition, ou réservé pour une attaque combinée. */
-  const heroEngaged = computed(() => !!row.value?.expedition || heroInAttack(attackList.value));
+  const heroEngaged = computed(
+    () =>
+      !!row.value?.expedition ||
+      heroInAttack(attackList.value) ||
+      // ⛵ En traversée (réservée ou en mer) : le héros est sur le bateau.
+      !!row.value?.expedition_map?.crossing,
+  );
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   /** 🛕 Le niveau du PANTHÉON — un seul bâtiment depuis la fusion (v0.949), donc un seul
@@ -4968,8 +5050,10 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<string[]> {
     const cur = row.value;
     if (!cur?.expedition_map) return [];
+    // ⛵ Les îles QUITTÉES produisent aussi : récoltées à distance (décision de l'utilisateur).
+    const stashed = Object.entries(cur.expedition_map.islands ?? {});
     const points = autoCollectable(cur.expedition_map, now);
-    if (!points.length) return [];
+    if (!points.length && !stashed.some(([, m]) => autoCollectable(m, now).length)) return [];
     const before = advList.value;
     const stock0 = cur.adv_gear?.stock ?? [];
     let map = cur.expedition_map;
@@ -4980,19 +5064,31 @@ export const useCharacterStore = defineStore('character', () => {
     let supplies: SupplyStock = {};
     let runes = 0;
     const msgs: ExpeditionMessage[] = [];
-    for (const p of points) {
-      const h = harvestControlIn(map, advs, stock, p.id, now, playerLevel);
-      if (h.map === map) continue;
-      map = h.map;
-      advs = h.advs;
-      stock = h.stock;
-      gold += h.gold;
-      mana += h.mana;
-      supplies = addSupplies(supplies, h.supplies);
-      runes += h.runes;
-      const m = controlLootMessage(p, now, h.supplies, h.runes);
-      if (m) msgs.push(m);
+    /** Récolte tous les points dus d'UNE carte (l'active ou une île rangée). */
+    const harvestAll = (m0: ExpeditionMap): ExpeditionMap => {
+      let m = m0;
+      for (const p of autoCollectable(m0, now)) {
+        const h = harvestControlIn(m, advs, stock, p.id, now, playerLevel);
+        if (h.map === m) continue;
+        m = h.map;
+        advs = h.advs;
+        stock = h.stock;
+        gold += h.gold;
+        mana += h.mana;
+        supplies = addSupplies(supplies, h.supplies);
+        runes += h.runes;
+        const msg = controlLootMessage(p, now, h.supplies, h.runes);
+        if (msg) msgs.push(msg);
+      }
+      return m;
+    };
+    map = harvestAll(map);
+    let islands = map.islands;
+    for (const [k, im] of stashed) {
+      const next = harvestAll(im);
+      if (next !== im) islands = { ...islands, [k]: next };
     }
+    if (islands !== map.islands) map = { ...map, islands };
     if (map === cur.expedition_map) return [];
     const gearNext = trainWornGear(before, advs, stock);
     const found = newAscensions(before, advs, stock0, gearNext);
@@ -5824,6 +5920,8 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     expeSyncMap,
     setArchipelMode,
+    crossIsland,
+    crossingBlock,
     expeSend,
     expeTick,
     expeSettle,

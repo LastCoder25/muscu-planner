@@ -719,11 +719,31 @@ export interface ExpeditionMap {
     pacifiedAt?: number;
     /** ⛺ Prochain PILLAGE des camps de brigands (île 1) sur la réserve des bâtiments. */
     pillageAt?: number;
+    /** 🏰 Le coffre de la forteresse a été déposé (`fortressReward`) : une seule fois. */
+    chestAt?: number;
   };
   /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
    *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir
    *  intacts en quittant l'île. Absent hors archipel. */
   citadelStash?: Poi[];
+  /** ⛵ Les îles VISITÉES qu'on a quittées (`crossing.ts`), rangées telles quelles par numéro :
+   *  même forme qu'une carte, leur `archipel` compris. Leurs lieux tenus produisent toujours
+   *  (récolte à distance) ; le reste est figé jusqu'au retour. Absent hors archipel. */
+  islands?: Record<string, ExpeditionMap>;
+  /** ⛵ La traversée réservée ou en cours (débarquement à `arriveAt`). */
+  crossing?: Crossing;
+}
+
+/** ⛵ Une traversée d'une île à l'autre (`crossing.ts`). */
+export interface Crossing {
+  from: number;
+  to: number;
+  bookedAt: number;
+  /** Le départ : l'heure pile qui suit la réservation. */
+  departAt: number;
+  arriveAt: number;
+  /** Les champions embarqués (le héros embarque toujours). */
+  ids: string[];
 }
 
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de

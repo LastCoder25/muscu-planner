@@ -477,6 +477,8 @@ describe('⚠️ LA DISPONIBILITÉ D’UN AVENTURIER — une seule source, trois
         { ...base(), championId: 'orsene' },
         // 🏰 Posté sur un point de contrôle.
         { ...base(), posted: 'ctl_mine' },
+        // ⛵ Resté sur une autre île de l'archipel.
+        { ...base(), elsewhere: 2 },
       ].map((a) => advStatus(a, at)),
     );
     expect([...vus].sort()).toEqual([...ADV_STATUSES].sort());

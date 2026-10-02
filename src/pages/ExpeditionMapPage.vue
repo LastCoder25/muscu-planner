@@ -25,7 +25,15 @@
       :island="island"
       :conquest="islandProgress"
       :busy="archBusy"
+      :open-ids="crossInfo.open"
+      :visited-ids="crossInfo.visited"
+      :crossing="char.row?.expedition_map?.crossing ?? null"
+      :blocks="crossInfo.blocks"
+      :travellers="crossInfo.travellers"
+      :away="crossInfo.away"
+      :now="now"
       @toggle="toggleArchipel"
+      @cross="crossTo"
     />
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
@@ -1293,7 +1301,13 @@ import MapFilterBar from '@/components/MapFilterBar.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
-import { activeIsland, mapOutpostLevel } from '@/lib/archipelago';
+import { activeIsland, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
+import {
+  CROSSING_BLOCK_LABEL,
+  crossingTravellers,
+  openIslands,
+  visitedIslands,
+} from '@/lib/crossing';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
@@ -1504,6 +1518,41 @@ const hourRings = computed(() =>
 );
 const islandTerr = computed(() => (island.value ? islandTerrain(island.value.id) : null));
 const archBusy = ref(false);
+/** ⛵ La traversée : îles ouvertes, visitées, raisons de refus, embarqués possibles, et les
+ *  champions restés sur chaque autre île. ⚠️ Les refus viennent du store (`crossingBlock`),
+ *  la même règle que celle qui refuse l'envoi. */
+const crossInfo = computed(() => {
+  const map = char.row?.expedition_map;
+  const blocks: Record<number, string | null> = {};
+  const away: Record<number, number> = {};
+  for (const a of char.advList)
+    if (a.elsewhere !== undefined) away[a.elsewhere] = (away[a.elsewhere] ?? 0) + 1;
+  if (!map?.archipel) return { open: [], visited: [], blocks, travellers: 0, away };
+  for (const i of ISLANDS) {
+    const why = char.crossingBlock(i.id);
+    blocks[i.id] = why && why !== 'same' && why !== 'locked' ? CROSSING_BLOCK_LABEL[why] : null;
+  }
+  return {
+    open: openIslands(map),
+    visited: visitedIslands(map),
+    blocks,
+    travellers: crossingTravellers(char.advList, now.value).length,
+    away,
+  };
+});
+async function crossTo(to: number) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.crossIsland(uid, to, Date.now());
+    $q.notify({ type: 'positive', message: `⛵ Traversée réservée vers l'île ${to}` });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: (e as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 async function toggleArchipel(on: boolean) {
   const uid = auth.user?.id;
   if (!uid || archBusy.value) return;

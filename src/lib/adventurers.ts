@@ -1330,6 +1330,9 @@ export interface Adventurer {
   /** 🏰 Posté sur ce point de contrôle (id du POI) : il y produit et le défend, et n'est
    *  disponible pour rien d'autre tant qu'il y est. */
   posted?: string;
+  /** ⛵ Resté sur cette AUTRE île de l'archipel (`crossing.ts`) : indisponible ici. Absent =
+   *  avec le héros. Posé et levé au débarquement (`landAdventurers`), jamais ailleurs. */
+  elsewhere?: number;
   /** 🔮 Ses COMPÉTENCES DE RUNES (spec 2026-09-27) : un champion n'a plus de signature ni de
    *  rôle écrits, il porte ce que le joueur lui a posé. Absent = aucune (JSONB, aucune
    *  migration). ⚠️ Lu par le combat (`escortEffects`), les convois (`roleShare`) et l'écran. */
@@ -2337,7 +2340,7 @@ export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): 
  *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
  *  Ordre : sur la route, puis à l'infirmerie (le premier qui s'applique). */
-export type AdvUnavailable = 'busy' | 'hurt' | 'posted';
+export type AdvUnavailable = 'busy' | 'hurt' | 'posted' | 'away';
 /**
  * 🏥 À L'INFIRMERIE = blessé ET rentré (2026-10-01, signalé : « sur le lieu ils repartent
  * blessés vers la base, mais ils sont déjà à l'infirmerie »). Depuis la v0.1396, un blessé
@@ -2355,6 +2358,8 @@ export function advWalkingHurt(adv: Adventurer, now: number): boolean {
 }
 
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
+  // ⛵ Resté sur une autre île de l'archipel (`crossing.ts`) : ni envoi, ni défense ici.
+  if (adv.elsewhere !== undefined) return 'away';
   if ((adv.busyUntil ?? 0) > now) return 'busy';
   if ((adv.hurtUntil ?? 0) > now) return 'hurt';
   // 🏰 Posté sur un point de contrôle : il y reste jusqu'à ce qu'on le rappelle ou qu'il
@@ -2369,6 +2374,7 @@ export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
   busy: '🧭 en route',
   hurt: '🤕 infirmerie',
   posted: '🏰 posté',
+  away: '⛵ autre île',
 };
 
 /** Disponible ? Ni en mission, ni à l'infirmerie. */
@@ -2390,12 +2396,13 @@ export function advStatus(adv: Adventurer, now: number): AdvStatus {
   return advUnavailableReason(adv, now) ?? 'free';
 }
 /** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
-export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'posted', 'hurt'];
+export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'posted', 'hurt', 'away'];
 export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
   free: '✅ disponibles',
   busy: '🧭 en expédition',
   hurt: '🛏️ infirmerie',
   posted: '🏰 postés',
+  away: '⛵ autre île',
 };
 
 // ── 🪬 LES COMPÉTENCES D'UN CHAMPION ─────────────────────────────────────────────────────

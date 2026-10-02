@@ -201,6 +201,27 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
       traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
       points tenus, avant-postes, récompenses (forteresse, premier débarquement).
+      **3a livrée v1.16.0 (2026-10-02) — la traversée** (`src/lib/crossing.ts`), décisions de
+      l'utilisateur : le héros et **tous les champions libres** embarquent ; les lieux tenus de
+      l'île quittée **produisent toujours, récoltés à distance** ; on **retraverse dans les deux
+      sens** vers toute île ouverte (visitée, ou suivante d'une forteresse abattue). Départ à
+      l'heure pile suivante, 2 h de mer, débarquement au tick de la carte. L'île quittée est
+      RANGÉE telle quelle dans `ExpeditionMap.islands` (son `archipel` compris) ; l'île
+      d'arrivée sort de sa réserve ou naît peuplée (`createMap` au rang de l'île). Un champion
+      resté sur une autre île porte `elsewhere` → indisponible (`'away'`, « ⛵ autre île »).
+      Refus (`crossingBlocker`, source unique) : île fermée, déjà en mer, héros en route, ou
+      troupes en marche vers/depuis un lieu fixe (leur arrivée se règle sur la carte active).
+      Récompenses en coffres dans la boîte : **premier débarquement = 10 tirages de mana**
+      (dérivé de `pullCost`), **forteresse abattue = 2 + n° de l'île runes et 3 sceaux de
+      champion au rang max de l'île** (une fois, `archipel.chestAt` ; le coffre de l'île 1 tombe
+      aussi pour qui l'avait déjà abattue). Panneau Archipel : bouton de traversée (heure de
+      départ, d'arrivée, embarqués), bandeau « en mer », champions restés sur chaque île.
+      Test `crossing.test.ts` (16, 9 mutations rouges).
+      ⚠️ Limites connues : une île rangée est FIGÉE (ni apparitions, ni failles, ni reprises —
+      une île quittée non pacifiée ne subit plus d'attaques, et ses points arrêtent de produire à
+      l'heure d'une attaque prévue) ; la **milice reste une réserve unique** ; base au port,
+      avant-postes et zone à portée des points tenus restent à faire (3b). Non vu à l'écran
+      avec une vraie traversée (le compte de smoke n'est pas en mode archipel).
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
 
 ### Étoffer

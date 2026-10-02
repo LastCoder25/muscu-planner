@@ -17,7 +17,8 @@
       <span class="arch-ico" aria-hidden="true">🏝️</span>
       <span class="arch-title">Archipel</span>
       <span class="arch-sum">
-        <template v-if="island"
+        <template v-if="crossing">⛵ en mer vers l'île {{ crossing.to }}</template>
+        <template v-else-if="island"
           >{{ island.emoji }} Île {{ island.id }} · {{ island.name
           }}{{ conquest?.pacified ? ' · 🕊️ pacifiée' : '' }}</template
         >
@@ -27,6 +28,27 @@
     </button>
 
     <div v-if="open" id="archipel-islands" class="arch-body">
+      <!-- ⛵ La traversée réservée ou en cours. -->
+      <div v-if="crossing" class="arch-sea">
+        <span class="as-emo" aria-hidden="true">⛵</span>
+        <span class="as-txt">
+          <b>Vers l'île {{ crossing.to }}</b>
+          <template v-if="now < crossing.departAt">
+            · départ à {{ clock(crossing.departAt) }} (dans
+            {{ formatDuration(crossing.departAt - now) }})
+          </template>
+          <template v-else>
+            · en mer, arrivée à {{ clock(crossing.arriveAt) }} (dans
+            {{ formatDuration(Math.max(0, crossing.arriveAt - now)) }})
+          </template>
+          <span class="as-sub"
+            >Le héros et {{ crossing.ids.length }} champion{{
+              crossing.ids.length > 1 ? 's' : ''
+            }}
+            à bord</span
+          >
+        </span>
+      </div>
       <!-- 🗺️ LA CARTE DE L'ARCHIPEL : les cinq îles (leur vraie silhouette), reliées par les
            routes de traversée. Toucher une île en montre la fiche juste dessous. -->
       <svg class="arch-map" viewBox="0 0 330 182" role="group" aria-label="Carte de l’archipel">
@@ -80,6 +102,7 @@
           <span class="at-emo" aria-hidden="true">{{ selTile.emoji }}</span>
           <span class="at-num">Île {{ selTile.id }} · {{ selTile.name }}</span>
           <span v-if="selTile.active" class="at-chip">Tu es ici</span>
+          <span v-else-if="!selTile.locked" class="at-chip open">⛵ ouverte</span>
           <span v-else class="at-chip dim">🔒 à venir</span>
         </div>
         <div class="at-ranks">
@@ -108,6 +131,34 @@
           }}</span>
           <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
         </div>
+        <!-- ⛵ Les champions restés sur cette île, et la traversée pour la rejoindre. -->
+        <div v-if="awayOn(selTile.id)" class="at-away">
+          ⛵ {{ awayOn(selTile.id) }} champion{{ awayOn(selTile.id) > 1 ? 's' : '' }} resté{{
+            awayOn(selTile.id) > 1 ? 's' : ''
+          }}
+          ici{{
+            selTile.visited && !selTile.active ? ' · ses lieux tenus produisent à distance' : ''
+          }}
+        </div>
+        <template v-if="island && !selTile.active && !selTile.locked">
+          <p v-if="blocks?.[selTile.id]" class="at-block">{{ blocks[selTile.id] }}</p>
+          <button
+            v-else
+            type="button"
+            class="at-cross"
+            :disabled="busy"
+            @click="$emit('cross', selTile.id)"
+          >
+            <span class="ac-main">⛵ Traverser vers l'île {{ selTile.id }}</span>
+            <span class="ac-sub"
+              >Départ à {{ clock(departAt) }} · arrivée {{ clock(departAt + CROSSING.travelMs) }} ·
+              le héros et {{ travellers ?? 0 }} champion{{ (travellers ?? 0) > 1 ? 's' : '' }}</span
+            >
+          </button>
+        </template>
+        <p v-else-if="island && selTile.locked" class="at-block">
+          🔒 Abats {{ prevFortress(selTile.id) }} pour ouvrir la traversée.
+        </p>
       </div>
       <p v-if="island" class="arch-note">
         Lieux plafonnés au rang {{ islandCapRank }}, trajets selon la seule distance, carte à la
@@ -123,6 +174,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ISLANDS, type Island } from '@/lib/archipelago';
+import { CROSSING, nextCrossingDeparture } from '@/lib/crossing';
+import { formatDuration } from '@/lib/duration';
+import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import { ISLAND_STYLES, islandOutline } from '@/lib/islandTerrain';
 
@@ -137,8 +191,27 @@ const props = defineProps<{
     locked: boolean;
     pacified: boolean;
   } | null;
+  /** ⛵ Les îles ouvertes à la traversée (`openIslands`) et celles déjà visitées. */
+  openIds?: number[];
+  visitedIds?: number[];
+  /** ⛵ La traversée réservée ou en cours. */
+  crossing?: Crossing | null;
+  /** ⛵ Pourquoi on ne peut pas traverser vers chaque île (texte), null si possible. */
+  blocks?: Record<number, string | null>;
+  /** ⛵ Combien de champions embarqueraient maintenant (les libres). */
+  travellers?: number;
+  /** ⛵ Champions restés sur chaque autre île. */
+  away?: Record<number, number>;
+  now: number;
 }>();
-defineEmits<{ toggle: [on: boolean] }>();
+defineEmits<{ toggle: [on: boolean]; cross: [to: number] }>();
+
+/** Heure d'horloge (« 14:00 »). */
+const clock = (t: number) =>
+  new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const departAt = computed(() => nextCrossingDeparture(props.now));
+const awayOn = (id: number) => props.away?.[id] ?? 0;
+const prevFortress = (id: number) => ISLANDS.find((i) => i.id === id - 1)?.fortress ?? '';
 
 const open = ref(false);
 
@@ -167,7 +240,10 @@ const tiles = computed(() =>
     const hi = characterRank(i.maxLevel);
     const [x, y] = POS[i.id]!;
     const active = props.island?.id === i.id;
-    const reached = (props.island?.id ?? 1) >= i.id;
+    const reached = props.openIds?.length
+      ? props.openIds.includes(i.id)
+      : (props.island?.id ?? 1) >= i.id;
+    const visited = !!props.visitedIds?.includes(i.id);
     return {
       ...i,
       lo,
@@ -178,6 +254,7 @@ const tiles = computed(() =>
       outline: islandOutline(i.id, x, y, SCALE),
       color: hi.color,
       active,
+      visited,
       locked: !reached,
     };
   }),
@@ -192,7 +269,9 @@ const routes = computed(() =>
     return {
       from: i.id,
       d: `M${x1} ${y1}Q${mx} ${my} ${x2} ${y2}`,
-      open: (props.island?.id ?? 1) > i.id,
+      open: props.openIds?.length
+        ? props.openIds.includes(i.id + 1)
+        : (props.island?.id ?? 1) > i.id,
     };
   }),
 );
@@ -430,6 +509,72 @@ const islandCapRank = computed(() =>
 }
 .at-pill.dim {
   color: var(--dim);
+}
+.at-chip.open {
+  background: #5aa9d6;
+  color: #0e1a22;
+}
+.arch-sea {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, #5aa9d6 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, #5aa9d6 50%, var(--line));
+  font-size: 12px;
+}
+.as-emo {
+  font-size: 20px;
+  line-height: 1;
+}
+.as-txt {
+  flex: 1;
+  min-width: 0;
+}
+.as-sub {
+  display: block;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.at-away {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8cc7e6;
+}
+.at-block {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+.at-cross {
+  margin-top: 10px;
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: none;
+  background: #5aa9d6;
+  color: #0e1a22;
+  font: inherit;
+  cursor: pointer;
+}
+.at-cross:disabled {
+  opacity: 0.5;
+}
+.ac-main {
+  font-weight: 800;
+  font-size: 14px;
+}
+.ac-sub {
+  font-size: 11px;
+  text-align: center;
 }
 .arch-note {
   margin: 10px 0 0;

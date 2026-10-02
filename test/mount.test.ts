@@ -164,7 +164,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const { islandById } = await import('@/lib/archipelago');
     let closed = '';
     let open = '';
-    const props = { island: islandById(1), busy: false };
+    const props = { island: islandById(1), busy: false, now: Date.now() };
     await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (closed = h));
     expect(closed).toContain('Île 1 · Île des Brigands');
     expect(closed).not.toContain('am-isl');
