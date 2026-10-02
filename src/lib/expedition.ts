@@ -765,8 +765,8 @@ export const ARCHIPEL_TRAVEL_LEVEL = 0;
 export const ISLAND_MAX_LEG_MIN = 120;
 
 /** 🏝️ La distance normalisée d'un lieu d'île, PLAFONNÉE pour que l'aller (niveau de trajet
- *  `ARCHIPEL_TRAVEL_LEVEL`) tienne en `ISLAND_MAX_LEG_MIN`. Seule la forteresse, sur le cap au
- *  bord de l'île, est au-delà : les lieux tirés restent dans 54 unités (~1 h 50). */
+ *  `ARCHIPEL_TRAVEL_LEVEL`) tienne en `ISLAND_MAX_LEG_MIN`. La forteresse, dernière grande expédition, est
+ *  reposée à part (`FORTRESS_LEG_MIN`, 3 h) : les lieux tirés restent dans 54 unités (~1 h 50). */
 export function islandDistNorm(d: number): number {
   const cap =
     (ISLAND_MAX_LEG_MIN - EXPE.travelOneWayMinMin) /

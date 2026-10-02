@@ -13,6 +13,7 @@ import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '@/lib/archipelago';
 import {
   ensureIslandConquest,
   FORTRESS_ID,
+  FORTRESS_LEG_MIN,
   FORTRESS_RELAY_LEG_MIN,
   ISLAND_OUTPOSTS,
   islandConquest,
@@ -50,14 +51,14 @@ const hold = (m: ExpeditionMap, kinds: readonly string[]): ExpeditionMap => ({
 });
 
 describe('🏝️ 4 h aller-retour au plus, de la base aux bords de l’île', () => {
-  it('sur les cinq îles, aucun lieu (forteresse comprise) à plus de 2 h d’aller', () => {
+  it('sur les cinq îles, aucun lieu à plus de 2 h d’aller, sauf la forteresse (3 h)', () => {
     for (const isl of ISLANDS)
       for (const seed of [3, 11, 29]) {
         const m = island(isl.id, seed);
-        const worst = Math.max(...m.pois.map(leg));
+        const worst = Math.max(...m.pois.filter((p) => p.id !== FORTRESS_ID).map(leg));
         expect(worst, `île ${isl.id}`).toBeLessThanOrEqual(ISLAND_MAX_LEG_MIN);
         const fort = m.pois.find((p) => p.id === FORTRESS_ID)!;
-        expect(leg(fort), `forteresse île ${isl.id}`).toBe(ISLAND_MAX_LEG_MIN);
+        expect(leg(fort), `forteresse île ${isl.id}`).toBe(FORTRESS_LEG_MIN);
       }
   });
 });
@@ -90,14 +91,16 @@ describe('🏝️ les deux avant-postes', () => {
             ).toBeGreaterThanOrEqual(10);
       }
   });
-  it('tenus TOUS LES DEUX, ils servent de relais : la forteresse passe à 1 h 15', () => {
+  it('tenus TOUS LES DEUX, ils servent de relais : la forteresse repasse de 3 h à 2 h', () => {
     for (const isl of ISLANDS) {
       const m = island(isl.id, 5);
       const fort = (x: ExpeditionMap) => x.pois.find((p) => p.id === FORTRESS_ID)!;
       const one = ensureIslandConquest(hold(m, [ISLAND_OUTPOSTS[0]!]), DAY * 7, isl.maxLevel);
-      expect(leg(fort(one))).toBe(ISLAND_MAX_LEG_MIN);
+      expect(leg(fort(one))).toBe(FORTRESS_LEG_MIN);
       const both = ensureIslandConquest(hold(m, ISLAND_OUTPOSTS), DAY * 7, isl.maxLevel);
       expect(leg(fort(both))).toBe(FORTRESS_RELAY_LEG_MIN);
+      expect(FORTRESS_RELAY_LEG_MIN).toBeLessThanOrEqual(ISLAND_MAX_LEG_MIN);
+      expect(FORTRESS_LEG_MIN).toBeGreaterThan(ISLAND_MAX_LEG_MIN);
     }
   });
   it('abattre un objectif ne déplace pas des avant-postes encore ennemis', () => {

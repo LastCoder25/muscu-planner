@@ -77,9 +77,14 @@ const OUTPOST_GEOM = {
   second: { d: [35, 38], off: [0.35, -0.35, 0.55, -0.55, 0.75, -0.75] },
 } as const;
 
+/** 🏰 La forteresse est la DERNIÈRE GRANDE EXPÉDITION de l'île (décision de l'utilisateur,
+ *  2026-10-02 : « mets-la plus loin si besoin ») : 3 h d'aller, seul lieu hors de la règle des
+ *  4 h aller-retour (`ISLAND_MAX_LEG_MIN`). */
+export const FORTRESS_LEG_MIN = 180;
+
 /** 🏝️ Tenus tous les deux, les avant-postes servent de RELAIS : l'aller vers la forteresse
- *  passe de 2 h à ce temps (option c, décision de l'utilisateur 2026-10-02). */
-export const FORTRESS_RELAY_LEG_MIN = 75;
+ *  repasse à 2 h, la limite ordinaire de l'île (option c, décision de l'utilisateur 2026-10-02). */
+export const FORTRESS_RELAY_LEG_MIN = 120;
 
 /** Où se posent les avant-postes : sur la route base → forteresse, le couple de places le plus
  *  DÉGAGÉ des autres lieux fixes (et l'un de l'autre). Déterministe. */
@@ -234,7 +239,7 @@ function enemyTarget(
     travelLevel: ARCHIPEL_TRAVEL_LEVEL,
     x: spot.x,
     y: spot.y,
-    // ⚠️ Plafonnée : la forteresse est au bord de l'île, l'aller y tient en 2 h.
+    // ⚠️ Plafonnée à 2 h d'aller (la forteresse, elle, est reposée à `FORTRESS_LEG_MIN`).
     distNorm: islandDistNorm(spot.d),
     spawnedAt: now,
     expiresAt: EXPE.lifespanMs.control,
@@ -305,8 +310,10 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
         },
       ),
     );
-    // 🏝️ Les deux avant-postes tenus : la forteresse est à `FORTRESS_RELAY_LEG_MIN` d'aller.
-    if (relay) out[out.length - 1]!.distNorm = distNormForLeg(FORTRESS_RELAY_LEG_MIN);
+    // 🏰 3 h d'aller ; les deux avant-postes tenus la ramènent à 2 h.
+    out[out.length - 1]!.distNorm = distNormForLeg(
+      relay ? FORTRESS_RELAY_LEG_MIN : FORTRESS_LEG_MIN,
+    );
   }
   return out;
 }

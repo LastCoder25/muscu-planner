@@ -242,6 +242,10 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       `ISLAND_MAX_LEG_MIN`) : seule la forteresse était au-delà. Base : le dessin actuel au
       centre, relié au port, est gardé. Tests `islandOutposts.test.ts` (8, mutations rouges).
       Non vu à l'écran en vraie partie (le compte de smoke n'est pas en mode archipel).
+      **v1.20.0 — la forteresse est la dernière grande expédition** (décision de l’utilisateur,
+      2026-10-02 : « mets la forteresse plus loin si besoin ») : 3 h d’aller (`FORTRESS_LEG_MIN`),
+      seul lieu hors des 4 h aller-retour ; les deux avant-postes tenus la ramènent à 2 h
+      (`FORTRESS_RELAY_LEG_MIN`, au lieu de 1 h 15).
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
 
 ### Étoffer
