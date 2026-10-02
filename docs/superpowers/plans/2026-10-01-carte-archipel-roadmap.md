@@ -340,4 +340,9 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       ~1 par jour. Avec 3 champions par lieu, ~0,4 lieu perdu de plus par jour sur l’île 4,
       ~1 sur l’île 5 — une vraie pression, mais BRÈVE : les objectifs de ces îles se prennent
       dès l’entrée (6c), et les abattre éteint la menace. Aucun réglage changé.
+      **v1.27.5 — l’autel des runes « à partir du bleu »** (tableau de l’étape 0) : ses runes
+      sont marquées (`RuneBank.blessed`, comptées dans le stock) et s’ouvrent avec la table
+      commune SANS le vert, renormalisée (`BLESSED_ODDS` : bleu 73 %, violet 23 %, doré 3 %),
+      en premier ; la rune gratuite d’un lot reste ordinaire. Le stock le dit. Tests
+      `runeBlessed.test.ts` (5, 6 mutations rouges).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

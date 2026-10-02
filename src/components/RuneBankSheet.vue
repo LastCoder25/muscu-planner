@@ -8,6 +8,12 @@
       <div class="rb-head">
         <span class="rb-title font-display">🪬 Runes</span>
         <span class="rb-wallet font-display"><RuneIcon size="18px" /> {{ bank.runes }}</span>
+        <span
+          v-if="bank.blessed"
+          class="rb-blessed"
+          :title="`${bank.blessed} rune${bank.blessed > 1 ? 's' : ''} de l’autel : jamais verte${bank.blessed > 1 ? 's' : ''}, ouverte${bank.blessed > 1 ? 's' : ''} en premier`"
+          >dont {{ bank.blessed }} 🔷 bleue{{ bank.blessed > 1 ? 's' : '' }} ou mieux</span
+        >
       </div>
 
       <!-- ── La compétence choisie : la donner, ou la fusionner ── -->
@@ -393,12 +399,18 @@ function confirmReplace(adv: Adventurer, index: number) {
 }
 .rb-head {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
 }
 .rb-title {
   font-size: 22px;
+}
+.rb-blessed {
+  font-size: 12px;
+  color: #8ec5ff;
 }
 .rb-wallet {
   display: inline-flex;

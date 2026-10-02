@@ -81,8 +81,8 @@ export const CONTROL = {
    * - ⚒️ arsenal (île 4) : ⅙ de la part d'objet d'une ruine / jour (+20 %) ;
    * - 🌀 cercle d'invocation (île 4, le « sanctuaire d'invocation » de la roadmap, renommé :
    *   c'est déjà le nom d'un lieu de récolte) : 1 tentative de boss de l'île / 2 jours (+18 %) ;
-   * - 🪬 autel des runes (île 5) : 1 rune multicolore / 2 jours (« à partir du bleu » : non
-   *   fait, la couleur se tire à l'ouverture comme toute rune).
+   * - 🪬 autel des runes (île 5) : 1 rune multicolore / 2 jours, « à partir du bleu » : elle
+   *   ne s'ouvre jamais verte (`runeBank.BLESSED_ODDS`).
    */
   ossuaryHoursPerSeal: 72,
   arsenalHoursPerRuin: 144,
@@ -1823,6 +1823,8 @@ export function collectControl(
   gearXp: Record<string, number>;
   supplies: SupplyStock;
   runes: number;
+  /** 🪬 Parmi `runes`, celles de l'autel (« à partir du bleu »). */
+  blessedRunes: number;
   /** 📖 Clés du Labyrinthe (les archives). */
   keys: number;
   /** ⚱️ Pierres d'invocation (l'ossuaire). */
@@ -1842,6 +1844,7 @@ export function collectControl(
     gearXp: {},
     supplies: {},
     runes: 0,
+    blessedRunes: 0,
     keys: 0,
     summon: 0,
     gearSeals: 0,
@@ -1907,6 +1910,7 @@ export function collectControl(
     gearXp: {},
     supplies,
     runes,
+    blessedRunes: c.kind === 'altar' ? whole : 0,
     keys: c.kind === 'archives' ? whole : 0,
     summon: c.kind === 'circle' ? whole : 0,
     gearSeals: c.kind === 'arsenal' ? whole : 0,

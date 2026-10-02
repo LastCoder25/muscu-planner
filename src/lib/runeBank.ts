@@ -40,6 +40,21 @@ export const RUNE_ODDS: Record<RuneTier, number> = {
   gold: 0.01,
 };
 
+/**
+ * 🪬 LES RUNES « À PARTIR DU BLEU » (l'autel des runes de l'île 5, roadmap de l'archipel,
+ * étape 0) : la même table SANS le vert, renormalisée — bleu 73 %, violet 23 %, doré 3 %.
+ * Dérivée de `RUNE_ODDS` : si la table bouge, celle-ci suit.
+ */
+export const BLESSED_ODDS: Record<RuneTier, number> = (() => {
+  const rest = 1 - RUNE_ODDS.green;
+  return {
+    green: 0,
+    blue: RUNE_ODDS.blue / rest,
+    violet: RUNE_ODDS.violet / rest,
+    gold: RUNE_ODDS.gold / rest,
+  };
+})();
+
 /** Une compétence au stock : un EXEMPLAIRE, avec son niveau. Deux exemplaires de la même
  *  compétence restent séparés tant que le joueur ne les fusionne pas. */
 export interface StockSkill {
@@ -60,9 +75,9 @@ function hashStr(s: string): number {
  * cette couleur, uniformément. ⚠️ DÉTERMINISTE (graine = joueur + numéro d'ouverture) : un
  * rechargement pendant l'animation ne fait pas retirer une autre compétence.
  */
-export function openRune(owner: string, n: number): StockSkill {
+export function openRune(owner: string, n: number, blessed = false): StockSkill {
   const rng = mulberry32(hashStr(`rune:${owner}:${n}`));
-  const tier = pickTier(rng, RUNE_ODDS);
+  const tier = pickTier(rng, blessed ? BLESSED_ODDS : RUNE_ODDS);
   const pool = skillsOfTier(tier);
   const id = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
   return { uid: `sk${n}`, id, level: 1 };
@@ -73,6 +88,9 @@ export function openRune(owner: string, n: number): StockSkill {
 export interface RuneBank {
   /** Runes multicolores non ouvertes. */
   runes: number;
+  /** 🪬 Parmi `runes`, celles « à partir du bleu » (l'autel des runes) : jamais vertes.
+   *  Ouvertes EN PREMIER (elles valent plus). Toujours ≤ `runes`. */
+  blessed: number;
   /** Compétences ouvertes, chacune à part. */
   skills: StockSkill[];
   /** Nombre de runes déjà ouvertes : graine du tirage et source des `uid`. */
@@ -86,15 +104,19 @@ export const RUNE_BANK_VERSION = 2;
 
 export const emptyBank = (): RuneBank => ({
   runes: 0,
+  blessed: 0,
   skills: [],
   opened: 0,
   comp: RUNE_BANK_VERSION,
 });
 
-/** Ajoute `n` runes multicolores (rend un NOUVEL état). */
-export function addRuneCount(bank: RuneBank, n: number): RuneBank {
+/** Ajoute `n` runes multicolores (rend un NOUVEL état), dont `blessed` « à partir du bleu »
+ *  (comptées dans les `n`). */
+export function addRuneCount(bank: RuneBank, n: number, blessed = 0): RuneBank {
   const k = Math.max(0, Math.floor(n));
-  return k ? { ...bank, runes: bank.runes + k } : bank;
+  if (!k) return bank;
+  const b = Math.min(k, Math.max(0, Math.floor(blessed)));
+  return { ...bank, runes: bank.runes + k, blessed: (bank.blessed ?? 0) + b };
 }
 
 /** Combien de runes porte un butin. ⚠️ Les rapports écrits AVANT la bascule portent un
@@ -125,7 +147,14 @@ export function normalizeRuneBank(raw: unknown): RuneBank {
       level: Math.max(1, Math.min(SKILL_MAX_LEVEL, int(s.level) || 1)),
     });
   }
-  return { runes: int(r.runes), skills, opened: int(r.opened), comp: int(r.comp) };
+  const runes = int(r.runes);
+  return {
+    runes,
+    blessed: Math.min(runes, int(r.blessed)),
+    skills,
+    opened: int(r.opened),
+    comp: int(r.comp),
+  };
 }
 
 // ── 🔓 OUVRIR ───────────────────────────────────────────────────────────────────────────
@@ -157,11 +186,17 @@ export function openRunes(
 ): { bank: RuneBank; opened: StockSkill[] } | null {
   if (openBlocker(bank, count)) return null;
   const cost = count === RUNE_LOT.size ? RUNE_LOT.cost : count;
-  const opened = Array.from({ length: count }, (_, i) => openRune(owner, bank.opened + i + 1));
+  // 🪬 Les runes de l'autel s'ouvrent d'abord : la rune gratuite d'un lot reste ordinaire.
+  const held = Math.min(bank.blessed ?? 0, bank.runes);
+  const used = Math.min(held, cost);
+  const opened = Array.from({ length: count }, (_, i) =>
+    openRune(owner, bank.opened + i + 1, i < used),
+  );
   return {
     bank: {
       ...bank,
       runes: bank.runes - cost,
+      blessed: held - used,
       skills: [...bank.skills, ...opened],
       opened: bank.opened + count,
     },

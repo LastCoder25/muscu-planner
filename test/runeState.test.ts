@@ -58,7 +58,13 @@ describe('🔁 la bascule, une fois', () => {
     )!;
     // Compétences 3×1 + 2×3 + 1×5 = 14 · stock 2 + 2 + 5 = 9 · attente (violette) 3.
     expect(out.refunded).toBe(26);
-    expect(out.bank).toEqual({ runes: 26, skills: [], opened: 0, comp: RUNE_BANK_VERSION });
+    expect(out.bank).toEqual({
+      runes: 26,
+      blessed: 0,
+      skills: [],
+      opened: 0,
+      comp: RUNE_BANK_VERSION,
+    });
   });
 
   it('⚠️ idempotente : une banque déjà basculée ne rend plus rien', () => {
