@@ -201,7 +201,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
       traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
       points tenus, avant-postes, récompenses (forteresse, premier débarquement).
-      **3a livrée v1.16.0 (2026-10-02) — la traversée** (`src/lib/crossing.ts`), décisions de
+      **3a livrée v1.17.0 (2026-10-02) — la traversée** (`src/lib/crossing.ts`), décisions de
       l'utilisateur : le héros et **tous les champions libres** embarquent ; les lieux tenus de
       l'île quittée **produisent toujours, récoltés à distance** ; on **retraverse dans les deux
       sens** vers toute île ouverte (visitée, ou suivante d'une forteresse abattue). Départ à
