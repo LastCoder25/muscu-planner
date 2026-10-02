@@ -106,6 +106,17 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     expect(dots.slice(3)).toBe('f'.repeat(Math.max(0, r.seats - 3)));
   });
 
+  it('🏰 une forteresse (places illimitées) ne dessine que ses occupants — sans planter', () => {
+    const mil = `${MILITIA_PREFIX}1`;
+    let m = captureControl(base(), MINE, ['a', mil], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    const held = { ...row(controlRoster(m, [], 2 * H, L), MINE), seats: Infinity };
+    expect(garrisonDots(held)).toBe('cm');
+    const enemy = row(controlRoster(base(), [], 0, L), MINE);
+    const assault = { ...enemy, seats: Infinity, assault: { ids: ['a', 'b'] } } as typeof enemy;
+    expect(garrisonDots(assault)).toBe('rr');
+  });
+
   it('un TRANSFERT depuis une autre place forte compte comme en route', () => {
     let m = captureControl(base(), MINE, ['a'], 0, 7);
     m = setAttack(m, MINE, 9e15);

@@ -3119,16 +3119,21 @@ export function ascensionMessage(
  * pour une prop à identité stable (la couche des lieux ne se re-dessine que si elle change).
  */
 export function garrisonDots(row: ControlRosterRow): string {
+  // 🏰 La FORTERESSE n'a pas de limite de places (`seats` = Infinity) : on ne dessine que ce
+  // qui l'occupe, jamais de place libre. ⚠️ Sans ça `'f'.repeat(Infinity)` levait une erreur
+  // qui faisait tomber TOUT le rendu de la carte (signalé : carte noire après la prise).
+  const free = (used: number) =>
+    Number.isFinite(row.seats) ? 'f'.repeat(Math.max(0, row.seats - used)) : '';
   if (row.poi.control?.owner !== 'player') {
     // ⚔️ Un point ennemi qu'on attaque : nos champions en marche occupent déjà leurs places
     // (au plus celles du point — ceux en trop rentrent après la prise).
     if (!row.assault) return '';
     const go = Math.min(row.assault.ids.length, row.seats);
-    return 'r'.repeat(go) + 'f'.repeat(Math.max(0, row.seats - go));
+    return 'r'.repeat(go) + free(go);
   }
   const champs = row.garrison.filter((id) => !isMilitiaId(id)).length;
   const mil = row.garrison.length - champs;
   const enRoute = row.reinforcing.length + row.away.length;
   const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute);
-  return filled + 'f'.repeat(Math.max(0, row.seats - filled.length));
+  return filled + free(filled.length);
 }
