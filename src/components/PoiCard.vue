@@ -67,6 +67,9 @@
           encore {{ formatDuration(ambushLeft) }}</template
         >
       </div>
+      <div v-else-if="poi.nestPeril" class="pc-alert">
+        🪺 Bêtes embusquées autour d’un nid — embuscades doublées, tant que le nid tient
+      </div>
       <div v-else-if="poi.perilous" class="pc-alert">
         ⚠️ Route dangereuse — embuscades doublées, butin renforcé
       </div>

@@ -657,6 +657,9 @@ export interface Poi {
    *  tout seul quand l'embuscade expire. Ne jamais l'écrire ailleurs — il serait faux dès
    *  le tick suivant. Le NOM est gardé : il est sérialisé dans les cartes existantes. */
   riftPeril?: boolean;
+  /** 🪺 À portée d'un NID de l'île 2 (`islandConquest`) : embuscades doublées. ⚠️ DÉRIVÉ,
+   *  recalculé à chaque tick de la conquête : il s'éteint quand le nid tombe. */
+  nestPeril?: boolean;
   /** 🕳️ Niveau sur lequel se calcule le TRAJET (v0.1012). ⚠️ Posé seulement quand le niveau
    *  du lieu NE DÉCOULE PAS de sa distance — une faille (niveau tiré par rang) et ce qu'elle
    *  laisse (mine, bande). Sans lui, une faille Bronze posée au bout de la carte prenait
@@ -730,6 +733,10 @@ export interface ExpeditionMap {
     pillageAt?: number;
     /** 🏰 Le coffre de la forteresse a été déposé (`fortressReward`) : une seule fois. */
     chestAt?: number;
+    /** 🪺 Île 2 : les NIDS nés en route (`layNests`) — index d'objectif, naissance, place. */
+    nests?: { i: number; at: number; x: number; y: number; d: number }[];
+    /** 🪺 Dernière ponte de chaque nid debout (id → instant). */
+    nestLaid?: Record<string, number>;
   };
   /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
    *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir
@@ -847,8 +854,8 @@ export function citadelRestingUntil(p: Pick<Poi, 'control'>, now: number): numbe
  * connaître que l'effet — sinon l'un d'eux finirait par oublier l'une des deux causes,
  * et une route irradiée serait dangereuse pour le combat mais pas pour les embuscades.
  */
-export const routePerilous = (p: Pick<Poi, 'perilous' | 'riftPeril'>): boolean =>
-  !!p.perilous || !!p.riftPeril;
+export const routePerilous = (p: Pick<Poi, 'perilous' | 'riftPeril' | 'nestPeril'>): boolean =>
+  !!p.perilous || !!p.riftPeril || !!p.nestPeril;
 
 export interface ExpeditionOutcome {
   win: boolean;
@@ -1995,7 +2002,13 @@ function placePoi(
  *  hors archipel. */
 export function islandFixedOf(map: Pick<ExpeditionMap, 'archipel' | 'pois'>): number | undefined {
   if (!map.archipel) return undefined;
-  return Math.max(EXPE.refControls, map.pois.filter((p) => p.type === 'control').length);
+  // 🪺 Les nids NÉS EN ROUTE (île 2) n’en prennent pas : ce sont des conséquences de la menace,
+  // comme les mines d’une faille — l’île se charge, c’est le prix de les laisser pondre.
+  const born = new Set((map.archipel.nests ?? []).map((n) => `isl_obj_${n.i}`));
+  return Math.max(
+    EXPE.refControls,
+    map.pois.filter((p) => p.type === 'control' && !born.has(p.id)).length,
+  );
 }
 
 /** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). Par défaut,

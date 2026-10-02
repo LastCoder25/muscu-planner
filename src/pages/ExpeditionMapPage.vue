@@ -4241,7 +4241,7 @@ const poiFacts = computed<PoiFact[]>(() => {
       const back = Math.round(route.turnBack * 100);
       out.push({
         icon: '🛣️',
-        label: p.perilous || p.riftPeril ? 'Route dangereuse' : 'Route',
+        label: p.perilous || p.riftPeril || p.nestPeril ? 'Route dangereuse' : 'Route',
         value: `${clear} % sûre`,
         go: true,
         title: `${clear} % des trajets sans embuscade perdue · ${back} % font demi-tour à l’aller (lieu jamais atteint, blessés à l’infirmerie) · au retour, une embuscade perdue coûte une part du butin. Plus de champions, mieux la route tient.`,

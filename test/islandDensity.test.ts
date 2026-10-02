@@ -42,8 +42,13 @@ function islandAt(id: number, L: number, seed: number): ExpeditionMap[] {
 
 /** Ce qui occupe la carte : lieux tirés, failles et lieux fixes (hors mines résiduelles et
  *  armées, qui sont des conséquences et non des spawns). */
+/** 🪺 Les nids nés en route (île 2) n’en font pas partie : une conséquence de la menace. */
 const occupied = (m: ExpeditionMap) =>
-  m.pois.filter((p) => isQuotaPoi(p) || p.type === 'rift' || p.type === 'control').length;
+  m.pois.filter(
+    (p) =>
+      (isQuotaPoi(p) || p.type === 'rift' || p.type === 'control') &&
+      !(m.archipel?.nests ?? []).some((n) => p.id === `isl_obj_${n.i}`),
+  ).length;
 
 describe('🏝️ densité des lieux sur une île', () => {
   it('les points de contrôle de référence sont ceux du jeu', () => {

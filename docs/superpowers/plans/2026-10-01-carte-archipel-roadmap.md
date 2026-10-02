@@ -198,7 +198,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       forteresse abattus. La carte ordinaire ne bouge pas. Test `islandDensity.test.ts` (cinq îles
       × 3 graines × 10 jours, 3 mutations rouges). ⚠️ Moins de lieux d'économie (4 au lieu de 6) et
       2 failles au lieu de 4 sur une île : or et mana à re-mesurer avec l'équilibrage (étape 6).
-- [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
+- [x] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
       traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
       points tenus, avant-postes, récompenses (forteresse, premier débarquement).
       **3a livrée v1.17.0 (2026-10-02) — la traversée** (`src/lib/crossing.ts`), décisions de
@@ -254,7 +254,19 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       et ne produit rien. La traversée part d’elle : sa garnison de champions et le héros
       embarquent (`boardFromFortress`), les miliciens restent. Tests `fortressHeld.test.ts`
       (6, 5 mutations rouges). Fiche non vue à l’écran en vraie partie.
+      **Étape 3 close (2026-10-02)** : la « zone à portée des points tenus » est couverte par la
+      limite de 2 h d’aller (tout lieu d’une île est à 2 h au plus de la base, et une sortie
+      depuis un point tenu raccourcit encore) ; la base garde son dessin au centre, reliée au
+      port (accord de l’utilisateur).
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
+      **4a livrée v1.22.0 — les nids** (décisions de l’utilisateur, 2026-10-02) : chaque nid
+      debout en pond un nouveau tous les 3 jours (`NEST.layMs`), 6 au plus sur l’île ; au plafond
+      la ponte est perdue. Les nids nés en route se posent à 10 unités au moins des autres lieux
+      fixes (`nestSpot`), troupe de 3, et ne prennent pas de place dans la densité de l’île
+      (une conséquence de la menace). TOUS les nids debout comptent pour pacifier ; le verrou de
+      la forteresse reste à 2 abattus. Les lieux à 25 unités d’un nid debout ont des routes
+      dangereuses (`Poi.nestPeril`, dérivé, embuscades doublées). Tests `islandNests.test.ts`
+      (9, 7 mutations rouges). Reste 4b : les archives.
 
 ### Étoffer
 
