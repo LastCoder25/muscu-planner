@@ -29,7 +29,7 @@ import {
 import { characterRank } from './characterRank';
 import { createMap, type Crossing, type ExpeditionMap, type ExpeditionMessage } from './expedition';
 import { GACHA } from './gacha';
-import { FORTRESS_ID } from './islandConquest';
+import { ENDLESS, FORTRESS_ID } from './islandConquest';
 import { emptyMilitia, militiaOnMap, produceMilitia, type MilitiaState } from './militia';
 
 export const CROSSING = {
@@ -107,6 +107,39 @@ export function fortressReward(
     map: { ...map, archipel: { ...a, chestAt: now } },
     msg: fortressChestMessage(isl, now),
   };
+}
+
+/** 🌀 Les coffres de la brèche sans fin (île 5) pas encore déposés : un par victoire, plus
+ *  riche à chaque cran (runes `runesBase + cran`, bornées), et la carte marquée — même
+ *  écriture, donc une seule fois chacun. `null` si rien à déposer. */
+export function endlessReward(
+  map: ExpeditionMap,
+  now: number,
+): { map: ExpeditionMap; msgs: ExpeditionMessage[] } | null {
+  const a = map.archipel;
+  const e = a?.endless;
+  const isl = a ? islandById(a.island) : null;
+  if (!a || !e || !isl || e.tier <= (e.paid ?? 0)) return null;
+  const msgs: ExpeditionMessage[] = [];
+  for (let t = (e.paid ?? 0) + 1; t <= e.tier; t++)
+    msgs.push({
+      id: `isl_endless_${isl.id}_${t}`,
+      chest: true,
+      title: `🌀 Brèche maudite abattue (${t}ᵉ fois)`,
+      level: isl.maxLevel,
+      win: true,
+      text: 'La brèche se referme… pour trois jours. Elle reviendra plus forte.',
+      gold: 0,
+      energy: 0,
+      runes: Math.min(ENDLESS.runesMax, ENDLESS.runesBase + t),
+      seals: { kind: 'champion', rank: characterRank(isl.maxLevel).rankIndex, n: ENDLESS.seals },
+      key: 0,
+      resolvedAt: e.at ?? now,
+      claimAt: e.at ?? now,
+      claimed: false,
+      read: false,
+    });
+  return { map: { ...map, archipel: { ...a, endless: { ...e, paid: e.tier } } }, msgs };
 }
 
 /** Le prochain départ (l'heure pile à venir, ou maintenant si on y est pile). */

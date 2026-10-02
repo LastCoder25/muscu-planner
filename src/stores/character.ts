@@ -143,6 +143,7 @@ import {
   crossingBlocker,
   crossingTravellers,
   fortressReward,
+  endlessReward,
   landAdventurers,
   landCrossing,
   landingChestMessage,
@@ -2344,15 +2345,18 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 La forteresse de l'île abattue : son coffre, une seule fois (marque dans la carte,
     // même écriture). ⚓ Le premier débarquement sur une île : le sien.
     const fort = fortressReward(mapP, now);
+    // 🌀 Île 5 : un coffre par victoire sur la brèche sans fin.
+    const endless = endlessReward(fort?.map ?? mapP, now);
     // 🛡️ La Caserne produit aussi pour les îles rangées (une réserve par île).
     const map = produceIslandMilitia(
-      fort?.map ?? mapP,
+      endless?.map ?? fort?.map ?? mapP,
       buildingLevel(cur.buildings, 'barracks'),
       now,
     );
     const landIsl = land?.crossing && land.firstTime ? islandById(land.crossing.to) : null;
     const islandMsgs = [
       ...(fort ? [fort.msg] : []),
+      ...(endless?.msgs ?? []),
       ...(landIsl && landIsl.id > 1
         ? [landingChestMessage(landIsl, land!.crossing!.arriveAt)]
         : []),

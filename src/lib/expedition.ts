@@ -779,6 +779,9 @@ export interface ExpeditionMap {
     convoys?: { id: string; at: number }[];
     /** 🐫 Les convois ARRIVÉS : chacun renforce la forteresse (`convoyBonus`). */
     delivered?: string[];
+    /** 🌀 Île 5, « puis sans fin » (`ENDLESS`) : la brèche maudite abattue `tier` fois, la
+     *  dernière à `at` ; `paid` = coffres déjà déposés (`endlessReward`). */
+    endless?: { tier: number; at?: number; paid?: number };
   };
   /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
    *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir

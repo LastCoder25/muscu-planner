@@ -304,8 +304,8 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       toutes les 72 h / sanctuaires debout (`INVASION`, même horloge `warAt` que l’armée de
       l’île 4, jamais une attaque reculée). Points fixes : socle + tour de guet + scriptorium +
       **autel des runes** (sceaux de champion 🔱 au rang du joueur : la part de champion d’une
-      ruine toutes les 72 h au complet). ⚠️ Le « puis sans fin » de la Citadelle maudite n’est
-      pas fait. Tests `islandCursed.test.ts` (10, 12 mutations rouges).
+      ruine toutes les 72 h au complet). Le « puis sans fin » est fait en v1.27.7
+      (ci-dessous). Tests `islandCursed.test.ts` (10, 12 mutations rouges).
 - [x] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
       défense, durée de chaque île, 5 îles de rente).
       **6a livrée v1.27.0 — les spécialités réalignées sur l’étape 0.** Les v1.24-1.26 avaient
@@ -357,4 +357,12 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       jusque-là, et un voyage qui l’a battu avant compte même si son rapport arrive après
       (`convoyVanquished`). Tests `islandConvoys.test.ts` (9, 12 mutations rouges). Fiche
       non vue à l’écran en vraie partie.
+      **v1.27.7 — l’île 5, « puis sans fin »** (choix par défaut) : la Citadelle maudite
+      prise, une **Brèche maudite** s’ouvre où se tenaient les sanctuaires (`ENDLESS`,
+      `ENDLESS_ID`). Abattue, elle se rouvre 3 jours plus tard, plus forte d’un champion de
+      référence (troupe 8 + crans, sans plafond), et chaque victoire dépose un coffre
+      (`endlessReward` : runes 2 + cran, 8 au plus, et 1 sceau de champion au rang max). Elle
+      n’attaque rien et ne défait pas la pacification. Lint : trois assertions inutiles des
+      convois retirées. Tests `islandEndless.test.ts` (5, 8 mutations rouges). Non vue à
+      l’écran en vraie partie.
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

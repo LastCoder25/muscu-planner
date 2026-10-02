@@ -324,7 +324,32 @@ export const FORTRESS_ID = 'isl_fortress';
 export const objectiveIdOf = (i: number): string => `isl_obj_${i}`;
 /** 🏝️ Un objectif ou la forteresse (ce qu'on abat sur une île). */
 export const isIslandTargetId = (id: string): boolean =>
-  id === FORTRESS_ID || id.startsWith('isl_obj_');
+  id === FORTRESS_ID || id === ENDLESS_ID || id.startsWith('isl_obj_');
+
+/**
+ * 🌀 « PUIS SANS FIN » (roadmap, île 5 : « La Citadelle maudite (puis sans fin) »). Une fois
+ * la citadelle prise, la malédiction ne s'éteint pas : une BRÈCHE MAUDITE s'ouvre là où se
+ * tenaient les sanctuaires. Abattue, elle se rouvre `respawnMs` plus tard, d'un champion de
+ * référence plus forte à chaque fois (`perTier`), sans plafond — le contenu sans fin du
+ * dernier palier, comme le Portail sans fin des donjons. Chaque victoire dépose un coffre
+ * (`endlessReward`, runes et sceaux de champion au rang max). Elle n'attaque rien : l'île
+ * reste pacifiée.
+ */
+export const ENDLESS_ID = 'isl_endless';
+export const ENDLESS = {
+  islands: new Set([5]) as ReadonlySet<number>,
+  respawnMs: 3 * 24 * 3600_000,
+  /** La troupe de départ : celle de la forteresse affaiblie (`fortressWeakSize`). */
+  perTier: 1,
+  runesBase: 2,
+  runesMax: 8,
+  seals: 1,
+} as const;
+
+/** 🌀 La troupe de la brèche après `tier` victoires. */
+export function endlessSize(tier: number): number {
+  return ISLAND_CONQUEST.fortressWeakSize + Math.max(0, tier) * ENDLESS.perTier;
+}
 
 /** Écarts d'angle des objectifs autour de la direction de la forteresse (radians). */
 function objectiveAngles(n: number): number[] {
@@ -518,6 +543,36 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
       relay ? FORTRESS_RELAY_LEG_MIN : FORTRESS_LEG_MIN,
     );
   }
+  // 🌀 La brèche sans fin, une fois la citadelle prise, rouverte après chaque victoire.
+  const e = map.archipel?.endless;
+  if (
+    ENDLESS.islands.has(isl.id) &&
+    gone.has(FORTRESS_ID) &&
+    (e?.at === undefined || now >= e.at + ENDLESS.respawnMs)
+  ) {
+    const a = f.angle + (objectiveAngles(isl.objectives)[0] ?? 0);
+    const d = ISLAND_CONQUEST.objectiveDist;
+    out.push(
+      enemyTarget(
+        map,
+        ENDLESS_ID,
+        {
+          x: Math.round(EXPE.town.x + Math.cos(a) * d),
+          y: Math.round(EXPE.town.y + Math.sin(a) * d),
+          d,
+        },
+        now,
+        isl.maxLevel,
+        {
+          kind: 'objective',
+          faction: isl.faction,
+          size: endlessSize(e?.tier ?? 0),
+          name: 'Brèche maudite',
+          emoji: '🌀',
+        },
+      ),
+    );
+  }
   return out;
 }
 
@@ -648,6 +703,15 @@ export function ensureIslandConquest(
 export function razeIslandTarget(map: ExpeditionMap, id: string, at: number): ExpeditionMap {
   const isl = activeIsland(map);
   if (!isl || !map.archipel || !isIslandTargetId(id)) return map;
+  // 🌀 La brèche sans fin ne compte pas pour la pacification : elle monte d'un cran.
+  if (id === ENDLESS_ID) {
+    const e = map.archipel.endless;
+    return {
+      ...map,
+      archipel: { ...map.archipel, endless: { ...e, tier: (e?.tier ?? 0) + 1, at } },
+      pois: map.pois.filter((p) => p.id !== id),
+    };
+  }
   const destroyed = [...new Set([...(map.archipel.destroyed ?? []), id])];
   const all = [...objectiveIds(isl, map.archipel.nests ?? []), FORTRESS_ID];
   const pacified = all.every((x) => destroyed.includes(x));
@@ -778,6 +842,16 @@ export function islandTargetLabel(
   const p = map?.pois.find((x) => x.id === id);
   if (!st || !p?.control || !isIslandTargetId(id) || heldFortress(p)) return null;
   const { island: isl, objectivesDown: down, objectivesTotal: n } = st;
+  if (id === ENDLESS_ID) {
+    const tier = map!.archipel?.endless?.tier ?? 0;
+    return {
+      title: `🌀 Brèche maudite · ${tier} fois abattue`,
+      detail:
+        `troupe de ${p.control.size} champions de référence · abattue, elle se rouvre 3 jours plus ` +
+        'tard, plus forte d’un champion de référence, sans fin · chaque victoire dépose un coffre ' +
+        '(runes et sceaux de champion).',
+    };
+  }
   const isKey = p.id === keystoneIdOf(isl);
   const rise = RISE.islands.has(isl.id);
   const riseAt = rise && isKey ? nextRiseAt(map!) : null;
@@ -1062,11 +1136,11 @@ export function warlordConvoys(
             x: camp.x,
             y: camp.y,
             from: { x: camp.x, y: camp.y },
-            to: { x: fortress!.x, y: fortress!.y },
+            to: { x: fortress.x, y: fortress.y },
             distNorm: islandDistNorm(Math.hypot(camp.x - EXPE.town.x, camp.y - EXPE.town.y)),
             spawnedAt: at,
             expiresAt: arrive,
-            faction: isl!.faction,
+            faction: isl.faction,
           },
         ];
         convoys = [...convoys, { id, at: arrive }];
