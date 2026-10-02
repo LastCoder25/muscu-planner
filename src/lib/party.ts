@@ -219,6 +219,7 @@ export type PartySendBlock =
   | 'citadelHidden'
   | 'citadelResting'
   | 'fortressLocked'
+  | 'objectiveLocked'
   | 'veinHero'
   | 'veinFull';
 export function partySendBlocker(
@@ -250,6 +251,8 @@ export function partySendBlocker(
     if (citadelRestingUntil(poi, now) > 0) return 'citadelResting';
     // 🏝️ La forteresse portuaire ne s'attaque qu'après assez d'objectifs abattus (le verrou).
     if (poi.control.kind === 'fortress' && poi.control.locked) return 'fortressLocked';
+    // 🏝️ Les objectifs, eux, attendent que les deux avant-postes soient tenus.
+    if (poi.control.kind === 'objective' && poi.control.locked) return 'objectiveLocked';
     // 🏯🏝️ Ce qu'on abat ne se tient pas : le héros seul peut l'attaquer.
     if (escortCount <= 0 && !RAZE_KINDS.has(poi.control.kind)) return 'controlEmpty';
   }
@@ -280,6 +283,8 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
     'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
   citadelResting: 'cette citadelle vient d’être abattue — elle se reconstruit pendant sa trêve',
   fortressLocked: 'la forteresse est verrouillée — abats d’abord les objectifs de l’île',
+  objectiveLocked:
+    'prends d’abord les deux avant-postes de l’île (Tour de guet, Camp d’entraînement)',
   controlHeld: 'ce point n’est pas à prendre : il est déjà à toi',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',

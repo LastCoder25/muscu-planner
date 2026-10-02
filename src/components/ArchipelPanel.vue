@@ -114,6 +114,9 @@
         <div class="at-fort">🏰 {{ selTile.fortress }}</div>
         <!-- 🏝️ La conquête de l'île active : objectifs abattus, forteresse, pacification. -->
         <div v-if="selTile.active && conquest" class="at-conq">
+          <span class="at-pill" :class="{ done: conquest.outpostsHeld >= 2 }"
+            >🗼 {{ conquest.outpostsHeld }}/2 avant-postes</span
+          >
           <span
             class="at-pill"
             :class="{ done: conquest.objectivesDown >= conquest.objectivesTotal }"
@@ -189,6 +192,7 @@ const props = defineProps<{
   busy?: boolean;
   /** 🏝️ Où en est la conquête de l'île active (`islandConquest`). */
   conquest?: {
+    outpostsHeld: number;
     objectivesDown: number;
     objectivesTotal: number;
     fortressDown: boolean;

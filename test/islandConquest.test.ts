@@ -116,8 +116,16 @@ describe('🏝️ conquête — la carte', () => {
   it('une forteresse verrouillée refuse l’envoi', () => {
     const m = island1();
     expect(partySendBlocker(poi(m, FORTRESS_ID)!, 8, true, 20, 0.9, NOW)).toBe('fortressLocked');
-    // Un objectif s'attaque, héros seul compris.
-    expect(partySendBlocker(poi(m, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBeNull();
+    // 🏝️ Un objectif attend que les deux avant-postes soient tenus (étape 3)…
+    expect(partySendBlocker(poi(m, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBe(
+      'objectiveLocked',
+    );
+    // …puis s'attaque, héros seul compris.
+    let held = m;
+    for (const k of ['tower', 'training'] as const)
+      held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
+    held = ensureIslandConquest(held, NOW, LV);
+    expect(partySendBlocker(poi(held, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBeNull();
   });
 });
 

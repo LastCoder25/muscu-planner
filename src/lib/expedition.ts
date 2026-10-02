@@ -110,6 +110,9 @@ export const CONTROL_MAX_GARRISON = 3;
 export interface ControlState {
   kind: ControlKind;
   owner: 'enemy' | 'player';
+  /** 🏝️ AVANT-POSTE de l'île (`islandConquest`) : posé sur la route base → forteresse ; les
+   *  objectifs ne s'attaquent qu'une fois les deux avant-postes tenus. */
+  outpost?: boolean;
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;
@@ -281,7 +284,9 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
 export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
   if (p.army) return p.army.kind === 'siege' ? 'Armée sur ta base' : 'Armée de reprise';
-  return p.control ? (p.control.name ?? CONTROL_KIND_LABEL[p.control.kind]) : POI_LABEL[p.type];
+  if (!p.control) return POI_LABEL[p.type];
+  const name = p.control.name ?? CONTROL_KIND_LABEL[p.control.kind];
+  return p.control.outpost ? `${name} · avant-poste` : name;
 }
 /** L'emoji d'un lieu (idem). */
 export function poiEmo(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
@@ -754,6 +759,20 @@ export interface Crossing {
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de
  *  niveau (`travelOneWayMin`) — sur une île, le temps ne dépend que de la distance. */
 export const ARCHIPEL_TRAVEL_LEVEL = 0;
+
+/** 🏝️ Sur une île, l'aller ne dépasse jamais 2 h depuis la base (décision de l'utilisateur,
+ *  2026-10-02 : « 4 h aller-retour depuis la base vers les bords de la carte au max »). */
+export const ISLAND_MAX_LEG_MIN = 120;
+
+/** 🏝️ La distance normalisée d'un lieu d'île, PLAFONNÉE pour que l'aller (niveau de trajet
+ *  `ARCHIPEL_TRAVEL_LEVEL`) tienne en `ISLAND_MAX_LEG_MIN`. Seule la forteresse, sur le cap au
+ *  bord de l'île, est au-delà : les lieux tirés restent dans 54 unités (~1 h 50). */
+export function islandDistNorm(d: number): number {
+  const cap =
+    (ISLAND_MAX_LEG_MIN - EXPE.travelOneWayMinMin) /
+    (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin);
+  return Math.min(distNormAt(d), cap);
+}
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;

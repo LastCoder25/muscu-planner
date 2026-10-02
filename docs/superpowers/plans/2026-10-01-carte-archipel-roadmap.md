@@ -230,7 +230,18 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       les miliciens postés sur CETTE île). Le panneau Archipel dit la réserve de chaque île.
       Tests `crossing.test.ts` (+3, 5 mutations rouges) et montage du panneau (traversée +
       milice, vérifié non creux). Panneau vu au banc Playwright à 344/390/600 px (0 débordement).
-      Reste pour 3b : base au port, 2 avant-postes, zone à portée des points tenus.
+      Reste pour 3b : zone à portée des points tenus.
+      **3b (2/4) livrée v1.19.0 — deux avant-postes et 4 h aller-retour au plus** (décisions
+      de l'utilisateur, 2026-10-02 : « ok pour tout », « 4h aller/retour depuis la base vers les
+      bords de la carte au max »). La Tour de guet et le Camp d'entraînement de l'île sont posés
+      SUR la route base → forteresse (`outpostSpots`, déplacés tant qu'ils sont ennemis, jamais
+      une fois tenus ; marque `ControlState.outpost`, libellé « · avant-poste »). Les objectifs
+      restent verrouillés tant que les DEUX ne sont pas tenus (refus `objectiveLocked`) ; tenus
+      tous les deux, ils servent de relais : la forteresse passe de 2 h à 1 h 15 d'aller
+      (`FORTRESS_RELAY_LEG_MIN`). Aucun lieu d'une île à plus de 2 h d'aller (`islandDistNorm`,
+      `ISLAND_MAX_LEG_MIN`) : seule la forteresse était au-delà. Base : le dessin actuel au
+      centre, relié au port, est gardé. Tests `islandOutposts.test.ts` (8, mutations rouges).
+      Non vu à l'écran en vraie partie (le compte de smoke n'est pas en mode archipel).
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
 
 ### Étoffer
