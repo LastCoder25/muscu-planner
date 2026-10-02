@@ -93,7 +93,8 @@
             <span class="bgs-t-main">
               <span class="bgs-t-name">{{ t.label }}</span>
               <span class="bgs-t-sub">{{
-                t.why ?? `🧭 ${formatDurationMin(t.min)} · ${t.free} place${t.free > 1 ? 's' : ''}`
+                t.why ??
+                `🧭 ${formatDurationMin(t.min)} · ${Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
               }}</span>
             </span>
           </button>

@@ -93,7 +93,7 @@
           <span
             v-if="r.status !== 'enemy' && r.status !== 'assault'"
             class="cps-minis"
-            :aria-label="`Garnison ${r.garrison.length} sur ${r.seats}`"
+            :aria-label="`Garnison ${r.garrison.length} sur ${Number.isFinite(r.seats) ? r.seats : 'sans limite'}`"
           >
             <template v-for="(s, i) in slotsOf(r)" :key="i">
               <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
@@ -243,7 +243,8 @@ const slotsOf = (r: ControlRosterRow): Slot[] => {
     ...r.reinforcing.map(() => ({ kind: 'route' as const })),
     ...advsOf(r.away).map((adv) => ({ kind: 'away' as const, adv })),
   ];
-  const free = Math.max(0, r.seats - filled.length);
+  // 🏰 Sans limite (la forteresse) : une seule case libre, qui dit qu'on peut en ajouter.
+  const free = Number.isFinite(r.seats) ? Math.max(0, r.seats - filled.length) : 1;
   return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
 };
 const rankOf = (r: ControlRosterRow) => poiRank(r.poi);

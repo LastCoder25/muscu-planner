@@ -564,17 +564,29 @@
             <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
             <p class="ctl-line">
-              🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
-              <span class="ctl-dim">
-                · {{ controlMembers.length + controlAway.length }}/{{
-                  seatsOf(liveControl.kind)
-                }}
-                champion{{ seatsOf(liveControl.kind) > 1 ? 's' : '' }}</span
-              >
+              <template v-if="unlimitedGarrison">
+                🏰 <b>Garnison {{ controlCount }}{{ liveControl.hero ? ' + ton héros' : '' }}</b>
+                <span class="ctl-dim"> · sans limite</span>
+              </template>
+              <template v-else>
+                🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
+                <span class="ctl-dim">
+                  · {{ controlMembers.length + controlAway.length }}/{{
+                    seatsOf(liveControl.kind)
+                  }}
+                  champion{{ seatsOf(liveControl.kind) > 1 ? 's' : '' }}</span
+                >
+              </template>
               <span class="ctl-dim"> · touche un membre pour le ramener ou le remplacer</span>
             </p>
             <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
             <div class="car-pick">
+              <!-- 🏰 Le héros posté à la forteresse (2026-10-02). -->
+              <div v-if="liveControl.hero" class="mil-tile hero-tile">
+                <span class="mil-emo">🦸</span>
+                <span class="mil-name">Ton héros</span>
+                <span class="mil-sub">posté ici</span>
+              </div>
               <AdvPickTile
                 v-for="m in controlMembers"
                 :key="m.adv.id"
@@ -664,6 +676,15 @@
               :at="ctlRecallAt"
             />
             <button
+              v-if="liveControl.hero"
+              type="button"
+              class="ctl-recall ctl-back"
+              :disabled="ctlBusy"
+              @click="recallHero"
+            >
+              🦸 Rappeler le héros à la base
+            </button>
+            <button
               v-if="ctlRecallSel.length"
               type="button"
               class="ctl-recall ctl-back"
@@ -751,7 +772,7 @@
                     <span class="xfer-name">{{ t.label }}</span>
                     <span class="xfer-sub">{{
                       t.why ??
-                      `🧭 ${formatDurationMin(t.min)} · ${t.free} place${t.free > 1 ? 's' : ''}`
+                      `🧭 ${formatDurationMin(t.min)} · ${Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
                     }}</span>
                   </span>
                 </button>
@@ -820,7 +841,9 @@
             {{
               liveControl.kind === 'fortress' && liveControl.locked
                 ? '🔒 Verrouillée : abats d’abord les objectifs de l’île.'
-                : '⚔️ Attaque-le avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout le monde rentre après l’assaut. Abattu, il ne revient jamais.'
+                : liveControl.kind === 'fortress'
+                  ? '🏰 Prise, elle se tient : toute l’équipe y reste, le héros aussi (garnison sans limite, jamais reprise). La traversée part de là.'
+                  : '⚔️ Attaque-le avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout le monde rentre après l’assaut. Abattu, il ne revient jamais.'
             }}
           </p>
           <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
@@ -1200,7 +1223,12 @@
 </template>
 
 <script setup lang="ts">
-import { islandConquest, islandTargetLabel, isIslandTargetId } from '@/lib/islandConquest';
+import {
+  heroAtFortress,
+  islandConquest,
+  islandTargetLabel,
+  isIslandTargetId,
+} from '@/lib/islandConquest';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import { attackWingVoyages, type CombinedAttack } from '@/lib/combinedAttack';
@@ -2194,12 +2222,30 @@ const controlCount = computed(
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
 /** ➕ Les cases vides de la garnison de 5 : les premières prennent un champion, les
  *  suivantes (au-delà des places de champion du lieu) seulement un milicien. */
-const garrisonSlots = computed(() =>
-  Array.from({ length: militiaFreeSeats(liveControl.value) }, (_, i) => ({
-    i,
-    label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
-  })),
+/** 🏰 La forteresse prise : garnison sans limite. */
+const unlimitedGarrison = computed(
+  () => !!liveControl.value && !Number.isFinite(seatsOf(liveControl.value.kind)),
 );
+const garrisonSlots = computed(() =>
+  unlimitedGarrison.value
+    ? [{ i: 0, label: 'Place libre · sans limite' }]
+    : Array.from({ length: militiaFreeSeats(liveControl.value) }, (_, i) => ({
+        i,
+        label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
+      })),
+);
+/** 🏰 Rappelle le héros posté à la forteresse : il rentre à la base, à son pas. */
+async function recallHero() {
+  const uid = auth.user?.id;
+  if (!uid || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    await char.recallHeroFromFortress(uid, Date.now());
+    $q.notify({ type: 'positive', message: '🦸 Ton héros rentre à la base.' });
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 /** ➕ Toucher une case vide ouvre le renfort direct (`QuickReinforceSheet`), le même que la
  *  liste des places fortes : champions et miliciens de la base, et membres des AUTRES points
  *  tenus (demandé : « comme partout ailleurs, pas seulement la base »). */
@@ -3891,6 +3937,9 @@ const baseOpen = ref(false);
 const baseChamps = computed(() => freeSorted.value);
 const heroBaseStatus = computed(() => {
   if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
+  const map = char.row?.expedition_map;
+  if (heroAtFortress(map)) return '🏰 posté à la forteresse';
+  if (map?.heroReturnAt !== undefined) return '🧭 rentre de la forteresse';
   if (char.heroEngaged) return '🧭 en expédition';
   return '✅ à la base — il part depuis la fiche d’un lieu';
 });
@@ -4601,7 +4650,8 @@ const controlReturnNote = computed(() =>
     ? returnNote(
         partyLeg.value,
         partyWonLeg.value,
-        partyHeroOn.value,
+        // 🏰 Prise, la forteresse garde le héros.
+        partyHeroOn.value && selected.value?.control?.kind !== 'fortress',
         partyAdvs.value.length,
         stayCap.value,
       )
@@ -5362,6 +5412,11 @@ onUnmounted(() => {
 }
 .swap-delta.down {
   color: var(--d4);
+}
+.hero-tile {
+  cursor: default;
+  border-style: solid;
+  border-color: var(--accent);
 }
 .mil-tile {
   position: relative;

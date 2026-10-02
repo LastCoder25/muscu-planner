@@ -155,6 +155,10 @@ import {
   ensureIslandConquest,
   isIslandTargetId,
   razeIslandTarget,
+  takeFortress,
+  heroAtFortress,
+  recallFortressHero,
+  boardFromFortress,
 } from '@/lib/islandConquest';
 import {
   buildingType,
@@ -2424,7 +2428,11 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return 'noArchipel' as const;
     return crossingBlocker(cur.expedition_map, to, {
-      heroBusy: !!cur.expedition || heroInAttack(attackList.value),
+      // 🏰 Posté à la forteresse, il embarque de là ; rappelé, il marche encore.
+      heroBusy:
+        !!cur.expedition ||
+        heroInAttack(attackList.value) ||
+        cur.expedition_map.heroReturnAt !== undefined,
       troopsMoving: troopsMoving(cur),
     });
   }
@@ -2436,11 +2444,17 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur?.expedition_map) return;
     const why = crossingBlock(to);
     if (why) throw new Error(CROSSING_BLOCK_LABEL[why]);
-    const ids = crossingTravellers(advList.value, now);
-    const map = startCrossing(cur.expedition_map, to, ids, now);
+    // 🏰 La forteresse est le port : sa garnison de champions et le héros embarquent de là.
+    const port = boardFromFortress(cur.expedition_map);
+    const fromPort = new Set(port.ids);
+    const advs = advList.value.map((a) =>
+      fromPort.has(a.id) && a.posted === FORTRESS_ID ? { ...a, posted: undefined } : a,
+    );
+    const ids = [...new Set([...crossingTravellers(advs, now), ...port.ids])];
+    const map = startCrossing(port.map, to, ids, now);
     await persist(userId, {
       expedition_map: map,
-      adventurers: boardTravellers(advList.value, map.crossing!),
+      adventurers: boardTravellers(advs, map.crossing!),
     });
   }
   async function setArchipelMode(userId: string, on: boolean) {
@@ -2886,7 +2900,12 @@ export const useCharacterStore = defineStore('character', () => {
   // départ, si : il défend). Le panneau de défense le comptait présent — la résolution du
   // siège, elle, lisait déjà les attaques (`outingsOf`).
   function heroIsHome(cur: CharacterRow): boolean {
-    return !cur.expedition && !heroOutInAttack(attackList.value);
+    return !cur.expedition && !heroOutInAttack(attackList.value) && !heroOnMap(cur.expedition_map);
+  }
+  /** 🏰 Le héros posté à la forteresse, ou rappelé et pas encore rentré (`heroReturnAt` est
+   *  retiré par `settleHome` à son arrivée). */
+  function heroOnMap(map: ExpeditionMap | null | undefined): boolean {
+    return heroAtFortress(map) || map?.heroReturnAt !== undefined;
   }
 
   /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
@@ -3581,7 +3600,9 @@ export const useCharacterStore = defineStore('character', () => {
       !!row.value?.expedition ||
       heroInAttack(attackList.value) ||
       // ⛵ En traversée (réservée ou en mer) : le héros est sur le bateau.
-      !!row.value?.expedition_map?.crossing,
+      !!row.value?.expedition_map?.crossing ||
+      // 🏰 Posté à la forteresse, ou en chemin vers la base.
+      heroOnMap(row.value?.expedition_map),
   );
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
@@ -3737,15 +3758,17 @@ export const useCharacterStore = defineStore('character', () => {
     const seats = poi.type === 'control' && poi.control ? seatsOf(poi.control.kind) : 0;
     const stayers = new Set(seats ? assaultStayers(opts.escortIds, opts.stayIds, seats) : []);
     const back = escort.filter((a) => !stayers.has(a.id));
+    // 🏰 Prise, la forteresse garde aussi le héros : il ne rentre pas.
+    const heroBack = !!hero && poi.control?.kind !== 'fortress';
     const backLeg = (p: Poi) =>
       partyLegMin(p, back, {
-        hero: !!hero,
+        hero: heroBack,
         travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
         gearSpeed: advGearRoles(back, road.advGear).speed,
         supplies,
       });
     let wonLeg = 0;
-    if (seats && (back.length || hero))
+    if (seats && (back.length || heroBack))
       wonLeg = origin ? legFromSpot(meet.poi, origin, backLeg) : backLeg(meet.poi);
     const trip1 = seats
       ? { ...trip0, returnLegs: { won: Math.min(wonLeg, leg), lost: leg } }
@@ -3942,6 +3965,8 @@ export const useCharacterStore = defineStore('character', () => {
     legMin: number,
   ): number {
     const back = escort.filter((a) => !stay.has(a.id));
+    // 🏰 Prise, la forteresse garde le héros : il ne rentre pas.
+    if (poi.control?.kind === 'fortress') hero = false;
     if (!back.length && !hero) return 0;
     const road = escortKitOf(cur);
     const legOf = (p: Poi) =>
@@ -4722,7 +4747,12 @@ export const useCharacterStore = defineStore('character', () => {
       if (isIslandTargetId(id)) {
         if (m.win) {
           const wasPacified = map.archipel?.pacifiedAt !== undefined;
-          map = razeIslandTarget(map, id, m.resolvedAt);
+          // 🏰 La forteresse se TIENT (2026-10-02) : toute l'équipe y reste, le héros aussi.
+          if (id === FORTRESS_ID) {
+            map = takeFortress(map, m.party!.escort, !!m.party!.hero, m.resolvedAt);
+            const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
+            advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
+          } else map = razeIslandTarget(map, id, m.resolvedAt);
           islandFx.push(map.archipel?.pacifiedAt !== undefined && !wasPacified ? 'pacified' : id);
         } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
         continue;
@@ -5222,6 +5252,21 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  /** 🏰 RAPPELLE le héros posté à la forteresse : il rentre à la base, à son pas. */
+  async function recallHeroFromFortress(userId: string, now: number): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    const poi = map?.pois.find((p) => p.id === FORTRESS_ID);
+    if (!cur || !map || !poi || !heroAtFortress(map)) return;
+    const leg = partyLegMin(poi, [], {
+      hero: true,
+      travelMult: travelTimeMult(cur.buildings) * controlTravelMult(map, now),
+      gearSpeed: 0,
+    });
+    await persist(userId, { expedition_map: recallFortressHero(map, now, leg) });
+  }
+
   async function releaseControlChampions(
     userId: string,
     id: string,
@@ -5306,7 +5351,14 @@ export const useCharacterStore = defineStore('character', () => {
    *  Appelé par `controlTick`, avant les reprises. */
   function settleHome(cur: CharacterRow, now: number): Record<string, unknown> | null {
     if (!cur.expedition_map) return null;
-    const r = settleReturns(cur.expedition_map, now);
+    let r = settleReturns(cur.expedition_map, now);
+    // 🏰 Le héros rappelé de la forteresse est rentré.
+    const back = r.map.heroReturnAt !== undefined && r.map.heroReturnAt <= now;
+    if (back) {
+      const m = { ...r.map };
+      delete m.heroReturnAt;
+      r = { ...r, map: m };
+    }
     if (r.map === cur.expedition_map) return null;
     return {
       expedition_map: r.map,
@@ -5984,6 +6036,7 @@ export const useCharacterStore = defineStore('character', () => {
     collectControlPoint,
     recallControl,
     releaseControlChampions,
+    recallHeroFromFortress,
     reinforceControlPoint,
     plannedList,
     scheduleReinforcement,

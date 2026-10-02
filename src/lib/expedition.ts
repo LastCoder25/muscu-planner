@@ -113,6 +113,9 @@ export interface ControlState {
   /** 🏝️ AVANT-POSTE de l'île (`islandConquest`) : posé sur la route base → forteresse ; les
    *  objectifs ne s'attaquent qu'une fois les deux avant-postes tenus. */
   outpost?: boolean;
+  /** 🏰 La FORTERESSE prise (`takeFortress`) : le héros y est POSTÉ — il défend la place,
+   *  n'est plus libre pour autre chose et embarque de là pour la traversée. */
+  hero?: boolean;
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;
@@ -738,6 +741,8 @@ export interface ExpeditionMap {
   islands?: Record<string, ExpeditionMap>;
   /** ⛵ La traversée réservée ou en cours (débarquement à `arriveAt`). */
   crossing?: Crossing;
+  /** 🏰 Le héros RAPPELÉ de la forteresse rentre à la base à cet instant (occupé d'ici là). */
+  heroReturnAt?: number;
   /** 🛡️ La RÉSERVE DE MILICE d'une île RANGÉE (règle 5 : une réserve par île, produite par
    *  la Caserne sur place même en ton absence). ⚠️ Jamais sur la carte ACTIVE : la réserve de
    *  l'île où tu es vit dans `base.militia`. Échangée au débarquement (`landCrossing`). */

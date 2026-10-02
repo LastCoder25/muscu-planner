@@ -348,11 +348,17 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
-  // 🏝️ Les objectifs de l'île et sa forteresse non plus.
+  // 🏝️ Les objectifs de l'île : on les abat, personne n'y reste.
   objective: 0,
-  fortress: 0,
+  // 🏰 La forteresse PRISE se tient, garnison SANS LIMITE, comme la base (décision de
+  // l'utilisateur, 2026-10-02 : « la forteresse a une garnison sans limite »).
+  fortress: Infinity,
 };
 export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
+/** 🏰 La garnison ENTIÈRE (champions et miliciens) d'un point : 5, sans limite pour la
+ *  forteresse. */
+export const garrisonCap = (kind: ControlKind): number =>
+  Number.isFinite(CONTROL_SEATS[kind]) ? MILITIA.perPoint : Infinity;
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
  *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
  *  la Forge de campagne (2026-09-29). */
@@ -734,7 +740,9 @@ function gateAttacks(
   }
   pois.forEach((p, k) => {
     const c = p.control;
-    if (!c || c.owner !== 'player' || c.kind === 'citadel' || c.attackAt !== undefined) return;
+    // 🏰 La forteresse prise n'est jamais reprise (décision de l'utilisateur, 2026-10-02).
+    if (!c || c.owner !== 'player' || c.kind === 'citadel' || c.kind === 'fortress') return;
+    if (c.attackAt !== undefined) return;
     const id = citadelIdFor(pois, c.kind);
     const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
     const attackAt = Math.max(now + retakeDelayMs(p.id, now, harass, slowOf(c.kind)), truce);
@@ -1885,7 +1893,8 @@ export function controlYieldCard(
   playerLevel: number,
 ): ControlYieldCard | null {
   const c = p.control;
-  if (!c || c.owner !== 'player') return null;
+  // 🏰 La forteresse ne produit rien : elle se tient.
+  if (!c || c.owner !== 'player' || c.kind === 'fortress') return null;
   const n = c.garrison.length;
   const seats = seatsOf(c.kind);
   const [one, many] = WORKER[c.kind];
@@ -2017,7 +2026,7 @@ export function controlSeats(c: ControlState | undefined | null): number {
 /** 🏰 Places encore libres dans la garnison, tout confondu (0 si le point n'est pas à nous). */
 function garrisonRoom(c: ControlState): number {
   const o = occupants(c);
-  return Math.max(0, MILITIA.perPoint - o.champs - o.militia);
+  return Math.max(0, garrisonCap(c.kind) - o.champs - o.militia);
 }
 /** 🏰 Places de champion libres pour un renfort : celles du point, dans la limite de la
  *  garnison entière (0 si le point n'est pas à nous). */
@@ -2427,7 +2436,7 @@ function capGarrison(kind: ControlKind, ids: readonly string[]): string[] {
   let champs = 0;
   let total = 0;
   return ids.filter((id) => {
-    if (total >= MILITIA.perPoint) return false;
+    if (total >= garrisonCap(kind)) return false;
     if (!isMilitiaId(id) && champs >= seatsOf(kind)) return false;
     if (!isMilitiaId(id)) champs++;
     total++;

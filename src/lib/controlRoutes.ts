@@ -17,7 +17,7 @@
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
 import { distNormAt, type ControlState, type ExpeditionMap, type Poi } from './expedition';
-import { isMilitiaId, MILITIA } from './militia';
+import { isMilitiaId } from './militia';
 import {
   controlFreeSeats,
   freeAway,
@@ -27,6 +27,7 @@ import {
   reinforceControl,
   releaseFromControl,
   seatsOf,
+  garrisonCap,
   sendHomeFromControl,
 } from './controlPoints';
 
@@ -165,7 +166,7 @@ function seatsOkAfter(c: ControlState, out: string, add: string): boolean {
   const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)].filter((x) => x !== out);
   ids.push(add);
   const champs = ids.filter((x) => !isMilitiaId(x)).length;
-  return ids.length <= MILITIA.perPoint && champs <= seatsOf(c.kind);
+  return ids.length <= garrisonCap(c.kind) && champs <= seatsOf(c.kind);
 }
 
 export function swapBlocker(

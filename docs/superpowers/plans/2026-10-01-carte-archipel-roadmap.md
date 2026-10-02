@@ -246,6 +246,14 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       2026-10-02 : « mets la forteresse plus loin si besoin ») : 3 h d’aller (`FORTRESS_LEG_MIN`),
       seul lieu hors des 4 h aller-retour ; les deux avant-postes tenus la ramènent à 2 h
       (`FORTRESS_RELAY_LEG_MIN`, au lieu de 1 h 15).
+      **v1.21.0 — la forteresse prise se TIENT** (décisions de l’utilisateur, 2026-10-02) : elle
+      n’est plus rasée (`takeFortress`) — toute l’équipe gagnante y reste, garnison SANS LIMITE
+      (champions et miliciens, `seatsOf` = ∞, `garrisonCap`), et le héros, s’il combattait, y
+      est POSTÉ (`ControlState.hero`) jusqu’à son rappel (« Rappeler le héros », il rentre à son
+      pas : `heroReturnAt`). Elle compte comme abattue pour la pacification, n’est JAMAIS reprise
+      et ne produit rien. La traversée part d’elle : sa garnison de champions et le héros
+      embarquent (`boardFromFortress`), les miliciens restent. Tests `fortressHeld.test.ts`
+      (6, 5 mutations rouges). Fiche non vue à l’écran en vraie partie.
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
 
 ### Étoffer

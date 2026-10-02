@@ -27,6 +27,7 @@ import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { mulberry32, seedOf } from './combat';
 import { CONTROL, bankAt } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
+import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
   EXPE,
@@ -337,9 +338,12 @@ export function ensureIslandConquest(
   const wantIds = new Set(want.map((p) => p.id));
   let pois = map.pois;
   let changed = false;
-  // 1. Ce qui ne doit plus être là (île abattue, mode quitté).
-  if (pois.some((p) => isIslandTargetId(p.id) && !wantIds.has(p.id))) {
-    pois = pois.filter((p) => !isIslandTargetId(p.id) || wantIds.has(p.id));
+  // 1. Ce qui ne doit plus être là (île abattue, mode quitté). ⚠️ La forteresse PRISE
+  // reste : elle se tient (`takeFortress`).
+  const stays = (p: Poi) =>
+    !isIslandTargetId(p.id) || wantIds.has(p.id) || (!!isl && heldFortress(p));
+  if (pois.some((p) => !stays(p))) {
+    pois = pois.filter(stays);
     changed = true;
   }
   // 2. Posés s'ils manquent, rafraîchis sinon (niveau, troupe, verrou ; la place ne bouge pas).
@@ -441,6 +445,99 @@ export function razeIslandTarget(map: ExpeditionMap, id: string, at: number): Ex
   return next;
 }
 
+/** 🏰 La forteresse est-elle à nous ? */
+function heldFortress(p: Poi): boolean {
+  return p.id === FORTRESS_ID && p.control?.owner === 'player';
+}
+
+/**
+ * 🏰 LA FORTERESSE PRISE (décisions de l'utilisateur, 2026-10-02) : elle n'est plus rasée,
+ * elle se TIENT. Toute l'équipe gagnante y reste — garnison SANS LIMITE, comme la base — et le
+ * héros, s'il était du combat, y est POSTÉ jusqu'à son rappel. Elle compte comme abattue pour
+ * la pacification et n'est JAMAIS reprise. Elle ne produit rien.
+ */
+export function takeFortress(
+  map: ExpeditionMap,
+  garrison: readonly string[],
+  hero: boolean,
+  at: number,
+): ExpeditionMap {
+  const before = map.pois.find((p) => p.id === FORTRESS_ID);
+  const razed = razeIslandTarget(map, FORTRESS_ID, at);
+  if (!before?.control || razed === map) return razed;
+  const { attackAt: _a, raidAt: _r, locked: _l, ...rest } = before.control;
+  void _a;
+  void _r;
+  void _l;
+  const held: Poi = {
+    ...before,
+    control: {
+      ...rest,
+      owner: 'player',
+      garrison: [...new Set(garrison)],
+      since: at,
+      collectedAt: at,
+      assault: false,
+      ...(hero ? { hero: true } : {}),
+    },
+  };
+  if (!hero) delete held.control!.hero;
+  return { ...razed, pois: [...razed.pois, held] };
+}
+
+/** 🏰 Le héros est-il posté à la forteresse ? */
+export function heroAtFortress(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
+  return !!map?.pois.some((p) => heldFortress(p) && p.control!.hero);
+}
+
+/** 🏰 Le héros est-il retenu sur la carte (posté à la forteresse, ou en chemin vers la base
+ *  après son rappel) ? */
+export function heroHeldOnMap(
+  map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt'> | null | undefined,
+  now: number,
+): boolean {
+  return heroAtFortress(map) || (map?.heroReturnAt ?? 0) > now;
+}
+
+/** 🏰 Rappelle le héros de la forteresse : il rentre à la base en `legMin` minutes. */
+export function recallFortressHero(map: ExpeditionMap, now: number, legMin: number): ExpeditionMap {
+  if (!heroAtFortress(map)) return map;
+  return {
+    ...map,
+    heroReturnAt: now + Math.max(0, Math.round(legMin)) * 60_000,
+    pois: map.pois.map((p) => {
+      if (!heroFortressPoi(p)) return p;
+      const { hero: _h, ...c } = p.control!;
+      void _h;
+      return { ...p, control: c };
+    }),
+  };
+}
+const heroFortressPoi = (p: Poi) => heldFortress(p) && !!p.control!.hero;
+
+/** ⛵ Ceux qui EMBARQUENT de la forteresse (elle est le port de l'île) : sa garnison de
+ *  champions et le héros. Rend la carte sans eux et leurs ids (les miliciens restent). */
+export function boardFromFortress(map: ExpeditionMap): { map: ExpeditionMap; ids: string[] } {
+  const f = map.pois.find(heldFortress);
+  if (!f) return { map, ids: [] };
+  const c = f.control!;
+  const ids = c.garrison.filter((x) => !isMilitiaId(x));
+  if (!ids.length && !c.hero) return { map, ids: [] };
+  const { hero: _h, ...rest } = c;
+  void _h;
+  return {
+    ids,
+    map: {
+      ...map,
+      pois: map.pois.map((p) =>
+        p.id === f.id
+          ? { ...p, control: { ...rest, garrison: c.garrison.filter(isMilitiaId) } }
+          : p,
+      ),
+    },
+  };
+}
+
 /** 🏝️ Ce que la fiche dit d'un objectif ou de la forteresse. */
 export function islandTargetLabel(
   map: ExpeditionMap | null | undefined,
@@ -448,7 +545,7 @@ export function islandTargetLabel(
 ): { title: string; detail: string } | null {
   const st = islandConquest(map);
   const p = map?.pois.find((x) => x.id === id);
-  if (!st || !p?.control || !isIslandTargetId(id)) return null;
+  if (!st || !p?.control || !isIslandTargetId(id) || heldFortress(p)) return null;
   const { island: isl, objectivesDown: down, objectivesTotal: n } = st;
   if (p.control.kind === 'objective')
     return {

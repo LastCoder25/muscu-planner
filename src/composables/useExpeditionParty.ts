@@ -585,10 +585,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
       return partyLeg.value;
     const stay = new Set(stayIds.value);
     const back = partyAdvs.value.filter((a) => !stay.has(a.id));
-    if (!back.length && !partyHeroOn.value) return 0;
+    // 🏰 Prise, la forteresse garde aussi le héros : il ne rentre pas.
+    const heroBack = partyHeroOn.value && selected.value.control?.kind !== 'fortress';
+    if (!back.length && !heroBack) return 0;
     const legOf = (p: Poi) =>
       partyLegMin(p, back, {
-        hero: partyHeroOn.value,
+        hero: heroBack,
         travelMult: travelMult.value,
         gearSpeed: advGearRoles(back, roadCtx.value.advGear).speed,
         supplies: activeSupplies.value,
