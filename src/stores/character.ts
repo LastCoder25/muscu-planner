@@ -146,6 +146,7 @@ import {
   landAdventurers,
   landCrossing,
   landingChestMessage,
+  produceIslandMilitia,
   startCrossing,
 } from '@/lib/crossing';
 import {
@@ -2295,7 +2296,7 @@ export const useCharacterStore = defineStore('character', () => {
     const orig = cur.expedition_map;
     // ⛵ DÉBARQUER d'abord (`crossing.ts`) : l'île quittée est rangée, l'île d'arrivée sort de
     // sa réserve ou naît neuve — tout le reste du tick travaille sur la carte d'arrivée.
-    const land = orig ? landCrossing(orig, now, level) : null;
+    const land = orig ? landCrossing(orig, now, level, cur.base?.militia) : null;
     const prev = land?.map ?? orig;
     // 🕳️ LES FAILLES MÛRES SE LISENT ICI, AVANT `advanceWorld` — c'est le SEUL instant où
     // elles sont encore sur la carte : lui les remplace par leur mine de mana résiduel.
@@ -2335,7 +2336,12 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 La forteresse de l'île abattue : son coffre, une seule fois (marque dans la carte,
     // même écriture). ⚓ Le premier débarquement sur une île : le sien.
     const fort = fortressReward(mapP, now);
-    const map = fort?.map ?? mapP;
+    // 🛡️ La Caserne produit aussi pour les îles rangées (une réserve par île).
+    const map = produceIslandMilitia(
+      fort?.map ?? mapP,
+      buildingLevel(cur.buildings, 'barracks'),
+      now,
+    );
     const landIsl = land?.crossing && land.firstTime ? islandById(land.crossing.to) : null;
     const islandMsgs = [
       ...(fort ? [fort.msg] : []),
@@ -2348,7 +2354,10 @@ export const useCharacterStore = defineStore('character', () => {
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
     // graine qui n'est pas celle que le tick de base lui aurait donnée.
-    const base = over.length && cur.base ? markOverflow(cur.base, over.map(riftOverflowOf)) : null;
+    // ⚓ Au débarquement, la réserve de milice de l'île d'arrivée devient celle de la base.
+    const base0 = land?.militia && cur.base ? { ...cur.base, militia: land.militia } : null;
+    const baseM = base0 ?? cur.base;
+    const base = over.length && baseM ? markOverflow(baseM, over.map(riftOverflowOf)) : base0;
     const mapChanged = JSON.stringify(map) !== JSON.stringify(orig);
     // `markOverflow` rend la MÊME référence quand il n'y a rien de plus récent à poser.
     const baseChanged = !!base && base !== cur.base;

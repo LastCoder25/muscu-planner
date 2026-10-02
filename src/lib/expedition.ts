@@ -13,6 +13,7 @@ import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank'
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
+import type { MilitiaState } from './militia';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
@@ -732,6 +733,10 @@ export interface ExpeditionMap {
   islands?: Record<string, ExpeditionMap>;
   /** ⛵ La traversée réservée ou en cours (débarquement à `arriveAt`). */
   crossing?: Crossing;
+  /** 🛡️ La RÉSERVE DE MILICE d'une île RANGÉE (règle 5 : une réserve par île, produite par
+   *  la Caserne sur place même en ton absence). ⚠️ Jamais sur la carte ACTIVE : la réserve de
+   *  l'île où tu es vit dans `base.militia`. Échangée au débarquement (`landCrossing`). */
+  militia?: MilitiaState;
 }
 
 /** ⛵ Une traversée d'une île à l'autre (`crossing.ts`). */

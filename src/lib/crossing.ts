@@ -30,6 +30,7 @@ import { characterRank } from './characterRank';
 import { createMap, type Crossing, type ExpeditionMap, type ExpeditionMessage } from './expedition';
 import { GACHA } from './gacha';
 import { FORTRESS_ID } from './islandConquest';
+import { emptyMilitia, militiaOnMap, produceMilitia, type MilitiaState } from './militia';
 
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
@@ -230,6 +231,9 @@ export interface Landing {
   crossing: Crossing | null;
   /** Première fois sur cette île : le coffre de débarquement est dû. */
   firstTime: boolean;
+  /** 🛡️ La réserve de milice de l'île d'arrivée, à poser dans `base.militia` (null si aucun
+   *  débarquement). La milice NE TRAVERSE PAS : une réserve par île (règle 5). */
+  militia: MilitiaState | null;
 }
 
 /**
@@ -238,15 +242,30 @@ export interface Landing {
  * îles rangées et les citadelles mises de côté. Une île neuve naît PEUPLÉE (`createMap`, au
  * plancher, à la taille et au rang de l'île) : elle ne doit pas apparaître vide.
  */
-export function landCrossing(map: ExpeditionMap, now: number, playerLevel: number): Landing {
+export function landCrossing(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  /** 🛡️ La réserve de milice de l'île quittée (`base.militia`) : rangée avec elle. */
+  militia: MilitiaState | null | undefined,
+): Landing {
   const c = map.crossing;
-  if (!c || now < c.arriveAt || !map.archipel) return { map, crossing: null, firstTime: false };
+  if (!c || now < c.arriveAt || !map.archipel)
+    return { map, crossing: null, firstTime: false, militia: null };
   const { islands, crossing: _c, citadelStash, ...left } = map;
   void _c;
   const stash: Record<string, ExpeditionMap> = { ...(islands ?? {}) };
-  const saved = stash[String(c.to)];
+  const found = stash[String(c.to)];
   delete stash[String(c.to)];
-  stash[String(c.from)] = left;
+  stash[String(c.from)] = militia ? { ...left, militia } : left;
+  // La réserve de l'île d'arrivée quitte sa carte : elle revient dans `base.militia`.
+  let saved: ExpeditionMap | undefined;
+  let arrival: MilitiaState | undefined;
+  if (found) {
+    const { militia: m, ...rest } = found;
+    saved = rest;
+    arrival = m;
+  }
   const archipel = archipelOn(c.to);
   const target: ExpeditionMap =
     saved ??
@@ -266,7 +285,28 @@ export function landCrossing(map: ExpeditionMap, now: number, playerLevel: numbe
     },
     crossing: c,
     firstTime: !saved,
+    militia: arrival ?? emptyMilitia(c.arriveAt),
   };
+}
+
+/**
+ * 🛡️ LA CASERNE PRODUIT AUSSI POUR LES ÎLES RANGÉES (règle 5) : chaque réserve avance, bornée
+ * par le plafond de la Caserne moins SES miliciens postés sur SES lieux. Rend la MÊME carte
+ * si rien ne change (l'appelant n'écrit pas à vide).
+ */
+export function produceIslandMilitia(
+  map: ExpeditionMap,
+  barracks: number,
+  now: number,
+): ExpeditionMap {
+  if (barracks <= 0 || !map.islands) return map;
+  let islands = map.islands;
+  for (const [k, im] of Object.entries(map.islands)) {
+    if (!im.militia) continue;
+    const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now);
+    if (m !== im.militia) islands = { ...islands, [k]: { ...im, militia: m } };
+  }
+  return islands === map.islands ? map : { ...map, islands };
 }
 
 /**

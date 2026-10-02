@@ -39,7 +39,7 @@ async function mountIt(
   html?: (out: string) => void,
   /** Un geste avant la lecture du HTML (déplier une ligne, par exemple) : ce qui ne se rend
    *  qu'après un clic resterait sinon invisible au test. */
-  act?: (host: HTMLElement) => void,
+  act?: (host: HTMLElement) => void | Promise<void>,
 ) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -71,7 +71,7 @@ async function mountIt(
   // état final, par exemple) n'est peint qu'au flush suivant.
   await nextTick();
   if (act) {
-    act(host);
+    await act(host);
     await nextTick();
   }
   html?.(host.innerHTML);
@@ -185,6 +185,44 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(open).toContain('Tu es ici');
     expect(open).toContain('Le Fort des pillards');
     expect(open).toContain('Quitter le mode archipel');
+  });
+
+  // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de
+  // l'île active est dite.
+  it('ArchipelPanel : la traversée vers une île ouverte, et la milice de chaque île', async () => {
+    const { default: ArchipelPanel } = await import('@/components/ArchipelPanel.vue');
+    const { islandById } = await import('@/lib/archipelago');
+    let here = '';
+    let there = '';
+    const props = {
+      island: islandById(1),
+      busy: false,
+      now: Date.UTC(2026, 9, 2, 10, 30),
+      openIds: [1, 2],
+      visitedIds: [1],
+      blocks: { 1: null, 2: null, 3: null, 4: null, 5: null },
+      travellers: 3,
+      away: {},
+      militia: { 1: 4 },
+    };
+    const openHead = (host: HTMLElement) => host.querySelector<HTMLElement>('.arch-head')?.click();
+    await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (here = h), openHead);
+    expect(here).toMatch(/🛡️ 4 miliciens/);
+    await mountIt(
+      ArchipelPanel,
+      props,
+      undefined,
+      undefined,
+      '/',
+      (h) => (there = h),
+      async (host) => {
+        openHead(host);
+        await nextTick();
+        host.querySelectorAll('.am-isl')[1]?.dispatchEvent(new Event('click'));
+      },
+    );
+    expect(there).toContain('Traverser vers l');
+    expect(there).toMatch(/3\s+champions/);
   });
 
   // 🏝️ Le sol d'une île : la côte, le port et la forteresse portuaire nommée.

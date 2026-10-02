@@ -140,6 +140,10 @@
             selTile.visited && !selTile.active ? ' · ses lieux tenus produisent à distance' : ''
           }}
         </div>
+        <div v-if="selTile.visited || selTile.active" class="at-away mil">
+          🛡️ {{ militiaOn(selTile.id) }} milicien{{ militiaOn(selTile.id) > 1 ? 's' : '' }} en
+          réserve{{ selTile.active ? '' : ' · la Caserne continue de produire' }}
+        </div>
         <template v-if="island && !selTile.active && !selTile.locked">
           <p v-if="blocks?.[selTile.id]" class="at-block">{{ blocks[selTile.id] }}</p>
           <button
@@ -202,6 +206,8 @@ const props = defineProps<{
   travellers?: number;
   /** ⛵ Champions restés sur chaque autre île. */
   away?: Record<number, number>;
+  /** 🛡️ La réserve de milice de chaque île visitée (la milice ne traverse pas). */
+  militia?: Record<number, number>;
   now: number;
 }>();
 defineEmits<{ toggle: [on: boolean]; cross: [to: number] }>();
@@ -211,6 +217,7 @@ const clock = (t: number) =>
   new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 const departAt = computed(() => nextCrossingDeparture(props.now));
 const awayOn = (id: number) => props.away?.[id] ?? 0;
+const militiaOn = (id: number) => props.militia?.[id] ?? 0;
 const prevFortress = (id: number) => ISLANDS.find((i) => i.id === id - 1)?.fortress ?? '';
 
 const open = ref(false);
@@ -542,6 +549,9 @@ const islandCapRank = computed(() =>
   margin-top: 8px;
   font-size: 12px;
   color: #8cc7e6;
+}
+.at-away.mil {
+  color: var(--dim);
 }
 .at-block {
   margin: 8px 0 0;

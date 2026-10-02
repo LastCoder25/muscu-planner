@@ -31,6 +31,7 @@
       :blocks="crossInfo.blocks"
       :travellers="crossInfo.travellers"
       :away="crossInfo.away"
+      :militia="crossInfo.militia"
       :now="now"
       @toggle="toggleArchipel"
       @cross="crossTo"
@@ -1530,7 +1531,12 @@ const crossInfo = computed(() => {
   const away: Record<number, number> = {};
   for (const a of char.advList)
     if (a.elsewhere !== undefined) away[a.elsewhere] = (away[a.elsewhere] ?? 0) + 1;
-  if (!map?.archipel) return { open: [], visited: [], blocks, travellers: 0, away };
+  // 🛡️ Une réserve par île : l'active dans la base, les autres rangées avec leur carte.
+  const militia: Record<number, number> = {};
+  if (map?.archipel) militia[map.archipel.island] = char.row?.base?.militia?.home ?? 0;
+  for (const [k, im] of Object.entries(map?.islands ?? {}))
+    militia[Number(k)] = im.militia?.home ?? 0;
+  if (!map?.archipel) return { open: [], visited: [], blocks, travellers: 0, away, militia };
   for (const i of ISLANDS) {
     const why = char.crossingBlock(i.id);
     blocks[i.id] = why && why !== 'same' && why !== 'locked' ? CROSSING_BLOCK_LABEL[why] : null;
@@ -1541,6 +1547,7 @@ const crossInfo = computed(() => {
     blocks,
     travellers: crossingTravellers(char.advList, now.value).length,
     away,
+    militia,
   };
 });
 async function crossTo(to: number) {

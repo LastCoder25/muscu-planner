@@ -222,6 +222,15 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       l'heure d'une attaque prévue) ; la **milice reste une réserve unique** ; base au port,
       avant-postes et zone à portée des points tenus restent à faire (3b). Non vu à l'écran
       avec une vraie traversée (le compte de smoke n'est pas en mode archipel).
+      **3b (1/4) livrée v1.18.0 — une réserve de milice par île** (règle 5) : la milice NE
+      TRAVERSE PAS. La réserve de l'île active vit dans `base.militia` ; au débarquement,
+      celle de l'île quittée est rangée avec sa carte (`ExpeditionMap.militia`, jamais sur la
+      carte active) et celle de l'île d'arrivée revient (vide sur une île neuve). La Caserne
+      produit aussi pour les îles rangées (`produceIslandMilitia`, bornée par son plafond moins
+      les miliciens postés sur CETTE île). Le panneau Archipel dit la réserve de chaque île.
+      Tests `crossing.test.ts` (+3, 5 mutations rouges) et montage du panneau (traversée +
+      milice, vérifié non creux). Panneau vu au banc Playwright à 344/390/600 px (0 débordement).
+      Reste pour 3b : base au port, 2 avant-postes, zone à portée des points tenus.
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
 
 ### Étoffer

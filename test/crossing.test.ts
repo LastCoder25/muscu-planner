@@ -10,6 +10,7 @@ import {
   landingChestMessage,
   nextCrossingDeparture,
   openIslands,
+  produceIslandMilitia,
   startCrossing,
   visitedIslands,
 } from '@/lib/crossing';
@@ -19,6 +20,7 @@ import { createMap, type ExpeditionMap } from '@/lib/expedition';
 import { FORTRESS_ID } from '@/lib/islandConquest';
 import { GACHA } from '@/lib/gacha';
 import { characterRank } from '@/lib/characterRank';
+import { militiaCap } from '@/lib/militia';
 
 const H = 3600_000;
 const T0 = Date.UTC(2026, 9, 2, 10, 0, 0);
@@ -94,12 +96,12 @@ describe('⚓ débarquer', () => {
   const booked = startCrossing(start, 2, ['a'], T0);
   const arrive = booked.crossing!.arriveAt;
   it('rien avant l’arrivée', () => {
-    const l = landCrossing(booked, arrive - 1, 30);
+    const l = landCrossing(booked, arrive - 1, 30, undefined);
     expect(l.crossing).toBeNull();
     expect(l.map).toBe(booked);
   });
   it('l’île quittée est rangée telle quelle, l’île 2 naît peuplée à son rang', () => {
-    const l = landCrossing(booked, arrive, 30);
+    const l = landCrossing(booked, arrive, 30, undefined);
     expect(l.firstTime).toBe(true);
     expect(l.map.crossing).toBeUndefined();
     expect(l.map.archipel!.island).toBe(2);
@@ -113,9 +115,9 @@ describe('⚓ débarquer', () => {
     expect(left.crossing).toBeUndefined();
   });
   it('retraverser rend l’île 1 intacte et range l’île 2', () => {
-    const on2 = landCrossing(booked, arrive, 30).map;
+    const on2 = landCrossing(booked, arrive, 30, undefined).map;
     const back = startCrossing(on2, 1, [], arrive + 10);
-    const l = landCrossing(back, back.crossing!.arriveAt, 30);
+    const l = landCrossing(back, back.crossing!.arriveAt, 30, undefined);
     expect(l.firstTime).toBe(false);
     expect(l.map.archipel!.island).toBe(1);
     expect(l.map.pois).toEqual(start.pois);
@@ -133,6 +135,37 @@ describe('⚓ débarquer', () => {
   it('un champion resté ailleurs est indisponible ici', () => {
     expect(advUnavailableReason(adv('x', { elsewhere: 1 }), T0)).toBe('away');
     expect(advUnavailableReason(adv('x'), T0)).toBeNull();
+  });
+});
+
+describe('🛡️ une réserve de milice par île', () => {
+  const start = island1([FORTRESS_ID]);
+  const booked = startCrossing(start, 2, [], T0);
+  const arrive = booked.crossing!.arriveAt;
+  const mil1 = { home: 4, producedAt: T0, seq: 9 };
+  it('la milice ne traverse pas : rangée avec l’île 1, l’île 2 démarre vide', () => {
+    const l = landCrossing(booked, arrive, 30, mil1);
+    expect(l.militia).toEqual({ home: 0, producedAt: arrive, seq: 0 });
+    expect(l.map.islands!['1']!.militia).toEqual(mil1);
+    expect(l.map.militia).toBeUndefined();
+  });
+  it('au retour, la réserve de l’île 1 revient, celle de l’île 2 est rangée', () => {
+    const on2 = landCrossing(booked, arrive, 30, mil1);
+    const mil2 = { home: 1, producedAt: arrive, seq: 1 };
+    const back = startCrossing(on2.map, 1, [], arrive + 10);
+    const l = landCrossing(back, back.crossing!.arriveAt, 30, mil2);
+    expect(l.militia).toEqual(mil1);
+    expect(l.map.militia).toBeUndefined();
+    expect(l.map.islands!['2']!.militia).toEqual(mil2);
+  });
+  it('la Caserne produit pour l’île rangée, bornée par son plafond', () => {
+    const on2 = landCrossing(booked, arrive, 30, { home: 0, producedAt: T0, seq: 0 }).map;
+    const later = produceIslandMilitia(on2, 10, T0 + 48 * H);
+    const home = later.islands!['1']!.militia!.home;
+    expect(home).toBeGreaterThan(0);
+    expect(home).toBeLessThanOrEqual(militiaCap(10));
+    expect(produceIslandMilitia(on2, 0, T0 + 48 * H)).toBe(on2);
+    expect(produceIslandMilitia(later, 10, T0 + 48 * H)).toBe(later);
   });
 });
 
