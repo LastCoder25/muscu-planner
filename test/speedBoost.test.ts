@@ -143,6 +143,13 @@ describe('⚔️🧭 attaque combinée (option B)', () => {
     });
     expect(d).toEqual({ members: ['a1'], hero: false });
   });
+  it('un groupe dont l’heure de départ est passée ne part jamais PLUS TARD', () => {
+    const a0 = attack(0);
+    // Le fort devait partir à 5 min ; à 7 min le tick n'est pas encore passé.
+    const { attack: a } = boostAttack(a0, 1 * M, 7 * M);
+    expect(a.wings[1]!.departAt).toBe(5 * M);
+    expect(a.wings[1]!.returnAt).toBe(a0.wings[1]!.returnAt - 1 * M);
+  });
   it('une fois arrivée, plus rien à presser', () => {
     expect(attackBoostPlan(attack(0), 5, 60 * M)).toBe('onSite');
   });

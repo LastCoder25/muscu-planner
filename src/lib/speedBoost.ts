@@ -115,7 +115,10 @@ export function boostAttack(
       to: returnAt,
     });
     return w.state === 'waiting'
-      ? { ...w, departAt: Math.max(now, w.departAt - gainMs), returnAt }
+      ? // ⚠️ Jamais PLUS TARD : un groupe dont l'heure est déjà passée (pas encore traité par
+        // le tick) garde la sienne — la repousser à « maintenant » changerait l'instant où
+        // l'on vérifie qui peut partir (blessures, bataille échue entre-temps).
+        { ...w, departAt: Math.min(w.departAt, Math.max(now, w.departAt - gainMs)), returnAt }
       : { ...w, returnAt };
   });
   return {
