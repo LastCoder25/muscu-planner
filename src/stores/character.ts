@@ -128,6 +128,7 @@ import {
   supersedeLate,
   staysUnderAttack,
   recordDeparture,
+  archipelFloor,
 } from '@/lib/expedition';
 import {
   archipelOn,
@@ -207,6 +208,7 @@ import {
   type DefenseStructure,
   type Raid,
   type RaidReport,
+  islandRaidBand,
 } from '@/lib/raid';
 import {
   advAvailable,
@@ -2865,6 +2867,12 @@ export const useCharacterStore = defineStore('character', () => {
         towerBoost: controlDetectBoost(cur.expedition_map, now),
         // 🕊️ Île pacifiée : plus aucun siège.
         pacified: islandPacified(cur.expedition_map),
+        // 🏝️ Sur une île, l'armée reste dans la tranche de l'île, jamais au-dessus du joueur.
+        levelBand: islandRaidBand(
+          cur.expedition_map?.archipel ? archipelFloor(cur.expedition_map) : null,
+          cur.expedition_map?.archipel?.levelCap ?? null,
+          ctx.playerLevel,
+        ),
       },
       now,
     );
@@ -4723,7 +4731,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       const { foe, force } = retakeBattle(
-        map.seed,
+        map,
         p,
         [...partyAllies(escort, kit, null), ...militia],
         playerLevel,

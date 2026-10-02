@@ -30,6 +30,7 @@ import {
   survivalOf,
   type Combatant,
 } from './combat';
+import { characterRank, rankStartLevel } from './characterRank';
 import { refFighter } from './proceduralContent';
 import { sinceEvent } from './sinceEvent';
 import { rollDrop, type AggregatedEffects, type Item } from './items';
@@ -1002,6 +1003,8 @@ export function rollRaid(
   arrivesAt: number,
   leadMs: number,
   overflow?: RiftOverflow | null,
+  /** 🏝️ Sur une île : les niveaux de l'armée restent dans cette tranche (`islandRaidBand`). */
+  band?: RaidLevelBand | null,
 ): Raid {
   const rng = mulberry32(seed >>> 0 || 1);
   // 🕳️ Une armée sortie d'une faille porte LA FACTION DE SA FAILLE — donc le butin du
@@ -1035,7 +1038,13 @@ export function rollRaid(
   levels.sort((a, b) => a - b);
   // Le champion prend le HAUT de sa troupe : toujours au-dessus d'elle, jamais hors fenêtre.
   const topTroop = levels.length ? levels[levels.length - 1]! : L;
-  const championLevel = Math.min(hi, topTroop + 1 + Math.floor(rng() * RAID.championLead));
+  const championLevel0 = Math.min(hi, topTroop + 1 + Math.floor(rng() * RAID.championLead));
+  // 🏝️ Sur une île, l'armée tire son rang dans la tranche de l'île, jamais au-dessus du joueur
+  // (2026-10-02, décision de l'utilisateur). ⚠️ Appliqué APRÈS les tirages : le flux aléatoire
+  // ne bouge pas, une armée hors archipel est identique au bit près.
+  const fit = (lv: number) => (band ? Math.max(band.min, Math.min(band.max, lv)) : lv);
+  for (let i = 0; i < levels.length; i++) levels[i] = fit(levels[i]!);
+  const championLevel = fit(championLevel0);
 
   // Effectifs : le champion est SEUL (c'est une élite) ; le reste se répartit.
   const groups: RaidGroup[] = [];
@@ -3180,6 +3189,29 @@ export interface BaseTickResult {
 /** Avance l'état de la base jusqu'à `now` : planification, détection, péremption du champ
  *  de bataille et du gel. NE RÉSOUT PAS le siège — l'appelant seul sait si le héros est
  *  là et ce que vaut la garnison ; il le signale via `dueRaid`. */
+/** 🏝️ La tranche de niveaux d'une armée sur une île. */
+export interface RaidLevelBand {
+  min: number;
+  max: number;
+}
+
+/**
+ * 🏝️ La tranche d'une armée sur l'île active : du premier niveau du rang d'entrée de l'île
+ * jusqu'au niveau du joueur, plafonné au niveau max de l'île. Un joueur encore sous le rang
+ * d'entrée ne voit que des armées de son rang. `null` hors archipel.
+ */
+export function islandRaidBand(
+  floorLevel: number | null,
+  capLevel: number | null,
+  playerLevel: number,
+): RaidLevelBand | null {
+  if (floorLevel === null || capLevel === null) return null;
+  const pl = Math.max(1, playerLevel);
+  const max = Math.max(1, Math.min(capLevel, pl));
+  const r = Math.min(characterRank(pl).rankIndex, characterRank(Math.max(1, floorLevel)).rankIndex);
+  return { min: Math.min(max, rankStartLevel(r)), max };
+}
+
 export function advanceBase(
   base: BaseState,
   ctx: {
@@ -3190,6 +3222,8 @@ export function advanceBase(
     towerBoost: number;
     /** 🕊️ L'île active est pacifiée : plus de siège (`raidsEnabled`). */
     pacified: boolean;
+    /** 🏝️ La tranche de niveaux des armées sur l'île active (`islandRaidBand`), `null` hors archipel. */
+    levelBand: RaidLevelBand | null;
   },
   now: number,
 ): BaseTickResult {
@@ -3261,7 +3295,7 @@ export function advanceBase(
     // 🕳️ Le débordement en attente est CONSOMMÉ ici : l'armée qui se met en marche est
     // celle de la faille, et le marquage s'efface. C'est ce qui garantit qu'il ne
     // s'applique qu'UNE fois — sans ça, chaque siège suivant serait renforcé à vie.
-    const raid = rollRaid(seed, ctx.playerLevel, b.nextRaidAt, lead, b.overflow);
+    const raid = rollRaid(seed, ctx.playerLevel, b.nextRaidAt, lead, b.overflow, ctx.levelBand);
     b = { ...b, raid, overflow: null };
     detected = raid;
     changed = true;

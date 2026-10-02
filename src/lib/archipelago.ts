@@ -122,7 +122,7 @@ export function activeIsland(
 /** L'état archipel d'une carte posée sur l'île `id`. */
 export function archipelOn(id = 1): NonNullable<ExpeditionMap['archipel']> {
   const isl = islandById(id) ?? ISLANDS[0]!;
-  return { island: isl.id, levelCap: isl.maxLevel };
+  return { island: isl.id, levelCap: isl.maxLevel, levelFloor: isl.minLevel };
 }
 
 /**

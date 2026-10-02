@@ -171,7 +171,7 @@ export function siegeArmyPoi(
  *  du cercle (à `vis` de la ville) jusqu'au point (à `d`), donc il mesure au moins `vis − d`. */
 export function retakeArmyPoi(
   p: Poi,
-  mapSeed: number,
+  map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
   detectR: number,
   reach: number,
   now: number,
@@ -202,7 +202,7 @@ export function retakeArmyPoi(
     { x: p.x, y: p.y },
     spawnedAt,
     c.attackAt,
-    attackerLevel(mapSeed, p, playerLevel),
+    attackerLevel(map, p, playerLevel),
     playerLevel,
     { kind: 'retake', targetId: p.id, at: c.attackAt, faction: force.faction, size },
     now,
@@ -261,7 +261,7 @@ export function syncFieldArmies(
       : undefined;
     const r = retakeArmyPoi(
       p,
-      map.seed,
+      map,
       ctx.detectR,
       ctx.reach,
       ctx.now,
@@ -552,12 +552,12 @@ export function retakeRemaining(p: Pick<Poi, 'control'>): number {
  * un ennemi que l'autre ne combat pas.
  */
 export function retakeBattle(
-  mapSeed: number,
+  map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
   p: Poi,
   allies: readonly SkirmishUnit[],
   playerLevel: number,
 ): { foe: Poi; force: CampSpec } {
-  const foe = { ...p, level: attackerLevel(mapSeed, p, playerLevel) };
+  const foe = { ...p, level: attackerLevel(map, p, playerLevel) };
   const f0 = retakeForce(foe, retakeBoost(foe, allies));
   return { foe, force: { ...f0, size: f0.size * retakeRemaining(p) } };
 }
@@ -569,7 +569,7 @@ export function retakeBattle(
  * ⚠️ À n'appeler que quand l'armée est VISIBLE : avant, sa force est un secret.
  */
 export function controlAttackHold(
-  mapSeed: number,
+  map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
   p: Poi,
   ids: readonly string[],
   advs: readonly Adventurer[],
@@ -580,7 +580,7 @@ export function controlAttackHold(
   const champs = advs.filter((a) => set.has(a.id));
   const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
   if (!allies.length) return 0;
-  const { foe, force } = retakeBattle(mapSeed, p, allies, playerLevel);
+  const { foe, force } = retakeBattle(map, p, allies, playerLevel);
   return campWinPct(foe, force, allies, CONTROL.holdSamples);
 }
 

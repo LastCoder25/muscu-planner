@@ -22,8 +22,10 @@ plus rien.
   | 4 · Seigneur de guerre | 61-80 | Divin, Divin ancestral | 3 camps de guerre, armée mobile qui vise le moins défendu, convois | Le Fort du seigneur |
   | 5 · Maudite | 81-100 | Divin céleste, Tout-puissant | 3 sanctuaires maudits (failles corrompues, invasions combinées) | La Citadelle maudite (puis sans fin) |
 - **Une seule île active** : toute l'activité y vit, failles comprises (le gacha se farme là où
-  on joue). Les lieux tirent leur rang comme aujourd'hui (jamais au-dessus du joueur), bornés
-  à la tranche de l'île ; au-delà ils restent au plafond, ce qui pousse à avancer.
+  on joue). **Lieux ET armées tirent leur rang au hasard entre le rang MINIMUM de l'île et le
+  rang du joueur**, jamais au-dessus du joueur, plafonné au rang max de l'île (précisé le
+  2026-10-02, option « borné au joueur ») ; au-delà ils restent au plafond, ce qui pousse à
+  avancer. Un joueur arrivé sous le rang d'entrée ne voit que des lieux de son rang.
 - **Une île en quatre temps** : débarquer au **port d'arrivée** (c'est la base de l'île) →
   prendre **2 avant-postes** sur le chemin → détruire les **objectifs secondaires** → abattre
   la **forteresse portuaire**, qui devient le port de départ.
@@ -88,6 +90,7 @@ produit au **niveau du héros** ; dans l'archipel il produira au **rang de son �
 
 **Répartition** (socle mine + camp + source de mana sur chaque île ; 2 lieux sur le chemin
 servent d'avant-postes) :
+
 - Île 1 : mine, camp, source de mana, jardin, tour de guet, scriptorium (la carte actuelle).
 - Île 2 : socle + tour de guet + **archives**.
 - Île 3 : socle + jardin + **ossuaire**.
@@ -121,65 +124,83 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
 ## La roadmap
 
 ### Fondations
+
 - [x] **0. Conception figée** (~2 j) — mesures ci-dessus, décisions prises.
 - [x] **1. Le mode archipel, île 1** (~3 j) — interrupteur admin (ce compte seul) ; la carte
-  devient l'île 1 : rangs plafonnés à Argent, trajets sans multiplicateur de niveau, Avant-poste
-  = vitesse ; production des lieux au rang de l'île ; vue d'ensemble de l'archipel.
-  **Livré v1.9.0 (2026-10-02)** : `src/lib/archipelago.ts` (îles, `mapPlayerLevel`,
-  `mapOutpostLevel`), `ExpeditionMap.archipel`, panneau `ArchipelPanel.vue` sur la carte (admin,
-  avec l'interrupteur), `setArchipelMode` au store. Rayon de l'île = celui de l'Avant-poste 3
-  (≤ 54 unités ; la 1re citadelle, à 55, reste hors de l'île 1). Basculer une carte retire au
-  tick suivant les lieux au-dessus d'Argent. Test `archipelago.test.ts` (12, 9 mutations
-  rouges). ⚠️ Non couvert par une porte : le câblage du store (production plafonnée, reprises
-  au rang de l'île).
+      devient l'île 1 : rangs plafonnés à Argent, trajets sans multiplicateur de niveau, Avant-poste
+      = vitesse ; production des lieux au rang de l'île ; vue d'ensemble de l'archipel.
+      **Livré v1.9.0 (2026-10-02)** : `src/lib/archipelago.ts` (îles, `mapPlayerLevel`,
+      `mapOutpostLevel`), `ExpeditionMap.archipel`, panneau `ArchipelPanel.vue` sur la carte (admin,
+      avec l'interrupteur), `setArchipelMode` au store. Rayon de l'île = celui de l'Avant-poste 3
+      (≤ 54 unités ; la 1re citadelle, à 55, reste hors de l'île 1). Basculer une carte retire au
+      tick suivant les lieux au-dessus d'Argent. Test `archipelago.test.ts` (12, 9 mutations
+      rouges). ⚠️ Non couvert par une porte : le câblage du store (production plafonnée, reprises
+      au rang de l'île).
 - [x] **1 bis. Les îles dessinées** (demandé le 2026-10-02, v1.10.0) — chaque île entourée de
-  mer avec SA silhouette (écrite à la main par île : ronde à baie, longue et déchiquetée,
-  croissant, trois lobes, hérissée), un décor par menace (camps de brigands · pins et ossements
-  · cimetières, arbres morts et mares · camps de guerre, étendards et dunes · cristaux et failles
-  de lave), le port d'arrivée au fond de la baie relié à la base par une route, la forteresse
-  portuaire dessinée sur le cap opposé, et une vraie carte de l'archipel (les 5 silhouettes
-  reliées par les routes de traversée, fiche de l'île touchée) à la place des tuiles.
-  `src/lib/islandTerrain.ts` (pur, ne dépend que du numéro de l'île : même île pour tout le
-  monde), `IslandTerrain.vue`. La côte ne passe jamais sous 60 unités (zone des lieux 54).
-  ⚠️ La forteresse n'est encore qu'un DÉCOR : elle devient attaquable à l'étape 2.
+      mer avec SA silhouette (écrite à la main par île : ronde à baie, longue et déchiquetée,
+      croissant, trois lobes, hérissée), un décor par menace (camps de brigands · pins et ossements
+      · cimetières, arbres morts et mares · camps de guerre, étendards et dunes · cristaux et failles
+      de lave), le port d'arrivée au fond de la baie relié à la base par une route, la forteresse
+      portuaire dessinée sur le cap opposé, et une vraie carte de l'archipel (les 5 silhouettes
+      reliées par les routes de traversée, fiche de l'île touchée) à la place des tuiles.
+      `src/lib/islandTerrain.ts` (pur, ne dépend que du numéro de l'île : même île pour tout le
+      monde), `IslandTerrain.vue`. La côte ne passe jamais sous 60 unités (zone des lieux 54).
+      ⚠️ La forteresse n'est encore qu'un DÉCOR : elle devient attaquable à l'étape 2.
 - [x] **2. Pacifier l'île 1** (~4 j) — objectifs secondaires (camps de brigands), forteresse
-  portuaire (verrou, affaiblissement, calage), île pacifiée (plus d'attaques ; spécialités à
-  plein, socle à 25 % sans crans), recalage de la mine tenue à 24 h.
-  **Livré v1.11.0 (2026-10-02)** : `src/lib/islandConquest.ts` — objectifs secondaires posés
-  autour du cap (troupes 3 puis 4, faction de l'île, niveau du joueur plafonné), forteresse sur le
-  cap (verrouillée jusqu'à 2 objectifs abattus ; 12 → 8 champions de référence, un rang au-dessus
-  → le plafond), abattus pour toujours (`archipel.destroyed`) ; tout abattu → `pacifiedAt` :
-  plus aucune reprise ni raid (`gateAttacks`, `captureControl`, `holdControl`). Règle de production
-  posée sur chaque lieu fixe (`yieldMult`, `flatTier`, réserve mise de côté avant tout changement) :
-  mine à 24 h en mode archipel, socle (mine, source) à 25 % sans crans une fois pacifiée. Fiche du
-  lieu et progression dans le panneau Archipel. Test `islandConquest.test.ts` (12, 11 mutations
-  rouges). **Complété v1.12.0** : sur une île, les reprises viennent des camps (`attackSlow` :
-  ×1 tous debout, puis (n+1)/debout, plus de ralentissement « citadelle cachée ») ; les camps de
-  brigands PILLENT la réserve non récoltée des bâtiments de la base (`brigandPillage`, en moyenne
-  toutes les 36 h par camp debout, rapport dans la boîte) ; plus aucun siège de la base sur une île
-  pacifiée (`raidsEnabled` prend `pacified`, requis). Reste : les récompenses (étape 3). Non vu à l'écran (le compte de smoke n'est pas
-  en mode archipel).
+      portuaire (verrou, affaiblissement, calage), île pacifiée (plus d'attaques ; spécialités à
+      plein, socle à 25 % sans crans), recalage de la mine tenue à 24 h.
+      **Livré v1.11.0 (2026-10-02)** : `src/lib/islandConquest.ts` — objectifs secondaires posés
+      autour du cap (troupes 3 puis 4, faction de l'île, niveau du joueur plafonné), forteresse sur le
+      cap (verrouillée jusqu'à 2 objectifs abattus ; 12 → 8 champions de référence, un rang au-dessus
+      → le plafond), abattus pour toujours (`archipel.destroyed`) ; tout abattu → `pacifiedAt` :
+      plus aucune reprise ni raid (`gateAttacks`, `captureControl`, `holdControl`). Règle de production
+      posée sur chaque lieu fixe (`yieldMult`, `flatTier`, réserve mise de côté avant tout changement) :
+      mine à 24 h en mode archipel, socle (mine, source) à 25 % sans crans une fois pacifiée. Fiche du
+      lieu et progression dans le panneau Archipel. Test `islandConquest.test.ts` (12, 11 mutations
+      rouges). **Complété v1.12.0** : sur une île, les reprises viennent des camps (`attackSlow` :
+      ×1 tous debout, puis (n+1)/debout, plus de ralentissement « citadelle cachée ») ; les camps de
+      brigands PILLENT la réserve non récoltée des bâtiments de la base (`brigandPillage`, en moyenne
+      toutes les 36 h par camp debout, rapport dans la boîte) ; plus aucun siège de la base sur une île
+      pacifiée (`raidsEnabled` prend `pacified`, requis). Reste : les récompenses (étape 3). Non vu à l'écran (le compte de smoke n'est pas
+      en mode archipel).
 
 ### Traverser
+
 - [x] **2 bis. Bien délimiter les îles** (demandé le 2026-10-02) — aucun lieu ne doit apparaître
-  hors de la côte. Aujourd'hui les lieux tirés restent dans 54 unités et la côte ne passe jamais
-  sous 60, mais ce qui est posé à part n'est pas borné par la côte : citadelles (55 à 100, cachées
-  sur une île), armées en marche, forteresse (sur le cap). À faire : un garde unique « sur l'île »
-  (`onIsland`) appliqué à tout ce qui est posé ou dessiné en mode archipel, avec un test qui balaie
-  les cinq îles.
-  **Livré v1.13.0** : mesuré, seules les CITADELLES tombaient en mer (posées de 55 à 100). Sur une
-  île il n'y en a plus (`syncCitadels` les retire, sauf pendant un assaut) : ce sont les camps de
-  l'île qui attaquent. Tout le reste tient déjà sur la terre (lieux tirés ≤ 54, côte ≥ 60,
-  armées en marche nées dans le rayon de détection borné à la carte). `islandBounds.test.ts` joue
-  dix jours de carte sur les cinq îles × 3 graines, armées comprises, et exige chaque lieu sur la
-  terre avec 3 unités de marge (2 mutations rouges).
+      hors de la côte. Aujourd'hui les lieux tirés restent dans 54 unités et la côte ne passe jamais
+      sous 60, mais ce qui est posé à part n'est pas borné par la côte : citadelles (55 à 100, cachées
+      sur une île), armées en marche, forteresse (sur le cap). À faire : un garde unique « sur l'île »
+      (`onIsland`) appliqué à tout ce qui est posé ou dessiné en mode archipel, avec un test qui balaie
+      les cinq îles.
+      **Livré v1.13.0** : mesuré, seules les CITADELLES tombaient en mer (posées de 55 à 100). Sur une
+      île il n'y en a plus (`syncCitadels` les retire, sauf pendant un assaut) : ce sont les camps de
+      l'île qui attaquent. Tout le reste tient déjà sur la terre (lieux tirés ≤ 54, côte ≥ 60,
+      armées en marche nées dans le rayon de détection borné à la carte). `islandBounds.test.ts` joue
+      dix jours de carte sur les cinq îles × 3 graines, armées comprises, et exige chaque lieu sur la
+      terre avec 3 unités de marge (2 mutations rouges).
+- [x] **2 ter. Les rangs bornés par l'île** (précisé le 2026-10-02) — **Livré v1.14.0** :
+      `archipel.levelFloor` (= `Island.minLevel`, posé par `archipelOn` ; absent = 1) ;
+      `riftLevelFor` prend un plancher et ne tire plus de rang sous celui de l'île (sauf joueur encore
+      en dessous) — lieux, failles, points fixes (`controlLevel`) et attaquants des reprises
+      (`attackerLevel` prend la carte) ; les sièges de la base sur une île restent dans la tranche
+      (`islandRaidBand`, appliquée après les tirages : hors archipel, armée identique au bit près).
+      Test `islandRanks.test.ts` (8, 11 mutations rouges). ⚠️ Limite connue : un lieu à UN garde
+      plafonne en difficulté vers 80 (niveau max des ennemis) — sur l'île 5 il s'affiche un rang sous
+      l'île ; à traiter avec l'île 5.
+- [ ] **2 quater. Densité des lieux sur une île** (question du 2026-10-02, à trancher) — mesuré
+      sur l'île 1 (rayon ~51, 2 h d'aller) : **~22 lieux** en même temps, contre 16 + 6 failles sur
+      la carte de référence (rayon ~64), soit ~1,7× plus dense. Détail : 9 lieux tirés (le quota suit
+      déjà la surface : 9 au lieu de 16), **9 lieux fixes** (6 points de contrôle, 2 objectifs, la
+      forteresse) et ~4 failles (quota 4). Ce sont les lieux fixes qui chargent la carte. Pistes :
+      failles 4 → 2 sur une île, ou lieux tirés 9 → 6, ou moins de points de contrôle par île.
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
-  traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
-  points tenus, avant-postes, récompenses (forteresse, premier débarquement).
+      traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
+      points tenus, avant-postes, récompenses (forteresse, premier débarquement).
 - [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
 
 ### Étoffer
+
 - [ ] **5. Îles 3, 4 et 5** (~3-4 j chacune) — une à la fois, quand le compte admin y arrive.
 - [ ] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
-  défense, durée de chaque île, 5 îles de rente).
+      défense, durée de chaque île, 5 îles de rente).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

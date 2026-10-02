@@ -710,6 +710,9 @@ export interface ExpeditionMap {
   archipel?: {
     island: number;
     levelCap: number;
+    /** 🏝️ Le niveau d'ENTRÉE de l'île (`Island.minLevel`) : lieux et armées tirent leur rang
+     *  entre le sien et celui du joueur. Absent (cartes d'avant, île 1) = 1. */
+    levelFloor?: number;
     /** 🏝️ Les objectifs et la forteresse ABATTUS (ids) : ils ne reviennent jamais. */
     destroyed?: string[];
     /** 🏝️ L'île est PACIFIÉE depuis cet instant : plus aucune attaque. */
@@ -2138,13 +2141,21 @@ export function riftLevelFor(
   /** 🪬 Le créneau « au-dessus » vise le RANG suivant entier (failles seules). Les autres lieux
    *  gardent l'ancien écart proportionnel : leur économie est calibrée dessus. */
   nextRankAbove = false,
+  /** 🏝️ Le niveau d'entrée de l'île (`archipelFloor`) : aucun rang tiré sous le sien. 1 = Bronze. */
+  floorLevel = 1,
 ): number {
   const top = characterRank(playerLevel).rankIndex;
   const above = top + 1;
+  // 🏝️ LE RANG MINIMUM DE L'ÎLE (2026-10-02, décision de l'utilisateur) : on tire entre lui
+  // et le rang du joueur. ⚠️ Jamais au-dessus du joueur pour autant : un joueur arrivé sous
+  // le niveau d'entrée de l'île ne voit que des lieux de SON rang.
+  const bottom = Math.min(top, characterRank(Math.max(1, floorLevel)).rankIndex);
   const taken = new Set(pris.map((lv) => riftSlotOf(lv, playerLevel)));
   const libres: number[] = [];
-  for (let i = 0; i <= above; i++) if (!taken.has(i)) libres.push(i);
-  const pool = libres.length ? libres : Array.from({ length: above + 1 }, (_, i) => i);
+  for (let i = bottom; i <= above; i++) if (!taken.has(i)) libres.push(i);
+  const pool = libres.length
+    ? libres
+    : Array.from({ length: above + 1 - bottom }, (_, i) => bottom + i);
   const r = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
   if (r === above) {
     // 🪬 UN RANG AU-DESSUS (2026-09-27, décision de l'utilisateur, runes) : la faille « au-dessus »
@@ -2204,6 +2215,7 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number, reach: 
       playerLevel,
       map.pois.filter(isRiftPoi).map((p) => p.level),
       true,
+      archipelFloor(map),
     ),
   );
 }
@@ -2278,7 +2290,9 @@ function placePoiOfType(
   // sienne, sans migration). C’est le NIVEAU qui compense — donc un lieu à 1 ennemi aligne
   // un ennemi plus fort, et « peu de forts » ou « beaucoup de faibles » remplissent le même
   // rang. Exactement ce que le joueur lit.
-  const tire0 = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  const tire0 =
+    forcedLevel ??
+    (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, [], false, archipelFloor(map)));
   // 🐺 Une tanière apparaît au RANG AU-DESSUS du joueur (`denLevelFor`), tirée sur un générateur
   // à part : le tirage ci-dessus est consommé quand même, sinon le reste de la carte décale.
   const tire = forcedLevel === undefined && type === 'den' ? denLevelFor(id, playerLevel) : tire0;
@@ -2411,6 +2425,12 @@ export function nextPlunderSpawn(
     if (p) return { id: p.id, at: p.spawnedAt };
   }
   return null;
+}
+
+/** 🏝️ Le niveau d'entrée de l'île active (1 hors archipel) : lieux et armées ne tirent jamais
+ *  de rang sous le sien (sauf joueur encore en dessous, cf. `riftLevelFor`). */
+export function archipelFloor(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): number {
+  return Math.max(1, map?.archipel?.levelFloor ?? 1);
 }
 
 /** Fait avancer le monde jusqu'à `now` : expire les POI périmés (sauf la cible d'une

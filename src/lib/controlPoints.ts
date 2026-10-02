@@ -44,6 +44,7 @@ import { riftClearMana } from './rift';
 import { pickSupply, type SupplyStock } from './supplies';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
+  archipelFloor,
   CAMP_FACTIONS,
   CONTROL_MAX_GARRISON,
   CONTROL_KIND_EMO,
@@ -932,13 +933,18 @@ export function citadelLabel(
 
 /** Le niveau (donc le rang) d'un point : tiré comme celui d'une faille — entre Bronze et le
  *  rang du joueur, jamais lié à la distance. Re-tiré à chaque reprise. */
-function controlLevel(id: string, retakes: number, playerLevel: number): number {
+function controlLevel(
+  id: string,
+  retakes: number,
+  playerLevel: number,
+  floorLevel: number,
+): number {
   const rng = mulberry32((seedOf(`${id}:lv:${retakes}`) ^ 0x7a3d91c3) >>> 0 || 1);
   // ⚠️ JAMAIS AU-DESSUS DU JOUEUR : le tirage des failles garde une place « au-dessus », or un
   // point FIXE tiré là restait hors d'atteinte jusqu'à ce qu'on le prenne — c'est-à-dire pour
   // toujours. Marquer cette place « prise » (`pris` = un niveau au-dessus) l'écarte du tirage.
   const pl = Math.max(1, playerLevel);
-  return Math.min(pl, riftLevelFor(rng, pl, [pl + 1]));
+  return Math.min(pl, riftLevelFor(rng, pl, [pl + 1], false, floorLevel));
 }
 
 /** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. */
@@ -980,7 +986,7 @@ export function ensureControls(
     add.push({
       id,
       type: 'control',
-      level: controlLevel(`${map.seed}:${id}`, 0, playerLevel),
+      level: controlLevel(`${map.seed}:${id}`, 0, playerLevel, archipelFloor(map)),
       // Le trajet suit la DISTANCE (le lieu est fixe), pas le rang tiré.
       travelLevel: map.archipel ? ARCHIPEL_TRAVEL_LEVEL : Math.max(1, playerLevel),
       ...controlSpot(map, kind),
@@ -1001,12 +1007,19 @@ export function ensureControls(
     const c = p.control;
     if (!c || c.owner !== 'enemy' || RAZE_KINDS.has(c.kind)) return p;
     const tooHigh = p.level > Math.max(1, playerLevel);
+    // 🏝️ Sous le rang d'entrée de l'île (carte qui change d'île) : re-tiré aussi, si le joueur
+    // a lui-même atteint ce rang.
+    const floorRank = characterRank(archipelFloor(map)).rankIndex;
+    const tooLow =
+      characterRank(p.level).rankIndex < floorRank &&
+      characterRank(Math.max(1, playerLevel)).rankIndex >= floorRank;
     const tooBig = c.size > Math.max(...CONTROL.captureSizes);
-    if (!tooHigh && !tooBig) return p;
+    if (!tooHigh && !tooLow && !tooBig) return p;
     const key = `${map.seed}:${p.id}`;
     return {
       ...p,
-      level: tooHigh ? controlLevel(key, c.retakes, playerLevel) : p.level,
+      level:
+        tooHigh || tooLow ? controlLevel(key, c.retakes, playerLevel, archipelFloor(map)) : p.level,
       control: tooBig ? { ...c, ...enemyForce(key, c.retakes) } : c,
     };
   });
@@ -1159,9 +1172,18 @@ export function captureControl(
  * Graine : la carte, le point et l'instant de l'attaque — une attaque repoussée n'annonce
  * pas le rang de la suivante. ⚠️ Jamais affiché avant la bataille : seule l'attaque le dit.
  */
-export function attackerLevel(seed: number, p: Poi, playerLevel: number): number {
+export function attackerLevel(
+  map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
+  p: Poi,
+  playerLevel: number,
+): number {
   const c = p.control;
-  return controlLevel(`${seed}:${p.id}@${c?.attackAt ?? 0}`, (c?.retakes ?? 0) + 1, playerLevel);
+  return controlLevel(
+    `${map.seed}:${p.id}@${c?.attackAt ?? 0}`,
+    (c?.retakes ?? 0) + 1,
+    playerLevel,
+    archipelFloor(map),
+  );
 }
 
 /** 🔙 Le point tombe à `at` pendant que des renforts marchent vers lui : ils ne combattent
@@ -1230,7 +1252,8 @@ export function loseControl(
       // 🔙 Les renforts encore en route les rejoignent : ils font demi-tour.
       ...(returning.length ? { returning } : {}),
     };
-    const level = won?.level ?? controlLevel(`${map.seed}:${id}`, retakes, playerLevel);
+    const level =
+      won?.level ?? controlLevel(`${map.seed}:${id}`, retakes, playerLevel, archipelFloor(map));
     return { ...p, level, control: next };
   });
 }

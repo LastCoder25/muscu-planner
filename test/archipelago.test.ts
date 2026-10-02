@@ -39,7 +39,7 @@ describe('🏝️ archipel — les îles', () => {
   });
 
   it("l'île 1 plafonne au niveau 20 (rang Argent)", () => {
-    expect(archipelOn(1)).toEqual({ island: 1, levelCap: 20 });
+    expect(archipelOn(1)).toEqual({ island: 1, levelCap: 20, levelFloor: 1 });
     expect(activeIsland({ archipel: archipelOn(1) })?.name).toBe('Île des Brigands');
     expect(activeIsland({})).toBeNull();
   });

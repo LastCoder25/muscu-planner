@@ -2214,12 +2214,11 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   if (!p || !c || c.owner !== 'player') return null;
   const at = knownAttackAt(p, coarseNow.value);
   const { present, late } = defendersAtAttack(c, at, extra);
-  const seed = char.row?.expedition_map?.seed;
+  const map = char.row?.expedition_map;
   const vsArmy =
-    seed !== undefined &&
-    pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
+    !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
   const hold = vsArmy
-    ? controlAttackHold(seed, p, present, char.advList, roadCtx.value, heroLevel.value)
+    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value)
     : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
   return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
 }

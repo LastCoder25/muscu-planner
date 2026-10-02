@@ -45,7 +45,7 @@ describe('🏳️ une place tenue est neutre, le rang appartient aux assaillants
 
   it('les assaillants tirent leur rang à CHAQUE attaque, entre Bronze et celui du joueur', () => {
     const lv = Array.from({ length: 200 }, (_, i) =>
-      attackerLevel(7, point(20, 1000 + i * 977), 60),
+      attackerLevel({ seed: 7 }, point(20, 1000 + i * 977), 60),
     );
     for (const l of lv) {
       expect(l).toBeGreaterThanOrEqual(1);
@@ -55,7 +55,9 @@ describe('🏳️ une place tenue est neutre, le rang appartient aux assaillants
     expect(ranks.size).toBeGreaterThan(2);
     expect(ranks.has(0)).toBe(true);
     // Même attaque, même rang (rejouable) ; il ne dépend pas du rang que le lieu avait.
-    expect(attackerLevel(7, point(20, 5000), 60)).toBe(attackerLevel(7, point(55, 5000), 60));
+    expect(attackerLevel({ seed: 7 }, point(20, 5000), 60)).toBe(
+      attackerLevel({ seed: 7 }, point(55, 5000), 60),
+    );
   });
 
   it('délogé, le lieu prend le rang et la bannière de ceux qui l’ont repris', () => {
