@@ -167,7 +167,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const props = { island: islandById(1), busy: false };
     await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (closed = h));
     expect(closed).toContain('Île 1 · Île des Brigands');
-    expect(closed).not.toContain('arch-tile');
+    expect(closed).not.toContain('am-isl');
     expect(
       await mountIt(
         ArchipelPanel,
@@ -179,9 +179,34 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (host) => host.querySelector<HTMLElement>('.arch-head')?.click(),
       ),
     ).toBeNull();
-    expect(open.split('class="arch-tile').length - 1).toBe(5);
-    expect(open).toContain('Active');
+    // La carte : cinq îles, dont l'active ; la fiche de l'île touchée (l'active d'abord).
+    expect(open.split('class="am-isl').length - 1).toBe(5);
+    expect(open).toContain('am-here');
+    expect(open).toContain('Tu es ici');
+    expect(open).toContain('Le Fort des pillards');
     expect(open).toContain('Quitter le mode archipel');
+  });
+
+  // 🏝️ Le sol d'une île : la côte, le port et la forteresse portuaire nommée.
+  it('IslandTerrain : côte, port et forteresse', async () => {
+    const { default: IslandTerrain } = await import('@/components/IslandTerrain.vue');
+    const { islandTerrain } = await import('@/lib/islandTerrain');
+    const { MAP_VIEW } = await import('@/lib/expedition');
+    let out = '';
+    expect(
+      await mountIt(
+        IslandTerrain,
+        { t: islandTerrain(2), view: MAP_VIEW, fortressName: 'La Tanière-port' },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('it-land');
+    expect(out).toContain('⚓ Port');
+    expect(out).toContain('La Tanière-port');
+    expect(out).toContain('k-pine');
   });
 
   // 🧝 Le héros est une tuile PARMI les effectifs : cochable, ou grisé AVEC sa raison.

@@ -38,12 +38,19 @@
           :style="{ width: mapPx + 'px', height: mapPx + 'px' }"
         >
           <!-- Le SOL : mer, côte, prairie, reliefs — même langage que la Base (v0.749). -->
-          <MapTerrain :terrain="terrain" :view="V" />
+          <!-- 🏝️ En mode archipel : l'île, entourée de mer, avec son port et sa forteresse. -->
+          <IslandTerrain
+            v-if="islandTerr && island"
+            :t="islandTerr"
+            :view="V"
+            :fortress-name="island.fortress"
+          />
+          <MapTerrain v-else :terrain="terrain" :view="V" />
 
           <!-- 🌫️ BROUILLARD DE GUERRE (v0.1047) : l'Avant-poste révèle un disque autour de la
                ville, qui grandit à chaque niveau. Au-delà, on devine le relief sans voir
                aucun lieu. Bord fondu (dégradé radial), liseré pointillé pour lire la limite. -->
-          <defs>
+          <defs v-if="!island">
             <radialGradient
               id="fog-edge"
               gradientUnits="userSpaceOnUse"
@@ -55,7 +62,9 @@
               <stop offset="1" stop-color="#15120e" stop-opacity="0.9" />
             </radialGradient>
           </defs>
+          <!-- ⚠️ Pas de brouillard sur une île : c'est la MER qui la borne. -->
           <rect
+            v-if="!island"
             :x="V.min"
             :y="V.min"
             :width="V.size"
@@ -64,6 +73,7 @@
             class="fog"
           />
           <circle
+            v-if="!island"
             :cx="TOWN.x"
             :cy="TOWN.y"
             :r="fogR"
@@ -1264,6 +1274,8 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
+import IslandTerrain from '@/components/IslandTerrain.vue';
+import { islandTerrain } from '@/lib/islandTerrain';
 import { activeIsland, mapOutpostLevel } from '@/lib/archipelago';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import { tripFrame } from '@/lib/tripFrame';
@@ -1471,6 +1483,7 @@ const reveal = computed(() =>
 const hourRings = computed(() =>
   travelHourRings(progressionLevel.value, travelMult.value, reveal.value, !!island.value),
 );
+const islandTerr = computed(() => (island.value ? islandTerrain(island.value.id) : null));
 const archBusy = ref(false);
 async function toggleArchipel(on: boolean) {
   const uid = auth.user?.id;

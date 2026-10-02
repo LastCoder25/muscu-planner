@@ -132,6 +132,16 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
   tick suivant les lieux au-dessus d'Argent. Test `archipelago.test.ts` (12, 9 mutations
   rouges). ⚠️ Non couvert par une porte : le câblage du store (production plafonnée, reprises
   au rang de l'île).
+- [x] **1 bis. Les îles dessinées** (demandé le 2026-10-02, v1.10.0) — chaque île entourée de
+  mer avec SA silhouette (écrite à la main par île : ronde à baie, longue et déchiquetée,
+  croissant, trois lobes, hérissée), un décor par menace (camps de brigands · pins et ossements
+  · cimetières, arbres morts et mares · camps de guerre, étendards et dunes · cristaux et failles
+  de lave), le port d'arrivée au fond de la baie relié à la base par une route, la forteresse
+  portuaire dessinée sur le cap opposé, et une vraie carte de l'archipel (les 5 silhouettes
+  reliées par les routes de traversée, fiche de l'île touchée) à la place des tuiles.
+  `src/lib/islandTerrain.ts` (pur, ne dépend que du numéro de l'île : même île pour tout le
+  monde), `IslandTerrain.vue`. La côte ne passe jamais sous 60 unités (zone des lieux 54).
+  ⚠️ La forteresse n'est encore qu'un DÉCOR : elle devient attaquable à l'étape 2.
 - [ ] **2. Pacifier l'île 1** (~4 j) — objectifs secondaires (camps de brigands), forteresse
   portuaire (verrou, affaiblissement, calage), île pacifiée (plus d'attaques ; spécialités à
   plein, socle à 25 % sans crans), recalage de la mine tenue à 24 h.

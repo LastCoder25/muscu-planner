@@ -1,8 +1,8 @@
 <!--
   🏝️ LA VUE D'ENSEMBLE DE L'ARCHIPEL (étape 1 de la roadmap `2026-10-01-carte-archipel-roadmap`).
   Réservée à l'admin pendant le développement : une tuile REPLIABLE (même langage que les
-  filtres de la carte) qui dit sur quelle île on joue, et dépliée les cinq îles en tuiles —
-  l'active, puis celles à venir, avec leur tranche de rangs et leur menace. Elle porte aussi
+  filtres de la carte) qui dit sur quelle île on joue, et dépliée la CARTE de l’archipel (les cinq silhouettes,
+  reliées par les routes de traversée) et la fiche de l’île touchée. Elle porte aussi
   l'interrupteur du mode. ⚠️ Repliée à chaque ouverture : la carte passe avant.
 -->
 <template>
@@ -26,29 +26,68 @@
     </button>
 
     <div v-if="open" id="archipel-islands" class="arch-body">
-      <div class="arch-grid">
-        <div
+      <!-- 🗺️ LA CARTE DE L'ARCHIPEL : les cinq îles (leur vraie silhouette), reliées par les
+           routes de traversée. Toucher une île en montre la fiche juste dessous. -->
+      <svg class="arch-map" viewBox="0 0 330 182" role="group" aria-label="Carte de l’archipel">
+        <defs>
+          <radialGradient id="arch-sea" cx="50%" cy="50%" r="75%">
+            <stop offset="0" stop-color="#2a6a88" />
+            <stop offset="1" stop-color="#122f45" />
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="330" height="182" rx="8" fill="url(#arch-sea)" />
+        <path v-for="(w, i) in SEA_WAVES" :key="'w' + i" :d="w" class="am-wave" />
+        <path
+          v-for="r in routes"
+          :key="'r' + r.from"
+          :d="r.d"
+          class="am-route"
+          :class="{ open: r.open }"
+        />
+        <g
           v-for="i in tiles"
           :key="i.id"
-          class="arch-tile"
-          :class="{ active: i.active, locked: !i.active }"
-          :style="{ '--a': i.color }"
+          class="am-isl"
+          :class="{ active: i.active, locked: i.locked, sel: sel === i.id }"
+          role="button"
+          tabindex="0"
+          :aria-label="`Île ${i.id} · ${i.name}`"
+          :aria-pressed="sel === i.id"
+          @click="sel = i.id"
+          @keydown.enter.prevent="sel = i.id"
+          @keydown.space.prevent="sel = i.id"
         >
-          <div class="at-top">
-            <span class="at-emo" aria-hidden="true">{{ i.emoji }}</span>
-            <span class="at-num">Île {{ i.id }}</span>
-            <span v-if="i.active" class="at-chip">Active</span>
-            <span v-else class="at-chip dim">🔒 à venir</span>
-          </div>
-          <div class="at-name">{{ i.name }}</div>
-          <div class="at-ranks">
-            <span class="at-rank" :style="{ '--rk': i.lo.color }">{{ i.lo.name }}</span>
-            <span class="at-rank" :style="{ '--rk': i.hi.color }">{{ i.hi.name }}</span>
-            <span class="at-lvl">niv. {{ i.minLevel }}-{{ i.maxLevel }}</span>
-          </div>
-          <div class="at-threat">⚔️ {{ i.threat }}</div>
-          <div class="at-fort">🏰 {{ i.fortress }}</div>
+          <circle :cx="i.x" :cy="i.y" r="34" class="am-hit" />
+          <path :d="i.outline" class="am-shoal" :style="{ stroke: i.style.shoal }" />
+          <path :d="i.outline" :fill="i.style.land0" :stroke="i.style.sand" class="am-land" />
+          <text :x="i.x" :y="i.y + 4" class="am-emo">{{ i.locked ? '🔒' : i.emoji }}</text>
+          <text :x="i.x" :y="i.y + 40" class="am-name">Île {{ i.id }}</text>
+          <g v-if="i.active" class="am-here">
+            <circle :cx="i.x + 22" :cy="i.y - 22" r="6" />
+            <text :x="i.x + 22" :y="i.y - 19.6">⚓</text>
+          </g>
+        </g>
+      </svg>
+
+      <div
+        v-if="selTile"
+        class="arch-tile"
+        :class="{ active: selTile.active, locked: selTile.locked }"
+        :style="{ '--a': selTile.color }"
+      >
+        <div class="at-top">
+          <span class="at-emo" aria-hidden="true">{{ selTile.emoji }}</span>
+          <span class="at-num">Île {{ selTile.id }} · {{ selTile.name }}</span>
+          <span v-if="selTile.active" class="at-chip">Tu es ici</span>
+          <span v-else class="at-chip dim">🔒 à venir</span>
         </div>
+        <div class="at-ranks">
+          <span class="at-rank" :style="{ '--rk': selTile.lo.color }">{{ selTile.lo.name }}</span>
+          <span class="at-rank" :style="{ '--rk': selTile.hi.color }">{{ selTile.hi.name }}</span>
+          <span class="at-lvl">niv. {{ selTile.minLevel }}-{{ selTile.maxLevel }}</span>
+        </div>
+        <div class="at-threat">⚔️ {{ selTile.threat }}</div>
+        <div class="at-fort">🏰 {{ selTile.fortress }}</div>
       </div>
       <p v-if="island" class="arch-note">
         Lieux plafonnés au rang {{ islandCapRank }}, trajets selon la seule distance, carte à la
@@ -65,19 +104,69 @@
 import { computed, ref } from 'vue';
 import { ISLANDS, type Island } from '@/lib/archipelago';
 import { characterRank } from '@/lib/characterRank';
+import { ISLAND_STYLES, islandOutline } from '@/lib/islandTerrain';
 
 const props = defineProps<{ island: Island | null; busy?: boolean }>();
 defineEmits<{ toggle: [on: boolean] }>();
 
 const open = ref(false);
 
+/** Où chaque île se pose sur la carte de l'archipel (une chaîne, d'ouest en est). */
+const POS: Record<number, [number, number]> = {
+  1: [44, 112],
+  2: [108, 56],
+  3: [168, 120],
+  4: [228, 56],
+  5: [290, 114],
+};
+/** Échelle d'une silhouette : une île (rayon ≤ 100) tient dans ~34 unités. */
+const SCALE = 0.34;
+const SEA_WAVES = [
+  'M18 30q3 -2.4 6 0q3 2.4 6 0',
+  'M150 20q3 -2.4 6 0q3 2.4 6 0',
+  'M300 30q3 -2.4 6 0q3 2.4 6 0',
+  'M82 150q3 -2.4 6 0q3 2.4 6 0',
+  'M210 154q3 -2.4 6 0q3 2.4 6 0',
+  'M265 160q3 -2.4 6 0q3 2.4 6 0',
+];
+
 const tiles = computed(() =>
   ISLANDS.map((i) => {
     const lo = characterRank(i.minLevel);
     const hi = characterRank(i.maxLevel);
-    return { ...i, lo, hi, color: hi.color, active: props.island?.id === i.id };
+    const [x, y] = POS[i.id]!;
+    const active = props.island?.id === i.id;
+    const reached = (props.island?.id ?? 1) >= i.id;
+    return {
+      ...i,
+      lo,
+      hi,
+      x,
+      y,
+      style: ISLAND_STYLES[i.id]!,
+      outline: islandOutline(i.id, x, y, SCALE),
+      color: hi.color,
+      active,
+      locked: !reached,
+    };
   }),
 );
+/** Les routes de traversée : d'une île à la suivante, ouvertes jusqu'à l'île active. */
+const routes = computed(() =>
+  ISLANDS.slice(0, -1).map((i) => {
+    const [x1, y1] = POS[i.id]!;
+    const [x2, y2] = POS[i.id + 1]!;
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2 + (y1 < y2 ? -14 : 14);
+    return {
+      from: i.id,
+      d: `M${x1} ${y1}Q${mx} ${my} ${x2} ${y2}`,
+      open: (props.island?.id ?? 1) > i.id,
+    };
+  }),
+);
+const sel = ref(props.island?.id ?? 1);
+const selTile = computed(() => tiles.value.find((t) => t.id === sel.value) ?? null);
 const islandCapRank = computed(() =>
   props.island ? characterRank(props.island.maxLevel).name : '',
 );
@@ -136,15 +225,85 @@ const islandCapRank = computed(() =>
 .arch-body {
   padding: 4px 12px 12px;
 }
-.arch-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+.arch-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 10px;
 }
-@media (min-width: 520px) {
-  .arch-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.am-wave {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.2;
+  stroke-width: 0.8;
+  stroke-linecap: round;
+}
+.am-route {
+  fill: none;
+  stroke: #e9dfc8;
+  stroke-opacity: 0.35;
+  stroke-width: 1.4;
+  stroke-dasharray: 3 3;
+}
+.am-route.open {
+  stroke: var(--accent);
+  stroke-opacity: 0.9;
+  stroke-dasharray: none;
+}
+.am-isl {
+  cursor: pointer;
+  outline: none;
+}
+.am-hit {
+  fill: transparent;
+}
+.am-shoal {
+  fill: none;
+  stroke-width: 4;
+  stroke-opacity: 0.55;
+}
+.am-land {
+  stroke-width: 1.2;
+}
+.am-isl.locked .am-land,
+.am-isl.locked .am-shoal {
+  opacity: 0.45;
+}
+.am-isl.active .am-land {
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+.am-isl.sel .am-land {
+  stroke: #ffffff;
+  stroke-width: 1.8;
+}
+.am-isl:focus-visible .am-land {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.am-emo {
+  font-size: 14px;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.am-name {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #f3eee6;
+  stroke: #0e1a24;
+  stroke-width: 2.2;
+  paint-order: stroke;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.am-here circle {
+  fill: var(--accent);
+  stroke: #15120e;
+  stroke-width: 1;
+}
+.am-here text {
+  font-size: 7px;
+  text-anchor: middle;
+  pointer-events: none;
 }
 .arch-tile {
   border: 1px solid var(--line);
