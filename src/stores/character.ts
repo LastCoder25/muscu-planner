@@ -4828,6 +4828,7 @@ export const useCharacterStore = defineStore('character', () => {
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
     let runesIn = 0;
+    let keysIn = 0;
     // 🔙 Les sorties en retour vers un point qui tombe rentrent à la base (`rerouteSorties`).
     let parties: ActiveParty[] = [...partyList.value];
     let partiesMoved = false;
@@ -4843,6 +4844,7 @@ export const useCharacterStore = defineStore('character', () => {
       advs = h.advs;
       gearStock = h.stock;
       runesIn += h.runes;
+      keysIn += h.keys;
       const escort = advs.filter((a) => ids.has(a.id));
       // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
       const militia = militiaUnits(p.control!.garrison, playerLevel);
@@ -5006,6 +5008,8 @@ export const useCharacterStore = defineStore('character', () => {
       ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
       ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn) } : {}),
+      // 📖 Les clés des archives, de même.
+      ...(keysIn ? { keys: cur.keys + keysIn } : {}),
       adventurers: roster,
     });
     x.play();
@@ -5032,6 +5036,7 @@ export const useCharacterStore = defineStore('character', () => {
     mana: number;
     supplies: SupplyStock;
     runes: number;
+    keys: number;
   } {
     const p = map.pois.find((x) => x.id === id);
     // 🏝️ En mode archipel, un lieu tenu produit au RANG DE SON ÎLE, plus au niveau du héros.
@@ -5048,6 +5053,7 @@ export const useCharacterStore = defineStore('character', () => {
         mana: c.mana,
         supplies: c.supplies,
         runes: c.runes,
+        keys: c.keys,
       };
     // 🎯 Le camp : chacun reçoit SA réserve, selon le temps qu'il a passé sur place (un renfort
     // arrivé tard n'a pas l'XP des autres) — un champion ramené reçoit ce qu'il avait gagné.
@@ -5071,6 +5077,7 @@ export const useCharacterStore = defineStore('character', () => {
       mana: c.mana,
       supplies: c.supplies,
       runes: c.runes,
+      keys: c.keys,
     };
   }
 
@@ -5102,6 +5109,7 @@ export const useCharacterStore = defineStore('character', () => {
     let mana = 0;
     let supplies: SupplyStock = {};
     let runes = 0;
+    let keys = 0;
     const msgs: ExpeditionMessage[] = [];
     /** Récolte tous les points dus d'UNE carte (l'active ou une île rangée). */
     const harvestAll = (m0: ExpeditionMap): ExpeditionMap => {
@@ -5116,7 +5124,8 @@ export const useCharacterStore = defineStore('character', () => {
         mana += h.mana;
         supplies = addSupplies(supplies, h.supplies);
         runes += h.runes;
-        const msg = controlLootMessage(p, now, h.supplies, h.runes);
+        keys += h.keys;
+        const msg = controlLootMessage(p, now, h.supplies, h.runes, h.keys);
         if (msg) msgs.push(msg);
       }
       return m;
@@ -5144,6 +5153,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(mana > 0 ? { mana: cur.mana + mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, supplies) } : {}),
       ...(runes ? { runes: addRuneCount(cur.runes, runes) } : {}),
+      ...(keys ? { keys: cur.keys + keys } : {}),
       ...(gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {}),
       ...(advs !== before ? { adventurers: advs } : {}),
       ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
@@ -5179,6 +5189,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
       ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes) } : {}),
+      ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       // ⚠️ `gearPatch` TOUJOURS : un champion au plafond ne bouge pas, ses pièces si — le
       // réserver au cas « vivier changé » (v0.1249) ne sauvegardait jamais leur XP.
       ...gearPatch,
@@ -5224,6 +5235,7 @@ export const useCharacterStore = defineStore('character', () => {
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
       ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes) } : {}),
+      ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       // 🗡️ Les pièces : le bonus du camp, puis ce que l'XP de leur porteur leur a appris.
       ...(() => {
         const next = trainWornGear(advList.value, h.advs, h.stock);

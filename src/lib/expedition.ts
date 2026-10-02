@@ -86,6 +86,8 @@ export type ControlKind =
   | 'garden'
   | 'tower'
   | 'scriptorium'
+  /** 🏝️📖 Les ARCHIVES (île 2) : des clés du Labyrinthe. */
+  | 'archives'
   | 'mana'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
@@ -268,6 +270,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   garden: 'Jardin d’herboriste',
   tower: 'Tour de guet',
   scriptorium: 'Scriptorium',
+  archives: 'Archives',
   mana: 'Source de mana',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
@@ -279,6 +282,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   garden: '🌿',
   tower: '🗼',
   scriptorium: '📜',
+  archives: '📖',
   mana: '⛲',
   citadel: '🏯',
   objective: '⛺',

@@ -25,7 +25,7 @@ import { activeIsland, islandPacified, ISLANDS, type Island } from './archipelag
 import { buildingType, collectable, type BuildResource, type Building } from './buildings';
 import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { mulberry32, seedOf } from './combat';
-import { CONTROL, bankAt } from './controlPoints';
+import { ALL_CONTROL_KINDS, CONTROL, bankAt } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { isMilitiaId } from './militia';
 import {
@@ -535,7 +535,7 @@ export function ensureIslandConquest(
   // 3. La règle de production de l'île sur chaque lieu fixe.
   pois = pois.map((p) => {
     const c = p.control;
-    if (!c || !CONTROL.kinds.includes(c.kind)) return p;
+    if (!c || !ALL_CONTROL_KINDS.includes(c.kind)) return p;
     const rule = islandYieldRule(map, c.kind);
     if ((c.yieldMult ?? 1) === (rule.yieldMult ?? 1) && !!c.flatTier === !!rule.flatTier) return p;
     changed = true;

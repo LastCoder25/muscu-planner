@@ -38,6 +38,7 @@ import {
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits } from './militia';
+import { labyKeyPriceAt } from '../data/labyrinths';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
@@ -68,6 +69,9 @@ export const CONTROL = {
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
    *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
   kinds: ['mine', 'training', 'garden', 'tower', 'scriptorium', 'mana'] as readonly ControlKind[],
+  /** 📖 Les archives (île 2) : une entrée du palier de l'île toutes les 48 h, garnison au
+   *  complet (étape 0 de l'archipel : +20 à +24 % de clés). */
+  archiveHoursPerEntry: 48,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -341,6 +345,7 @@ const tierAtAttack = (c: ControlState | undefined): number =>
 const PRODUCER_SEATS = MILITIA.perPoint;
 const CONTROL_SEATS: Record<ControlKind, number> = {
   scriptorium: PRODUCER_SEATS,
+  archives: PRODUCER_SEATS,
   mana: PRODUCER_SEATS,
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
@@ -368,6 +373,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   garden: 2,
   tower: 3,
   scriptorium: 2.5,
+  // 📖 Île 2 : la place du jardin, qui n'y est pas.
+  archives: 2,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -386,6 +393,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   garden: 'consommables 🎒',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
+  archives: 'clés du Labyrinthe',
   mana: 'pierres de mana 💠 en continu',
   citadel: 'une trêve de 3 jours sur les points qu’elle attaque',
   objective: 'un pas vers la pacification de l’île',
@@ -979,6 +987,22 @@ function spotAt(map: ExpeditionMap, quarter: number, d: number): Pick<Poi, 'x' |
   };
 }
 
+/** 🏰 TOUS les types de points qui produisent (carte ordinaire et îles). */
+export const ALL_CONTROL_KINDS: readonly ControlKind[] = [...CONTROL.kinds, 'archives'];
+
+/**
+ * 🏝️ LES POINTS FIXES DE CHAQUE ÎLE (roadmap, « Répartition ») : le socle (mine, camp, source
+ * de mana) partout, plus les spécialités de l'île. Île 1 et carte ordinaire : la liste
+ * d'origine. Île 2 : socle + tour de guet + ARCHIVES. Îles 3 à 5 : la liste d'origine tant
+ * que leur étape n'est pas faite.
+ */
+const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
+  2: ['mine', 'training', 'tower', 'mana', 'archives'],
+};
+export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
+  return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
+}
+
 /** Pose les points de contrôle MANQUANTS sur la carte (tenus par l'ennemi). Rend la même
  *  carte quand il ne manque rien : le store n'écrit pas à vide. */
 export function ensureControls(
@@ -988,7 +1012,8 @@ export function ensureControls(
   outpostLevel: number,
 ): ExpeditionMap {
   const add: Poi[] = [];
-  for (const kind of CONTROL.kinds) {
+  const kinds = controlKindsOf(map);
+  for (const kind of kinds) {
     const id = controlIdOf(kind);
     if (map.pois.some((p) => p.id === id)) continue;
     add.push({
@@ -1035,7 +1060,7 @@ export function ensureControls(
   // quitte la carte. ⚠️ Sa garnison est libérée d'elle-même : la disponibilité d'un champion
   // se DÉDUIT de la carte. Vérifié en base avant le retrait : aucun joueur n'en tenait une.
   const kept = healed.filter(
-    (p) => !p.control || RAZE_KINDS.has(p.control.kind) || CONTROL.kinds.includes(p.control.kind),
+    (p) => !p.control || RAZE_KINDS.has(p.control.kind) || kinds.includes(p.control.kind),
   );
   // 🏯 Les citadelles quittent l'île SANS être perdues (mises de côté, rendues en sortant).
   const { pois: stashed, stash } = stashCitadels([...kept, ...add], map, now);
@@ -1512,6 +1537,9 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
     case 'scriptorium':
       return shareOf(n) / CONTROL.runeHoursPerItem;
+    case 'archives':
+      // 📖 Une entrée du palier de l'île toutes les 48 h au complet (étape 0 de l'archipel).
+      return (labyKeyPriceAt(playerLevel) * shareOf(n)) / CONTROL.archiveHoursPerEntry;
     case 'mana':
       return controlManaPerHour(n, playerLevel);
     default:
@@ -1725,9 +1753,11 @@ export function collectControl(
   gearXp: Record<string, number>;
   supplies: SupplyStock;
   runes: number;
+  /** 📖 Clés du Labyrinthe (les archives). */
+  keys: number;
 } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, mana: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: 0 };
+  const none = { map, gold: 0, mana: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: 0, keys: 0 };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
@@ -1787,6 +1817,7 @@ export function collectControl(
     gearXp: {},
     supplies,
     runes,
+    keys: c.kind === 'archives' ? whole : 0,
   };
 }
 
@@ -1844,6 +1875,11 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
         pct: r,
       };
     }
+    case 'archives': {
+      const next = Math.max(0, units - Math.floor(units + 1e-9));
+      const left = leftFor(1 - next, rate);
+      return { text: `🗝️ ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
+    }
     default:
       return null;
   }
@@ -1881,6 +1917,7 @@ const WORKER: Record<ControlKind, [string, string]> = {
   garden: ['jardinier', 'jardiniers'],
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
+  archives: ['archiviste', 'archivistes'],
   mana: ['gardien', 'gardiens'],
   citadel: ['assaillant', 'assaillants'],
   objective: ['assaillant', 'assaillants'],
@@ -1965,6 +2002,20 @@ export function controlYieldCard(
         gauge: idle ?? (left ? `Prochain dans ${left}` : null),
         rate: every ? `1 toutes les ${formatDuration(every * 3600_000)} · ${crew}` : crew,
         ready: whole > 0,
+        full: false,
+      };
+    }
+    case 'archives': {
+      const next = Math.max(0, units - Math.floor(units + 1e-9));
+      const left = leftFor(1 - next, rate);
+      return {
+        emoji: '📖',
+        value: `${Math.round(next * 100)} %`,
+        what: 'de la prochaine clé du Labyrinthe, versée directement',
+        pct: next,
+        gauge: idle ?? (left ? `Prochaine clé dans ${left}` : null),
+        rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} 🗝️/jour · ${crew}`,
+        ready: false,
         full: false,
       };
     }
@@ -2661,7 +2712,7 @@ export function controlRoster(
   playerLevel: number,
 ): ControlRosterRow[] {
   if (!map) return [];
-  const order = (k: ControlKind) => CONTROL.kinds.indexOf(k);
+  const order = (k: ControlKind) => ALL_CONTROL_KINDS.indexOf(k);
   return (
     map.pois
       // 🏯 La citadelle n'est pas un point à tenir : elle vit sur la carte, pas dans la liste.
@@ -2767,14 +2818,17 @@ export function controlLootMessage(
   at: number,
   supplies: SupplyStock,
   runes: number,
+  /** 📖 Clés des archives. */
+  keys = 0,
 ): ExpeditionMessage | null {
   const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
-  if (!nSup && !runes) return null;
+  if (!nSup && !runes && !keys) return null;
   const kind = p.control?.kind;
   const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
   const what = [
     nSup ? `${nSup} consommable${nSup > 1 ? 's' : ''}` : '',
     runes ? `${runes} rune${runes > 1 ? 's' : ''}` : '',
+    keys ? `${keys} clé${keys > 1 ? 's' : ''} du Labyrinthe` : '',
   ]
     .filter(Boolean)
     .join(' et ');

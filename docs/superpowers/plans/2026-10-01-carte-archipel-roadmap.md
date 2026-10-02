@@ -258,7 +258,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       limite de 2 h d’aller (tout lieu d’une île est à 2 h au plus de la base, et une sortie
       depuis un point tenu raccourcit encore) ; la base garde son dessin au centre, reliée au
       port (accord de l’utilisateur).
-- [ ] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
+- [x] **4. Les menaces de l'île 2** (~3 j) — nids qui se multiplient, embuscades ; archives.
       **4a livrée v1.22.0 — les nids** (décisions de l’utilisateur, 2026-10-02) : chaque nid
       debout en pond un nouveau tous les 3 jours (`NEST.layMs`), 6 au plus sur l’île ; au plafond
       la ponte est perdue. Les nids nés en route se posent à 10 unités au moins des autres lieux
@@ -266,7 +266,14 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       (une conséquence de la menace). TOUS les nids debout comptent pour pacifier ; le verrou de
       la forteresse reste à 2 abattus. Les lieux à 25 unités d’un nid debout ont des routes
       dangereuses (`Poi.nestPeril`, dérivé, embuscades doublées). Tests `islandNests.test.ts`
-      (9, 7 mutations rouges). Reste 4b : les archives.
+      (9, 7 mutations rouges).
+      **4b livrée v1.23.0 — les archives et les points fixes par île** : l’île 2 porte le socle
+      (mine, camp, source de mana) + tour de guet + **archives** (`controlKindsOf`, table
+      `ISLAND_KINDS` ; île 1, carte ordinaire et îles 3-5 gardent la liste d’origine pour
+      l’instant). Les archives produisent des clés du Labyrinthe : une entrée du palier de l’île
+      (`labyKeyPriceAt` au niveau de l’île) toutes les 48 h au complet (`archiveHoursPerEntry`),
+      moins vite avec moins d’archivistes, versées toutes seules comme le reste (rapport
+      « N clés du Labyrinthe »). Tests `islandArchives.test.ts` (3, 5 mutations rouges).
 
 ### Étoffer
 
