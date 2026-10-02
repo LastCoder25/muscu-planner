@@ -2090,6 +2090,15 @@ const selectedWarband = computed(() => {
     };
   }
   const army = warbandArmy(p, progress.global.value.level);
+  // 🐫 Un convoi de l'île 4 : ce qu'on évite, c'est le renfort de la FORTERESSE.
+  if (p.convoy)
+    return {
+      faction: army.faction,
+      size: army.groups.reduce((s, g) => s + g.count, 0),
+      gone: p.expiresAt - now.value,
+      utile: true,
+      convoy: true,
+    };
   return {
     faction: army.faction,
     size: army.groups.reduce((s, g) => s + g.count, 0),
@@ -4451,7 +4460,9 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   rift: () => 'mana 💠',
   // ⚠️ Seules les armées de FAILLE rendent du mana ; les autres, le butin de leur faction.
   warband: (p) =>
-    p.army
+    p.convoy
+      ? 'or 🪙 · la forteresse n’est pas renforcée'
+      : p.army
       ? `${p.army.rift ? 'mana 💠' : FACTION_LOOT_LABEL[p.army.faction]} · chaque ennemi abattu n’attaquera pas`
       : 'mana 💠 · siège non renforcé',
   ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),

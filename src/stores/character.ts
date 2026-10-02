@@ -153,6 +153,7 @@ import {
   FORTRESS_ID,
   brigandPillage,
   ensureIslandConquest,
+  convoyVanquished,
   isIslandTargetId,
   razeIslandTarget,
   takeFortress,
@@ -440,6 +441,7 @@ import {
 import {
   resolveIncursion,
   resolveInterception,
+  resolveConvoy,
   riftOverflowOf,
   siegeMana,
   withRiftCut,
@@ -2323,6 +2325,8 @@ export const useCharacterStore = defineStore('character', () => {
       ),
       now,
       level,
+      // 🐫 Un convoi battu avant son arrivée ne renforce pas la forteresse.
+      convoyVanquished(partyList.value),
     );
     // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
     // détection de la Tour de guet (`fieldArmy.ts`).
@@ -3854,7 +3858,17 @@ export const useCharacterStore = defineStore('character', () => {
             playerLevel: opts.playerLevel,
             pantheonLevel: pantheonLevel.value,
           })
-        : isWarbandPoi(poi)
+        : poi.convoy
+          ? resolveConvoy({
+              poi,
+              escort,
+              road,
+              hero,
+              seed,
+              playerLevel: opts.playerLevel,
+              pantheonLevel: pantheonLevel.value,
+            })
+          : isWarbandPoi(poi)
           ? resolveInterception({
               // ⚔️🕳️ La colonne DÉJÀ amputée par les interceptions ratées (lue sur la base).
               poi: withRiftCut(poi, row.value?.base),
@@ -4342,7 +4356,7 @@ export const useCharacterStore = defineStore('character', () => {
     for (const m of fresh)
       // ⚔️🗼 Une ARMÉE EN CAMPAGNE battue n'est pas une bande de faille : elle ne disperse
       // pas le débordement (son effet passe par `applyFieldHit*`).
-      if (m.poiType === 'warband' && m.win && !m.party?.fieldHit) {
+      if (m.poiType === 'warband' && m.win && !m.party?.fieldHit && !m.party?.convoy) {
         const d = dispelOverflow(b, m.resolvedAt);
         b = d.base;
         if (d.dispel) said.set(m.id, d.dispel);

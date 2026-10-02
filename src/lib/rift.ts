@@ -42,6 +42,7 @@ import { supplyFx } from './supplies';
 import { interpolate } from './proceduralContent';
 import {
   EXPE,
+  harvestGold,
   riftFactionOf,
   riftMaturityAt,
   type ExpeditionOutcome,
@@ -366,7 +367,7 @@ const RIFT_INTERCEPT = {
 /** ⚔️🕳️ La bande avec sa part déjà abattue (lue sur le débordement de la base), sur une
  *  COPIE — c'est ce qu'estimer et résoudre doivent affronter. Sans objet pour tout autre lieu. */
 export function withRiftCut<P extends Poi>(poi: P, base: BaseState | null | undefined): P {
-  if (poi.type !== 'warband' || poi.army) return poi;
+  if (poi.type !== 'warband' || poi.army || poi.convoy) return poi;
   const cut = overflowCutFor(base, poi.spawnedAt);
   return cut > 0 ? { ...poi, riftCut: cut } : poi;
 }
@@ -1171,6 +1172,36 @@ export interface InterceptionInput {
  * - ⚠️ **Le héros n'est jamais blessé** (cf. `resolveIncursion` : un camp perdu ne blesse
  *   pas le héros non plus — seul un SIÈGE perdu le fait).
  */
+/**
+ * 🐫 Intercepter un CONVOI de ravitaillement de l'île 4 (`islandConquest.warlordConvoys`).
+ * Le MÊME choc qu'une bande de faille (`resolveInterception` : force, XP, infirmerie,
+ * rejeu) — seul ce qu'on y gagne change : sa CARGAISON, l'or d'une mission de mine de son
+ * rang (`harvestGold`), entière si on le rompt, au prorata de ce qu'on a abattu sinon. Et
+ * battu, il n'arrivera pas : la forteresse n'est pas renforcée. ⚠️ Ni mana, ni effet sur le
+ * débordement d'une faille (`riftHit` retiré, `convoy` posé : `dispelWon` l'ignore).
+ */
+export function resolveConvoy(input: InterceptionInput): ExpeditionOutcome {
+  const o = resolveInterception(input);
+  const part = o.win ? 1 : (o.party?.riftHit?.part ?? 0);
+  const gold = Math.round(
+    harvestGold({ id: input.poi.id, type: 'mine', level: input.poi.level }, input.playerLevel) *
+      part,
+  );
+  const { riftHit: _r, ...party } = o.party!;
+  void _r;
+  return {
+    ...o,
+    mana: 0,
+    gold,
+    party: { ...party, convoy: true },
+    text: o.win
+      ? `🐫 Convoi rompu — il n’arrivera pas à la forteresse. +${gold} 🪙`
+      : gold > 0
+        ? `💀 Le convoi passe, mais tu lui as pris une part de sa cargaison. +${gold} 🪙`
+        : '💀 Le convoi passe sans perte. Il renforcera la forteresse s’il arrive.',
+  };
+}
+
 export function resolveInterception(input: InterceptionInput): ExpeditionOutcome {
   const { poi, escort, hero, seed, playerLevel } = input;
   const allies = partyAllies(escort, input.road, hero);

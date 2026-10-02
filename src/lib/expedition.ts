@@ -307,6 +307,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
 export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
   if (p.army) return p.army.kind === 'siege' ? 'Armée sur ta base' : 'Armée de reprise';
+  if ((p as Pick<Poi, 'convoy'>).convoy) return 'Convoi de ravitaillement';
   if (!p.control) return POI_LABEL[p.type];
   const name = p.control.name ?? CONTROL_KIND_LABEL[p.control.kind];
   return p.control.outpost ? `${name} · avant-poste` : name;
@@ -314,6 +315,7 @@ export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTa
 /** L'emoji d'un lieu (idem). */
 export function poiEmo(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
   if (p.army) return '🪖';
+  if ((p as Pick<Poi, 'convoy'>).convoy) return '🐫';
   return p.control ? (p.control.emoji ?? CONTROL_KIND_EMO[p.control.kind]) : POI_EMO[p.type];
 }
 
@@ -438,6 +440,9 @@ export interface PartyResult {
   /** ⚔️🕳️ Une interception RATÉE contre une bande de faille : ce qu'elle a abattu (part de
    *  la colonne restante), appliqué au débordement par `weakenOverflow`. */
   riftHit?: { part: number; hitId: string; spawnedAt: number };
+  /** 🐫 L'interception d'un CONVOI de l'île 4 (pas une bande de faille : elle ne touche pas au
+   *  débordement). */
+  convoy?: true;
   /** 🏰 Ceux qui RESTENT en garnison si le point est pris (choisis à l'envoi) ; les autres
    *  rentrent. Absent = toute l'escorte (dans la limite des places du point). */
   stay?: string[];
@@ -683,6 +688,9 @@ export interface Poi {
   /** 🔮 Faille née CORROMPUE sur l'île 5 (`islandConquest`) : vieillie d'un jour par sanctuaire
    *  maudit debout, une seule fois. */
   corrupt?: boolean;
+  /** 🐫 Île 4 : un CONVOI DE RAVITAILLEMENT du seigneur de guerre (une bande en marche d'un
+   *  camp de guerre vers la forteresse, `warlordConvoys`). Arrivé, il la renforce. */
+  convoy?: true;
   /** 🕳️ Niveau sur lequel se calcule le TRAJET (v0.1012). ⚠️ Posé seulement quand le niveau
    *  du lieu NE DÉCOULE PAS de sa distance — une faille (niveau tiré par rang) et ce qu'elle
    *  laisse (mine, bande). Sans lui, une faille Bronze posée au bout de la carte prenait
@@ -765,6 +773,12 @@ export interface ExpeditionMap {
     razedAt?: Record<string, number>;
     /** 🚩 Île 4 : la prochaine sortie de l'ARMÉE MOBILE du seigneur de guerre. */
     warAt?: number;
+    /** 🐫 Île 4 : la prochaine sortie d'un CONVOI de ravitaillement. */
+    convoyAt?: number;
+    /** 🐫 Les convois en route (id, arrivée à la forteresse). */
+    convoys?: { id: string; at: number }[];
+    /** 🐫 Les convois ARRIVÉS : chacun renforce la forteresse (`convoyBonus`). */
+    delivered?: string[];
   };
   /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
    *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir
@@ -2687,7 +2701,9 @@ export function advanceWorld(
       (p) =>
         p.id === protectedPoiId ||
         (p.type !== 'wreck' &&
-          p.expiresAt > now &&
+          // 🐫 Un convoi reste jusqu'à ce que `warlordConvoys` tranche son arrivée : retiré ici
+          // à l'échéance, on ne saurait plus s'il a été intercepté ou s'il a livré.
+          (p.expiresAt > now || !!p.convoy) &&
           // 🏯 Les citadelles sont posées LOIN, hors du disque révélé : c'est voulu.
           // 🏝️ La forteresse portuaire est sur la CÔTE, parfois au-delà : idem.
           (withinLand(p, reach) || (!!p.control && RAZE_KINDS.has(p.control.kind))) &&

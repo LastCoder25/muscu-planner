@@ -109,6 +109,14 @@
           attaque-la en combiné depuis la base et tes points fixes.
         </p>
       </template>
+      <template v-else-if="warband?.convoy">
+        <p class="pc-note">
+          🐫 Ce convoi ravitaille la <b>forteresse</b> : arrivé, il la renforce d'un champion de
+          référence (4 au plus). Le rompre l'arrête et rapporte sa <b>cargaison</b> ; même repoussé,
+          tu gardes la part de ce que tu as abattu. En cas de défaite, tout le groupe part à
+          l'infirmerie.
+        </p>
+      </template>
       <template v-else-if="warband">
         <p v-if="warband.utile" class="pc-note">
           ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
@@ -149,7 +157,13 @@ const props = defineProps<{
   /** Une bande en marche : `utile` = l'intercepter évite encore le renfort du siège.
    *  `army` = une armée EN CAMPAGNE (siège de la base ou reprise d'un point fixe), `target`
    *  = ce qu'elle vient attaquer. */
-  warband: { utile: boolean; army?: 'siege' | 'retake'; target?: string } | null;
+  warband: {
+    utile: boolean;
+    army?: 'siege' | 'retake';
+    target?: string;
+    /** 🐫 Un convoi de ravitaillement de l'île 4. */
+    convoy?: boolean;
+  } | null;
   sealStock: number;
   busySeal: boolean;
 }>();

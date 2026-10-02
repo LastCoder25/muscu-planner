@@ -349,6 +349,8 @@ function rankAbove(cap: number): number {
 export function fortressForce(
   isl: Pick<Island, 'maxLevel' | 'objectives'>,
   down: number,
+  /** 🐫 Champions de référence ajoutés par les convois arrivés (`convoyBonus`). */
+  bonus = 0,
 ): { level: number; size: number; locked: boolean } {
   const n = Math.max(1, isl.objectives);
   const w = Math.min(1, Math.max(0, down) / n);
@@ -356,7 +358,7 @@ export function fortressForce(
   const { fortressIntactSize: big, fortressWeakSize: small } = ISLAND_CONQUEST;
   return {
     level: Math.round(hi - (hi - isl.maxLevel) * w),
-    size: Math.round((big - (big - small) * w) * 100) / 100,
+    size: Math.round((big - (big - small) * w + Math.max(0, bonus)) * 100) / 100,
     locked: down < Math.min(ISLAND_CONQUEST.unlockAfter, n),
   };
 }
@@ -488,7 +490,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
   }
   if (!gone.has(FORTRESS_ID)) {
     const down = objectiveIds(isl, map.archipel?.nests ?? []).filter((x) => gone.has(x)).length;
-    const force = fortressForce(isl, down);
+    const force = fortressForce(isl, down, convoyBonus(map));
     const relay = outpostsHeld(map);
     out.push(
       enemyTarget(
@@ -532,6 +534,8 @@ export function ensureIslandConquest(
   map0: ExpeditionMap,
   now: number,
   playerLevel: number,
+  /** 🐫 Les convois BATTUS par un voyage avant leur arrivée (`convoyVanquished`). */
+  vanquished: ReadonlySet<string> = new Set(),
 ): ExpeditionMap {
   // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🪦 De même les
   // cimetières qui se relèvent.
@@ -631,7 +635,8 @@ export function ensureIslandConquest(
     changed = true;
   }
   // 6. 🚩 L'armée mobile du seigneur de guerre (île 4), 🔮 les invasions combinées (île 5).
-  return warlordRaids(changed ? { ...map, pois } : map, now);
+  // 7. 🐫 Les convois de ravitaillement de l'île 4.
+  return warlordConvoys(warlordRaids(changed ? { ...map, pois } : map, now), now, vanquished);
 }
 
 /**
@@ -796,11 +801,12 @@ export function islandTargetLabel(
             : CURSE.islands.has(isl.id)
               ? ' · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (en moyenne toutes les 72 h, plus souvent avec plusieurs sanctuaires debout)'
               : WARLORD.islands.has(isl.id)
-                ? ' · tant qu’il tient, son armée mobile frappe ton lieu tenu le MOINS défendu (en moyenne toutes les 36 h, plus souvent avec plusieurs camps debout)'
+                ? ' · tant qu’il tient, son armée mobile frappe ton lieu tenu le MOINS défendu (en moyenne toutes les 36 h, plus souvent avec plusieurs camps debout) et ses convois de ravitaillement marchent sur la forteresse (chacun arrivé la renforce : intercepte-les)'
                 : ' · tant qu’il tient, il attaque tes lieux fixes') +
         ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} abattus ouvrent la forteresse, tous l’affaiblissent au plus bas.`,
     };
-  const f = fortressForce(isl, down);
+  const bonus = convoyBonus(map!);
+  const f = fortressForce(isl, down, bonus);
   return {
     title: f.locked
       ? `🔒 ${isl.fortress} · verrouillée (${down}/${Math.min(ISLAND_CONQUEST.unlockAfter, n)})`
@@ -810,6 +816,7 @@ export function islandTargetLabel(
       (down < n
         ? ` · chaque objectif abattu l’affaiblit (${down}/${n})`
         : ' · affaiblie au plus bas') +
+      (bonus ? ` · renforcée par ${bonus} convoi${bonus > 1 ? 's' : ''} de ravitaillement` : '') +
       ' · abattue avec tous les objectifs : l’île est pacifiée, plus aucune attaque.',
   };
 }
@@ -950,6 +957,140 @@ export function warlordRaids(map: ExpeditionMap, now: number): ExpeditionMap {
   if (at <= now) at = now + warDelayMs(map.seed, now, camps, raidMs);
   if (at === a.warAt && pois === map.pois) return map;
   return { ...map, pois, archipel: { ...a, warAt: at } };
+}
+
+/**
+ * 🐫 LES CONVOIS DE RAVITAILLEMENT DE L'ÎLE 4 (roadmap : « 3 camps de guerre, armée mobile
+ * qui vise le moins défendu, convois ») : tant qu'un camp de guerre tient et que la
+ * forteresse est debout, un convoi part d'un camp en moyenne toutes les `everyMs` / camps
+ * debout et marche `travelMs` jusqu'à la forteresse. C'est une BANDE EN MARCHE : on
+ * l'intercepte comme celle d'une faille (même force, calibrée sur l'escorte de référence),
+ * et la battre rapporte sa cargaison (`convoyHaul`). ARRIVÉ, il RENFORCE la forteresse de
+ * `troop` champion de référence (au plus `max`) : l'ignorer rend la fin de l'île plus dure.
+ *
+ * ⚠️ L'arrivée se tranche ICI, une fois : le convoi reste sur la carte jusque-là
+ * (`advanceWorld` ne le retire pas à l'échéance). Il est intercepté s'il a quitté la carte
+ * avant (une victoire l'en retire, `restoreUnvanquished`) OU si un voyage l'a battu avant son
+ * arrivée (`vanquished` — sans ça, l'ordre des ticks déciderait après une absence).
+ */
+export const CONVOY = {
+  islands: new Set([4]) as ReadonlySet<number>,
+  everyMs: 24 * 3600_000,
+  travelMs: 8 * 3600_000,
+  jitter: 0.25,
+  troop: 1,
+  max: 4,
+  catchUp: 8,
+} as const;
+
+/** 🐫 Le renfort de la forteresse : un champion de référence par convoi arrivé (borné). */
+export function convoyBonus(map: Pick<ExpeditionMap, 'archipel'>): number {
+  return Math.min(CONVOY.max, map.archipel?.delivered?.length ?? 0) * CONVOY.troop;
+}
+
+/** Le délai jusqu'au prochain convoi, à `standing` camps debout. */
+export function convoyDelayMs(seed: number, from: number, standing: number): number {
+  const r = mulberry32((seedOf(`${seed}:convoy:${from}`) ^ 0x2545f491) >>> 0 || 1)();
+  return (CONVOY.everyMs / Math.max(1, standing)) * (1 + (r * 2 - 1) * CONVOY.jitter);
+}
+
+/** 🐫 Les convois qu'un voyage a BATTUS (l'issue est tirée au départ, la rencontre a lieu
+ *  avant l'arrivée : `interceptLeg`). */
+export function convoyVanquished(
+  voyages: readonly { poi: Pick<Poi, 'id' | 'convoy'>; outcome?: { win?: boolean } }[],
+): Set<string> {
+  return new Set(voyages.filter((v) => v.poi.convoy && v.outcome?.win).map((v) => v.poi.id));
+}
+
+/** 🐫 Fait partir et arriver les convois jusqu'à `now`. Rend la MÊME carte si rien ne change. */
+export function warlordConvoys(
+  map: ExpeditionMap,
+  now: number,
+  vanquished: ReadonlySet<string> = new Set(),
+): ExpeditionMap {
+  const a = map.archipel;
+  if (!a) return map;
+  const isl = activeIsland(map);
+  const fortress = map.pois.find((p) => p.id === FORTRESS_ID && p.control?.owner === 'enemy');
+  const camps = map.pois.filter(
+    (p) => p.control?.owner === 'enemy' && p.control.kind === 'objective',
+  );
+  const active =
+    !!isl && CONVOY.islands.has(isl.id) && !islandPacified(map) && !!fortress && camps.length > 0;
+  let pois = map.pois;
+  let convoys = a.convoys ?? [];
+  let delivered = a.delivered ?? [];
+  const deliver = (id: string) => {
+    if (!delivered.includes(id)) delivered = [...delivered, id];
+  };
+  // 1. Les arrivées. Avant l'échéance, un convoi disparu ou battu est INTERCEPTÉ ; à
+  // l'échéance, encore là et jamais battu, il LIVRE.
+  for (const c of a.convoys ?? []) {
+    const onMap = pois.some((p) => p.id === c.id);
+    const beaten = vanquished.has(c.id) || !onMap;
+    if (c.at > now && !beaten) continue;
+    convoys = convoys.filter((x) => x.id !== c.id);
+    if (onMap) pois = pois.filter((p) => p.id !== c.id);
+    if (!beaten && fortress) deliver(c.id);
+  }
+  // 2. Les départs.
+  let convoyAt = a.convoyAt;
+  if (!active) {
+    // Île quittée, pacifiée, forteresse prise ou plus aucun camp : plus de convoi en route.
+    const stale = new Set(convoys.map((c) => c.id));
+    if (stale.size) pois = pois.filter((p) => !stale.has(p.id));
+    convoys = [];
+    convoyAt = undefined;
+  } else {
+    let at = convoyAt ?? now + convoyDelayMs(map.seed, now, camps.length);
+    for (let n = 0; at <= now && n < CONVOY.catchUp; n++) {
+      const r = mulberry32((seedOf(`${map.seed}:convoyCamp:${at}`) ^ 0x1b873593) >>> 0 || 1)();
+      const camp = camps[Math.floor(r * camps.length)]!;
+      const id = `isl_convoy_${Math.round(at)}`;
+      const arrive = at + CONVOY.travelMs;
+      // ⚠️ Parti ET arrivé pendant une absence : personne n'a pu l'intercepter, il livre.
+      if (arrive <= now) deliver(id);
+      else {
+        pois = [
+          ...pois,
+          {
+            id,
+            type: 'warband',
+            convoy: true,
+            level: camp.level,
+            travelLevel: ARCHIPEL_TRAVEL_LEVEL,
+            x: camp.x,
+            y: camp.y,
+            from: { x: camp.x, y: camp.y },
+            to: { x: fortress!.x, y: fortress!.y },
+            distNorm: islandDistNorm(Math.hypot(camp.x - EXPE.town.x, camp.y - EXPE.town.y)),
+            spawnedAt: at,
+            expiresAt: arrive,
+            faction: isl!.faction,
+          },
+        ];
+        convoys = [...convoys, { id, at: arrive }];
+      }
+      at += convoyDelayMs(map.seed, at, camps.length);
+    }
+    if (at <= now) at = now + convoyDelayMs(map.seed, now, camps.length);
+    convoyAt = at;
+  }
+  if (
+    pois === map.pois &&
+    convoyAt === a.convoyAt &&
+    same(convoys, a.convoys ?? []) &&
+    same(delivered, a.delivered ?? [])
+  )
+    return map;
+  const next = { ...a };
+  if (convoyAt === undefined) delete next.convoyAt;
+  else next.convoyAt = convoyAt;
+  if (convoys.length) next.convoys = convoys;
+  else delete next.convoys;
+  if (delivered.length) next.delivered = delivered;
+  else delete next.delivered;
+  return { ...map, pois, archipel: next };
 }
 
 /** Les camps (objectifs) encore debout. */

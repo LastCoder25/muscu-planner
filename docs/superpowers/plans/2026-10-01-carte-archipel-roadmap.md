@@ -294,7 +294,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       la recule. Points fixes : socle + tour de guet + **arsenal** (sceaux d’objet ⚜️ : la part
       d’objet d’une ruine toutes les 72 h au complet) + **cercle d’invocation** (mana : le prix
       d’un tirage toutes les 48 h au complet ; nommé « cercle » car « sanctuaire d’invocation »
-      est déjà un lieu de récolte). ⚠️ **Les convois de la menace ne sont pas faits** (à
+      est déjà un lieu de récolte). (convois faits en v1.27.6, ci-dessous ; à
       concevoir) ; débits de l’arsenal et du cercle à revoir à l’étape 6. Tests
       `islandWarlord.test.ts` (12, 10 mutations rouges).
       **Île 5 livrée v1.26.0 (choix par défaut)** : 3 sanctuaires maudits. Tant qu’un tient,
@@ -345,4 +345,16 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       commune SANS le vert, renormalisée (`BLESSED_ODDS` : bleu 73 %, violet 23 %, doré 3 %),
       en premier ; la rune gratuite d’un lot reste ordinaire. Le stock le dit. Tests
       `runeBlessed.test.ts` (5, 6 mutations rouges).
+      **v1.27.6 — les convois de l’île 4** (choix par défaut) : tant qu’un camp de guerre
+      tient et que la forteresse est debout, un convoi de ravitaillement part d’un camp en
+      moyenne toutes les 24 h / camps debout (±25 %) et marche 8 h jusqu’à la forteresse
+      (`CONVOY`, `warlordConvoys`, `archipel.convoyAt/convoys/delivered`). C’est une bande en
+      marche (`Poi.convoy`) : on l’intercepte comme celle d’une faille, même force, mais elle
+      paie sa CARGAISON (l’or d’une mission de mine de son rang, au prorata de ce qu’on a
+      abattu si on est repoussé ; `resolveConvoy`), jamais de mana, sans toucher au
+      débordement. ARRIVÉ, il renforce la forteresse d’un champion de référence (4 au plus,
+      `convoyBonus`). ⚠️ L’arrivée se tranche une fois : le convoi reste sur la carte
+      jusque-là, et un voyage qui l’a battu avant compte même si son rapport arrive après
+      (`convoyVanquished`). Tests `islandConvoys.test.ts` (9, 12 mutations rouges). Fiche
+      non vue à l’écran en vraie partie.
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.
