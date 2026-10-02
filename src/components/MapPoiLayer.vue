@@ -35,7 +35,10 @@
       <!-- 🏰 UN POINT DE CONTRÔLE se dessine en FORT, et sa bannière dit qui le tient :
            ROUGE à l'ennemi, VIOLET (la couleur de nos équipes) quand nos champions y sont.
            Pointillé tant qu'une équipe y marche. -->
-      <template v-else-if="p.control">
+      <!-- 🏰 Un lieu FIXE se dessine plus GROS qu'un lieu ordinaire (demandé), et une citadelle
+           plus encore : on les repère sur la carte. Agrandi autour de son centre, garnison,
+           cran et alerte compris. -->
+      <g v-else-if="p.control" :transform="fixedScale(p)">
         <rect
           :x="p.x - 5.2"
           :y="p.y - 5.2"
@@ -87,7 +90,7 @@
           <circle :cx="p.x - 5.2" :cy="p.y - 5.2" r="2.9" />
           <text :x="p.x - 5.2" :y="p.y - 4">!</text>
         </g>
-      </template>
+      </g>
       <!-- ⚔️🗼 Une ARMÉE EN CAMPAGNE (siège, reprise) : un liseré rouge — elle marche sur nous. -->
       <template v-else>
         <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" :class="{ 'poi-army': p.army }" />
@@ -100,12 +103,20 @@
       <text
         v-if="!isHeldControl(p)"
         :x="p.x"
-        :y="p.y - (isRiftPoi(p) ? RIFT_MAP_ICON.dy + 0.5 : 5.4)"
+        :y="p.y - (isRiftPoi(p) ? RIFT_MAP_ICON.dy + 0.5 : 5.4 * scaleOf(p))"
         class="poi-rank"
       >
         {{ rankOf(p).emoji }}
         <tspan class="poi-star">{{ rankOf(p).star }}★</tspan>
       </text>
+      <!-- 🔴 Une de nos troupes marche sur ce lieu : un point rouge dessous (demandé). -->
+      <circle
+        v-if="attacked.has(p.id)"
+        :cx="p.x"
+        :cy="p.y + attackDotDy(p)"
+        r="1.5"
+        class="attack-dot"
+      />
     </g>
 
     <!-- Objectif du héros. 🌀 Une faille garde son PORTAIL même quand on y va ou qu'on en
@@ -201,6 +212,8 @@ const props = defineProps<{
   downKey?: string;
   /** Ids des points de contrôle sous attaque imminente, même forme que `dimmedKey`. */
   imminentKey: string;
+  /** 🔴 Ids des lieux sur lesquels une de nos troupes marche (`underAttackKey`), même forme. */
+  attackedKey?: string;
   /** 🏅 Les crans des points fixes, « id:cran » joints par « | » (seuls les crans > 0). */
   tierKey?: string;
   /** ⚫ La garnison des points tenus, « id:lettres » joints par « | » (`garrisonDots`). */
@@ -219,6 +232,23 @@ const dimmed = computed(() => toSet(props.dimmedKey));
 const veiled = computed(() => toSet(props.veiledKey));
 const down = computed(() => toSet(props.downKey ?? ''));
 const imminent = computed(() => toSet(props.imminentKey));
+const attacked = computed(() => toSet(props.attackedKey ?? ''));
+/** 🏰 Agrandissement d'un lieu fixe (citadelle encore plus) ; 1 pour un lieu ordinaire. */
+const FIXED_SCALE = 1.3;
+const CITADEL_SCALE = 1.55;
+const scaleOf = (p: Poi) =>
+  !p.control ? 1 : p.control.kind === 'citadel' ? CITADEL_SCALE : FIXED_SCALE;
+const fixedScale = (p: Poi) => {
+  const k = scaleOf(p);
+  return `translate(${p.x} ${p.y}) scale(${k}) translate(${-p.x} ${-p.y})`;
+};
+/** 🔴 Le point d'attaque se pose sous tout ce que le lieu dessine (garnison, cran, faille). */
+const attackDotDy = (p: Poi) => {
+  if (isRiftPoi(p)) return RIFT_MAP_ICON.dy + 2;
+  if (!p.control) return 6.6;
+  const below = tiers.value.get(p.id) ? 13.2 : dots.value.get(p.id) ? 9.2 : 7.2;
+  return below * scaleOf(p);
+};
 const tiers = computed(
   () =>
     new Map(
@@ -315,6 +345,13 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   .ctl-alert {
     animation: none;
   }
+}
+/* 🔴 Lieu en train d'être attaqué par une de nos troupes. */
+.attack-dot {
+  fill: var(--d4, #ff6a45);
+  stroke: var(--bg);
+  stroke-width: 0.5;
+  pointer-events: none;
 }
 /* Contour dans la couleur du RANG du lieu (`--rk`, posé par lieu). */
 .poi-bg {

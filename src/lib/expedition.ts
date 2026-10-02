@@ -2901,6 +2901,36 @@ export function staysUnderAttack(p: Poi): boolean {
   return !!(campSpecOf(p) || harvestGuardOf(p) || isRiftPoi(p) || isWarbandPoi(p));
 }
 
+/**
+ * 🔴 LES LIEUX EN TRAIN D'ÊTRE ATTAQUÉS (demandé : « un point rouge sous les lieux qui sont en
+ * train d'être attaqués »). Un lieu l'est tant qu'une de nos troupes MARCHE dessus et n'a pas
+ * encore livré bataille : le voyage du héros ou d'une équipe avant son arrivée (`midAt`), sans
+ * demi-tour ni rapport, une attaque combinée avant son arrivée commune, ou un point fixe marqué
+ * en assaut. Ne rend que les lieux présents sur la carte, en chaîne triée (« id|id ») pour que
+ * la carte ne se redessine que si la liste change.
+ */
+export function underAttackKey(
+  pois: readonly Pick<Poi, 'id' | 'control'>[],
+  voyages: readonly {
+    poi: Pick<Poi, 'id'>;
+    midAt: number;
+    reported?: boolean;
+    turnBack?: number;
+  }[],
+  attacks: readonly { poi: Pick<Poi, 'id'>; arriveAt: number }[],
+  now: number,
+): string {
+  const ids = new Set<string>();
+  for (const v of voyages)
+    if (now < v.midAt && !v.reported && v.turnBack === undefined) ids.add(v.poi.id);
+  for (const a of attacks) if (now < a.arriveAt) ids.add(a.poi.id);
+  return pois
+    .filter((p) => ids.has(p.id) || !!p.control?.assault)
+    .map((p) => p.id)
+    .sort()
+    .join('|');
+}
+
 /** Un voyage vers un lieu, tel que `supersedeLate` le lit. */
 type LateVoyage = {
   poi: Pick<Poi, 'id'>;

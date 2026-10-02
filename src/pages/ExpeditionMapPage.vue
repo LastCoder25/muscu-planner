@@ -226,6 +226,7 @@
             :veiled-key="veiledKey"
             :down-key="downKey"
             :imminent-key="imminentKey"
+            :attacked-key="attackedKey"
             :tier-key="tierKey"
             :garrison-key="garrisonKey"
             :target="active && voyageTargetShown(active, now) ? active.poi : null"
@@ -358,6 +359,7 @@
             :veiled-key="veiledKey"
             :down-key="downKey"
             :imminent-key="imminentKey"
+            :attacked-key="attackedKey"
             :target="null"
             :travel-targets="[]"
             @select="selectPoi"
@@ -1266,6 +1268,7 @@ import {
   tripTimeLabel,
   tripLegs,
   voyageProgress,
+  underAttackKey,
   voyageTargetShown,
   voyageVanquished,
   voyageFailure,
@@ -1874,6 +1877,15 @@ const citadelRestIn = computed(() => {
 /** ⚔️ Les points sous attaque imminente, à la minute près (une chaîne stable pour la carte). */
 const imminentKey = computed(() =>
   imminentControlKey(char.row?.expedition_map ?? null, coarseNow.value),
+);
+/** 🔴 Les lieux sur lesquels une de nos troupes marche (point rouge sous le lieu). */
+const attackedKey = computed(() =>
+  underAttackKey(
+    mapPois.value,
+    [...(active.value ? [active.value] : []), ...char.partyList],
+    char.attackList,
+    now.value,
+  ),
 );
 // 🕳️ Les auréoles d'EMBUSCADE — les monstres restés autour d'une faille qui a débordé
 // (v0.1009). ⚠️ Horloge GROSSIÈRE : une embuscade dure deux jours, la recalculer à la
