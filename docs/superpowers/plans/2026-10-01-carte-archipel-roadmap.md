@@ -1,7 +1,7 @@
 # Carte de conquête : l'archipel — roadmap
 
-> Conçue avec l'utilisateur le 2026-10-01. **Étapes 0 et 1 faites** (v1.9.0, 2026-10-02).
-> Prochaine étape : **2 — pacifier l'île 1**, sur le compte admin seul.
+> Conçue avec l'utilisateur le 2026-10-01. **Étapes 0, 1 et 2 faites** (v1.11.0, 2026-10-02).
+> Prochaine étape : **3 — la traversée et l'île 2**, sur le compte admin seul.
 > Page visuelle (carte dessinée, tableaux) : https://claude.ai/artifact/JK5zL5fjbPojaXwpM8ZPJc
 
 ## Pourquoi
@@ -142,9 +142,21 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
   `src/lib/islandTerrain.ts` (pur, ne dépend que du numéro de l'île : même île pour tout le
   monde), `IslandTerrain.vue`. La côte ne passe jamais sous 60 unités (zone des lieux 54).
   ⚠️ La forteresse n'est encore qu'un DÉCOR : elle devient attaquable à l'étape 2.
-- [ ] **2. Pacifier l'île 1** (~4 j) — objectifs secondaires (camps de brigands), forteresse
+- [x] **2. Pacifier l'île 1** (~4 j) — objectifs secondaires (camps de brigands), forteresse
   portuaire (verrou, affaiblissement, calage), île pacifiée (plus d'attaques ; spécialités à
   plein, socle à 25 % sans crans), recalage de la mine tenue à 24 h.
+  **Livré v1.11.0 (2026-10-02)** : `src/lib/islandConquest.ts` — objectifs secondaires posés
+  autour du cap (troupes 3 puis 4, faction de l'île, niveau du joueur plafonné), forteresse sur le
+  cap (verrouillée jusqu'à 2 objectifs abattus ; 12 → 8 champions de référence, un rang au-dessus
+  → le plafond), abattus pour toujours (`archipel.destroyed`) ; tout abattu → `pacifiedAt` :
+  plus aucune reprise ni raid (`gateAttacks`, `captureControl`, `holdControl`). Règle de production
+  posée sur chaque lieu fixe (`yieldMult`, `flatTier`, réserve mise de côté avant tout changement) :
+  mine à 24 h en mode archipel, socle (mine, source) à 25 % sans crans une fois pacifiée. Fiche du
+  lieu et progression dans le panneau Archipel. Test `islandConquest.test.ts` (12, 11 mutations
+  rouges). ⚠️ Pas encore fait : le harcèlement propre aux camps de brigands (pillage, attaques
+  des lieux fixes : ce sont toujours les citadelles), les récompenses (étape 3), et les sièges de
+  la base ne sont pas coupés par la pacification. Non vu à l'écran (le compte de smoke n'est pas
+  en mode archipel).
 
 ### Traverser
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,

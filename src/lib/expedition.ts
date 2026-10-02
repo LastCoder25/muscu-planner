@@ -87,7 +87,18 @@ export type ControlKind =
   | 'scriptorium'
   | 'mana'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
-  | 'citadel';
+  | 'citadel'
+  /** 🏝️ ARCHIPEL (étape 2) : un OBJECTIF SECONDAIRE de l'île (camp de brigands, nid…) et la
+   *  FORTERESSE PORTUAIRE. Jamais tenus : on les abat, une fois pour toutes (`islandConquest`). */
+  | 'objective'
+  | 'fortress';
+/** 🏯🏝️ Les points qu'on ABAT au lieu de les tenir : personne n'y reste, le héros seul peut y
+ *  aller. ⚠️ SOURCE UNIQUE de « ce point ne s'occupe pas » (envoi, offres, places). */
+export const RAZE_KINDS: ReadonlySet<ControlKind> = new Set<ControlKind>([
+  'citadel',
+  'objective',
+  'fortress',
+]);
 /** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
 export const CONTROL_MAX_GARRISON = 3;
 /**
@@ -134,6 +145,18 @@ export interface ControlState {
   activity?: number;
   /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
   attackAt?: number;
+  /** 🏝️ Nom et emoji PROPRES (objectif secondaire : « Camp de brigands » sur l'île 1, « Nid »
+   *  sur l'île 2…) : ils l'emportent sur ceux du type. */
+  name?: string;
+  emoji?: string;
+  /** 🏝️ Forteresse portuaire : VERROUILLÉE tant que trop peu d'objectifs sont abattus. */
+  locked?: boolean;
+  /** 🏝️ RÈGLE DE PRODUCTION DE L'ÎLE, posée par `ensureIslandConquest` (absente hors du mode
+   *  archipel → rien ne change) : un multiplicateur du débit (mine recalée à 24 h, socle d'une
+   *  île pacifiée à 25 %) et « sans crans » (socle pacifié). ⚠️ La production déjà faite est
+   *  mise de côté AVANT tout changement de règle : on ne recalcule jamais le passé. */
+  yieldMult?: number;
+  flatTier?: boolean;
   /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
    *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
    *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */
@@ -240,6 +263,8 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   scriptorium: 'Scriptorium',
   mana: 'Source de mana',
   citadel: 'Citadelle ennemie',
+  objective: 'Objectif de l’île',
+  fortress: 'Forteresse portuaire',
 };
 export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   mine: '⛏️',
@@ -249,16 +274,18 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   scriptorium: '📜',
   mana: '⛲',
   citadel: '🏯',
+  objective: '⛺',
+  fortress: '🏰',
 };
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
 export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
   if (p.army) return p.army.kind === 'siege' ? 'Armée sur ta base' : 'Armée de reprise';
-  return p.control ? CONTROL_KIND_LABEL[p.control.kind] : POI_LABEL[p.type];
+  return p.control ? (p.control.name ?? CONTROL_KIND_LABEL[p.control.kind]) : POI_LABEL[p.type];
 }
 /** L'emoji d'un lieu (idem). */
 export function poiEmo(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
   if (p.army) return '🪖';
-  return p.control ? CONTROL_KIND_EMO[p.control.kind] : POI_EMO[p.type];
+  return p.control ? (p.control.emoji ?? CONTROL_KIND_EMO[p.control.kind]) : POI_EMO[p.type];
 }
 
 /** POI de récolte : on ramasse et on rentre (comme la mine) — gardé depuis 2026-09-22 (`harvestGuardOf`). */
@@ -680,7 +707,14 @@ export interface ExpeditionMap {
   departures?: number[];
   /** 🏝️ MODE ARCHIPEL (`archipelago.ts`, étape 1, compte admin seul) : l'île active et le
    *  plafond de niveau de ses lieux. Absent = la carte d'avant, rien ne change. */
-  archipel?: { island: number; levelCap: number };
+  archipel?: {
+    island: number;
+    levelCap: number;
+    /** 🏝️ Les objectifs et la forteresse ABATTUS (ids) : ils ne reviennent jamais. */
+    destroyed?: string[];
+    /** 🏝️ L'île est PACIFIÉE depuis cet instant : plus aucune attaque. */
+    pacifiedAt?: number;
+  };
 }
 
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de
@@ -2489,7 +2523,8 @@ export function advanceWorld(
         (p.type !== 'wreck' &&
           p.expiresAt > now &&
           // 🏯 Les citadelles sont posées LOIN, hors du disque révélé : c'est voulu.
-          (withinLand(p, reach) || p.control?.kind === 'citadel') &&
+          // 🏝️ La forteresse portuaire est sur la CÔTE, parfois au-delà : idem.
+          (withinLand(p, reach) || (!!p.control && RAZE_KINDS.has(p.control.kind))) &&
           fitsIsland(p, map.archipel)),
     ),
   };

@@ -12,6 +12,7 @@
  * - les lieux tenus produisent **au rang de l'île**, plus au niveau du héros.
  */
 import { revealRadius, type ExpeditionMap } from './expedition';
+import type { RaidFaction } from './raid';
 
 export interface Island {
   /** 1 à 5. */
@@ -25,6 +26,12 @@ export interface Island {
   /** Tranche de niveaux couverte : les lieux ne dépassent jamais `maxLevel`. */
   minLevel: number;
   maxLevel: number;
+  /** 🏝️ Les OBJECTIFS SECONDAIRES (étape 2) : combien, leur nom et leur emoji, et la faction
+   *  qui tient l'île (objectifs ET forteresse). */
+  objectives: number;
+  objective: string;
+  objectiveEmoji: string;
+  faction: RaidFaction;
 }
 
 /** Les cinq îles : une par tranche de 20 niveaux, deux rangs chacune. */
@@ -35,6 +42,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '🗡️',
     threat: 'Camps de brigands',
     fortress: 'Le Fort des pillards',
+    objectives: 2,
+    objective: 'Camp de brigands',
+    objectiveEmoji: '⛺',
+    faction: 'bandits',
     minLevel: 1,
     maxLevel: 20,
   },
@@ -44,6 +55,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '🐺',
     threat: 'Nids qui se multiplient',
     fortress: 'La Tanière-port',
+    objectives: 3,
+    objective: 'Nid',
+    objectiveEmoji: '🪺',
+    faction: 'betes',
     minLevel: 21,
     maxLevel: 40,
   },
@@ -53,6 +68,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '💀',
     threat: 'Cimetières et citadelle',
     fortress: 'Le Bastion des marées',
+    objectives: 2,
+    objective: 'Cimetière',
+    objectiveEmoji: '🪦',
+    faction: 'mortsvivants',
     minLevel: 41,
     maxLevel: 60,
   },
@@ -62,6 +81,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '⚔️',
     threat: 'Camps de guerre, armée mobile',
     fortress: 'Le Fort du seigneur',
+    objectives: 3,
+    objective: 'Camp de guerre',
+    objectiveEmoji: '🚩',
+    faction: 'bandits',
     minLevel: 61,
     maxLevel: 80,
   },
@@ -71,6 +94,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '🌑',
     threat: 'Sanctuaires maudits',
     fortress: 'La Citadelle maudite',
+    objectives: 3,
+    objective: 'Sanctuaire maudit',
+    objectiveEmoji: '🔮',
+    faction: 'mortsvivants',
     minLevel: 81,
     maxLevel: 100,
   },
@@ -130,4 +157,11 @@ export function mapOutpostLevel(
   outpostLevel: number,
 ): number {
   return map?.archipel ? ISLAND_OUTPOST_LEVEL : outpostLevel;
+}
+
+/** 🕊️ L'île active est-elle PACIFIÉE (objectifs et forteresse abattus) ? Plus aucune attaque
+ *  sur ses lieux tenus. ⚠️ ICI et non dans `islandConquest` : `controlPoints` le lit, et
+ *  `islandConquest` importe `controlPoints`. */
+export function islandPacified(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): boolean {
+  return map?.archipel?.pacifiedAt !== undefined;
 }

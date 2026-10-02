@@ -41,6 +41,7 @@ import {
   poiLabel,
   warbandAt,
   citadelRestingUntil,
+  RAZE_KINDS,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
@@ -217,6 +218,7 @@ export type PartySendBlock =
   | 'controlHeld'
   | 'citadelHidden'
   | 'citadelResting'
+  | 'fortressLocked'
   | 'veinHero'
   | 'veinFull';
 export function partySendBlocker(
@@ -246,8 +248,10 @@ export function partySendBlocker(
       return 'citadelHidden';
     // 🏯 Abattue : elle se reconstruit pendant sa trêve, on ne l'attaque pas.
     if (citadelRestingUntil(poi, now) > 0) return 'citadelResting';
-    // 🏯 La citadelle ne se tient pas : le héros seul peut l'attaquer.
-    if (escortCount <= 0 && poi.control.kind !== 'citadel') return 'controlEmpty';
+    // 🏝️ La forteresse portuaire ne s'attaque qu'après assez d'objectifs abattus (le verrou).
+    if (poi.control.kind === 'fortress' && poi.control.locked) return 'fortressLocked';
+    // 🏯🏝️ Ce qu'on abat ne se tient pas : le héros seul peut l'attaquer.
+    if (escortCount <= 0 && !RAZE_KINDS.has(poi.control.kind)) return 'controlEmpty';
   }
   // 💎 Un filon : 1 à 3 CHAMPIONS, jamais le héros (décision de l'utilisateur).
   if (poi.type === 'vein') {
@@ -275,6 +279,7 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   citadelHidden:
     'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
   citadelResting: 'cette citadelle vient d’être abattue — elle se reconstruit pendant sa trêve',
+  fortressLocked: 'la forteresse est verrouillée — abats d’abord les objectifs de l’île',
   controlHeld: 'ce point n’est pas à prendre : il est déjà à toi',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',

@@ -20,7 +20,13 @@
     />
 
     <!-- 🏝️ L'archipel (étape 1 de la roadmap) : réservé à l'admin pendant le développement. -->
-    <ArchipelPanel v-if="auth.isAdmin" :island="island" :busy="archBusy" @toggle="toggleArchipel" />
+    <ArchipelPanel
+      v-if="auth.isAdmin"
+      :island="island"
+      :conquest="islandProgress"
+      :busy="archBusy"
+      @toggle="toggleArchipel"
+    />
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
          désormais sur l'écran « Ma base » (v0.664) → on y renvoie explicitement. -->
@@ -796,6 +802,16 @@
             {{ formatDuration(citadelRestIn) }}. Pendant ce temps, aucune reprise sur les points
             qu’elle attaque.
           </p>
+          <p
+            v-else-if="liveControl?.kind === 'objective' || liveControl?.kind === 'fortress'"
+            class="sh-note"
+          >
+            {{
+              liveControl.kind === 'fortress' && liveControl.locked
+                ? '🔒 Verrouillée : abats d’abord les objectifs de l’île.'
+                : '⚔️ Attaque-le avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout le monde rentre après l’assaut. Abattu, il ne revient jamais.'
+            }}
+          </p>
           <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
             🏯 Attaque-la avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout
             le monde rentre après l’assaut. Abattue, elle offre {{ CONTROL_YIELD.citadel }} et monte
@@ -1173,6 +1189,7 @@
 </template>
 
 <script setup lang="ts">
+import { islandConquest, islandTargetLabel, isIslandTargetId } from '@/lib/islandConquest';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import { attackWingVoyages, type CombinedAttack } from '@/lib/combinedAttack';
@@ -1476,6 +1493,8 @@ const V = MAP_VIEW;
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 // 🏝️ En mode archipel, la carte a la taille de l'île : l'Avant-poste ne règle que la vitesse.
 const island = computed(() => activeIsland(char.row?.expedition_map));
+/** 🏝️ La conquête de l'île active (objectifs, forteresse, pacification). */
+const islandProgress = computed(() => islandConquest(char.row?.expedition_map));
 const reveal = computed(() =>
   revealRadius(mapOutpostLevel(char.row?.expedition_map, char.comptoirLevel)),
 );
@@ -1992,14 +2011,16 @@ const liveControl = computed(() => {
 /** 🏅 Le cran du point sélectionné (ancienneté) — ou, pour la citadelle, son palier et sa
  *  trêve : titre et détail, à la minute. */
 const tierLine = computed(() =>
-  liveControl.value?.kind === 'citadel'
-    ? citadelLabel(
-        char.row?.expedition_map,
-        selected.value!.id,
-        coarseNow.value,
-        progress.activeDaysInLast(7),
-      )
-    : controlTierLabel(liveControl.value ?? undefined, coarseNow.value),
+  selected.value && isIslandTargetId(selected.value.id)
+    ? islandTargetLabel(char.row?.expedition_map, selected.value.id)
+    : liveControl.value?.kind === 'citadel'
+      ? citadelLabel(
+          char.row?.expedition_map,
+          selected.value!.id,
+          coarseNow.value,
+          progress.activeDaysInLast(7),
+        )
+      : controlTierLabel(liveControl.value ?? undefined, coarseNow.value),
 );
 /** 🏅 Les crans des points de la carte, en CHAÎNE « id:cran » (le calque ne se redessine que si
  *  un cran change). Seuls les crans > 0 sont dessinés. */
@@ -4325,8 +4346,10 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
     p.control
       ? p.control.owner === 'player'
         ? `${CONTROL_YIELD[p.control.kind]} tant que tu le tiens`
-        : p.control.kind === 'citadel'
-          ? `à abattre · ${CONTROL_YIELD.citadel}`
+        : p.control.kind === 'citadel' ||
+            p.control.kind === 'objective' ||
+            p.control.kind === 'fortress'
+          ? `à abattre · ${CONTROL_YIELD[p.control.kind]}`
           : `à prendre · ${CONTROL_YIELD[p.control.kind]}`
       : '',
 };

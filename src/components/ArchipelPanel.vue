@@ -18,7 +18,8 @@
       <span class="arch-title">Archipel</span>
       <span class="arch-sum">
         <template v-if="island"
-          >{{ island.emoji }} Île {{ island.id }} · {{ island.name }}</template
+          >{{ island.emoji }} Île {{ island.id }} · {{ island.name
+          }}{{ conquest?.pacified ? ' · 🕊️ pacifiée' : '' }}</template
         >
         <template v-else>mode désactivé · admin</template>
       </span>
@@ -88,6 +89,25 @@
         </div>
         <div class="at-threat">⚔️ {{ selTile.threat }}</div>
         <div class="at-fort">🏰 {{ selTile.fortress }}</div>
+        <!-- 🏝️ La conquête de l'île active : objectifs abattus, forteresse, pacification. -->
+        <div v-if="selTile.active && conquest" class="at-conq">
+          <span
+            class="at-pill"
+            :class="{ done: conquest.objectivesDown >= conquest.objectivesTotal }"
+            >{{ selTile.objectiveEmoji }} {{ conquest.objectivesDown }}/{{
+              conquest.objectivesTotal
+            }}
+            abattus</span
+          >
+          <span class="at-pill" :class="{ done: conquest.fortressDown, dim: conquest.locked }">{{
+            conquest.fortressDown
+              ? '🏰 abattue'
+              : conquest.locked
+                ? '🔒 forteresse verrouillée'
+                : '🏰 forteresse à abattre'
+          }}</span>
+          <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
+        </div>
       </div>
       <p v-if="island" class="arch-note">
         Lieux plafonnés au rang {{ islandCapRank }}, trajets selon la seule distance, carte à la
@@ -106,7 +126,18 @@ import { ISLANDS, type Island } from '@/lib/archipelago';
 import { characterRank } from '@/lib/characterRank';
 import { ISLAND_STYLES, islandOutline } from '@/lib/islandTerrain';
 
-const props = defineProps<{ island: Island | null; busy?: boolean }>();
+const props = defineProps<{
+  island: Island | null;
+  busy?: boolean;
+  /** 🏝️ Où en est la conquête de l'île active (`islandConquest`). */
+  conquest?: {
+    objectivesDown: number;
+    objectivesTotal: number;
+    fortressDown: boolean;
+    locked: boolean;
+    pacified: boolean;
+  } | null;
+}>();
 defineEmits<{ toggle: [on: boolean] }>();
 
 const open = ref(false);
@@ -378,6 +409,27 @@ const islandCapRank = computed(() =>
   font-size: 11px;
   color: var(--dim);
   overflow-wrap: anywhere;
+}
+.at-conq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.at-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, var(--surface));
+  color: var(--text);
+}
+.at-pill.done {
+  border-color: color-mix(in srgb, var(--d1) 60%, var(--line));
+  color: var(--d1);
+}
+.at-pill.dim {
+  color: var(--dim);
 }
 .arch-note {
   margin: 10px 0 0;

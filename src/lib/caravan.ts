@@ -67,6 +67,7 @@ import {
   heroRewardLevel,
   HARVEST,
   citadelRestingUntil,
+  RAZE_KINDS,
 } from './expedition';
 import {
   advBankedLevel,
@@ -1126,8 +1127,10 @@ export function poiOffers(
           !(poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined) &&
           // 🏯 Abattue, elle se reconstruit pendant sa trêve : grisée, inattaquable.
           citadelRestingUntil(poi, opts.now) === 0 &&
-          // 🏯 La citadelle ne s'occupe pas : le héros seul peut y aller.
-          (opts.advsAvailable > 0 || (poi.control.kind === 'citadel' && !opts.heroAway))
+          // 🏝️ La forteresse verrouillée ne s'attaque pas encore.
+          !(poi.control.kind === 'fortress' && poi.control.locked) &&
+          // 🏯🏝️ Ce qu'on abat ne s'occupe pas : le héros seul peut y aller.
+          (opts.advsAvailable > 0 || (RAZE_KINDS.has(poi.control.kind) && !opts.heroAway))
         : !opts.heroAway || opts.advsAvailable > 0),
   };
 }

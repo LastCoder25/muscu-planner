@@ -18,6 +18,7 @@
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
 import { formatDuration } from './duration';
+import { islandPacified } from './archipelago';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -48,6 +49,7 @@ import {
   CONTROL_KIND_EMO,
   CONTROL_KIND_LABEL,
   EXPE,
+  RAZE_KINDS,
   distNormAt,
   mineVeinGold,
   revealRadius,
@@ -266,6 +268,8 @@ export const tierThreatMult = (tier: number): number => 1 + TIER.threatPerTier *
  *  cran d'aujourd'hui. */
 function tierHours(c: ControlState, from: number, to: number): number {
   if (to <= from) return 0;
+  // 🏝️ Socle d'une île pacifiée : SANS crans, le temps compte à plat.
+  if (c.flatTier) return (to - from) / 3600_000;
   let acc = 0;
   let t = from;
   while (t < to) {
@@ -343,6 +347,9 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
+  // 🏝️ Les objectifs de l'île et sa forteresse non plus.
+  objective: 0,
+  fortress: 0,
 };
 export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
@@ -358,6 +365,9 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
   citadel: 0,
+  // 🏝️ Inutilisés : objectifs et forteresse ont leur place (`islandConquest`).
+  objective: 0,
+  fortress: 0,
 };
 
 export const CONTROL_EMO = CONTROL_KIND_EMO;
@@ -371,6 +381,8 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   scriptorium: 'runes de compétence',
   mana: 'pierres de mana 💠 en continu',
   citadel: 'une trêve de 3 jours sur les points qu’elle attaque',
+  objective: 'un pas vers la pacification de l’île',
+  fortress: 'l’île pacifiée : plus aucune attaque',
 };
 
 export const controlIdOf = (kind: ControlKind): string => `ctl_${kind}`;
@@ -664,6 +676,8 @@ function syncCitadels(
     };
   });
   const harass = mapHarass(map, now);
+  // 🕊️ Île pacifiée : ni reprise, ni raid.
+  if (islandPacified(map)) return gateAttacks(stampAnger(out), now, harass, true);
   return citadelRaids(gateAttacks(stampAnger(out), now, harass), now, harass);
 }
 
@@ -680,8 +694,21 @@ export function attackerHidden(pois: readonly Poi[], kind: ControlKind): boolean
 /** ⚔️ Tout point tenu a une attaque prévue. Celui qui n'en a pas (la règle « une citadelle
  *  cachée n'attaque pas », v0.1388, est abandonnée le 2026-09-30) en reçoit une à partir de
  *  maintenant, au rythme du harcèlement (jamais pendant une trêve). N'écrit que ce qui change. */
-function gateAttacks(pois: Poi[], now: number, harass: number): Poi[] {
+function gateAttacks(pois: Poi[], now: number, harass: number, pacified = false): Poi[] {
   let out = pois;
+  // 🕊️ Île pacifiée : plus aucune attaque — on RETIRE celles qui étaient prévues.
+  if (pacified) {
+    pois.forEach((p, k) => {
+      const c = p.control;
+      if (!c || (c.attackAt === undefined && c.raidAt === undefined)) return;
+      if (out === pois) out = [...pois];
+      const { attackAt: _a, raidAt: _r, ...rest } = c;
+      void _a;
+      void _r;
+      out[k] = { ...p, control: rest };
+    });
+    return out;
+  }
   pois.forEach((p, k) => {
     const c = p.control;
     if (!c || c.owner !== 'player' || c.kind === 'citadel' || c.attackAt !== undefined) return;
@@ -951,7 +978,7 @@ export function ensureControls(
   // re-tirés : sinon ils restaient imprenables. Idempotent — une fois soignés, ils passent.
   const healed = map.pois.map((p) => {
     const c = p.control;
-    if (!c || c.owner !== 'enemy' || c.kind === 'citadel') return p;
+    if (!c || c.owner !== 'enemy' || RAZE_KINDS.has(c.kind)) return p;
     const tooHigh = p.level > Math.max(1, playerLevel);
     const tooBig = c.size > Math.max(...CONTROL.captureSizes);
     if (!tooHigh && !tooBig) return p;
@@ -966,7 +993,7 @@ export function ensureControls(
   // quitte la carte. ⚠️ Sa garnison est libérée d'elle-même : la disponibilité d'un champion
   // se DÉDUIT de la carte. Vérifié en base avant le retrait : aucun joueur n'en tenait une.
   const kept = healed.filter(
-    (p) => !p.control || p.control.kind === 'citadel' || CONTROL.kinds.includes(p.control.kind),
+    (p) => !p.control || RAZE_KINDS.has(p.control.kind) || CONTROL.kinds.includes(p.control.kind),
   );
   // 🏯 Les citadelles : posées si elles manquent, niveau, place et troupe tenus à jour.
   const all = syncCitadels([...kept, ...add], map, now, playerLevel, outpostLevel);
@@ -1019,10 +1046,14 @@ export function captureControl(
       since: at,
       collectedAt: at,
       // 🏯 Jamais pendant la trêve d'une citadelle abattue ; 🌫️ plus lent si elle est cachée.
-      attackAt: Math.max(
-        at + retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
-        truceUntilFor(map, p.control!.kind),
-      ),
+      // 🕊️ Jamais sur une île pacifiée.
+      attackAt: islandPacified(map)
+        ? undefined
+        : Math.max(
+            at +
+              retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
+            truceUntilFor(map, p.control!.kind),
+          ),
       activity: activeDays7,
       assault: false,
       // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
@@ -1141,11 +1172,14 @@ export function holdControl(
     ...p,
     control: {
       ...p.control!,
-      // 🏯 Jamais pendant la trêve d'une citadelle abattue.
-      attackAt: Math.max(
-        at + retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
-        truceUntilFor(map, p.control!.kind),
-      ),
+      // 🏯 Jamais pendant la trêve d'une citadelle abattue ; 🕊️ jamais sur une île pacifiée.
+      attackAt: islandPacified(map)
+        ? undefined
+        : Math.max(
+            at +
+              retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
+            truceUntilFor(map, p.control!.kind),
+          ),
       activity: activeDays7,
     },
   }));
@@ -1342,6 +1376,14 @@ export function campGearXpPerHour(playerLevel: number): number {
 /** Ce qu'un point produit par heure, dans SON unité : or (mine), XP par champion (camp),
  *  consommables (jardin, fractionnaires). La tour ne produit rien. */
 function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
+  // 🏝️ La règle de l'île (mine recalée, socle pacifié), absente hors du mode archipel.
+  return baseUnitsPerHour(p, n, playerLevel) * (p.control?.yieldMult ?? 1);
+}
+/** 🏅🏝️ Le multiplicateur de cran AU CRAN D'AUJOURD'HUI, 1 pour un socle pacifié (sans crans). */
+export function yieldTierMult(c: ControlState, now: number): number {
+  return c.flatTier ? 1 : tierYieldMult(controlTier(c, now));
+}
+function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
   switch (p.control?.kind) {
     case 'mine':
       return controlGoldPerHour(p, n, playerLevel);
@@ -1659,7 +1701,7 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   }
   // 🎓⛏️⛲ Versé directement (2026-09-29) : on dit le débit, il n'y a plus de jauge.
   // 🏅 Le débit AU CRAN D'AUJOURD'HUI.
-  const perH = unitsPerHour(p, c.garrison.length, playerLevel) * tierYieldMult(controlTier(c, now));
+  const perH = unitsPerHour(p, c.garrison.length, playerLevel) * yieldTierMult(c, now);
   const per = (x: number) => Math.round(x).toLocaleString('fr-FR');
   if (isPerChampKind(c.kind)) return { text: `🎓 +${per(perH)} XP/h`, pct: null };
   if (c.kind === 'mine') return { text: `🪙 +${per(perH)}/h`, pct: null };
@@ -1723,6 +1765,8 @@ const WORKER: Record<ControlKind, [string, string]> = {
   scriptorium: ['copiste', 'copistes'],
   mana: ['gardien', 'gardiens'],
   citadel: ['assaillant', 'assaillants'],
+  objective: ['assaillant', 'assaillants'],
+  fortress: ['assaillant', 'assaillants'],
 };
 
 export function controlYieldCard(
@@ -1752,7 +1796,7 @@ export function controlYieldCard(
     };
   }
   // 🎓 Plus de réserve (2026-09-29) : l'XP arrive directement aux champions (`AUTO_COLLECT_MS`).
-  const tierMult = tierYieldMult(controlTier(c, now));
+  const tierMult = yieldTierMult(c, now);
   if (isPerChampKind(c.kind)) {
     const perH = trainingXpPerHour(playerLevel) * tierMult;
     return {
@@ -1837,7 +1881,7 @@ export function controlYieldCard(
 
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
-function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
+export function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
   // 🏅👥 Le cran aussi : la suite se charge au rythme de la NOUVELLE garnison. ⚠️ Figé APRÈS
   // le calcul de la réserve, qui doit voir les crans passés tels qu'ils étaient.
   const c = rebaseTier(p.control!, at);

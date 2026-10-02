@@ -129,7 +129,13 @@ import {
   staysUnderAttack,
   recordDeparture,
 } from '@/lib/expedition';
-import { archipelOn, mapOutpostLevel, mapPlayerLevel } from '@/lib/archipelago';
+import { archipelOn, islandById, mapOutpostLevel, mapPlayerLevel } from '@/lib/archipelago';
+import {
+  FORTRESS_ID,
+  ensureIslandConquest,
+  isIslandTargetId,
+  razeIslandTarget,
+} from '@/lib/islandConquest';
 import {
   buildingType,
   buildingUpgradeCost,
@@ -2276,13 +2282,18 @@ export const useCharacterStore = defineStore('character', () => {
     const outpost = mapOutpostLevel(prev, buildingLevel(cur.buildings, 'outpost'));
     level = mapPlayerLevel(prev, level);
     // 🏰 Les points de contrôle (fixes) se posent s'ils manquent — ils sont hors quota.
-    const map0: ExpeditionMap = ensureControls(
-      prev
-        ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
-        : createMap(newSeed(now), now, level, outpost),
+    // 🏝️ Puis les objectifs de l'île et sa forteresse, et la règle de production de l'île.
+    const map0: ExpeditionMap = ensureIslandConquest(
+      ensureControls(
+        prev
+          ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
+          : createMap(newSeed(now), now, level, outpost),
+        now,
+        level,
+        outpost,
+      ),
       now,
       level,
-      outpost,
     );
     // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
     // détection de la Tour de guet (`fieldArmy.ts`).
@@ -2436,6 +2447,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(advs1 !== advs0 ? { adventurers: advs1 } : {}),
     });
     x.play();
+    flushIslandFx(row.value?.expedition_map);
     return msg;
   }
   // Au retour en ville : crédite le butin (or/poussière/objet/clé) et libère le héros.
@@ -2486,6 +2498,7 @@ export const useCharacterStore = defineStore('character', () => {
       expedition: null,
     });
     x?.play();
+    flushIslandFx(row.value?.expedition_map);
     return msg;
   }
 
@@ -4335,6 +4348,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(advsBack !== advsBase ? { adventurers: advsBack } : {}),
     });
     x.play();
+    flushIslandFx(row.value?.expedition_map);
     return t.fresh;
   }
 
@@ -4525,6 +4539,38 @@ export const useCharacterStore = defineStore('character', () => {
     return any ? { map, adventurers: advs } : null;
   }
 
+  /** 🏝️ Ce que les assauts d'île viennent d'abattre (ids, ou « pacified ») : annoncé à l'écran
+   *  par `flushIslandFx` une fois l'écriture faite. */
+  const islandFx: string[] = [];
+  function flushIslandFx(map: ExpeditionMap | null | undefined) {
+    const isl = map?.archipel ? islandById(map.archipel.island) : null;
+    for (const what of islandFx.splice(0)) {
+      if (!isl) continue;
+      if (what === 'pacified')
+        useGameFx().celebrate({
+          kind: 'unlock',
+          emoji: '🕊️',
+          title: `${isl.name} pacifiée !`,
+          subtitle: 'Plus aucune attaque sur tes lieux tenus · la forteresse est à toi',
+          rarity: 'divin',
+        });
+      else if (what === FORTRESS_ID)
+        useGameFx().celebrate({
+          kind: 'unlock',
+          emoji: '🏰',
+          title: `${isl.fortress} abattue !`,
+          rarity: 'legendary',
+        });
+      else
+        useGameFx().celebrate({
+          kind: 'unlock',
+          emoji: isl.objectiveEmoji,
+          title: `${isl.objective} abattu !`,
+          subtitle: 'Un pas vers la forteresse portuaire',
+          rarity: 'epic',
+        });
+    }
+  }
   /** ⚔️ Une autre équipe marche-t-elle encore sur ce lieu (arrivée après `at`) ? */
   function stillMarching(cur: CharacterRow, id: string, at: number): boolean {
     return [...partyList.value, ...(cur.expedition ? [cur.expedition] : [])].some(
@@ -4550,6 +4596,16 @@ export const useCharacterStore = defineStore('character', () => {
       // 🏯 La citadelle ne se prend pas : gagnée, elle tombe (palier +1, trêve) ; perdue, palier −1.
       if (isCitadelId(id)) {
         map = m.win ? razeCitadel(map, id, m.resolvedAt) : repelledAtCitadel(map, id, m.resolvedAt);
+        continue;
+      }
+      // 🏝️ Un objectif de l'île ou sa forteresse : gagné, il tombe pour toujours (et l'île se
+      // pacifie quand tout est tombé) ; perdu, l'assaut se lève.
+      if (isIslandTargetId(id)) {
+        if (m.win) {
+          const wasPacified = map.archipel?.pacifiedAt !== undefined;
+          map = razeIslandTarget(map, id, m.resolvedAt);
+          islandFx.push(map.archipel?.pacifiedAt !== undefined && !wasPacified ? 'pacified' : id);
+        } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
         continue;
       }
       if (m.win) {
