@@ -1,7 +1,7 @@
 # Carte de conquête : l'archipel — roadmap
 
-> Conçue avec l'utilisateur le 2026-10-01. **Étape 0 faite (mesures), rien de codé.**
-> Prochaine étape : **1 — le mode archipel, île 1**, sur le compte admin seul.
+> Conçue avec l'utilisateur le 2026-10-01. **Étapes 0 et 1 faites** (v1.9.0, 2026-10-02).
+> Prochaine étape : **2 — pacifier l'île 1**, sur le compte admin seul.
 > Page visuelle (carte dessinée, tableaux) : https://claude.ai/artifact/JK5zL5fjbPojaXwpM8ZPJc
 
 ## Pourquoi
@@ -122,9 +122,16 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
 
 ### Fondations
 - [x] **0. Conception figée** (~2 j) — mesures ci-dessus, décisions prises.
-- [ ] **1. Le mode archipel, île 1** (~3 j) — interrupteur admin (ce compte seul) ; la carte
+- [x] **1. Le mode archipel, île 1** (~3 j) — interrupteur admin (ce compte seul) ; la carte
   devient l'île 1 : rangs plafonnés à Argent, trajets sans multiplicateur de niveau, Avant-poste
   = vitesse ; production des lieux au rang de l'île ; vue d'ensemble de l'archipel.
+  **Livré v1.9.0 (2026-10-02)** : `src/lib/archipelago.ts` (îles, `mapPlayerLevel`,
+  `mapOutpostLevel`), `ExpeditionMap.archipel`, panneau `ArchipelPanel.vue` sur la carte (admin,
+  avec l'interrupteur), `setArchipelMode` au store. Rayon de l'île = celui de l'Avant-poste 3
+  (≤ 54 unités ; la 1re citadelle, à 55, reste hors de l'île 1). Basculer une carte retire au
+  tick suivant les lieux au-dessus d'Argent. Test `archipelago.test.ts` (12, 9 mutations
+  rouges). ⚠️ Non couvert par une porte : le câblage du store (production plafonnée, reprises
+  au rang de l'île).
 - [ ] **2. Pacifier l'île 1** (~4 j) — objectifs secondaires (camps de brigands), forteresse
   portuaire (verrou, affaiblissement, calage), île pacifiée (plus d'attaques ; spécialités à
   plein, socle à 25 % sans crans), recalage de la mine tenue à 24 h.

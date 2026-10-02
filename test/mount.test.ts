@@ -158,6 +158,32 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Mine d’or');
   });
 
+  // 🏝️ La vue d'ensemble de l'archipel : repliée elle dit l'île active, dépliée les cinq îles.
+  it("ArchipelPanel : l'île active repliée, les cinq îles dépliées", async () => {
+    const { default: ArchipelPanel } = await import('@/components/ArchipelPanel.vue');
+    const { islandById } = await import('@/lib/archipelago');
+    let closed = '';
+    let open = '';
+    const props = { island: islandById(1), busy: false };
+    await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (closed = h));
+    expect(closed).toContain('Île 1 · Île des Brigands');
+    expect(closed).not.toContain('arch-tile');
+    expect(
+      await mountIt(
+        ArchipelPanel,
+        props,
+        undefined,
+        undefined,
+        '/',
+        (h) => (open = h),
+        (host) => host.querySelector<HTMLElement>('.arch-head')?.click(),
+      ),
+    ).toBeNull();
+    expect(open.split('class="arch-tile').length - 1).toBe(5);
+    expect(open).toContain('Active');
+    expect(open).toContain('Quitter le mode archipel');
+  });
+
   // 🧝 Le héros est une tuile PARMI les effectifs : cochable, ou grisé AVEC sa raison.
   it('HeroPickTile : coché, ou grisé avec la raison', async () => {
     const { default: HeroPickTile } = await import('@/components/HeroPickTile.vue');

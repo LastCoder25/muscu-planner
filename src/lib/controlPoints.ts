@@ -42,6 +42,7 @@ import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
 import { pickSupply, type SupplyStock } from './supplies';
 import {
+  ARCHIPEL_TRAVEL_LEVEL,
   CAMP_FACTIONS,
   CONTROL_MAX_GARRISON,
   CONTROL_KIND_EMO,
@@ -618,7 +619,7 @@ function syncCitadels(
         id,
         type: 'control',
         level,
-        travelLevel: level,
+        travelLevel: map.archipel ? ARCHIPEL_TRAVEL_LEVEL : level,
         ...spotAt(map, site.quarter, site.dist),
         spawnedAt: now,
         expiresAt: EXPE.lifespanMs.control,
@@ -658,7 +659,7 @@ function syncCitadels(
       ...p,
       ...spot,
       level,
-      travelLevel: level,
+      travelLevel: map.archipel ? ARCHIPEL_TRAVEL_LEVEL : level,
       control: { ...c, size, ...(found !== undefined ? { discoveredAt: found } : {}) },
     };
   });
@@ -933,7 +934,7 @@ export function ensureControls(
       type: 'control',
       level: controlLevel(`${map.seed}:${id}`, 0, playerLevel),
       // Le trajet suit la DISTANCE (le lieu est fixe), pas le rang tiré.
-      travelLevel: Math.max(1, playerLevel),
+      travelLevel: map.archipel ? ARCHIPEL_TRAVEL_LEVEL : Math.max(1, playerLevel),
       ...controlSpot(map, kind),
       spawnedAt: now,
       expiresAt: EXPE.lifespanMs.control,

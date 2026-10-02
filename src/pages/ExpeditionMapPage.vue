@@ -19,6 +19,9 @@
       @reset="resetFilters"
     />
 
+    <!-- 🏝️ L'archipel (étape 1 de la roadmap) : réservé à l'admin pendant le développement. -->
+    <ArchipelPanel v-if="auth.isAdmin" :island="island" :busy="archBusy" @toggle="toggleArchipel" />
+
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
          désormais sur l'écran « Ma base » (v0.664) → on y renvoie explicitement. -->
     <div v-if="!outpostBuilt" class="outpost-hint">
@@ -1260,6 +1263,8 @@ import {
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
+import ArchipelPanel from '@/components/ArchipelPanel.vue';
+import { activeIsland, mapOutpostLevel } from '@/lib/archipelago';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
@@ -1457,11 +1462,28 @@ const terrain = computed(() =>
 /** 🗺️ Fenêtre dessinée (la ville reste en 100,100 ; la carte s'étend en négatif autour). */
 const V = MAP_VIEW;
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
-const reveal = computed(() => revealRadius(char.comptoirLevel));
+// 🏝️ En mode archipel, la carte a la taille de l'île : l'Avant-poste ne règle que la vitesse.
+const island = computed(() => activeIsland(char.row?.expedition_map));
+const reveal = computed(() =>
+  revealRadius(mapOutpostLevel(char.row?.expedition_map, char.comptoirLevel)),
+);
 /** ⏱️ Rayons des heures pleines de trajet aller du héros, dans la zone révélée. */
 const hourRings = computed(() =>
-  travelHourRings(progressionLevel.value, travelMult.value, reveal.value),
+  travelHourRings(progressionLevel.value, travelMult.value, reveal.value, !!island.value),
 );
+const archBusy = ref(false);
+async function toggleArchipel(on: boolean) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.setArchipelMode(uid, on);
+  } catch (e) {
+    $q.notify({ type: 'negative', message: (e as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 /** 🗼 Le cercle de détection : rayon vu (borné par la zone révélée) et son libellé. Rien
  *  tant que la Tour ne voit pas plus loin que la ville elle-même. */
 const detectRing = computed(() => {

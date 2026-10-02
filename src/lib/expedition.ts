@@ -678,7 +678,14 @@ export interface ExpeditionMap {
   /** 🗺️ Les départs (héros et équipes) des 7 derniers jours : l'UTILISATION de la carte, qui
    *  règle son harcèlement (`mapHarass`). Absent des cartes d'avant → 0, aucune migration. */
   departures?: number[];
+  /** 🏝️ MODE ARCHIPEL (`archipelago.ts`, étape 1, compte admin seul) : l'île active et le
+   *  plafond de niveau de ses lieux. Absent = la carte d'avant, rien ne change. */
+  archipel?: { island: number; levelCap: number };
 }
+
+/** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de
+ *  niveau (`travelOneWayMin`) — sur une île, le temps ne dépend que de la distance. */
+export const ARCHIPEL_TRAVEL_LEVEL = 0;
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
@@ -1655,10 +1662,11 @@ export function travelOneWayMin(level: number, distNorm: number): number {
 /** Trajet ALLER du héros (minutes) vers un point à la distance `d` de la ville : la MÊME règle
  *  qu'un lieu posé là (niveau de trajet `travelLevel` de `placePoiOfType`, `travelOneWayMin`,
  *  réduction de l'Avant-poste). Non arrondi : sert à placer les cercles d'heures. */
-function heroLegMinAt(d: number, playerLevel: number, travelMult: number): number {
+function heroLegMinAt(d: number, playerLevel: number, travelMult: number, flat: boolean): number {
   const dn = distNormAt(d);
   const win = spawnWindow(playerLevel);
-  const lvl = win.min + Math.min(1, dn) * (win.max - win.min);
+  // 🏝️ En mode archipel, aucun facteur de niveau : la règle des lieux qu'on y pose.
+  const lvl = flat ? ARCHIPEL_TRAVEL_LEVEL : win.min + Math.min(1, dn) * (win.max - win.min);
   const base = EXPE.travelOneWayMinMin + (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * dn;
   return base * (1 + Math.max(0, lvl) * 0.02) * travelMult;
 }
@@ -1670,9 +1678,11 @@ export function travelHourRings(
   playerLevel: number,
   travelMult: number,
   maxR: number,
+  /** 🏝️ Mode archipel : trajets sans facteur de niveau. */
+  flat = false,
 ): { hours: number; r: number }[] {
   const out: { hours: number; r: number }[] = [];
-  const at = (d: number) => heroLegMinAt(d, playerLevel, travelMult);
+  const at = (d: number) => heroLegMinAt(d, playerLevel, travelMult, flat);
   for (let h = 1; h < 48 && at(maxR) >= h * 60; h++) {
     let lo = 0;
     let hi = maxR;
@@ -1868,6 +1878,8 @@ export function createMap(
   /** ⚠️ REQUIS : la taille de la carte et le nombre de lieux en dépendent. */
   outpostLevel: number,
   seedPois = mapQuota(outpostLevel).pois,
+  /** 🏝️ Carte neuve posée directement en mode archipel. */
+  archipel?: ExpeditionMap['archipel'],
 ): ExpeditionMap {
   const reach = revealRadius(outpostLevel);
   const map: ExpeditionMap = {
@@ -1877,6 +1889,7 @@ export function createMap(
     nextSpawnAt: now,
     riftCount: 0,
     nextRiftAt: now,
+    ...(archipel ? { archipel } : {}),
   };
   const q = mapQuota(outpostLevel);
   for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach, q.econ, q.extra);
@@ -2229,8 +2242,12 @@ function placePoiOfType(
   // 🐺 Une tanière apparaît au RANG AU-DESSUS du joueur (`denLevelFor`), tirée sur un générateur
   // à part : le tirage ci-dessus est consommé quand même, sinon le reste de la carte décale.
   const tire = forcedLevel === undefined && type === 'den' ? denLevelFor(id, playerLevel) : tire0;
-  const vise =
+  const vise0 =
     forcedLevel === undefined && type !== 'arena' ? earlySpawnLevel(tire, playerLevel) : tire;
+  // 🏝️ En mode archipel, aucun lieu ne dépasse le rang max de l'île (le créneau « au-dessus »
+  // des failles et la tanière compris) : au-delà ils restent au plafond, ce qui pousse à avancer.
+  const cap = map.archipel?.levelCap;
+  const vise = cap ? Math.min(cap, vise0) : vise0;
   // ⚠️ Les gardes d’une récolte ont une RAMPE de début de partie qui lit le niveau : on
   // l’estime sur la difficulté visée. Au-delà du niveau 7 elle vaut 1, donc sans effet ; en
   // deçà le lieu sort un peu plus facile que sa cible — c’est la rampe d’apprentissage.
@@ -2246,7 +2263,9 @@ function placePoiOfType(
   // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.
   // ⚠️ Plafonné à 1 : au-delà de l'échelle, c'est la DISTANCE qui allonge le trajet
   // (`travelOneWayMin`), pas un niveau hors de la fenêtre.
-  const travelLevel = win.min + Math.round(Math.min(1, pos.distNorm) * span);
+  const travelLevel = map.archipel
+    ? ARCHIPEL_TRAVEL_LEVEL
+    : win.min + Math.round(Math.min(1, pos.distNorm) * span);
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
@@ -2356,6 +2375,14 @@ export function nextPlunderSpawn(
 
 /** Fait avancer le monde jusqu'à `now` : expire les POI périmés (sauf la cible d'une
  *  expédition en cours) et fait apparaître au plus 1 POI si l'heure est venue. Pur. */
+/** 🏝️ Un lieu tient-il sur l'île active ? Sa difficulté ne dépasse pas le plafond de l'île.
+ *  ⚠️ Points de contrôle et armées en marche exceptés : les premiers se re-tirent eux-mêmes
+ *  (`ensureControls`), les secondes ont une cible et une heure. */
+function fitsIsland(p: Poi, archipel: ExpeditionMap['archipel']): boolean {
+  if (!archipel || p.type === 'control' || p.type === 'warband') return true;
+  return poiDifficultyLevel(p) <= archipel.levelCap;
+}
+
 export function advanceWorld(
   map: ExpeditionMap,
   now: number,
@@ -2447,6 +2474,8 @@ export function advanceWorld(
     ...(ambushes.length ? { ambushes } : {}),
     // 🗺️ Les départs récents survivent (même règle : clé absente quand il n'y en a pas).
     ...(recentDepartures(map, now).length ? { departures: recentDepartures(map, now) } : {}),
+    // 🏝️ Le mode archipel survit au tick (clé absente hors du mode).
+    ...(map.archipel ? { archipel: map.archipel } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
     // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des
     // POI dessinés en pleine mer, et ils survivraient jusqu'à 48 h. On les périme donc
@@ -2460,9 +2489,16 @@ export function advanceWorld(
         (p.type !== 'wreck' &&
           p.expiresAt > now &&
           // 🏯 Les citadelles sont posées LOIN, hors du disque révélé : c'est voulu.
-          (withinLand(p, reach) || p.control?.kind === 'citadel')),
+          (withinLand(p, reach) || p.control?.kind === 'citadel') &&
+          fitsIsland(p, map.archipel)),
     ),
   };
+  // 🏝️ En mode archipel, plus aucun lieu ne garde un niveau de trajet : une carte qui
+  // bascule dans le mode voit ses lieux d'avant suivre la règle de l'île au premier tick.
+  if (map.archipel)
+    next.pois = next.pois.map((p) =>
+      p.travelLevel === ARCHIPEL_TRAVEL_LEVEL ? p : { ...p, travelLevel: ARCHIPEL_TRAVEL_LEVEL },
+    );
   // ⚠️ LES QUOTAS SE COMPTENT SÉPARÉMENT (`isQuotaPoi`) : une faille ou une mine qui
   // entrerait dans les 20 volerait une place à une mine d'or, un camp ou une récolte — dont
   // l'économie est MESURÉE. Les failles S'AJOUTENT à la carte.

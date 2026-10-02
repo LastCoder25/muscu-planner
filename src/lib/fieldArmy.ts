@@ -26,6 +26,7 @@ import {
   distNormAt,
   isFieldArmyPoi,
   warbandAt,
+  ARCHIPEL_TRAVEL_LEVEL,
   type CampSpec,
   type ExpeditionMap,
   type ExpeditionOutcome,
@@ -43,13 +44,7 @@ import {
   type RaidGroup,
 } from './raid';
 import { BATTLE } from './siegeBattle';
-import {
-  CONTROL,
-  attackerLevel,
-  citadelIdFor,
-  retakeBoost,
-  retakeForce,
-} from './controlPoints';
+import { CONTROL, attackerLevel, citadelIdFor, retakeBoost, retakeForce } from './controlPoints';
 import {
   campHurt,
   campLightHurt,
@@ -253,10 +248,10 @@ export function syncFieldArmies(
     playerLevel: number;
   },
 ): ExpeditionMap {
-  const want: Poi[] = [];
+  const want0: Poi[] = [];
   if (ctx.raid) {
     const s = siegeArmyPoi(ctx.raid, ctx.reach, ctx.now, ctx.playerLevel);
-    if (s) want.push(s);
+    if (s) want0.push(s);
   }
   for (const p of map.pois) {
     if (p.type !== 'control') continue;
@@ -273,8 +268,14 @@ export function syncFieldArmies(
       ctx.playerLevel,
       cit ? { x: cit.x, y: cit.y } : undefined,
     );
-    if (r) want.push(r);
+    if (r) want0.push(r);
   }
+  // 🏝️ En mode archipel, le trajet ne lit aucun niveau — la règle que `advanceWorld` pose sur
+  // tous les lieux. ⚠️ Sans elle, les deux réécriraient le lieu à chaque tick, l'un après
+  // l'autre, et la carte serait persistée toutes les secondes.
+  const want = map.archipel
+    ? want0.map((w) => ({ ...w, travelLevel: ARCHIPEL_TRAVEL_LEVEL }))
+    : want0;
   const old = map.pois.filter(isFieldArmyPoi);
   const byId = new Map(old.map((p) => [p.id, p]));
   const same =

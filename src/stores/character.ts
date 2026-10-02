@@ -129,6 +129,7 @@ import {
   staysUnderAttack,
   recordDeparture,
 } from '@/lib/expedition';
+import { archipelOn, mapOutpostLevel, mapPlayerLevel } from '@/lib/archipelago';
 import {
   buildingType,
   buildingUpgradeCost,
@@ -2271,7 +2272,9 @@ export const useCharacterStore = defineStore('character', () => {
     // Après lui, il n'y a plus rien à voir, et l'armée disparaîtrait avec la faille.
     const over = prev ? riftOverflows(prev, now) : [];
     // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1047).
-    const outpost = buildingLevel(cur.buildings, 'outpost');
+    // 🏝️ Sauf en mode archipel : l'île a sa taille, et le niveau de ses lieux un plafond.
+    const outpost = mapOutpostLevel(prev, buildingLevel(cur.buildings, 'outpost'));
+    level = mapPlayerLevel(prev, level);
     // 🏰 Les points de contrôle (fixes) se posent s'ils manquent — ils sont hors quota.
     const map0: ExpeditionMap = ensureControls(
       prev
@@ -2324,6 +2327,20 @@ export const useCharacterStore = defineStore('character', () => {
         ...citadelDiscoveryFx(map, found),
         rarity: 'legendary',
       });
+  }
+  /** 🏝️ L'INTERRUPTEUR DU MODE ARCHIPEL (étape 1 de la roadmap) — réservé à l'admin pendant
+   *  le développement. Le tick suivant de la carte (`advanceWorld`) retire les lieux au-dessus
+   *  du rang de l'île et pose la règle de trajet ; quitter le mode rend la carte d'avant. */
+  async function setArchipelMode(userId: string, on: boolean) {
+    if (!useAuthStore().isAdmin) throw new Error('Mode archipel réservé à l’admin.');
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const prev = cur.expedition_map;
+    if (!!prev.archipel === on) return;
+    const map: ExpeditionMap = { ...prev };
+    if (on) map.archipel = archipelOn(1);
+    else delete map.archipel;
+    await persist(userId, { expedition_map: map });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
   async function expeSend(userId: string, poi: Poi, hero: Combatant, now: number, level: number) {
@@ -4564,6 +4581,8 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return none;
     knownActiveDays7 = activeDays7;
+    // 🏝️ Les assaillants d'une île ne dépassent pas son rang max (le tirage lit ce niveau).
+    playerLevel = mapPlayerLevel(cur.expedition_map, playerLevel);
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
     // reprises) se fera au tick suivant, sur l'état relu.
     const home = settleHome(cur, now);
@@ -4816,7 +4835,8 @@ export const useCharacterStore = defineStore('character', () => {
     runes: number;
   } {
     const p = map.pois.find((x) => x.id === id);
-    const c = collectControl(map, id, at, heroLevel);
+    // 🏝️ En mode archipel, un lieu tenu produit au RANG DE SON ÎLE, plus au niveau du héros.
+    const c = collectControl(map, id, at, mapPlayerLevel(map, heroLevel));
     // ⚒️ Le camp verse AUSSI son XP aux PIÈCES portées — chacun la SIENNE, selon le temps
     // qu'il a passé sur place, même quand le champion bute sur son plafond.
     const nextStock = campGear(stock, advs, c.gearXp);
@@ -5725,6 +5745,7 @@ export const useCharacterStore = defineStore('character', () => {
     spentBossTokens,
     setPseudo,
     expeSyncMap,
+    setArchipelMode,
     expeSend,
     expeTick,
     expeSettle,
