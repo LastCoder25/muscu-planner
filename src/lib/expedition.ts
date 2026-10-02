@@ -717,6 +717,10 @@ export interface ExpeditionMap {
     /** ⛺ Prochain PILLAGE des camps de brigands (île 1) sur la réserve des bâtiments. */
     pillageAt?: number;
   };
+  /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
+   *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir
+   *  intacts en quittant l'île. Absent hors archipel. */
+  citadelStash?: Poi[];
 }
 
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de

@@ -1016,11 +1016,57 @@ export function ensureControls(
   const kept = healed.filter(
     (p) => !p.control || RAZE_KINDS.has(p.control.kind) || CONTROL.kinds.includes(p.control.kind),
   );
+  // 🏯 Les citadelles quittent l'île SANS être perdues (mises de côté, rendues en sortant).
+  const { pois: stashed, stash } = stashCitadels([...kept, ...add], map, now);
   // 🏯 Les citadelles : posées si elles manquent, niveau, place et troupe tenus à jour.
-  const all = syncCitadels([...kept, ...add], map, now, playerLevel, outpostLevel);
-  const changed = all.length !== map.pois.length || all.some((p, i) => p !== map.pois[i]);
+  const all = syncCitadels(stashed, map, now, playerLevel, outpostLevel);
+  const changed =
+    stash !== map.citadelStash ||
+    all.length !== map.pois.length ||
+    all.some((p, i) => p !== map.pois[i]);
   if (!changed) return map;
-  return { ...map, pois: all };
+  const out: ExpeditionMap = { ...map, pois: all };
+  if (stash) out.citadelStash = stash;
+  else delete out.citadelStash;
+  return out;
+}
+
+/**
+ * 🏯🏝️ LES CITADELLES NE SE PERDENT PAS SUR UNE ÎLE (2026-10-02, signalé par l'utilisateur :
+ * « les 2 citadelles prises hier ne sont plus grisées alors que ça ne fait pas 3 j »).
+ * `syncCitadels` les retire en mode archipel (elles tomberaient en mer) puis les REPOSAIT
+ * À NEUF en sortant : palier 0, aucune trêve, aucune destruction — basculer l'interrupteur
+ * effaçait trois jours de trêve. Elles sont désormais mises de côté sur la carte
+ * (`citadelStash`) et rendues telles quelles. ⚠️ Une citadelle en plein ASSAUT reste sur
+ * l'île (l'équipe y marche, cf. `syncCitadels`). ⚠️ Au retour, un raid prévu pendant l'île
+ * est REPROGRAMMÉ (`raidAt` retiré) : sinon `citadelRaids` rattraperait jusqu'à 8 raids d'un coup.
+ */
+function stashCitadels(
+  pois: Poi[],
+  map: ExpeditionMap,
+  now: number,
+): { pois: Poi[]; stash: Poi[] | undefined } {
+  const prev = map.citadelStash;
+  if (map.archipel) {
+    const leaving = pois.filter((p) => isCitadel(p) && !p.control!.assault);
+    if (!leaving.length) return { pois, stash: prev };
+    const ids = new Set(leaving.map((p) => p.id));
+    return {
+      pois: pois.filter((p) => !ids.has(p.id)),
+      stash: [...(prev ?? []).filter((p) => !ids.has(p.id)), ...leaving],
+    };
+  }
+  if (!prev) return { pois, stash: undefined };
+  const back = prev
+    .filter((s) => !pois.some((p) => p.id === s.id))
+    .map((s) => {
+      const c = s.control!;
+      if (c.raidAt === undefined || c.raidAt > now) return s;
+      const rest: ControlState = { ...c };
+      delete rest.raidAt;
+      return { ...s, control: rest };
+    });
+  return { pois: [...pois, ...back], stash: undefined };
 }
 
 /** Délai avant la prochaine attaque (graine : le lieu et l'instant) : visé entre 3 jours (on
