@@ -149,6 +149,32 @@ export function speedKmh(distanceKm?: number, durationMin?: number): number | nu
   return Math.round((distanceKm / (durationMin / 60)) * 10) / 10;
 }
 
+/**
+ * ⚠️ Une durée qui ne peut pas être vraie — à confirmer avant d'enregistrer.
+ *
+ * Signalé sur un compte réel : « 60 » tapé dans le champ des HEURES (il porte le libellé
+ * « Durée ») pour une course de 9,5 km → 3 600 min, soit ~21 700 XP au lieu de ~430 et dix
+ * niveaux d'un coup. La durée porte l'essentiel de l'XP cardio, donc une faute de frappe
+ * s'y paie très cher.
+ *
+ * Deux signaux : plus de 24 h pour une seule sortie, ou une vitesse sous `MIN_PLAUSIBLE_KMH`
+ * (personne ne marche à moins de 1 km/h). Rend le motif à afficher, `null` si rien à redire.
+ * L'appareil d'appartement compris : 1 km en plus d'une heure n'y a pas plus de sens.
+ */
+export const MAX_PLAUSIBLE_MIN = 24 * 60;
+export const MIN_PLAUSIBLE_KMH = 1;
+export function implausibleDuration(
+  distanceKm?: number | null,
+  durationMin?: number | null,
+): string | null {
+  if (!durationMin || durationMin <= 0) return null;
+  const h = Math.round((durationMin / 60) * 10) / 10;
+  if (durationMin > MAX_PLAUSIBLE_MIN) return `${h} h pour une seule sortie`;
+  const v = speedKmh(distanceKm ?? undefined, durationMin);
+  if (v !== null && v < MIN_PLAUSIBLE_KMH) return `${h} h pour ${distanceKm} km, soit ${v} km/h`;
+  return null;
+}
+
 /** Distance-effort (km-effort) : distance + (D+ + D-)/100.
  *  Chaque 100 m de dénivelé (montée OU descente) ≈ 1 km à plat. */
 export function effortKm(distanceKm?: number, dplus?: number, dminus?: number): number | null {

@@ -50,8 +50,38 @@
         <q-input v-model.number="distance" type="number" filled label="Distance (km)" step="0.1" />
         <!-- ⏱️ Durée en heures + minutes : une sortie longue (rando, vélo) se saisit sans calcul. -->
         <div class="fields-row">
-          <q-input v-model.number="durH" type="number" min="0" filled label="Durée" suffix="h" />
-          <q-input v-model.number="durM" type="number" min="0" filled label=" " suffix="min" />
+          <q-input
+            v-model.number="durH"
+            type="number"
+            min="0"
+            filled
+            label="Durée — heures"
+            suffix="h"
+          />
+          <q-input
+            v-model.number="durM"
+            type="number"
+            min="0"
+            filled
+            label="minutes"
+            suffix="min"
+          />
+        </div>
+        <!-- ⚠️ « 60 » tapé dans les HEURES a déjà coûté dix niveaux à un joueur : on le dit
+             avant l'enregistrement, avec la correction la plus probable à portée de doigt. -->
+        <div v-if="durationWarn" class="dur-warn">
+          <span>⚠️ {{ durationWarn }} — vérifie la durée.</span>
+          <q-btn
+            v-if="durH && !durM"
+            dense
+            no-caps
+            unelevated
+            color="primary"
+            text-color="dark"
+            class="dur-fix"
+            :label="`C'était ${durH} min`"
+            @click="hoursWereMinutes"
+          />
         </div>
         <q-input v-if="hasSteps" v-model.number="steps" type="number" filled label="Pas" />
         <q-input
@@ -196,6 +226,7 @@ import {
   ACTIVITY_ICONS,
   ACTIVITY_EMOJI,
   activityHasElevation,
+  implausibleDuration,
   paceLabel,
   speedKmh,
   effortPace,
@@ -242,6 +273,13 @@ const durH = ref<number | null>(null);
 const durM = ref<number | null>(null);
 /** La durée en minutes (seule unité stockée), lue sur les deux champs. */
 const duration = computed(() => hoursMinutesToMin(durH.value, durM.value));
+/** Motif d'une durée invraisemblable (plus de 24 h, moins de 1 km/h), sinon null. */
+const durationWarn = computed(() => implausibleDuration(distance.value, duration.value));
+/** La correction la plus probable : le nombre tapé dans les heures était des minutes. */
+function hoursWereMinutes() {
+  durM.value = durH.value;
+  durH.value = null;
+}
 const steps = ref<number | null>(null);
 const load = ref<number | null>(null);
 const dplus = ref<number | null>(null);
@@ -308,6 +346,22 @@ async function save() {
   if (!distance.value && !duration.value && !(hasSteps.value && steps.value)) {
     $q.notify({ type: 'warning', message: 'Renseigne une durée, une distance ou des pas.' });
     return;
+  }
+  // La durée porte l'essentiel de l'XP : une faute de frappe s'y paie cher, on fait confirmer.
+  if (durationWarn.value) {
+    const motif = durationWarn.value;
+    const ok = await new Promise<boolean>((resolve) => {
+      $q.dialog({
+        title: 'Cette durée est-elle juste ?',
+        message: `${motif}. Enregistrer quand même ?`,
+        cancel: { label: 'Corriger', flat: true },
+        ok: { label: 'Enregistrer', color: 'primary', textColor: 'dark' },
+        persistent: true,
+      })
+        .onOk(() => resolve(true))
+        .onCancel(() => resolve(false));
+    });
+    if (!ok) return;
   }
   saving.value = true;
   /** Le niveau d'une tuile de sport (celle de l'accueil), par sa clé. Absente = jamais
@@ -630,6 +684,21 @@ function remove(id: string) {
 }
 .fields-row .q-input {
   flex: 1;
+}
+.dur-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--d4);
+  background: color-mix(in srgb, var(--d4) 14%, transparent);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.dur-fix {
+  min-height: 44px;
 }
 .metrics {
   display: grid;

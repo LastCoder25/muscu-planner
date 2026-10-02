@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { paceLabel, speedKmh, effortKm, effortPace, effortSpeedKmh } from '@/data/cardio';
+import {
+  paceLabel,
+  speedKmh,
+  effortKm,
+  effortPace,
+  effortSpeedKmh,
+  implausibleDuration,
+} from '@/data/cardio';
 import { cardioSessionXp } from '@/lib/athlete';
 import type { CardioLog } from '@/lib/types';
 
@@ -74,5 +81,25 @@ describe('cardioSessionXp (log global)', () => {
     expect(marche).toBeLessThan(course);
     // marche : ((10*2 + 50*3=150)=170)*0.50=85 × XP_MULT(2) = 170 (intensité 50/100)
     expect(marche).toBe(170);
+  });
+});
+
+describe('implausibleDuration — la faute de frappe heures/minutes', () => {
+  it('60 h pour 9,5 km (le cas réel) est signalé', () => {
+    expect(implausibleDuration(9.5, 3600)).not.toBeNull();
+  });
+  it('une vraie sortie passe, longue comprise', () => {
+    expect(implausibleDuration(9.5, 60)).toBeNull();
+    expect(implausibleDuration(30, 8 * 60)).toBeNull(); // rando d'une journée
+    expect(implausibleDuration(undefined, 120)).toBeNull(); // durée seule
+    expect(implausibleDuration(5, null)).toBeNull();
+  });
+  it('plus de 24 h est signalé même sans distance', () => {
+    expect(implausibleDuration(undefined, 25 * 60)).not.toBeNull();
+    expect(implausibleDuration(undefined, 24 * 60)).toBeNull();
+  });
+  it('sous 1 km/h est signalé', () => {
+    expect(implausibleDuration(5, 6 * 60)).not.toBeNull(); // 0,8 km/h
+    expect(implausibleDuration(5, 4 * 60)).toBeNull(); // 1,25 km/h
   });
 });
