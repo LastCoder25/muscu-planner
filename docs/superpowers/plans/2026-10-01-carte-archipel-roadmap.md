@@ -1,6 +1,6 @@
 # Carte de conquête : l'archipel — roadmap
 
-> Conçue avec l'utilisateur le 2026-10-01. **Étapes 0, 1 et 2 faites** (v1.11.0, 2026-10-02).
+> Conçue avec l'utilisateur le 2026-10-01. **Étapes 0 à 2 quater faites** (v1.15.0, 2026-10-02).
 > Prochaine étape : **3 — la traversée et l'île 2**, sur le compte admin seul.
 > Page visuelle (carte dessinée, tableaux) : https://claude.ai/artifact/JK5zL5fjbPojaXwpM8ZPJc
 
@@ -187,12 +187,17 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       Test `islandRanks.test.ts` (8, 11 mutations rouges). ⚠️ Limite connue : un lieu à UN garde
       plafonne en difficulté vers 80 (niveau max des ennemis) — sur l'île 5 il s'affiche un rang sous
       l'île ; à traiter avec l'île 5.
-- [ ] **2 quater. Densité des lieux sur une île** (question du 2026-10-02, à trancher) — mesuré
-      sur l'île 1 (rayon ~51, 2 h d'aller) : **~22 lieux** en même temps, contre 16 + 6 failles sur
-      la carte de référence (rayon ~64), soit ~1,7× plus dense. Détail : 9 lieux tirés (le quota suit
-      déjà la surface : 9 au lieu de 16), **9 lieux fixes** (6 points de contrôle, 2 objectifs, la
-      forteresse) et ~4 failles (quota 4). Ce sont les lieux fixes qui chargent la carte. Pistes :
-      failles 4 → 2 sur une île, ou lieux tirés 9 → 6, ou moins de points de contrôle par île.
+- [x] **2 quater. Densité des lieux sur une île** (question du 2026-10-02 : « vu la taille de
+      l'île et le temps de trajet max, il faut adapter le nombre de lieux ? ») — **Livré v1.15.0** :
+      mesuré, l'île 1 (rayon ~51) portait **22 lieux** (9 tirés + 4 failles + 9 fixes) sur ~60 %
+      de la surface d'une carte ordinaire qui en porte 28 (22 tirés + 6 points fixes) : 1,3× plus
+      dense, et ce sont les lieux FIXES qui débordaient (le quota suivait la surface sans les
+      compter). Une île vise désormais la densité de la carte ordinaire, **lieux fixes compris**
+      (`ISLAND_DENSITY`, `mapQuota(outpost, islandFixed)`, `islandFixedOf`) : **17 lieux** sur
+      l'île 1 → **6 tirés + 2 failles** pendant la conquête, **8 + 3** une fois objectifs et
+      forteresse abattus. La carte ordinaire ne bouge pas. Test `islandDensity.test.ts` (cinq îles
+      × 3 graines × 10 jours, 3 mutations rouges). ⚠️ Moins de lieux d'économie (4 au lieu de 6) et
+      2 failles au lieu de 4 sur une île : or et mana à re-mesurer avec l'équilibrage (étape 6).
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
       traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
       points tenus, avant-postes, récompenses (forteresse, premier débarquement).

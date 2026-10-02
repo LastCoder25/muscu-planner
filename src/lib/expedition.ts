@@ -1231,6 +1231,9 @@ export const EXPE = {
    */
   riftRef: 6,
   riftFloor: 2,
+  /** 🏰 Points de contrôle d'une carte ordinaire (`CONTROL.kinds`, vérifié par un test) : ils
+   *  entrent dans la densité qu'une île vise (`ISLAND_DENSITY`). */
+  refControls: 6,
   /** Rythme d'apparition d'une faille. ⚠️ Volontairement plus LENT que celui des POI
    *  ordinaires (1-2 h) : une faille vit 7 jours, donc le quota se remplit de toute façon,
    *  et un spawn rapide ne ferait que le saturer d'un coup après chaque effondrement. C'est
@@ -1623,6 +1626,11 @@ export const MAP_REACH = { r1: 40, areaMult100: 3, maxLevel: 100, margin: 14 } a
 const annulusArea = (r: number) => Math.PI * (r * r - EXPE.distMin * EXPE.distMin);
 const REF_AREA = annulusArea(EXPE.distMax);
 
+/** 🏝️ Densité de la carte ORDINAIRE, lieux fixes compris : les lieux tirés et les failles de
+ *  l'anneau de référence, plus ses `refControls` points de contrôle. Une île la vise (cf.
+ *  `mapQuota`). */
+export const ISLAND_DENSITY = (EXPE.poiRef + EXPE.riftRef + EXPE.refControls) / REF_AREA;
+
 /** Rayon RÉVÉLÉ autour de la ville pour un niveau d'Avant-poste (sans Avant-poste : niveau 1). */
 export function revealRadius(outpostLevel: number): number {
   const L = Math.min(MAP_REACH.maxLevel, Math.max(1, Math.floor(outpostLevel) || 1));
@@ -1635,7 +1643,12 @@ export function revealRadius(outpostLevel: number): number {
 /** Nombre de lieux et de failles sur la carte révélée : PROPORTIONNEL À SA SURFACE, à la
  *  densité de l'anneau de référence (`poiRef` + `riftRef` sur 18 → 64). ⚠️ La part des
  *  failles garde celle de la référence, sans descendre sous `riftFloor` (l'accès au mana). */
-export function mapQuota(outpostLevel: number): {
+export function mapQuota(
+  outpostLevel: number,
+  /** 🏝️ Sur une île : le nombre de LIEUX FIXES présents (points tenus ou à prendre, objectifs,
+   *  forteresse). Absent = carte ordinaire. Cf. `ISLAND_DENSITY`. */
+  islandFixed?: number,
+): {
   pois: number;
   rifts: number;
   econ: number;
@@ -1643,7 +1656,22 @@ export function mapQuota(outpostLevel: number): {
 } {
   const R = revealRadius(outpostLevel);
   const ref = EXPE.poiRef + EXPE.riftRef;
-  const n = Math.round((ref * annulusArea(R)) / REF_AREA);
+  // 🏝️ UNE ÎLE VISE LA DENSITÉ DE LA CARTE ORDINAIRE, LIEUX FIXES COMPRIS (2026-10-02 ; question
+  // de l'utilisateur : « vu la taille de l'île et le temps de trajet max, il faut adapter le
+  // nombre de lieux pour que ce ne soit pas surchargé ? »). Mesuré sur l'île 1 (rayon 51) :
+  // 22 lieux en permanence (9 tirés + 4 failles + 9 fixes) sur ~60 % de la surface d'une
+  // carte ordinaire qui en porte 28 (22 tirés + 6 points fixes) — 1,3× plus dense, et ce sont
+  // les FIXES qui débordaient : le quota suivait la surface sans les compter. Le total de l'île
+  // suit donc la densité de la carte ordinaire (17 à l'île 1), et les fixes y prennent leur
+  // place : 6 tirés + 2 failles pendant la conquête, 8 + 3 une fois objectifs et forteresse
+  // abattus.
+  const n =
+    islandFixed === undefined
+      ? Math.round((ref * annulusArea(R)) / REF_AREA)
+      : Math.max(
+          EXPE.riftFloor + 1,
+          Math.round(ISLAND_DENSITY * annulusArea(R)) - Math.max(0, islandFixed),
+        );
   const rifts = Math.max(EXPE.riftFloor, Math.round((n * EXPE.riftRef) / ref));
   // 🗺️ Les lieux ORDINAIRES s'arrêtent au nombre de la carte de référence (v0.1205, décision
   // de l'utilisateur : « on n'a pas trop de lieux ? »). Au-delà, les terres révélées
@@ -1912,6 +1940,15 @@ function placePoi(
   return { x: Math.round(town.x + lo), y: town.y, distNorm: distNormAt(lo) };
 }
 
+/** 🏝️ Les lieux FIXES d'une île (points de contrôle, objectifs, forteresse), qui prennent leur
+ *  place dans son quota (`mapQuota`). Jamais moins que les points de contrôle d'une carte
+ *  ordinaire : une carte qui vient de basculer ne les a pas encore tous posés. `undefined`
+ *  hors archipel. */
+export function islandFixedOf(map: Pick<ExpeditionMap, 'archipel' | 'pois'>): number | undefined {
+  if (!map.archipel) return undefined;
+  return Math.max(EXPE.refControls, map.pois.filter((p) => p.type === 'control').length);
+}
+
 /** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). Par défaut,
  *  on démarre AU PLANCHER (`poiFloor`) → la carte n'est jamais quasi-vide au début. */
 export function createMap(
@@ -1920,7 +1957,7 @@ export function createMap(
   playerLevel: number,
   /** ⚠️ REQUIS : la taille de la carte et le nombre de lieux en dépendent. */
   outpostLevel: number,
-  seedPois = mapQuota(outpostLevel).pois,
+  seedPois?: number,
   /** 🏝️ Carte neuve posée directement en mode archipel. */
   archipel?: ExpeditionMap['archipel'],
 ): ExpeditionMap {
@@ -1934,8 +1971,9 @@ export function createMap(
     nextRiftAt: now,
     ...(archipel ? { archipel } : {}),
   };
-  const q = mapQuota(outpostLevel);
-  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach, q.econ, q.extra);
+  const q = mapQuota(outpostLevel, islandFixedOf(map));
+  const n = seedPois ?? q.pois;
+  for (let i = 0; i < n; i++) spawnOne(map, now, playerLevel, reach, q.econ, q.extra);
   // 🕳️ On sème aussi le PLANCHER de failles : sans elles, une carte neuve n'aurait ni accès
   // au mana ni siège à venir jusqu'au premier `advanceWorld`.
   for (let i = 0; i < EXPE.riftFloor; i++) spawnRift(map, now, playerLevel, reach);
@@ -2312,6 +2350,18 @@ function placePoiOfType(
   // gardes, qui lit le niveau RÉEL et non la cible) — mesuré, un lieu visé « difficulté 4 » sortait à 7 au niveau 5, donc imprenable.
   // On redescend jusqu’à ne plus dépasser : plus facile que la cible, jamais plus dur.
   while (force && level > 1 && poiDifficultyLevel({ id, type, level }) > vise) level--;
+  // 🏝️ …MAIS JAMAIS SOUS LE RANG D'ENTRÉE DE L'ÎLE (2 ter) : la redescente pouvait poser un
+  // camp visé à 21 (île 2) à une difficulté de 20, donc un rang sous l'île. On remonte d'un cran
+  // tant que la difficulté reste sous le plancher — sauf joueur encore lui-même en dessous.
+  const floorLv = map.archipel ? archipelFloor(map) : 1;
+  // ⚠️ Le NIVEAU des ennemis peut dépasser le plafond de l'île : c'est la DIFFICULTÉ (ce que
+  // la carte affiche, et ce que retire le passage au plafond) qui doit rester dans la tranche —
+  // un camp à un seul garde au niveau 40 n'affiche que la difficulté 20, un rang sous l'île 2.
+  if (force && vise >= floorLv) {
+    const diffOf = (lv: number) => poiDifficultyLevel({ id, type, level: lv });
+    const top = cap ?? vise;
+    while (level < 100 && diffOf(level) < floorLv && diffOf(level + 1) <= top) level++;
+  }
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
   // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant
   // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.
@@ -2452,7 +2502,7 @@ export function advanceWorld(
   protectedPoiId?: string,
 ): ExpeditionMap {
   const reach = revealRadius(outpostLevel);
-  const cap = mapQuota(outpostLevel);
+  const cap = mapQuota(outpostLevel, islandFixedOf(map));
   // 🕳️ DÉBORDEMENT D'ABORD, avant tout filtrage : une faille arrivée à maturité
   // s'effondre et laisse une MINE DE MANA RÉSIDUEL. ⚠️ Si on filtrait d'abord, la faille
   // serait simplement « expirée » (sa durée de vie EST sa maturation) et la mine n'aurait
