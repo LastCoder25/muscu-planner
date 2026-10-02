@@ -508,6 +508,42 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await render('c1')).toContain('ctl-alert');
     expect(await render('')).not.toContain('ctl-alert');
   }, 30_000);
+  it('🔴 MapPoiLayer : point rouge sous un lieu attaqué, fort agrandi', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    const fort = {
+      ...MAP_POIS[0],
+      id: 'c1',
+      type: 'control',
+      control: { kind: 'citadel', owner: 'enemy', garrison: [], collectedAt: 0 },
+    } as unknown as (typeof MAP_POIS)[number];
+    const render = async (attackedKey: string) => {
+      let out = '';
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: [MAP_POIS[0], fort],
+          selectedId: null,
+          dimmedKey: '',
+          veiledKey: '',
+          imminentKey: '',
+          attackedKey,
+          target: null,
+          travelTargets: [],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      return out;
+    };
+    const one = await render(MAP_POIS[0]!.id);
+    expect(one.match(/attack-dot/g)?.length).toBe(1);
+    expect(await render('')).not.toContain('attack-dot');
+    // Le fort (citadelle) est agrandi, le lieu ordinaire non.
+    expect(one).toMatch(/scale\(1\.55\)/);
+    expect(one.match(/scale\(/g)?.length).toBe(1);
+  }, 30_000);
   it('⚫ MapPoiLayer dessine la garnison en points sous le fort', async () => {
     const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
     const fort = {
