@@ -161,12 +161,18 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
   en mode archipel).
 
 ### Traverser
-- [ ] **2 bis. Bien délimiter les îles** (demandé le 2026-10-02) — aucun lieu ne doit apparaître
+- [x] **2 bis. Bien délimiter les îles** (demandé le 2026-10-02) — aucun lieu ne doit apparaître
   hors de la côte. Aujourd'hui les lieux tirés restent dans 54 unités et la côte ne passe jamais
   sous 60, mais ce qui est posé à part n'est pas borné par la côte : citadelles (55 à 100, cachées
   sur une île), armées en marche, forteresse (sur le cap). À faire : un garde unique « sur l'île »
   (`onIsland`) appliqué à tout ce qui est posé ou dessiné en mode archipel, avec un test qui balaie
   les cinq îles.
+  **Livré v1.13.0** : mesuré, seules les CITADELLES tombaient en mer (posées de 55 à 100). Sur une
+  île il n'y en a plus (`syncCitadels` les retire, sauf pendant un assaut) : ce sont les camps de
+  l'île qui attaquent. Tout le reste tient déjà sur la terre (lieux tirés ≤ 54, côte ≥ 60,
+  armées en marche nées dans le rayon de détection borné à la carte). `islandBounds.test.ts` joue
+  dix jours de carte sur les cinq îles × 3 graines, armées comprises, et exige chaque lieu sur la
+  terre avec 3 unités de marge (2 mutations rouges).
 - [ ] **3. La traversée et l'île 2** (~5 j) — héros/champions/milice rattachés à une île,
   traversée avec un départ chaque heure, débarquement, base au port, zone jouable à portée des
   points tenus, avant-postes, récompenses (forteresse, premier débarquement).

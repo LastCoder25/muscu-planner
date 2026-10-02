@@ -622,6 +622,15 @@ function syncCitadels(
   let out = pois.some((p) => p.id === controlIdOf('citadel'))
     ? pois.filter((p) => p.id !== controlIdOf('citadel'))
     : pois;
+  // 🏝️ SUR UNE ÎLE, PAS DE CITADELLE : posées de 55 à 100 unités, elles tomberaient en mer
+  // (la côte peut passer à 60), et ce sont les camps de l'île qui attaquent (`attackSlow`).
+  // Celles d'une carte qui bascule s'en vont (sauf pendant un assaut : l'équipe y marche).
+  if (map.archipel) {
+    const kept = out.filter((p) => !isCitadel(p) || p.control!.assault);
+    const harass0 = mapHarass(map, now);
+    const slow0 = (k: ControlKind) => attackSlow({ pois: kept, archipel: map.archipel }, k);
+    return gateAttacks(kept, now, harass0, slow0, islandPacified(map));
+  }
   CITADEL.sites.forEach((site, i) => {
     const id = citadelIdOf(i);
     if (out.some((p) => p.id === id)) return;
