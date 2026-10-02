@@ -623,7 +623,8 @@ export function ensureIslandConquest(
       return rest;
     });
   }
-  return changed ? { ...map, pois } : map;
+  // 5. 🚩 L'armée mobile du seigneur de guerre (île 4).
+  return warlordRaids(changed ? { ...map, pois } : map, now);
 }
 
 /**
@@ -785,7 +786,9 @@ export function islandTargetLabel(
           ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
           : NEST.islands.has(isl.id)
             ? ' · tant qu’il tient, il pond un nid tous les 3 jours (6 au plus), ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tous les nids debout comptent pour pacifier'
-            : ' · tant qu’il tient, il attaque tes lieux fixes') +
+            : WARLORD.islands.has(isl.id)
+              ? ' · tant qu’il tient, son armée mobile frappe ton lieu tenu le MOINS défendu (en moyenne toutes les 36 h, plus souvent avec plusieurs camps debout)'
+              : ' · tant qu’il tient, il attaque tes lieux fixes') +
         ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} abattus ouvrent la forteresse, tous l’affaiblissent au plus bas.`,
     };
   const f = fortressForce(isl, down);
@@ -814,6 +817,73 @@ export function islandTargetLabel(
 export const BRIGANDS = { pillageMs: 36 * 3600_000, jitter: 0.25 } as const;
 /** Les îles dont les objectifs pillent (leur menace propre, roadmap). */
 const PILLAGE_ISLANDS: ReadonlySet<number> = new Set([1]);
+
+/**
+ * 🚩 L'ARMÉE MOBILE DU SEIGNEUR DE GUERRE (île 4, roadmap : « armée mobile qui vise le moins
+ * défendu ») : tant qu'un camp de guerre tient, une armée sort en moyenne toutes les
+ * `raidMs` / camps debout et AVANCE à cet instant l'attaque prévue du lieu tenu le MOINS
+ * défendu (la plus petite garnison, champions et miliciens ; départage tiré). Comme un raid
+ * de citadelle : elle ne crée pas d'attaque, elle avance celle qui vient. Abattre les camps
+ * l'espace, les abattre tous l'arrête. Déterministe, rattrape une absence (bornée).
+ */
+export const WARLORD = {
+  islands: new Set([4]) as ReadonlySet<number>,
+  raidMs: 36 * 3600_000,
+  jitter: 0.25,
+  catchUp: 8,
+} as const;
+
+/** Le délai jusqu'à la prochaine sortie, à `standing` camps debout. */
+export function warDelayMs(seed: number, from: number, standing: number): number {
+  const r = mulberry32((seedOf(`${seed}:war:${from}`) ^ 0x3b9ac9ff) >>> 0 || 1)();
+  return (WARLORD.raidMs / Math.max(1, standing)) * (1 + (r * 2 - 1) * WARLORD.jitter);
+}
+
+/** 🚩 Le lieu tenu le MOINS défendu à `at` (dont l'attaque prévue vient après), `null` si aucun. */
+export function weakestHeld(pois: readonly Poi[], at: number, seed: number): Poi | null {
+  const held = pois.filter(
+    (p) =>
+      p.control?.owner === 'player' &&
+      ALL_CONTROL_KINDS.includes(p.control.kind) &&
+      p.control.attackAt !== undefined &&
+      p.control.attackAt > at,
+  );
+  if (!held.length) return null;
+  const least = Math.min(...held.map((p) => p.control!.garrison.length));
+  const ties = held.filter((p) => p.control!.garrison.length === least);
+  const r = mulberry32((seedOf(`${seed}:warTarget:${at}`) ^ 0x7f4a7c15) >>> 0 || 1)();
+  return ties[Math.floor(r * ties.length)]!;
+}
+
+/** 🚩 Avance l'armée mobile jusqu'à `now`. Rend la MÊME carte si rien ne change. */
+export function warlordRaids(map: ExpeditionMap, now: number): ExpeditionMap {
+  const isl = activeIsland(map);
+  const a = map.archipel;
+  if (!a) return map;
+  const camps = standingCamps(map);
+  const active = !!isl && WARLORD.islands.has(isl.id) && !islandPacified(map) && camps > 0;
+  if (!active) {
+    if (a.warAt === undefined) return map;
+    const { warAt: _w, ...rest } = a;
+    void _w;
+    return { ...map, archipel: rest };
+  }
+  let pois = map.pois;
+  let at = a.warAt ?? now + warDelayMs(map.seed, now, camps);
+  for (let n = 0; at <= now && n < WARLORD.catchUp; n++) {
+    const t = weakestHeld(pois, at, map.seed);
+    if (t) {
+      const when = at;
+      pois = pois.map((p) =>
+        p.id === t.id ? { ...p, control: { ...p.control!, attackAt: when } } : p,
+      );
+    }
+    at += warDelayMs(map.seed, at, camps);
+  }
+  if (at <= now) at = now + warDelayMs(map.seed, now, camps);
+  if (at === a.warAt && pois === map.pois) return map;
+  return { ...map, pois, archipel: { ...a, warAt: at } };
+}
 
 /** Les camps (objectifs) encore debout. */
 function standingCamps(map: Pick<ExpeditionMap, 'pois'>): number {

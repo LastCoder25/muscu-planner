@@ -287,6 +287,16 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       la tour reste, c’est un des deux avant-postes). L’ossuaire produit le prix d’une
       tentative de boss de l’île (`bossSummonCost`) en pierres d’invocation toutes les 48 h
       au complet. Tests `islandDead.test.ts` (9, 8 mutations rouges).
+      **Île 4 livrée v1.25.0 (choix par défaut)** : 3 camps de guerre ; tant qu’un camp tient,
+      l’**armée mobile** du seigneur de guerre sort en moyenne toutes les 36 h / camps debout
+      (`WARLORD`, `warlordRaids`, `archipel.warAt`) et AVANCE l’attaque prévue du lieu tenu le
+      MOINS défendu (plus petite garnison, champions et miliciens ; départage tiré) — jamais ne
+      la recule. Points fixes : socle + tour de guet + **arsenal** (sceaux d’objet ⚜️ : la part
+      d’objet d’une ruine toutes les 72 h au complet) + **cercle d’invocation** (mana : le prix
+      d’un tirage toutes les 48 h au complet ; nommé « cercle » car « sanctuaire d’invocation »
+      est déjà un lieu de récolte). ⚠️ **Les convois de la menace ne sont pas faits** (à
+      concevoir) ; débits de l’arsenal et du cercle à revoir à l’étape 6. Tests
+      `islandWarlord.test.ts` (12, 10 mutations rouges).
 - [ ] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
       défense, durée de chaque île, 5 îles de rente).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

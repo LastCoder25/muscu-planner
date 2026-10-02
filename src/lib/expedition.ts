@@ -90,6 +90,10 @@ export type ControlKind =
   | 'archives'
   /** 🏝️⚱️ L'OSSUAIRE (île 3) : des pierres d'invocation. */
   | 'ossuary'
+  /** 🏝️⚒️ L'ARSENAL (île 4) : des sceaux d'objet. */
+  | 'arsenal'
+  /** 🏝️🌀 Le CERCLE D'INVOCATION (île 4) : des pierres de mana. */
+  | 'circle'
   | 'mana'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
@@ -274,6 +278,8 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   scriptorium: 'Scriptorium',
   archives: 'Archives',
   ossuary: 'Ossuaire',
+  arsenal: 'Arsenal',
+  circle: 'Cercle d’invocation',
   mana: 'Source de mana',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
@@ -287,6 +293,8 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   scriptorium: '📜',
   archives: '📖',
   ossuary: '⚱️',
+  arsenal: '⚒️',
+  circle: '🌀',
   mana: '⛲',
   citadel: '🏯',
   objective: '⛺',
@@ -748,6 +756,8 @@ export interface ExpeditionMap {
     /** 🪦 Île 3 : quand chaque cimetière a été abattu (id → instant) — il se relève
      *  `RISE.riseMs` plus tard tant que la citadelle des morts tient. */
     razedAt?: Record<string, number>;
+    /** 🚩 Île 4 : la prochaine sortie de l'ARMÉE MOBILE du seigneur de guerre. */
+    warAt?: number;
   };
   /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
    *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir

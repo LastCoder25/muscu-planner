@@ -40,6 +40,7 @@ import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits } from './militia';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { bossSummonCost } from '../data/bosses';
+import { GACHA } from './gacha';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
@@ -47,6 +48,7 @@ import { pickSupply, type SupplyStock } from './supplies';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
   archipelFloor,
+  RUINS_SEALS,
   CAMP_FACTIONS,
   CONTROL_MAX_GARRISON,
   CONTROL_KIND_EMO,
@@ -76,6 +78,11 @@ export const CONTROL = {
   /** ⚱️ L'ossuaire (île 3) : le prix d'une tentative de boss de l'île toutes les 48 h,
    *  garnison au complet (le pendant des archives : les morts-vivants laissent des pierres). */
   ossuaryHoursPerAttempt: 48,
+  /** ⚒️ L'arsenal (île 4) : la part d'objet d'une ruine (`ruinsSeals`) toutes les 72 h au
+   *  complet — un tiers de plus que les ruines seules, à revoir à l'équilibrage (étape 6). */
+  arsenalHoursPerRuin: 72,
+  /** 🌀 Le cercle d'invocation (île 4) : le prix d'un tirage toutes les 48 h au complet. */
+  circleHoursPerPull: 48,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -351,6 +358,8 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   scriptorium: PRODUCER_SEATS,
   archives: PRODUCER_SEATS,
   ossuary: PRODUCER_SEATS,
+  arsenal: PRODUCER_SEATS,
+  circle: PRODUCER_SEATS,
   mana: PRODUCER_SEATS,
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
@@ -382,6 +391,9 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   archives: 2,
   // ⚱️ Île 3 : la place du scriptorium, qui n'y est pas.
   ossuary: 2.5,
+  // ⚒️🌀 Île 4 : les places du jardin et du scriptorium, qui n'y sont pas.
+  arsenal: 2,
+  circle: 2.5,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -402,6 +414,8 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
   ossuary: 'pierres d’invocation 🔮',
+  arsenal: 'sceaux d’objet ⚜️',
+  circle: 'pierres de mana 💠',
   mana: 'pierres de mana 💠 en continu',
   citadel: 'une trêve de 3 jours sur les points qu’elle attaque',
   objective: 'un pas vers la pacification de l’île',
@@ -996,7 +1010,13 @@ function spotAt(map: ExpeditionMap, quarter: number, d: number): Pick<Poi, 'x' |
 }
 
 /** 🏰 TOUS les types de points qui produisent (carte ordinaire et îles). */
-export const ALL_CONTROL_KINDS: readonly ControlKind[] = [...CONTROL.kinds, 'archives', 'ossuary'];
+export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
+  ...CONTROL.kinds,
+  'archives',
+  'ossuary',
+  'arsenal',
+  'circle',
+];
 
 /**
  * 🏝️ LES POINTS FIXES DE CHAQUE ÎLE (roadmap, « Répartition ») : le socle (mine, camp, source
@@ -1008,6 +1028,7 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   2: ['mine', 'training', 'tower', 'mana', 'archives'],
   // ⚠️ La tour de guet reste sur l'île 3 : c'est un des deux AVANT-POSTES (`ISLAND_OUTPOSTS`).
   3: ['mine', 'training', 'tower', 'mana', 'garden', 'ossuary'],
+  4: ['mine', 'training', 'tower', 'mana', 'arsenal', 'circle'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
@@ -1553,6 +1574,17 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'ossuary':
       // ⚱️ Une tentative de boss de l'île toutes les 48 h au complet.
       return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.ossuaryHoursPerAttempt;
+    case 'arsenal':
+      // ⚒️ La part d'objet d'une ruine (9 × (1 + rang)) toutes les 72 h au complet.
+      return (
+        (RUINS_SEALS.gearPerRank *
+          (1 + characterRank(Math.max(1, playerLevel)).rankIndex) *
+          shareOf(n)) /
+        CONTROL.arsenalHoursPerRuin
+      );
+    case 'circle':
+      // 🌀 Le prix d'un tirage toutes les 48 h au complet.
+      return (GACHA.pullCost * shareOf(n)) / CONTROL.circleHoursPerPull;
     case 'mana':
       return controlManaPerHour(n, playerLevel);
     default:
@@ -1770,6 +1802,8 @@ export function collectControl(
   keys: number;
   /** ⚱️ Pierres d'invocation (l'ossuaire). */
   summon: number;
+  /** ⚒️ Sceaux d'objet (l'arsenal). */
+  gearSeals: number;
 } {
   const p = map.pois.find((x) => x.id === id);
   const none = {
@@ -1782,6 +1816,7 @@ export function collectControl(
     runes: 0,
     keys: 0,
     summon: 0,
+    gearSeals: 0,
   };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
@@ -1837,13 +1872,15 @@ export function collectControl(
       },
     })),
     gold: c.kind === 'mine' ? whole : 0,
-    mana: c.kind === 'mana' ? whole : 0,
+    // 🌀 Le cercle d'invocation verse du mana, comme la source.
+    mana: c.kind === 'mana' || c.kind === 'circle' ? whole : 0,
     xpBy: {},
     gearXp: {},
     supplies,
     runes,
     keys: c.kind === 'archives' ? whole : 0,
     summon: c.kind === 'ossuary' ? whole : 0,
+    gearSeals: c.kind === 'arsenal' ? whole : 0,
   };
 }
 
@@ -1911,6 +1948,13 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       const left = leftFor(1 - next, rate);
       return { text: `🔮 ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
     }
+    case 'arsenal':
+    case 'circle': {
+      const next = Math.max(0, units - Math.floor(units + 1e-9));
+      const left = leftFor(1 - next, rate);
+      const e = c.kind === 'arsenal' ? '⚜️' : '💠';
+      return { text: `${e} ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
+    }
     default:
       return null;
   }
@@ -1950,6 +1994,8 @@ const WORKER: Record<ControlKind, [string, string]> = {
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
   ossuary: ['fossoyeur', 'fossoyeurs'],
+  arsenal: ['armurier', 'armuriers'],
+  circle: ['invocateur', 'invocateurs'],
   mana: ['gardien', 'gardiens'],
   citadel: ['assaillant', 'assaillants'],
   objective: ['assaillant', 'assaillants'],
@@ -2061,6 +2107,24 @@ export function controlYieldCard(
         pct: next,
         gauge: idle ?? (left ? `Prochaine pierre dans ${left}` : null),
         rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} 🔮/jour · ${crew}`,
+        ready: false,
+        full: false,
+      };
+    }
+    case 'arsenal':
+    case 'circle': {
+      const next = Math.max(0, units - Math.floor(units + 1e-9));
+      const left = leftFor(1 - next, rate);
+      const arsenal = c.kind === 'arsenal';
+      return {
+        emoji: arsenal ? '⚒️' : '🌀',
+        value: `${Math.round(next * 100)} %`,
+        what: arsenal
+          ? 'du prochain sceau d’objet, versé directement'
+          : 'de la prochaine pierre de mana, versée directement',
+        pct: next,
+        gauge: idle ?? (left ? `Prochain dans ${left}` : null),
+        rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ${arsenal ? '⚜️' : '💠'}/jour · ${crew}`,
         ready: false,
         full: false,
       };
@@ -2868,9 +2932,11 @@ export function controlLootMessage(
   keys = 0,
   /** ⚱️ Pierres d'invocation de l'ossuaire. */
   summon = 0,
+  /** ⚒️ Sceaux d'objet de l'arsenal. */
+  gearSeals = 0,
 ): ExpeditionMessage | null {
   const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
-  if (!nSup && !runes && !keys && !summon) return null;
+  if (!nSup && !runes && !keys && !summon && !gearSeals) return null;
   const kind = p.control?.kind;
   const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
   const what = [
@@ -2878,6 +2944,7 @@ export function controlLootMessage(
     runes ? `${runes} rune${runes > 1 ? 's' : ''}` : '',
     keys ? `${keys} clé${keys > 1 ? 's' : ''} du Labyrinthe` : '',
     summon ? `${summon} pierre${summon > 1 ? 's' : ''} d’invocation` : '',
+    gearSeals ? `${gearSeals} sceau${gearSeals > 1 ? 'x' : ''} d’objet` : '',
   ]
     .filter(Boolean)
     .join(' et ');
