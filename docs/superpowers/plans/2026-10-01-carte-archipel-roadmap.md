@@ -321,5 +321,15 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       fourchette de l’étape 0, +7 à +41 %), mana **+25 %** de deux failles/jour (un peu au-dessus
       des +4 à +15 % de l’étape 0, mesurés à garnison 3 : 19 % à 3), pierres d’invocation
       **+30 %** d’une journée de donjons, **~0,7 run** de Labyrinthe/jour. Aucun réglage changé.
-      Reste : parties simulées complètes (durée de chaque île, défense).
+      **6c v1.27.2 — la durée de chaque île, simulée** (champions de référence du niveau du
+      joueur, nombre de champions du vrai tirage, joueur régulier 700 XP/jour) : niveau où la
+      forteresse affaiblie devient prenable à 70 % — île 1 **19** (~26 j) · île 2 **30** (~66 j)
+      · île 3 **48** (~167 j) · île 4 **61** (~269 j) · île 5 **81** (~474 j) ; joueur
+      tranquille 400 XP/j : 47 · 115 · 293 · 472 · 829 jours. Avant-postes et objectifs tombent
+      dès l’entrée de chaque île. ⚠️ Îles 4 et 5 : une armée de 12 champions prend la forteresse
+      dès le niveau d’entrée (un rang pèse peu en fin de partie, déjà vu à l’étape 0) — leur
+      durée est donc bornée par le NIVEAU, pas par la forteresse. Gardé par
+      `archipelFortress.test.ts` (8 champions au plafond la prennent affaiblie, 5 non, intacte
+      elle tient ; 3 mutations rouges). Reste : la défense des ports et lieux tenus sous les
+      armées des îles 4-5 (non simulée).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.
