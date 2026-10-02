@@ -4740,6 +4740,8 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🏝️ Ce que les assauts d'île viennent d'abattre (ids, ou « pacified ») : annoncé à l'écran
    *  par `flushIslandFx` une fois l'écriture faite. */
   const islandFx: string[] = [];
+  /** Les rapports déjà annoncés : on n'annonce jamais deux fois le même. */
+  const islandFxSeen = new Set<string>();
   function flushIslandFx(map: ExpeditionMap | null | undefined) {
     const isl = map?.archipel ? islandById(map.archipel.island) : null;
     for (const what of islandFx.splice(0)) {
@@ -4821,7 +4823,12 @@ export const useCharacterStore = defineStore('character', () => {
             const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
             advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
           }
-          islandFx.push(map.archipel?.pacifiedAt !== undefined && !wasPacified ? 'pacified' : id);
+          // ⚠️ UNE FOIS par rapport : un tick qui repart d'une ligne pas encore relue (écriture
+          // en vol) retraite le même rapport — sans ce garde, le bandeau « pris ! » bouclait.
+          if (!islandFxSeen.has(m.id)) {
+            islandFxSeen.add(m.id);
+            islandFx.push(map.archipel?.pacifiedAt !== undefined && !wasPacified ? 'pacified' : id);
+          }
         } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
         continue;
       }
