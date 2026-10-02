@@ -13,12 +13,12 @@ import {
   FORTRESS_ID,
   boardFromFortress,
   ensureIslandConquest,
-  heroAtFortress,
+  heroPosted,
   heroHeldOnMap,
   islandConquest,
   objectiveIdOf,
   razeIslandTarget,
-  recallFortressHero,
+  recallPostedHero,
   takeFortress,
 } from '@/lib/islandConquest';
 
@@ -40,7 +40,7 @@ describe('🏰 la forteresse prise se tient', () => {
     expect(c.owner).toBe('player');
     expect(c.garrison).toEqual(TEAM);
     expect(c.hero).toBe(true);
-    expect(heroAtFortress(m)).toBe(true);
+    expect(heroPosted(m)).toBe(true);
     expect(seatsOf('fortress')).toBe(Infinity);
     expect(controlFreeSeats(c)).toBe(Infinity);
     expect(militiaFreeSeats(c)).toBe(Infinity);
@@ -50,7 +50,7 @@ describe('🏰 la forteresse prise se tient', () => {
   it('sans le héros, il n’est pas posté', () => {
     const m = takeFortress(island1(), TEAM, false, NOW);
     expect(fort(m)!.control!.hero).toBeUndefined();
-    expect(heroAtFortress(m)).toBe(false);
+    expect(heroPosted(m)).toBe(false);
   });
   it('elle compte comme abattue, n’est jamais reprise et ne produit rien', () => {
     let m = island1();
@@ -81,8 +81,8 @@ describe('🏰 la forteresse prise se tient', () => {
 
 describe('🦸 le héros posté', () => {
   it('rappelé, il quitte la forteresse et marche jusqu’à la base', () => {
-    const m = recallFortressHero(takeFortress(island1(), TEAM, true, NOW), NOW, 90);
-    expect(heroAtFortress(m)).toBe(false);
+    const m = recallPostedHero(takeFortress(island1(), TEAM, true, NOW), NOW, 90);
+    expect(heroPosted(m)).toBe(false);
     expect(m.heroReturnAt).toBe(NOW + 90 * 60_000);
     expect(heroHeldOnMap(m, NOW + 89 * 60_000)).toBe(true);
     expect(heroHeldOnMap(m, NOW + 90 * 60_000)).toBe(false);
@@ -96,6 +96,6 @@ describe('🦸 le héros posté', () => {
     const c = fort(b.map)!.control!;
     expect(c.garrison).toEqual(['mil:1', 'mil:2']);
     expect(c.hero).toBeUndefined();
-    expect(heroAtFortress(b.map)).toBe(false);
+    expect(heroPosted(b.map)).toBe(false);
   });
 });

@@ -124,9 +124,12 @@ export interface ControlState {
   /** 🏝️ AVANT-POSTE de l'île (`islandConquest`) : posé sur la route base → forteresse ; les
    *  objectifs ne s'attaquent qu'une fois les deux avant-postes tenus. */
   outpost?: boolean;
-  /** 🏰 La FORTERESSE prise (`takeFortress`) : le héros y est POSTÉ — il défend la place,
-   *  n'est plus libre pour autre chose et embarque de là pour la traversée. */
+  /** 🧝 Le héros y est POSTÉ (étape 6 bis : n'importe quel lieu tenu, la forteresse comprise) —
+   *  il défend la place, n'est plus libre pour autre chose et se rappelle à la base. */
   hero?: boolean;
+  /** 🧝 Ce que vaut le héros posté au combat, FIGÉ à son départ (une reprise se résout
+   *  hors de l'app, sans son équipement du moment). Absent : il ne combat pas (rapports d'avant). */
+  heroUnit?: PostedHero;
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;
@@ -430,8 +433,19 @@ export interface CampSpec {
 /** ⚔️ Ce qu'un GROUPE a vécu sur un camp — porté par l'issue, recopié dans le rapport 📬 et
  *  encaissé par `expeClaim`. ⚠️ Absent des expéditions et rapports d'avant les camps de
  *  faction : tous les lecteurs le traitent comme optionnel. */
+/** 🧝 Le héros tel qu'il défend un lieu tenu : nom, niveau, combattant figé au départ. */
+export interface PostedHero {
+  name: string;
+  level: number;
+  combatant: Combatant;
+}
+
 export interface PartyResult {
   hero: boolean;
+  /** 🧝 Le héros RESTE en garnison si le point est pris (choisi à l'envoi), avec son
+   *  instantané de combat. */
+  heroStays?: boolean;
+  heroUnit?: PostedHero;
   /** 🏰 L'assaut d'un point de contrôle (`controlPoints.ts`) — ou sa DÉFENSE contre une
    *  reprise ennemie (`defense`). Absent des autres rapports. */
   controlId?: string;

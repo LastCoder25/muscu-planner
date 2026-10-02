@@ -403,12 +403,20 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
         reste (`withRelays`, v1.29.0). Plus de règle spéciale de forteresse (3 h / 2 h en
         relais) ni d'avant-postes désignés : tout lieu tenu en est un. Les objectifs s'ouvrent
         une fois **deux lieux fixes tenus**, n'importe lesquels (`OBJECTIVES_AFTER_HELD`).
-      - [ ] **Le rang des lieux fixes monte en s'éloignant du port** (bas rang de l'île près du
-        village, haut rang vers l'intérieur et la forteresse) : la progression se lit sur la
-        carte. Exception assumée à « la difficulté ne dépend pas de la distance », qui reste
-        vraie pour les lieux tirés.
-      - [ ] **Le héros peut tenir garnison partout** et partir d'un lieu tenu.
-      - [ ] Un blessé rentre se soigner au village ; la milice y est produite et se transfère.
+      - [x] **Le rang des LIEUX FIXES monte en s'éloignant du port d'arrivée** (bas de la
+        tranche de l'île près du port, haut vers l'intérieur et la forteresse) : la progression
+        se lit sur la carte (`islandControlLevel`, v1.30.0). ⚠️ **Les lieux fixes seulement**
+        (décision de l'utilisateur) : lieux tirés, objectifs, forteresse et assaillants gardent
+        leur règle. Un lieu repris garde le rang de ses assaillants. Jamais au-dessus du joueur.
+      - [x] **Le héros peut tenir garnison partout** (v1.30.0) : à l'envoi vers un lieu fixe,
+        « 🏰 le héros reste en garnison » ; seul, il reste d'office ; à la forteresse, toujours
+        (`heroStaysAt`). Il **défend** le lieu aux reprises avec son instantané de combat figé
+        au départ (`ControlState.heroUnit`), se rappelle depuis la fiche du lieu, et rentre à
+        pied s'il est délogé (jamais blessé hors d'un siège de la base). Il part de la base, mais
+        ses trajets partent du lieu tenu le plus proche (`withRelays`).
+      - [x] Un blessé rentre se soigner au village ; la milice y est produite et en part : sur
+        les îles 2 à 5, la base EST le village du port (l'île est dessinée devant lui), donc
+        l'infirmerie, la Caserne et les transferts y sont déjà (v1.29.0, rien à ajouter).
       - [ ] À trancher : 4 lieux fixes par île (socle + 1 spécialité) ; milice plafonnée à 3
         places sur 5 par lieu ; récompenses d'une nouvelle île (pas de tickets : règle 9).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

@@ -37,6 +37,7 @@ import {
   type ControlKind,
   type ControlState,
   type ExpeditionMap,
+  type PostedHero,
   type ExpeditionMessage,
   type Poi,
 } from './expedition';
@@ -726,6 +727,7 @@ export function takeFortress(
   garrison: readonly string[],
   hero: boolean,
   at: number,
+  heroUnit?: PostedHero,
 ): ExpeditionMap {
   const before = map.pois.find((p) => p.id === FORTRESS_ID);
   const razed = razeIslandTarget(map, FORTRESS_ID, at);
@@ -744,41 +746,50 @@ export function takeFortress(
       collectedAt: at,
       assault: false,
       ...(hero ? { hero: true } : {}),
+      ...(hero && heroUnit ? { heroUnit } : {}),
     },
   };
   if (!hero) delete held.control!.hero;
+  if (!hero || !heroUnit) delete held.control!.heroUnit;
   return { ...razed, pois: [...razed.pois, held] };
 }
 
-/** 🏰 Le héros est-il posté à la forteresse ? */
-export function heroAtFortress(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
-  return !!map?.pois.some((p) => heldFortress(p) && p.control!.hero);
+/** 🧝 Le lieu tenu où le héros est POSTÉ (étape 6 bis : n'importe lequel), s'il l'est. */
+export function heroPostOf(map: Pick<ExpeditionMap, 'pois'> | null | undefined): Poi | undefined {
+  return map?.pois.find(heroPostPoi);
+}
+const heroPostPoi = (p: Poi) => p.control?.owner === 'player' && !!p.control.hero;
+
+/** 🧝 Le héros est-il posté sur un lieu tenu ? */
+export function heroPosted(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
+  return !!heroPostOf(map);
 }
 
-/** 🏰 Le héros est-il retenu sur la carte (posté à la forteresse, ou en chemin vers la base
- *  après son rappel) ? */
+/** 🧝 Le héros est-il retenu sur la carte (posté, ou en chemin vers la base après son rappel
+ *  ou la perte de son lieu) ? */
 export function heroHeldOnMap(
   map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt'> | null | undefined,
   now: number,
 ): boolean {
-  return heroAtFortress(map) || (map?.heroReturnAt ?? 0) > now;
+  return heroPosted(map) || (map?.heroReturnAt ?? 0) > now;
 }
 
-/** 🏰 Rappelle le héros de la forteresse : il rentre à la base en `legMin` minutes. */
-export function recallFortressHero(map: ExpeditionMap, now: number, legMin: number): ExpeditionMap {
-  if (!heroAtFortress(map)) return map;
+/** 🧝 Le héros quitte son poste (rappel, ou lieu perdu) : il rentre à la base en `legMin`
+ *  minutes depuis `now`. */
+export function recallPostedHero(map: ExpeditionMap, now: number, legMin: number): ExpeditionMap {
+  if (!heroPosted(map)) return map;
   return {
     ...map,
     heroReturnAt: now + Math.max(0, Math.round(legMin)) * 60_000,
     pois: map.pois.map((p) => {
-      if (!heroFortressPoi(p)) return p;
-      const { hero: _h, ...c } = p.control!;
+      if (!heroPostPoi(p)) return p;
+      const { hero: _h, heroUnit: _u, ...c } = p.control!;
       void _h;
+      void _u;
       return { ...p, control: c };
     }),
   };
 }
-const heroFortressPoi = (p: Poi) => heldFortress(p) && !!p.control!.hero;
 
 /** ⛵ Ceux qui EMBARQUENT de la forteresse (elle est le port de l'île) : sa garnison de
  *  champions et le héros. Rend la carte sans eux et leurs ids (les miliciens restent). */
@@ -788,8 +799,9 @@ export function boardFromFortress(map: ExpeditionMap): { map: ExpeditionMap; ids
   const c = f.control!;
   const ids = c.garrison.filter((x) => !isMilitiaId(x));
   if (!ids.length && !c.hero) return { map, ids: [] };
-  const { hero: _h, ...rest } = c;
+  const { hero: _h, heroUnit: _u, ...rest } = c;
   void _h;
+  void _u;
   return {
     ids,
     map: {

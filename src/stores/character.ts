@@ -158,8 +158,9 @@ import {
   isIslandTargetId,
   razeIslandTarget,
   takeFortress,
-  heroAtFortress,
-  recallFortressHero,
+  heroPosted,
+  heroPostOf,
+  recallPostedHero,
   boardFromFortress,
 } from '@/lib/islandConquest';
 import {
@@ -296,6 +297,7 @@ import {
 } from '@/lib/advGear';
 import {
   partySendBlocker,
+  heroStaysAt,
   suppliesBlocker,
   supplyTarget,
   PARTY_SEND_BLOCK_LABEL,
@@ -2913,7 +2915,7 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🏰 Le héros posté à la forteresse, ou rappelé et pas encore rentré (`heroReturnAt` est
    *  retiré par `settleHome` à son arrivée). */
   function heroOnMap(map: ExpeditionMap | null | undefined): boolean {
-    return heroAtFortress(map) || map?.heroReturnAt !== undefined;
+    return heroPosted(map) || map?.heroReturnAt !== undefined;
   }
 
   /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
@@ -3652,6 +3654,8 @@ export const useCharacterStore = defineStore('character', () => {
       stayIds?: string[];
       /** 🏰 SORTIE : l'équipe part de ce point fixe tenu (sa garnison) et y revient. */
       fromControlId?: string;
+      /** 🧝 Le héros reste en garnison si le point est pris (étape 6 bis). */
+      heroStays?: boolean;
     },
   ): Promise<string | null> {
     // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
@@ -3753,12 +3757,26 @@ export const useCharacterStore = defineStore('character', () => {
       stayIds: opts.stayIds,
     });
     if (!withSupplies) return PARTY_SEND_BLOCK_LABEL.notTarget;
+    // 🧝 Le héros reste-t-il en garnison si le point est pris ? Son instantané de combat part
+    // avec le rapport : c'est lui qui défendra le lieu, hors de l'app.
+    const heroStays = !!hero && heroStaysAt(poi, escort.length, !!opts.heroStays);
+    const outcome =
+      heroStays && withSupplies.party
+        ? {
+            ...withSupplies,
+            party: {
+              ...withSupplies.party,
+              heroStays: true,
+              heroUnit: { name: hero.name, level: hero.level, combatant: hero.combatant },
+            },
+          }
+        : withSupplies;
     const trip0 = startParty(
       { poi: meet.poi, hero, seed, champions: escort.length },
       now,
       leg,
       // 🧭 Le rapport dira d'où chacun est parti : où le renvoyer une fois guéri.
-      withOrigins(withSupplies, partyOrigins([{ ids: opts.escortIds, origin }])),
+      withOrigins(outcome, partyOrigins([{ ids: opts.escortIds, origin }])),
     );
     // 🏰 Assaut d'un point fixe : si on le prend, seuls le héros et les champions en trop
     // rentrent — à LEUR pas, souvent plus vif que celui de toute l'équipe. `returnAt` garde
@@ -3766,8 +3784,8 @@ export const useCharacterStore = defineStore('character', () => {
     const seats = poi.type === 'control' && poi.control ? seatsOf(poi.control.kind) : 0;
     const stayers = new Set(seats ? assaultStayers(opts.escortIds, opts.stayIds, seats) : []);
     const back = escort.filter((a) => !stayers.has(a.id));
-    // 🏰 Prise, la forteresse garde aussi le héros : il ne rentre pas.
-    const heroBack = !!hero && poi.control?.kind !== 'fortress';
+    // 🧝 Prise, le lieu garde le héros s'il y reste (la forteresse toujours) : il ne rentre pas.
+    const heroBack = !!hero && !heroStays;
     const backLeg = (p: Poi) =>
       partyLegMin(p, back, {
         hero: heroBack,
@@ -4767,7 +4785,13 @@ export const useCharacterStore = defineStore('character', () => {
           const wasPacified = map.archipel?.pacifiedAt !== undefined;
           // 🏰 La forteresse se TIENT (2026-10-02) : toute l'équipe y reste, le héros aussi.
           if (id === FORTRESS_ID) {
-            map = takeFortress(map, m.party!.escort, !!m.party!.hero, m.resolvedAt);
+            map = takeFortress(
+              map,
+              m.party!.escort,
+              !!m.party!.hero,
+              m.resolvedAt,
+              m.party!.heroUnit,
+            );
             const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
             advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
           } else map = razeIslandTarget(map, id, m.resolvedAt);
@@ -4779,7 +4803,9 @@ export const useCharacterStore = defineStore('character', () => {
         // 🏰 Ceux qu'on a choisis pour rester (sinon l'escorte), coupés aux places du point :
         // on relit la garnison POSÉE, sinon un champion en trop serait « posté » hors garnison.
         const stay = m.party!.stay?.length ? m.party!.stay : m.party!.escort;
-        map = captureControl(map, id, stay, m.resolvedAt, activeDays7);
+        // 🧝 Le héros qui y reste, avec son instantané (étape 6 bis).
+        const heroUnit = m.party!.heroStays ? m.party!.heroUnit : undefined;
+        map = captureControl(map, id, stay, m.resolvedAt, activeDays7, heroUnit);
         const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
         advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
       } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
@@ -4879,21 +4905,23 @@ export const useCharacterStore = defineStore('character', () => {
       const kit = escortKitOf(cur);
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
+      // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
+      const heroUnit = p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
-        [...partyAllies(escort, kit, null), ...militia],
+        [...partyAllies(escort, kit, heroUnit), ...militia],
         playerLevel,
       );
       const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
-        escort.length || militia.length
+        escort.length || militia.length || heroUnit
           ? resolveCamp({
               poi: foe,
               spec: force,
               escort,
               road: kit,
-              hero: null,
+              hero: heroUnit,
               seed,
               playerLevel,
               pantheonLevel: pantheonLevel.value,
@@ -4958,6 +4986,10 @@ export const useCharacterStore = defineStore('character', () => {
       // `settleReturns` les rend à la base à leur arrivée — plus en un instant).
       const dead = o?.party?.militiaLost ?? [];
       if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
+      // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel). Il n'est
+      // jamais blessé hors d'un siège de la base.
+      if (!held && p.control!.hero)
+        map = recallPostedHero(map, at, heroHomeLegMin(cur, map, p, at));
       map = held
         ? holdControl(map, p.id, at, activeDays7)
         : loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction });
@@ -5360,19 +5392,25 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  /** 🏰 RAPPELLE le héros posté à la forteresse : il rentre à la base, à son pas. */
-  async function recallHeroFromFortress(userId: string, now: number): Promise<void> {
-    await writesSettled();
-    const cur = row.value;
-    const map = cur?.expedition_map;
-    const poi = map?.pois.find((p) => p.id === FORTRESS_ID);
-    if (!cur || !map || !poi || !heroAtFortress(map)) return;
-    const leg = partyLegMin(poi, [], {
+  /** 🧝 Le trajet du héros seul depuis un lieu jusqu'à la base, à son pas. */
+  function heroHomeLegMin(cur: CharacterRow, map: ExpeditionMap, poi: Poi, now: number): number {
+    return partyLegMin(poi, [], {
       hero: true,
       travelMult: travelTimeMult(cur.buildings) * controlTravelMult(map, now),
       gearSpeed: 0,
     });
-    await persist(userId, { expedition_map: recallFortressHero(map, now, leg) });
+  }
+
+  /** 🧝 RAPPELLE le héros de son poste (n'importe quel lieu tenu) : il rentre à la base. */
+  async function recallHeroFromPost(userId: string, now: number): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    const poi = heroPostOf(map);
+    if (!cur || !map || !poi) return;
+    await persist(userId, {
+      expedition_map: recallPostedHero(map, now, heroHomeLegMin(cur, map, poi, now)),
+    });
   }
 
   async function releaseControlChampions(
@@ -6144,7 +6182,7 @@ export const useCharacterStore = defineStore('character', () => {
     collectControlPoint,
     recallControl,
     releaseControlChampions,
-    recallHeroFromFortress,
+    recallHeroFromPost,
     reinforceControlPoint,
     plannedList,
     scheduleReinforcement,

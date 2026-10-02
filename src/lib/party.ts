@@ -253,8 +253,9 @@ export function partySendBlocker(
     if (poi.control.kind === 'fortress' && poi.control.locked) return 'fortressLocked';
     // 🏝️ Les objectifs, eux, attendent que les deux avant-postes soient tenus.
     if (poi.control.kind === 'objective' && poi.control.locked) return 'objectiveLocked';
-    // 🏯🏝️ Ce qu'on abat ne se tient pas : le héros seul peut l'attaquer.
-    if (escortCount <= 0 && !RAZE_KINDS.has(poi.control.kind)) return 'controlEmpty';
+    // 🏯🏝️ Ce qu'on abat ne se tient pas : le héros seul peut l'attaquer. 🧝 Un point ordinaire
+    // se tient par au moins un champion OU le héros, qui y reste alors (étape 6 bis).
+    if (escortCount <= 0 && !hero && !RAZE_KINDS.has(poi.control.kind)) return 'controlEmpty';
   }
   // 💎 Un filon : 1 à 3 CHAMPIONS, jamais le héros (décision de l'utilisateur).
   if (poi.type === 'vein') {
@@ -272,13 +273,31 @@ export function partySendBlocker(
   if (winChance !== null && winChance <= 0 && !canWeaken(poi)) return 'hopeless';
   return null;
 }
+/** 🧝 Le héros peut-il RESTER en garnison sur ce lieu s'il est pris ? Tout point fixe qui se
+ *  tient (la forteresse comprise), jamais ce qu'on abat (citadelle, objectif). */
+export function heroCanStay(poi: Pick<Poi, 'type' | 'control'> | null | undefined): boolean {
+  const c = poi?.type === 'control' ? poi.control : undefined;
+  return !!c && c.owner === 'enemy' && (c.kind === 'fortress' || !RAZE_KINDS.has(c.kind));
+}
+
+/** 🧝 Le héros reste-t-il ? À la forteresse toujours (elle le garde pour la traversée) ; seul,
+ *  sans champion, toujours (il faut quelqu'un pour tenir) ; sinon, selon le choix à l'envoi. */
+export function heroStaysAt(
+  poi: Pick<Poi, 'type' | 'control'> | null | undefined,
+  escortCount: number,
+  chosen: boolean,
+): boolean {
+  if (!heroCanStay(poi)) return false;
+  return poi!.control!.kind === 'fortress' || escortCount <= 0 || chosen;
+}
+
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   hopeless: 'perdu d’avance — aucun d’eux n’en reviendrait vainqueur',
   tooLate: 'trop tard — l’armée atteindra sa cible avant ton équipe',
   notTarget: 'on n’envoie pas d’équipe sur ce lieu',
   empty: 'l’équipe est vide',
   tooMany: 'trop de champions pour ton Panthéon',
-  controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
+  controlEmpty: 'il faut au moins un champion ou le héros pour occuper le point',
   citadelHidden:
     'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
   citadelResting: 'cette citadelle vient d’être abattue — elle se reconstruit pendant sa trêve',

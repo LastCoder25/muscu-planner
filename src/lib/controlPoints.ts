@@ -63,6 +63,7 @@ import {
   type ControlKind,
   type ControlState,
   type ExpeditionMap,
+  type PostedHero,
   type ExpeditionMessage,
   type Poi,
 } from './expedition';
@@ -1281,6 +1282,8 @@ export function captureControl(
   garrison: readonly string[],
   at: number,
   activeDays7: number,
+  /** 🧝 Le héros qui RESTE en garnison (étape 6 bis), avec son instantané de combat. */
+  hero?: PostedHero,
 ): ExpeditionMap {
   return withControl(map, id, (p) => ({
     ...p,
@@ -1288,6 +1291,7 @@ export function captureControl(
       ...p.control!,
       owner: 'player',
       garrison: garrison.slice(0, seatsOf(p.control!.kind)),
+      ...(hero ? { hero: true, heroUnit: hero } : {}),
       since: at,
       collectedAt: at,
       // 🏯 Jamais pendant la trêve d'une citadelle abattue ; 🌫️ plus lent si elle est cachée.

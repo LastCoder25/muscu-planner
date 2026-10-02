@@ -17,6 +17,8 @@ import {
   partyHeroBlocker,
   partyLegMin,
   partySendBlocker,
+  heroCanStay,
+  heroStaysAt,
   interceptLeg,
   interceptTooLate,
   meetAll,
@@ -124,10 +126,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyEscort = ref<string[]>([]);
   /** 🏰 Qui reste en garnison sur un point de contrôle (le choix le plus récent d'abord). */
   const partyStay = ref<string[]>([]);
+  /** 🧝 Le héros reste-t-il en garnison si le point est pris (étape 6 bis) ? */
+  const partyHeroStay = ref(false);
   watch(selected, () => {
     partyHero.value = false;
     partyEscort.value = [];
     partyStay.value = [];
+    partyHeroStay.value = false;
   });
   /** ⚠️ Une CHAÎNE (point → ids prêts) recalculée au tick, qui ne réveille les listes que si
    *  quelqu'un change d'état — même principe que `freeKey` de la page. « Prêt à sortir » est
@@ -585,8 +590,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
       return partyLeg.value;
     const stay = new Set(stayIds.value);
     const back = partyAdvs.value.filter((a) => !stay.has(a.id));
-    // 🏰 Prise, la forteresse garde aussi le héros : il ne rentre pas.
-    const heroBack = partyHeroOn.value && selected.value.control?.kind !== 'fortress';
+    // 🧝 Prise, le lieu garde le héros s'il y reste (la forteresse toujours) : il ne rentre pas.
+    const heroBack = partyHeroOn.value && !heroStays.value;
     if (!back.length && !heroBack) return 0;
     const legOf = (p: Poi) =>
       partyLegMin(p, back, {
@@ -788,6 +793,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             supplies: activeSupplies.value,
             ...(stayCap.value ? { stayIds: stayIds.value } : {}),
             ...(originPoi.value ? { fromControlId: originPoi.value.id } : {}),
+            ...(heroStays.value ? { heroStays: true } : {}),
           });
       if (!refused) selected.value = null;
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
@@ -847,6 +853,24 @@ export function useExpeditionParty(ctx: PartyCtx) {
       ]),
     );
   });
+  /** 🧝 Le héros reste-t-il ? La MÊME règle que le store (`heroStaysAt`). */
+  const heroStays = computed(
+    () =>
+      !combined.value &&
+      partyHeroOn.value &&
+      heroStaysAt(selected.value, partyAdvs.value.length, partyHeroStay.value),
+  );
+  /** 🧝 Le choix ne se pose que sur un point ordinaire avec des champions : à la forteresse, ou
+   *  seul, le héros reste d'office. */
+  const heroStayChoice = computed(
+    () =>
+      !combined.value &&
+      partyHeroOn.value &&
+      heroCanStay(selected.value) &&
+      selected.value?.control?.kind !== 'fortress' &&
+      partyAdvs.value.length > 0,
+  );
+
   /** Le choix n'a de sens que si l'équipe dépasse les places. */
   const stayChoice = computed(() => stayCap.value > 0 && partyAdvs.value.length > stayCap.value);
   function toggleStay(id: string) {
@@ -873,6 +897,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
     stayIds,
     stayChoice,
     toggleStay,
+    partyHeroStay,
+    heroStays,
+    heroStayChoice,
     partyHero,
     partyEscort,
     partyAdvs,

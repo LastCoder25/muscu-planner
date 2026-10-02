@@ -963,6 +963,22 @@
               <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
             </p>
             <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
+            <!-- 🧝 Le héros peut tenir garnison partout (étape 6 bis) : il défend le lieu, ne
+               rentre pas, et se rappelle depuis la fiche du lieu. -->
+            <button
+              v-if="heroStayChoice"
+              type="button"
+              class="stay-chip hero-stay"
+              :class="{ on: partyHeroStay }"
+              :aria-pressed="partyHeroStay"
+              @click="partyHeroStay = !partyHeroStay"
+            >
+              {{ partyHeroStay ? '🏰' : '↩' }} Le héros
+              {{ partyHeroStay ? 'reste en garnison' : 'rentre après la prise' }}
+            </button>
+            <p v-else-if="heroStays && !partyAdvs.length" class="car-cap">
+              🧝 Seul, le héros reste tenir le lieu s’il le prend.
+            </p>
             <div v-if="stayChoice" class="stay-pick">
               <p class="car-cap">
                 🏰 <b>Qui reste ?</b> {{ stayIds.length }}/{{ stayCap }} en garnison · les autres
@@ -1224,7 +1240,7 @@
 
 <script setup lang="ts">
 import {
-  heroAtFortress,
+  heroPostOf,
   islandConquest,
   islandTargetLabel,
   isIslandTargetId,
@@ -2257,7 +2273,7 @@ async function recallHero() {
   if (!uid || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    await char.recallHeroFromFortress(uid, Date.now());
+    await char.recallHeroFromPost(uid, Date.now());
     $q.notify({ type: 'positive', message: '🦸 Ton héros rentre à la base.' });
   } finally {
     ctlBusy.value = false;
@@ -3955,8 +3971,9 @@ const baseChamps = computed(() => freeSorted.value);
 const heroBaseStatus = computed(() => {
   if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const map = char.row?.expedition_map;
-  if (heroAtFortress(map)) return '🏰 posté à la forteresse';
-  if (map?.heroReturnAt !== undefined) return '🧭 rentre de la forteresse';
+  const post = heroPostOf(map);
+  if (post) return `🏰 posté : ${poiLabel(post)}`;
+  if (map?.heroReturnAt !== undefined) return '🧭 rentre à la base';
   if (char.heroEngaged) return '🧭 en expédition';
   return '✅ à la base — il part depuis la fiche d’un lieu';
 });
@@ -4597,6 +4614,9 @@ const {
   stayIds,
   stayChoice,
   toggleStay,
+  partyHeroStay,
+  heroStays,
+  heroStayChoice,
   combined,
   wingPlan,
   combinedBlock,

@@ -327,15 +327,16 @@ describe('🏰 qui peut partir, et comment', () => {
     expect(poiOffers(marching, opts).party).toBe(true);
     expect(partySendBlocker(marching, 1, false, 20, 0.5)).toBeNull();
   });
-  it('autant de champions qu’on veut, héros compris — au moins un champion pour occuper', () => {
+  it('autant de champions qu’on veut, héros compris — un champion ou le héros pour occuper', () => {
     // Plus de plafond propre au point : celui du Panthéon seul.
     expect(partyCapFor(20, enemy, false)).toBe(20);
     expect(partyCapFor(20, enemy, true)).toBe(20);
     expect(partySendBlocker(enemy, 8, false, 20, 0.5)).toBeNull();
     expect(partySendBlocker(enemy, 6, true, 20, 0.5)).toBeNull();
     expect(partySendBlocker(enemy, 21, false, 20, 0.5)).toBe('tooMany');
-    // Le héros seul ne peut pas l'occuper : il rentre toujours.
-    expect(partySendBlocker(enemy, 0, true, 20, 0.5)).toBe('controlEmpty');
+    // 🧝 Le héros seul peut l'occuper (étape 6 bis) : il y reste. Personne, non.
+    expect(partySendBlocker(enemy, 0, true, 20, 0.5)).toBeNull();
+    expect(partySendBlocker(enemy, 0, false, 20, 0.5)).toBe('controlEmpty');
     expect(partySendBlocker(owned, 1, false, 20, 0.5)).toBe('controlHeld');
     expect(partyHeroBlocker({ onExpedition: false, healMs: 0, outpost: true })).toBeNull();
   });
