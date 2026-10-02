@@ -275,15 +275,22 @@ export function partySendBlocker(
 }
 /** 🧝 Le héros peut-il RESTER en garnison sur ce lieu s'il est pris ? Tout point fixe qui se
  *  tient (la forteresse comprise), jamais ce qu'on abat (citadelle, objectif). */
-export function heroCanStay(poi: Pick<Poi, 'type' | 'control'> | null | undefined): boolean {
+export function heroCanStay(poi: Pick<Poi, 'id' | 'type' | 'control'> | null | undefined): boolean {
   const c = poi?.type === 'control' ? poi.control : undefined;
-  return !!c && c.owner === 'enemy' && (c.kind === 'fortress' || !RAZE_KINDS.has(c.kind));
+  // 🏳️ Les objectifs d'une île se tiennent aussi (la brèche sans fin, elle, s'abat).
+  return (
+    !!c &&
+    c.owner === 'enemy' &&
+    (c.kind === 'fortress' ||
+      (c.kind === 'objective' && poi!.id !== 'isl_endless') ||
+      !RAZE_KINDS.has(c.kind))
+  );
 }
 
 /** 🧝 Le héros reste-t-il ? À la forteresse toujours (elle le garde pour la traversée) ; seul,
  *  sans champion, toujours (il faut quelqu'un pour tenir) ; sinon, selon le choix à l'envoi. */
 export function heroStaysAt(
-  poi: Pick<Poi, 'type' | 'control'> | null | undefined,
+  poi: Pick<Poi, 'id' | 'type' | 'control'> | null | undefined,
   escortCount: number,
   chosen: boolean,
 ): boolean {

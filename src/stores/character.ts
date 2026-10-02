@@ -158,6 +158,10 @@ import {
   isIslandTargetId,
   razeIslandTarget,
   takeFortress,
+  takeObjective,
+  regainIslandTarget,
+  redirectIslandAttacks,
+  ENDLESS_ID,
   heroPosted,
   heroPostOf,
   recallPostedHero,
@@ -4745,7 +4749,7 @@ export const useCharacterStore = defineStore('character', () => {
         useGameFx().celebrate({
           kind: 'unlock',
           emoji: isl.objectiveEmoji,
-          title: `${isl.objective} abattu !`,
+          title: `${isl.objective} pris !`,
           subtitle: 'Un pas vers la forteresse portuaire',
           rarity: 'epic',
         });
@@ -4794,7 +4798,15 @@ export const useCharacterStore = defineStore('character', () => {
             );
             const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
             advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
-          } else map = razeIslandTarget(map, id, m.resolvedAt);
+          } else if (id === ENDLESS_ID) map = razeIslandTarget(map, id, m.resolvedAt);
+          else {
+            // 🏳️ Un objectif pris SE TIENT (étape 6 bis) : ceux qu'on a choisis y restent.
+            const stay = m.party!.stay?.length ? m.party!.stay : m.party!.escort;
+            const heroUnit = m.party!.heroStays ? m.party!.heroUnit : undefined;
+            map = takeObjective(map, id, stay, m.resolvedAt, heroUnit);
+            const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
+            advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
+          }
           islandFx.push(map.archipel?.pacifiedAt !== undefined && !wasPacified ? 'pacified' : id);
         } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
         continue;
@@ -4857,6 +4869,8 @@ export const useCharacterStore = defineStore('character', () => {
         ).map;
       }
     }
+    // 🎯 Sur une île, la forteresse vise d'abord les objectifs qu'on lui a pris.
+    settled = redirectIslandAttacks(settled, now);
     const due = dueRetakes(settled, now);
     if (!due.length) {
       if (settled !== cur.expedition_map) {
@@ -4992,7 +5006,10 @@ export const useCharacterStore = defineStore('character', () => {
         map = recallPostedHero(map, at, heroHomeLegMin(cur, map, p, at));
       map = held
         ? holdControl(map, p.id, at, activeDays7)
-        : loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction });
+        : regainIslandTarget(
+            loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction }),
+            p.id,
+          );
       // 🏠 Délogée, la garnison RENTRE À PIED à la base (le trajet d'un rappel) : elle est en
       // route jusqu'à son arrivée, et c'est là, à l'infirmerie, que ses soins commencent
       // (`partyClaimRoster` part de `busyUntil`). Les miliciens engagés sont morts.

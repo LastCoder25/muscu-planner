@@ -23,9 +23,17 @@
  */
 import { activeIsland, islandPacified, ISLANDS, type Island } from './archipelago';
 import { buildingType, collectable, type BuildResource, type Building } from './buildings';
-import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { mulberry32, seedOf } from './combat';
-import { ALL_CONTROL_KINDS, CONTROL, bankAt, controlSpot } from './controlPoints';
+import {
+  ALL_CONTROL_KINDS,
+  CONTROL,
+  attackSlow,
+  bankAt,
+  controlSpot,
+  mapHarass,
+  retakeDelayMs,
+  seatsOf,
+} from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { islandPoint } from './islandShape';
 import { isMilitiaId } from './militia';
@@ -122,11 +130,21 @@ export function raiseDead(map: ExpeditionMap, now: number): ExpeditionMap {
   const razed = a.razedAt ?? {};
   const up = Object.keys(razed).filter((id) => gone.has(id) && razed[id]! + RISE.riseMs <= now);
   if (!up.length) return map;
-  const back = new Set(up);
+  // 🏳️ Un cimetière TENU ne se relève pas tout seul : ses morts ATTAQUENT la garnison à
+  // l'heure où il se serait relevé (la reprise décide).
+  const held = new Set(map.pois.filter((p) => heldIslandTarget(p)).map((p) => p.id));
+  const back = new Set(up.filter((id) => !held.has(id)));
   const razedAt = { ...razed };
   for (const id of up) delete razedAt[id];
+  const pois = map.pois.map((p) => {
+    if (!held.has(p.id) || !up.includes(p.id)) return p;
+    const t = razed[p.id]! + RISE.riseMs;
+    const cur = p.control!.attackAt ?? Infinity;
+    return { ...p, control: { ...p.control!, attackAt: Math.min(cur, t) } };
+  });
   return {
     ...map,
+    pois,
     archipel: { ...a, destroyed: (a.destroyed ?? []).filter((x) => !back.has(x)), razedAt },
   };
 }
@@ -355,14 +373,9 @@ export function objectiveSize(i: number, n: number): number {
   return i < Math.ceil(n / 2) ? ISLAND_CONQUEST.firstSize : ISLAND_CONQUEST.lastSize;
 }
 
-/** Le premier niveau du rang au-dessus du plafond de l'île (borné au dernier rang). */
-function rankAbove(cap: number): number {
-  const top = rankStartLevel(CHARACTER_RANKS.length - 1);
-  return Math.min(top, cap + (rankStartLevel(1) - 1));
-}
-
-/** ⚔️ La forteresse selon les objectifs abattus (`down` sur `n`) : niveau, troupe et verrou.
- *  Elle redescend LINÉAIREMENT d'un rang au-dessus du plafond (troupe 12) au plafond (8). */
+/** ⚔️ La forteresse selon les objectifs pris (`down` sur `n`) : niveau, troupe et verrou.
+ *  🏰 Son NIVEAU est le maximum de la carte de l'île (décision de l'utilisateur, 2026-10-02) ;
+ *  sa troupe redescend LINÉAIREMENT de 12 à 8 champions de référence. */
 export function fortressForce(
   isl: Pick<Island, 'maxLevel' | 'objectives'>,
   down: number,
@@ -371,10 +384,9 @@ export function fortressForce(
 ): { level: number; size: number; locked: boolean } {
   const n = Math.max(1, isl.objectives);
   const w = Math.min(1, Math.max(0, down) / n);
-  const hi = rankAbove(isl.maxLevel);
   const { fortressIntactSize: big, fortressWeakSize: small } = ISLAND_CONQUEST;
   return {
-    level: Math.round(hi - (hi - isl.maxLevel) * w),
+    level: isl.maxLevel,
     size: Math.round((big - (big - small) * w + Math.max(0, bonus)) * 100) / 100,
     locked: down < Math.min(ISLAND_CONQUEST.unlockAfter, n),
   };
@@ -562,7 +574,7 @@ export function ensureIslandConquest(
   // 1. Ce qui ne doit plus être là (île abattue, mode quitté). ⚠️ La forteresse PRISE
   // reste : elle se tient (`takeFortress`).
   const stays = (p: Poi) =>
-    !isIslandTargetId(p.id) || wantIds.has(p.id) || (!!isl && heldFortress(p));
+    !isIslandTargetId(p.id) || wantIds.has(p.id) || (!!isl && heldIslandTarget(p));
   if (pois.some((p) => !stays(p))) {
     pois = pois.filter(stays);
     changed = true;
@@ -716,6 +728,95 @@ function heldFortress(p: Poi): boolean {
   return p.id === FORTRESS_ID && p.control?.owner === 'player';
 }
 
+/** 🏝️ Un objectif ou la forteresse TENU par le joueur (étape 6 bis : ils se tiennent). */
+export function heldIslandTarget(p: Poi): boolean {
+  return isIslandTargetId(p.id) && p.id !== ENDLESS_ID && p.control?.owner === 'player';
+}
+
+/**
+ * 🏳️ UN OBJECTIF PRIS SE TIENT (décision de l'utilisateur, 2026-10-02) : il compte comme
+ * « tombé » pour la forteresse (verrou, troupe) et la pacification, mais reste sur la carte
+ * avec sa garnison — et la forteresse vient le RÉCUPÉRER en priorité (`redirectIslandAttacks`).
+ * Il ne produit rien. Repris par l'ennemi (`regainIslandTarget`), il recompte comme debout.
+ */
+export function takeObjective(
+  map: ExpeditionMap,
+  id: string,
+  garrison: readonly string[],
+  at: number,
+  hero?: PostedHero,
+): ExpeditionMap {
+  const before = map.pois.find((p) => p.id === id);
+  if (id === FORTRESS_ID || id === ENDLESS_ID) return map;
+  const razed = razeIslandTarget(map, id, at);
+  if (!before?.control || razed === map) return razed;
+  const { attackAt: _a, raidAt: _r, locked: _l, hero: _h, heroUnit: _u, ...rest } = before.control;
+  void _a;
+  void _r;
+  void _l;
+  void _h;
+  void _u;
+  const held: Poi = {
+    ...before,
+    control: {
+      ...rest,
+      owner: 'player',
+      garrison: [...new Set(garrison)].slice(0, seatsOf('objective')),
+      since: at,
+      collectedAt: at,
+      assault: false,
+      ...(hero ? { hero: true, heroUnit: hero } : {}),
+    },
+  };
+  return { ...razed, pois: [...razed.pois, held] };
+}
+
+/** ⚔️ Un objectif tenu REPRIS par l'ennemi : il recompte comme debout (la forteresse se
+ *  reverrouille et se renforce s'il le faut). Rend la MÊME carte si rien ne change. */
+export function regainIslandTarget(map: ExpeditionMap, id: string): ExpeditionMap {
+  const a = map.archipel;
+  if (!a?.destroyed?.includes(id) || id === FORTRESS_ID || id === ENDLESS_ID) return map;
+  const razedAt = { ...(a.razedAt ?? {}) };
+  delete razedAt[id];
+  return {
+    ...map,
+    archipel: { ...a, destroyed: a.destroyed.filter((x) => x !== id), razedAt },
+  };
+}
+
+/**
+ * 🎯 LA FORTERESSE VISE D'ABORD CE QU'ON LUI A PRIS (décision de l'utilisateur, 2026-10-02) :
+ * tant qu'on tient un objectif de l'île (pacifiée exceptée), une attaque échue sur un autre
+ * lieu tenu se reporte sur l'objectif tenu le PLUS PROCHE (son attaque est avancée à cet
+ * instant) et l'attaque du lieu épargné est reprogrammée. La base n'est pas concernée (ses
+ * sièges suivent leur propre règle). Rend la MÊME carte si rien ne change.
+ */
+export function redirectIslandAttacks(map: ExpeditionMap, now: number): ExpeditionMap {
+  if (!activeIsland(map) || islandPacified(map)) return map;
+  const objectives = map.pois.filter((p) => heldIslandTarget(p) && p.control!.kind === 'objective');
+  if (!objectives.length) return map;
+  let pois = map.pois;
+  for (const p of map.pois) {
+    const c = p.control;
+    if (!c || c.owner !== 'player' || isIslandTargetId(p.id)) continue;
+    if (c.attackAt === undefined || c.attackAt > now) continue;
+    const at = c.attackAt;
+    const target = objectives.reduce((best, o) =>
+      Math.hypot(o.x - p.x, o.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y) ? o : best,
+    );
+    const next = at + retakeDelayMs(p.id, at, mapHarass(map, at), attackSlow(map, c.kind));
+    pois = pois.map((q) => {
+      if (q.id === p.id) return { ...q, control: { ...q.control!, attackAt: next } };
+      if (q.id === target.id) {
+        const cur = q.control!.attackAt ?? Infinity;
+        return { ...q, control: { ...q.control!, attackAt: Math.min(cur, at) } };
+      }
+      return q;
+    });
+  }
+  return pois === map.pois ? map : { ...map, pois };
+}
+
 /**
  * 🏰 LA FORTERESSE PRISE (décisions de l'utilisateur, 2026-10-02) : elle n'est plus rasée,
  * elle se TIENT. Toute l'équipe gagnante y reste — garnison SANS LIMITE, comme la base — et le
@@ -822,7 +923,7 @@ export function islandTargetLabel(
 ): { title: string; detail: string } | null {
   const st = islandConquest(map);
   const p = map?.pois.find((x) => x.id === id);
-  if (!st || !p?.control || !isIslandTargetId(id) || heldFortress(p)) return null;
+  if (!st || !p?.control || !isIslandTargetId(id) || heldIslandTarget(p)) return null;
   const { island: isl, objectivesDown: down, objectivesTotal: n } = st;
   if (id === ENDLESS_ID) {
     const tier = map!.archipel?.endless?.tier ?? 0;
@@ -839,17 +940,17 @@ export function islandTargetLabel(
   const riseAt = rise && isKey ? nextRiseAt(map!) : null;
   if (p.control.kind === 'objective')
     return {
-      title: `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} abattus`,
+      title: `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} pris`,
       detail:
         `troupe de ${p.control.size} champions de référence · ` +
         (rise && !isKey
-          ? 'abattu, il se relève 3 jours plus tard tant que la citadelle des morts tient'
+          ? 'pris, il se tient — mais ses morts l’attaquent 3 jours plus tard tant que la citadelle des morts tient'
           : rise
-            ? 'abattue, plus aucun cimetière ne se relève' +
+            ? 'prise, plus aucun cimetière ne se relève' +
               (riseAt
                 ? ` (le prochain se relève ${new Date(riseAt).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })})`
                 : '')
-            : 'abattu, il ne revient pas') +
+            : 'pris, il se tient : la forteresse viendra le reprendre EN PRIORITÉ, avant tes lieux fixes') +
         (PILLAGE_ISLANDS.has(isl.id)
           ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
           : NEST.islands.has(isl.id)
@@ -859,7 +960,7 @@ export function islandTargetLabel(
               : WARLORD.islands.has(isl.id)
                 ? ' · tant qu’il tient, son armée mobile frappe ton lieu tenu le MOINS défendu (en moyenne toutes les 36 h, plus souvent avec plusieurs camps debout) et ses convois de ravitaillement marchent sur la forteresse (chacun arrivé la renforce : intercepte-les)'
                 : ' · tant qu’il tient, il attaque tes lieux fixes') +
-        ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} abattus ouvrent la forteresse, tous l’affaiblissent au plus bas.`,
+        ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} pris ouvrent la forteresse, tous l’affaiblissent au plus bas (repris, ils la reverrouillent).`,
     };
   const bonus = convoyBonus(map!);
   const f = fortressForce(isl, down, bonus);
@@ -870,10 +971,10 @@ export function islandTargetLabel(
     detail:
       `troupe de ${f.size} champions de référence` +
       (down < n
-        ? ` · chaque objectif abattu l’affaiblit (${down}/${n})`
+        ? ` · chaque objectif pris l’affaiblit (${down}/${n})`
         : ' · affaiblie au plus bas') +
       (bonus ? ` · renforcée par ${bonus} convoi${bonus > 1 ? 's' : ''} de ravitaillement` : '') +
-      ' · abattue avec tous les objectifs : l’île est pacifiée, plus aucune attaque.',
+      ' · prise avec tous les objectifs : l’île est pacifiée, plus aucune attaque.',
   };
 }
 

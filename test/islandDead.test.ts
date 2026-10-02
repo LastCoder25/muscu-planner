@@ -81,7 +81,7 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
   });
   it('la fiche le dit', () => {
     const m = razeIslandTarget(islandMap(), 'isl_obj_0', NOW + H);
-    expect(islandTargetLabel(m, 'isl_obj_1')!.detail).toContain('se relève 3 jours');
+    expect(islandTargetLabel(m, 'isl_obj_1')!.detail).toContain('ses morts l’attaquent 3 jours');
     expect(islandTargetLabel(m, KEY)!.detail).toContain('plus aucun cimetière');
   });
 });

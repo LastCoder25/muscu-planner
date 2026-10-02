@@ -378,8 +378,8 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
-  // 🏝️ Les objectifs de l'île : on les abat, personne n'y reste.
-  objective: 0,
+  // 🏝️ Les objectifs de l'île se TIENNENT une fois pris (étape 6 bis) : 3 champions.
+  objective: CONTROL_MAX_GARRISON,
   // 🏰 La forteresse PRISE se tient, garnison SANS LIMITE, comme la base (décision de
   // l'utilisateur, 2026-10-02 : « la forteresse a une garnison sans limite »).
   fortress: Infinity,
@@ -2102,8 +2102,8 @@ export function controlYieldCard(
   playerLevel: number,
 ): ControlYieldCard | null {
   const c = p.control;
-  // 🏰 La forteresse ne produit rien : elle se tient.
-  if (!c || c.owner !== 'player' || c.kind === 'fortress') return null;
+  // 🏰🏳️ La forteresse et les objectifs ne produisent rien : ils se tiennent.
+  if (!c || c.owner !== 'player' || c.kind === 'fortress' || c.kind === 'objective') return null;
   const n = c.garrison.length;
   const seats = seatsOf(c.kind);
   const [one, many] = WORKER[c.kind];

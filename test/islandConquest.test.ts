@@ -49,17 +49,17 @@ describe('🏝️ conquête — les forces', () => {
     expect([0, 1, 2].map((i) => objectiveSize(i, 3))).toEqual([3, 3, 4]);
   });
 
-  it('la forteresse : intacte un rang au-dessus et troupe 12, puis 8 au plafond', () => {
+  it('la forteresse : niveau max de l’île, troupe 12 intacte puis 8 au plus bas', () => {
     const isl = ISLANDS[1]!; // 3 objectifs, plafond 40
-    expect(fortressForce(isl, 0)).toEqual({ level: 50, size: 12, locked: true });
+    expect(fortressForce(isl, 0)).toEqual({ level: 40, size: 12, locked: true });
     expect(fortressForce(isl, 1).locked).toBe(true);
     const two = fortressForce(isl, 2);
     expect(two.locked).toBe(false);
     expect(two.size).toBeLessThan(12);
     expect(two.size).toBeGreaterThan(8);
     expect(fortressForce(isl, 3)).toEqual({ level: 40, size: 8, locked: false });
-    // L'île 5 ne dépasse jamais le dernier niveau de l'échelle de prestige.
-    expect(fortressForce(ISLANDS[4]!, 0).level).toBeLessThanOrEqual(100);
+    // 🏰 Son niveau ne bouge pas : c'est le maximum de la carte de l'île.
+    for (const i of ISLANDS) expect(fortressForce(i, 0).level).toBe(i.maxLevel);
   });
 });
 

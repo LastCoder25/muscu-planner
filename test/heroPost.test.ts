@@ -21,11 +21,15 @@ function map(): ExpeditionMap {
 const mine = (m: ExpeditionMap): Poi => m.pois.find((p) => p.control?.kind === 'mine')!;
 
 describe('🧝 le héros tient garnison partout', () => {
-  it('un lieu fixe ordinaire peut le garder ; ce qu’on abat, non', () => {
+  it('un lieu fixe, un objectif ou la forteresse peut le garder ; ce qu’on abat, non', () => {
     const p = mine(map());
     expect(heroCanStay(p)).toBe(true);
     expect(heroCanStay({ ...p, control: { ...p.control!, kind: 'citadel' } })).toBe(false);
-    expect(heroCanStay({ ...p, control: { ...p.control!, kind: 'objective' } })).toBe(false);
+    // 🏳️ Un objectif d'île se tient ; la brèche sans fin, elle, s'abat.
+    expect(heroCanStay({ ...p, control: { ...p.control!, kind: 'objective' } })).toBe(true);
+    expect(
+      heroCanStay({ ...p, id: 'isl_endless', control: { ...p.control!, kind: 'objective' } }),
+    ).toBe(false);
     expect(heroCanStay({ ...p, control: { ...p.control!, kind: 'fortress' } })).toBe(true);
     expect(heroCanStay({ ...p, control: { ...p.control!, owner: 'player' } })).toBe(false);
     expect(heroCanStay({ ...p, type: 'camp', control: undefined })).toBe(false);

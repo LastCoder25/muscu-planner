@@ -417,6 +417,19 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       - [x] Un blessé rentre se soigner au village ; la milice y est produite et en part : sur
         les îles 2 à 5, la base EST le village du port (l'île est dessinée devant lui), donc
         l'infirmerie, la Caserne et les transferts y sont déjà (v1.29.0, rien à ajouter).
+      - [x] **Les objectifs (avant-postes secondaires) se TIENNENT une fois pris** (décision de
+        l'utilisateur, 2026-10-02, v1.31.0) : garnison de 3 champions, ils ne produisent rien,
+        comptent comme pris pour le verrou et la troupe de la forteresse (`takeObjective`).
+        **La forteresse vient les récupérer EN PRIORITÉ** : tant qu'on en tient un, une attaque
+        échue sur un autre lieu fixe se reporte sur l'objectif tenu le plus proche
+        (`redirectIslandAttacks`). Repris par l'ennemi, il recompte comme debout et la
+        forteresse se reverrouille (`regainIslandTarget`). Les objectifs encore ennemis
+        attaquent selon la même règle que la forteresse (`attackSlow`). Île 3 : un cimetière
+        tenu ne se relève pas, ses morts l'attaquent à l'heure où il se serait relevé.
+        ⚠️ Les sièges de la base ne sont pas reportés (leur propre règle). Pacifiée : plus
+        aucune attaque.
+      - [x] **La forteresse a le niveau MAX de la carte de l'île** (v1.31.0) ; sa troupe
+        descend toujours de 12 à 8 avec les objectifs pris.
       - [ ] À trancher : 4 lieux fixes par île (socle + 1 spécialité) ; milice plafonnée à 3
         places sur 5 par lieu ; récompenses d'une nouvelle île (pas de tickets : règle 9).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

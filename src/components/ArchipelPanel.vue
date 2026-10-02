@@ -126,7 +126,7 @@
             >{{ selTile.objectiveEmoji }} {{ conquest.objectivesDown }}/{{
               conquest.objectivesTotal
             }}
-            abattus</span
+            pris</span
           >
           <span class="at-pill" :class="{ done: conquest.fortressDown, dim: conquest.locked }">{{
             conquest.fortressDown
