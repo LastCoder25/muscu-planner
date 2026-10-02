@@ -87,10 +87,10 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
 });
 
 describe('⚱️ l’ossuaire de l’île 3', () => {
-  it('l’île 3 porte socle + tour de guet + jardin + ossuaire', () => {
+  it('l’île 3 porte socle + jardin + ossuaire, sans tour de guet', () => {
     const k = islandMap().pois.flatMap((p) => (p.control ? [p.control.kind] : []));
-    for (const x of ['mine', 'training', 'mana', 'tower', 'garden', 'ossuary'])
-      expect(k).toContain(x);
+    for (const x of ['mine', 'training', 'mana', 'garden', 'ossuary']) expect(k).toContain(x);
+    expect(k).not.toContain('tower');
     expect(k).not.toContain('archives');
     expect(k).not.toContain('scriptorium');
   });

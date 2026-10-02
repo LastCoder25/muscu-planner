@@ -124,10 +124,10 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
 });
 
 describe('🗿 l’autel des runes', () => {
-  it('l’île 5 porte socle + tour de guet + scriptorium + autel', () => {
+  it('l’île 5 porte socle + scriptorium + autel, sans tour de guet', () => {
     const k = kinds(islandMap());
-    for (const x of ['mine', 'training', 'mana', 'tower', 'scriptorium', 'altar'])
-      expect(k).toContain(x);
+    for (const x of ['mine', 'training', 'mana', 'scriptorium', 'altar']) expect(k).toContain(x);
+    expect(k).not.toContain('tower');
     expect(k).not.toContain('garden');
     expect(k).not.toContain('arsenal');
   });

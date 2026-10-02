@@ -3,6 +3,7 @@ import { ISLANDS, ISLAND_OUTPOST_LEVEL, archipelOn, islandPacified } from '@/lib
 import { createMap, poiLabel, type ExpeditionMap, type Poi } from '@/lib/expedition';
 import {
   CONTROL,
+  controlKindsOf,
   attackSlow,
   attackerHidden,
   captureControl,
@@ -14,6 +15,7 @@ import {
   holdControl,
 } from '@/lib/controlPoints';
 import {
+  ISLAND_OUTPOSTS,
   BRIGANDS,
   FORTRESS_ID,
   ISLAND_CONQUEST,
@@ -71,7 +73,7 @@ describe('🏝️ conquête — la carte', () => {
       expect(p.control?.owner).toBe('enemy');
       expect(p.control?.faction).toBe('bandits');
       expect(onIsland(1, p.x, p.y)).toBe(true);
-      for (const k of CONTROL.kinds) {
+      for (const k of controlKindsOf(m)) {
         const c = poi(m, controlIdOf(k))!;
         expect(Math.hypot(c.x - p.x, c.y - p.y)).toBeGreaterThan(9);
       }
@@ -113,6 +115,20 @@ describe('🏝️ conquête — la carte', () => {
     expect(poi(ensureIslandConquest(m, NOW + 30 * 24 * H, LV), objectiveIdOf(0))).toBeUndefined();
   });
 
+  it('🗼 une tour de guet TENUE (miliciens) reste en basculant sur une île ; à l’ennemi, elle part', () => {
+    const base = ensureControls(
+      createMap(9, NOW, LV, ISLAND_OUTPOST_LEVEL),
+      NOW,
+      LV,
+      ISLAND_OUTPOST_LEVEL,
+    );
+    const held = captureControl(base, controlIdOf('tower'), ['mil:1', 'mil:2'], NOW, 7);
+    const isl = (m: ExpeditionMap) =>
+      ensureControls({ ...m, archipel: archipelOn(1) }, NOW, LV, ISLAND_OUTPOST_LEVEL);
+    expect(poi(isl(held), controlIdOf('tower'))?.control?.garrison).toEqual(['mil:1', 'mil:2']);
+    expect(poi(isl(base), controlIdOf('tower'))).toBeUndefined();
+  });
+
   it('une forteresse verrouillée refuse l’envoi', () => {
     const m = island1();
     expect(partySendBlocker(poi(m, FORTRESS_ID)!, 8, true, 20, 0.9, NOW)).toBe('fortressLocked');
@@ -122,8 +138,7 @@ describe('🏝️ conquête — la carte', () => {
     );
     // …puis s'attaque, héros seul compris.
     let held = m;
-    for (const k of ['tower', 'training'] as const)
-      held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
+    for (const k of ISLAND_OUTPOSTS) held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
     held = ensureIslandConquest(held, NOW, LV);
     expect(partySendBlocker(poi(held, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBeNull();
   });

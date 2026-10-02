@@ -1047,16 +1047,16 @@ export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
 
 /**
  * 🏝️ LES POINTS FIXES DE CHAQUE ÎLE (roadmap, « Répartition ») : le socle (mine, camp, source
- * de mana) partout, plus les spécialités de l'île. Île 1 et carte ordinaire : la liste
- * d'origine. Île 2 : socle + tour de guet + ARCHIVES. Îles 3 à 5 : la liste d'origine tant
- * que leur étape n'est pas faite.
+ * de mana) partout, plus les spécialités de l'île. Carte ordinaire : la liste d'origine.
+ * 🗼 PAS DE TOUR DE GUET SUR LES ÎLES (v1.28.1, décision de l'utilisateur : « enlève les tours
+ * de guet, les îles sont plus petites ») — la Tour de guet de la BASE, elle, reste.
  */
 const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
-  2: ['mine', 'training', 'tower', 'mana', 'archives'],
-  // ⚠️ La tour de guet reste sur l'île 3 : c'est un des deux AVANT-POSTES (`ISLAND_OUTPOSTS`).
-  3: ['mine', 'training', 'tower', 'mana', 'garden', 'ossuary'],
-  4: ['mine', 'training', 'tower', 'mana', 'arsenal', 'circle'],
-  5: ['mine', 'training', 'tower', 'mana', 'scriptorium', 'altar'],
+  1: ['mine', 'training', 'garden', 'scriptorium', 'mana'],
+  2: ['mine', 'training', 'mana', 'archives'],
+  3: ['mine', 'training', 'mana', 'garden', 'ossuary'],
+  4: ['mine', 'training', 'mana', 'arsenal', 'circle'],
+  5: ['mine', 'training', 'mana', 'scriptorium', 'altar'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
@@ -1129,8 +1129,14 @@ export function ensureControls(
   // 🗑️ Un point d'un type RETIRÉ (la Forge de campagne, fondue dans le camp le 2026-09-29)
   // quitte la carte. ⚠️ Sa garnison est libérée d'elle-même : la disponibilité d'un champion
   // se DÉDUIT de la carte. Vérifié en base avant le retrait : aucun joueur n'en tenait une.
+  // ⚠️ Sauf s'il est TENU : sa garnison (miliciens compris) n'a nulle part où aller. Il reste
+  // jusqu'à ce qu'on le rappelle ou qu'il soit perdu (la tour de guet d'une île, v1.28.1).
   const kept = healed.filter(
-    (p) => !p.control || RAZE_KINDS.has(p.control.kind) || kinds.includes(p.control.kind),
+    (p) =>
+      !p.control ||
+      RAZE_KINDS.has(p.control.kind) ||
+      kinds.includes(p.control.kind) ||
+      p.control.owner === 'player',
   );
   // 🏯 Les citadelles quittent l'île SANS être perdues (mises de côté, rendues en sortant).
   const { pois: stashed, stash } = stashCitadels([...kept, ...add], map, now);

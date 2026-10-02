@@ -376,4 +376,11 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       voisin le plus proche 16,5 → 22-24 unités. Décor ×2 (villages, champs, ruines, plus
       d’herbe et de taches). Lieux fixes : île 1 → 9, îles 2-5 → 10 (île 2 jusqu’à 12 avec
       les nids, île 5 + la brèche sans fin).
+      **v1.28.1 — plus de tour de guet sur les îles** (décision de l’utilisateur : « enlève les
+      tours de guet, les îles sont plus petites », sauf la Tour de guet de la base). Lieux fixes :
+      île 1 mine, camp, jardin, scriptorium, source de mana (5) ; île 2 socle + archives (4) ;
+      île 3 socle + jardin + ossuaire ; île 4 socle + arsenal + cercle ; île 5 socle + scriptorium
+      + autel (5 chacune). Avant-postes : le camp et la MINE (ISLAND_OUTPOSTS), relais
+      inchangé. Une tour TENUE au moment de la bascule reste jusqu’au rappel ou à sa perte (sa
+      garnison, miliciens compris, n’a nulle part où aller).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

@@ -109,10 +109,10 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
 });
 
 describe('⚒️🌀 l’arsenal et le cercle d’invocation', () => {
-  it('l’île 4 porte socle + tour de guet + arsenal + cercle', () => {
+  it('l’île 4 porte socle + arsenal + cercle, sans tour de guet', () => {
     const k = kinds(islandMap());
-    for (const x of ['mine', 'training', 'mana', 'tower', 'arsenal', 'circle'])
-      expect(k).toContain(x);
+    for (const x of ['mine', 'training', 'mana', 'arsenal', 'circle']) expect(k).toContain(x);
+    expect(k).not.toContain('tower');
     expect(k).not.toContain('garden');
     expect(k).not.toContain('ossuary');
   });

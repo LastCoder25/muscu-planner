@@ -247,8 +247,9 @@ function nestPerilIds(
 
 /** 🏝️ Les DEUX AVANT-POSTES d'une île (étape 3) : deux de ses lieux fixes, posés sur la
  *  route base → forteresse. Tenus tous les deux, ils ouvrent les objectifs ; tenus, on en
- *  part plus près de la forteresse (sorties d'un point tenu). */
-export const ISLAND_OUTPOSTS: readonly ControlKind[] = ['tower', 'training'];
+ *  part plus près de la forteresse (sorties d'un point tenu). Le camp et la mine (le socle,
+ *  présent sur toutes les îles) depuis que les îles n'ont plus de tour de guet (v1.28.1). */
+export const ISLAND_OUTPOSTS: readonly ControlKind[] = ['training', 'mine'];
 
 /** Les deux avant-postes sont-ils tenus ? */
 export function outpostsHeld(map: Pick<ExpeditionMap, 'pois'>): boolean {
