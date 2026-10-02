@@ -31,6 +31,8 @@ export interface Island {
   objectives: number;
   objective: string;
   objectiveEmoji: string;
+  /** 🏯 Le DERNIER objectif est différent des autres (île 3 : la citadelle des morts). */
+  keystone?: { name: string; emoji: string };
   faction: RaidFaction;
 }
 
@@ -68,9 +70,11 @@ export const ISLANDS: readonly Island[] = [
     emoji: '💀',
     threat: 'Cimetières et citadelle',
     fortress: 'Le Bastion des marées',
-    objectives: 2,
+    // 🪦 Deux cimetières + la citadelle des morts (la roadmap : « 2 cimetières + la citadelle »).
+    objectives: 3,
     objective: 'Cimetière',
     objectiveEmoji: '🪦',
+    keystone: { name: 'Citadelle des morts', emoji: '🏯' },
     faction: 'mortsvivants',
     minLevel: 41,
     maxLevel: 60,

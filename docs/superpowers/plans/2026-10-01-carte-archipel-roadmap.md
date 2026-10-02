@@ -278,6 +278,15 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
 ### Étoffer
 
 - [ ] **5. Îles 3, 4 et 5** (~3-4 j chacune) — une à la fois, quand le compte admin y arrive.
+      **Île 3 livrée v1.24.0 (choix par défaut, l’utilisateur a dit « Go »)** : 2 cimetières
+      (troupe 3) + la **citadelle des morts** (troupe 4, `Island.keystone`, dernier objectif).
+      Un cimetière abattu **se relève 3 jours plus tard** tant que la citadelle tient
+      (`RISE`, `raiseDead`, `archipel.razedAt`) ; la citadelle abattue, plus rien ne se
+      relève. Deux façons de faire : la citadelle d’abord, ou les trois en moins de 3 jours.
+      Points fixes : socle + jardin + **ossuaire** + tour de guet (⚠️ écart à la répartition :
+      la tour reste, c’est un des deux avant-postes). L’ossuaire produit le prix d’une
+      tentative de boss de l’île (`bossSummonCost`) en pierres d’invocation toutes les 48 h
+      au complet. Tests `islandDead.test.ts` (9, 8 mutations rouges).
 - [ ] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
       défense, durée de chaque île, 5 îles de rente).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

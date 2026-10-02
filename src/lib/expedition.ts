@@ -88,6 +88,8 @@ export type ControlKind =
   | 'scriptorium'
   /** 🏝️📖 Les ARCHIVES (île 2) : des clés du Labyrinthe. */
   | 'archives'
+  /** 🏝️⚱️ L'OSSUAIRE (île 3) : des pierres d'invocation. */
+  | 'ossuary'
   | 'mana'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
@@ -271,6 +273,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   tower: 'Tour de guet',
   scriptorium: 'Scriptorium',
   archives: 'Archives',
+  ossuary: 'Ossuaire',
   mana: 'Source de mana',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
@@ -283,6 +286,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   tower: '🗼',
   scriptorium: '📜',
   archives: '📖',
+  ossuary: '⚱️',
   mana: '⛲',
   citadel: '🏯',
   objective: '⛺',
@@ -741,6 +745,9 @@ export interface ExpeditionMap {
     nests?: { i: number; at: number; x: number; y: number; d: number }[];
     /** 🪺 Dernière ponte de chaque nid debout (id → instant). */
     nestLaid?: Record<string, number>;
+    /** 🪦 Île 3 : quand chaque cimetière a été abattu (id → instant) — il se relève
+     *  `RISE.riseMs` plus tard tant que la citadelle des morts tient. */
+    razedAt?: Record<string, number>;
   };
   /** 🏯 Les citadelles MISES DE CÔTÉ pendant le mode archipel (`ensureControls`) : elles ne
    *  vont pas sur une île, mais leur palier, leur trêve et leurs destructions doivent revenir

@@ -39,6 +39,7 @@ import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits } from './militia';
 import { labyKeyPriceAt } from '../data/labyrinths';
+import { bossSummonCost } from '../data/bosses';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
@@ -72,6 +73,9 @@ export const CONTROL = {
   /** 📖 Les archives (île 2) : une entrée du palier de l'île toutes les 48 h, garnison au
    *  complet (étape 0 de l'archipel : +20 à +24 % de clés). */
   archiveHoursPerEntry: 48,
+  /** ⚱️ L'ossuaire (île 3) : le prix d'une tentative de boss de l'île toutes les 48 h,
+   *  garnison au complet (le pendant des archives : les morts-vivants laissent des pierres). */
+  ossuaryHoursPerAttempt: 48,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -346,6 +350,7 @@ const PRODUCER_SEATS = MILITIA.perPoint;
 const CONTROL_SEATS: Record<ControlKind, number> = {
   scriptorium: PRODUCER_SEATS,
   archives: PRODUCER_SEATS,
+  ossuary: PRODUCER_SEATS,
   mana: PRODUCER_SEATS,
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
@@ -375,6 +380,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   scriptorium: 2.5,
   // 📖 Île 2 : la place du jardin, qui n'y est pas.
   archives: 2,
+  // ⚱️ Île 3 : la place du scriptorium, qui n'y est pas.
+  ossuary: 2.5,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -394,6 +401,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
+  ossuary: 'pierres d’invocation 🔮',
   mana: 'pierres de mana 💠 en continu',
   citadel: 'une trêve de 3 jours sur les points qu’elle attaque',
   objective: 'un pas vers la pacification de l’île',
@@ -988,7 +996,7 @@ function spotAt(map: ExpeditionMap, quarter: number, d: number): Pick<Poi, 'x' |
 }
 
 /** 🏰 TOUS les types de points qui produisent (carte ordinaire et îles). */
-export const ALL_CONTROL_KINDS: readonly ControlKind[] = [...CONTROL.kinds, 'archives'];
+export const ALL_CONTROL_KINDS: readonly ControlKind[] = [...CONTROL.kinds, 'archives', 'ossuary'];
 
 /**
  * 🏝️ LES POINTS FIXES DE CHAQUE ÎLE (roadmap, « Répartition ») : le socle (mine, camp, source
@@ -998,6 +1006,8 @@ export const ALL_CONTROL_KINDS: readonly ControlKind[] = [...CONTROL.kinds, 'arc
  */
 const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   2: ['mine', 'training', 'tower', 'mana', 'archives'],
+  // ⚠️ La tour de guet reste sur l'île 3 : c'est un des deux AVANT-POSTES (`ISLAND_OUTPOSTS`).
+  3: ['mine', 'training', 'tower', 'mana', 'garden', 'ossuary'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
@@ -1540,6 +1550,9 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'archives':
       // 📖 Une entrée du palier de l'île toutes les 48 h au complet (étape 0 de l'archipel).
       return (labyKeyPriceAt(playerLevel) * shareOf(n)) / CONTROL.archiveHoursPerEntry;
+    case 'ossuary':
+      // ⚱️ Une tentative de boss de l'île toutes les 48 h au complet.
+      return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.ossuaryHoursPerAttempt;
     case 'mana':
       return controlManaPerHour(n, playerLevel);
     default:
@@ -1755,9 +1768,21 @@ export function collectControl(
   runes: number;
   /** 📖 Clés du Labyrinthe (les archives). */
   keys: number;
+  /** ⚱️ Pierres d'invocation (l'ossuaire). */
+  summon: number;
 } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, mana: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: 0, keys: 0 };
+  const none = {
+    map,
+    gold: 0,
+    mana: 0,
+    xpBy: {},
+    gearXp: {},
+    supplies: {},
+    runes: 0,
+    keys: 0,
+    summon: 0,
+  };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
@@ -1818,6 +1843,7 @@ export function collectControl(
     supplies,
     runes,
     keys: c.kind === 'archives' ? whole : 0,
+    summon: c.kind === 'ossuary' ? whole : 0,
   };
 }
 
@@ -1880,6 +1906,11 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       const left = leftFor(1 - next, rate);
       return { text: `🗝️ ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
     }
+    case 'ossuary': {
+      const next = Math.max(0, units - Math.floor(units + 1e-9));
+      const left = leftFor(1 - next, rate);
+      return { text: `🔮 ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
+    }
     default:
       return null;
   }
@@ -1918,6 +1949,7 @@ const WORKER: Record<ControlKind, [string, string]> = {
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
+  ossuary: ['fossoyeur', 'fossoyeurs'],
   mana: ['gardien', 'gardiens'],
   citadel: ['assaillant', 'assaillants'],
   objective: ['assaillant', 'assaillants'],
@@ -2015,6 +2047,20 @@ export function controlYieldCard(
         pct: next,
         gauge: idle ?? (left ? `Prochaine clé dans ${left}` : null),
         rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} 🗝️/jour · ${crew}`,
+        ready: false,
+        full: false,
+      };
+    }
+    case 'ossuary': {
+      const next = Math.max(0, units - Math.floor(units + 1e-9));
+      const left = leftFor(1 - next, rate);
+      return {
+        emoji: '⚱️',
+        value: `${Math.round(next * 100)} %`,
+        what: 'de la prochaine pierre d’invocation, versée directement',
+        pct: next,
+        gauge: idle ?? (left ? `Prochaine pierre dans ${left}` : null),
+        rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} 🔮/jour · ${crew}`,
         ready: false,
         full: false,
       };
@@ -2820,15 +2866,18 @@ export function controlLootMessage(
   runes: number,
   /** 📖 Clés des archives. */
   keys = 0,
+  /** ⚱️ Pierres d'invocation de l'ossuaire. */
+  summon = 0,
 ): ExpeditionMessage | null {
   const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
-  if (!nSup && !runes && !keys) return null;
+  if (!nSup && !runes && !keys && !summon) return null;
   const kind = p.control?.kind;
   const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
   const what = [
     nSup ? `${nSup} consommable${nSup > 1 ? 's' : ''}` : '',
     runes ? `${runes} rune${runes > 1 ? 's' : ''}` : '',
     keys ? `${keys} clé${keys > 1 ? 's' : ''} du Labyrinthe` : '',
+    summon ? `${summon} pierre${summon > 1 ? 's' : ''} d’invocation` : '',
   ]
     .filter(Boolean)
     .join(' et ');

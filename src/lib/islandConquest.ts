@@ -78,6 +78,69 @@ export const NEST = {
 
 type NestBirth = NonNullable<NonNullable<ExpeditionMap['archipel']>['nests']>[number];
 
+/**
+ * 🪦 LES MORTS SE RELÈVENT (île 3, roadmap : « 2 cimetières + la citadelle ») : un cimetière
+ * abattu se RELÈVE `riseMs` plus tard tant que la CITADELLE DES MORTS (le dernier objectif,
+ * `Island.keystone`) tient. Abattre la citadelle arrête tout : ce qui est à terre y reste.
+ * D'où deux façons de faire : la citadelle d'abord (troupe 4), ou les trois en moins de 3 jours.
+ */
+export const RISE = {
+  islands: new Set([3]) as ReadonlySet<number>,
+  riseMs: 3 * 24 * 3600_000,
+} as const;
+
+/** L'id de l'objectif-clé (la citadelle des morts), `null` si l'île n'en a pas. */
+function keystoneIdOf(isl: Pick<Island, 'objectives' | 'keystone'>): string | null {
+  return isl.keystone ? objectiveIdOf(isl.objectives - 1) : null;
+}
+
+/** Le nom et l'emoji de l'objectif `i`. */
+function objectiveLook(
+  isl: Pick<Island, 'objectives' | 'keystone' | 'objective' | 'objectiveEmoji'>,
+  i: number,
+): { name: string; emoji: string } {
+  return isl.keystone && i === isl.objectives - 1
+    ? isl.keystone
+    : { name: isl.objective, emoji: isl.objectiveEmoji };
+}
+
+/**
+ * 🪦 Relève les cimetières abattus depuis `RISE.riseMs` tant que la citadelle tient. Rend la
+ * MÊME carte si rien ne change.
+ */
+export function raiseDead(map: ExpeditionMap, now: number): ExpeditionMap {
+  const isl = activeIsland(map);
+  const a = map.archipel;
+  if (!isl || !a || !RISE.islands.has(isl.id) || a.pacifiedAt !== undefined) return map;
+  const key = keystoneIdOf(isl);
+  const gone = destroyedOf(map);
+  if (!key || gone.has(key)) return map;
+  const razed = a.razedAt ?? {};
+  const up = Object.keys(razed).filter((id) => gone.has(id) && razed[id]! + RISE.riseMs <= now);
+  if (!up.length) return map;
+  const back = new Set(up);
+  const razedAt = { ...razed };
+  for (const id of up) delete razedAt[id];
+  return {
+    ...map,
+    archipel: { ...a, destroyed: (a.destroyed ?? []).filter((x) => !back.has(x)), razedAt },
+  };
+}
+
+/** 🪦 Quand le prochain cimetière se relève, `null` si aucun. */
+export function nextRiseAt(map: Pick<ExpeditionMap, 'archipel'>): number | null {
+  const isl = activeIsland(map);
+  const a = map.archipel;
+  if (!isl || !a || !RISE.islands.has(isl.id) || a.pacifiedAt !== undefined) return null;
+  const key = keystoneIdOf(isl);
+  const gone = destroyedOf(map);
+  if (!key || gone.has(key)) return null;
+  const ts = Object.entries(a.razedAt ?? {})
+    .filter(([id]) => gone.has(id))
+    .map(([, t]) => t + RISE.riseMs);
+  return ts.length ? Math.min(...ts) : null;
+}
+
 /** Les ids de TOUS les objectifs de l'île : ceux d'origine et les nids nés en route. */
 function objectiveIds(isl: Pick<Island, 'objectives'>, nests: readonly NestBirth[]): string[] {
   return [
@@ -401,8 +464,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
           kind: 'objective',
           faction: isl.faction,
           size: objectiveSize(i, isl.objectives),
-          name: isl.objective,
-          emoji: isl.objectiveEmoji,
+          ...objectiveLook(isl, i),
           ...(objLocked ? { locked: true } : {}),
         },
       ),
@@ -470,8 +532,9 @@ export function ensureIslandConquest(
   now: number,
   playerLevel: number,
 ): ExpeditionMap {
-  // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée.
-  const map = layNests(map0, now);
+  // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🪦 De même les
+  // cimetières qui se relèvent.
+  const map = raiseDead(layNests(map0, now), now);
   const isl = activeIsland(map);
   const want = isl ? expectedTargets(map, isl, now, playerLevel) : [];
   const wantIds = new Set(want.map((p) => p.id));
@@ -575,11 +638,14 @@ export function razeIslandTarget(map: ExpeditionMap, id: string, at: number): Ex
   const destroyed = [...new Set([...(map.archipel.destroyed ?? []), id])];
   const all = [...objectiveIds(isl, map.archipel.nests ?? []), FORTRESS_ID];
   const pacified = all.every((x) => destroyed.includes(x));
+  // 🪦 Un cimetière abattu garde l'heure de sa chute : il se relève 3 jours plus tard.
+  const rises = RISE.islands.has(isl.id) && id !== FORTRESS_ID && id !== keystoneIdOf(isl);
   const next: ExpeditionMap = {
     ...map,
     archipel: {
       ...map.archipel,
       destroyed,
+      ...(rises ? { razedAt: { ...(map.archipel.razedAt ?? {}), [id]: at } } : {}),
       ...(pacified && map.archipel.pacifiedAt === undefined ? { pacifiedAt: at } : {}),
     },
     pois: map.pois
@@ -699,11 +765,22 @@ export function islandTargetLabel(
   const p = map?.pois.find((x) => x.id === id);
   if (!st || !p?.control || !isIslandTargetId(id) || heldFortress(p)) return null;
   const { island: isl, objectivesDown: down, objectivesTotal: n } = st;
+  const isKey = p.id === keystoneIdOf(isl);
+  const rise = RISE.islands.has(isl.id);
+  const riseAt = rise && isKey ? nextRiseAt(map!) : null;
   if (p.control.kind === 'objective')
     return {
-      title: `${isl.objectiveEmoji} Objectif de l’île · ${down}/${n} abattus`,
+      title: `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} abattus`,
       detail:
-        `troupe de ${p.control.size} champions de référence · abattu, il ne revient pas` +
+        `troupe de ${p.control.size} champions de référence · ` +
+        (rise && !isKey
+          ? 'abattu, il se relève 3 jours plus tard tant que la citadelle des morts tient'
+          : rise
+            ? 'abattue, plus aucun cimetière ne se relève' +
+              (riseAt
+                ? ` (le prochain se relève ${new Date(riseAt).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })})`
+                : '')
+            : 'abattu, il ne revient pas') +
         (PILLAGE_ISLANDS.has(isl.id)
           ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
           : NEST.islands.has(isl.id)
