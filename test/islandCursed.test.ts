@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, ISLAND_OUTPOST_LEVEL } from '@/lib/archipelago';
-import {
-  createMap,
-  EXPE,
-  poiLabel,
-  RUINS_SEALS,
-  type ExpeditionMap,
-  type Poi,
-} from '@/lib/expedition';
+import { createMap, EXPE, poiLabel, type ExpeditionMap, type Poi } from '@/lib/expedition';
 import {
   captureControl,
   collectControl,
@@ -24,7 +17,7 @@ import {
   razeIslandTarget,
   warlordRaids,
 } from '@/lib/islandConquest';
-import { characterRank } from '@/lib/characterRank';
+import { harvestOver } from './helpers/controlHarvest';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
 const H = 3600_000;
@@ -138,21 +131,17 @@ describe('🗿 l’autel des runes', () => {
     expect(k).not.toContain('garden');
     expect(k).not.toContain('arsenal');
   });
-  it('tenu au complet, la part de champion d’une ruine toutes les 72 h, au rang du joueur', () => {
+  it('tenu au complet, une rune multicolore tous les 2 jours (étape 0)', () => {
     const id = controlIdOf('altar');
     let m = islandMap();
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Autel des runes');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
-    const got = collectControl(m, id, NOW + 72 * H, LV);
-    expect(got.champSeals).toBeGreaterThanOrEqual(RUINS_SEALS.champion - 1);
-    expect(got.champSeals).toBeLessThanOrEqual(Math.ceil(RUINS_SEALS.champion * 1.6));
-    expect(got.champSealRank).toBe(characterRank(LV).rankIndex);
-    expect(got.gold + got.gearSeals + got.keys + got.summon).toBe(0);
+    const got = harvestOver(m, id, NOW, 8 * 24, LV);
+    // 4 runes en 8 jours (au cran du jour du point, d’où la marge basse).
+    expect(got.runes).toBeGreaterThanOrEqual(3);
+    expect(got.runes).toBeLessThanOrEqual(6);
+    expect(got.gold + got.gearSeals + got.keys + got.summon + got.champSeals).toBe(0);
     const one = captureControl(islandMap(), id, ['a'], NOW, 7);
-    expect(collectControl(one, id, NOW + 72 * H, LV).champSeals).toBeLessThan(got.champSeals);
-  });
-  it('le rapport dit les sceaux de champion', () => {
-    const p = islandMap().pois.find((q) => q.id === controlIdOf('altar'))!;
-    expect(controlLootMessage(p, NOW, {}, 0, 0, 0, 0, 2)!.title).toContain('2 sceaux de champion');
+    expect(harvestOver(one, id, NOW, 8 * 24, LV).runes).toBeLessThan(got.runes);
   });
 });

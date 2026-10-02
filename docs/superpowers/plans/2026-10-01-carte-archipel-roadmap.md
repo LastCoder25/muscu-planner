@@ -308,4 +308,12 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       pas fait. Tests `islandCursed.test.ts` (10, 12 mutations rouges).
 - [ ] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
       défense, durée de chaque île, 5 îles de rente).
+      **6a livrée v1.27.0 — les spécialités réalignées sur l’étape 0.** Les v1.24-1.26 avaient
+      mal lu le tableau « Les lieux fixes » : les produits ET les débits sont remis à ceux décidés
+      et mesurés — ⚱️ ossuaire = 1 sceau de champion au rang de l’île / 3 jours (il donnait des
+      pierres d’invocation) ; ⚒️ arsenal = ⅙ de ruine / jour (il en donnait le double) ; 🌀 cercle
+      d’invocation = 1 tentative de boss / 2 jours en pierres d’invocation (il donnait du mana) ;
+      🪬 autel des runes = 1 rune multicolore / 2 jours (il donnait des sceaux de champion ;
+      « à partir du bleu » non fait). Tests réécrits (récolte toutes les 6 h comme le jeu,
+      `test/helpers/controlHarvest.ts`), 7 mutations rouges.
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

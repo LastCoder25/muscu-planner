@@ -17,7 +17,8 @@ import {
   weakestHeld,
 } from '@/lib/islandConquest';
 import { characterRank } from '@/lib/characterRank';
-import { GACHA } from '@/lib/gacha';
+import { bossSummonCost } from '@/data/bosses';
+import { harvestOver } from './helpers/controlHarvest';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
 const H = 3600_000;
@@ -115,32 +116,33 @@ describe('⚒️🌀 l’arsenal et le cercle d’invocation', () => {
     expect(k).not.toContain('garden');
     expect(k).not.toContain('ossuary');
   });
-  it('l’arsenal : la part d’objet d’une ruine toutes les 72 h au complet', () => {
+  it('l’arsenal : ⅙ de la part d’objet d’une ruine par jour au complet (étape 0)', () => {
     const id = controlIdOf('arsenal');
     let m = islandMap();
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Arsenal');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
     const ruin = RUINS_SEALS.gearPerRank * (1 + characterRank(LV).rankIndex);
-    const got = collectControl(m, id, NOW + 72 * H, LV);
+    const got = harvestOver(m, id, NOW, 144, LV);
     // ⚠️ Au cran du jour du point (qui monte avec le temps tenu), d’où la marge basse.
     expect(got.gearSeals).toBeGreaterThanOrEqual(Math.floor(ruin * 0.85));
     expect(got.gearSeals).toBeLessThanOrEqual(Math.ceil(ruin * 1.6));
     expect(got.gold + got.mana + got.keys + got.summon).toBe(0);
     const one = captureControl(islandMap(), id, ['a'], NOW, 7);
     // Un seul armurier : environ moitié moins (share 1 contre 3).
-    expect(collectControl(one, id, NOW + 72 * H, LV).gearSeals).toBeLessThanOrEqual(
-      got.gearSeals * 0.6,
-    );
+    expect(harvestOver(one, id, NOW, 144, LV).gearSeals).toBeLessThanOrEqual(got.gearSeals * 0.6);
   });
-  it('le cercle : le prix d’un tirage toutes les 48 h au complet, en mana', () => {
+  it('le cercle : une tentative de boss de l’île tous les 2 jours, en pierres d’invocation', () => {
     const id = controlIdOf('circle');
     let m = islandMap();
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Cercle');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
+    const price = bossSummonCost(LV);
     const got = collectControl(m, id, NOW + 48 * H, LV);
-    expect(got.mana).toBeGreaterThanOrEqual(GACHA.pullCost);
-    expect(got.mana).toBeLessThanOrEqual(Math.ceil(GACHA.pullCost * 1.6));
-    expect(got.gold + got.gearSeals + got.keys + got.summon).toBe(0);
+    expect(got.summon).toBeGreaterThanOrEqual(Math.floor(price * 0.85));
+    expect(got.summon).toBeLessThanOrEqual(Math.ceil(price * 1.6));
+    expect(got.gold + got.mana + got.gearSeals + got.keys).toBe(0);
+    const one = captureControl(islandMap(), id, ['a'], NOW, 7);
+    expect(collectControl(one, id, NOW + 48 * H, LV).summon).toBeLessThanOrEqual(got.summon * 0.6);
   });
   it('le rapport dit les sceaux', () => {
     const p = islandMap().pois.find((q: Poi) => q.id === controlIdOf('arsenal'))!;

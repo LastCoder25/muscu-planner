@@ -40,7 +40,6 @@ import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits } from './militia';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { bossSummonCost } from '../data/bosses';
-import { GACHA } from './gacha';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
@@ -75,17 +74,20 @@ export const CONTROL = {
   /** 📖 Les archives (île 2) : une entrée du palier de l'île toutes les 48 h, garnison au
    *  complet (étape 0 de l'archipel : +20 à +24 % de clés). */
   archiveHoursPerEntry: 48,
-  /** ⚱️ L'ossuaire (île 3) : le prix d'une tentative de boss de l'île toutes les 48 h,
-   *  garnison au complet (le pendant des archives : les morts-vivants laissent des pierres). */
-  ossuaryHoursPerAttempt: 48,
-  /** ⚒️ L'arsenal (île 4) : la part d'objet d'une ruine (`ruinsSeals`) toutes les 72 h au
-   *  complet — un tiers de plus que les ruines seules, à revoir à l'équilibrage (étape 6). */
-  arsenalHoursPerRuin: 72,
-  /** 🌀 Le cercle d'invocation (île 4) : le prix d'un tirage toutes les 48 h au complet. */
-  circleHoursPerPull: 48,
-  /** 🗿 L'autel des runes (île 5) : la part de champion d'une ruine (3 sceaux au rang du
-   *  joueur) toutes les 72 h au complet. */
-  altarHoursPerRuin: 72,
+  /**
+   * 🏝️ LES SPÉCIALITÉS DES ÎLES 3 À 5, aux débits DÉCIDÉS à l'étape 0 de l'archipel (roadmap,
+   * « Les lieux fixes ») — garnison au complet :
+   * - ⚱️ ossuaire (île 3) : 1 sceau de champion au rang de l'île / 3 jours (+13 %) ;
+   * - ⚒️ arsenal (île 4) : ⅙ de la part d'objet d'une ruine / jour (+20 %) ;
+   * - 🌀 cercle d'invocation (île 4, le « sanctuaire d'invocation » de la roadmap, renommé :
+   *   c'est déjà le nom d'un lieu de récolte) : 1 tentative de boss de l'île / 2 jours (+18 %) ;
+   * - 🪬 autel des runes (île 5) : 1 rune multicolore / 2 jours (« à partir du bleu » : non
+   *   fait, la couleur se tire à l'ouverture comme toute rune).
+   */
+  ossuaryHoursPerSeal: 72,
+  arsenalHoursPerRuin: 144,
+  circleHoursPerAttempt: 48,
+  altarHoursPerRune: 48,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -419,10 +421,10 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
-  ossuary: 'pierres d’invocation 🔮',
+  ossuary: 'sceaux de champion 🔱',
   arsenal: 'sceaux d’objet ⚜️',
-  circle: 'pierres de mana 💠',
-  altar: 'sceaux de champion 🔱',
+  circle: 'pierres d’invocation 🔮',
+  altar: 'runes multicolores 🪬',
   mana: 'pierres de mana 💠 en continu',
   citadel: 'une trêve de 3 jours sur les points qu’elle attaque',
   objective: 'un pas vers la pacification de l’île',
@@ -1044,10 +1046,14 @@ export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly C
 }
 
 /** ⚒️🌀🗿 L'unité produite et ce qu'en dit la tuile, pour les spécialités des îles 4 et 5. */
-const UNIT_LOOK: Record<'arsenal' | 'circle' | 'altar', { unit: string; what: string }> = {
+const UNIT_LOOK: Record<
+  'ossuary' | 'arsenal' | 'circle' | 'altar',
+  { unit: string; what: string }
+> = {
+  ossuary: { unit: '🔱', what: 'du prochain sceau de champion, versé directement' },
   arsenal: { unit: '⚜️', what: 'du prochain sceau d’objet, versé directement' },
-  circle: { unit: '💠', what: 'de la prochaine pierre de mana, versée directement' },
-  altar: { unit: '🔱', what: 'du prochain sceau de champion, versé directement' },
+  circle: { unit: '🔮', what: 'de la prochaine pierre d’invocation, versée directement' },
+  altar: { unit: '🪬', what: 'de la prochaine rune, versée directement' },
 };
 
 /** Pose les points de contrôle MANQUANTS sur la carte (tenus par l'ennemi). Rend la même
@@ -1588,10 +1594,10 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
       // 📖 Une entrée du palier de l'île toutes les 48 h au complet (étape 0 de l'archipel).
       return (labyKeyPriceAt(playerLevel) * shareOf(n)) / CONTROL.archiveHoursPerEntry;
     case 'ossuary':
-      // ⚱️ Une tentative de boss de l'île toutes les 48 h au complet.
-      return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.ossuaryHoursPerAttempt;
+      // ⚱️ Un sceau de champion toutes les 72 h au complet.
+      return shareOf(n) / CONTROL.ossuaryHoursPerSeal;
     case 'arsenal':
-      // ⚒️ La part d'objet d'une ruine (9 × (1 + rang)) toutes les 72 h au complet.
+      // ⚒️ La part d'objet d'une ruine (9 × (1 + rang)) toutes les 144 h au complet.
       return (
         (RUINS_SEALS.gearPerRank *
           (1 + characterRank(Math.max(1, playerLevel)).rankIndex) *
@@ -1599,11 +1605,11 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
         CONTROL.arsenalHoursPerRuin
       );
     case 'altar':
-      // 🗿 La part de champion d'une ruine toutes les 72 h au complet.
-      return (RUINS_SEALS.champion * shareOf(n)) / CONTROL.altarHoursPerRuin;
+      // 🪬 Une rune toutes les 48 h au complet.
+      return shareOf(n) / CONTROL.altarHoursPerRune;
     case 'circle':
-      // 🌀 Le prix d'un tirage toutes les 48 h au complet.
-      return (GACHA.pullCost * shareOf(n)) / CONTROL.circleHoursPerPull;
+      // 🌀 Une tentative de boss de l'île toutes les 48 h au complet.
+      return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.circleHoursPerAttempt;
     case 'mana':
       return controlManaPerHour(n, playerLevel);
     default:
@@ -1881,7 +1887,7 @@ export function collectControl(
     }
   }
   // 📜 Des runes MULTICOLORES : leur couleur se tire à l'ouverture (`runeBank.openRune`).
-  const runes = c.kind === 'scriptorium' ? whole : 0;
+  const runes = c.kind === 'scriptorium' || c.kind === 'altar' ? whole : 0;
   const until = Math.min(now, c.attackAt ?? now);
   return {
     map: withControl(map, id, (q) => ({
@@ -1896,16 +1902,15 @@ export function collectControl(
       },
     })),
     gold: c.kind === 'mine' ? whole : 0,
-    // 🌀 Le cercle d'invocation verse du mana, comme la source.
-    mana: c.kind === 'mana' || c.kind === 'circle' ? whole : 0,
+    mana: c.kind === 'mana' ? whole : 0,
     xpBy: {},
     gearXp: {},
     supplies,
     runes,
     keys: c.kind === 'archives' ? whole : 0,
-    summon: c.kind === 'ossuary' ? whole : 0,
+    summon: c.kind === 'circle' ? whole : 0,
     gearSeals: c.kind === 'arsenal' ? whole : 0,
-    champSeals: c.kind === 'altar' ? whole : 0,
+    champSeals: c.kind === 'ossuary' ? whole : 0,
     champSealRank: characterRank(Math.max(1, playerLevel)).rankIndex,
   };
 }
@@ -1969,11 +1974,7 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       const left = leftFor(1 - next, rate);
       return { text: `🗝️ ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
     }
-    case 'ossuary': {
-      const next = Math.max(0, units - Math.floor(units + 1e-9));
-      const left = leftFor(1 - next, rate);
-      return { text: `🔮 ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
-    }
+    case 'ossuary':
     case 'arsenal':
     case 'circle':
     case 'altar': {
@@ -2125,20 +2126,7 @@ export function controlYieldCard(
         full: false,
       };
     }
-    case 'ossuary': {
-      const next = Math.max(0, units - Math.floor(units + 1e-9));
-      const left = leftFor(1 - next, rate);
-      return {
-        emoji: '⚱️',
-        value: `${Math.round(next * 100)} %`,
-        what: 'de la prochaine pierre d’invocation, versée directement',
-        pct: next,
-        gauge: idle ?? (left ? `Prochaine pierre dans ${left}` : null),
-        rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} 🔮/jour · ${crew}`,
-        ready: false,
-        full: false,
-      };
-    }
+    case 'ossuary':
     case 'arsenal':
     case 'circle':
     case 'altar': {

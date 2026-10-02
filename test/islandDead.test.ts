@@ -17,7 +17,8 @@ import {
   nextRiseAt,
   razeIslandTarget,
 } from '@/lib/islandConquest';
-import { bossSummonCost } from '@/data/bosses';
+import { characterRank } from '@/lib/characterRank';
+import { harvestOver } from './helpers/controlHarvest';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
 const H = 3600_000;
@@ -93,21 +94,22 @@ describe('⚱️ l’ossuaire de l’île 3', () => {
     expect(k).not.toContain('archives');
     expect(k).not.toContain('scriptorium');
   });
-  it('tenu au complet, une tentative de boss de l’île toutes les 48 h', () => {
+  it('tenu au complet, un sceau de champion au rang de l’île tous les 3 jours (étape 0)', () => {
     const id = controlIdOf('ossuary');
     let m = islandMap();
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Ossuaire');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
-    const price = bossSummonCost(LV);
-    const got = collectControl(m, id, NOW + 48 * H, LV);
-    expect(got.summon).toBeGreaterThanOrEqual(price);
-    expect(got.summon).toBeLessThanOrEqual(Math.ceil(price * 1.6));
-    expect(got.gold + got.mana + got.keys + got.runes).toBe(0);
+    const got = harvestOver(m, id, NOW, 12 * 24, LV);
+    // 4 sceaux en 12 jours (au cran du jour du point, d’où la marge basse).
+    expect(got.champSeals).toBeGreaterThanOrEqual(3);
+    expect(got.champSeals).toBeLessThanOrEqual(6);
+    expect(collectControl(m, id, NOW + 72 * H, LV).champSealRank).toBe(characterRank(LV).rankIndex);
+    expect(got.gold + got.mana + got.keys + got.runes + got.summon + got.gearSeals).toBe(0);
     const one = captureControl(islandMap(), id, ['a'], NOW, 7);
-    expect(collectControl(one, id, NOW + 48 * H, LV).summon).toBeLessThan(got.summon);
+    expect(harvestOver(one, id, NOW, 12 * 24, LV).champSeals).toBeLessThan(got.champSeals);
   });
-  it('le rapport dit les pierres', () => {
+  it('le rapport dit les sceaux de champion', () => {
     const p = islandMap().pois.find((q) => q.id === controlIdOf('ossuary'))!;
-    expect(controlLootMessage(p, NOW, {}, 0, 0, 3)!.title).toContain('3 pierres d’invocation');
+    expect(controlLootMessage(p, NOW, {}, 0, 0, 0, 0, 2)!.title).toContain('2 sceaux de champion');
   });
 });
