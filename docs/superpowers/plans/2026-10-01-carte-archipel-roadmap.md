@@ -277,7 +277,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
 
 ### Étoffer
 
-- [ ] **5. Îles 3, 4 et 5** (~3-4 j chacune) — une à la fois, quand le compte admin y arrive.
+- [x] **5. Îles 3, 4 et 5** (~3-4 j chacune) — une à la fois, quand le compte admin y arrive.
       **Île 3 livrée v1.24.0 (choix par défaut, l’utilisateur a dit « Go »)** : 2 cimetières
       (troupe 3) + la **citadelle des morts** (troupe 4, `Island.keystone`, dernier objectif).
       Un cimetière abattu **se relève 3 jours plus tard** tant que la citadelle tient
@@ -297,6 +297,15 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       est déjà un lieu de récolte). ⚠️ **Les convois de la menace ne sont pas faits** (à
       concevoir) ; débits de l’arsenal et du cercle à revoir à l’étape 6. Tests
       `islandWarlord.test.ts` (12, 10 mutations rouges).
+      **Île 5 livrée v1.26.0 (choix par défaut)** : 3 sanctuaires maudits. Tant qu’un tient,
+      (1) les **failles naissent corrompues** — vieillies d’un jour par sanctuaire debout, une
+      seule fois (`CURSE`, `corruptRifts`, `Poi.corrupt`) : plus peuplées, elles débordent plus
+      tôt ; (2) les **invasions combinées** frappent TOUS les lieux tenus à la fois, en moyenne
+      toutes les 72 h / sanctuaires debout (`INVASION`, même horloge `warAt` que l’armée de
+      l’île 4, jamais une attaque reculée). Points fixes : socle + tour de guet + scriptorium +
+      **autel des runes** (sceaux de champion 🔱 au rang du joueur : la part de champion d’une
+      ruine toutes les 72 h au complet). ⚠️ Le « puis sans fin » de la Citadelle maudite n’est
+      pas fait. Tests `islandCursed.test.ts` (10, 12 mutations rouges).
 - [ ] **6. Équilibrage du niveau 1 au 100** (~3 j) — parties simulées complètes (économie,
       défense, durée de chaque île, 5 îles de rente).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

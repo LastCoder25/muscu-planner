@@ -4831,6 +4831,7 @@ export const useCharacterStore = defineStore('character', () => {
     let keysIn = 0;
     let summonIn = 0;
     let gearSealsIn = 0;
+    const champSealsIn: [number, number][] = [];
     // 🔙 Les sorties en retour vers un point qui tombe rentrent à la base (`rerouteSorties`).
     let parties: ActiveParty[] = [...partyList.value];
     let partiesMoved = false;
@@ -4849,6 +4850,7 @@ export const useCharacterStore = defineStore('character', () => {
       keysIn += h.keys;
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
+      if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
       const escort = advs.filter((a) => ids.has(a.id));
       // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
       const militia = militiaUnits(p.control!.garrison, playerLevel);
@@ -5017,7 +5019,10 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚱️ Les pierres de l'ossuaire, de même.
       ...(summonIn ? { summon_stones: (cur.summon_stones ?? 0) + summonIn } : {}),
       // ⚒️ Les sceaux de l'arsenal, de même.
-      ...(gearSealsIn ? { seals: addSeals(cur.seals, 'gear', 0, gearSealsIn) } : {}),
+      // 🗿 Et ceux de l'autel des runes.
+      ...(gearSealsIn || champSealsIn.length
+        ? { seals: withControlSeals(cur.seals, gearSealsIn, champSealsIn) }
+        : {}),
       adventurers: roster,
     });
     x.play();
@@ -5047,6 +5052,8 @@ export const useCharacterStore = defineStore('character', () => {
     keys: number;
     summon: number;
     gearSeals: number;
+    champSeals: number;
+    champSealRank: number;
   } {
     const p = map.pois.find((x) => x.id === id);
     // 🏝️ En mode archipel, un lieu tenu produit au RANG DE SON ÎLE, plus au niveau du héros.
@@ -5066,6 +5073,8 @@ export const useCharacterStore = defineStore('character', () => {
         keys: c.keys,
         summon: c.summon,
         gearSeals: c.gearSeals,
+        champSeals: c.champSeals,
+        champSealRank: c.champSealRank,
       };
     // 🎯 Le camp : chacun reçoit SA réserve, selon le temps qu'il a passé sur place (un renfort
     // arrivé tard n'a pas l'XP des autres) — un champion ramené reçoit ce qu'il avait gagné.
@@ -5092,7 +5101,16 @@ export const useCharacterStore = defineStore('character', () => {
       keys: c.keys,
       summon: c.summon,
       gearSeals: c.gearSeals,
+      champSeals: c.champSeals,
+      champSealRank: c.champSealRank,
     };
+  }
+
+  /** ⚒️🗿 Ajoute les sceaux des lieux tenus (arsenal : d'objet ; autel : de champion, par rang). */
+  function withControlSeals(s: Seals, gear: number, champ: [number, number][]): Seals {
+    let out = gear ? addSeals(s, 'gear', 0, gear) : s;
+    for (const [rank, n] of champ) out = addSeals(out, 'champion', rank, n);
+    return out;
   }
 
   /**
@@ -5126,6 +5144,7 @@ export const useCharacterStore = defineStore('character', () => {
     let keys = 0;
     let summon = 0;
     let gearSeals = 0;
+    const champSeals: [number, number][] = [];
     const msgs: ExpeditionMessage[] = [];
     /** Récolte tous les points dus d'UNE carte (l'active ou une île rangée). */
     const harvestAll = (m0: ExpeditionMap): ExpeditionMap => {
@@ -5143,7 +5162,17 @@ export const useCharacterStore = defineStore('character', () => {
         keys += h.keys;
         summon += h.summon;
         gearSeals += h.gearSeals;
-        const msg = controlLootMessage(p, now, h.supplies, h.runes, h.keys, h.summon, h.gearSeals);
+        if (h.champSeals) champSeals.push([h.champSealRank, h.champSeals]);
+        const msg = controlLootMessage(
+          p,
+          now,
+          h.supplies,
+          h.runes,
+          h.keys,
+          h.summon,
+          h.gearSeals,
+          h.champSeals,
+        );
         if (msg) msgs.push(msg);
       }
       return m;
@@ -5173,7 +5202,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(runes ? { runes: addRuneCount(cur.runes, runes) } : {}),
       ...(keys ? { keys: cur.keys + keys } : {}),
       ...(summon ? { summon_stones: (cur.summon_stones ?? 0) + summon } : {}),
-      ...(gearSeals ? { seals: addSeals(cur.seals, 'gear', 0, gearSeals) } : {}),
+      ...(gearSeals || champSeals.length
+        ? { seals: withControlSeals(cur.seals, gearSeals, champSeals) }
+        : {}),
       ...(gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {}),
       ...(advs !== before ? { adventurers: advs } : {}),
       ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
@@ -5211,7 +5242,15 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes) } : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
-      ...(h.gearSeals ? { seals: addSeals(cur.seals, 'gear', 0, h.gearSeals) } : {}),
+      ...(h.gearSeals || h.champSeals
+        ? {
+            seals: withControlSeals(
+              cur.seals,
+              h.gearSeals,
+              h.champSeals ? [[h.champSealRank, h.champSeals]] : [],
+            ),
+          }
+        : {}),
       // ⚠️ `gearPatch` TOUJOURS : un champion au plafond ne bouge pas, ses pièces si — le
       // réserver au cas « vivier changé » (v0.1249) ne sauvegardait jamais leur XP.
       ...gearPatch,
@@ -5259,7 +5298,15 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes) } : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
-      ...(h.gearSeals ? { seals: addSeals(cur.seals, 'gear', 0, h.gearSeals) } : {}),
+      ...(h.gearSeals || h.champSeals
+        ? {
+            seals: withControlSeals(
+              cur.seals,
+              h.gearSeals,
+              h.champSeals ? [[h.champSealRank, h.champSeals]] : [],
+            ),
+          }
+        : {}),
       // 🗡️ Les pièces : le bonus du camp, puis ce que l'XP de leur porteur leur a appris.
       ...(() => {
         const next = trainWornGear(advList.value, h.advs, h.stock);

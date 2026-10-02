@@ -83,6 +83,9 @@ export const CONTROL = {
   arsenalHoursPerRuin: 72,
   /** 🌀 Le cercle d'invocation (île 4) : le prix d'un tirage toutes les 48 h au complet. */
   circleHoursPerPull: 48,
+  /** 🗿 L'autel des runes (île 5) : la part de champion d'une ruine (3 sceaux au rang du
+   *  joueur) toutes les 72 h au complet. */
+  altarHoursPerRuin: 72,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -360,6 +363,7 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   ossuary: PRODUCER_SEATS,
   arsenal: PRODUCER_SEATS,
   circle: PRODUCER_SEATS,
+  altar: PRODUCER_SEATS,
   mana: PRODUCER_SEATS,
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
@@ -394,6 +398,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   // ⚒️🌀 Île 4 : les places du jardin et du scriptorium, qui n'y sont pas.
   arsenal: 2,
   circle: 2.5,
+  // 🗿 Île 5 : la place du jardin, qui n'y est pas.
+  altar: 2,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -416,6 +422,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   ossuary: 'pierres d’invocation 🔮',
   arsenal: 'sceaux d’objet ⚜️',
   circle: 'pierres de mana 💠',
+  altar: 'sceaux de champion 🔱',
   mana: 'pierres de mana 💠 en continu',
   citadel: 'une trêve de 3 jours sur les points qu’elle attaque',
   objective: 'un pas vers la pacification de l’île',
@@ -1016,6 +1023,7 @@ export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
   'ossuary',
   'arsenal',
   'circle',
+  'altar',
 ];
 
 /**
@@ -1029,10 +1037,18 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   // ⚠️ La tour de guet reste sur l'île 3 : c'est un des deux AVANT-POSTES (`ISLAND_OUTPOSTS`).
   3: ['mine', 'training', 'tower', 'mana', 'garden', 'ossuary'],
   4: ['mine', 'training', 'tower', 'mana', 'arsenal', 'circle'],
+  5: ['mine', 'training', 'tower', 'mana', 'scriptorium', 'altar'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
 }
+
+/** ⚒️🌀🗿 L'unité produite et ce qu'en dit la tuile, pour les spécialités des îles 4 et 5. */
+const UNIT_LOOK: Record<'arsenal' | 'circle' | 'altar', { unit: string; what: string }> = {
+  arsenal: { unit: '⚜️', what: 'du prochain sceau d’objet, versé directement' },
+  circle: { unit: '💠', what: 'de la prochaine pierre de mana, versée directement' },
+  altar: { unit: '🔱', what: 'du prochain sceau de champion, versé directement' },
+};
 
 /** Pose les points de contrôle MANQUANTS sur la carte (tenus par l'ennemi). Rend la même
  *  carte quand il ne manque rien : le store n'écrit pas à vide. */
@@ -1582,6 +1598,9 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
           shareOf(n)) /
         CONTROL.arsenalHoursPerRuin
       );
+    case 'altar':
+      // 🗿 La part de champion d'une ruine toutes les 72 h au complet.
+      return (RUINS_SEALS.champion * shareOf(n)) / CONTROL.altarHoursPerRuin;
     case 'circle':
       // 🌀 Le prix d'un tirage toutes les 48 h au complet.
       return (GACHA.pullCost * shareOf(n)) / CONTROL.circleHoursPerPull;
@@ -1804,6 +1823,9 @@ export function collectControl(
   summon: number;
   /** ⚒️ Sceaux d'objet (l'arsenal). */
   gearSeals: number;
+  /** 🗿 Sceaux de champion (l'autel des runes), au rang `champSealRank`. */
+  champSeals: number;
+  champSealRank: number;
 } {
   const p = map.pois.find((x) => x.id === id);
   const none = {
@@ -1817,6 +1839,8 @@ export function collectControl(
     keys: 0,
     summon: 0,
     gearSeals: 0,
+    champSeals: 0,
+    champSealRank: 0,
   };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
@@ -1881,6 +1905,8 @@ export function collectControl(
     keys: c.kind === 'archives' ? whole : 0,
     summon: c.kind === 'ossuary' ? whole : 0,
     gearSeals: c.kind === 'arsenal' ? whole : 0,
+    champSeals: c.kind === 'altar' ? whole : 0,
+    champSealRank: characterRank(Math.max(1, playerLevel)).rankIndex,
   };
 }
 
@@ -1949,10 +1975,11 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       return { text: `🔮 ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
     }
     case 'arsenal':
-    case 'circle': {
+    case 'circle':
+    case 'altar': {
       const next = Math.max(0, units - Math.floor(units + 1e-9));
       const left = leftFor(1 - next, rate);
-      const e = c.kind === 'arsenal' ? '⚜️' : '💠';
+      const e = UNIT_LOOK[c.kind].unit;
       return { text: `${e} ${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`, pct: next };
     }
     default:
@@ -1996,6 +2023,7 @@ const WORKER: Record<ControlKind, [string, string]> = {
   ossuary: ['fossoyeur', 'fossoyeurs'],
   arsenal: ['armurier', 'armuriers'],
   circle: ['invocateur', 'invocateurs'],
+  altar: ['ritualiste', 'ritualistes'],
   mana: ['gardien', 'gardiens'],
   citadel: ['assaillant', 'assaillants'],
   objective: ['assaillant', 'assaillants'],
@@ -2112,19 +2140,18 @@ export function controlYieldCard(
       };
     }
     case 'arsenal':
-    case 'circle': {
+    case 'circle':
+    case 'altar': {
       const next = Math.max(0, units - Math.floor(units + 1e-9));
       const left = leftFor(1 - next, rate);
-      const arsenal = c.kind === 'arsenal';
+      const look = UNIT_LOOK[c.kind];
       return {
-        emoji: arsenal ? '⚒️' : '🌀',
+        emoji: CONTROL_EMO[c.kind],
         value: `${Math.round(next * 100)} %`,
-        what: arsenal
-          ? 'du prochain sceau d’objet, versé directement'
-          : 'de la prochaine pierre de mana, versée directement',
+        what: look.what,
         pct: next,
         gauge: idle ?? (left ? `Prochain dans ${left}` : null),
-        rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ${arsenal ? '⚜️' : '💠'}/jour · ${crew}`,
+        rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} ${look.unit}/jour · ${crew}`,
         ready: false,
         full: false,
       };
@@ -2934,9 +2961,11 @@ export function controlLootMessage(
   summon = 0,
   /** ⚒️ Sceaux d'objet de l'arsenal. */
   gearSeals = 0,
+  /** 🗿 Sceaux de champion de l'autel des runes. */
+  champSeals = 0,
 ): ExpeditionMessage | null {
   const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
-  if (!nSup && !runes && !keys && !summon && !gearSeals) return null;
+  if (!nSup && !runes && !keys && !summon && !gearSeals && !champSeals) return null;
   const kind = p.control?.kind;
   const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
   const what = [
@@ -2945,6 +2974,7 @@ export function controlLootMessage(
     keys ? `${keys} clé${keys > 1 ? 's' : ''} du Labyrinthe` : '',
     summon ? `${summon} pierre${summon > 1 ? 's' : ''} d’invocation` : '',
     gearSeals ? `${gearSeals} sceau${gearSeals > 1 ? 'x' : ''} d’objet` : '',
+    champSeals ? `${champSeals} sceau${champSeals > 1 ? 'x' : ''} de champion` : '',
   ]
     .filter(Boolean)
     .join(' et ');

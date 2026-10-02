@@ -94,6 +94,8 @@ export type ControlKind =
   | 'arsenal'
   /** 🏝️🌀 Le CERCLE D'INVOCATION (île 4) : des pierres de mana. */
   | 'circle'
+  /** 🏝️🗿 L'AUTEL DES RUNES (île 5) : des sceaux de champion. */
+  | 'altar'
   | 'mana'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
@@ -280,6 +282,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   ossuary: 'Ossuaire',
   arsenal: 'Arsenal',
   circle: 'Cercle d’invocation',
+  altar: 'Autel des runes',
   mana: 'Source de mana',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
@@ -295,6 +298,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   ossuary: '⚱️',
   arsenal: '⚒️',
   circle: '🌀',
+  altar: '🗿',
   mana: '⛲',
   citadel: '🏯',
   objective: '⛺',
@@ -676,6 +680,9 @@ export interface Poi {
   /** 🪺 À portée d'un NID de l'île 2 (`islandConquest`) : embuscades doublées. ⚠️ DÉRIVÉ,
    *  recalculé à chaque tick de la conquête : il s'éteint quand le nid tombe. */
   nestPeril?: boolean;
+  /** 🔮 Faille née CORROMPUE sur l'île 5 (`islandConquest`) : vieillie d'un jour par sanctuaire
+   *  maudit debout, une seule fois. */
+  corrupt?: boolean;
   /** 🕳️ Niveau sur lequel se calcule le TRAJET (v0.1012). ⚠️ Posé seulement quand le niveau
    *  du lieu NE DÉCOULE PAS de sa distance — une faille (niveau tiré par rang) et ce qu'elle
    *  laisse (mine, bande). Sans lui, une faille Bronze posée au bout de la carte prenait

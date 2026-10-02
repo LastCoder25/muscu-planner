@@ -31,6 +31,7 @@ import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
   EXPE,
+  isRiftPoi,
   islandDistNorm,
   type ControlKind,
   type ControlState,
@@ -623,7 +624,13 @@ export function ensureIslandConquest(
       return rest;
     });
   }
-  // 5. 🚩 L'armée mobile du seigneur de guerre (île 4).
+  // 5. 🔮 Les failles corrompues (île 5).
+  const cursed = corruptRifts(map, pois);
+  if (cursed !== pois) {
+    pois = cursed;
+    changed = true;
+  }
+  // 6. 🚩 L'armée mobile du seigneur de guerre (île 4), 🔮 les invasions combinées (île 5).
   return warlordRaids(changed ? { ...map, pois } : map, now);
 }
 
@@ -786,9 +793,11 @@ export function islandTargetLabel(
           ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
           : NEST.islands.has(isl.id)
             ? ' · tant qu’il tient, il pond un nid tous les 3 jours (6 au plus), ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tous les nids debout comptent pour pacifier'
-            : WARLORD.islands.has(isl.id)
-              ? ' · tant qu’il tient, son armée mobile frappe ton lieu tenu le MOINS défendu (en moyenne toutes les 36 h, plus souvent avec plusieurs camps debout)'
-              : ' · tant qu’il tient, il attaque tes lieux fixes') +
+            : CURSE.islands.has(isl.id)
+              ? ' · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (en moyenne toutes les 72 h, plus souvent avec plusieurs sanctuaires debout)'
+              : WARLORD.islands.has(isl.id)
+                ? ' · tant qu’il tient, son armée mobile frappe ton lieu tenu le MOINS défendu (en moyenne toutes les 36 h, plus souvent avec plusieurs camps debout)'
+                : ' · tant qu’il tient, il attaque tes lieux fixes') +
         ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} abattus ouvrent la forteresse, tous l’affaiblissent au plus bas.`,
     };
   const f = fortressForce(isl, down);
@@ -834,25 +843,76 @@ export const WARLORD = {
 } as const;
 
 /** Le délai jusqu'à la prochaine sortie, à `standing` camps debout. */
-export function warDelayMs(seed: number, from: number, standing: number): number {
+export function warDelayMs(
+  seed: number,
+  from: number,
+  standing: number,
+  raidMs: number = WARLORD.raidMs,
+): number {
   const r = mulberry32((seedOf(`${seed}:war:${from}`) ^ 0x3b9ac9ff) >>> 0 || 1)();
-  return (WARLORD.raidMs / Math.max(1, standing)) * (1 + (r * 2 - 1) * WARLORD.jitter);
+  return (raidMs / Math.max(1, standing)) * (1 + (r * 2 - 1) * WARLORD.jitter);
 }
 
 /** 🚩 Le lieu tenu le MOINS défendu à `at` (dont l'attaque prévue vient après), `null` si aucun. */
 export function weakestHeld(pois: readonly Poi[], at: number, seed: number): Poi | null {
-  const held = pois.filter(
+  const held = heldBefore(pois, at);
+  if (!held.length) return null;
+  const least = Math.min(...held.map((p) => p.control!.garrison.length));
+  const ties = held.filter((p) => p.control!.garrison.length === least);
+  const r = mulberry32((seedOf(`${seed}:warTarget:${at}`) ^ 0x7f4a7c15) >>> 0 || 1)();
+  return ties[Math.floor(r * ties.length)]!;
+}
+
+/** Les lieux tenus dont l'attaque prévue vient APRÈS `at` (on n'en recule jamais une). */
+function heldBefore(pois: readonly Poi[], at: number): Poi[] {
+  return pois.filter(
     (p) =>
       p.control?.owner === 'player' &&
       ALL_CONTROL_KINDS.includes(p.control.kind) &&
       p.control.attackAt !== undefined &&
       p.control.attackAt > at,
   );
-  if (!held.length) return null;
-  const least = Math.min(...held.map((p) => p.control!.garrison.length));
-  const ties = held.filter((p) => p.control!.garrison.length === least);
-  const r = mulberry32((seedOf(`${seed}:warTarget:${at}`) ^ 0x7f4a7c15) >>> 0 || 1)();
-  return ties[Math.floor(r * ties.length)]!;
+}
+
+/**
+ * 🔮 LES INVASIONS COMBINÉES DE L'ÎLE 5 (roadmap : « invasions combinées ») : tant qu'un
+ * sanctuaire maudit tient, une invasion sort en moyenne toutes les `raidMs` / sanctuaires
+ * debout et frappe TOUS les lieux tenus à la fois (elle avance leurs attaques prévues au même
+ * instant). Plus rare que l'armée de l'île 4, mais tout tombe en même temps : il faut des
+ * garnisons partout. Même mécanique que `warlordRaids` (même horloge `warAt`).
+ */
+export const INVASION = {
+  islands: new Set([5]) as ReadonlySet<number>,
+  raidMs: 72 * 3600_000,
+} as const;
+
+/**
+ * 🔮 LES FAILLES CORROMPUES DE L'ÎLE 5 : tant qu'un sanctuaire maudit tient, chaque faille
+ * naît VIEILLIE de `ageMs` par sanctuaire debout (plus peuplée, elle déborde plus tôt). Une
+ * seule fois par faille (`Poi.corrupt`).
+ */
+export const CURSE = {
+  islands: new Set([5]) as ReadonlySet<number>,
+  ageMs: 24 * 3600_000,
+} as const;
+
+/** 🔮 Corrompt les failles neuves de l'île 5. Rend les MÊMES lieux si rien ne change. */
+export function corruptRifts(map: ExpeditionMap, pois: Poi[]): Poi[] {
+  const isl = activeIsland(map);
+  if (!isl || !CURSE.islands.has(isl.id) || islandPacified(map)) return pois;
+  const n = standingCamps({ pois });
+  if (!n || !pois.some((p) => isRiftPoi(p) && !p.corrupt)) return pois;
+  const age = n * CURSE.ageMs;
+  return pois.map((p) =>
+    isRiftPoi(p) && !p.corrupt
+      ? {
+          ...p,
+          spawnedAt: p.spawnedAt - age,
+          expiresAt: p.expiresAt - age,
+          corrupt: true,
+        }
+      : p,
+  );
 }
 
 /** 🚩 Avance l'armée mobile jusqu'à `now`. Rend la MÊME carte si rien ne change. */
@@ -861,7 +921,10 @@ export function warlordRaids(map: ExpeditionMap, now: number): ExpeditionMap {
   const a = map.archipel;
   if (!a) return map;
   const camps = standingCamps(map);
-  const active = !!isl && WARLORD.islands.has(isl.id) && !islandPacified(map) && camps > 0;
+  // 🚩 Île 4 : le moins défendu ; 🔮 île 5 : tous à la fois, plus rarement.
+  const all = !!isl && INVASION.islands.has(isl.id);
+  const raidMs = all ? INVASION.raidMs : WARLORD.raidMs;
+  const active = !!isl && (WARLORD.islands.has(isl.id) || all) && !islandPacified(map) && camps > 0;
   if (!active) {
     if (a.warAt === undefined) return map;
     const { warAt: _w, ...rest } = a;
@@ -869,18 +932,22 @@ export function warlordRaids(map: ExpeditionMap, now: number): ExpeditionMap {
     return { ...map, archipel: rest };
   }
   let pois = map.pois;
-  let at = a.warAt ?? now + warDelayMs(map.seed, now, camps);
+  let at = a.warAt ?? now + warDelayMs(map.seed, now, camps, raidMs);
   for (let n = 0; at <= now && n < WARLORD.catchUp; n++) {
-    const t = weakestHeld(pois, at, map.seed);
-    if (t) {
+    const hit = new Set(
+      (all ? heldBefore(pois, at) : [weakestHeld(pois, at, map.seed)])
+        .filter((p): p is Poi => !!p)
+        .map((p) => p.id),
+    );
+    if (hit.size) {
       const when = at;
       pois = pois.map((p) =>
-        p.id === t.id ? { ...p, control: { ...p.control!, attackAt: when } } : p,
+        hit.has(p.id) ? { ...p, control: { ...p.control!, attackAt: when } } : p,
       );
     }
-    at += warDelayMs(map.seed, at, camps);
+    at += warDelayMs(map.seed, at, camps, raidMs);
   }
-  if (at <= now) at = now + warDelayMs(map.seed, now, camps);
+  if (at <= now) at = now + warDelayMs(map.seed, now, camps, raidMs);
   if (at === a.warAt && pois === map.pois) return map;
   return { ...map, pois, archipel: { ...a, warAt: at } };
 }
