@@ -52,13 +52,20 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
-import { advAtInfirmary, advAvailable, rankAvailability } from '@/lib/adventurers';
+import {
+  advAtInfirmary,
+  advAvailable,
+  rankAvailability,
+  type Adventurer,
+} from '@/lib/adventurers';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import { militiaCount } from '@/lib/militia';
 import { buildingLevel } from '@/lib/buildings';
 import { heroAttackReturnAt } from '@/lib/combinedAttack';
+import { readyGarrisons } from '@/lib/controlRoutes';
+import { plannedTransferIds } from '@/lib/plannedMoves';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{
@@ -90,13 +97,30 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
   return { label: 'dispo', tone: 'ok', healMs };
 });
 
-/** 🏅 Champions libres / possédés (hors blessés). */
+/** 🏰 Les champions de garnison PRÊTS À SORTIR des points fixes tenus — la règle de l'écran
+ *  d'envoi (`readyGarrisons`) : une sortie peut partir de chez eux, ils comptent donc comme
+ *  disponibles au même titre que ceux de la base (demandé). */
+const readyPosted = computed(() => {
+  const ids = new Set<string>();
+  const ready = readyGarrisons(
+    char.row?.expedition_map,
+    char.advList,
+    props.now,
+    plannedTransferIds(char.plannedList),
+  );
+  for (const list of ready.values()) for (const a of list) ids.add(a.id);
+  return ids;
+});
+/** Peut partir : libre à la base, ou prêt dans la garnison d'un point fixe. */
+const canGo = (a: Adventurer) => advAvailable(a, props.now) || readyPosted.value.has(a.id);
+
+/** 🏅 Champions disponibles (base + garnisons prêtes) / possédés (hors blessés). */
 const d = computed(() => {
   const advs = char.advList;
   // 🏥 À l'infirmerie seulement : un blessé qui rentre encore à pied est « en route ».
   const champHurt = advs.filter((a) => advAtInfirmary(a, props.now)).length;
   return {
-    champFree: advs.filter((a) => advAvailable(a, props.now)).length,
+    champFree: advs.filter(canGo).length,
     // ⛑️ Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
     champTotal: advs.length - champHurt,
     champHurt,
@@ -108,7 +132,7 @@ const d = computed(() => {
 const rankRows = computed(() =>
   rankAvailability(
     char.advList.filter((a) => !advAtInfirmary(a, props.now)),
-    (a) => advAvailable(a, props.now),
+    canGo,
   ),
 );
 
