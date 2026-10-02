@@ -1307,7 +1307,7 @@ import {
   travelOneWayMin,
   expeditionTerrain,
   MAP_VIEW,
-  revealRadius,
+  mapReach,
   travelHourRings,
   type Poi,
   type PoiType,
@@ -1541,8 +1541,9 @@ const V = MAP_VIEW;
 const island = computed(() => activeIsland(char.row?.expedition_map));
 /** 🏝️ La conquête de l'île active (objectifs, forteresse, pacification). */
 const islandProgress = computed(() => islandConquest(char.row?.expedition_map));
+// 🏝️ Sur une île : toute sa terre ferme (`mapReach`, v1.28.0).
 const reveal = computed(() =>
-  revealRadius(mapOutpostLevel(char.row?.expedition_map, char.comptoirLevel)),
+  mapReach(char.row?.expedition_map, mapOutpostLevel(char.row?.expedition_map, char.comptoirLevel)),
 );
 /** ⏱️ Rayons des heures pleines de trajet aller du héros, dans la zone révélée. */
 const hourRings = computed(() =>
@@ -1650,6 +1651,13 @@ function liftFog(from: number | null) {
   cancelAnimationFrame(fogRaf);
   clearTimeout(fogWait);
   const to = reveal.value;
+  // 🏝️ Sur une île, pas de brouillard : rien à lever, et le rayon vu de la carte ordinaire
+  // reste celui de la carte ordinaire.
+  if (island.value) {
+    fogPlan.value = null;
+    fogR.value = to;
+    return;
+  }
   writeFogSeen(to);
   const plan = fogRevealPlan(from, to);
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -4463,8 +4471,8 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
     p.convoy
       ? 'or 🪙 · la forteresse n’est pas renforcée'
       : p.army
-      ? `${p.army.rift ? 'mana 💠' : FACTION_LOOT_LABEL[p.army.faction]} · chaque ennemi abattu n’attaquera pas`
-      : 'mana 💠 · siège non renforcé',
+        ? `${p.army.rift ? 'mana 💠' : FACTION_LOOT_LABEL[p.army.faction]} · chaque ennemi abattu n’attaquera pas`
+        : 'mana 💠 · siège non renforcé',
   ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',

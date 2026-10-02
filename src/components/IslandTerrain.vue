@@ -269,6 +269,21 @@ const vars = computed(() => ({
   stroke: #e7e0cf;
   stroke-width: 0.5;
 }
+.k-house {
+  fill: #8a6a48;
+  stroke: #3e2c1c;
+  stroke-width: 0.35;
+}
+.k-field {
+  fill: #00000014;
+  stroke: #0000003d;
+  stroke-width: 0.3;
+}
+.k-ruin {
+  fill: #8d877b;
+  stroke: #3a3732;
+  stroke-width: 0.35;
+}
 .k-dune {
   fill: #c9ad6c;
   stroke: #e0c88f;

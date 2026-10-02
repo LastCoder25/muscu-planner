@@ -7,16 +7,16 @@
  * QUE de son numéro — l'île 2 a la même silhouette pour tout le monde, c'est ce qui en fait un
  * LIEU qu'on reconnaît. Les lieux à prendre restent posés par `expedition.ts` dans le disque de
  * l'île (`ISLAND_REACH`) : la côte est tenue de ne JAMAIS passer en deçà (`ISLAND_MIN_R`), sinon
- * un lieu se poserait dans la mer.
+ * un lieu se poserait dans la mer. (v1.28.0 : la silhouette vit dans `islandShape.ts`, et
+ * les lieux se posent désormais sur TOUTE la terre ferme, à `LAND_MARGIN` de la côte.)
  */
 import { mulberry32 } from './combat';
 import { EXPE, MAP_VIEW } from './expedition';
-import { ISLAND_REACH } from './archipelago';
+import { angDiff, islandRadiusAt, islandShape, onIsland, ISLAND_MAX_R } from './islandShape';
 
-/** La côte ne descend jamais sous ce rayon : la zone des lieux (54) plus une plage de 6. */
-export const ISLAND_MIN_R = ISLAND_REACH + 6;
-/** …ni ne monte au-dessus de celui-ci : il reste de la mer tout autour dans la fenêtre. */
-export const ISLAND_MAX_R = MAP_VIEW.size / 2 - 22;
+// La silhouette vit dans `islandShape.ts` (la carte en a besoin pour poser les lieux, et
+// `expedition.ts` ne peut pas importer ce fichier-ci sans cycle).
+export { islandRadiusAt, onIsland, ISLAND_MAX_R, ISLAND_MIN_R } from './islandShape';
 
 /** Les couleurs d'une île (une ambiance par menace). */
 export interface IslandStyle {
@@ -45,7 +45,10 @@ export type DecorKind =
   | 'crystal'
   | 'crack'
   | 'bones'
-  | 'dune';
+  | 'dune'
+  | 'house'
+  | 'field'
+  | 'ruin';
 
 export interface Decor {
   kind: DecorKind;
@@ -80,93 +83,6 @@ export interface IslandTerrainData {
   /** La forteresse portuaire (sur le cap opposé). */
   fortress: CoastAnchor;
 }
-
-/** La silhouette d'une île : rayon de base, harmoniques [k, amplitude, phase], une baie (le
- *  port) et un cap (la forteresse). ⚠️ Écrites à la main, une par île : c'est ce qui les rend
- *  RECONNAISSABLES — un tirage seul donnerait cinq patatoïdes cousins. */
-interface Shape {
-  base: number;
-  harm: [k: number, amp: number, phase: number][];
-  bay: number; // angle de la baie (radians)
-  bayDepth: number; // part du rayon retirée au fond de la baie
-  bayWidth: number; // largeur angulaire de la baie
-  cape: number; // angle du cap
-  capeHeight: number;
-}
-
-const SHAPES: Record<number, Shape> = {
-  // 🗡️ Brigands : une île ronde et bonhomme, une large baie au sud.
-  1: {
-    base: 76,
-    harm: [
-      [2, 0.06, 0.4],
-      [3, 0.05, 1.9],
-      [5, 0.03, 0.7],
-    ],
-    bay: Math.PI / 2,
-    bayDepth: 0.2,
-    bayWidth: 0.45,
-    cape: -Math.PI / 2 + 0.6,
-    capeHeight: 0.14,
-  },
-  // 🐺 Bêtes : longue, couchée d'est en ouest, côte déchiquetée.
-  2: {
-    base: 78,
-    harm: [
-      [2, 0.2, 0],
-      [3, 0.04, 2.4],
-      [7, 0.035, 0.3],
-      [11, 0.02, 1.1],
-    ],
-    bay: Math.PI / 2 + 0.5,
-    bayDepth: 0.18,
-    bayWidth: 0.35,
-    cape: 0.15,
-    capeHeight: 0.1,
-  },
-  // 💀 Morts : un croissant — un grand golfe mangé au nord-est.
-  3: {
-    base: 80,
-    harm: [
-      [1, 0.12, 2.6],
-      [4, 0.04, 0.9],
-      [6, 0.025, 2.1],
-    ],
-    bay: -Math.PI / 4,
-    bayDepth: 0.24,
-    bayWidth: 0.7,
-    cape: Math.PI - 0.4,
-    capeHeight: 0.16,
-  },
-  // ⚔️ Seigneur de guerre : trois lobes anguleux, comme une place forte.
-  4: {
-    base: 78,
-    harm: [
-      [3, 0.16, 0.5],
-      [6, 0.04, 1.3],
-      [9, 0.02, 0.2],
-    ],
-    bay: Math.PI / 2 + 0.52,
-    bayDepth: 0.16,
-    bayWidth: 0.3,
-    cape: -Math.PI / 2 - 0.5,
-    capeHeight: 0.12,
-  },
-  // 🌑 Maudite : hérissée de pointes, comme brisée.
-  5: {
-    base: 79,
-    harm: [
-      [5, 0.11, 0.1],
-      [8, 0.04, 1.7],
-      [13, 0.03, 0.6],
-    ],
-    bay: Math.PI / 2 - 0.3,
-    bayDepth: 0.2,
-    bayWidth: 0.32,
-    cape: -Math.PI / 2 + 0.3,
-    capeHeight: 0.15,
-  },
-};
 
 export const ISLAND_STYLES: Record<number, IslandStyle> = {
   1: {
@@ -229,27 +145,6 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
 const C = EXPE.town.x;
 const f1 = (v: number) => +v.toFixed(1);
 
-/** Écart angulaire signé ramené dans [−π, π]. */
-function angDiff(a: number, b: number): number {
-  let d = a - b;
-  while (d > Math.PI) d -= 2 * Math.PI;
-  while (d < -Math.PI) d += 2 * Math.PI;
-  return d;
-}
-
-/** Le rayon de la côte de l'île `id` à l'angle `t`. ⚠️ SOURCE UNIQUE de la silhouette : le
- *  dessin de l'île, son décor (tout dedans) et sa miniature de l'archipel la lisent. */
-export function islandRadiusAt(id: number, t: number): number {
-  const s = SHAPES[id] ?? SHAPES[1]!;
-  let k = 0;
-  for (const [n, amp, ph] of s.harm) k += amp * Math.sin(n * t + ph);
-  const bay = angDiff(t, s.bay) / s.bayWidth;
-  k -= s.bayDepth * Math.exp(-bay * bay);
-  const cape = angDiff(t, s.cape) / 0.25;
-  k += s.capeHeight * Math.exp(-cape * cape);
-  return Math.min(ISLAND_MAX_R, Math.max(ISLAND_MIN_R, s.base * (1 + k)));
-}
-
 const COAST_STEPS = 144;
 
 /** Le contour lissé d'une île centrée en (cx, cy), à l'échelle `scale`. */
@@ -274,13 +169,6 @@ export function islandOutline(id: number, cx: number = C, cy: number = C, scale 
     d += `Q${f1(p[0])} ${f1(p[1])} ${m[0]} ${m[1]}`;
   }
   return d + 'Z';
-}
-
-/** Le point (x, y) est-il sur l'île, à `margin` au moins de la côte ? */
-export function onIsland(id: number, x: number, y: number, margin = 0): boolean {
-  const dx = x - C;
-  const dy = y - C;
-  return Math.hypot(dx, dy) <= islandRadiusAt(id, Math.atan2(dy, dx)) - margin;
 }
 
 // ── Motifs ────────────────────────────────────────────────────────────────────────────────
@@ -326,6 +214,21 @@ function motif(kind: DecorKind, x: number, y: number, s: number, r: () => number
       return `M${f1(x - 1.4 * s)} ${f1(y - 1 * s)}L${f1(x + 1.4 * s)} ${f1(y + 1 * s)}M${f1(x - 1.4 * s)} ${f1(y + 1 * s)}L${f1(x + 1.4 * s)} ${f1(y - 1 * s)}`;
     case 'dune':
       return `M${f1(x - 4 * s)} ${f1(y)}Q${f1(x)} ${f1(y - 2.2 * s)} ${f1(x + 4 * s)} ${f1(y)}`;
+    case 'house':
+      // Une maison : murs, toit à deux pans.
+      return `M${f1(x - 1.6 * s)} ${f1(y + 1.2 * s)}L${f1(x - 1.6 * s)} ${f1(y - 0.4 * s)}L${f1(x)} ${f1(y - 1.9 * s)}L${f1(x + 1.6 * s)} ${f1(y - 0.4 * s)}L${f1(x + 1.6 * s)} ${f1(y + 1.2 * s)}Z`;
+    case 'field': {
+      // Un champ : une parcelle et ses sillons.
+      const w = 3.4 * s;
+      const h = 2.2 * s;
+      let d = `M${f1(x - w)} ${f1(y - h)}L${f1(x + w)} ${f1(y - h)}L${f1(x + w)} ${f1(y + h)}L${f1(x - w)} ${f1(y + h)}Z`;
+      for (let i = -1; i <= 1; i++)
+        d += `M${f1(x - w + 0.5)} ${f1(y + i * h * 0.55)}L${f1(x + w - 0.5)} ${f1(y + i * h * 0.55)}`;
+      return d;
+    }
+    case 'ruin':
+      // Un pan de mur effondré.
+      return `M${f1(x - 2.2 * s)} ${f1(y + 1 * s)}L${f1(x - 2.2 * s)} ${f1(y - 1.6 * s)}L${f1(x - 1 * s)} ${f1(y - 1.6 * s)}L${f1(x - 1 * s)} ${f1(y - 0.6 * s)}L${f1(x + 0.4 * s)} ${f1(y - 0.9 * s)}L${f1(x + 0.4 * s)} ${f1(y + 0.1 * s)}L${f1(x + 2.2 * s)} ${f1(y + 0.1 * s)}L${f1(x + 2.2 * s)} ${f1(y + 1 * s)}Z`;
   }
 }
 
@@ -343,17 +246,59 @@ type Cluster =
   | 'crystals'
   | 'scorched'
   | 'bones'
-  | 'dunes';
+  | 'dunes'
+  | 'village'
+  | 'fields'
+  | 'ruins';
 
+// 🌿 v1.28.0 (« habille la carte ») : les lieux couvrent désormais toute l'île, le décor aussi
+// — deux fois plus d'amas par île, des villages, des champs et des ruines.
 const BIOMES: Record<number, { clusters: Cluster[]; rivers: number; pools: number }> = {
   1: {
-    clusters: ['range', 'hills', 'hills', 'forest', 'forest', 'forest', 'camp', 'camp', 'rocks'],
-    rivers: 2,
+    clusters: [
+      'range',
+      'hills',
+      'hills',
+      'forest',
+      'forest',
+      'forest',
+      'camp',
+      'camp',
+      'rocks',
+      'village',
+      'village',
+      'fields',
+      'fields',
+      'forest',
+      'pines',
+      'hills',
+      'range',
+      'ruins',
+    ],
+    rivers: 3,
     pools: 0,
   },
   2: {
-    clusters: ['pines', 'pines', 'pines', 'forest', 'forest', 'range', 'rocks', 'bones', 'bones'],
-    rivers: 2,
+    clusters: [
+      'pines',
+      'pines',
+      'pines',
+      'forest',
+      'forest',
+      'range',
+      'rocks',
+      'bones',
+      'bones',
+      'pines',
+      'pines',
+      'forest',
+      'range',
+      'hills',
+      'rocks',
+      'village',
+      'fields',
+    ],
+    rivers: 3,
     pools: 0,
   },
   3: {
@@ -366,6 +311,14 @@ const BIOMES: Record<number, { clusters: Cluster[]; rivers: number; pools: numbe
       'rocks',
       'hills',
       'deadwood',
+      'ruins',
+      'ruins',
+      'ruins',
+      'deadwood',
+      'deadwood',
+      'hills',
+      'rocks',
+      'graveyard',
     ],
     rivers: 1,
     pools: 9,
@@ -381,6 +334,14 @@ const BIOMES: Record<number, { clusters: Cluster[]; rivers: number; pools: numbe
       'dunes',
       'scorched',
       'rocks',
+      'range',
+      'warcamp',
+      'dunes',
+      'dunes',
+      'ruins',
+      'ruins',
+      'rocks',
+      'hills',
     ],
     rivers: 1,
     pools: 0,
@@ -392,6 +353,14 @@ const BIOMES: Record<number, { clusters: Cluster[]; rivers: number; pools: numbe
       'crystals',
       'scorched',
       'scorched',
+      'deadwood',
+      'range',
+      'rocks',
+      'crystals',
+      'crystals',
+      'scorched',
+      'ruins',
+      'ruins',
       'deadwood',
       'range',
       'rocks',
@@ -407,7 +376,7 @@ const cache = new Map<number, IslandTerrainData>();
 export function islandTerrain(id: number): IslandTerrainData {
   const hit = cache.get(id);
   if (hit) return hit;
-  const shape = SHAPES[id] ?? SHAPES[1]!;
+  const shape = islandShape(id);
   const style = ISLAND_STYLES[id] ?? ISLAND_STYLES[1]!;
   const biome = BIOMES[id] ?? BIOMES[1]!;
   const rng = mulberry32((id * 2654435761) >>> 0 || 1);
@@ -512,6 +481,18 @@ export function islandTerrain(id: number): IslandTerrainData {
       case 'dunes':
         ring(cx, cy, 6, 10, 'dune', 1);
         break;
+      case 'village':
+        // 🏘️ Un hameau : quelques maisons serrées, ses champs autour.
+        ring(cx, cy, 6, 5, 'house', 0.9);
+        ring(cx, cy, 3, 11, 'field', 1);
+        break;
+      case 'fields':
+        ring(cx, cy, 5, 10, 'field', 1);
+        break;
+      case 'ruins':
+        ring(cx, cy, 4, 7, 'ruin', 1);
+        ring(cx, cy, 3, 8, 'rock', 0.8);
+        break;
       case 'crystals':
         ring(cx, cy, 8, 8, 'crystal', 1);
         break;
@@ -568,7 +549,7 @@ export function islandTerrain(id: number): IslandTerrainData {
   const span = ISLAND_MAX_R;
   const rp = () => C + (dec() * 2 - 1) * span;
   const tufts: string[] = [];
-  for (let i = 0; i < 600 && tufts.length < 90; i++) {
+  for (let i = 0; i < 1600 && tufts.length < 240; i++) {
     const x = rp();
     const y = rp();
     if (!onIsland(id, x, y, 2) || Math.hypot(x - C, y - C) < 14) continue;
@@ -578,7 +559,7 @@ export function islandTerrain(id: number): IslandTerrainData {
     );
   }
   const patches: IslandTerrainData['patches'] = [];
-  for (let i = 0; i < 200 && patches.length < 16; i++) {
+  for (let i = 0; i < 500 && patches.length < 40; i++) {
     const cx = rp();
     const cy = rp();
     if (!onIsland(id, cx, cy, 8) || Math.hypot(cx - C, cy - C) < 16) continue;

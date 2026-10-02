@@ -104,7 +104,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isFieldArmyPoi,
-  revealRadius,
+  mapReach,
   campSpecOf,
   depositMessages,
   MESSAGES_CAP,
@@ -2334,7 +2334,7 @@ export const useCharacterStore = defineStore('character', () => {
     const mapF = syncFieldArmies(map0, {
       raid: cur.base?.raid ?? null,
       detectR: detectRadiusOf(cur.base, map0),
-      reach: revealRadius(outpost),
+      reach: mapReach(map0, outpost),
       now,
       playerLevel: level,
     });
@@ -3873,20 +3873,9 @@ export const useCharacterStore = defineStore('character', () => {
               pantheonLevel: pantheonLevel.value,
             })
           : isWarbandPoi(poi)
-          ? resolveInterception({
-              // ⚔️🕳️ La colonne DÉJÀ amputée par les interceptions ratées (lue sur la base).
-              poi: withRiftCut(poi, row.value?.base),
-              escort,
-              road,
-              hero,
-              seed,
-              playerLevel: opts.playerLevel,
-              pantheonLevel: pantheonLevel.value,
-            })
-          : spec
-            ? resolveCamp({
-                poi,
-                spec,
+            ? resolveInterception({
+                // ⚔️🕳️ La colonne DÉJÀ amputée par les interceptions ratées (lue sur la base).
+                poi: withRiftCut(poi, row.value?.base),
                 escort,
                 road,
                 hero,
@@ -3894,9 +3883,10 @@ export const useCharacterStore = defineStore('character', () => {
                 playerLevel: opts.playerLevel,
                 pantheonLevel: pantheonLevel.value,
               })
-            : HARVEST_TYPES.has(poi.type)
-              ? resolveHarvestParty({
+            : spec
+              ? resolveCamp({
                   poi,
+                  spec,
                   escort,
                   road,
                   hero,
@@ -3904,7 +3894,17 @@ export const useCharacterStore = defineStore('character', () => {
                   playerLevel: opts.playerLevel,
                   pantheonLevel: pantheonLevel.value,
                 })
-              : null;
+              : HARVEST_TYPES.has(poi.type)
+                ? resolveHarvestParty({
+                    poi,
+                    escort,
+                    road,
+                    hero,
+                    seed,
+                    playerLevel: opts.playerLevel,
+                    pantheonLevel: pantheonLevel.value,
+                  })
+                : null;
     if (!outcome) return null;
     // 🩹 La trousse agit à l'ENCAISSEMENT (la convalescence part du retour) : elle voyage donc
     // dans le rapport. 🎒 Et un consommable peut tomber de tout voyage.

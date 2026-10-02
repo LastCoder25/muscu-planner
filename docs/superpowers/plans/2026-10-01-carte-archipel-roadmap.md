@@ -365,4 +365,15 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       n’attaque rien et ne défait pas la pacification. Lint : trois assertions inutiles des
       convois retirées. Tests `islandEndless.test.ts` (5, 8 mutations rouges). Non vue à
       l’écran en vraie partie.
+      **v1.28.0 — toute l’île, des lieux espacés, une carte habillée** (demandé : « utilise tout
+      l’espace de la carte disponible même si ça dépasse 4 h ; habille la carte et espace les
+      lieux »). Les lieux tirés se posent sur TOUTE la terre ferme (`islandShape.ts`, module
+      feuille : `mapReach`, côte moins 8 unités), sans plafond d’aller (jusqu’à ~3 h 50),
+      écart visé 22 au lieu de 14 ; le NOMBRE ne change pas (`mapQuota`). Points fixes à 42 %
+      de la terre utile à leur angle (`CONTROL.islandFrac`), objectifs à 78 %
+      (`objectiveSpot`), avant-postes et nids en parts de l’île ; ceux encore ennemis se
+      replacent d’eux-mêmes. Forteresse toujours 3 h (2 h en relais). Mesuré (4 graines) :
+      voisin le plus proche 16,5 → 22-24 unités. Décor ×2 (villages, champs, ruines, plus
+      d’herbe et de taches). Lieux fixes : île 1 → 9, îles 2-5 → 10 (île 2 jusqu’à 12 avec
+      les nids, île 5 + la brèche sans fin).
 - [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.

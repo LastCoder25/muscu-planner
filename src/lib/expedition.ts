@@ -18,6 +18,7 @@ import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 import { labyKeyPriceAt } from '../data/labyrinths';
+import { islandSpan, onIsland, LAND_MARGIN } from './islandShape';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -817,18 +818,16 @@ export interface Crossing {
  *  niveau (`travelOneWayMin`) — sur une île, le temps ne dépend que de la distance. */
 export const ARCHIPEL_TRAVEL_LEVEL = 0;
 
-/** 🏝️ Sur une île, l'aller ne dépasse jamais 2 h depuis la base (décision de l'utilisateur,
- *  2026-10-02 : « 4 h aller-retour depuis la base vers les bords de la carte au max »). */
+/** 🏝️ L'aller d'un RELAIS d'île (les avant-postes, et la forteresse quand ils sont tenus) :
+ *  2 h. ⚠️ Ce n'est plus le bord de l'île : les lieux se posent sur TOUTE la terre ferme
+ *  (v1.28.0, décision de l'utilisateur : « utilise tout l'espace de la carte disponible même
+ *  si ça dépasse 4 h »), jusqu'à ~4 h d'aller sur les grands lobes. */
 export const ISLAND_MAX_LEG_MIN = 120;
 
-/** 🏝️ La distance normalisée d'un lieu d'île, PLAFONNÉE pour que l'aller (niveau de trajet
- *  `ARCHIPEL_TRAVEL_LEVEL`) tienne en `ISLAND_MAX_LEG_MIN`. La forteresse, dernière grande expédition, est
- *  reposée à part (`FORTRESS_LEG_MIN`, 3 h) : les lieux tirés restent dans 54 unités (~1 h 50). */
+/** 🏝️ La distance normalisée d'un lieu d'île : celle de sa distance, SANS plafond (v1.28.0 ;
+ *  avant, l'aller était plafonné à 2 h et les lieux tenaient dans 54 unités). */
 export function islandDistNorm(d: number): number {
-  const cap =
-    (ISLAND_MAX_LEG_MIN - EXPE.travelOneWayMinMin) /
-    (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin);
-  return Math.min(distNormAt(d), cap);
+  return distNormAt(d);
 }
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
@@ -1370,6 +1369,9 @@ export const EXPE = {
   // écart de 20 occuperait 53 % de la surface : le placement aléatoire échouerait ses
   // 6 essais et les POI se poseraient les uns sur les autres. À 14, on retombe à 26 %.
   minDistPoi: 14, // écart mini entre POI (placement espacé)
+  // 🏝️ Sur une île, la terre fait ~2× le disque où l'on posait les lieux, pour le MÊME
+  // nombre : on vise un écart plus large (v1.28.0, « espace les lieux »).
+  islandMinDistPoi: 22,
 
   /** 🐫 **HARCÈLEMENT DES CONVOIS — les monstres embusqués d'une faille qui a DÉBORDÉ.**
    *
@@ -1732,6 +1734,26 @@ const REF_AREA = annulusArea(EXPE.distMax);
  *  `mapQuota`). */
 export const ISLAND_DENSITY = (EXPE.poiRef + EXPE.riftRef + EXPE.refControls) / REF_AREA;
 
+/** 🗺️ Jusqu'où les lieux se posent : le disque révélé par l'Avant-poste, ou, sur une île,
+ *  sa terre ferme ENTIÈRE (`islandSpan`, la côte moins une marge) — v1.28.0. Le NOMBRE de
+ *  lieux, lui, suit toujours `mapQuota` : l'île n'en porte pas plus, elle les espace. */
+export function mapReach(
+  map: Pick<ExpeditionMap, 'archipel'> | null | undefined,
+  outpostLevel: number,
+): number {
+  return map?.archipel ? islandSpan(map.archipel.island) : revealRadius(outpostLevel);
+}
+
+/** 🏝️ Le prédicat « sur la terre ferme de l'île » d'une carte en mode archipel (`null`
+ *  hors du mode). `margin` = distance mini à la côte. */
+function landOf(
+  map: Pick<ExpeditionMap, 'archipel'>,
+  margin = LAND_MARGIN,
+): ((x: number, y: number) => boolean) | null {
+  const id = map.archipel?.island;
+  return id === undefined ? null : (x, y) => onIsland(id, x, y, margin);
+}
+
 /** Rayon RÉVÉLÉ autour de la ville pour un niveau d'Avant-poste (sans Avant-poste : niveau 1). */
 export function revealRadius(outpostLevel: number): number {
   const L = Math.min(MAP_REACH.maxLevel, Math.max(1, Math.floor(outpostLevel) || 1));
@@ -2022,6 +2044,8 @@ function placePoi(
   reach: number,
   minFrac = 0,
   band?: number,
+  /** 🏝️ Sur une île : la terre ferme (on rejette la mer). */
+  land: ((x: number, y: number) => boolean) | null = null,
 ): { x: number; y: number; distNorm: number } {
   const { town, distMin } = EXPE;
   const lo = distMin + clamp01(minFrac) * (reach - distMin);
@@ -2036,6 +2060,7 @@ function placePoi(
     const y = Math.round(town.y + Math.sin(ang) * dd);
     // ⚠️ L'arrondi peut pousser d'un cheveu hors du disque révélé : on retire.
     if (Math.hypot(x - town.x, y - town.y) > reach) continue;
+    if (land && !land(x, y)) continue;
     return { x, y, distNorm: distNormAt(dd) };
   }
   return { x: Math.round(town.x + lo), y: town.y, distNorm: distNormAt(lo) };
@@ -2068,7 +2093,7 @@ export function createMap(
   /** 🏝️ Carte neuve posée directement en mode archipel. */
   archipel?: ExpeditionMap['archipel'],
 ): ExpeditionMap {
-  const reach = revealRadius(outpostLevel);
+  const reach = archipel ? mapReach({ archipel }, outpostLevel) : revealRadius(outpostLevel);
   const map: ExpeditionMap = {
     seed: seed >>> 0 || 1,
     spawnCount: 0,
@@ -2390,12 +2415,15 @@ function placePoiOfType(
   // (mesuré : 17 paires chevauchantes sur quelques jours de simulation). On tente plus
   // longtemps, et surtout on GARDE LE MEILLEUR candidat : à défaut d'un emplacement
   // parfait, on prend le moins mauvais au lieu du dernier venu.
-  let pos = placePoi(rng, reach, minFrac, band);
+  // 🏝️ Sur une île : toute la terre ferme, et un écart plus large.
+  const land = landOf(map);
+  const minGap = land ? EXPE.islandMinDistPoi : EXPE.minDistPoi;
+  let pos = placePoi(rng, reach, minFrac, band, land);
   const clearance = (p: { x: number; y: number }) =>
     map.pois.length ? Math.min(...map.pois.map((q) => dist(q.x, q.y, p.x, p.y))) : Infinity;
   let best = clearance(pos);
-  for (let k = 0; k < 48 && best < EXPE.minDistPoi; k++) {
-    const cand = placePoi(rng, reach, minFrac, band);
+  for (let k = 0; k < 48 && best < minGap; k++) {
+    const cand = placePoi(rng, reach, minFrac, band, land);
     const gap = clearance(cand);
     if (gap > best) {
       best = gap;
@@ -2608,7 +2636,10 @@ export function advanceWorld(
   outpostLevel: number,
   protectedPoiId?: string,
 ): ExpeditionMap {
-  const reach = revealRadius(outpostLevel);
+  const reach = mapReach(map, outpostLevel);
+  // 🏝️ Sur une île, « dans la carte » = sur la terre ferme (une marge un peu plus courte que
+  // celle du placement : l'arrondi des coordonnées ne doit pas faire sortir un lieu posé).
+  const ashore = landOf(map, LAND_MARGIN - 2);
   const cap = mapQuota(outpostLevel, islandFixedOf(map));
   // 🕳️ DÉBORDEMENT D'ABORD, avant tout filtrage : une faille arrivée à maturité
   // s'effondre et laisse une MINE DE MANA RÉSIDUEL. ⚠️ Si on filtrait d'abord, la faille
@@ -2709,7 +2740,9 @@ export function advanceWorld(
           (p.expiresAt > now || !!p.convoy) &&
           // 🏯 Les citadelles sont posées LOIN, hors du disque révélé : c'est voulu.
           // 🏝️ La forteresse portuaire est sur la CÔTE, parfois au-delà : idem.
-          (withinLand(p, reach) || (!!p.control && RAZE_KINDS.has(p.control.kind))) &&
+          // ⚔️ Une armée en marche peut traverser une baie : elle garde le disque.
+          ((ashore && p.type !== 'warband' ? ashore(p.x, p.y) : withinLand(p, reach)) ||
+            (!!p.control && RAZE_KINDS.has(p.control.kind))) &&
           fitsIsland(p, map.archipel)),
     ),
   };

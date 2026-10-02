@@ -50,16 +50,37 @@ const hold = (m: ExpeditionMap, kinds: readonly string[]): ExpeditionMap => ({
   ),
 });
 
-describe('🏝️ 4 h aller-retour au plus, de la base aux bords de l’île', () => {
-  it('sur les cinq îles, aucun lieu à plus de 2 h d’aller, sauf la forteresse (3 h)', () => {
-    for (const isl of ISLANDS)
+describe('🏝️ toute l’île, jusqu’aux côtes (v1.28.0)', () => {
+  it('les lieux vont au-delà de 2 h d’aller, la forteresse reste à 3 h, les avant-postes à 2 h', () => {
+    for (const isl of ISLANDS) {
+      let worst = 0;
       for (const seed of [3, 11, 29]) {
         const m = island(isl.id, seed);
-        const worst = Math.max(...m.pois.filter((p) => p.id !== FORTRESS_ID).map(leg));
-        expect(worst, `île ${isl.id}`).toBeLessThanOrEqual(ISLAND_MAX_LEG_MIN);
+        worst = Math.max(worst, ...m.pois.filter((p) => p.id !== FORTRESS_ID).map(leg));
         const fort = m.pois.find((p) => p.id === FORTRESS_ID)!;
         expect(leg(fort), `forteresse île ${isl.id}`).toBe(FORTRESS_LEG_MIN);
+        for (const p of m.pois.filter((q) => q.control?.outpost))
+          expect(leg(p), `avant-poste île ${isl.id}`).toBeLessThanOrEqual(ISLAND_MAX_LEG_MIN);
       }
+      // ⚠️ Avant la v1.28.0 l'aller était plafonné à 2 h : la côte restait vide.
+      expect(worst, `île ${isl.id}`).toBeGreaterThan(ISLAND_MAX_LEG_MIN + 30);
+    }
+  });
+  it('les lieux sont espacés : ~23 unités au plus proche voisin en moyenne (16,5 avant)', () => {
+    for (const isl of ISLANDS) {
+      let sum = 0;
+      let n = 0;
+      for (const seed of [1, 7, 13, 21]) {
+        const ps = island(isl.id, seed).pois.filter((p) => p.type !== 'warband');
+        for (const p of ps) {
+          sum += Math.min(
+            ...ps.filter((q) => q !== p).map((q) => Math.hypot(p.x - q.x, p.y - q.y)),
+          );
+          n++;
+        }
+      }
+      expect(sum / n, `île ${isl.id}`).toBeGreaterThan(20);
+    }
   });
 });
 

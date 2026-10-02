@@ -25,8 +25,9 @@ import { activeIsland, islandPacified, ISLANDS, type Island } from './archipelag
 import { buildingType, collectable, type BuildResource, type Building } from './buildings';
 import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { mulberry32, seedOf } from './combat';
-import { ALL_CONTROL_KINDS, CONTROL, bankAt } from './controlPoints';
+import { ALL_CONTROL_KINDS, CONTROL, bankAt, controlSpot } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
+import { islandRing } from './islandShape';
 import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -51,9 +52,10 @@ export const ISLAND_CONQUEST = {
   fortressWeakSize: 8,
   /** Objectifs abattus avant que la forteresse ne s'attaque (le verrou). */
   unlockAfter: 2,
-  /** Distance des objectifs à la base (unités de carte) : entre l'anneau des lieux fixes
-   *  (~32) et le bord de l'île (54) — à au moins 10 unités de chacun des deux. */
-  objectiveDist: 43,
+  /** Où se posent les objectifs : cette part de la terre utile à leur angle (`islandRing`).
+   *  v1.28.0 (« espace les lieux ») : les lieux couvrent toute l'île, les objectifs vont vers
+   *  la côte, côté forteresse — au-delà de l'anneau des points fixes (`CONTROL.islandFrac`). */
+  objectiveFrac: 0.78,
   /** ⛏️ Mine tenue en mode archipel : une mission de mine toutes les 24 h (au lieu de 8 h). */
   mineHours: 24,
   /** 🕊️ Le socle d'une île pacifiée produit à cette part, sans crans. */
@@ -159,24 +161,19 @@ export function nestSpot(
 ): { x: number; y: number; d: number } | null {
   const isl = ISLANDS.find((i) => i.id === islandId);
   const f = islandTerrain(islandId).fortress;
-  const at = (d: number, off: number) => ({
-    x: Math.round(EXPE.town.x + Math.cos(f.angle + off) * d),
-    y: Math.round(EXPE.town.y + Math.sin(f.angle + off) * d),
-    d,
-  });
+  const at = (frac: number, off: number) => fortressSideSpot(islandId, frac, off);
   const others: { x: number; y: number }[] = [
     ...map.pois.filter((p) => p.control),
-    ...objectiveAngles(isl?.objectives ?? 0).map((o) => at(ISLAND_CONQUEST.objectiveDist, o)),
+    ...objectiveAngles(isl?.objectives ?? 0).map((_, i) => objectiveSpot(islandId, i)),
     ...nests,
     { x: f.x, y: f.y },
   ];
   let best: ReturnType<typeof at> | null = null;
   let bestGap = 9.999;
-  for (const d of [36, 43, 49])
+  for (const frac of [0.62, 0.78, 0.9])
     for (let k = -8; k <= 8; k++) {
-      const s = at(d, k * 0.3);
-      // ⚠️ Toujours sur la terre : la côte ne passe jamais sous 60 unités (`ISLAND_MIN_R`),
-      // les places s’arrêtent à 49.
+      const s = at(frac, k * 0.3);
+      // ⚠️ Toujours sur la terre : `islandRing` suit la côte, moins une marge.
       const g = Math.min(99, ...others.map((p) => Math.hypot(s.x - p.x, s.y - p.y)));
       if (g > bestGap) {
         bestGap = g;
@@ -260,12 +257,36 @@ export function outpostsHeld(map: Pick<ExpeditionMap, 'pois'>): boolean {
   );
 }
 
-/** Où les avant-postes PEUVENT se poser (distance à la base, écart d'angle à l'axe base →
- *  forteresse) : le premier près de la base, le second à mi-chemin des objectifs (43). */
+/** Où les avant-postes PEUVENT se poser (part de la terre utile, `islandRing`, et écart
+ *  d'angle à l'axe base → forteresse) : le premier près de la base, le second à mi-chemin des
+ *  objectifs. v1.28.0 : en parts de l'île et non plus en unités, pour suivre sa côte. */
 const OUTPOST_GEOM = {
-  first: { d: [24, 27], off: [0, 0.3, -0.3, 0.5, -0.5] },
-  second: { d: [35, 38], off: [0.35, -0.35, 0.55, -0.55, 0.75, -0.75] },
+  first: { d: [0.16, 0.22], off: [0, 0.3, -0.3, 0.5, -0.5] },
+  second: { d: [0.44, 0.5], off: [0.35, -0.35, 0.55, -0.55, 0.75, -0.75] },
 } as const;
+
+/** 🏝️ Un lieu fixe de l'île `id` : à l'angle `a`, à la part `frac` de sa terre utile. */
+function islandSpot(id: number, a: number, frac: number): { x: number; y: number; d: number } {
+  const d = islandRing(id, a, frac);
+  return {
+    x: Math.round(EXPE.town.x + Math.cos(a) * d),
+    y: Math.round(EXPE.town.y + Math.sin(a) * d),
+    d,
+  };
+}
+
+/** 🏝️ Un lieu fixe du côté de la forteresse : à l'écart d'angle `off` de l'axe base →
+ *  forteresse, à la part `frac` de la terre utile (objectifs, avant-postes, nids). */
+function fortressSideSpot(id: number, frac: number, off: number) {
+  return islandSpot(id, islandTerrain(id).fortress.angle + off, frac);
+}
+
+/** 🏝️ La place de l'objectif `i` de l'île `id` : du côté de la forteresse, vers la côte. */
+export function objectiveSpot(id: number, i: number): { x: number; y: number; d: number } {
+  const isl = ISLANDS.find((x) => x.id === id);
+  const off = objectiveAngles(isl?.objectives ?? 0)[i] ?? 0;
+  return fortressSideSpot(id, ISLAND_CONQUEST.objectiveFrac, off);
+}
 
 /** 🏰 La forteresse est la DERNIÈRE GRANDE EXPÉDITION de l'île (décision de l'utilisateur,
  *  2026-10-02 : « mets-la plus loin si besoin ») : 3 h d'aller, seul lieu hors de la règle des
@@ -282,18 +303,15 @@ export function outpostSpots(
   map: Pick<ExpeditionMap, 'pois'>,
   islandId: number,
 ): Record<string, { x: number; y: number; d: number }> {
-  const f = islandTerrain(islandId).fortress;
-  const at = (d: number, off: number) => ({
-    x: Math.round(EXPE.town.x + Math.cos(f.angle + off) * d),
-    y: Math.round(EXPE.town.y + Math.sin(f.angle + off) * d),
-    d,
-  });
+  const at = (frac: number, off: number) => fortressSideSpot(islandId, frac, off);
   // Les autres lieux fixes, et la place de CHAQUE objectif, abattu ou non : sinon abattre un
   // objectif déplacerait des avant-postes encore ennemis.
   const isl = ISLANDS.find((i) => i.id === islandId);
   const others: { x: number; y: number }[] = [
-    ...map.pois.filter((p) => p.control && !ISLAND_OUTPOSTS.includes(p.control.kind)),
-    ...objectiveAngles(isl?.objectives ?? 0).map((o) => at(ISLAND_CONQUEST.objectiveDist, o)),
+    ...map.pois.filter(
+      (p) => p.control && !ISLAND_OUTPOSTS.includes(p.control.kind) && !isIslandTargetId(p.id),
+    ),
+    ...objectiveAngles(isl?.objectives ?? 0).map((_, i) => objectiveSpot(islandId, i)),
   ];
   const gapTo = (s: { x: number; y: number }) =>
     Math.min(99, ...others.map((p) => Math.hypot(s.x - p.x, s.y - p.y)));
@@ -472,30 +490,17 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
   const lv = Math.max(1, Math.min(level, isl.maxLevel));
   // 🏝️ Les objectifs ne s'attaquent qu'une fois les deux avant-postes tenus.
   const objLocked = !outpostsHeld(map);
-  objectiveAngles(isl.objectives).forEach((off, i) => {
+  objectiveAngles(isl.objectives).forEach((_, i) => {
     const id = objectiveIdOf(i);
     if (gone.has(id)) return;
-    const a = f.angle + off;
-    const d = ISLAND_CONQUEST.objectiveDist;
     out.push(
-      enemyTarget(
-        map,
-        id,
-        {
-          x: Math.round(EXPE.town.x + Math.cos(a) * d),
-          y: Math.round(EXPE.town.y + Math.sin(a) * d),
-          d,
-        },
-        now,
-        lv,
-        {
-          kind: 'objective',
-          faction: isl.faction,
-          size: objectiveSize(i, isl.objectives),
-          ...objectiveLook(isl, i),
-          ...(objLocked ? { locked: true } : {}),
-        },
-      ),
+      enemyTarget(map, id, objectiveSpot(isl.id, i), now, lv, {
+        kind: 'objective',
+        faction: isl.faction,
+        size: objectiveSize(i, isl.objectives),
+        ...objectiveLook(isl, i),
+        ...(objLocked ? { locked: true } : {}),
+      }),
     );
   });
   // 🪺 Les nids nés en route, à leur place.
@@ -550,27 +555,14 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
     gone.has(FORTRESS_ID) &&
     (e?.at === undefined || now >= e.at + ENDLESS.respawnMs)
   ) {
-    const a = f.angle + (objectiveAngles(isl.objectives)[0] ?? 0);
-    const d = ISLAND_CONQUEST.objectiveDist;
     out.push(
-      enemyTarget(
-        map,
-        ENDLESS_ID,
-        {
-          x: Math.round(EXPE.town.x + Math.cos(a) * d),
-          y: Math.round(EXPE.town.y + Math.sin(a) * d),
-          d,
-        },
-        now,
-        isl.maxLevel,
-        {
-          kind: 'objective',
-          faction: isl.faction,
-          size: endlessSize(e?.tier ?? 0),
-          name: 'Brèche maudite',
-          emoji: '🌀',
-        },
-      ),
+      enemyTarget(map, ENDLESS_ID, objectiveSpot(isl.id, 0), now, isl.maxLevel, {
+        kind: 'objective',
+        faction: isl.faction,
+        size: endlessSize(e?.tier ?? 0),
+        name: 'Brèche maudite',
+        emoji: '🌀',
+      }),
     );
   }
   return out;
@@ -623,13 +615,38 @@ export function ensureIslandConquest(
     const next: ControlState = { ...c, size: wc.size, faction: wc.faction };
     if (wc.locked) next.locked = true;
     else delete next.locked;
-    if (p.level === w.level && p.distNorm === w.distNorm && same(next, c)) continue;
+    // 🏝️ La place suit aussi (v1.28.0) : un objectif encore ennemi et hors assaut va là où
+    // la règle le pose aujourd'hui — une île déjà ouverte s'espace d'elle-même.
+    const moved = p.x !== w.x || p.y !== w.y;
+    if (!moved && p.level === w.level && p.distNorm === w.distNorm && same(next, c)) continue;
     pois = pois.map((q, j) =>
-      j === k ? { ...p, level: w.level, distNorm: w.distNorm, control: next } : q,
+      j === k ? { ...p, x: w.x, y: w.y, level: w.level, distNorm: w.distNorm, control: next } : q,
     );
     changed = true;
   }
-  // 2 bis. 🏝️ Les AVANT-POSTES : marqués, et posés sur la route base → forteresse tant
+  // 2 bis. 🏝️ LES POINTS FIXES ENCORE À L'ENNEMI se posent à leur place d'île (v1.28.0,
+  // « espace les lieux ») : à mi-chemin de la côte au lieu de serrés autour de la base. Ceux
+  // qu'on tient, qu'on attaque ou où des champions marchent ne bougent pas.
+  if (isl)
+    pois = pois.map((p) => {
+      const c = p.control;
+      if (
+        !c ||
+        c.owner !== 'enemy' ||
+        c.assault ||
+        c.reinforcing?.length ||
+        c.returning?.length ||
+        isIslandTargetId(p.id) ||
+        ISLAND_OUTPOSTS.includes(c.kind) ||
+        !ALL_CONTROL_KINDS.includes(c.kind)
+      )
+        return p;
+      const s = controlSpot(map, c.kind);
+      if (p.x === s.x && p.y === s.y) return p;
+      changed = true;
+      return { ...p, ...s };
+    });
+  // 2 ter. 🏝️ Les AVANT-POSTES : marqués, et posés sur la route base → forteresse tant
   // qu'ils sont à l'ennemi et hors assaut (un point tenu ne bouge plus sous sa garnison).
   if (isl) {
     const spots = outpostSpots({ pois }, isl.id);

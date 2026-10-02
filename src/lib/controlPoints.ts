@@ -19,6 +19,7 @@
  */
 import { formatDuration } from './duration';
 import { activeIsland, islandPacified } from './archipelago';
+import { islandRing } from './islandShape';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -91,6 +92,9 @@ export const CONTROL = {
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
+  /** 🏝️ Sur une île : cette part de la terre utile à leur angle (v1.28.0, « espace les
+   *  lieux ») — à mi-chemin entre la ville et la côte, au lieu de serrés autour de la base. */
+  islandFrac: 0.42,
   /** Délai avant une reprise ennemie : entre 1 et 3 jours (décision de l'utilisateur), et
    *  d'autant plus COURT que le joueur est actif (v0.1239, demandé : « plus souvent s'il joue
    *  beaucoup »). La mesure est celle des sièges de la base (`activeDays7`) : 7 jours actifs
@@ -994,8 +998,15 @@ function controlLevel(
   return Math.min(pl, riftLevelFor(rng, pl, [pl + 1], false, floorLevel));
 }
 
-/** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. */
-function controlSpot(map: ExpeditionMap, kind: ControlKind): Pick<Poi, 'x' | 'y' | 'distNorm'> {
+/** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. Sur une île, à
+ *  `CONTROL.islandFrac` de la terre utile à son angle (`islandRing`). */
+export function controlSpot(
+  map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
+  kind: ControlKind,
+): Pick<Poi, 'x' | 'y' | 'distNorm'> {
+  const id = map.archipel?.island;
+  if (id !== undefined)
+    return spotAt(map, CONTROL_QUARTER[kind], (ang) => islandRing(id, ang, CONTROL.islandFrac));
   // Chaque point a son angle, en quarts de tour à partir de l'angle de la MINE (tiré comme
   // avant : une mine déjà posée ne bouge pas). ⚠️ UNE TABLE, pas l'index dans `kinds` : un
   // cinquième type divisait le tour en cinq, et le nouveau point tombait à 18° d'un point
@@ -1007,10 +1018,16 @@ function controlSpot(map: ExpeditionMap, kind: ControlKind): Pick<Poi, 'x' | 'y'
   );
 }
 
-/** Un lieu fixe : à `quarter` quarts de tour de l'angle de la mine, à la distance `d`. */
-function spotAt(map: ExpeditionMap, quarter: number, d: number): Pick<Poi, 'x' | 'y' | 'distNorm'> {
+/** Un lieu fixe : à `quarter` quarts de tour de l'angle de la mine, à la distance `d`
+ *  (ou `d(angle)`, pour suivre la côte d'une île). */
+function spotAt(
+  map: Pick<ExpeditionMap, 'seed'>,
+  quarter: number,
+  dist: number | ((ang: number) => number),
+): Pick<Poi, 'x' | 'y' | 'distNorm'> {
   const rng = mulberry32((map.seed ^ seedOf('ctl:mine:0')) >>> 0 || 1);
   const ang = rng() * Math.PI * 2 + (quarter * Math.PI) / 2;
+  const d = typeof dist === 'number' ? dist : dist(ang);
   return {
     x: Math.round(EXPE.town.x + Math.cos(ang) * d),
     y: Math.round(EXPE.town.y + Math.sin(ang) * d),

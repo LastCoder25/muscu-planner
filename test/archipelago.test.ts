@@ -16,8 +16,10 @@ import {
   revealRadius,
   travelHourRings,
   travelOneWayMin,
+  distNormAt,
   type ExpeditionMap,
 } from '@/lib/expedition';
+import { LAND_MARGIN, onIsland } from '@/lib/islandShape';
 import { CITADEL, ensureControls } from '@/lib/controlPoints';
 import { syncFieldArmies } from '@/lib/fieldArmy';
 import { rollRaid } from '@/lib/raid';
@@ -72,11 +74,15 @@ describe('🏝️ archipel — la carte', () => {
     }
   });
 
-  it('les trajets ne lisent plus aucun niveau : 2 h d’aller au plus sur l’île', () => {
+  it('les trajets ne lisent plus aucun niveau : le temps suit la seule distance', () => {
     const m = islandMap(5, 60);
     for (const p of m.pois) {
       expect(poiTravelLevel(p)).toBe(0);
-      expect(travelOneWayMin(poiTravelLevel(p), p.distNorm)).toBeLessThanOrEqual(120);
+      const d = Math.hypot(p.x - 100, p.y - 100);
+      // (±3 min : la place est arrondie à l’unité, ~0,7 unité au pire ; sa distance non)
+      expect(
+        Math.abs(travelOneWayMin(0, p.distNorm) - travelOneWayMin(0, distNormAt(d))),
+      ).toBeLessThanOrEqual(3);
     }
   });
 
@@ -148,12 +154,18 @@ describe('🏝️ archipel — la carte', () => {
     expect(Math.abs(flat[1]!.r - ISLAND_REACH)).toBeLessThan(3);
   });
 
-  it('un lieu tenu sur l’île reste à la taille de l’île après une semaine', () => {
+  it('après une semaine, les lieux restent sur la terre ferme et couvrent l’île (v1.28.0)', () => {
     let m = islandMap(8, 20);
-    for (let t = 1; t <= 7 * 24; t += 6) m = advanceWorld(m, NOW + t * H, 20, ISLAND_OUTPOST_LEVEL);
-    const r = revealRadius(ISLAND_OUTPOST_LEVEL);
-    for (const p of m.pois)
-      if (p.type !== 'warband')
-        expect(Math.hypot(p.x - 100, p.y - 100)).toBeLessThanOrEqual(r + 0.5);
+    let far = 0;
+    for (let t = 1; t <= 7 * 24; t += 6) {
+      m = advanceWorld(m, NOW + t * H, 20, ISLAND_OUTPOST_LEVEL);
+      for (const p of m.pois)
+        if (p.type !== 'warband') {
+          expect(onIsland(1, p.x, p.y, LAND_MARGIN - 2)).toBe(true);
+          far = Math.max(far, Math.hypot(p.x - 100, p.y - 100));
+        }
+    }
+    // ⚠️ Avant, rien au-delà du disque de l'Avant-poste d'île (~51) : la côte restait vide.
+    expect(far).toBeGreaterThan(revealRadius(ISLAND_OUTPOST_LEVEL) + 10);
   });
 });

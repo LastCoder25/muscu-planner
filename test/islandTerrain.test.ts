@@ -8,7 +8,8 @@ import {
   onIsland,
 } from '@/lib/islandTerrain';
 import { ISLANDS, ISLAND_OUTPOST_LEVEL, ISLAND_REACH, archipelOn } from '@/lib/archipelago';
-import { MAP_VIEW, createMap } from '@/lib/expedition';
+import { EXPE, MAP_VIEW, createMap } from '@/lib/expedition';
+import { LAND_MARGIN, NEAR, TOWN } from '@/lib/islandShape';
 
 const IDS = ISLANDS.map((i) => i.id);
 const ANGLES = Array.from({ length: 360 }, (_, i) => (i / 360) * Math.PI * 2);
@@ -36,12 +37,18 @@ describe('🏝️ la côte des îles', () => {
       }
   });
 
-  it('tous les lieux posés sur une île tombent sur la terre', () => {
+  it('tous les lieux posés sur une île tombent sur SA terre, à la marge de la côte', () => {
     for (const seed of [1, 9, 42])
       for (const id of IDS) {
-        const m = createMap(seed, 0, 20, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(1));
-        for (const p of m.pois) expect(onIsland(id, p.x, p.y, 3)).toBe(true);
+        const m = createMap(seed, 0, 20, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(id));
+        for (const p of m.pois) expect(onIsland(id, p.x, p.y, LAND_MARGIN - 1)).toBe(true);
       }
+  });
+  it('la silhouette recopie bien les valeurs de la carte (module feuille)', () => {
+    expect(TOWN).toBe(EXPE.town.x);
+    expect(TOWN).toBe(EXPE.town.y);
+    expect(NEAR).toBe(EXPE.distMin);
+    expect(ISLAND_MAX_R).toBeLessThanOrEqual(MAP_VIEW.size / 2 - 22 + 0.1);
   });
 
   it('une palette par île', () => {
