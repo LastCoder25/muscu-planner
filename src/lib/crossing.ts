@@ -50,8 +50,6 @@ import { bankAt, militiaFreeSeats, militiaSeatsOf } from './controlPoints';
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
   travelMs: 2 * 3600_000,
-  /** Un départ chaque heure, à l'heure pile. */
-  everyMs: 3600_000,
   /** 🎟️ Premier débarquement : 10 TIRAGES, en tickets (un ticket = un tirage), une seule fois
    *  par île — sinon des allers-retours de 2 h deviendraient une source de tirages. Décision
    *  de l'utilisateur (2026-10-03 : « donne 10 tirages avec une animation ») : le coffre en
@@ -168,9 +166,11 @@ export function isForwardCrossing(c: Pick<Crossing, 'from' | 'to'>): boolean {
   return c.to > c.from;
 }
 
-/** Le prochain départ (l'heure pile à venir, ou maintenant si on y est pile). */
+/** Le prochain départ : TOUT DE SUITE. ⚠️ Plus d'heure pile (v1.46.0, décision de
+ *  l'utilisateur : « enlève la règle d'heure fixe pour le départ ») ; seul le retour des troupes
+ *  encore en marche fait encore attendre (`crossingDeparture`). */
 export function nextCrossingDeparture(now: number): number {
-  return Math.ceil(now / CROSSING.everyMs) * CROSSING.everyMs;
+  return now;
 }
 
 /** Les îles VISITÉES : l'active et celles rangées. */
@@ -231,25 +231,30 @@ export function crossingBlocker(
   return null;
 }
 
-/** ⛵ Le départ d'une traversée du héros : l'heure pile qui suit maintenant ET le retour des
- *  troupes encore en marche (`troopsBackAt`, 0 s'il n'y en a pas). */
+/** ⛵ Le départ d'une traversée du héros : maintenant, ou le retour des troupes encore en
+ *  marche (`troopsBackAt`, 0 s'il n'y en a pas) s'il est plus tard. */
 export function crossingDeparture(now: number, troopsBackAt: number): number {
   return nextCrossingDeparture(Math.max(now, troopsBackAt));
 }
 
 /**
- * ⏳ Des troupes sont encore en route à l'heure du départ (envoyées après la réservation, ou
- * rentrées plus tard que prévu) : le départ glisse à l'heure pile qui suit leur retour, et les
- * embarqués restent occupés jusqu'à la nouvelle arrivée. `null` si rien ne change.
+ * ⏳ Recale le départ d'une traversée PAS ENCORE PARTIE sur le retour des troupes : des troupes
+ * encore en route le repoussent (envoyées après la réservation, ou rentrées plus tard que prévu),
+ * et des troupes rentrées plus tôt l'avancent — jusqu'à maintenant. ⚠️ Avancer compte aussi pour
+ * une traversée réservée avant la v1.46.0 sur une heure pile qui n'a plus lieu d'être. Les
+ * embarqués restent occupés jusqu'à la nouvelle arrivée. `null` si rien ne change, ou si le
+ * bateau est déjà parti.
  */
 export function postponeCrossing(
   map: ExpeditionMap,
   advs: Adventurer[],
   troopsBackAt: number,
+  now: number,
 ): { map: ExpeditionMap; advs: Adventurer[] } | null {
   const c = map.crossing;
-  if (!c || troopsBackAt <= c.departAt) return null;
-  const departAt = nextCrossingDeparture(troopsBackAt);
+  if (!c || now >= c.departAt) return null;
+  const departAt = crossingDeparture(now, troopsBackAt);
+  if (departAt === c.departAt) return null;
   const next: Crossing = { ...c, departAt, arriveAt: departAt + CROSSING.travelMs };
   return { map: { ...map, crossing: next }, advs: boardTravellers(advs, next) };
 }
@@ -268,8 +273,8 @@ export function crossingTravellers(advs: readonly Adventurer[], now: number): st
     .map((a) => a.id);
 }
 
-/** Réserve la traversée : départ à la prochaine heure pile (après le retour des troupes encore
- *  en marche, `troopsBackAt`), arrivée 2 h plus tard. */
+/** Réserve la traversée : départ tout de suite (ou au retour des troupes encore en marche,
+ *  `troopsBackAt`), arrivée 2 h plus tard. */
 export function startCrossing(
   map: ExpeditionMap,
   to: number,
@@ -348,7 +353,7 @@ export function sailingBlocker(
   return null;
 }
 
-/** ⛵ Réserve une navigation sans héros : même horaire qu'une traversée (heure pile, 2 h). */
+/** ⛵ Réserve une navigation sans héros : départ tout de suite, 2 h de mer. */
 export function startSailing(
   map: ExpeditionMap,
   from: number,
@@ -605,6 +610,9 @@ export function landAdventurers(advs: Adventurer[], c: Crossing): Adventurer[] {
   });
 }
 
+/** Au-delà d'une minute après la réservation, un départ a été retenu par des troupes. */
+const DELAY_TOLERANCE_MS = 60_000;
+
 /** ⛵ Un voyage en mer tel que la rangée des voyages le montre. */
 export interface SeaTrip {
   key: string;
@@ -613,7 +621,7 @@ export interface SeaTrip {
   hero: boolean;
   /** Pas encore parti : la tuile décompte le DÉPART. */
   waiting: boolean;
-  /** Le départ a glissé après l'heure pile qui suivait la réservation : des troupes rentrent. */
+  /** Le départ a glissé après la réservation : des troupes rentrent. */
   delayed: boolean;
   /** Avancement de la mer seule (0..1). */
   pct: number;
@@ -634,7 +642,7 @@ export function seaTrips(
     crossing: c,
     hero,
     waiting: now < c.departAt,
-    delayed: c.departAt > nextCrossingDeparture(c.bookedAt),
+    delayed: c.departAt > c.bookedAt + DELAY_TOLERANCE_MS,
     pct: Math.min(1, Math.max(0, (now - c.departAt) / Math.max(1, c.arriveAt - c.departAt))),
   });
   const out: SeaTrip[] = [];

@@ -856,7 +856,7 @@ export interface Crossing {
   from: number;
   to: number;
   bookedAt: number;
-  /** Le départ : l'heure pile qui suit la réservation. */
+  /** Le départ : à la réservation, ou au retour des troupes encore en marche. */
   departAt: number;
   arriveAt: number;
   /** Les champions embarqués (avec le héros pour `crossing`, seuls pour `sailings`). */

@@ -118,7 +118,7 @@ const props = defineProps<{
   /** Pourquoi le héros ne peut pas partir (texte), null s'il le peut. */
   heroBlock: string | null;
   candidates: Adventurer[];
-  /** Le départ d'une navigation sans héros (heure pile suivante). */
+  /** Le départ d'une navigation sans héros (tout de suite). */
   departAt: number;
   /** Le départ avec le héros : après le retour des troupes encore en marche. */
   heroDepartAt: number;

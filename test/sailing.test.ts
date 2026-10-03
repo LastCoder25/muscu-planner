@@ -39,11 +39,11 @@ describe('⛵ naviguer sans le héros', () => {
     expect(sailingBlocker(m, 2, 2, ['a'], ['a'])).toBe('same');
     expect(sailingBlocker(m, 1, 2, ['a', 'b'], ['a'])).toBe('notHere');
   });
-  it('part à l’heure pile, arrive 2 h après, sans toucher à la traversée du héros', () => {
+  it('part tout de suite, arrive 2 h après, sans toucher à la traversée du héros', () => {
     const m = startSailing(twoIslands(), 1, 2, ['a'], T0 + 1);
     expect(m.sailings).toHaveLength(1);
-    expect(m.sailings![0]!.departAt).toBe(T0 + H);
-    expect(m.sailings![0]!.arriveAt).toBe(T0 + H + CROSSING.travelMs);
+    expect(m.sailings![0]!.departAt).toBe(T0 + 1);
+    expect(m.sailings![0]!.arriveAt).toBe(T0 + 1 + CROSSING.travelMs);
     expect(m.crossing).toBeUndefined();
     expect(m.archipel!.island).toBe(1);
   });

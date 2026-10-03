@@ -2355,9 +2355,9 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     const orig = cur.expedition_map;
-    // ⏳ Des troupes encore en route à l'heure du départ : la traversée attend leur retour
+    // ⏳ La traversée pas encore partie se recale sur le retour des troupes encore en route
     // (`postponeCrossing`) — avant le débarquement, qui sinon changerait la carte sous leurs pieds.
-    const post = orig ? postponeCrossing(orig, advList.value, troopsBackAt(cur)) : null;
+    const post = orig ? postponeCrossing(orig, advList.value, troopsBackAt(cur), now) : null;
     const advBase = post?.advs ?? advList.value;
     const src = post?.map ?? orig;
     // ⛵ DÉBARQUER d'abord (`crossing.ts`) : l'île quittée est rangée, l'île d'arrivée sort de
@@ -2532,7 +2532,7 @@ export const useCharacterStore = defineStore('character', () => {
     );
     return { map: port.map, advs };
   }
-  /** ⛵ RÉSERVE LA TRAVERSÉE du héros vers l'île `to` : départ à l'heure pile suivante, arrivée
+  /** ⛵ RÉSERVE LA TRAVERSÉE du héros vers l'île `to` : départ tout de suite (ou au retour des troupes), arrivée
    *  2 h après. `pick` = les champions qui l'accompagnent (option A, 2026-10-03) ; absent =
    *  tous ceux qui peuvent embarquer. */
   async function crossIsland(userId: string, to: number, now: number, pick?: readonly string[]) {

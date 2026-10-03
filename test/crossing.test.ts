@@ -42,11 +42,11 @@ const adv = (id: string, extra: Partial<Adventurer> = {}): Adventurer =>
   ({ id, name: id, seed: 1, path: ['guerrier'], level: 5, xp: 0, ...extra }) as Adventurer;
 const free = { heroBusy: false };
 
-describe('⛵ départs à l’heure pile', () => {
-  it('le prochain départ est l’heure pile suivante, ou maintenant pile', () => {
+describe('⛵ départ immédiat (plus d’heure pile, v1.46.0)', () => {
+  it('le prochain départ est maintenant, quelle que soit l’heure', () => {
     expect(nextCrossingDeparture(T0)).toBe(T0);
-    expect(nextCrossingDeparture(T0 + 1)).toBe(T0 + H);
-    expect(nextCrossingDeparture(T0 + H - 1)).toBe(T0 + H);
+    expect(nextCrossingDeparture(T0 + 1)).toBe(T0 + 1);
+    expect(nextCrossingDeparture(T0 + H - 1)).toBe(T0 + H - 1);
   });
 });
 
@@ -91,8 +91,8 @@ describe('⛵ qui embarque', () => {
   });
   it('les embarqués sont occupés jusqu’à l’arrivée (2 h après le départ)', () => {
     const m = startCrossing(island1([FORTRESS_ID]), 2, ['a'], T0 + 1);
-    expect(m.crossing!.departAt).toBe(T0 + H);
-    expect(m.crossing!.arriveAt).toBe(T0 + H + CROSSING.travelMs);
+    expect(m.crossing!.departAt).toBe(T0 + 1);
+    expect(m.crossing!.arriveAt).toBe(T0 + 1 + CROSSING.travelMs);
     const b = boardTravellers([adv('a'), adv('z')], m.crossing!);
     expect(b[0]!.busyUntil).toBe(m.crossing!.arriveAt);
     expect(b[1]!.busyUntil).toBeUndefined();
