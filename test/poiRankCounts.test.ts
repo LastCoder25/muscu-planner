@@ -1,7 +1,7 @@
 // 🏅 LE RANG AFFICHÉ D'UN LIEU — cf. `poiRank` (poiRank.ts).
 //
 // Le rang affiché dit la DIFFICULTÉ (niveau × nombre d'ennemis), pas le seul niveau.
-// (Le filtre de rang de la carte et `poiRankCounts` sont retirés en v1.35.0.)
+// (Le filtre de rang de la carte et `poiRankCounts` sont retirés en v1.35.1.)
 import { describe, it, expect } from 'vitest';
 import { poiRank } from '@/lib/poiRank';
 import { characterRank } from '@/lib/characterRank';

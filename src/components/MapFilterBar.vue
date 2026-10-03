@@ -6,7 +6,7 @@
   Repliée : une ligne de 40 px — un RÉSUMÉ de ce qui est filtré (`filterSummary`), bordée
   d'accent quand un filtre retire des lieux : la carte ne doit jamais avoir l'air vide sans
   raison. Dépliée : chaque type de lieu est une tuile qui ÉCRIT son état.
-  ⚠️ Plus de filtre par RANG (v1.35.0) : une île ne porte que deux rangs de lieux.
+  ⚠️ Plus de filtre par RANG (v1.35.1) : une île ne porte que deux rangs de lieux.
   ⚠️ Repliée à CHAQUE ouverture, jamais mémorisée : la carte et les voyages passent avant, et un
   pli mémorisé se lit comme « ça se rouvre tout seul » (leçon de la carte des mondes, v0.994).
 -->

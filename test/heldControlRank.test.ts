@@ -1,4 +1,4 @@
-// 🎚️ Plus de filtre par RANG sur la carte (v1.35.0) : une île ne porte que deux rangs de lieux.
+// 🎚️ Plus de filtre par RANG sur la carte (v1.35.1) : une île ne porte que deux rangs de lieux.
 // Tous les lieux restent affichés quel que soit leur rang ; seuls les types les filtrent.
 import { describe, expect, it } from 'vitest';
 import { ref } from 'vue';

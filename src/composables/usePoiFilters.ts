@@ -2,7 +2,7 @@
 // appareil. Sorti de `ExpeditionMapPage` (découpage de la page, 2026-09-27) : l'état et sa
 // persistance vivent ici, l'écran (`MapFilterBar`) ne fait que les montrer.
 // La règle des types (affiché · seul · masqué) vit dans `lib/poiTypeFilter.ts`.
-// ⚠️ Le filtre par RANG est retiré (v1.35.0, décision de l'utilisateur) : une île ne porte plus
+// ⚠️ Le filtre par RANG est retiré (v1.35.1, décision de l'utilisateur) : une île ne porte plus
 // que deux rangs de lieux, il ne triait plus rien.
 import { computed, ref, type Ref } from 'vue';
 import {
