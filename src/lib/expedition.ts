@@ -106,6 +106,9 @@ export type ControlKind =
   /** 🏝️🗺️ Le CARTOGRAPHE (île 4) : on y choisit un type de lieu tiré, qui apparaît plus
    *  souvent sur l'île (`CARTO_TYPES`, `cartoPick`). */
   | 'cartographer'
+  /** 🏝️💎 Le LAPIDAIRE (île 3) : UN champion y polit une de SES compétences (+1 niveau, 5 au
+   *  plus). Personne ne le défend : on intercepte l'armée qui marche dessus. */
+  | 'lapidary'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
   /** 🏝️ ARCHIPEL (étape 2) : un OBJECTIF SECONDAIRE de l'île (camp de brigands, nid…) et la
@@ -191,6 +194,8 @@ export interface ControlState {
   fortMult?: number;
   /** 🗺️ CARTOGRAPHE : le type de lieu que le joueur fait apparaître plus souvent. */
   favor?: PoiType;
+  /** 💎 LAPIDAIRE : la compétence que son champion polit (un id de `SKILLS`). */
+  lapis?: string;
   /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
    *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
    *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */
@@ -304,6 +309,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   distillery: 'Distillerie',
   fort: 'Fortin',
   cartographer: 'Cartographe',
+  lapidary: 'Lapidaire',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
   fortress: 'Forteresse portuaire',
@@ -323,6 +329,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   distillery: '🧪',
   fort: '🧱',
   cartographer: '🗺️',
+  lapidary: '💎',
   citadel: '🏯',
   objective: '⛺',
   fortress: '🏰',
