@@ -30,6 +30,7 @@ import {
   attackSlow,
   bankAt,
   controlSpot,
+  fortMultOf,
   mapHarass,
   retakeDelayMs,
   seatsOf,
@@ -655,6 +656,18 @@ export function ensureIslandConquest(
     void _m;
     void _f;
     return { ...p, control: { ...rest, ...rule } };
+  });
+  // 3 bis. 🧱 Le fortin de l'île : son facteur sur chaque AUTRE lieu tenu (la clé est retirée
+  // sans fortin, ou sur un lieu à l'ennemi).
+  pois = pois.map((p) => {
+    const c = p.control;
+    if (!c || !ALL_CONTROL_KINDS.includes(c.kind)) return p;
+    const f = c.owner === 'player' ? fortMultOf(pois, p.id) : 1;
+    if ((c.fortMult ?? 1) === f) return p;
+    changed = true;
+    const { fortMult: _f, ...rest } = c;
+    void _f;
+    return { ...p, control: f < 1 ? { ...rest, fortMult: f } : rest };
   });
   // 4. 🪺 Les routes dangereuses autour des nids (dérivé ; la clé est RETIRÉE hors portée).
   const peril = nestPerilIds(pois, isl?.id ?? null, islandPacified(map));
