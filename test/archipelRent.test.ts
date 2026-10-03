@@ -11,7 +11,7 @@ import { fullGoldPerDay, stonesPerDay } from './helpers/goldModel';
 /**
  * 🏝️ ÉTAPE 6 — LA RENTE DES CINQ ÎLES PACIFIÉES (mesurée le 2026-10-02). Chaque île pacifiée
  * produit ses spécialités à plein et son socle (mine, source de mana) à 25 % sans crans
- * (règle 10). Garnisons pleines (5), crans montés (20 jours tenus), au niveau 100 :
+ * (règle 10 ; l’île 1, seule à porter la mine, reste à 100 %). Garnisons pleines (5), crans montés (20 jours tenus), au niveau 100 :
  * or +28 % du revenu complet, mana +25 % de deux failles refermées par jour, pierres
  * d'invocation +30 % d'une journée de donjons, ~0,7 run de Labyrinthe par jour.
  * L'or tient dans la fourchette décidée à l'étape 0 (+7 à +41 %) ; ces bornes la gardent.
@@ -59,10 +59,13 @@ describe('🏝️ la rente des cinq îles pacifiées (niveau 100)', () => {
   // ⚠️ 2026-10-03 : plus de doublon de lieu fixe d'une île à l'autre (une seule mine, sur
   // l'île 1) — la rente d'or tombe à ~+14 %. Le plancher revient à la borne DÉCIDÉE à l'étape
   // 0 (+7 %) au lieu de la mesure d'avant (+28 %, d'où l'ancien plancher à 15 %).
-  it('l’or : dans la fourchette de l’étape 0 (+7 à +41 % du revenu complet)', () => {
+  // ⚠️ 2026-10-03 (décision de l'utilisateur) : l'île 1 porte la SEULE mine de l'archipel,
+  // son socle pacifié reste à 100 % (`socleFullIslands`) — mesuré +52,5 %. Plafond relevé de
+  // 41 à 55 % pour cette raison seule.
+  it('l’or : +7 à +55 % du revenu complet', () => {
     const part = r.gold / fullGoldPerDay(100);
     expect(part).toBeGreaterThan(0.07);
-    expect(part).toBeLessThan(0.41);
+    expect(part).toBeLessThan(0.55);
   });
   it('le mana, les pierres et les clés restent un complément', () => {
     expect(r.mana / (2 * riftClearMana({ level: 100 }))).toBeLessThan(0.35);

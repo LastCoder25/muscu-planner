@@ -70,6 +70,9 @@ export const ISLAND_CONQUEST = {
   mineHours: 24,
   /** 🕊️ Le socle d'une île pacifiée produit à cette part, sans crans. */
   socleShare: 0.25,
+  /** 🕊️ …sauf sur ces îles, où il garde sa production entière (décision de l'utilisateur,
+   *  2026-10-03 : l'île 1 pacifiée reste à 100 %). Les crans disparaissent quand même. */
+  socleFullIslands: new Set([1]) as ReadonlySet<number>,
 } as const;
 
 /**
@@ -436,7 +439,8 @@ export function islandYieldRule(
   if (!map.archipel) return {};
   let mult = kind === 'mine' ? CONTROL.mineHoursPerHaul / ISLAND_CONQUEST.mineHours : 1;
   const flat = islandPacified(map) && SOCLE.has(kind);
-  if (flat) mult *= ISLAND_CONQUEST.socleShare;
+  if (flat && !ISLAND_CONQUEST.socleFullIslands.has(map.archipel.island))
+    mult *= ISLAND_CONQUEST.socleShare;
   return {
     ...(mult !== 1 ? { yieldMult: mult } : {}),
     ...(flat ? { flatTier: true } : {}),
