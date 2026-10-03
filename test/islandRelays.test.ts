@@ -194,7 +194,10 @@ describe('🏅 le rang d’un lieu fixe monte en s’éloignant du port', () => 
         expect(p.level).toBeLessThanOrEqual(lv);
         expect(p.level).toBe(islandControlLevel(m, p, lv));
       }
-      // Le plus proche est bas dans la tranche, le plus loin haut.
+      // Le plus proche est bas dans la tranche, le plus loin haut. ⚠️ Seulement à 3 lieux et
+      // plus : sans le camp d'entraînement (retiré des îles le 2026-10-03), les îles 2 à 5 n'en
+      // ont plus que deux, posés côte à côte — même distance au port, donc même rang.
+      if (pts.length < 3) continue;
       expect(pts.at(-1)!.level - pts[0]!.level, `île ${isl.id}`).toBeGreaterThan(
         (lv - isl.minLevel) * 0.2,
       );

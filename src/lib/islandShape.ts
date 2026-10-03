@@ -163,6 +163,12 @@ export function islandCenter(id: number): { x: number; y: number } {
   return c;
 }
 
+/** 🧭 La marge qu'une armée garde avec la côte en marchant tout droit : son glyphe (3 unités)
+ *  doit tenir sur la terre. À 1, une marche qui longeait la baie passait à 1,8 de la côte et
+ *  son glyphe tombait à la mer (île 5). Les deux rayons par le centre restent au-dessus : un
+ *  lieu est posé à `LAND_MARGIN` (8) de la côte, la ville à 6. */
+const MARCH_MARGIN = 3;
+
 /** 🧭 Le point de passage d'une armée qui marche de `from` à `to` sur l'île `id`. Les
  *  attaques vont TOUT DROIT (décision de l'utilisateur : « les cartes d'îles sont assez simples
  *  pour des trajets directs ») ; seulement si la ligne droite coupe la mer — une faille de
@@ -180,7 +186,7 @@ export function islandVia(
     const t = k / steps;
     const x = from.x + (to.x - from.x) * t;
     const y = from.y + (to.y - from.y) * t;
-    if (!onIsland(id, x, y, 1)) return islandCenter(id);
+    if (!onIsland(id, x, y, MARCH_MARGIN)) return islandCenter(id);
   }
   return undefined;
 }

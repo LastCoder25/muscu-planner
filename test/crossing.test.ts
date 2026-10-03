@@ -329,11 +329,11 @@ describe('🛡️ une réserve de milice par île', () => {
       expect(seats).toBeGreaterThan(0);
       for (const b of [1, 5, 30, 100]) expect(militiaCap(b, seats)).toBe(Math.min(b, seats));
     }
-    // Île 1 : 4 lieux fixes → 20 miliciens, atteints pile à la Caserne 20 (on la quitte au niveau 20).
+    // Île 1 : 3 lieux fixes (plus de camp d'entraînement) → 15 miliciens, atteints à la Caserne 15.
     const s1 = militiaSeatsOf({ archipel: archipelOn(1) });
-    expect(militiaCap(19, s1)).toBe(19);
-    expect(militiaCap(20, s1)).toBe(20);
-    expect(militiaCap(37, s1)).toBe(20);
+    expect(militiaCap(14, s1)).toBe(14);
+    expect(militiaCap(15, s1)).toBe(15);
+    expect(militiaCap(37, s1)).toBe(15);
     expect(militiaCap(0, 20)).toBe(0);
     expect(militiaSeatsOf({})).toBe(0);
     // La production remplit bien jusqu'à ce plafond, pas seulement jusqu'à l'ancien.
