@@ -133,7 +133,7 @@ export interface ControlState {
   kind: ControlKind;
   owner: 'enemy' | 'player';
   /** 🏝️ AVANT-POSTE de l'île (`islandConquest`) : posé sur la route base → forteresse ; les
-   *  objectifs ne s'attaquent qu'une fois les deux avant-postes tenus. */
+   *  objectifs ne s'attaquent qu'une fois deux lieux fixes de l'île tenus. */
   outpost?: boolean;
   /** 🧝 Le héros y est POSTÉ (étape 6 bis : n'importe quel lieu tenu, la forteresse comprise) —
    *  il défend la place, n'est plus libre pour autre chose et se rappelle à la base. */

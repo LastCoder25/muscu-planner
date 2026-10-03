@@ -1020,8 +1020,13 @@ export function islandTargetLabel(
   const riseAt = rise && isKey ? nextRiseAt(map!) : null;
   if (p.control.kind === 'objective')
     return {
-      title: `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} pris`,
+      title: p.control.locked
+        ? `🔒 Objectif de l’île · verrouillé (${Math.min(st.pointsHeld, OBJECTIVES_AFTER_HELD)}/${OBJECTIVES_AFTER_HELD} lieux fixes tenus)`
+        : `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} pris`,
       detail:
+        (p.control.locked
+          ? `tiens d’abord ${OBJECTIVES_AFTER_HELD} lieux fixes de l’île (n’importe lesquels) pour l’attaquer · `
+          : '') +
         `troupe de ${p.control.size} champions de référence · ` +
         (rise && !isKey
           ? 'pris, il se tient — mais ses morts l’attaquent 3 jours plus tard tant que la citadelle des morts tient'
