@@ -16,7 +16,11 @@ export default defineBoot(async ({ router, store }) => {
     if (event === 'PASSWORD_RECOVERY') void router.push('/reset-password');
   });
 
+  // 🩺 Étapes lues par la garde du démarrage (index.html) si l'app ne s'affiche pas.
+  const stage = (s: string) => ((window as { __boot?: string }).__boot = s);
+  stage('session (connexion)');
   await auth.init();
+  stage('session ok, ouverture du premier écran');
 
   router.beforeEach(async (to) => {
     // Écran de nouveau mot de passe : toujours accessible (session de recovery).
@@ -37,6 +41,7 @@ export default defineBoot(async ({ router, store }) => {
 
     // S'assure d'avoir tenté de charger le profil au moins une fois.
     if (!profile.loaded) {
+      stage('chargement du profil');
       try {
         await profile.fetch(auth.user.id);
       } catch {
@@ -47,6 +52,7 @@ export default defineBoot(async ({ router, store }) => {
     const hasProfile = !!profile.profile;
     if (!hasProfile && to.path !== '/onboarding') return { path: '/onboarding' };
     if (hasProfile && to.path === '/onboarding') return { path: '/' };
+    stage('affichage de ' + to.path);
     return true;
   });
 });
