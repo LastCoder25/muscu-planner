@@ -39,7 +39,13 @@
         class="trip"
         :class="[
           t.kind,
-          { back: t.back, focus: focus === t.key, pending: t.pending, failed: !!t.failed },
+          {
+            back: t.back,
+            focus: focus === t.key,
+            pending: t.pending,
+            failed: !!t.failed,
+            sea: !!t.sea,
+          },
         ]"
         :title="t.title"
         :aria-pressed="focus === t.key"
@@ -62,8 +68,8 @@
             <MilitiaPortrait v-if="f.militia" />
             <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
           </span>
-          <span v-if="t.members.length > FACES_MAX" class="tr-face-more"
-            >+{{ t.members.length - FACES_MAX }}</span
+          <span v-if="t.members.length > facesMax(t)" class="tr-face-more"
+            >+{{ t.members.length - facesMax(t) }}</span
           >
         </span>
         <span
@@ -395,10 +401,13 @@ watch(
 /** 🛡️ Au plus ce nombre de portraits sur une tuile (au-delà : « +N »), pour tenir sur une
  *  ligne dans une tuile de tiers de largeur à 344 px. */
 const FACES_MAX = 4;
+/** ⛵ Une traversée prend toute la ligne : la place de plus de portraits. */
+const SEA_FACES_MAX = 10;
+const facesMax = (t: MapTrip) => (t.sea ? SEA_FACES_MAX : FACES_MAX);
 /** 🛡️ Les portraits d'un renfort : champions (portrait, repli emoji) et miliciens. */
 function facesOf(t: MapTrip) {
   const byId = new Map(char.advList.map((a) => [a.id, a]));
-  return t.members.slice(0, FACES_MAX).map((id) => {
+  return t.members.slice(0, facesMax(t)).map((id) => {
     if (isMilitiaId(id))
       return { id, militia: true, name: MILITIA_NAME, championId: null, emoji: '' };
     const a = byId.get(id);
@@ -637,6 +646,11 @@ const crew = computed(() => {
   /* border-box : sans lui padding et bordure s'ajoutaient au tiers, et il n'en tenait que deux. */
   box-sizing: border-box;
   flex: 0 0 calc((100% - 16px) / 3);
+}
+/* ⛵ Une traversée en bateau prend TOUTE la ligne (demandé) : île de départ et d'arrivée aux
+   deux coins, l'équipage entier au milieu. */
+.trips > .trip.sea {
+  flex-basis: 100%;
 }
 .trip {
   position: relative;

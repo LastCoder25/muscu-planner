@@ -891,6 +891,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toMatch(/title="Île 1">🏝️<sub[^>]*>1</);
     expect(out).toMatch(/title="Île 2">\s*🏝️<sub[^>]*>2</);
     expect(out).toContain('⚓ 00:00');
+    // ⛵ Demandé : une traversée prend toute la ligne (classe sea, flex-basis 100 %).
+    expect(out).toMatch(/class="trip hero[^"]*sea/);
     expect(out).toMatch(/Partira vers\s+l(&#39;|')île 2/);
   }, 30_000);
 
@@ -3443,7 +3445,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('tr-filter');
     // ⚠️ Jamais la classe nue de la catégorie : `trips` est celle de la GRILLE des tuiles,
     // dont le padding décentrait « Expéditions » dans sa pastille (signalé).
-    expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
+    expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
     expect(out).not.toContain('trf-trips');
     expect(out).toMatch(/class="trf trf-attacks"/);
     expect(out).toMatch(/class="trf trf-all on"/);
