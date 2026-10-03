@@ -563,10 +563,21 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(AvailabilityLine, { now: 1 }, row, undefined, '/', (h) => (out = h)),
     ).toBeNull();
-    // 3 hors de la base (2 postés + 1 en route) sur 7 (4 à la base).
+    // 4 disponibles à la base sur 7 (3 hors de la base : 2 postés + 1 en route).
     // Le milicien a désormais son portrait (l'emoji 🛡️ n'est plus que le repli).
-    expect(out).toMatch(/av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span>3\/7/);
-    expect(out).toContain('3 milicien(s) posté(s) sur 7 (4 à la base)');
+    expect(out).toMatch(/av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span><b[^>]*>4<\/b>\/7/);
+    expect(out).toContain("4 milicien(s) disponible(s) sur l'île, 3 posté(s)");
+    // 🏝️ Nouvelle île, personne à la base : la pastille dit quand vient le prochain.
+    const fresh = {
+      ...ROW,
+      buildings: [{ slot: 0, level: 10, typeId: 'barracks', collectedAt: 0 }],
+      base: { militia: { home: 0, producedAt: 0, seq: 0 } },
+    };
+    let out2 = '';
+    expect(
+      await mountIt(AvailabilityLine, { now: 1 }, fresh, undefined, '/', (h) => (out2 = h)),
+    ).toBeNull();
+    expect(out2).toMatch(/<b[^>]*>0<\/b>\/0<span[^>]*class="av-cap"[^>]*>·\+1 dans /);
   }, 30_000);
 
   // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.

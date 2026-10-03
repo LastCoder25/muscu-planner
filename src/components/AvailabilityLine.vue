@@ -39,11 +39,14 @@
         >/{{ r.total }}</span
       >
     </span>
-    <!-- 🛡️ Les miliciens postés sur des places fortes (ou en route) / tous ceux qui existent,
-         puis le plafond de la Caserne (demandé : « assignés, total, et ce que je peux avoir »). -->
-    <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.posted }"
-      ><span class="av-ico"><MilitiaPortrait /></span>{{ mil.posted }}/{{ mil.total
-      }}<span class="av-cap">·max {{ mil.cap }}</span></span
+    <!-- 🛡️ Les miliciens DISPONIBLES sur l'île (à la base, prêts à partir) / tous ceux qui
+         existent sur l'île, comme les champions (v1.46.1, demandé : « voir les miliciens dispos
+         sur la nouvelle île »). Aucun dispo : le temps avant le prochain ; sinon le plafond. -->
+    <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.home }"
+      ><span class="av-ico"><MilitiaPortrait /></span><b>{{ mil.home }}</b>/{{ mil.total
+      }}<span v-if="!mil.home && milNextMs" class="av-cap"
+        >·+1 dans {{ formatDuration(milNextMs) }}</span
+      ><span v-else class="av-cap">·max {{ mil.cap }}</span></span
     >
     <span v-if="interactive" class="av-go">›</span>
   </component>
@@ -62,7 +65,7 @@ import {
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
-import { militiaCount } from '@/lib/militia';
+import { militiaCount, nextMilitiaMs } from '@/lib/militia';
 import { buildingLevel } from '@/lib/buildings';
 import { heroAttackReturnAt } from '@/lib/combinedAttack';
 import { readyGarrisons } from '@/lib/controlRoutes';
@@ -142,15 +145,28 @@ const rankRows = computed(() =>
   ),
 );
 
-/** 🛡️ Miliciens postés (ou en route vers une place forte) / effectif total. */
+/** 🛡️ Miliciens de l'île : à la base (dispos), postés (ou en route), total, plafond. */
+const barracks = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks'));
 const mil = computed(() =>
   militiaCount(
     char.row?.base?.militia,
     char.row?.expedition_map,
-    buildingLevel(char.row?.buildings ?? [], 'barracks'),
+    barracks.value,
     militiaSeatsOf(char.row?.expedition_map),
   ),
 );
+/** ⏳ Le prochain milicien de la Caserne (0 si pleine ou absente) — la règle de production. */
+const milNextMs = computed(() => {
+  const s = char.row?.base?.militia;
+  if (!s) return 0;
+  return nextMilitiaMs(
+    s,
+    barracks.value,
+    mil.value.posted,
+    props.now,
+    militiaSeatsOf(char.row?.expedition_map),
+  );
+});
 
 /** ⛵ L'infobulle d'une traversée : vers quelle île, départ (s'il n'a pas eu lieu), arrivée. */
 const seaTitle = computed(() => {
@@ -176,9 +192,10 @@ const title = computed(() => {
   if (d.value.champHurt) parts.push(`${d.value.champHurt} champion(s) à l'infirmerie`);
   if (d.value.champTotal)
     parts.push(`${d.value.champFree} champion(s) disponible(s) sur ${d.value.champTotal}`);
-  if (mil.value.total)
+  if (mil.value.total || mil.value.cap)
     parts.push(
-      `${mil.value.posted} milicien(s) posté(s) sur ${mil.value.total} (${mil.value.home} à la base) — ${mil.value.cap} au plus avec ta Caserne`,
+      `${mil.value.home} milicien(s) disponible(s) sur l'île, ${mil.value.posted} posté(s) — ${mil.value.cap} au plus avec ta Caserne` +
+        (milNextMs.value ? `, le prochain dans ${formatDuration(milNextMs.value)}` : ''),
     );
   return parts.join(' · ');
 });
