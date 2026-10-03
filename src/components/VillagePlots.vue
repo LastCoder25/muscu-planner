@@ -267,6 +267,7 @@ import {
 } from '@/lib/buildings';
 import { buildingPreview, nextMilestone, previewNote } from '@/lib/buildingPreview';
 import { emptyMilitia, militiaCap, militiaOnMap, nextMilitiaMs } from '@/lib/militia';
+import { militiaSeatsOf } from '@/lib/controlPoints';
 import { formatDuration } from '@/lib/duration';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
@@ -332,8 +333,8 @@ const militia = computed(() => {
   return {
     home: s.home,
     away,
-    cap: militiaCap(b.level),
-    next: nextMilitiaMs(s, b.level, away, props.now),
+    cap: militiaCap(b.level, militiaSeatsOf(char.row?.expedition_map)),
+    next: nextMilitiaMs(s, b.level, away, props.now, militiaSeatsOf(char.row?.expedition_map)),
   };
 });
 /** 🛕 Le Panthéon a sa propre feuille : plein écran, trois grandes tuiles. */

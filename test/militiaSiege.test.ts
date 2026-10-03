@@ -87,7 +87,7 @@ describe('🛡️ la milice au rempart', () => {
   it('une enceinte seule tient nettement mieux avec sa milice, sans devenir imprenable', () => {
     for (const L of [12, 30]) {
       const without = siege(L, 1, 0, 80).hold;
-      const withMil = siege(L, 1, militiaCap(L), 80).hold;
+      const withMil = siege(L, 1, militiaCap(L, 0), 80).hold;
       expect(withMil).toBeGreaterThan(without + (L >= RAID.enceinteTo ? 30 : 8));
       expect(withMil).toBeLessThan(97);
     }

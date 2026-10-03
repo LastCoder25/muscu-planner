@@ -489,7 +489,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // CHAQUE cran — il suffit qu'UN des deux bouge. (La forge est partie en v0.1012.)
     pantheon: (l) => engageCap(l) * 1_000_000 + l,
     // Effectif (+1 tous les 3 niveaux) ET cadence (asymptotique, à CHAQUE niveau).
-    barracks: (l) => militiaCap(l) * 1_000_000 - militiaIntervalH(l),
+    barracks: (l) => militiaCap(l, 0) * 1_000_000 - militiaIntervalH(l),
   };
 
   it('chaque type de bâtiment déclare ce que son niveau change', () => {

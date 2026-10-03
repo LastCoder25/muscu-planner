@@ -28,19 +28,20 @@ import {
 } from './archipelago';
 import { characterRank } from './characterRank';
 import { createMap, type Crossing, type ExpeditionMap, type ExpeditionMessage } from './expedition';
-import { GACHA } from './gacha';
 import { ENDLESS, FORTRESS_ID } from './islandConquest';
 import { emptyMilitia, militiaOnMap, produceMilitia, type MilitiaState } from './militia';
+import { militiaSeatsOf } from './controlPoints';
 
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
   travelMs: 2 * 3600_000,
   /** Un départ chaque heure, à l'heure pile. */
   everyMs: 3600_000,
-  /** 💠 Premier débarquement : l'équivalent de 10 tirages (multiplié par `pullCost`). */
-  firstLandingPulls: 10,
-  /** 🎟️ Premier débarquement : 10 tickets d'invocation (demandé par l'utilisateur, une seule
-   *  fois par île — sinon des allers-retours de 2 h deviendraient une source de tickets). */
+  /** 🎟️ Premier débarquement : 10 TIRAGES, en tickets (un ticket = un tirage), une seule fois
+   *  par île — sinon des allers-retours de 2 h deviendraient une source de tirages. Décision
+   *  de l'utilisateur (2026-10-03 : « donne 10 tirages avec une animation ») : le coffre en
+   *  donnait 20 (10 en pierres de mana + 10 tickets). L'animation des tickets se joue à
+   *  l'ouverture du coffre (`expeClaim` → `celebrateTickets`). */
   firstLandingTickets: 10,
   /** 🏰 Forteresse abattue : sceaux de champion au rang max de l'île. */
   fortressSeals: 3,
@@ -48,8 +49,8 @@ export const CROSSING = {
   fortressRunesBase: 2,
 } as const;
 
-/** 💠 Le coffre du PREMIER débarquement sur une île (à partir de l'île 2) : l'équivalent de
- *  10 tirages en pierres de mana, DÉRIVÉ du prix d'un tirage. Déposé dans la boîte dans la
+/** 🎟️ Le coffre du PREMIER débarquement sur une île (à partir de l'île 2) : 10 tirages, en
+ *  tickets. Déposé dans la boîte dans la
  *  même écriture que le débarquement, donc une seule fois. */
 export function landingChestMessage(isl: Island, at: number): ExpeditionMessage {
   return {
@@ -58,10 +59,9 @@ export function landingChestMessage(isl: Island, at: number): ExpeditionMessage 
     title: `⚓ Débarquement sur l'île ${isl.id}`,
     level: isl.minLevel,
     win: true,
-    text: `Premier pas sur ${isl.name}. Les marins t'offrent de quoi invoquer, et 10 tickets.`,
+    text: `Premier pas sur ${isl.name}. Les marins t'offrent ${CROSSING.firstLandingTickets} tirages.`,
     gold: 0,
     energy: 0,
-    mana: CROSSING.firstLandingPulls * GACHA.pullCost,
     tickets: CROSSING.firstLandingTickets,
     key: 0,
     resolvedAt: at,
@@ -340,7 +340,8 @@ export function produceIslandMilitia(
   let islands = map.islands;
   for (const [k, im] of Object.entries(map.islands)) {
     if (!im.militia) continue;
-    const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now);
+    const seats = militiaSeatsOf({ archipel: archipelOn(Number(k)) });
+    const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now, seats);
     if (m !== im.militia) islands = { ...islands, [k]: { ...im, militia: m } };
   }
   return islands === map.islands ? map : { ...map, islands };

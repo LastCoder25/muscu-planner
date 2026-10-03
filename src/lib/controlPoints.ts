@@ -1089,6 +1089,12 @@ export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly C
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
 }
 
+/** 🛡️🏝️ Les places de milice qu'une île ajoute au plafond de la Caserne : une garnison
+ *  PLEINE (`MILITIA.perPoint`) sur chacun de ses lieux fixes. 0 hors archipel. */
+export function militiaSeatsOf(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): number {
+  return map?.archipel ? controlKindsOf(map).length * MILITIA.perPoint : 0;
+}
+
 /** ⚒️🌀🗿 L'unité produite et ce qu'en dit la tuile, pour les spécialités des îles 4 et 5. */
 const UNIT_LOOK: Record<
   'ossuary' | 'arsenal' | 'circle' | 'altar',

@@ -18,9 +18,9 @@ import { archipelOn, islandById } from '@/lib/archipelago';
 import { advUnavailableReason, type Adventurer } from '@/lib/adventurers';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 import { FORTRESS_ID } from '@/lib/islandConquest';
-import { GACHA } from '@/lib/gacha';
 import { characterRank } from '@/lib/characterRank';
-import { militiaCap } from '@/lib/militia';
+import { emptyMilitia, militiaCap, produceMilitia } from '@/lib/militia';
+import { militiaSeatsOf } from '@/lib/controlPoints';
 
 const H = 3600_000;
 const T0 = Date.UTC(2026, 9, 2, 10, 0, 0);
@@ -163,17 +163,34 @@ describe('🛡️ une réserve de milice par île', () => {
     const later = produceIslandMilitia(on2, 10, T0 + 48 * H);
     const home = later.islands!['1']!.militia!.home;
     expect(home).toBeGreaterThan(0);
-    expect(home).toBeLessThanOrEqual(militiaCap(10));
+    expect(home).toBeLessThanOrEqual(militiaCap(10, militiaSeatsOf({ archipel: archipelOn(1) })));
     expect(produceIslandMilitia(on2, 0, T0 + 48 * H)).toBe(on2);
     expect(produceIslandMilitia(later, 10, T0 + 48 * H)).toBe(later);
+  });
+
+  it("l'île qu'on quitte peut être tenue ENTIÈREMENT par la milice, à toute Caserne", () => {
+    // Les champions partent sur l'île suivante : chaque lieu fixe doit pouvoir garder
+    // sa garnison pleine de miliciens (5 par point), réserve de la base en plus.
+    for (const isl of [1, 2, 3, 4, 5]) {
+      const seats = militiaSeatsOf({ archipel: archipelOn(isl) });
+      expect(seats).toBeGreaterThanOrEqual(4 * 5);
+      for (const b of [1, 5, 30, 100])
+        expect(militiaCap(b, seats)).toBeGreaterThanOrEqual(seats + militiaCap(b, 0));
+    }
+    expect(militiaSeatsOf({})).toBe(0);
+    // La production remplit bien jusqu'à ce plafond, pas seulement jusqu'à l'ancien.
+    const seats = militiaSeatsOf({ archipel: archipelOn(1) });
+    const full = produceMilitia(emptyMilitia(0), 1, 0, 1e13, seats);
+    expect(full.home).toBe(militiaCap(1, seats));
   });
 });
 
 describe('🎁 récompenses', () => {
-  it('premier débarquement : 10 tirages en pierres de mana, dérivés du prix', () => {
+  it('premier débarquement : 10 tirages, en tickets — et rien en pierres de mana (sinon 20)', () => {
     const m = landingChestMessage(islandById(2)!, T0);
-    expect(m.mana).toBe(CROSSING.firstLandingPulls * GACHA.pullCost);
-    expect(m.tickets).toBe(10);
+    expect(m.tickets).toBe(CROSSING.firstLandingTickets);
+    expect(CROSSING.firstLandingTickets).toBe(10);
+    expect(m.mana ?? 0).toBe(0);
     expect(m.claimed).toBe(false);
   });
   it('forteresse abattue : un coffre une seule fois, sceaux au rang max de l’île', () => {

@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+import { militiaSeatsOf } from '@/lib/controlPoints';
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
 import {
@@ -142,6 +143,7 @@ const mil = computed(() =>
     char.row?.base?.militia,
     char.row?.expedition_map,
     buildingLevel(char.row?.buildings ?? [], 'barracks'),
+    militiaSeatsOf(char.row?.expedition_map),
   ),
 );
 

@@ -366,6 +366,7 @@ import {
 import { resolveCamp } from '@/lib/camp';
 import { FACTION_EMOJI } from '@/lib/raid';
 import {
+  militiaSeatsOf,
   CONTROL_LABEL,
   captureControl,
   collectControl,
@@ -3029,7 +3030,13 @@ export const useCharacterStore = defineStore('character', () => {
     const barracks = buildingLevel(cur.buildings, 'barracks');
     if (barracks > 0) {
       const m0 = t.base.militia ?? emptyMilitia(now);
-      const m1 = produceMilitia(m0, barracks, militiaOnMap(cur.expedition_map), now);
+      const m1 = produceMilitia(
+        m0,
+        barracks,
+        militiaOnMap(cur.expedition_map),
+        now,
+        militiaSeatsOf(cur.expedition_map),
+      );
       if (m1 !== t.base.militia) {
         t.base = { ...t.base, militia: m1 };
         t.changed = true;

@@ -83,10 +83,14 @@ export function militiaIntervalH(barracks: number): number {
   return fastH + ((slowH - fastH) * halfLevel) / (halfLevel + L);
 }
 
-/** Combien de miliciens la Caserne entretient au plus (base + postés + en route). */
-export function militiaCap(barracks: number): number {
+/** Combien de miliciens la Caserne entretient au plus (base + postés + en route).
+ *  🏝️ `islandSeats` (REQUIS) : sur une île, les places de TOUS ses lieux fixes s'ajoutent
+ *  (`militiaSeatsOf`), pour qu'on puisse laisser l'île qu'on quitte en garnison pleine de
+ *  miliciens — les champions partent sur l'île suivante (décision de l'utilisateur,
+ *  2026-10-03). 0 hors archipel : la carte ordinaire ne change pas. */
+export function militiaCap(barracks: number, islandSeats: number): number {
   if (barracks <= 0) return 0;
-  return MILITIA.capBase + Math.floor(barracks / MILITIA.capEvery);
+  return MILITIA.capBase + Math.floor(barracks / MILITIA.capEvery) + Math.max(0, islandSeats);
 }
 
 /**
@@ -101,9 +105,10 @@ export function produceMilitia(
   barracks: number,
   away: number,
   now: number,
+  islandSeats: number,
 ): MilitiaState {
   if (barracks <= 0) return s;
-  const room = militiaCap(barracks) - s.home - away;
+  const room = militiaCap(barracks, islandSeats) - s.home - away;
   const step = militiaIntervalH(barracks) * 3_600_000;
   const made = Math.floor(Math.max(0, now - s.producedAt) / step);
   if (made <= 0) return s;
@@ -121,8 +126,9 @@ export function nextMilitiaMs(
   barracks: number,
   away: number,
   now: number,
+  islandSeats: number,
 ): number {
-  if (barracks <= 0 || s.home + away >= militiaCap(barracks)) return 0;
+  if (barracks <= 0 || s.home + away >= militiaCap(barracks, islandSeats)) return 0;
   const step = militiaIntervalH(barracks) * 3_600_000;
   return Math.max(0, s.producedAt + step - now);
 }
@@ -170,10 +176,12 @@ export function militiaCount(
   s: MilitiaState | null | undefined,
   map: ExpeditionMap | null | undefined,
   barracks: number,
+  /** 🏝️ Les places de l'île (`militiaSeatsOf`), REQUIS : le même plafond que la Caserne. */
+  islandSeats: number,
 ): { posted: number; home: number; total: number; cap: number } {
   const posted = militiaOnMap(map);
   const home = s?.home ?? 0;
-  return { posted, home, total: posted + home, cap: militiaCap(barracks) };
+  return { posted, home, total: posted + home, cap: militiaCap(barracks, islandSeats) };
 }
 
 const unitCache = new Map<number, Combatant>();

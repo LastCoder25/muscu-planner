@@ -82,7 +82,7 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       const h = militiaIntervalH(level);
       const hh = Math.floor(h);
       const mm = Math.round((h - hh) * 60);
-      return `1 milicien / ${hh} h${mm ? ` ${String(mm).padStart(2, '0')}` : ''} · ${militiaCap(level)} au plus`;
+      return `1 milicien / ${hh} h${mm ? ` ${String(mm).padStart(2, '0')}` : ''} · ${militiaCap(level, 0)} au plus (+5 par lieu fixe sur une île)`;
     }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);
@@ -114,7 +114,7 @@ export function previewNote(typeId: BuildingTypeId): string | null {
 
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: BuildingTypeId, level: number): boolean {
-  if (typeId === 'barracks') return militiaCap(level) > militiaCap(level - 1);
+  if (typeId === 'barracks') return militiaCap(level, 0) > militiaCap(level - 1, 0);
   return false;
 }
 
