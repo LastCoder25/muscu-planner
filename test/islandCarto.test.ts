@@ -46,11 +46,10 @@ function spawned(m0: ExpeditionMap, type: string, days = 20): number {
 }
 
 describe('🗺️ le cartographe de l’île 4', () => {
-  it('l’île 4 : camp, cartographe, fortin', () => {
+  it('l’île 4 : cartographe, fortin', () => {
     expect([...controlKindsOf({ archipel: archipelOn(4) })].sort()).toEqual([
       'cartographer',
       'fort',
-      'training',
     ]);
     expect(poiLabel(island4().pois.find((p) => p.id === id)!)).toContain('Cartographe');
   });

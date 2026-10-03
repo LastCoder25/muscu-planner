@@ -32,9 +32,9 @@ function islandMap(id = 4, L = LV): ExpeditionMap {
 }
 const kinds = (m: ExpeditionMap) => m.pois.flatMap((p) => (p.control ? [p.control.kind] : []));
 
-/** Deux lieux tenus : le camp à 3 champions, le fortin à 1, attaques lointaines. */
+/** Deux lieux tenus : le cartographe à 3 champions, le fortin à 1, attaques lointaines. */
 function held(m: ExpeditionMap): ExpeditionMap {
-  let out = captureControl(m, controlIdOf('training'), ['a', 'b', 'c'], NOW, 7);
+  let out = captureControl(m, controlIdOf('cartographer'), ['a', 'b', 'c'], NOW, 7);
   out = captureControl(out, controlIdOf('fort'), ['d'], NOW, 7);
   const far = NOW + 30 * DAY;
   return {
@@ -63,7 +63,7 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
     expect(at - NOW).toBeLessThanOrEqual((WARLORD.raidMs / 3) * (1 + WARLORD.jitter));
     m = warlordRaids(m, at);
     expect(attackOf(m, 'fort')).toBe(at);
-    expect(attackOf(m, 'training')).toBe(NOW + 30 * DAY);
+    expect(attackOf(m, 'cartographer')).toBe(NOW + 30 * DAY);
     expect(m.archipel!.warAt!).toBeGreaterThan(at);
     // Même carte tant qu’elle n’est pas due.
     expect(warlordRaids(m, at + 1)).toBe(m);
@@ -92,7 +92,7 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
     };
     const m = warlordRaids(m1, NOW + 12 * H);
     expect(attackOf(m, 'fort')).toBe(soon);
-    expect(attackOf(m, 'training')).toBe(NOW + 12 * H);
+    expect(attackOf(m, 'cartographer')).toBe(NOW + 12 * H);
   });
   it('branchée sur le tick de la carte', () => {
     const m0 = held(islandMap());
@@ -120,13 +120,15 @@ function withOldCircle(m: ExpeditionMap): ExpeditionMap {
 }
 
 describe('⚒️🌀 l’arsenal (île 3), et le cercle d’invocation retiré', () => {
-  it('l’île 3 porte le camp et l’arsenal ; l’île 4 le camp et le fortin', () => {
+  it('l’île 3 porte l’arsenal, l’île 4 le fortin — et plus aucun camp d’entraînement', () => {
     const k = kinds(islandMap(3));
-    for (const x of ['training', 'arsenal']) expect(k).toContain(x);
+    expect(k).toContain('arsenal');
+    expect(k).not.toContain('training');
     expect(k).not.toContain('mine');
     expect(k).not.toContain('mana');
     const k4 = kinds(islandMap(4));
-    for (const x of ['training', 'fort']) expect(k4).toContain(x);
+    expect(k4).toContain('fort');
+    expect(k4).not.toContain('training');
     expect(k4).not.toContain('arsenal');
     expect(k).not.toContain('circle');
     expect(k).not.toContain('tower');

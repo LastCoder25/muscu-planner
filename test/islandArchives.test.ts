@@ -23,7 +23,7 @@ function islandMap(id: number, L: number): ExpeditionMap {
 const kinds = (m: ExpeditionMap) => m.pois.flatMap((p) => (p.control ? [p.control.kind] : []));
 /** 📖 Des archives d'une sauvegarde d'avant leur retrait (encore tenues, rappelées ensuite). */
 function withOldArchives(m: ExpeditionMap): ExpeditionMap {
-  const camp = m.pois.find((q) => q.id === controlIdOf('training'))!;
+  const camp = m.pois.find((q) => q.id === controlIdOf('scriptorium'))!;
   const id = controlIdOf('archives');
   return {
     ...m,
@@ -34,21 +34,20 @@ function withOldArchives(m: ExpeditionMap): ExpeditionMap {
   };
 }
 
-describe('🏝️ lieux fixes des îles 1 et 2 : aucun doublon, sauf le camp', () => {
-  it('île 1 : camp, mine, source de mana, jardin · île 2 : camp, scriptorium, ossuaire', () => {
+describe('🏝️ lieux fixes des îles 1 et 2 : aucun doublon, aucun camp', () => {
+  it('île 1 : mine, source de mana, jardin · île 2 : scriptorium, ossuaire', () => {
     const fixed = (m: ExpeditionMap) =>
       kinds(m)
         .filter((k) => !['objective', 'fortress', 'citadel'].includes(k))
         .sort();
-    expect(fixed(islandMap(1, 20))).toEqual(['garden', 'mana', 'mine', 'training']);
-    expect(fixed(islandMap(2, 40))).toEqual(['ossuary', 'scriptorium', 'training']);
+    expect(fixed(islandMap(1, 20))).toEqual(['garden', 'mana', 'mine']);
+    expect(fixed(islandMap(2, 40))).toEqual(['ossuary', 'scriptorium']);
     expect(controlKindsOf({})).toEqual(CONTROL.kinds);
   });
-  it('hors camp, aucun lieu fixe n’apparaît sur deux îles', () => {
+  it('aucun lieu fixe n’apparaît sur deux îles', () => {
     const seen = new Map<string, number>();
     for (const isl of [1, 2])
       for (const k of controlKindsOf({ archipel: archipelOn(isl) })) {
-        if (k === 'training') continue;
         expect(seen.get(k), `${k} déjà sur l’île ${seen.get(k)}`).toBeUndefined();
         seen.set(k, isl);
       }

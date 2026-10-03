@@ -18,7 +18,8 @@ const NOW = Date.UTC(2026, 9, 3, 12);
 const DAY = 24 * 3600_000;
 const LV = 70;
 const FORT = controlIdOf('fort');
-const CAMP = controlIdOf('training');
+// 🎯 Plus de camp d'entraînement sur les îles (2026-10-03) : le lieu épaulé est le cartographe.
+const CAMP = controlIdOf('cartographer');
 
 function island4(): ExpeditionMap {
   const m = createMap(4, NOW, LV, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(4));
@@ -45,7 +46,7 @@ describe('🧱 le fortin de l’île 4', () => {
     expect(poiLabel(poi(island4(), FORT))).toContain('Fortin');
   });
 
-  it('tenu par 3, la troupe qui reprend le camp perd un quart', () => {
+  it('tenu par 3, la troupe qui reprend le cartographe perd un quart', () => {
     const without = retakeForce(poi(heldWithFort(0), CAMP), 1).size;
     const withFort = retakeForce(poi(heldWithFort(3), CAMP), 1).size;
     expect(withFort / without).toBeCloseTo(1 - CONTROL.fortCut, 6);
