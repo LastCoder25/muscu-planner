@@ -452,6 +452,26 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toMatch(/🦸<\/span>dispo/);
   }, 30_000);
 
+  // 🐞 Signalé : « comment on voit que le héros est en traversée ? » — la ligne disait « dispo ».
+  it('AvailabilityLine : un héros en traversée n’est pas « dispo »', async () => {
+    const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
+    const crossing = { from: 1, to: 2, bookedAt: 0, departAt: 3_600_000, arriveAt: 10_800_000, ids: [] };
+    const map = { seed: 1, spawnCount: 0, nextSpawnAt: 0, pois: [], crossing };
+    let out = '';
+    expect(
+      await mountIt(
+        AvailabilityLine,
+        { now: 1 },
+        { ...ROW, expedition_map: map },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toMatch(/🦸<\/span>⛵/);
+    expect(out).toMatch(/title="Héros en traversée vers l.{1,6}île 2/);
+  }, 30_000);
+
   // 🎯 Demandé : l'apport de chaque membre à la réussite, sur sa tuile.
   it('AdvPickTile affiche ce qu’il apporte à la réussite', async () => {
     const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');

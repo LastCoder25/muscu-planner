@@ -87,6 +87,11 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
   const healMs = woundRemainingMs(char.row?.base, props.now);
   if (isWounded(char.row?.base, props.now))
     return { label: `⛑️ ${formatDuration(healMs)}`, tone: 'hurt', healMs };
+  // ⛵ En traversée (réservée ou en mer) : il est sur le bateau jusqu'au débarquement
+  // (signalé : la ligne disait « dispo » pendant toute la traversée).
+  const sea = char.row?.expedition_map?.crossing;
+  if (sea && sea.arriveAt > props.now)
+    return { label: `⛵ ${formatDuration(sea.arriveAt - props.now)}`, tone: 'away', healMs };
   const exp = char.row?.expedition;
   const h = exp ? travelPosition(exp, props.now) : null;
   if (h && h.phase !== 'done')
@@ -147,6 +152,14 @@ const mil = computed(() =>
   ),
 );
 
+/** ⛵ L'infobulle d'une traversée : vers quelle île, départ (s'il n'a pas eu lieu), arrivée. */
+const seaTitle = computed(() => {
+  const c = char.row?.expedition_map?.crossing;
+  if (!c) return '';
+  const wait = c.departAt > props.now ? `départ dans ${formatDuration(c.departAt - props.now)}, ` : '';
+  return `Héros en traversée vers l'île ${c.to} — ${wait}arrivée dans ${formatDuration(Math.max(0, c.arriveAt - props.now))}`;
+});
+
 const title = computed(() => {
   const h = hero.value;
   const parts = [
@@ -154,9 +167,11 @@ const title = computed(() => {
       ? 'Héros disponible'
       : h.tone === 'hurt'
         ? `Héros à l'infirmerie — de retour dans ${formatDuration(h.healMs)}`
-        : h.label.startsWith('⚔️')
-          ? `Héros engagé dans une attaque combinée — libre dans ${h.label.slice(3)}`
-          : `Héros en expédition — de retour dans ${h.label}`,
+        : h.label.startsWith('⛵')
+          ? seaTitle.value
+          : h.label.startsWith('⚔️')
+            ? `Héros engagé dans une attaque combinée — libre dans ${h.label.slice(3)}`
+            : `Héros en expédition — de retour dans ${h.label}`,
   ];
   if (d.value.champHurt) parts.push(`${d.value.champHurt} champion(s) à l'infirmerie`);
   if (d.value.champTotal)
