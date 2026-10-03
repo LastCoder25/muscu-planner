@@ -37,7 +37,6 @@ export interface IslandStyle {
   land1: string;
   patch: string;
   tuft: string;
-  road: string;
 }
 
 export type DecorKind =
@@ -89,7 +88,6 @@ export interface IslandTerrainData {
   /** Le port d'arrivée (au fond de la baie). ⚓ Aucun sur l'île 1 (demandé) : on y part de la
    *  base, pas d'un port. */
   port: CoastAnchor | null;
-  road: string;
   /** La forteresse portuaire (sur le cap opposé). */
   fortress: CoastAnchor;
 }
@@ -104,7 +102,6 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
     land1: '#43552a',
     patch: '#3b4c23',
     tuft: '#86a34b',
-    road: '#a58a5a',
   },
   2: {
     sea0: '#26607a',
@@ -115,7 +112,6 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
     land1: '#26401f',
     patch: '#1f3418',
     tuft: '#5f8a3e',
-    road: '#8a6f47',
   },
   3: {
     sea0: '#2e4d57',
@@ -126,7 +122,6 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
     land1: '#363d39',
     patch: '#2b322e',
     tuft: '#7d8a7a',
-    road: '#7b7466',
   },
   4: {
     sea0: '#3a5f78',
@@ -137,7 +132,6 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
     land1: '#6e5a30',
     patch: '#5a4826',
     tuft: '#b8a160',
-    road: '#7c5c34',
   },
   5: {
     sea0: '#33294a',
@@ -148,7 +142,6 @@ export const ISLAND_STYLES: Record<number, IslandStyle> = {
     land1: '#2a2133',
     patch: '#1d1626',
     tuft: '#7a6390',
-    road: '#5b4d63',
   },
 };
 
@@ -407,27 +400,16 @@ export function islandTerrain(id: number): IslandTerrainData {
   };
   const port = anchor(shape.bay, PORT_DOCK);
   const fortress = anchor(shape.cape, 9);
-  // La route, une courbe douce (pas une règle) : de la base au port sur l'île 1 ; ailleurs,
-  // du village vers l'intérieur de l'île.
-  const end = id <= 1 ? port : { x: f1(C + (ox - C) * 0.55), y: f1(C + (oy - C) * 0.55) };
-  const bend = (rng() - 0.5) * 18;
-  const mx = (C + end.x) / 2 + Math.cos(shape.bay + Math.PI / 2) * bend;
-  const my = (C + end.y) / 2 + Math.sin(shape.bay + Math.PI / 2) * bend;
-  const road = `M${C} ${C}Q${f1(mx)} ${f1(my)} ${end.x} ${end.y}`;
-  // Ce qui reste dégagé : la base, la route, le port et la forteresse.
-  const roadPts = Array.from({ length: 13 }, (_, i) => {
-    const u = i / 12;
-    return [
-      (1 - u) * (1 - u) * C + 2 * (1 - u) * u * mx + u * u * end.x,
-      (1 - u) * (1 - u) * C + 2 * (1 - u) * u * my + u * u * end.y,
-    ];
-  });
+  // 🛤️ Plus de route dessinée (demandé) : elle filait de la base vers le bord de l'île et ne
+  // menait nulle part. ⚠️ Le tirage qui la courbait est conservé : le retirer décalerait tout
+  // le décor de chaque île.
+  rng();
+  // Ce qui reste dégagé : la base, le port et la forteresse.
   const free = (x: number, y: number, pad = 0) =>
     onIsland(id, x, y, 3) &&
     Math.hypot(x - C, y - C) > 16 + pad &&
     Math.hypot(x - port.x, y - port.y) > 9 + pad &&
-    Math.hypot(x - fortress.x, y - fortress.y) > 11 + pad &&
-    roadPts.every(([rx, ry]) => Math.hypot(x - rx!, y - ry!) > 4 + pad);
+    Math.hypot(x - fortress.x, y - fortress.y) > 11 + pad;
 
   const decor: Decor[] = [];
   const put = (kind: DecorKind, x: number, y: number, s: number) => {
@@ -617,7 +599,6 @@ export function islandTerrain(id: number): IslandTerrainData {
     pools,
     waves,
     port: id <= 1 ? null : port,
-    road,
     fortress,
   };
   cache.set(id, out);
