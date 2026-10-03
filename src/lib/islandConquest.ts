@@ -579,6 +579,12 @@ export function ensureIslandConquest(
     pois = pois.filter(stays);
     changed = true;
   }
+  // 1 bis. 🏳️ Les objectifs rasés sous l'ancienne règle reviennent, tenus par nous.
+  const restored = restoreRazedObjectives(map, pois, now, playerLevel);
+  if (restored.length) {
+    pois = [...pois, ...restored];
+    changed = true;
+  }
   // 2. Posés s'ils manquent, rafraîchis sinon (niveau, troupe, verrou ; la place ne bouge pas).
   for (const w of want) {
     const k = pois.findIndex((p) => p.id === w.id);
@@ -750,13 +756,23 @@ export function takeObjective(
   if (id === FORTRESS_ID || id === ENDLESS_ID) return map;
   const razed = razeIslandTarget(map, id, at);
   if (!before?.control || razed === map) return razed;
-  const { attackAt: _a, raidAt: _r, locked: _l, hero: _h, heroUnit: _u, ...rest } = before.control;
+  return { ...razed, pois: [...razed.pois, heldObjective(before, garrison, at, hero)] };
+}
+
+/** 🏳️ L'objectif `before` (encore ennemi) devenu NÔTRE à `at`, avec sa garnison. */
+function heldObjective(
+  before: Poi,
+  garrison: readonly string[],
+  at: number,
+  hero?: PostedHero,
+): Poi {
+  const { attackAt: _a, raidAt: _r, locked: _l, hero: _h, heroUnit: _u, ...rest } = before.control!;
   void _a;
   void _r;
   void _l;
   void _h;
   void _u;
-  const held: Poi = {
+  return {
     ...before,
     control: {
       ...rest,
@@ -768,7 +784,39 @@ export function takeObjective(
       ...(hero ? { hero: true, heroUnit: hero } : {}),
     },
   };
-  return { ...razed, pois: [...razed.pois, held] };
+}
+
+/**
+ * 🏳️ LES OBJECTIFS RASÉS SOUS L'ANCIENNE RÈGLE REVIENNENT, TENUS PAR LE JOUEUR (signalé : « un
+ * avant-poste ennemi que j'ai pris hier a disparu de la carte »). Avant la v1.31, un objectif
+ * pris était RASÉ (il quittait la carte) ; depuis il se TIENT (`takeObjective`). Un objectif
+ * fixe de l'île compté abattu (`destroyed`) mais absent de la carte est donc un reliquat : il
+ * revient à sa place, à nous, sans garnison. Rien si la carte n'en a pas.
+ */
+export function restoreRazedObjectives(
+  map: ExpeditionMap,
+  pois: readonly Poi[],
+  now: number,
+  playerLevel: number,
+): Poi[] {
+  const isl = activeIsland(map);
+  if (!isl) return [];
+  const gone = destroyedOf(map);
+  const lv = Math.max(1, Math.min(playerLevel, isl.maxLevel));
+  const out: Poi[] = [];
+  objectiveAngles(isl.objectives).forEach((_, i) => {
+    const id = objectiveIdOf(i);
+    if (!gone.has(id) || pois.some((p) => p.id === id)) return;
+    const at = map.archipel?.razedAt?.[id] ?? now;
+    const enemy = enemyTarget(map, id, objectiveSpot(isl.id, i), at, lv, {
+      kind: 'objective',
+      faction: isl.faction,
+      size: objectiveSize(i, isl.objectives),
+      ...objectiveLook(isl, i),
+    });
+    out.push(heldObjective(enemy, [], at));
+  });
+  return out;
 }
 
 /** ⚔️ Un objectif tenu REPRIS par l'ennemi : il recompte comme debout (la forteresse se
