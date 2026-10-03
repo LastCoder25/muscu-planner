@@ -1081,9 +1081,13 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   // 2026-10-03 : « on va déplacer le camp d'entraînement en île 2 »).
   1: ['mine', 'garden', 'scriptorium', 'mana'],
   2: ['mine', 'training', 'mana', 'archives'],
-  3: ['mine', 'training', 'mana', 'garden', 'ossuary'],
-  4: ['mine', 'training', 'mana', 'arsenal', 'circle'],
-  5: ['mine', 'training', 'mana', 'scriptorium', 'altar'],
+  // 🏝️ QUATRE LIEUX FIXES PAR ÎLE : le socle (mine, camp, source) + UNE spécialité (décision
+  // de l'utilisateur, 2026-10-03). Retirés : jardin (île 3), cercle (île 4, la source donne
+  // déjà le mana), scriptorium (île 5, l'autel donne déjà les runes). Un lieu retiré encore
+  // tenu est rappelé puis effacé (`retiredHeld`).
+  3: ['mine', 'training', 'mana', 'ossuary'],
+  4: ['mine', 'training', 'mana', 'arsenal'],
+  5: ['mine', 'training', 'mana', 'altar'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;

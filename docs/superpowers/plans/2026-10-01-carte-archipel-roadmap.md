@@ -1,7 +1,7 @@
 # Carte de conquête : l'archipel — roadmap
 
 > Conçue avec l’utilisateur le 2026-10-01. **Étape 7 faite (v1.36.0, 2026-10-03) : tous les comptes jouent l’archipel.**
-> Reste : les points « à trancher » de la 6 bis (lieux par île, milice, récompenses).
+> Les points « à trancher » de la 6 bis sont tranchés (lieux par île v1.37.0, milice et récompense v1.34.1).
 > Page visuelle (carte dessinée, tableaux) : https://claude.ai/artifact/JK5zL5fjbPojaXwpM8ZPJc
 
 ## Pourquoi
@@ -93,9 +93,12 @@ produit au **niveau du héros** ; dans l'archipel il produira au **rang de son �
 
 - Île 1 : mine, source de mana, jardin, scriptorium.
 - Île 2 : socle + **camp d'entraînement** + **archives**.
-- Île 3 : socle + camp + jardin + **ossuaire**.
-- Île 4 : socle + camp + **arsenal** + **cercle d'invocation**.
-- Île 5 : socle + camp + scriptorium + **autel des runes**.
+- Île 3 : socle + camp + **ossuaire**.
+- Île 4 : socle + camp + **arsenal**.
+- Île 5 : socle + camp + **autel des runes**.
+
+(4 lieux fixes par île depuis la v1.37.0 : jardin de l'île 3, cercle de l'île 4 et scriptorium
+de l'île 5 retirés.)
 
 ## Étape 0 — mesures (2026-10-01)
 
@@ -383,7 +386,7 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       + autel (5 chacune). Avant-postes : le camp et la MINE (ISLAND_OUTPOSTS), relais
       inchangé. Une tour TENUE au moment de la bascule reste jusqu’au rappel ou à sa perte (sa
       garnison, miliciens compris, n’a nulle part où aller).
-- [ ] **6 bis. Débarquer et s'étendre** (décisions de l'utilisateur, 2026-10-02) — sur une île,
+- [x] **6 bis. Débarquer et s'étendre** (décisions de l'utilisateur, 2026-10-02) — sur une île,
       on n'arrive pas dans une base centrale mais dans un **village de pêcheurs au port**, et on
       s'étend en prenant les lieux clés un par un.
       - [x] **Les îles sont EN LIGNE, d'ouest en est** (miniature de l'archipel comprise). On
@@ -437,7 +440,11 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       - [x] **Récompense d'une nouvelle île** (v1.34.1, décision de l'utilisateur, qui lève la
         règle 9 sur ce point) : le coffre du premier débarquement vaut 10 tickets de tirage,
         une fois par île.
-      - [ ] À trancher : 4 lieux fixes par île (socle + 1 spécialité) au lieu de 9-10 aujourd'hui.
+      - [x] **4 lieux fixes par île** (v1.37.0, décision de l'utilisateur) : socle (mine, camp
+        d'entraînement, source de mana) + UNE spécialité. Retirés : jardin (île 3), cercle
+        d'invocation (île 4, la source donne déjà le mana), scriptorium (île 5, l'autel donne déjà
+        les runes). Un lieu retiré encore tenu est rappelé (récolte comprise) puis effacé
+        (`retiredHeld`).
 - [x] **7. Bascule de tous les comptes** (v1.36.0, 2026-10-03) — départ de l'île 1, compensation.
       Décisions de l'utilisateur : **les lieux tenus qui existent sur l'île 1** (mine, source,
       jardin, scriptorium) **restent tenus** ; les autres (camp d'entraînement, tour de guet)
