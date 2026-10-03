@@ -121,6 +121,7 @@ import {
   dwellMsFor,
   type ActiveExpedition,
   type ExpeditionMap,
+  type CartoType,
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
@@ -430,6 +431,7 @@ import {
   campXpFor,
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
+  setCartoFavor,
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
@@ -5583,6 +5585,16 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  /** 🗺️ Le cartographe tenu fait revenir un autre type de lieu. */
+  async function chooseCartoFavor(userId: string, id: string, favor: CartoType): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const next = setCartoFavor(cur.expedition_map, id, favor);
+    if (next === cur.expedition_map) return;
+    await persist(userId, { expedition_map: next });
+  }
+
   async function releaseControlChampions(
     userId: string,
     id: string,
@@ -6380,6 +6392,7 @@ export const useCharacterStore = defineStore('character', () => {
     collectControlPoint,
     recallControl,
     releaseControlChampions,
+    chooseCartoFavor,
     recallHeroFromPost,
     reinforceControlPoint,
     plannedList,

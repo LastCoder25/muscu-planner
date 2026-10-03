@@ -566,6 +566,25 @@
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
+            <!-- 🗺️ LE CARTOGRAPHE : le lieu qu'il fait revenir sur l'île (`CARTO_TYPES`). -->
+            <div v-if="liveControl.kind === 'cartographer'" class="carto-box">
+              <p class="carto-q">🗺️ Quel lieu faire revenir plus souvent ?</p>
+              <div class="carto-grid">
+                <button
+                  v-for="t in CARTO_TYPES"
+                  :key="t"
+                  type="button"
+                  class="carto-tile"
+                  :class="{ on: liveControl.favor === t }"
+                  :aria-pressed="liveControl.favor === t"
+                  :disabled="ctlBusy"
+                  @click="chooseCarto(t)"
+                >
+                  <span class="carto-emo">{{ POI_EMO[t] }}</span>
+                  <span class="carto-lab">{{ POI_LABEL[t] }}</span>
+                </button>
+              </div>
+            </div>
             <!-- ⛵ LA FORTERESSE EST LE PORT (signalé : « elle me permet d'envoyer des champions
                mais je ne sais pas où ») : on dit à quoi sert sa garnison, et on traverse d'ici.
                Mêmes îles et mêmes refus que le panneau de l'archipel (`crossInfo`). -->
@@ -1337,6 +1356,8 @@ import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import {
   POI_EMO,
   POI_LABEL,
+  CARTO_TYPES,
+  type CartoType,
   poiLabel,
   type ExpeditionMessage,
   EXPE,
@@ -2733,6 +2754,17 @@ async function scheduleCtlRecall(ids: readonly string[], whole: boolean) {
       ctlRecallSel.value = [];
       ctlRecallDelay.value = 0;
     }
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+async function chooseCarto(t: CartoType) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    await char.chooseCartoFavor(uid, p.id, t);
   } finally {
     ctlBusy.value = false;
   }
@@ -5293,6 +5325,47 @@ onUnmounted(() => {
   margin: 6px 0 0;
   font-size: 13px;
   font-weight: 600;
+}
+.carto-box {
+  margin-top: 10px;
+}
+.carto-q {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.carto-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.carto-tile {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.carto-tile.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.carto-emo {
+  font-size: 20px;
+  line-height: 1;
+}
+.carto-lab {
+  font-size: 11px;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .yield-rate {
   margin: 6px 0 0;

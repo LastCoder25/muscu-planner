@@ -50,6 +50,10 @@ import {
   archipelFloor,
   RUINS_SEALS,
   CAMP_FACTIONS,
+  CARTO_TYPES,
+  cartoPick,
+  POI_LABEL,
+  type CartoType,
   CONTROL_MAX_GARRISON,
   CONTROL_KIND_EMO,
   CONTROL_KIND_LABEL,
@@ -387,6 +391,7 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   garden: PRODUCER_SEATS,
   distillery: PRODUCER_SEATS,
   fort: PRODUCER_SEATS,
+  cartographer: PRODUCER_SEATS,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
@@ -425,6 +430,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   distillery: 3,
   // 🧱 Île 4 : la place du jardin (camp en 1).
   fort: 2,
+  // 🗺️ Île 4 : la place de la tour de guet (camp en 1, fortin en 2).
+  cartographer: 3,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -443,6 +450,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   garden: 'consommables 🎒',
   distillery: 'boosts de vitesse ⚡',
   fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
+  cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
@@ -1107,7 +1115,7 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   // ⏳ Îles 3 à 5 : composition d'avant tant que leurs lieux nouveaux (lapidaire, cartographe,
   // fortin, distillerie) ne sont pas écrits — personne n'a encore quitté l'île 1.
   3: ['training', 'arsenal'],
-  4: ['training', 'fort'],
+  4: ['training', 'cartographer', 'fort'],
   5: ['training', 'altar', 'distillery'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
@@ -1322,6 +1330,15 @@ export function retakeDelayMs(id: string, from: number, harass: number, slowBy: 
 /** Remplace un point dans la carte. */
 function withControl(map: ExpeditionMap, id: string, f: (p: Poi) => Poi): ExpeditionMap {
   return { ...map, pois: map.pois.map((p) => (p.id === id && p.control ? f(p) : p)) };
+}
+
+/** 🗺️ Le CARTOGRAPHE tenu change le type qu'il fait revenir. Refus (carte inchangée) : pas un
+ *  cartographe, pas à nous, ou un type hors de `CARTO_TYPES`. */
+export function setCartoFavor(map: ExpeditionMap, id: string, favor: CartoType): ExpeditionMap {
+  const c = map.pois.find((p) => p.id === id)?.control;
+  if (!c || c.kind !== 'cartographer' || c.owner !== 'player') return map;
+  if (!(CARTO_TYPES as readonly string[]).includes(favor) || c.favor === favor) return map;
+  return withControl(map, id, (p) => ({ ...p, control: { ...p.control!, favor } }));
 }
 
 /** 🏰 Une équipe part à l'assaut : on ne l'attaque pas deux fois. */
@@ -2090,6 +2107,15 @@ function leftFor(units: number, rate: number): string | null {
 export function controlProgress(p: Poi, now: number, playerLevel: number): ControlProgress | null {
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
+  if (c.kind === 'cartographer') {
+    const k = cartoPick([p]);
+    return {
+      text: k
+        ? `🗺️ ${POI_LABEL[k.favor]} : ${Math.round(k.chance * 100)} % des lieux tirés`
+        : '🗺️ Choisis le lieu à faire revenir',
+      pct: null,
+    };
+  }
   if (c.kind === 'fort') {
     return {
       text: `🛡️ −${Math.round(fortCutFor(c.garrison.length) * 100)} % sur les reprises voisines`,
@@ -2184,6 +2210,7 @@ const WORKER: Record<ControlKind, [string, string]> = {
   garden: ['jardinier', 'jardiniers'],
   distillery: ['distillateur', 'distillateurs'],
   fort: ['sentinelle', 'sentinelles'],
+  cartographer: ['arpenteur', 'arpenteurs'],
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
@@ -2210,6 +2237,21 @@ export function controlYieldCard(
   const [one, many] = WORKER[c.kind];
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
+  if (c.kind === 'cartographer') {
+    const k = cartoPick([p]);
+    return {
+      emoji: '🗺️',
+      value: k ? `${Math.round(k.chance * 100)} %` : '—',
+      what: k
+        ? `des lieux tirés sur l’île deviennent : ${POI_LABEL[k.favor]}`
+        : 'choisis ci-dessous le lieu à faire revenir',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
   if (c.kind === 'fort') {
     return {
       emoji: '🛡️',
