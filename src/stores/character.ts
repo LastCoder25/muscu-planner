@@ -259,7 +259,12 @@ import {
   advChampionSlots,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RUNE_PLACE_OK, normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
+import {
+  RUNE_PLACE_OK,
+  normalizeChampSkills,
+  type ChampSkill,
+  type SkillId,
+} from '@/lib/skillRunes';
 import {
   AWAKEN_RUNE_COUNT,
   FUSE_BLOCK_LABEL,
@@ -432,6 +437,9 @@ import {
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
   setCartoFavor,
+  defendsControl,
+  applyLapis,
+  setLapisSkill,
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
@@ -5064,16 +5072,19 @@ export const useCharacterStore = defineStore('character', () => {
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
-      const escort = advs.filter((a) => ids.has(a.id));
+      // 💎 Le lapidaire : son champion ne se bat pas, il rentre (sans blessure) si le lieu tombe.
+      const fights = defendsControl(p.control!.kind);
+      const posted = advs.filter((a) => ids.has(a.id));
+      const escort = fights ? posted : [];
       // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
-      const militia = militiaUnits(p.control!.garrison, playerLevel);
+      const militia = fights ? militiaUnits(p.control!.garrison, playerLevel) : [];
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
-      const heroUnit = p.control!.hero ? (p.control!.heroUnit ?? null) : null;
+      const heroUnit = fights && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
@@ -5168,7 +5179,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 🏠 Délogée, la garnison RENTRE À PIED à la base (le trajet d'un rappel) : elle est en
       // route jusqu'à son arrivée, et c'est là, à l'infirmerie, que ses soins commencent
       // (`partyClaimRoster` part de `busyUntil`). Les miliciens engagés sont morts.
-      const walkers = held ? [] : escort.map((a) => a.id);
+      const walkers = held ? [] : posted.map((a) => a.id);
       const home = walkers.length ? walkHome(cur, p.id, walkers, [], at) : null;
       if (home) map = home.map(map);
       // 📜 Le rapport reste lisible sur la fiche du lieu, même quand la boîte l'a oublié.
@@ -5286,6 +5297,8 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚒️ Le camp verse AUSSI son XP aux PIÈCES portées — chacun la SIENNE, selon le temps
     // qu'il a passé sur place, même quand le champion bute sur son plafond.
     const nextStock = campGear(stock, advs, c.gearXp);
+    // 💎 Le lapidaire verse ses heures sur la compétence de son champion.
+    if (c.lapis) advs = applyLapis(advs, c.lapis).advs;
     if (!p?.control || !Object.keys(c.xpBy).length)
       return {
         map: c.map,
@@ -5582,6 +5595,33 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !map || !poi) return;
     await persist(userId, {
       expedition_map: recallPostedHero(map, now, heroHomeLegMin(cur, map, poi, now)),
+    });
+  }
+
+  /** 💎 Le lapidaire tenu polit une autre compétence : ce qui a été poli est versé d'abord. */
+  async function chooseLapisSkill(
+    userId: string,
+    id: string,
+    skill: SkillId,
+    now: number,
+    playerLevel: number,
+  ): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const h = harvestControlIn(
+      cur.expedition_map,
+      advList.value,
+      cur.adv_gear?.stock ?? [],
+      id,
+      now,
+      playerLevel,
+    );
+    const next = setLapisSkill(h.map, id, skill, now);
+    if (next === h.map && h.map === cur.expedition_map) return;
+    await persist(userId, {
+      expedition_map: next,
+      ...(h.advs !== advList.value ? { adventurers: h.advs } : {}),
     });
   }
 
@@ -6393,6 +6433,7 @@ export const useCharacterStore = defineStore('character', () => {
     recallControl,
     releaseControlChampions,
     chooseCartoFavor,
+    chooseLapisSkill,
     recallHeroFromPost,
     reinforceControlPoint,
     plannedList,

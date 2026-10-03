@@ -566,6 +566,29 @@
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
+            <!-- 💎 LE LAPIDAIRE : la compétence que son champion polit, et où il en est. -->
+            <div v-if="liveControl.kind === 'lapidary'" class="carto-box">
+              <p class="carto-q">💎 Quelle compétence polir ?</p>
+              <p v-if="!lapisRows.length" class="carto-q">
+                Poste un champion qui porte une compétence sous le niveau 5.
+              </p>
+              <div v-else class="carto-grid">
+                <button
+                  v-for="r in lapisRows"
+                  :key="r.id"
+                  type="button"
+                  class="carto-tile"
+                  :class="{ on: liveControl.lapis === r.id }"
+                  :aria-pressed="liveControl.lapis === r.id"
+                  :disabled="ctlBusy || r.max"
+                  @click="chooseLapis(r.id)"
+                >
+                  <span class="carto-emo">{{ r.emoji }}</span>
+                  <span class="carto-lab">{{ r.name }} · niv {{ r.level }}</span>
+                  <span class="carto-lab">{{ r.max ? 'au maximum' : r.left }}</span>
+                </button>
+              </div>
+            </div>
             <!-- 🗺️ LE CARTOGRAPHE : le lieu qu'il fait revenir sur l'île (`CARTO_TYPES`). -->
             <div v-if="liveControl.kind === 'cartographer'" class="carto-box">
               <p class="carto-q">🗺️ Quel lieu faire revenir plus souvent ?</p>
@@ -1353,6 +1376,7 @@ import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildi
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
+import { SKILLS, SKILL_MAX_LEVEL, type SkillId } from '@/lib/skillRunes';
 import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import {
   POI_EMO,
@@ -1498,6 +1522,7 @@ import {
   attackImminent,
   attackerHidden,
   controlDefenseHold,
+  lapidaryHours,
   defendersAtAttack,
   imminentControlKey,
   knownAttackAt,
@@ -2756,6 +2781,37 @@ async function scheduleCtlRecall(ids: readonly string[], whole: boolean) {
       ctlRecallSel.value = [];
       ctlRecallDelay.value = 0;
     }
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+/** 💎 Les compétences du champion du lapidaire : niveau, et temps de polissage restant. */
+const lapisRows = computed(() => {
+  const c = liveControl.value;
+  if (c?.kind !== 'lapidary') return [];
+  const adv = char.advList.find((a) => c.garrison.includes(a.id));
+  return (adv?.skills ?? []).map((s) => {
+    const def = SKILLS[s.id];
+    const max = s.level >= SKILL_MAX_LEVEL;
+    const need = max ? 0 : lapidaryHours(s.id, s.level);
+    const done = adv?.lapisHours?.[s.id] ?? 0;
+    return {
+      id: s.id,
+      emoji: def.emoji,
+      name: def.name,
+      level: s.level,
+      max,
+      left: `${formatDuration(Math.max(0, need - done) * 3600_000)} restantes`,
+    };
+  });
+});
+async function chooseLapis(skill: SkillId) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    await char.chooseLapisSkill(uid, p.id, skill, Date.now(), heroLevel.value);
   } finally {
     ctlBusy.value = false;
   }

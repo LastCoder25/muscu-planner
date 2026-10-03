@@ -45,7 +45,14 @@ import {
 } from './raid';
 import { BATTLE } from './siegeBattle';
 import { islandCenter, islandVia, onIsland } from './islandShape';
-import { CONTROL, attackerLevel, citadelIdFor, retakeBoost, retakeForce } from './controlPoints';
+import {
+  CONTROL,
+  attackerLevel,
+  citadelIdFor,
+  defendsControl,
+  retakeBoost,
+  retakeForce,
+} from './controlPoints';
 import {
   campHurt,
   campLightHurt,
@@ -625,7 +632,7 @@ export function controlAttackHold(
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
   const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
-  if (!allies.length) return 0;
+  if (!allies.length || !defendsControl(p.control?.kind)) return 0;
   const { foe, force } = retakeBattle(map, p, allies, playerLevel, fort);
   return campWinPct(foe, force, allies, CONTROL.holdSamples);
 }
