@@ -50,6 +50,10 @@ import {
   archipelFloor,
   RUINS_SEALS,
   CAMP_FACTIONS,
+  CARTO_TYPES,
+  cartoPick,
+  POI_LABEL,
+  type CartoType,
   CONTROL_MAX_GARRISON,
   CONTROL_KIND_EMO,
   CONTROL_KIND_LABEL,
@@ -158,6 +162,11 @@ export const CONTROL = {
    *  BOOSTS de vitesse (`pickBoost`, leurs poids de butin) — un toutes les 12 h pour un
    *  distillateur, plus vite à plusieurs (`garrisonShare`). */
   distilleryHoursPerItem: 12,
+  /** 🧱 Fortin (île 4, 2026-10-03) : il ne produit rien. Tenu par 3, il retire cette part à
+   *  la troupe qui vient reprendre CHACUN des autres lieux tenus de l'île (×0,5/0,8/1/1,15/1,3
+   *  de cette part de 1 à 5, `garrisonShare`). Appliqué APRÈS le plafond de tenue de 90 %
+   *  (`retakeBoost`), comme le cran : un lieu épaulé par un fortin peut tenir mieux que 90 %. */
+  fortCut: 0.25,
   /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
    *  recopie une RUNE de compétence. Depuis le 2026-09-28 (demandé : « comme les autres lieux
    *  fixes »), il garde jusqu'à 5 copistes (3 avant le 2026-09-28) et produit selon l'effectif (`garrisonShare`) : une
@@ -381,6 +390,8 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   training: CONTROL_MAX_GARRISON,
   garden: PRODUCER_SEATS,
   distillery: PRODUCER_SEATS,
+  fort: PRODUCER_SEATS,
+  cartographer: PRODUCER_SEATS,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
@@ -409,13 +420,18 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   archives: 2,
   // ⚱️ Île 3 : la place du scriptorium, qui n'y est pas.
   ossuary: 2.5,
-  // ⚒️🌀 Île 4 : les places du jardin et du scriptorium, qui n'y sont pas.
-  arsenal: 2,
+  // ⚒️ Île 3 (2026-10-03) : face au camp, assez loin de lui pour un rang différent.
+  arsenal: 3,
+  // 🌀 Retiré (plus sur aucune île).
   circle: 2.5,
   // 🗿 Île 5 : la place du jardin, qui n'y est pas.
   altar: 2,
   // 🧪 Île 5 : la place de la tour de guet (camp en 1, autel en 2).
   distillery: 3,
+  // 🧱 Île 4 : la place du jardin (camp en 1).
+  fort: 2,
+  // 🗺️ Île 4 : la place de la tour de guet (camp en 1, fortin en 2).
+  cartographer: 3,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -433,6 +449,8 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   training: 'XP pour la garnison 🎓 et son équipement ⚒️',
   garden: 'consommables 🎒',
   distillery: 'boosts de vitesse ⚡',
+  fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
+  cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
@@ -1096,8 +1114,8 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   2: ['training', 'scriptorium', 'ossuary'],
   // ⏳ Îles 3 à 5 : composition d'avant tant que leurs lieux nouveaux (lapidaire, cartographe,
   // fortin, distillerie) ne sont pas écrits — personne n'a encore quitté l'île 1.
-  3: ['mine', 'training', 'mana', 'ossuary'],
-  4: ['mine', 'training', 'mana', 'arsenal'],
+  3: ['training', 'arsenal'],
+  4: ['training', 'cartographer', 'fort'],
   5: ['training', 'altar', 'distillery'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
@@ -1312,6 +1330,15 @@ export function retakeDelayMs(id: string, from: number, harass: number, slowBy: 
 /** Remplace un point dans la carte. */
 function withControl(map: ExpeditionMap, id: string, f: (p: Poi) => Poi): ExpeditionMap {
   return { ...map, pois: map.pois.map((p) => (p.id === id && p.control ? f(p) : p)) };
+}
+
+/** 🗺️ Le CARTOGRAPHE tenu change le type qu'il fait revenir. Refus (carte inchangée) : pas un
+ *  cartographe, pas à nous, ou un type hors de `CARTO_TYPES`. */
+export function setCartoFavor(map: ExpeditionMap, id: string, favor: CartoType): ExpeditionMap {
+  const c = map.pois.find((p) => p.id === id)?.control;
+  if (!c || c.kind !== 'cartographer' || c.owner !== 'player') return map;
+  if (!(CARTO_TYPES as readonly string[]).includes(favor) || c.favor === favor) return map;
+  return withControl(map, id, (p) => ({ ...p, control: { ...p.control!, favor } }));
 }
 
 /** 🏰 Une équipe part à l'assaut : on ne l'attaque pas deux fois. */
@@ -1543,7 +1570,11 @@ export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
       p.control?.attackAt ?? p.control?.angerSince ?? 0,
       activityOf(p.control),
     );
-  return garrisonHoldChance(p, allies, retakeBoost(p, allies) * threat);
+  return garrisonHoldChance(
+    p,
+    allies,
+    retakeBoost(p, allies) * threat * (p.control?.fortMult ?? 1),
+  );
 }
 
 /** ⏰ L'heure de l'attaque, telle que le joueur la CONNAÎT : seulement dans les dernières
@@ -1606,7 +1637,9 @@ export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction'
       p.control?.attackAt ?? p.control?.angerSince ?? 0,
       activityOf(p.control),
     );
-  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat };
+  // 🧱 Un fortin tenu sur l'île affaiblit la troupe (après le plafond de tenue, comme le cran).
+  const fort = p.control?.fortMult ?? 1;
+  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat * fort };
 }
 
 const shareOf = (n: number) =>
@@ -1874,6 +1907,25 @@ export function gardenStock(p: Poi, now: number): number {
   return p.control?.kind === 'garden' ? Math.floor(stockUnits(p, now, 1) + 1e-9) : 0;
 }
 
+/** 🧱 La part qu'un fortin de `n` sentinelles retire aux reprises (0 sans personne). */
+export function fortCutFor(n: number): number {
+  return CONTROL.fortCut * shareOf(n);
+}
+
+/**
+ * 🧱 LE FACTEUR DU FORTIN pour la troupe qui reprend un AUTRE lieu tenu de la carte : 1 sans
+ * fortin tenu (ou sans sentinelle). Le fortin ne se couvre pas lui-même : sa propre garnison
+ * le défend. ⚠️ SOURCE UNIQUE, posée sur chaque lieu par `ensureIslandConquest` (`fortMult`),
+ * puis lue par la reprise réelle (`retakeForce`) ET le pronostic (`garrisonHold`).
+ */
+export function fortMultOf(pois: readonly Poi[], forId: string): number {
+  let m = 1;
+  for (const p of pois)
+    if (p.id !== forId && p.control?.kind === 'fort' && p.control.owner === 'player')
+      m *= 1 - fortCutFor(p.control.garrison.length);
+  return m;
+}
+
 /**
  * 🗼 Le multiplicateur de trajet des TOURS DE GUET tenues : `1 − towerCut × part`. Il
  * MULTIPLIE le trajet déjà réduit par l'Avant-poste (décision de l'utilisateur) — on ne
@@ -2046,6 +2098,21 @@ function leftFor(units: number, rate: number): string | null {
 export function controlProgress(p: Poi, now: number, playerLevel: number): ControlProgress | null {
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
+  if (c.kind === 'cartographer') {
+    const k = cartoPick([p]);
+    return {
+      text: k
+        ? `🗺️ ${POI_LABEL[k.favor]} : ${Math.round(k.chance * 100)} % des lieux tirés`
+        : '🗺️ Choisis le lieu à faire revenir',
+      pct: null,
+    };
+  }
+  if (c.kind === 'fort') {
+    return {
+      text: `🛡️ −${Math.round(fortCutFor(c.garrison.length) * 100)} % sur les reprises voisines`,
+      pct: null,
+    };
+  }
   if (c.kind === 'tower') {
     const cut = towerCutOf(c, now);
     const det = towerDetectOf(c, now);
@@ -2133,6 +2200,8 @@ const WORKER: Record<ControlKind, [string, string]> = {
   training: ['champion', 'champions'],
   garden: ['jardinier', 'jardiniers'],
   distillery: ['distillateur', 'distillateurs'],
+  fort: ['sentinelle', 'sentinelles'],
+  cartographer: ['arpenteur', 'arpenteurs'],
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
@@ -2159,6 +2228,33 @@ export function controlYieldCard(
   const [one, many] = WORKER[c.kind];
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
+  if (c.kind === 'cartographer') {
+    const k = cartoPick([p]);
+    return {
+      emoji: '🗺️',
+      value: k ? `${Math.round(k.chance * 100)} %` : '—',
+      what: k
+        ? `des lieux tirés sur l’île deviennent : ${POI_LABEL[k.favor]}`
+        : 'choisis ci-dessous le lieu à faire revenir',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
+  if (c.kind === 'fort') {
+    return {
+      emoji: '🛡️',
+      value: `−${Math.round(fortCutFor(n) * 100)} %`,
+      what: 'de troupe ennemie sur chacun de tes autres lieux de l’île',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
   if (c.kind === 'tower') {
     const cut = towerCutOf(c, now);
     const det = towerDetectOf(c, now);

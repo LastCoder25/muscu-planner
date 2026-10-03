@@ -7,6 +7,7 @@
   d'accent quand un filtre retire des lieux : la carte ne doit jamais avoir l'air vide sans
   raison. Dépliée : chaque type de lieu est une tuile qui ÉCRIT son état.
   ⚠️ Plus de filtre par RANG (v1.35.1) : une île ne porte que deux rangs de lieux.
+  ⚠️ Plus de filtre par TYPE de lieu (v1.40.0, demandé) : il ne reste que les déplacements.
   ⚠️ Repliée à CHAQUE ouverture, jamais mémorisée : la carte et les voyages passent avant, et un
   pli mémorisé se lit comme « ça se rouvre tout seul » (leçon de la carte des mondes, v0.994).
 -->
@@ -26,36 +27,6 @@
     </button>
 
     <div v-if="open" id="map-filters" class="flt-body">
-      <!-- 🗺️ Par TYPE de lieu : une tuile par type présent, à TROIS états (un toucher passe au
-           suivant) — affiché · SEUL · masqué. Plusieurs types « seuls » se cumulent.
-           Règle dans `lib/poiTypeFilter.ts`. -->
-      <section v-if="typeChips.length > 1" class="flt-sec">
-        <div class="flt-lab">
-          Types de lieu
-          <span class="flt-hint">toucher : affiché → seul → masqué</span>
-        </div>
-        <div class="type-filter" role="group" aria-label="Filtrer les lieux par type">
-          <button
-            v-for="o in typeChips"
-            :key="o.type"
-            type="button"
-            class="type-chip"
-            :class="['rm-' + typeMode(typeFilter, o.type), { on: typeShown(typeFilter, o.type) }]"
-            :style="o.type === 'rift' ? { '--rk': '#b57bff' } : undefined"
-            :aria-pressed="typeShown(typeFilter, o.type)"
-            :aria-label="typeChipLabel(o)"
-            @click="emit('cycle-type', o.type)"
-          >
-            <span v-if="o.type === 'rift'" class="rift-emo"
-              ><RiftPortal color="#b57bff" :seed="7" still
-            /></span>
-            <span v-else class="type-emo">{{ FILTER_EMO[o.type] }}</span>
-            <span class="tc-name">{{ FILTER_LABEL[o.type] }}</span>
-            <span class="tc-state">{{ stateText(o) }}</span>
-          </button>
-        </div>
-      </section>
-
       <!-- 🚶 LES DÉPLACEMENTS DE TES TROUPES (demandé) : affichés ou masqués, un toucher. Les
            voyages restent listés sous la carte ; seuls leurs tracés et marqueurs disparaissent. -->
       <section v-if="troops > 0" class="flt-sec">
@@ -87,21 +58,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import RiftPortal from '@/components/RiftPortal.vue';
-import {
-  FILTER_EMO,
-  FILTER_LABEL,
-  filterSummary,
-  typeMode,
-  typeShown,
-  type FilterKey,
-  type TypeFilter,
-  type TypeMode,
-} from '@/lib/poiTypeFilter';
+import { EMPTY_TYPE_FILTER, filterSummary, type TypeMode } from '@/lib/poiTypeFilter';
 
 const props = defineProps<{
-  typeChips: { type: FilterKey; total: number }[];
-  typeFilter: TypeFilter;
   /** 🚶 Combien de voyages sont en cours, et s'ils sont masqués sur la carte. */
   troops?: number;
   troopMode?: TypeMode;
@@ -109,7 +68,6 @@ const props = defineProps<{
   defaultOpen?: boolean;
 }>();
 const emit = defineEmits<{
-  'cycle-type': [t: FilterKey];
   'cycle-troops': [];
   reset: [];
 }>();
@@ -117,31 +75,17 @@ const emit = defineEmits<{
 const open = ref(props.defaultOpen ?? false);
 const troops = computed(() => props.troops ?? 0);
 const troopMode = computed<TypeMode>(() => props.troopMode ?? 'all');
-const hasAny = computed(
-  () => props.typeChips.length > 1 || troops.value > 0,
-);
+const hasAny = computed(() => troops.value > 0);
 const summary = computed(() =>
   filterSummary(
-    props.typeFilter,
-    props.typeChips.map((o) => o.type),
+    EMPTY_TYPE_FILTER,
+    [],
     // Masqués alors qu'il n'y a rien en route : ça ne retire rien, on ne l'annonce pas.
     troops.value > 0 ? troopMode.value : 'all',
   ),
 );
 
-/** Ce qu'une tuile de type dit d'elle-même : son compte quand elle est affichée, son état
- *  sinon — « seul » et « masqué » doivent se LIRE, pas se deviner à une teinte. */
-function stateText(o: { type: FilterKey; total: number }) {
-  const m = typeMode(props.typeFilter, o.type);
-  if (m === 'only') return 'seul';
-  // Masqué : un ✕ — le nom est déjà barré et la tuile en pointillé. Écrit en entier, « masqué »
-  // mangeait le nom à 344 px (« Sanctuai… »).
-  if (m === 'none') return '✕';
-  return String(o.total);
-}
 const TYPE_MODE_LABEL = { all: 'affichés', only: 'seuls', none: 'masqués' } as const;
-const typeChipLabel = (o: { type: FilterKey; total: number }) =>
-  `${FILTER_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(props.typeFilter, o.type)]} · ${o.total} sur la carte — toucher pour changer`;
 </script>
 
 <style scoped lang="scss">
@@ -226,13 +170,7 @@ const typeChipLabel = (o: { type: FilterKey; total: number }) =>
   text-transform: uppercase;
   color: var(--dim);
 }
-.flt-hint {
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  opacity: 0.8;
-}
-/* Types : des tuiles en grille — deux colonnes sur téléphone, plus au-delà. */
+/* Tuiles en grille — deux colonnes sur téléphone, plus au-delà. */
 .type-filter {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -270,14 +208,7 @@ const typeChipLabel = (o: { type: FilterKey; total: number }) =>
   font-size: 15px;
   line-height: 1;
 }
-.rift-emo {
-  flex: none;
-  display: inline-block;
-  width: 12px;
-  height: 19px;
-}
-.type-chip.rm-none .type-emo,
-.type-chip.rm-none .rift-emo {
+.type-chip.rm-none .type-emo {
   opacity: 0.4;
   filter: grayscale(1);
 }
