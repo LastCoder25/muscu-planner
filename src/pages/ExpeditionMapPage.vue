@@ -5,13 +5,10 @@
        fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
        ici aussi doublerait chaque notification. -->
   <div class="emap">
-    <!-- 🎚️🗺️ Filtres par type (état + mémorisation : `usePoiFilters`). -->
+    <!-- 🎚️🗺️ Filtre des déplacements (état + mémorisation : `usePoiFilters`). -->
     <MapFilterBar
-      :type-chips="typeChips"
-      :type-filter="typeFilterShown"
       :troops="troopCount"
       :troop-mode="troopMode"
-      @cycle-type="cycleTypeChip"
       @cycle-troops="cycleTroops"
       @reset="resetFilters"
     />
@@ -1953,23 +1950,14 @@ const selected = ref<Poi | null>(null);
  *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
-// ── 🎚️🗺️ Filtres par type (mémorisés par appareil) ──
-const {
-  typeFilterShown,
-  typeChips,
-  cycleTypeChip,
-  resetFilters,
-  shownPois,
-  troopMode,
-  troopsHidden,
-  cycleTroops,
-} = usePoiFilters(pois);
+// ── 🎚️🗺️ Filtre des déplacements (mémorisé par appareil) ──
+const { resetFilters, troopMode, troopsHidden, cycleTroops } = usePoiFilters();
 /** 🚶 Les lieux où se rendent tes voyages en cours (renforts vers un point tenu, retours…) :
  *  ce qui reste dessiné quand les déplacements sont « seuls ». */
 const troopPoiIds = computed(() => new Set(travelersOnMap.value.map((v) => v.poi.id)));
-/** Les lieux que la carte dessine (filtres ET mode des déplacements, `mapPoisFor`). */
+/** Les lieux que la carte dessine (selon le mode des déplacements, `mapPoisFor`). */
 const mapPois = computed(() =>
-  mapPoisFor(troopMode.value, shownPois.value, pois.value, troopPoiIds.value),
+  mapPoisFor(troopMode.value, pois.value, pois.value, troopPoiIds.value),
 );
 /** ⚔️ Les armées en campagne se dessinent au premier plan, au-dessus de la ville et des
  *  lieux (cf. le second `MapPoiLayer`) ; les autres lieux restent dessous. */
