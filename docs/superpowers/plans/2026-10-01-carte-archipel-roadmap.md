@@ -88,17 +88,24 @@ produit au **niveau du héros** ; dans l'archipel il produira au **rang de son �
 | 🔮 Sanctuaire d'invocation | Pierres d'invocation | 1 tentative de boss / 2 jours | +18 % |
 | 🪬 Autel des runes | Runes multicolores à partir du bleu | 1 / 2 jours | modéré |
 
-**Répartition** (à jour du 2026-10-03 ; socle mine + source de mana partout, camp d'entraînement
-à partir de l'île 2 ; aucune tour de guet sur les îles) :
+**Répartition** (SOURCE DE VÉRITÉ, v1.43.0, 2026-10-03 ; décision de l'utilisateur : une île
+quittée produit encore au niveau du joueur, donc **aucun lieu fixe en double d'une île à
+l'autre, sauf un camp d'entraînement par île** ; aucun lieu ne produit une ressource de la
+partie héros — ni clés, ni pierres d'invocation) :
 
-- Île 1 : mine, source de mana, jardin, scriptorium.
-- Île 2 : socle + **camp d'entraînement** + **archives**.
-- Île 3 : socle + camp + **ossuaire**.
-- Île 4 : socle + camp + **arsenal**.
-- Île 5 : socle + camp + **autel des runes**.
+- Île 1 : camp, mine, source de mana, jardin.
+- Île 2 : camp, scriptorium, ossuaire.
+- Île 3 : camp, **lapidaire** (💎 un seul champion polit une de ses compétences : +1 niveau,
+  5 au plus, après 24/48/96/192 h selon la couleur, +50 % par niveau ; heures gardées sur le
+  champion ; personne ne le défend, on intercepte l'armée), arsenal.
+- Île 4 : camp, **cartographe** (🗺️ on choisit un type de lieu tiré — mine, camp, repaire,
+  ruines, ruines d'un héros tombé, tanière — qui devient 12 à 33 % des lieux tirés selon la
+  garnison), **fortin** (🧱 ne produit rien : −25 % de troupe sur les reprises des autres lieux
+  tenus de l'île, à 3).
+- Île 5 : camp, autel des runes, **distillerie** (🧪 boosts de vitesse d'expédition).
 
-(4 lieux fixes par île depuis la v1.37.0 : jardin de l'île 3, cercle de l'île 4 et scriptorium
-de l'île 5 retirés.)
+Retirés : archives (clés), cercle d'invocation (pierres), tour de guet. En attente : lieu à
+surprise, arène de duel. ⚠️ Débits du lapidaire et du cartographe : premier calage, non mesurés.
 
 ## Étape 0 — mesures (2026-10-01)
 

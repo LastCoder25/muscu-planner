@@ -61,17 +61,20 @@ describe('controlDefenseHold', () => {
   const kit = { advGear: [] };
   it('vaut exactement `garrisonHold` au niveau du héros, miliciens compris', () => {
     const ids = ['a0', 'mil:1', 'mil:2'];
-    const want = garrisonHold({ ...p, level: L }, [
-      ...partyAllies([advs[0]!], kit, null),
-      ...militiaUnits(ids, L),
-    ]);
-    expect(controlDefenseHold(p, ids, advs, kit, L)).toBe(want);
+    const want = garrisonHold(
+      { ...p, level: L },
+      [...partyAllies([advs[0]!], kit, null), ...militiaUnits(ids, L)],
+      1,
+    );
+    expect(controlDefenseHold(p, ids, advs, kit, L, 1)).toBe(want);
   });
   it('un renfort de plus ne fait jamais baisser la tenue, personne = 0', () => {
-    const one = controlDefenseHold(p, ['a0'], advs, kit, L);
-    const two = controlDefenseHold(p, ['a0', 'a1'], advs, kit, L);
+    const one = controlDefenseHold(p, ['a0'], advs, kit, L, 1);
+    const two = controlDefenseHold(p, ['a0', 'a1'], advs, kit, L, 1);
     expect(two).toBeGreaterThanOrEqual(one);
-    expect(controlDefenseHold(p, [], advs, kit, L)).toBe(0);
-    expect(controlDefenseHold(p, ['a0', 'mil:1', 'mil:2'], advs, kit, L)).toBeGreaterThanOrEqual(one);
+    expect(controlDefenseHold(p, [], advs, kit, L, 1)).toBe(0);
+    expect(controlDefenseHold(p, ['a0', 'mil:1', 'mil:2'], advs, kit, L, 1)).toBeGreaterThanOrEqual(
+      one,
+    );
   });
 });

@@ -4,6 +4,96 @@
     <title><%= productName %></title>
 
     <meta charset="utf-8" />
+    <!-- 🩺 GARDE DU DÉMARRAGE : si l'app n'a pas remplacé l'écran de lancement au bout de
+         15 s, on le DIT, avec l'erreur captée et l'étape où le démarrage s'est arrêté
+         (`window.__boot`, posé par boot/auth et App.vue). Sans lui, un démarrage cassé
+         ressemble à un chargement interminable. Script inline et sans dépendance : il doit
+         marcher même si le bundle de l'app ne se charge pas. -->
+    <script>
+      (function () {
+        var errs = [];
+        function note(t) {
+          if (errs.length < 5) errs.push(String(t).slice(0, 300));
+        }
+        // En CAPTURE : l'échec de chargement d'un script ne remonte pas jusqu'à window.
+        window.addEventListener(
+          'error',
+          function (e) {
+            var src = e.target && (e.target.src || e.target.href);
+            if (src) note('ressource introuvable : ' + src.split('/').pop());
+            else
+              note(
+                (e.message || 'erreur') +
+                  (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''),
+              );
+          },
+          true,
+        );
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          note('promesse rejetée : ' + (r && (r.message || r)));
+        });
+        window.__boot = 'chargement du code';
+        setTimeout(function () {
+          var s = document.getElementById('app-splash');
+          if (!s || s.classList.contains('hide')) return;
+          var box = document.createElement('div');
+          box.id = 'splash-stuck';
+          var h = document.createElement('div');
+          h.className = 'st-title';
+          h.textContent = 'Le démarrage est bloqué';
+          var p = document.createElement('div');
+          p.className = 'st-text';
+          p.textContent =
+            'Étape : ' +
+            window.__boot +
+            '. ' +
+            (errs.length ? 'Erreur : ' + errs.join(' · ') : 'Aucune erreur captée.') +
+            ' — Envoie une capture de ce message.';
+          var row = document.createElement('div');
+          row.className = 'st-row';
+          var b1 = document.createElement('button');
+          b1.textContent = 'Recharger';
+          b1.onclick = function () {
+            location.reload();
+          };
+          var b2 = document.createElement('button');
+          b2.textContent = 'Réparer et recharger';
+          b2.onclick = function () {
+            // Retire les réglages de CET appareil (préfixe muscu:) et le service worker.
+            // La session Supabase (sb-…) et ta progression (en base) ne sont pas touchées.
+            try {
+              Object.keys(localStorage).forEach(function (k) {
+                if (k.indexOf('muscu:') === 0) localStorage.removeItem(k);
+              });
+            } catch (x) {
+              /* stockage indisponible */
+            }
+            var done = function () {
+              location.reload();
+            };
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+              navigator.serviceWorker
+                .getRegistrations()
+                .then(function (rs) {
+                  return Promise.all(
+                    rs.map(function (r) {
+                      return r.unregister();
+                    }),
+                  );
+                })
+                .then(done, done);
+            else done();
+          };
+          row.appendChild(b1);
+          row.appendChild(b2);
+          box.appendChild(h);
+          box.appendChild(p);
+          box.appendChild(row);
+          s.appendChild(box);
+        }, 15000);
+      })();
+    </script>
     <meta name="description" content="<%= productDescription %>" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="msapplication-tap-highlight" content="no" />
@@ -183,6 +273,44 @@
         #app-splash .loader .run {
           animation: none;
         }
+      }
+      /* 🩺 Démarrage bloqué (garde inline en tête de page) */
+      #splash-stuck {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: calc(24px + env(safe-area-inset-bottom));
+        z-index: 10;
+        padding: 14px;
+        border: 1px solid #ff6a45;
+        border-radius: 12px;
+        background: #211c16;
+        color: #f3eee6;
+        font: 13px/1.4 system-ui, sans-serif;
+      }
+      #splash-stuck .st-title {
+        font-weight: 700;
+        color: #ff6a45;
+        margin-bottom: 6px;
+      }
+      #splash-stuck .st-text {
+        word-break: break-word;
+      }
+      #splash-stuck .st-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      #splash-stuck button {
+        min-height: 44px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid #3a332a;
+        background: #2b241c;
+        color: #f3eee6;
+        font: inherit;
+        font-weight: 600;
       }
     </style>
   </head>

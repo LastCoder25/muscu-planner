@@ -121,6 +121,7 @@ import {
   dwellMsFor,
   type ActiveExpedition,
   type ExpeditionMap,
+  type CartoType,
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
@@ -148,6 +149,7 @@ import {
   endlessReward,
   landAdventurers,
   landCrossing,
+  moveRemoteMilitia,
   landingChestMessage,
   produceIslandMilitia,
   startCrossing,
@@ -235,6 +237,7 @@ import {
   type DefenseStructure,
   type Raid,
   type RaidReport,
+  fortifyMult,
   islandRaidBand,
 } from '@/lib/raid';
 import {
@@ -256,7 +259,12 @@ import {
   advChampionSlots,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RUNE_PLACE_OK, normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
+import {
+  RUNE_PLACE_OK,
+  normalizeChampSkills,
+  type ChampSkill,
+  type SkillId,
+} from '@/lib/skillRunes';
 import {
   AWAKEN_RUNE_COUNT,
   FUSE_BLOCK_LABEL,
@@ -428,6 +436,10 @@ import {
   campXpFor,
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
+  setCartoFavor,
+  defendsControl,
+  applyLapis,
+  setLapisSkill,
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
@@ -2509,9 +2521,7 @@ export const useCharacterStore = defineStore('character', () => {
     const active = map?.archipel?.island;
     if (!map || active === undefined) return [];
     if (from !== active) return islandChampions(advList.value, from, active, now).map((a) => a.id);
-    return [
-      ...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids]),
-    ];
+    return [...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids])];
   }
   /** 🏰 Les champions choisis quittent la garnison de la forteresse (le port) avant d'embarquer. */
   function leavePort(map: ExpeditionMap, ids: readonly string[], hero: boolean) {
@@ -2565,6 +2575,41 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.sailings![map.sailings!.length - 1]!),
+    });
+  }
+  /** 🧱🏹 Ce que l'enceinte de la base retire aux troupes qui reprennent un lieu fixe
+   *  (`fortifyMult`, au niveau du héros). Lu par la bataille ET par le % affiché. */
+  function fortify(cur: CharacterRow | null | undefined, heroLevel: number): number {
+    return fortifyMult(cur?.base?.defenses ?? [], heroLevel);
+  }
+  /** 🧱🏹 Idem pour l'écran. */
+  function fortifyFor(heroLevel: number): number {
+    return fortify(row.value, heroLevel);
+  }
+  /** 🛡️ Déplace des miliciens sur une île RANGÉE (`moveRemoteMilitia`) : `delta` > 0 de sa
+   *  réserve vers le lieu fixe `pointId`, < 0 du lieu vers la réserve. Immédiat. */
+  async function moveIslandMilitia(
+    userId: string,
+    island: number,
+    pointId: string,
+    delta: number,
+    now: number,
+    level: number,
+  ) {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    const im = map?.islands?.[String(island)];
+    if (!cur || !map || !im) return;
+    const next = moveRemoteMilitia(im, pointId, delta, now, level);
+    if (!next)
+      throw new Error(
+        delta > 0
+          ? 'Plus de place sur ce lieu, ou plus de milicien en réserve sur cette île.'
+          : 'Aucun milicien à ramener de ce lieu.',
+      );
+    await persist(userId, {
+      expedition_map: { ...map, islands: { ...map.islands, [String(island)]: next } },
     });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
@@ -4956,6 +5001,8 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return none;
     knownActiveDays7 = activeDays7;
+    // 🧱🏹 L'enceinte se mesure au niveau du HÉROS (le sport), pas au plafond de l'île.
+    const heroLevel = playerLevel;
     // 🏝️ Les assaillants d'une île ne dépassent pas son rang max (le tirage lit ce niveau).
     playerLevel = mapPlayerLevel(cur.expedition_map, playerLevel);
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
@@ -5025,21 +5072,26 @@ export const useCharacterStore = defineStore('character', () => {
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
-      const escort = advs.filter((a) => ids.has(a.id));
+      // 💎 Le lapidaire : son champion ne se bat pas, il rentre (sans blessure) si le lieu tombe.
+      const fights = defendsControl(p.control!.kind);
+      const posted = advs.filter((a) => ids.has(a.id));
+      const escort = fights ? posted : [];
       // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
-      const militia = militiaUnits(p.control!.garrison, playerLevel);
+      const militia = fights ? militiaUnits(p.control!.garrison, playerLevel) : [];
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
-      const heroUnit = p.control!.hero ? (p.control!.heroUnit ?? null) : null;
+      const heroUnit = fights && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
         [...partyAllies(escort, kit, heroUnit), ...militia],
         playerLevel,
+        // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (`fortifyMult`).
+        fortify(cur, heroLevel),
       );
       const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
@@ -5127,7 +5179,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 🏠 Délogée, la garnison RENTRE À PIED à la base (le trajet d'un rappel) : elle est en
       // route jusqu'à son arrivée, et c'est là, à l'infirmerie, que ses soins commencent
       // (`partyClaimRoster` part de `busyUntil`). Les miliciens engagés sont morts.
-      const walkers = held ? [] : escort.map((a) => a.id);
+      const walkers = held ? [] : posted.map((a) => a.id);
       const home = walkers.length ? walkHome(cur, p.id, walkers, [], at) : null;
       if (home) map = home.map(map);
       // 📜 Le rapport reste lisible sur la fiche du lieu, même quand la boîte l'a oublié.
@@ -5245,6 +5297,8 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚒️ Le camp verse AUSSI son XP aux PIÈCES portées — chacun la SIENNE, selon le temps
     // qu'il a passé sur place, même quand le champion bute sur son plafond.
     const nextStock = campGear(stock, advs, c.gearXp);
+    // 💎 Le lapidaire verse ses heures sur la compétence de son champion.
+    if (c.lapis) advs = applyLapis(advs, c.lapis).advs;
     if (!p?.control || !Object.keys(c.xpBy).length)
       return {
         map: c.map,
@@ -5542,6 +5596,43 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: recallPostedHero(map, now, heroHomeLegMin(cur, map, poi, now)),
     });
+  }
+
+  /** 💎 Le lapidaire tenu polit une autre compétence : ce qui a été poli est versé d'abord. */
+  async function chooseLapisSkill(
+    userId: string,
+    id: string,
+    skill: SkillId,
+    now: number,
+    playerLevel: number,
+  ): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const h = harvestControlIn(
+      cur.expedition_map,
+      advList.value,
+      cur.adv_gear?.stock ?? [],
+      id,
+      now,
+      playerLevel,
+    );
+    const next = setLapisSkill(h.map, id, skill, now);
+    if (next === h.map && h.map === cur.expedition_map) return;
+    await persist(userId, {
+      expedition_map: next,
+      ...(h.advs !== advList.value ? { adventurers: h.advs } : {}),
+    });
+  }
+
+  /** 🗺️ Le cartographe tenu fait revenir un autre type de lieu. */
+  async function chooseCartoFavor(userId: string, id: string, favor: CartoType): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const next = setCartoFavor(cur.expedition_map, id, favor);
+    if (next === cur.expedition_map) return;
+    await persist(userId, { expedition_map: next });
   }
 
   async function releaseControlChampions(
@@ -6282,6 +6373,8 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     expeSyncMap,
     crossIsland,
+    moveIslandMilitia,
+    fortifyFor,
     crossingDepartAt,
     sailChampions,
     boardableIds,
@@ -6339,6 +6432,8 @@ export const useCharacterStore = defineStore('character', () => {
     collectControlPoint,
     recallControl,
     releaseControlChampions,
+    chooseCartoFavor,
+    chooseLapisSkill,
     recallHeroFromPost,
     reinforceControlPoint,
     plannedList,

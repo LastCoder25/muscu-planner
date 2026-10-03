@@ -18,6 +18,9 @@ import { fullGoldPerDay, stonesPerDay } from './helpers/goldModel';
  */
 const NOW = Date.UTC(2026, 9, 2, 12);
 const DAY = 86_400_000;
+/** ⚠️ Une île QUITTÉE produit au niveau du JOUEUR (`autoCollectControls` récolte avec
+ *  `playerLevel`), pas à celui de son île : on mesure la rente d'un joueur de niveau 100. */
+const PL = 100;
 
 function rentPerDay() {
   const total = { gold: 0, mana: 0, keys: 0, summon: 0, runes: 0, gearSeals: 0, champSeals: 0 };
@@ -44,7 +47,7 @@ function rentPerDay() {
           p.id === id ? { ...p, control: { ...p.control!, attackAt: T + 1e12 } } : p,
         ),
       };
-      const h = harvestOver(collectControl(far, id, T, L).map, id, T, 10 * 24, L);
+      const h = harvestOver(collectControl(far, id, T, PL).map, id, T, 10 * 24, PL);
       for (const k of Object.keys(h) as (keyof typeof h)[]) total[k] += h[k] / 10;
     }
   }

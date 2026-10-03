@@ -67,15 +67,23 @@ describe('⚓ arrivée d’une navigation', () => {
     expect(r.advs[0]!.elsewhere).toBeUndefined();
   });
   it('le héros débarque pendant la navigation : l’arrivée corrige où est le champion', () => {
-    // Le héros part de 1 vers 2, le champion aussi (sans lui) ; le héros arrive d'abord.
-    let m = startSailing(twoIslands(), 1, 2, ['a'], T0 + 30 * 60_000);
-    m = startCrossing(m, 2, [], T0);
+    // RETOUR (2 → 1) : le héros part, le champion aussi (sans lui) ; le héros arrive d'abord.
+    const on2: ExpeditionMap = { ...isl(2), islands: { '1': isl(1) } };
+    let m = startSailing(on2, 2, 1, ['a'], T0 + 30 * 60_000);
+    m = startCrossing(m, 1, [], T0);
     const land = landCrossing(m, m.crossing!.arriveAt, 18, undefined);
     expect(land.map.sailings).toHaveLength(1); // la navigation suit la carte active
     const advs = landAdventurers([adv('a')], land.crossing!);
-    expect(advs[0]!.elsewhere).toBe(1); // provisoire : resté sur l'île quittée
+    expect(advs[0]!.elsewhere).toBe(2); // provisoire : resté sur l'île quittée
     const r = settleSailings(land.map, advs, m.sailings![0]!.arriveAt)!;
-    expect(r.advs[0]!.elsewhere).toBeUndefined(); // il arrive sur l'île 2, désormais active
+    expect(r.advs[0]!.elsewhere).toBeUndefined(); // il arrive sur l'île 1, désormais active
+  });
+  it('vers l’île suivante, la navigation en cours n’a plus d’objet : son champion suit le héros', () => {
+    let m = startSailing(twoIslands(), 1, 2, ['a'], T0 + 30 * 60_000);
+    m = startCrossing(m, 2, [], T0);
+    const land = landCrossing(m, m.crossing!.arriveAt, 18, undefined);
+    expect(land.map.sailings).toBeUndefined();
+    expect(landAdventurers([adv('a')], land.crossing!)[0]!.elsewhere).toBeUndefined();
   });
 });
 

@@ -186,7 +186,7 @@ describe('🏅 le rang d’un lieu fixe monte en s’éloignant du port', () => 
         .sort(
           (a, b) => Math.hypot(a.x - port.x, a.y - port.y) - Math.hypot(b.x - port.x, b.y - port.y),
         );
-      expect(pts.length).toBeGreaterThan(2);
+      expect(pts.length).toBeGreaterThanOrEqual(2);
       for (let i = 1; i < pts.length; i++)
         expect(pts[i]!.level, `île ${isl.id}`).toBeGreaterThanOrEqual(pts[i - 1]!.level);
       for (const p of pts) {

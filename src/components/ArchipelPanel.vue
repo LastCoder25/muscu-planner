@@ -125,6 +125,31 @@
           🛡️ {{ militiaOn(selTile.id) }} milicien{{ militiaOn(selTile.id) > 1 ? 's' : '' }} en
           réserve{{ selTile.active ? '' : ' · la Caserne continue de produire' }}
         </div>
+        <!-- 🛡️ Île quittée : sa milice se gère d'ici, entre sa réserve et ses lieux fixes. -->
+        <div v-if="!selTile.active && remote?.[selTile.id]?.length" class="at-remote">
+          <div v-for="rp in remote[selTile.id]" :key="rp.id" class="ar-row">
+            <span class="ar-name">{{ rp.emoji }} {{ rp.label }}</span>
+            <span class="ar-count">🛡️ {{ rp.militia }}</span>
+            <button
+              type="button"
+              class="ar-btn"
+              :aria-label="`Ramener un milicien de ${rp.label}`"
+              :disabled="busy || rp.militia < 1"
+              @click="$emit('militia', { island: selTile.id, pointId: rp.id, delta: -1 })"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              class="ar-btn"
+              :aria-label="`Poster un milicien sur ${rp.label}`"
+              :disabled="busy || rp.room < 1 || militiaOn(selTile.id) < 1"
+              @click="$emit('militia', { island: selTile.id, pointId: rp.id, delta: 1 })"
+            >
+              +
+            </button>
+          </div>
+        </div>
         <template v-if="island && !selTile.active && !selTile.locked">
           <!-- ⛵ Option A (2026-10-03) : le héros retenu bloque SA traversée, pas celle des
                champions vers une île déjà visitée — la feuille propose alors de les envoyer seuls. -->
@@ -179,7 +204,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ISLANDS, type Island } from '@/lib/archipelago';
-import { CROSSING, nextCrossingDeparture } from '@/lib/crossing';
+import { CROSSING, nextCrossingDeparture, type RemotePoint } from '@/lib/crossing';
 import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
@@ -214,9 +239,15 @@ const props = defineProps<{
   away?: Record<number, number>;
   /** 🛡️ La réserve de milice de chaque île visitée (la milice ne traverse pas). */
   militia?: Record<number, number>;
+  /** 🛡️ Les lieux fixes tenus de chaque île rangée, avec leur milice (`remotePoints`). */
+  remote?: Record<number, RemotePoint[]>;
   now: number;
 }>();
-defineEmits<{ cross: [to: number]; fetch: [from: number] }>();
+defineEmits<{
+  cross: [to: number];
+  fetch: [from: number];
+  militia: [{ island: number; pointId: string; delta: number }];
+}>();
 
 /** Heure d'horloge (« 14:00 »). */
 const clock = (t: number) =>
@@ -467,6 +498,42 @@ const islandCapRank = computed(() =>
 }
 .at-away.mil {
   color: var(--dim);
+}
+.at-remote {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.ar-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ar-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.ar-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 .at-block {
   margin: 8px 0 0;

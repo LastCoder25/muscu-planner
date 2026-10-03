@@ -45,7 +45,14 @@ import {
 } from './raid';
 import { BATTLE } from './siegeBattle';
 import { islandCenter, islandVia, onIsland } from './islandShape';
-import { CONTROL, attackerLevel, citadelIdFor, retakeBoost, retakeForce } from './controlPoints';
+import {
+  CONTROL,
+  attackerLevel,
+  citadelIdFor,
+  defendsControl,
+  retakeBoost,
+  retakeForce,
+} from './controlPoints';
 import {
   campHurt,
   campLightHurt,
@@ -597,10 +604,13 @@ export function retakeBattle(
   p: Poi,
   allies: readonly SkirmishUnit[],
   playerLevel: number,
+  /** 🧱🏹 Ce que l'enceinte retire à la troupe (`fortifyMult`), REQUIS : la bataille et le %
+   *  affiché doivent le compter tous les deux. */
+  fort: number,
 ): { foe: Poi; force: CampSpec } {
   const foe = { ...p, level: attackerLevel(map, p, playerLevel) };
-  const f0 = retakeForce(foe, retakeBoost(foe, allies));
-  return { foe, force: { ...f0, size: f0.size * retakeRemaining(p) } };
+  const f0 = retakeForce(foe, retakeBoost(foe, allies, fort));
+  return { foe, force: { ...f0, size: (f0.size * retakeRemaining(p)) / Math.max(1, fort) } };
 }
 
 /**
@@ -616,12 +626,14 @@ export function controlAttackHold(
   advs: readonly Adventurer[],
   kit: EscortKit,
   playerLevel: number,
+  /** 🧱🏹 `fortifyMult`, REQUIS. */
+  fort: number,
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
   const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
-  if (!allies.length) return 0;
-  const { foe, force } = retakeBattle(map, p, allies, playerLevel);
+  if (!allies.length || !defendsControl(p.control?.kind)) return 0;
+  const { foe, force } = retakeBattle(map, p, allies, playerLevel, fort);
   return campWinPct(foe, force, allies, CONTROL.holdSamples);
 }
 
