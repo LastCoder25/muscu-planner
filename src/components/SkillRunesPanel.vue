@@ -36,23 +36,15 @@
     <p class="srp-note">
       Donne-lui des compétences depuis la tuile 🪬 Runes du Panthéon<template v-if="stock">
         ({{ stock }} au stock)</template
-      >. 🟣 dès le rang {{ minRankName('violet') }}, 🟠 dès le rang {{ minRankName('gold') }}.
+      >.
     </p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import {
-  RUNE_INFO,
-  SKILLS,
-  SKILL_MAX_LEVEL,
-  skillValue,
-  type RuneTier,
-  type SkillId,
-} from '@/lib/skillRunes';
+import { SKILLS, SKILL_MAX_LEVEL, skillValue, type SkillId } from '@/lib/skillRunes';
 import { advRuneSkills, advSkillSlots, type Adventurer } from '@/lib/adventurers';
-import { CHARACTER_RANKS } from '@/lib/characterRank';
 
 /** `stock` : combien de compétences attendent au stock (pour le rappel). */
 const props = defineProps<{ adv: Adventurer; stock?: number }>();
@@ -67,9 +59,6 @@ const cells = computed(() =>
 );
 function whatOf(id: SkillId, level: number): string {
   return SKILLS[id].what.replace('{v}', String(skillValue(id, level)).replace('.', ','));
-}
-function minRankName(t: RuneTier): string {
-  return CHARACTER_RANKS[RUNE_INFO[t].minRank]?.name ?? '';
 }
 </script>
 

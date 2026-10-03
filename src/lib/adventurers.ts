@@ -2422,12 +2422,8 @@ export function advSkillCells(adv: Adventurer): (ChampSkill | null)[] {
   return Array.from({ length: n }, (_, i) => skills[i] ?? null);
 }
 
-/** 🪬 Ce que `runeBank.giveBlocker` lit d'un aventurier : ses compétences, ses emplacements
- *  (0 hors champion) et son rang de prestige. */
+/** 🪬 Ce que `runeBank.giveBlocker` lit d'un aventurier : ses compétences et ses emplacements
+ *  (0 hors champion). Son rang n'entre pas en compte : toute couleur se donne à tout champion. */
 export function advChampionSlots(adv: Adventurer): ChampionSlots {
-  return {
-    skills: advRuneSkills(adv),
-    slots: advSkillSlots(adv),
-    rankIndex: advRank(adv).rankIndex,
-  };
+  return { skills: advRuneSkills(adv), slots: advSkillSlots(adv) };
 }

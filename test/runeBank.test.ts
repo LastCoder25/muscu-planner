@@ -171,11 +171,11 @@ describe('donner à un champion', () => {
     expect(kind).toBe('replace');
   });
 
-  it('respecte le rang de la couleur, et refuse hors champion', () => {
+  it('⚠️ toute couleur se donne à tout champion, même Bronze — et refuse hors champion', () => {
     const b = bank(0, [sk('a', 'crit'), sk('g', 'plunder')]);
-    expect(giveBlocker(b, 'a', c([], 3, 0))).toBe('rank');
-    expect(giveBlocker(b, 'a', c([], 3, 1))).toBeNull();
-    expect(giveBlocker(b, 'g', c([], 3, 1))).toBe('rank');
+    expect(giveBlocker(b, 'a', c([], 3, 0))).toBeNull();
+    expect(giveBlocker(b, 'g', c([], 3, 0))).toBeNull();
+    expect(giveSkill(b, 'g', c([], 3, 0), null)).not.toBeNull();
     expect(giveBlocker(b, 'a', c([], 0, 3))).toBe('missing');
   });
 });
