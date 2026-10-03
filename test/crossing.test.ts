@@ -31,7 +31,7 @@ function island1(destroyed: string[] = []): ExpeditionMap {
 }
 const adv = (id: string, extra: Partial<Adventurer> = {}): Adventurer =>
   ({ id, name: id, seed: 1, path: ['guerrier'], level: 5, xp: 0, ...extra }) as Adventurer;
-const free = { heroBusy: false, troopsMoving: false };
+const free = { heroBusy: false };
 
 describe('⛵ départs à l’heure pile', () => {
   it('le prochain départ est l’heure pile suivante, ou maintenant pile', () => {
@@ -63,7 +63,6 @@ describe('⛵ refus de traverser', () => {
     expect(crossingBlocker(m, 1, free)).toBe('same');
     expect(crossingBlocker(m, 3, free)).toBe('locked');
     expect(crossingBlocker(m, 2, { ...free, heroBusy: true })).toBe('heroBusy');
-    expect(crossingBlocker(m, 2, { ...free, troopsMoving: true })).toBe('troopsMoving');
     expect(crossingBlocker(startCrossing(m, 2, [], T0), 2, free)).toBe('atSea');
     expect(crossingBlocker(m, 2, free)).toBeNull();
   });
