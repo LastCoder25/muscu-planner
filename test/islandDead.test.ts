@@ -45,7 +45,7 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
     expect(o.find((p) => p.id === KEY)!.control!.size).toBe(4);
     expect(o.filter((p) => p.id !== KEY).every((p) => p.control!.size === 3)).toBe(true);
   });
-  it('un cimetière abattu se relève 3 jours plus tard tant que la citadelle tient', () => {
+  it('un cimetière abattu (rasé, ancienne règle) revient à nous et ses morts l’attaquent 3 jours plus tard', () => {
     let m = razeIslandTarget(islandMap(), 'isl_obj_0', NOW + H);
     m = tick(m, NOW + H);
     expect(objectives(m)).toHaveLength(2);
@@ -53,8 +53,11 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
     m = tick(m, NOW + H + RISE.riseMs - 1);
     expect(objectives(m)).toHaveLength(2);
     m = tick(m, NOW + H + RISE.riseMs);
-    expect(objectives(m)).toHaveLength(3);
-    expect(islandConquest(m)!.objectivesDown).toBe(0);
+    // 🏳️ Il est tenu (`restoreRazedObjectives`) : ses morts le reprennent par une ATTAQUE.
+    expect(objectives(m)).toHaveLength(2);
+    const held = m.pois.find((p) => p.id === 'isl_obj_0')!;
+    expect(held.control!.owner).toBe('player');
+    expect(held.control!.attackAt).toBe(NOW + H + RISE.riseMs);
     // Rend la même carte au tick suivant.
     expect(tick(m, NOW + H + RISE.riseMs)).toBe(m);
   });

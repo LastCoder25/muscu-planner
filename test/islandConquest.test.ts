@@ -104,15 +104,18 @@ describe('🏝️ conquête — la carte', () => {
     let m = island1();
     m = razeIslandTarget(m, objectiveIdOf(0), NOW);
     m = ensureIslandConquest(m, NOW, LV);
-    expect(poi(m, objectiveIdOf(0))).toBeUndefined();
+    // 🏳️ Rasé (l'ancienne prise, v < 1.31), il revient À NOUS (`restoreRazedObjectives`).
+    expect(poi(m, objectiveIdOf(0))!.control!.owner).toBe('player');
     expect(poi(m, FORTRESS_ID)!.control!.locked).toBe(true);
     m = ensureIslandConquest(razeIslandTarget(m, objectiveIdOf(1), NOW), NOW, LV);
     const f = poi(m, FORTRESS_ID)!;
     expect(f.control!.locked).toBeUndefined();
     expect(f.control!.size).toBe(ISLAND_CONQUEST.fortressWeakSize);
     expect(f.level).toBe(20);
-    // Un objectif abattu ne revient pas.
-    expect(poi(ensureIslandConquest(m, NOW + 30 * 24 * H, LV), objectiveIdOf(0))).toBeUndefined();
+    // Un objectif abattu ne revient jamais à l'ennemi.
+    expect(
+      poi(ensureIslandConquest(m, NOW + 30 * 24 * H, LV), objectiveIdOf(0))!.control!.owner,
+    ).toBe('player');
   });
 
   it('🗼 une tour de guet TENUE (miliciens) reste tant qu’elle est occupée ; vide ou à l’ennemi, elle part', () => {
@@ -155,7 +158,7 @@ describe('🏝️ conquête — la carte', () => {
     );
     // …puis s'attaque, héros seul compris.
     let held = m;
-    for (const k of ['mine', 'training'] as const)
+    for (const k of ['mine', 'garden'] as const)
       held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
     held = ensureIslandConquest(held, NOW, LV);
     expect(partySendBlocker(poi(held, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBeNull();
