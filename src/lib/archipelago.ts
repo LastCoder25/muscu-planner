@@ -2,7 +2,7 @@
  * 🏝️ L'ARCHIPEL — la carte de conquête découpée en cinq îles (roadmap
  * `docs/superpowers/plans/2026-10-01-carte-archipel-roadmap.md`, conçue avec l'utilisateur).
  *
- * ⚠️ ÉTAPE 1 : le MODE ARCHIPEL, île 1 seule, derrière un interrupteur ADMIN. Une carte en
+ * ⚠️ Depuis l’étape 7 (v1.36.0) TOUS les comptes jouent l’archipel (`archipelBascule.ts`). Une carte en
  * mode archipel porte `ExpeditionMap.archipel` ; sans lui, tout reste exactement comme avant.
  * Ce que le mode change, et seulement ça :
  * - les lieux sont **plafonnés au rang max de l'île** (île 1 : Argent, niveau 20) ;

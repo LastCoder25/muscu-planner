@@ -184,7 +184,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(open).toContain('am-here');
     expect(open).toContain('Tu es ici');
     expect(open).toContain('Le Fort des pillards');
-    expect(open).toContain('Quitter le mode archipel');
+    // 🏝️ Étape 7 : tout le monde joue l'archipel, plus d'interrupteur pour en sortir.
+    expect(open).not.toContain('Quitter le mode archipel');
   });
 
   // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de

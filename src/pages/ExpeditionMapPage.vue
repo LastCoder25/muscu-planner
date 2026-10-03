@@ -16,9 +16,8 @@
       @reset="resetFilters"
     />
 
-    <!-- 🏝️ L'archipel (étape 1 de la roadmap) : réservé à l'admin pendant le développement. -->
+    <!-- 🏝️ L'archipel : toute la carte depuis la bascule (étape 7 de la roadmap). -->
     <ArchipelPanel
-      v-if="auth.isAdmin"
       :island="island"
       :conquest="islandProgress"
       :busy="archBusy"
@@ -30,7 +29,6 @@
       :away="crossInfo.away"
       :militia="crossInfo.militia"
       :now="now"
-      @toggle="toggleArchipel"
       @cross="crossTo"
     />
 
@@ -1586,18 +1584,6 @@ async function crossTo(to: number) {
   try {
     await char.crossIsland(uid, to, Date.now());
     $q.notify({ type: 'positive', message: `⛵ Traversée réservée vers l'île ${to}` });
-  } catch (e) {
-    $q.notify({ type: 'negative', message: (e as Error).message });
-  } finally {
-    archBusy.value = false;
-  }
-}
-async function toggleArchipel(on: boolean) {
-  const uid = auth.user?.id;
-  if (!uid || archBusy.value) return;
-  archBusy.value = true;
-  try {
-    await char.setArchipelMode(uid, on);
   } catch (e) {
     $q.notify({ type: 'negative', message: (e as Error).message });
   } finally {

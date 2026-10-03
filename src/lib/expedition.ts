@@ -765,7 +765,7 @@ export interface ExpeditionMap {
   /** 🗺️ Les départs (héros et équipes) des 7 derniers jours : l'UTILISATION de la carte, qui
    *  règle son harcèlement (`mapHarass`). Absent des cartes d'avant → 0, aucune migration. */
   departures?: number[];
-  /** 🏝️ MODE ARCHIPEL (`archipelago.ts`, étape 1, compte admin seul) : l'île active et le
+  /** 🏝️ MODE ARCHIPEL (`archipelago.ts` ; tous les comptes depuis la bascule, étape 7) : l'île active et le
    *  plafond de niveau de ses lieux. Absent = la carte d'avant, rien ne change. */
   archipel?: {
     island: number;

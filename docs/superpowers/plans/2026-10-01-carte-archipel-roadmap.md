@@ -1,7 +1,7 @@
 # Carte de conquête : l'archipel — roadmap
 
-> Conçue avec l'utilisateur le 2026-10-01. **Étapes 0 à 2 quater faites** (v1.15.0, 2026-10-02).
-> Prochaine étape : **3 — la traversée et l'île 2**, sur le compte admin seul.
+> Conçue avec l’utilisateur le 2026-10-01. **Étape 7 faite (v1.36.0, 2026-10-03) : tous les comptes jouent l’archipel.**
+> Reste : les points « à trancher » de la 6 bis (lieux par île, milice, récompenses).
 > Page visuelle (carte dessinée, tableaux) : https://claude.ai/artifact/JK5zL5fjbPojaXwpM8ZPJc
 
 ## Pourquoi
@@ -432,4 +432,24 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
         descend toujours de 12 à 8 avec les objectifs pris.
       - [ ] À trancher : 4 lieux fixes par île (socle + 1 spécialité) ; milice plafonnée à 3
         places sur 5 par lieu ; récompenses d'une nouvelle île (pas de tickets : règle 9).
-- [ ] **7. Bascule de tous les comptes** (~2 j) — départ de l'île 1, compensation.
+- [x] **7. Bascule de tous les comptes** (v1.36.0, 2026-10-03) — départ de l'île 1, compensation.
+      Décisions de l'utilisateur : **les lieux tenus qui existent sur l'île 1** (mine, source,
+      jardin, scriptorium) **restent tenus** ; les autres (camp d'entraînement, tour de guet)
+      sont rendus — production récoltée, garnison rentrée (`retiredHeld`, le chemin de
+      l'interrupteur d'avant) — et **compensés de 2 jours de leur production en or**, garnison
+      pleine, à leur rang (`archipelBascule.ts`, coffre `archipel_bascule` dans la boîte). La
+      bascule se fait au premier tick de carte, dans la même écriture que le coffre (une carte
+      qui porte `archipel` ne rebascule jamais) ; une carte NEUVE naît sur l'île 1.
+      L'interrupteur admin est retiré, le panneau de l'archipel est ouvert à tous. Tests
+      `archipelBascule.test.ts` (8, 5 mutations rouges).
+      **Simulation d'un compte débutant réel (Cypher, 2026-10-03)** : 5 champions A (niv 8, 8,
+      8, 6, 4), Panthéon 12, presque sans runes. Il garde jardin et source de mana ; son camp
+      d'entraînement (niv 5, 3 champions) est rendu contre **27 169 🪙**. Sur l'île 1, équipe de
+      3 à leur niveau actuel : petit lieu fixe 100 %, gros lieu fixe (troupe 2,5) 0 %, objectifs
+      0 %. Champions montés au plafond du Panthéon (12) et équipés à leur rang : gros lieu fixe
+      64 %, objectif troupe 3 **100 % à 5 champions** (3 % à 3), troupe 4 97 %. Forteresse
+      affaiblie (troupe 8, niv 20) : **0 % à 5 champions même au niveau 20** — il faut ~8
+      champions de niveau 20 (référence S : 97 %). ⚠️ Ses champions A valent nettement moins
+      que les références S de la calibration (objectif troupe 3 à 3 champions de niv 12 : 3 %
+      contre 93 %) : la progression passe par monter le Panthéon et équiper ses champions, puis
+      par le tirage (8 champions) pour la forteresse — conforme à la 6c (île 1 ≈ niveau 19).

@@ -1,9 +1,9 @@
 <!--
   🏝️ LA VUE D'ENSEMBLE DE L'ARCHIPEL (étape 1 de la roadmap `2026-10-01-carte-archipel-roadmap`).
-  Réservée à l'admin pendant le développement : une tuile REPLIABLE (même langage que les
+  Ouverte à tous depuis la bascule (étape 7) : une tuile REPLIABLE (même langage que les
   filtres de la carte) qui dit sur quelle île on joue, et dépliée la CARTE de l’archipel (les cinq silhouettes,
-  reliées par les routes de traversée) et la fiche de l’île touchée. Elle porte aussi
-  l'interrupteur du mode. ⚠️ Repliée à chaque ouverture : la carte passe avant.
+  reliées par les routes de traversée) et la fiche de l’île touchée. ⚠️ Repliée à chaque
+  ouverture : la carte passe avant.
 -->
 <template>
   <div class="arch" :class="{ open, on: !!island }">
@@ -22,7 +22,7 @@
           >{{ island.emoji }} Île {{ island.id }} · {{ island.name
           }}{{ conquest?.pacified ? ' · 🕊️ pacifiée' : '' }}</template
         >
-        <template v-else>mode désactivé · admin</template>
+        <template v-else>la carte devient un archipel…</template>
       </span>
       <span class="arch-chev" aria-hidden="true">{{ open ? '▴' : '▾' }}</span>
     </button>
@@ -174,9 +174,6 @@
         Lieux plafonnés au rang {{ islandCapRank }}, trajets selon la seule distance, carte à la
         taille de l'île : l'Avant-poste ne règle plus que la vitesse.
       </p>
-      <button type="button" class="arch-toggle" :disabled="busy" @click="$emit('toggle', !island)">
-        {{ island ? 'Quitter le mode archipel' : '🏝️ Activer le mode archipel (admin)' }}
-      </button>
     </div>
   </div>
 </template>
@@ -218,7 +215,7 @@ const props = defineProps<{
   militia?: Record<number, number>;
   now: number;
 }>();
-defineEmits<{ toggle: [on: boolean]; cross: [to: number] }>();
+defineEmits<{ cross: [to: number] }>();
 
 /** Heure d'horloge (« 14:00 »). */
 const clock = (t: number) =>
@@ -598,21 +595,5 @@ const islandCapRank = computed(() =>
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--dim);
-}
-.arch-toggle {
-  margin-top: 10px;
-  width: 100%;
-  min-height: 44px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-.arch-toggle:disabled {
-  opacity: 0.5;
 }
 </style>

@@ -144,6 +144,7 @@ import {
   produceIslandMilitia,
   startCrossing,
 } from '@/lib/crossing';
+import { basculeToArchipel } from '@/lib/archipelBascule';
 import {
   FORTRESS_ID,
   brigandPillage,
@@ -2305,6 +2306,21 @@ export const useCharacterStore = defineStore('character', () => {
   async function expeSyncMap(userId: string, now: number, level: number) {
     const cur = row.value;
     if (!cur) return;
+    // 🏝️ ÉTAPE 7 — LA BASCULE (`archipelBascule.ts`) : une carte classique passe sur l'île 1,
+    // avec le coffre de compensation des lieux tenus qui n'existent pas sur l'île, DANS LA MÊME
+    // écriture (une carte qui porte `archipel` ne rebascule jamais). Le tick suivant rappelle
+    // leur garnison (`retiredHeld`, récolte comprise) et pose les lieux de l'île.
+    if (cur.expedition_map && !cur.expedition_map.archipel) {
+      if (!tickMayWrite(cur)) return;
+      const b = basculeToArchipel(cur.expedition_map, now);
+      if (b) {
+        await persist(userId, {
+          expedition_map: b.map,
+          ...(b.message ? { messages: boxWith(cur, [b.message], MESSAGES_CAP) } : {}),
+        });
+        return;
+      }
+    }
     // 🗼 Un point d'un type RETIRÉ encore tenu (la tour de guet) : sa garnison et le héros
     // rentrent à pied d'abord ; il quitte la carte au tick suivant, une fois vide.
     if (cur.expedition_map) {
@@ -2329,15 +2345,17 @@ export const useCharacterStore = defineStore('character', () => {
     const over = prev ? riftOverflows(prev, now) : [];
     // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1047).
     // 🏝️ Sauf en mode archipel : l'île a sa taille, et le niveau de ses lieux un plafond.
-    const outpost = mapOutpostLevel(prev, buildingLevel(cur.buildings, 'outpost'));
-    level = mapPlayerLevel(prev, level);
+    // 🏝️ Une carte NEUVE naît sur l'île 1 (étape 7 : tout le monde joue l'archipel).
+    const sizing = prev ?? { archipel: archipelOn(1) };
+    const outpost = mapOutpostLevel(sizing, buildingLevel(cur.buildings, 'outpost'));
+    level = mapPlayerLevel(sizing, level);
     // 🏰 Les points de contrôle (fixes) se posent s'ils manquent — ils sont hors quota.
     // 🏝️ Puis les objectifs de l'île et sa forteresse, et la règle de production de l'île.
     const map0: ExpeditionMap = ensureIslandConquest(
       ensureControls(
         prev
           ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
-          : createMap(newSeed(now), now, level, outpost),
+          : { ...createMap(newSeed(now), now, level, outpost), archipel: archipelOn(1) },
         now,
         level,
         outpost,
@@ -2435,9 +2453,6 @@ export const useCharacterStore = defineStore('character', () => {
         rarity: 'legendary',
       });
   }
-  /** 🏝️ L'INTERRUPTEUR DU MODE ARCHIPEL (étape 1 de la roadmap) — réservé à l'admin pendant
-   *  le développement. Le tick suivant de la carte (`advanceWorld`) retire les lieux au-dessus
-   *  du rang de l'île et pose la règle de trajet ; quitter le mode rend la carte d'avant. */
   /** ⛵ Des troupes marchent-elles vers un lieu fixe ou en reviennent-elles ? Leur arrivée
    *  se règle sur la carte ACTIVE : la traversée attend qu'elles soient arrivées. */
   function troopsMoving(cur: CharacterRow): boolean {
@@ -2484,17 +2499,6 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: boardTravellers(advs, map.crossing!),
     });
   }
-  async function setArchipelMode(userId: string, on: boolean) {
-    if (!useAuthStore().isAdmin) throw new Error('Mode archipel réservé à l’admin.');
-    const cur = row.value;
-    if (!cur?.expedition_map) return;
-    const prev = cur.expedition_map;
-    if (!!prev.archipel === on) return;
-    const map: ExpeditionMap = { ...prev };
-    if (on) map.archipel = archipelOn(1);
-    else delete map.archipel;
-    await persist(userId, { expedition_map: map });
-  }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
   async function expeSend(userId: string, poi: Poi, hero: Combatant, now: number, level: number) {
     const cur = row.value;
@@ -2538,9 +2542,10 @@ export const useCharacterStore = defineStore('character', () => {
       ...started,
       outcome: { ...started.outcome, supplies: rollSupplyDrop(started.seed) },
     };
-    const baseMap =
-      cur.expedition_map ??
-      createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost'));
+    const baseMap = cur.expedition_map ?? {
+      ...createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost')),
+      archipel: archipelOn(1),
+    };
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
     // 🧝 Posté sur un lieu tenu, il en part directement (`unpostHero`).
     const map: ExpeditionMap = recordDeparture(
@@ -6208,7 +6213,6 @@ export const useCharacterStore = defineStore('character', () => {
     spentBossTokens,
     setPseudo,
     expeSyncMap,
-    setArchipelMode,
     crossIsland,
     crossingBlock,
     expeSend,
