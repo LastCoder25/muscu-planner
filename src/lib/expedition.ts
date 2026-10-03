@@ -103,6 +103,9 @@ export type ControlKind =
   /** 🏝️🧱 Le FORTIN (île 4) : ne produit rien, affaiblit les reprises sur les autres lieux
    *  tenus de l'île. */
   | 'fort'
+  /** 🏝️🗺️ Le CARTOGRAPHE (île 4) : on y choisit un type de lieu tiré, qui apparaît plus
+   *  souvent sur l'île (`CARTO_TYPES`, `cartoPick`). */
+  | 'cartographer'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
   /** 🏝️ ARCHIPEL (étape 2) : un OBJECTIF SECONDAIRE de l'île (camp de brigands, nid…) et la
@@ -186,6 +189,8 @@ export interface ControlState {
   /** 🧱 Le FORTIN de l'île tenu (`fortMultOf`, posé par `ensureIslandConquest`) : la troupe
    *  qui vient reprendre CE lieu est multipliée par ce facteur (< 1). Absent sans fortin. */
   fortMult?: number;
+  /** 🗺️ CARTOGRAPHE : le type de lieu que le joueur fait apparaître plus souvent. */
+  favor?: PoiType;
   /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
    *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
    *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */
@@ -298,6 +303,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   mana: 'Source de mana',
   distillery: 'Distillerie',
   fort: 'Fortin',
+  cartographer: 'Cartographe',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
   fortress: 'Forteresse portuaire',
@@ -316,6 +322,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   mana: '⛲',
   distillery: '🧪',
   fort: '🧱',
+  cartographer: '🗺️',
   citadel: '🏯',
   objective: '⛺',
   fortress: '🏰',
@@ -1488,6 +1495,11 @@ export const EXPE = {
   /** 💎 Chance qu'un camp ou un repaire qui apparaît soit un filon éphémère (un à la fois).
    *  Mesuré (`vein.test`, 8 cartes × 14 jours) : ~0,3 filon par jour. */
   veinChance: 0.12,
+  /** 🗺️ CARTOGRAPHE (île 4, 2026-10-03) : chance qu'un lieu tiré devienne le type choisi, selon
+   *  la garnison (0 à 5). À 3, un quart des lieux tirés : la mine (1 sur 6 des tirages)
+   *  passe à ~38 %, la tanière (1 sur 24) à ~28 %. Les quotas d'économie s'appliquent APRÈS :
+   *  favoriser la mine ne fait pas déborder l'or de la carte au-delà de son plafond. */
+  cartoChance: [0, 0.12, 0.2, 0.25, 0.29, 0.33] as readonly number[],
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
@@ -2197,6 +2209,32 @@ const EXTRA_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(EXTRA_TABLE);
  *  que `SPAWN_TABLE`). */
 const ECON_TABLE = SPAWN_TABLE.filter((t) => ECON_TYPES.has(t));
 
+/**
+ * 🗺️ Les types qu'un CARTOGRAPHE peut faire revenir : les lieux tirés de la carte, SAUF ceux
+ * qui paient la partie héros (sources → énergie, sanctuaires → pierres d'invocation, archives →
+ * clés), l'arène (une seule à la fois) et les lieux rares (caravane, filon, failles).
+ */
+export const CARTO_TYPES = [
+  'mine',
+  'camp',
+  'lair',
+  'ruins',
+  'fallen',
+  'den',
+] as const satisfies readonly PoiType[];
+export type CartoType = (typeof CARTO_TYPES)[number];
+
+/** 🗺️ Le cartographe tenu de la carte (avec un type choisi et du monde) : son type et sa
+ *  chance (`EXPE.cartoChance`). `null` sinon. */
+export function cartoPick(pois: readonly Poi[]): { favor: PoiType; chance: number } | null {
+  const c = pois.find((p) => p.control?.kind === 'cartographer')?.control;
+  if (!c || c.owner !== 'player' || !c.favor) return null;
+  if (!(CARTO_TYPES as readonly PoiType[]).includes(c.favor)) return null;
+  const t = EXPE.cartoChance;
+  const chance = t[Math.min(t.length - 1, c.garrison.length)] ?? 0;
+  return chance > 0 ? { favor: c.favor, chance } : null;
+}
+
 function spawnOne(
   map: ExpeditionMap,
   now: number,
@@ -2212,6 +2250,11 @@ function spawnOne(
   // mais elle peut toujours produire des devises qui, elles, ne se périment pas.
   // ⚓ Plus d'ÉPAVE (v0.999) : sans la ferraille, elle doublait la mine en moins bien.
   let type: PoiType = pick(rng, SPAWN_TABLE);
+  // 🗺️ CARTOGRAPHE tenu : le type choisi revient plus souvent. ⚠️ Générateur À PART, et AVANT
+  // les quotas (ils bornent toujours l'économie de la carte).
+  const carto = cartoPick(map.pois);
+  if (carto && mulberry32((map.seed ^ (map.spawnCount * 0xc2b2ae35)) >>> 0 || 1)() < carto.chance)
+    type = carto.favor;
   // 💰 Quota d'économie plein → une source ou des archives (cf. `ECON_TYPES`). ⚠️ Le tirage de
   // remplacement ne consomme le flux aléatoire QUE dans ce cas : sur une carte qui n'excède
   // pas la référence, rien ne change au bit près.
