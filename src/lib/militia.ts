@@ -84,13 +84,17 @@ export function militiaIntervalH(barracks: number): number {
 }
 
 /** Combien de miliciens la Caserne entretient au plus (base + postés + en route).
- *  🏝️ `islandSeats` (REQUIS) : sur une île, les places de TOUS ses lieux fixes s'ajoutent
- *  (`militiaSeatsOf`), pour qu'on puisse laisser l'île qu'on quitte en garnison pleine de
- *  miliciens — les champions partent sur l'île suivante (décision de l'utilisateur,
- *  2026-10-03). 0 hors archipel : la carte ordinaire ne change pas. */
+ *  🏝️ `islandSeats` (REQUIS) : sur une île, le plafond EST ses places de lieux fixes
+ *  (`militiaSeatsOf`, 4 × 5 = 20 sur l'île 1) — exactement de quoi laisser l'île qu'on
+ *  quitte en garnison pleine de miliciens, les champions partant sur l'île suivante. La
+ *  part « Caserne » ne s'y ajoute plus (décision de l'utilisateur, 2026-10-03 : « 4 lieux
+ *  fixes, il faut 20 miliciens par île ») : la Caserne n'y règle que la cadence. Les
+ *  objectifs acceptent des miliciens mais n'en réclament pas. 0 hors archipel : la carte
+ *  ordinaire ne change pas. */
 export function militiaCap(barracks: number, islandSeats: number): number {
   if (barracks <= 0) return 0;
-  return MILITIA.capBase + Math.floor(barracks / MILITIA.capEvery) + Math.max(0, islandSeats);
+  if (islandSeats > 0) return islandSeats;
+  return MILITIA.capBase + Math.floor(barracks / MILITIA.capEvery);
 }
 
 /**
