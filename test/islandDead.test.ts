@@ -7,6 +7,7 @@ import {
   controlIdOf,
   controlLootMessage,
   ensureControls,
+  ALL_CONTROL_KINDS,
 } from '@/lib/controlPoints';
 import {
   FORTRESS_ID,
@@ -90,9 +91,11 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
 });
 
 describe('⚱️ l’ossuaire de l’île 3', () => {
-  it('l’île 3 porte socle + jardin + ossuaire, sans tour de guet', () => {
+  it('l’île 3 porte le socle + l’ossuaire seulement (4 lieux fixes)', () => {
     const k = islandMap().pois.flatMap((p) => (p.control ? [p.control.kind] : []));
-    for (const x of ['mine', 'training', 'mana', 'garden', 'ossuary']) expect(k).toContain(x);
+    for (const x of ['mine', 'training', 'mana', 'ossuary']) expect(k).toContain(x);
+    expect(new Set(k.filter((x) => (ALL_CONTROL_KINDS as string[]).includes(x))).size).toBe(4);
+    expect(k).not.toContain('garden');
     expect(k).not.toContain('tower');
     expect(k).not.toContain('archives');
     expect(k).not.toContain('scriptorium');
