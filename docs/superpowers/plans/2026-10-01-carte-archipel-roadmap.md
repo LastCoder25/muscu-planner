@@ -430,8 +430,14 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
         aucune attaque.
       - [x] **La forteresse a le niveau MAX de la carte de l'île** (v1.31.0) ; sa troupe
         descend toujours de 12 à 8 avec les objectifs pris.
-      - [ ] À trancher : 4 lieux fixes par île (socle + 1 spécialité) ; milice plafonnée à 3
-        places sur 5 par lieu ; récompenses d'une nouvelle île (pas de tickets : règle 9).
+      - [x] **Milice** (v1.34.1, décision de l'utilisateur) : PAS plafonnée à 3 places sur 5 —
+        chaque lieu fixe d'une île ajoute ses 5 places au plafond de la Caserne
+        (`militiaCap(caserne, islandSeats)`), donc l'île qu'on quitte peut être tenue
+        entièrement par la milice.
+      - [x] **Récompense d'une nouvelle île** (v1.34.1, décision de l'utilisateur, qui lève la
+        règle 9 sur ce point) : le coffre du premier débarquement vaut 10 tickets de tirage,
+        une fois par île.
+      - [ ] À trancher : 4 lieux fixes par île (socle + 1 spécialité) au lieu de 9-10 aujourd'hui.
 - [x] **7. Bascule de tous les comptes** (v1.36.0, 2026-10-03) — départ de l'île 1, compensation.
       Décisions de l'utilisateur : **les lieux tenus qui existent sur l'île 1** (mine, source,
       jardin, scriptorium) **restent tenus** ; les autres (camp d'entraînement, tour de guet)
