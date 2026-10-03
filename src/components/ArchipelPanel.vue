@@ -49,6 +49,23 @@
           >
         </span>
       </div>
+      <!-- ⛵ Les champions qui naviguent seuls (option A). -->
+      <div v-for="(s, k) in sailings ?? []" :key="'s' + k" class="arch-sea">
+        <span class="as-emo" aria-hidden="true">⛵</span>
+        <span class="as-txt">
+          <b>Île {{ s.from }} → île {{ s.to }}</b>
+          <template v-if="now < s.departAt">
+            · départ à {{ clock(s.departAt) }} (dans {{ formatDuration(s.departAt - now) }})
+          </template>
+          <template v-else>
+            · arrivée à {{ clock(s.arriveAt) }} (dans
+            {{ formatDuration(Math.max(0, s.arriveAt - now)) }})
+          </template>
+          <span class="as-sub"
+            >{{ s.ids.length }} champion{{ s.ids.length > 1 ? 's' : '' }} sans le héros</span
+          >
+        </span>
+      </div>
       <!-- 🗺️ LA CARTE DE L'ARCHIPEL : les cinq îles (leur vraie silhouette), reliées par les
            routes de traversée. Toucher une île en montre la fiche juste dessous. -->
       <svg class="arch-map" viewBox="0 0 330 182" role="group" aria-label="Carte de l’archipel">
@@ -151,9 +168,11 @@
           réserve{{ selTile.active ? '' : ' · la Caserne continue de produire' }}
         </div>
         <template v-if="island && !selTile.active && !selTile.locked">
+          <!-- ⛵ Option A (2026-10-03) : le héros retenu bloque SA traversée, pas celle des
+               champions vers une île déjà visitée — la feuille propose alors de les envoyer seuls. -->
           <p v-if="blocks?.[selTile.id]" class="at-block">{{ blocks[selTile.id] }}</p>
           <button
-            v-else
+            v-if="!blocks?.[selTile.id] || selTile.visited"
             type="button"
             class="at-cross"
             :disabled="busy"
@@ -162,8 +181,27 @@
             <span class="ac-main">⛵ Traverser vers l'île {{ selTile.id }}</span>
             <span class="ac-sub"
               >Départ à {{ clock(departAt) }} · arrivée {{ clock(departAt + CROSSING.travelMs) }} ·
-              le héros et {{ travellers ?? 0 }} champion{{ (travellers ?? 0) > 1 ? 's' : '' }}</span
+              {{
+                selTile.visited
+                  ? 'avec ou sans le héros, tu choisis qui embarque'
+                  : 'avec le héros, tu choisis les champions'
+              }}</span
             >
+          </button>
+          <button
+            v-if="fetchable?.[selTile.id]"
+            type="button"
+            class="at-cross alt"
+            :disabled="busy"
+            @click="$emit('fetch', selTile.id)"
+          >
+            <span class="ac-main"
+              >⛵ Faire venir {{ fetchable[selTile.id] }} champion{{
+                fetchable[selTile.id]! > 1 ? 's' : ''
+              }}
+              sur l'île {{ island.id }}</span
+            >
+            <span class="ac-sub">Ils naviguent seuls, sans le héros.</span>
           </button>
         </template>
         <p v-else-if="island && selTile.locked" class="at-block">
@@ -207,15 +245,17 @@ const props = defineProps<{
   crossing?: Crossing | null;
   /** ⛵ Pourquoi on ne peut pas traverser vers chaque île (texte), null si possible. */
   blocks?: Record<number, string | null>;
-  /** ⛵ Combien de champions embarqueraient maintenant (les libres). */
-  travellers?: number;
+  /** ⛵ Champions LIBRES sur chaque autre île visitée : on peut les faire venir. */
+  fetchable?: Record<number, number>;
+  /** ⛵ Les navigations sans héros en cours. */
+  sailings?: Crossing[];
   /** ⛵ Champions restés sur chaque autre île. */
   away?: Record<number, number>;
   /** 🛡️ La réserve de milice de chaque île visitée (la milice ne traverse pas). */
   militia?: Record<number, number>;
   now: number;
 }>();
-defineEmits<{ cross: [to: number] }>();
+defineEmits<{ cross: [to: number]; fetch: [from: number] }>();
 
 /** Heure d'horloge (« 14:00 »). */
 const clock = (t: number) =>
@@ -582,6 +622,11 @@ const islandCapRank = computed(() =>
 }
 .at-cross:disabled {
   opacity: 0.5;
+}
+.at-cross.alt {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid #5aa9d6;
 }
 .ac-main {
   font-weight: 800;

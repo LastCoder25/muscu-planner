@@ -810,6 +810,10 @@ export interface ExpeditionMap {
   islands?: Record<string, ExpeditionMap>;
   /** ⛵ La traversée réservée ou en cours (débarquement à `arriveAt`). */
   crossing?: Crossing;
+  /** ⛵ Des champions qui naviguent SANS le héros entre deux îles déjà visitées
+   *  (`startSailing`) : la carte active ne change pas, ils changent d'île à l'arrivée
+   *  (`settleSailings`). Absent quand il n'y en a pas. */
+  sailings?: Crossing[];
   /** 🏰 Le héros RAPPELÉ de la forteresse rentre à la base à cet instant (occupé d'ici là). */
   heroReturnAt?: number;
   /** 🛡️ La RÉSERVE DE MILICE d'une île RANGÉE (règle 5 : une réserve par île, produite par
@@ -826,7 +830,7 @@ export interface Crossing {
   /** Le départ : l'heure pile qui suit la réservation. */
   departAt: number;
   arriveAt: number;
-  /** Les champions embarqués (le héros embarque toujours). */
+  /** Les champions embarqués (avec le héros pour `crossing`, seuls pour `sailings`). */
   ids: string[];
 }
 
@@ -2729,6 +2733,7 @@ export function advanceWorld(
     // suivant — une traversée réservée s'est ainsi évaporée sans débarquement (2026-10-03).
     // Mêmes règles que plus haut : clé absente quand il n'y a rien.
     ...(map.crossing ? { crossing: map.crossing } : {}),
+    ...(map.sailings?.length ? { sailings: map.sailings } : {}),
     ...(map.islands ? { islands: map.islands } : {}),
     ...(map.citadelStash ? { citadelStash: map.citadelStash } : {}),
     ...(map.heroReturnAt !== undefined ? { heroReturnAt: map.heroReturnAt } : {}),

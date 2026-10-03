@@ -25,11 +25,26 @@
       :visited-ids="crossInfo.visited"
       :crossing="char.row?.expedition_map?.crossing ?? null"
       :blocks="crossInfo.blocks"
-      :travellers="crossInfo.travellers"
+      :fetchable="crossInfo.fetchable"
+      :sailings="char.row?.expedition_map?.sailings ?? []"
       :away="crossInfo.away"
       :militia="crossInfo.militia"
       :now="now"
       @cross="crossTo"
+      @fetch="fetchFrom"
+    />
+    <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
+    <CrossingSheet
+      v-model="crossOpen"
+      :from="crossAsk?.from ?? 0"
+      :to="crossAsk?.to ?? null"
+      :active-id="island?.id ?? 0"
+      :hero-mode="crossHeroMode"
+      :hero-block="crossAsk ? (crossInfo.blocks[crossAsk.to] ?? null) : null"
+      :candidates="crossCandidates"
+      :depart-at="nextCrossingDeparture(now)"
+      :busy="archBusy"
+      @confirm="confirmCross"
     />
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
@@ -555,8 +570,9 @@
                Mêmes îles et mêmes refus que le panneau de l'archipel (`crossInfo`). -->
             <div v-if="liveControl.kind === 'fortress'" class="port-box">
               <p class="port-txt">
-                ⛵ <b>Le port de l'île.</b> Au départ, sa garnison, ton héros et tous tes champions
-                libres embarquent — ceux postés sur un autre lieu restent sur l'île.
+                ⛵ <b>Le port de l'île.</b> Tu choisis qui embarque : ton héros (obligatoire pour
+                une île jamais visitée), sa garnison et tes champions libres — ceux postés sur un
+                autre lieu restent sur l'île.
               </p>
               <p v-if="sailing" class="port-txt">
                 En mer vers l'île {{ sailing.to }} : la traversée se suit dans le panneau de
@@ -569,9 +585,9 @@
                   no-caps
                   unelevated
                   class="port-btn"
-                  :color="t.block ? 'grey-8' : 'primary'"
-                  :text-color="t.block ? undefined : 'dark'"
-                  :disable="!!t.block || archBusy"
+                  :color="t.block && !t.visited ? 'grey-8' : 'primary'"
+                  :text-color="t.block && !t.visited ? undefined : 'dark'"
+                  :disable="(!!t.block && !t.visited) || archBusy"
                   :label="`⛵ Traverser vers l'île ${t.id} · ${t.name}`"
                   @click="crossTo(t.id)"
                 />
@@ -1368,10 +1384,12 @@ import { islandTerrain } from '@/lib/islandTerrain';
 import { activeIsland, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
 import {
   CROSSING_BLOCK_LABEL,
-  crossingTravellers,
+  islandChampions,
+  nextCrossingDeparture,
   openIslands,
   visitedIslands,
 } from '@/lib/crossing';
+import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
@@ -1593,7 +1611,14 @@ const crossInfo = computed(() => {
   if (map?.archipel) militia[map.archipel.island] = char.row?.base?.militia?.home ?? 0;
   for (const [k, im] of Object.entries(map?.islands ?? {}))
     militia[Number(k)] = im.militia?.home ?? 0;
-  if (!map?.archipel) return { open: [], visited: [], blocks, travellers: 0, away, militia };
+  const fetchable: Record<number, number> = {};
+  if (!map?.archipel) return { open: [], visited: [], blocks, fetchable, away, militia };
+  const here = map.archipel.island;
+  for (const id of visitedIslands(map))
+    if (id !== here) {
+      const n = islandChampions(char.advList, id, here, now.value).length;
+      if (n) fetchable[id] = n;
+    }
   for (const i of ISLANDS) {
     const why = char.crossingBlock(i.id);
     blocks[i.id] = why && why !== 'same' && why !== 'locked' ? CROSSING_BLOCK_LABEL[why] : null;
@@ -1602,7 +1627,7 @@ const crossInfo = computed(() => {
     open: openIslands(map),
     visited: visitedIslands(map),
     blocks,
-    travellers: crossingTravellers(char.advList, now.value).length,
+    fetchable,
     away,
     militia,
   };
@@ -1619,16 +1644,57 @@ const portTargets = computed(() => {
       id,
       name: ISLANDS.find((i) => i.id === id)?.name ?? '',
       block: crossInfo.value.blocks[id] ?? null,
+      visited: crossInfo.value.visited.includes(id),
     }));
 });
 const portBlocked = computed(() => portTargets.value.filter((t) => t.block));
-async function crossTo(to: number) {
+/** ⛵ La feuille « Qui embarque ? » : d'où, vers où. */
+const crossAsk = ref<{ from: number; to: number } | null>(null);
+const crossOpen = ref(false);
+/** Partir de l'île active vers `to` (le panneau, le port). */
+function crossTo(to: number) {
+  const here = char.row?.expedition_map?.archipel?.island;
+  if (here === undefined) return;
+  crossAsk.value = { from: here, to };
+  crossOpen.value = true;
+}
+/** Faire venir sur l'île active les champions restés sur l'île `from` (sans le héros). */
+function fetchFrom(from: number) {
+  const here = char.row?.expedition_map?.archipel?.island;
+  if (here === undefined) return;
+  crossAsk.value = { from, to: here };
+  crossOpen.value = true;
+}
+/** Le héros : obligatoire vers une île jamais visitée, facultatif ensuite, absent au retour. */
+const crossHeroMode = computed<'forced' | 'optional' | 'none'>(() => {
+  const a = crossAsk.value;
+  if (!a || a.from !== island.value?.id) return 'none';
+  return crossInfo.value.visited.includes(a.to) ? 'optional' : 'forced';
+});
+/** Ceux qui peuvent embarquer depuis l'île de départ (la règle du store). */
+const crossCandidates = computed(() => {
+  const a = crossAsk.value;
+  if (!a) return [];
+  const ok = new Set(char.boardableIds(a.from, now.value));
+  return char.advList.filter((x) => ok.has(x.id));
+});
+async function confirmCross(pick: { hero: boolean; ids: string[] }) {
   const uid = auth.user?.id;
-  if (!uid || archBusy.value) return;
+  const a = crossAsk.value;
+  if (!uid || !a || archBusy.value) return;
   archBusy.value = true;
   try {
-    await char.crossIsland(uid, to, Date.now());
-    $q.notify({ type: 'positive', message: `⛵ Traversée réservée vers l'île ${to}` });
+    if (pick.hero) {
+      await char.crossIsland(uid, a.to, Date.now(), pick.ids);
+      $q.notify({ type: 'positive', message: `⛵ Traversée réservée vers l'île ${a.to}` });
+    } else {
+      await char.sailChampions(uid, a.from, a.to, pick.ids, Date.now());
+      $q.notify({
+        type: 'positive',
+        message: `⛵ ${pick.ids.length} champion${pick.ids.length > 1 ? 's naviguent' : ' navigue'} vers l'île ${a.to}`,
+      });
+    }
+    crossOpen.value = false;
   } catch (e) {
     $q.notify({ type: 'negative', message: (e as Error).message });
   } finally {
