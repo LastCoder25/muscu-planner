@@ -95,14 +95,14 @@ describe('la Caserne : cadence et effectif', () => {
       expect(militiaIntervalH(l)).toBeGreaterThan(MILITIA.fastH);
     }
   });
-  it('l’effectif monte d’un milicien tous les 3 niveaux, et vaut 0 sans Caserne', () => {
+  it('la Caserne débloque UN milicien par niveau, et 0 sans Caserne', () => {
     expect(militiaCap(0, 0)).toBe(0);
-    expect(militiaCap(1, 0)).toBe(5);
-    expect(militiaCap(3, 0)).toBe(6);
-    expect(militiaCap(30, 0)).toBe(15);
+    for (let l = 1; l <= 100; l++) expect(militiaCap(l, 0)).toBe(militiaCap(l - 1, 0) + 1);
+    expect(militiaCap(20, 0)).toBe(20);
   });
-  it('une garnison pleine (5) se forme en une demi-journée au plus, dès la Caserne 1', () => {
-    expect(militiaCap(1, 0)).toBeGreaterThanOrEqual(MILITIA.perPoint);
+  it('une garnison pleine (5) se forme en une demi-journée au plus, dès la Caserne 5', () => {
+    expect(militiaCap(4, 0)).toBeLessThan(MILITIA.perPoint);
+    expect(militiaCap(5, 0)).toBe(MILITIA.perPoint);
     expect(militiaIntervalH(1) * MILITIA.perPoint).toBeLessThanOrEqual(12.5);
     expect(militiaIntervalH(10) * MILITIA.perPoint).toBeLessThanOrEqual(9.5);
     expect(militiaIntervalH(30) * MILITIA.perPoint).toBeLessThanOrEqual(7);
@@ -117,16 +117,16 @@ describe('la production', () => {
     expect(s.producedAt).toBe(step * 2);
   });
   it('s’arrête au plafond, en comptant ceux partis sur la carte', () => {
-    const step = militiaIntervalH(1) * H;
-    const s = produceMilitia(emptyMilitia(0), 1, 2, step * 50, 0);
-    expect(s.home).toBe(militiaCap(1, 0) - 2);
+    const step = militiaIntervalH(5) * H;
+    const s = produceMilitia(emptyMilitia(0), 5, 2, step * 50, 0);
+    expect(s.home).toBe(militiaCap(5, 0) - 2);
   });
   it('au plafond l’horloge avance : vider un point ne relance pas une rafale', () => {
-    const step = militiaIntervalH(1) * H;
-    const full = produceMilitia(emptyMilitia(0), 1, 0, step * 50, 0);
-    expect(full.home).toBe(militiaCap(1, 0));
-    const out = takeMilitia(full, militiaCap(1, 0))!.state;
-    const next = produceMilitia(out, 1, militiaCap(1, 0), step * 50 + step * 0.5, 0);
+    const step = militiaIntervalH(5) * H;
+    const full = produceMilitia(emptyMilitia(0), 5, 0, step * 50, 0);
+    expect(full.home).toBe(militiaCap(5, 0));
+    const out = takeMilitia(full, militiaCap(5, 0))!.state;
+    const next = produceMilitia(out, 5, militiaCap(5, 0), step * 50 + step * 0.5, 0);
     expect(next.home).toBe(0);
   });
   it('rend le MÊME objet quand rien ne change (pas d’écriture à vide)', () => {
@@ -173,7 +173,7 @@ describe('envoyer, rappeler', () => {
       total: 5,
       cap: militiaCap(6, 0),
     });
-    expect(militiaCap(6, 0)).toBe(MILITIA.capBase + 2);
+    expect(militiaCap(6, 0)).toBe(6);
     expect(militiaCount(null, null, 0, 0)).toEqual({ posted: 0, home: 0, total: 0, cap: 0 });
   });
 });

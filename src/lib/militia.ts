@@ -41,10 +41,6 @@ export const MILITIA = {
   fastH: 0.5,
   /** Niveau de Caserne où la cadence a fait la moitié du chemin. */
   halfLevel: 20,
-  /** Plafond d'effectif : `capBase` + 1 tous les `capEvery` niveaux de Caserne. `capBase` vaut
-   *  une garnison pleine (`perPoint`) : dès la Caserne 1, on peut occuper un point à 5. */
-  capBase: 5,
-  capEvery: 3,
   /** Garnison au plus sur UN point de contrôle, CHAMPIONS ET MILICIENS COMPRIS (demandé :
    *  « garnison de 5 max champions et miliciens compris »). Les champions gardent en plus
    *  leur propre limite (`seatsOf` : 5, ou 3 au camp et à la forge) à l'intérieur de ces 5. La production du lieu
@@ -84,17 +80,17 @@ export function militiaIntervalH(barracks: number): number {
 }
 
 /** Combien de miliciens la Caserne entretient au plus (base + postés + en route).
- *  🏝️ `islandSeats` (REQUIS) : sur une île, le plafond EST ses places de lieux fixes
- *  (`militiaSeatsOf`, 4 × 5 = 20 sur l'île 1) — exactement de quoi laisser l'île qu'on
- *  quitte en garnison pleine de miliciens, les champions partant sur l'île suivante. La
- *  part « Caserne » ne s'y ajoute plus (décision de l'utilisateur, 2026-10-03 : « 4 lieux
- *  fixes, il faut 20 miliciens par île ») : la Caserne n'y règle que la cadence. Les
- *  objectifs acceptent des miliciens mais n'en réclament pas. 0 hors archipel : la carte
- *  ordinaire ne change pas. */
+ *  ⚖️ UN MILICIEN PAR NIVEAU DE CASERNE (décision de l'utilisateur, 2026-10-03 : « la
+ *  caserne débloque 1 milicien par lvl »).
+ *  🏝️ `islandSeats` (REQUIS) : sur une île, plafonné à ses places de lieux fixes
+ *  (`militiaSeatsOf`, 4 × 5 = 20 sur l'île 1) — atteint pile à la Caserne 20, le niveau où
+ *  l'on quitte l'île 1 : de quoi la laisser en garnison pleine de miliciens, les champions
+ *  partant sur l'île suivante. Au-delà, la Caserne n'y règle plus que la cadence. Les
+ *  objectifs acceptent des miliciens mais n'en réclament pas. 0 hors archipel : pas de
+ *  borne d'île. */
 export function militiaCap(barracks: number, islandSeats: number): number {
-  if (barracks <= 0) return 0;
-  if (islandSeats > 0) return islandSeats;
-  return MILITIA.capBase + Math.floor(barracks / MILITIA.capEvery);
+  const L = Math.max(0, Math.floor(barracks));
+  return islandSeats > 0 ? Math.min(L, islandSeats) : L;
 }
 
 /**

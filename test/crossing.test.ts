@@ -168,17 +168,20 @@ describe('🛡️ une réserve de milice par île', () => {
     expect(produceIslandMilitia(later, 10, T0 + 48 * H)).toBe(later);
   });
 
-  it('sur une île, le plafond est EXACTEMENT ses lieux fixes × 5, à toute Caserne', () => {
+  it('sur une île : 1 milicien par niveau de Caserne, borné à ses lieux fixes × 5', () => {
     // Les champions partent sur l'île suivante : chaque lieu fixe garde sa garnison pleine
-    // de miliciens (5 par point) — ni plus (la part Caserne ne s'ajoute pas), ni moins.
+    // de miliciens (5 par point) — jamais plus.
     for (const isl of [1, 2, 3, 4, 5]) {
       const seats = militiaSeatsOf({ archipel: archipelOn(isl) });
       expect(seats % 5).toBe(0);
       expect(seats).toBeGreaterThanOrEqual(4 * 5);
-      for (const b of [1, 5, 30, 100]) expect(militiaCap(b, seats)).toBe(seats);
+      for (const b of [1, 5, 30, 100]) expect(militiaCap(b, seats)).toBe(Math.min(b, seats));
     }
-    // Île 1 : 4 lieux fixes → 20 miliciens, quel que soit le niveau de la Caserne.
-    expect(militiaCap(37, militiaSeatsOf({ archipel: archipelOn(1) }))).toBe(20);
+    // Île 1 : 4 lieux fixes → 20 miliciens, atteints pile à la Caserne 20 (on la quitte au niveau 20).
+    const s1 = militiaSeatsOf({ archipel: archipelOn(1) });
+    expect(militiaCap(19, s1)).toBe(19);
+    expect(militiaCap(20, s1)).toBe(20);
+    expect(militiaCap(37, s1)).toBe(20);
     expect(militiaCap(0, 20)).toBe(0);
     expect(militiaSeatsOf({})).toBe(0);
     // La production remplit bien jusqu'à ce plafond, pas seulement jusqu'à l'ancien.
