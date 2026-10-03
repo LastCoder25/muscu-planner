@@ -210,7 +210,7 @@ describe('🏰 une garnison tient ou se fait déborder — jamais pour toujours'
         level: L,
       };
       const { advs, stock } = team(L + lag);
-      const hold = garrisonHold(p, partyAllies(advs, { advGear: stock }, null));
+      const hold = garrisonHold(p, partyAllies(advs, { advGear: stock }, null), 1);
       expect(hold).toBeLessThanOrEqual(CONTROL.maxHold);
       const runs = Array.from({ length: 200 }, (_, s) =>
         holdsBeforeFall(p, advs, stock, s * 97 + 5),

@@ -71,8 +71,8 @@ describe('🧱 le fortin de l’île 4', () => {
 
   it('le pronostic de tenue suit : un lieu épaulé tient mieux, au-delà du plafond de 90 %', () => {
     const allies = refEscortUnits(LV);
-    const a = garrisonHold(poi(heldWithFort(0), CAMP), allies);
-    const b = garrisonHold(poi(heldWithFort(5), CAMP), allies);
+    const a = garrisonHold(poi(heldWithFort(0), CAMP), allies, 1);
+    const b = garrisonHold(poi(heldWithFort(5), CAMP), allies, 1);
     expect(b).toBeGreaterThan(a);
   });
 

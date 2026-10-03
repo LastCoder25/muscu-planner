@@ -368,7 +368,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     // Niveau 1 (v0.823) : on BÂTIT dès le début ; ce sont les SIÈGES qui attendent
     // `RAID.minRaidLevel`. Construire n'expose à rien tant qu'aucune armée ne vient.
     unlockLevel: 1,
-    desc: 'L’enceinte encaisse les assauts. Tant qu’elle et les tourelles ne suivent pas ton niveau, personne ne vient t’attaquer.',
+    desc: 'Plus aucune armée ne vient sur ta base : avec les tourelles, l’enceinte renforce la garnison de tous tes lieux fixes, sur toutes les îles. Toutes deux à ton niveau, près d’un quart de troupe ennemie en moins.',
   },
   {
     id: 'turret',
@@ -376,7 +376,7 @@ export const DEFENSE_TYPES: DefenseType[] = [
     emoji: '🏹',
     buildGold: 700,
     unlockLevel: 1,
-    desc: 'Elles tirent. Chaque niveau ajoute de la puissance de feu, et une tourelle de plus sur le mur (jusqu’à 8).',
+    desc: 'Avec la muraille, elles renforcent la garnison de tous tes lieux fixes, sur toutes les îles. Toutes deux à ton niveau, près d’un quart de troupe ennemie en moins.',
   },
   {
     id: 'watchtower',
@@ -3192,6 +3192,25 @@ export interface BaseTickResult {
 /** Avance l'état de la base jusqu'à `now` : planification, détection, péremption du champ
  *  de bataille et du gel. NE RÉSOUT PAS le siège — l'appelant seul sait si le héros est
  *  là et ce que vaut la garnison ; il le signale via `dueRaid`. */
+/**
+ * 🧱🏹 L'ENCEINTE RENFORCE LES GARNISONS (décision de l'utilisateur, 2026-10-03, « piste 1 ») :
+ * depuis l'archipel, plus aucun siège ne vient sur la base — la muraille et les tourelles
+ * qu'on a montées ne servaient plus à rien. Elles renforcent désormais la défense de TOUS les
+ * lieux fixes tenus, sur toutes les îles. Chacune vaut sa PART du niveau du héros (la règle de
+ * `defenseReadiness` : surmonter au-delà n'achète rien, le sport reste le plafond), moyennées.
+ */
+export const FORTIFY = {
+  /** La troupe ennemie d'une reprise est divisée par 1 + `max` × part (enceinte à niveau : ÷1,3). */
+  max: 0.3,
+} as const;
+
+/** 🧱🏹 Ce par quoi l'enceinte divise la troupe qui vient reprendre un lieu fixe (≥ 1). */
+export function fortifyMult(defenses: DefenseStructure[], playerLevel: number): number {
+  const L = Math.max(1, playerLevel);
+  const part = (id: DefenseId) => Math.min(1, ownedLevel(defenses, id) / L);
+  return 1 + (FORTIFY.max * (part('wall') + part('turret'))) / 2;
+}
+
 /** 🏝️ La tranche de niveaux d'une armée sur une île. */
 export interface RaidLevelBand {
   min: number;

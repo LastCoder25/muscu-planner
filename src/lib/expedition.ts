@@ -803,6 +803,9 @@ export interface ExpeditionMap {
     destroyed?: string[];
     /** 🏝️ L'île est PACIFIÉE depuis cet instant : plus aucune attaque. */
     pacifiedAt?: number;
+    /** ⛵ L'île a été QUITTÉE vers l'île suivante (`vacateIsland`) : pacifiée d'office, vidée de
+     *  ses lieux (seuls ses lieux fixes restent) et plus rien n'y apparaît, même au retour. */
+    vacatedAt?: number;
     /** ⛺ Prochain PILLAGE des camps de brigands (île 1) sur la réserve des bâtiments. */
     pillageAt?: number;
     /** 🏰 Le coffre de la forteresse a été déposé (`fortressReward`) : une seule fois. */
@@ -2836,6 +2839,9 @@ export function advanceWorld(
   // Rattrapage : après une longue absence, l'heure de spawn a pu être dépassée
   // PLUSIEURS fois → on fait apparaître autant de POI que d'intervalles écoulés
   // (jusqu'au cap), sinon la carte restait à 1 spawn/ouverture et se vidait.
+  // ⛵ Une île QUITTÉE vers la suivante (`vacateIsland`) ne fait plus rien apparaître : ni
+  // lieux, ni failles. Seuls ses lieux fixes y restent.
+  if (map.archipel?.vacatedAt !== undefined) return next;
   let guard = 0;
   while (now >= next.nextSpawnAt && quota() < cap.pois && guard++ < cap.pois) {
     spawnOne(next, now, playerLevel, reach, cap.econ, cap.extra);

@@ -27,9 +27,11 @@
       :hero-depart-at="char.crossingDepartAt(now)"
       :away="crossInfo.away"
       :militia="crossInfo.militia"
+      :remote="remoteInfo"
       :now="now"
       @cross="crossTo"
       @fetch="fetchFrom"
+      @militia="moveMilitia"
     />
     <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
     <CrossingSheet
@@ -1316,6 +1318,7 @@
 
 <script setup lang="ts">
 import {
+  FORTRESS_ID,
   heroPostOf,
   islandConquest,
   islandTargetLabel,
@@ -1431,7 +1434,10 @@ import {
   islandChampions,
   nextCrossingDeparture,
   openIslands,
+  remotePoints,
+  seaTrips,
   visitedIslands,
+  type RemotePoint,
 } from '@/lib/crossing';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
@@ -1677,6 +1683,26 @@ const crossInfo = computed(() => {
     militia,
   };
 });
+/** 🛡️ Les lieux fixes tenus de chaque île RANGÉE, avec leur milice (gérée à distance). */
+const remoteInfo = computed(() => {
+  const out: Record<number, RemotePoint[]> = {};
+  for (const [k, im] of Object.entries(char.row?.expedition_map?.islands ?? {}))
+    out[Number(k)] = remotePoints(im);
+  return out;
+});
+/** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
+async function moveMilitia(e: { island: number; pointId: string; delta: number }) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.moveIslandMilitia(uid, e.island, e.pointId, e.delta, Date.now(), heroLevel.value);
+  } catch (err) {
+    $q.notify({ type: 'negative', message: (err as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 /** ⛵ La traversée en cours (réservée ou en mer), s'il y en a une. */
 const sailing = computed(() => char.row?.expedition_map?.crossing ?? null);
 /** ⛵ Les îles où l'on peut traverser depuis le port (toutes les ouvertes, sauf celle-ci),
@@ -2470,9 +2496,11 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const map = char.row?.expedition_map;
   const vsArmy =
     !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
+  // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (la règle de la bataille).
+  const fort = char.fortifyFor(heroLevel.value);
   const hold = vsArmy
-    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value)
-    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
+    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort)
+    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort);
   return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
 }
 const defenseNow = computed(() => defenseOf(livePoi.value));
@@ -3324,6 +3352,48 @@ const trips = computed(() => {
       title: m.recall
         ? `Retour programmé de ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`
         : `Renfort programmé — ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`,
+    });
+  }
+  // ⛵ EN MER (demandé : « comment on voit que le héros est en traversée ? ») : la traversée
+  // du héros et les navigations de champions, ancrées au port (la forteresse) ou à la ville.
+  const port =
+    pois.value.find((p) => p.id === FORTRESS_ID) ??
+    ({ id: 'port', type: 'control', x: TOWN.x, y: TOWN.y, level: 0 } as Poi);
+  const clock = (ms: number) =>
+    new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  for (const s of seaTrips(char.row?.expedition_map, now.value)) {
+    const c = s.crossing;
+    const isle = ISLANDS.find((i) => i.id === c.to)?.name ?? `île ${c.to}`;
+    ends.set(s.key, c.arriveAt);
+    out.push({
+      key: s.key,
+      kind: s.hero ? 'hero' : 'van',
+      who: '⛵',
+      cat: 'trips',
+      pending: s.waiting,
+      sea: { from: c.from, to: c.to },
+      poi: port,
+      time: s.waiting
+        ? `⏳ ${formatDuration(c.departAt - now.value)}`
+        : formatDuration(c.arriveAt - now.value),
+      pct: s.pct * 100,
+      back: false,
+      withHero: s.hero,
+      from: port,
+      members: c.ids,
+      haul: [],
+      legs: {
+        go: null,
+        back: `⚓ ${clock(c.arriveAt)}`,
+        detail:
+          `Départ à ${clock(c.departAt)}, arrivée à ${clock(c.arriveAt)} (2 h de mer)` +
+          (s.delayed ? ' — le départ attend le retour de tes troupes' : ''),
+      },
+      title:
+        `${s.hero ? 'Ton héros' : 'Champions'} vers ${isle} · ` +
+        (s.waiting ? `départ à ${clock(c.departAt)}` : 'en mer') +
+        ` · arrivée à ${clock(c.arriveAt)}` +
+        (s.delayed ? ' · le départ attend le retour de tes troupes' : ''),
     });
   }
   // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.

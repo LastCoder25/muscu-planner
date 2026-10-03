@@ -64,13 +64,13 @@ describe('💎 le lapidaire de l’île 3', () => {
     const m = captureControl(island3(), id, ['a', 'b'], NOW, 7);
     const p = m.pois.find((q) => q.id === id)!;
     expect(p.control!.garrison).toEqual(['a']);
-    expect(garrisonHold(p, refEscortUnits(LV))).toBe(0);
+    expect(garrisonHold(p, refEscortUnits(LV), 1)).toBe(0);
     // Les mêmes défenseurs tiendraient une mine : c'est bien le lapidaire qui ne se défend pas.
     const champs = [0, 1, 2].map((k) => refChampionAdv(LV + 20, k));
     const ids = champs.map((c) => c.id);
     const asMine = { ...p, control: { ...p.control!, kind: 'mine' as const, garrison: ids } };
-    expect(controlAttackHold(m, asMine, ids, champs, { advGear: [] }, LV)).toBeGreaterThan(0);
-    expect(controlAttackHold(m, p, ids, champs, { advGear: [] }, LV)).toBe(0);
+    expect(controlAttackHold(m, asMine, ids, champs, { advGear: [] }, LV, 1)).toBeGreaterThan(0);
+    expect(controlAttackHold(m, p, ids, champs, { advGear: [] }, LV, 1)).toBe(0);
   });
 
   it('le temps dépend de la couleur et du niveau', () => {

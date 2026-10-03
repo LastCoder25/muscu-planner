@@ -47,7 +47,10 @@
       >
         <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, miroir de l'objectif :
            la base 🏰, ou le point fixe d'où elle est partie. -->
-        <span class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
+        <span v-if="t.sea" class="tr-from" :title="`Île ${t.sea.from}`"
+          >🏝️<sub>{{ t.sea.from }}</sub></span
+        >
+        <span v-else class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
           t.from ? poiEmo(t.from) : '🏰'
         }}</span>
         <span class="tr-who">{{ t.who }}</span>
@@ -63,8 +66,14 @@
             >+{{ t.members.length - FACES_MAX }}</span
           >
         </span>
-        <span class="tr-poi" :title="t.toBase ? 'La base' : poiLabel(t.poi)">
-          <template v-if="t.toBase">🏰</template>
+        <span
+          class="tr-poi"
+          :title="t.sea ? `Île ${t.sea.to}` : t.toBase ? 'La base' : poiLabel(t.poi)"
+        >
+          <template v-if="t.sea"
+            >🏝️<sub>{{ t.sea.to }}</sub></template
+          >
+          <template v-else-if="t.toBase">🏰</template>
           <span v-else-if="isRiftPoi(t.poi)" class="tr-rift">
             <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
           </span>
@@ -77,7 +86,7 @@
         }}</span>
         <template v-if="t.legs">
           <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
-          <span class="tr-legs">↩ {{ t.legs.back }}</span>
+          <span class="tr-legs">{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span>
         </template>
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
       </button>
@@ -111,7 +120,13 @@
   <div v-if="crew" class="trip-crew">
     <div class="tc-head">
       👥 {{ crew.pending ? 'Partira vers' : 'En route vers' }}
-      {{ crew.toBase ? 'la base' : `${poiLabel(crew.poi)} niv ${crew.poi.level}` }}
+      {{
+        crew.sea
+          ? `l'île ${crew.sea.to}`
+          : crew.toBase
+            ? 'la base'
+            : `${poiLabel(crew.poi)} niv ${crew.poi.level}`
+      }}
     </div>
     <p v-if="crew.legs" class="tc-legs">⏱️ {{ crew.legs }}</p>
     <div v-if="crew.haul.length" class="tc-haul">
@@ -222,6 +237,8 @@ export interface MapTrip {
   cancelPlan?: string;
   /** ✖ Mission ratée (rapport tombé) : la tuile le dit, pour voir ce qu'il faut refaire. */
   failed?: VoyageFailure | null;
+  /** ⛵ Un voyage en MER d'une île à l'autre : `poi` n'est que le port d'ancrage. */
+  sea?: { from: number; to: number };
 }
 </script>
 
@@ -419,6 +436,7 @@ const crew = computed(() => {
     legs: t.legs?.detail ?? null,
     pending: !!t.pending,
     toBase: !!t.toBase,
+    sea: t.sea ?? null,
     cancelPlan: t.cancelPlan ?? null,
   };
 });
@@ -691,6 +709,12 @@ const crew = computed(() => {
   pointer-events: none;
 }
 /* 🧭 La provenance, en encart haut-gauche : le miroir exact de l'objectif. */
+.tr-from sub,
+.tr-poi sub {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
 .tr-from {
   position: absolute;
   top: 0;

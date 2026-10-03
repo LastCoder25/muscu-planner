@@ -42,8 +42,8 @@ describe('🎯 la tenue face à l’armée en approche', () => {
   it('rejoue EXACTEMENT la bataille de la reprise (`retakeBattle`)', () => {
     for (const p of attacks.slice(0, 5)) {
       const allies = militiaUnits(MIL, L);
-      const { foe, force } = retakeBattle({ seed: 42 }, p, allies, L);
-      expect(controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L)).toBe(
+      const { foe, force } = retakeBattle({ seed: 42 }, p, allies, L, 1);
+      expect(controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L, 1)).toBe(
         campWinPct(foe, force, allies, 24),
       );
     }
@@ -53,8 +53,10 @@ describe('🎯 la tenue face à l’armée en approche', () => {
     // ⚠️ Pas « plus faible = mieux repoussé » : face à une garnison trop sûre, l'ennemi
     // grossit sa troupe (`retakeBoost`) — un assaillant faible vient plus nombreux. Ce qui
     // doit changer, c'est que chaque attaque est jugée sur SA troupe.
-    const floors = new Set(attacks.map((p) => controlDefenseHold(p, MIL, [], KIT, L)));
-    const holds = new Set(attacks.map((p) => controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L)));
+    const floors = new Set(attacks.map((p) => controlDefenseHold(p, MIL, [], KIT, L, 1)));
+    const holds = new Set(
+      attacks.map((p) => controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L, 1)),
+    );
     expect(floors.size).toBe(1);
     expect(holds.size).toBeGreaterThan(1);
   });
@@ -62,8 +64,16 @@ describe('🎯 la tenue face à l’armée en approche', () => {
   it('une armée amputée par les sorties est mieux repoussée', () => {
     let better = false;
     for (const p of attacks.slice(0, 8)) {
-      const full = controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L);
-      const cut = controlAttackHold({ seed: 42 }, poi(p.control!.attackAt!, 0.8), MIL, [], KIT, L);
+      const full = controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L, 1);
+      const cut = controlAttackHold(
+        { seed: 42 },
+        poi(p.control!.attackAt!, 0.8),
+        MIL,
+        [],
+        KIT,
+        L,
+        1,
+      );
       expect(cut).toBeGreaterThanOrEqual(full);
       if (cut > full) better = true;
     }
@@ -75,19 +85,19 @@ describe('🎯 la tenue face à l’armée en approche', () => {
     // quel que soit l'assaillant réel.
     const weak = attacks.find((p) => attackerLevel({ seed: 42 }, p, L) < L - 5);
     expect(weak, 'aucune attaque sous le rang du joueur').toBeDefined();
-    const floor = controlDefenseHold(weak!, MIL, [], KIT, L);
-    expect(controlAttackHold({ seed: 42 }, weak!, MIL, [], KIT, L)).toBeGreaterThan(floor);
+    const floor = controlDefenseHold(weak!, MIL, [], KIT, L, 1);
+    expect(controlAttackHold({ seed: 42 }, weak!, MIL, [], KIT, L, 1)).toBeGreaterThan(floor);
   });
 
   it('les assaillants se battent à LEUR niveau, tiré pour cette attaque', () => {
     for (const p of attacks)
-      expect(retakeBattle({ seed: 42 }, p, [], L).foe.level).toBe(
+      expect(retakeBattle({ seed: 42 }, p, [], L, 1).foe.level).toBe(
         attackerLevel({ seed: 42 }, p, L),
       );
     expect(new Set(attacks.map((p) => attackerLevel({ seed: 42 }, p, L))).size).toBeGreaterThan(1);
   });
 
   it('sans défenseur, rien n’est repoussé', () => {
-    expect(controlAttackHold({ seed: 42 }, attacks[0]!, [], [], KIT, L)).toBe(0);
+    expect(controlAttackHold({ seed: 42 }, attacks[0]!, [], [], KIT, L, 1)).toBe(0);
   });
 });
