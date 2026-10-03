@@ -550,6 +550,36 @@
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
+            <!-- ⛵ LA FORTERESSE EST LE PORT (signalé : « elle me permet d'envoyer des champions
+               mais je ne sais pas où ») : on dit à quoi sert sa garnison, et on traverse d'ici.
+               Mêmes îles et mêmes refus que le panneau de l'archipel (`crossInfo`). -->
+            <div v-if="liveControl.kind === 'fortress'" class="port-box">
+              <p class="port-txt">
+                ⛵ <b>Le port de l'île.</b> Au départ, sa garnison, ton héros et tous tes champions
+                libres embarquent — ceux postés sur un autre lieu restent sur l'île.
+              </p>
+              <p v-if="sailing" class="port-txt">
+                En mer vers l'île {{ sailing.to }} : la traversée se suit dans le panneau de
+                l'archipel, en haut de la carte.
+              </p>
+              <template v-else>
+                <q-btn
+                  v-for="t in portTargets"
+                  :key="t.id"
+                  no-caps
+                  unelevated
+                  class="port-btn"
+                  :color="t.block ? 'grey-8' : 'primary'"
+                  :text-color="t.block ? undefined : 'dark'"
+                  :disable="!!t.block || archBusy"
+                  :label="`⛵ Traverser vers l'île ${t.id} · ${t.name}`"
+                  @click="crossTo(t.id)"
+                />
+                <p v-for="t in portBlocked" :key="'b' + t.id" class="port-why">
+                  Île {{ t.id }} : {{ t.block }}
+                </p>
+              </template>
+            </div>
             <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
             <p class="ctl-line">
@@ -1577,6 +1607,21 @@ const crossInfo = computed(() => {
     militia,
   };
 });
+/** ⛵ La traversée en cours (réservée ou en mer), s'il y en a une. */
+const sailing = computed(() => char.row?.expedition_map?.crossing ?? null);
+/** ⛵ Les îles où l'on peut traverser depuis le port (toutes les ouvertes, sauf celle-ci),
+ *  avec la raison du refus s'il y en a une (`crossInfo`, la règle du store). */
+const portTargets = computed(() => {
+  const here = char.row?.expedition_map?.archipel?.island;
+  return crossInfo.value.open
+    .filter((id) => id !== here)
+    .map((id) => ({
+      id,
+      name: ISLANDS.find((i) => i.id === id)?.name ?? '',
+      block: crossInfo.value.blocks[id] ?? null,
+    }));
+});
+const portBlocked = computed(() => portTargets.value.filter((t) => t.block));
 async function crossTo(to: number) {
   const uid = auth.user?.id;
   if (!uid || archBusy.value) return;
@@ -5082,6 +5127,31 @@ onUnmounted(() => {
 }
 .ctl-last-t {
   font-weight: 700;
+}
+.port-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.port-txt {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.port-btn {
+  min-height: 44px;
+  width: 100%;
+  font-weight: 700;
+}
+.port-why {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
 }
 .yield-card {
   margin: 0 0 12px;

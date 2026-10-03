@@ -2724,6 +2724,15 @@ export function advanceWorld(
     ...(recentDepartures(map, now).length ? { departures: recentDepartures(map, now) } : {}),
     // 🏝️ Le mode archipel survit au tick (clé absente hors du mode).
     ...(map.archipel ? { archipel: map.archipel } : {}),
+    // ⛵ Ce que la carte PORTE sans le gérer (traversée, îles rangées, citadelles mises de
+    // côté, retour du héros, réserve de milice) : oublié ici, il disparaissait au tick
+    // suivant — une traversée réservée s'est ainsi évaporée sans débarquement (2026-10-03).
+    // Mêmes règles que plus haut : clé absente quand il n'y a rien.
+    ...(map.crossing ? { crossing: map.crossing } : {}),
+    ...(map.islands ? { islands: map.islands } : {}),
+    ...(map.citadelStash ? { citadelStash: map.citadelStash } : {}),
+    ...(map.heroReturnAt !== undefined ? { heroReturnAt: map.heroReturnAt } : {}),
+    ...(map.militia ? { militia: map.militia } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
     // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des
     // POI dessinés en pleine mer, et ils survivraient jusqu'à 48 h. On les périme donc
