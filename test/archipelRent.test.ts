@@ -53,9 +53,12 @@ function rentPerDay() {
 
 describe('🏝️ la rente des cinq îles pacifiées (niveau 100)', () => {
   const r = rentPerDay();
+  // ⚠️ 2026-10-03 : plus de doublon de lieu fixe d'une île à l'autre (une seule mine, sur
+  // l'île 1) — la rente d'or tombe à ~+14 %. Le plancher revient à la borne DÉCIDÉE à l'étape
+  // 0 (+7 %) au lieu de la mesure d'avant (+28 %, d'où l'ancien plancher à 15 %).
   it('l’or : dans la fourchette de l’étape 0 (+7 à +41 % du revenu complet)', () => {
     const part = r.gold / fullGoldPerDay(100);
-    expect(part).toBeGreaterThan(0.15);
+    expect(part).toBeGreaterThan(0.07);
     expect(part).toBeLessThan(0.41);
   });
   it('le mana, les pierres et les clés restent un complément', () => {

@@ -141,6 +141,18 @@ const WEIGHT_TOTAL = SUPPLY_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
 /** Le consommable désigné par un tirage uniforme `r` ∈ [0, 1) — UN seul tirage, comme
  *  avant : aucun autre tirage de la résolution n'est décalé. SOURCE UNIQUE de tous les
  *  butins de consommable (voyage, camp, point fixe, récolte). */
+/** 🧪 Le BOOST désigné par un tirage uniforme `r` ∈ [0, 1), aux mêmes poids que dans le butin
+ *  (un boost de 5 min est dix fois plus fréquent qu'un boost d'1 h). La distillerie. */
+export function pickBoost(r: number): BoostId {
+  const total = BOOST_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
+  let x = r * total;
+  for (const id of BOOST_IDS) {
+    x -= SUPPLY_WEIGHT[id];
+    if (x < 0) return id;
+  }
+  return BOOST_IDS[BOOST_IDS.length - 1]!;
+}
+
 export function pickSupply(r: number): SupplyId {
   let x = r * WEIGHT_TOTAL;
   for (const id of SUPPLY_IDS) {

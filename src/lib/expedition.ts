@@ -98,6 +98,8 @@ export type ControlKind =
   /** 🏝️🗿 L'AUTEL DES RUNES (île 5) : des sceaux de champion. */
   | 'altar'
   | 'mana'
+  /** 🏝️🧪 La DISTILLERIE (île 5) : des boosts de vitesse d'expédition. */
+  | 'distillery'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
   /** 🏝️ ARCHIPEL (étape 2) : un OBJECTIF SECONDAIRE de l'île (camp de brigands, nid…) et la
@@ -288,6 +290,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   circle: 'Cercle d’invocation',
   altar: 'Autel des runes',
   mana: 'Source de mana',
+  distillery: 'Distillerie',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
   fortress: 'Forteresse portuaire',
@@ -304,6 +307,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   circle: '🌀',
   altar: '🗿',
   mana: '⛲',
+  distillery: '🧪',
   citadel: '🏯',
   objective: '⛺',
   fortress: '🏰',

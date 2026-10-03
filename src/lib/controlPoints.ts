@@ -44,7 +44,7 @@ import { bossSummonCost } from '../data/bosses';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
-import { pickSupply, type SupplyStock } from './supplies';
+import { pickBoost, pickSupply, type SupplyStock } from './supplies';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
   archipelFloor,
@@ -154,6 +154,10 @@ export const CONTROL = {
    *  `gardenHoursPerItem` heures (2 par jour) ; plus de monde, plus vite (`garrisonShare`,
    *  jusqu'à ×2,6 à cinq). */
   gardenHoursPerItem: 12,
+  /** 🧪 Distillerie (île 5, 2026-10-03) : comme le jardin, mais elle ne distille que des
+   *  BOOSTS de vitesse (`pickBoost`, leurs poids de butin) — un toutes les 12 h pour un
+   *  distillateur, plus vite à plusieurs (`garrisonShare`). */
+  distilleryHoursPerItem: 12,
   /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
    *  recopie une RUNE de compétence. Depuis le 2026-09-28 (demandé : « comme les autres lieux
    *  fixes »), il garde jusqu'à 5 copistes (3 avant le 2026-09-28) et produit selon l'effectif (`garrisonShare`) : une
@@ -376,6 +380,7 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
   garden: PRODUCER_SEATS,
+  distillery: PRODUCER_SEATS,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
@@ -409,6 +414,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   circle: 2.5,
   // 🗿 Île 5 : la place du jardin, qui n'y est pas.
   altar: 2,
+  // 🧪 Île 5 : la place de la tour de guet (camp en 1, autel en 2).
+  distillery: 3,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -425,6 +432,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   mine: 'or 🪙 en continu',
   training: 'XP pour la garnison 🎓 et son équipement ⚒️',
   garden: 'consommables 🎒',
+  distillery: 'boosts de vitesse ⚡',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
@@ -1060,14 +1068,14 @@ function spotAt(
   return { x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
 }
 
-/** 🏰 TOUS les types de points qui produisent (carte ordinaire et îles). */
+/** 🏰 TOUS les types de points qui se TIENNENT (carte ordinaire et îles) : ceux qu'on n'abat
+ *  pas. ⚠️ DÉRIVÉ de `CONTROL_SEATS` (exhaustive par construction) : une liste écrite à la main
+ *  avait oublié la distillerie, qu'aucune invasion ne frappait. */
 export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
   ...CONTROL.kinds,
-  'archives',
-  'ossuary',
-  'arsenal',
-  'circle',
-  'altar',
+  ...(Object.keys(CONTROL_SEATS) as ControlKind[]).filter(
+    (k) => !RAZE_KINDS.has(k) && !CONTROL.kinds.includes(k),
+  ),
 ];
 
 /**
@@ -1090,7 +1098,7 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   // fortin, distillerie) ne sont pas écrits — personne n'a encore quitté l'île 1.
   3: ['mine', 'training', 'mana', 'ossuary'],
   4: ['mine', 'training', 'mana', 'arsenal'],
-  5: ['mine', 'training', 'mana', 'altar'],
+  5: ['training', 'altar', 'distillery'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
@@ -1682,6 +1690,8 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
       return controlGoldPerHour(p, n, playerLevel);
     case 'training':
       return n > 0 ? trainingXpPerHour(playerLevel) : 0;
+    case 'distillery':
+      return shareOf(n) / shareOf(1) / CONTROL.distilleryHoursPerItem;
     case 'garden':
       // Un jardinier : un consommable toutes les 12 h, comme avant ; plus de monde, plus vite.
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
@@ -1979,10 +1989,11 @@ export function collectControl(
   const whole = Math.floor(units + 1e-9);
   if (whole <= 0) return none;
   const supplies: SupplyStock = {};
-  if (c.kind === 'garden') {
+  if (c.kind === 'garden' || c.kind === 'distillery') {
     const rng = mulberry32((seedOf(`${id}:${c.collectedAt}`) ^ 0x6a09e667) >>> 0 || 1);
+    const pick = c.kind === 'distillery' ? pickBoost : pickSupply;
     for (let i = 0; i < whole; i++) {
-      const s = pickSupply(rng());
+      const s = pick(rng());
       supplies[s] = (supplies[s] ?? 0) + 1;
     }
   }
@@ -2053,6 +2064,7 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   const units = stockUnits(p, now, playerLevel);
   const rate = perH;
   switch (c.kind) {
+    case 'distillery':
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
@@ -2060,7 +2072,8 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       // au débit de la garnison actuelle — rien sans jardinier.
       const left = leftFor(1 - next, rate);
       const pct = `${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`;
-      return { text: whole > 0 ? `🎒 ${whole} · ${pct}` : `🎒 ${pct}`, pct: next };
+      const e = c.kind === 'distillery' ? '⚡' : '🎒';
+      return { text: whole > 0 ? `${e} ${whole} · ${pct}` : `${e} ${pct}`, pct: next };
     }
     case 'scriptorium': {
       const r = units >= 1 - 1e-9 ? 1 : units;
@@ -2119,6 +2132,7 @@ const WORKER: Record<ControlKind, [string, string]> = {
   mine: ['mineur', 'mineurs'],
   training: ['champion', 'champions'],
   garden: ['jardinier', 'jardiniers'],
+  distillery: ['distillateur', 'distillateurs'],
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
@@ -2194,18 +2208,22 @@ export function controlYieldCard(
         full: false,
       };
     }
+    case 'distillery':
     case 'garden': {
+      const boost = c.kind === 'distillery';
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
       const left = leftFor(1 - next, rate);
+      // 🧪 Même rythme que le jardin (12 h pour un, `garrisonShare` à plusieurs).
       const every = (gardenHoursFor(n) ?? 0) / tierMult || null;
+      const thing = boost ? 'boost' : 'consommable';
       return {
-        emoji: '🌿',
-        value: whole > 0 ? `${whole} 🎒` : `${Math.round(next * 100)} %`,
+        emoji: boost ? '🧪' : '🌿',
+        value: whole > 0 ? `${whole} ${boost ? '⚡' : '🎒'}` : `${Math.round(next * 100)} %`,
         what:
           whole > 0
-            ? `consommable${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}`
-            : 'du prochain consommable',
+            ? `${thing}${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}`
+            : `du prochain ${thing}`,
         pct: next,
         gauge: idle ?? (left ? `Prochain dans ${left}` : null),
         rate: every ? `1 toutes les ${formatDuration(every * 3600_000)} · ${crew}` : crew,

@@ -41,9 +41,9 @@ function rift(m: ExpeditionMap): Poi {
 }
 /** Trois lieux tenus, attaques lointaines. */
 function held(m: ExpeditionMap): ExpeditionMap {
-  let out = captureControl(m, controlIdOf('mine'), ['a', 'b', 'c'], NOW, 7);
+  let out = captureControl(m, controlIdOf('distillery'), ['a', 'b', 'c'], NOW, 7);
   out = captureControl(out, controlIdOf('altar'), ['d'], NOW, 7);
-  out = captureControl(out, controlIdOf('mana'), ['e', 'f'], NOW, 7);
+  out = captureControl(out, controlIdOf('training'), ['e', 'f'], NOW, 7);
   const far = NOW + 30 * DAY;
   return {
     ...out,
@@ -114,7 +114,9 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
     };
     const m = warlordRaids(m1, NOW + 12 * H);
     expect(m.pois.find((p) => p.control?.kind === 'altar')!.control!.attackAt).toBe(soon);
-    expect(m.pois.find((p) => p.control?.kind === 'mine')!.control!.attackAt).toBe(NOW + 12 * H);
+    expect(m.pois.find((p) => p.control?.kind === 'distillery')!.control!.attackAt).toBe(
+      NOW + 12 * H,
+    );
   });
   it('la fiche le dit', () => {
     const d = islandTargetLabel(islandMap(), 'isl_obj_0')!.detail;
@@ -124,9 +126,11 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
 });
 
 describe('🗿 l’autel des runes', () => {
-  it('l’île 5 porte le socle + l’autel seulement (4 lieux fixes)', () => {
+  it('l’île 5 porte le camp, l’autel et la distillerie — sans mine ni source', () => {
     const k = kinds(islandMap());
-    for (const x of ['mine', 'training', 'mana', 'altar']) expect(k).toContain(x);
+    for (const x of ['training', 'altar', 'distillery']) expect(k).toContain(x);
+    expect(k).not.toContain('mine');
+    expect(k).not.toContain('mana');
     expect(k).not.toContain('scriptorium');
     expect(k).not.toContain('tower');
     expect(k).not.toContain('garden');
