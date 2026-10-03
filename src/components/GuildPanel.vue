@@ -641,6 +641,27 @@
         <template v-else>✅ disponible</template>
       </div>
 
+      <!-- 📘 LES TOMES D'EXPÉRIENCE : un consommable par taille, le gain dit AVANT d'ouvrir. -->
+      <template v-if="detailTomes.length">
+        <div class="d-sec">📘 Tomes d’expérience</div>
+        <div class="d-tomes">
+          <button
+            v-for="t in detailTomes"
+            :key="t.id"
+            type="button"
+            class="d-tome"
+            :class="{ banked: t.banked }"
+            :disabled="busy"
+            :title="tomeTitle(t)"
+            @click="doTome(detailAdv, t)"
+          >
+            <span class="d-tome-xp">+{{ t.xp.toLocaleString('fr-FR') }} XP</span>
+            <span class="d-tome-gain">{{ tomeGain(t) }}</span>
+            <span class="d-tome-n">×{{ t.count }}</span>
+          </button>
+        </div>
+      </template>
+
       <!-- 🔮 LES COMPÉTENCES D'UN CHAMPION : des RUNES qu'on pose (plus rien d'écrit sur lui). -->
       <SkillRunesPanel
         v-if="detailAdv.championId"
@@ -943,6 +964,8 @@ import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
+import { tomeChoices, type TomeChoice } from '@/lib/xpTome';
+import { SUPPLIES } from '@/lib/supplies';
 import { emptyBank } from '@/lib/runeBank';
 import {
   ADV_STARS,
@@ -1747,6 +1770,37 @@ function confirmAscendGear() {
 }
 /** 🪬 La banque de runes du joueur (rappel en tête du vivier, compteur de la fiche). */
 const runeBank = computed(() => char.row?.runes ?? emptyBank());
+/** 📘 Les tomes qu'on possède, chiffrés pour le champion ouvert (`tomeChoices`, lib). */
+const detailTomes = computed<TomeChoice[]>(() =>
+  detailAdv.value
+    ? tomeChoices(char.row?.supplies ?? {}, detailAdv.value, pantheonLevel.value)
+    : [],
+);
+function tomeGain(t: TomeChoice): string {
+  if (t.stars > 0) return `+${t.stars} ★`;
+  return t.banked ? 'gardé pour plus tard' : 'vers l’étoile suivante';
+}
+function tomeTitle(t: TomeChoice): string {
+  const base = SUPPLIES[t.id].what;
+  return t.banked ? `${base} — il bute sur son plafond : l’XP est gardée pour après` : base;
+}
+function doTome(a: Adventurer, t: TomeChoice) {
+  const go = () =>
+    void pair(async (uid) => {
+      const err = await char.openXpTome(uid, a.id, t.id);
+      if (err) throw new Error(err);
+      detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
+    });
+  // ⚠️ Un tome qui ne fait pas monter tout de suite se DIT avant d'être consommé.
+  if (!t.banked) return go();
+  $q.dialog({
+    title: `📘 +${t.xp.toLocaleString('fr-FR')} XP pour ${a.name} ?`,
+    message:
+      'Il bute sur son plafond (Panthéon ou ascension) : l’XP sera gardée et versée quand le plafond se lèvera. Son équipement, lui, apprend tout de suite.',
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Ouvrir', color: 'primary', textColor: 'dark' },
+  }).onOk(go);
+}
 function doAscend(a: Adventurer) {
   void pair(async (uid) => {
     const err = await char.ascendChampion(uid, a.id);
@@ -2118,6 +2172,49 @@ function leftOf(at: number): string {
   width: 100%;
   min-height: 44px;
   margin-top: 8px;
+}
+.d-tomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+.d-tome {
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  position: relative;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.d-tome.banked {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+}
+.d-tome:disabled {
+  opacity: 0.5;
+}
+.d-tome-xp {
+  font-size: 13px;
+  font-weight: 700;
+}
+.d-tome-gain {
+  font-size: 11px;
+  color: var(--dim);
+}
+.d-tome-n {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  font-size: 11px;
+  color: var(--dim);
 }
 .d-state {
   font-size: 12px;
