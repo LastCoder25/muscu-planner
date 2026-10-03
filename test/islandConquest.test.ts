@@ -155,7 +155,7 @@ describe('🏝️ conquête — la carte', () => {
     );
     // …puis s'attaque, héros seul compris.
     let held = m;
-    for (const k of ['mine', 'training'] as const)
+    for (const k of ['mine', 'garden'] as const)
       held = captureControl(held, controlIdOf(k), ['a'], NOW, 7);
     held = ensureIslandConquest(held, NOW, LV);
     expect(partySendBlocker(poi(held, objectiveIdOf(0))!, 0, true, 20, 0.9, NOW)).toBeNull();

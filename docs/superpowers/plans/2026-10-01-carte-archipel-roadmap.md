@@ -88,14 +88,14 @@ produit au **niveau du héros** ; dans l'archipel il produira au **rang de son �
 | 🔮 Sanctuaire d'invocation | Pierres d'invocation | 1 tentative de boss / 2 jours | +18 % |
 | 🪬 Autel des runes | Runes multicolores à partir du bleu | 1 / 2 jours | modéré |
 
-**Répartition** (socle mine + camp + source de mana sur chaque île ; 2 lieux sur le chemin
-servent d'avant-postes) :
+**Répartition** (à jour du 2026-10-03 ; socle mine + source de mana partout, camp d'entraînement
+à partir de l'île 2 ; aucune tour de guet sur les îles) :
 
-- Île 1 : mine, camp, source de mana, jardin, tour de guet, scriptorium (la carte actuelle).
-- Île 2 : socle + tour de guet + **archives**.
-- Île 3 : socle + jardin + **ossuaire**.
-- Île 4 : socle + **arsenal** + **sanctuaire d'invocation**.
-- Île 5 : socle + scriptorium + **autel des runes**.
+- Île 1 : mine, source de mana, jardin, scriptorium.
+- Île 2 : socle + **camp d'entraînement** + **archives**.
+- Île 3 : socle + camp + jardin + **ossuaire**.
+- Île 4 : socle + camp + **arsenal** + **cercle d'invocation**.
+- Île 5 : socle + camp + scriptorium + **autel des runes**.
 
 ## Étape 0 — mesures (2026-10-01)
 

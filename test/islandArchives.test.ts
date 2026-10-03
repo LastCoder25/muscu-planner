@@ -23,14 +23,16 @@ function islandMap(id: number, L: number): ExpeditionMap {
 const kinds = (m: ExpeditionMap) => m.pois.flatMap((p) => (p.control ? [p.control.kind] : []));
 
 describe('📖 les archives de l’île 2', () => {
-  it('l’île 2 porte socle + archives ; l’île 1 la liste d’origine sans tour de guet', () => {
+  it('l’île 2 porte socle + archives (le camp d’entraînement arrive ici) ; l’île 1 sans tour ni camp', () => {
     const two = kinds(islandMap(2, 40));
     for (const k of ['mine', 'training', 'mana', 'archives']) expect(two).toContain(k);
     expect(two).not.toContain('garden');
     expect(two).not.toContain('scriptorium');
     expect(two).not.toContain('tower');
     const one = kinds(islandMap(1, 20));
-    for (const k of CONTROL.kinds.filter((x) => x !== 'tower')) expect(one).toContain(k);
+    for (const k of CONTROL.kinds.filter((x) => x !== 'tower' && x !== 'training'))
+      expect(one).toContain(k);
+    expect(one).not.toContain('training');
     expect(one).not.toContain('tower');
     expect(one).not.toContain('archives');
     expect(controlKindsOf({})).toEqual(CONTROL.kinds);

@@ -1077,7 +1077,9 @@ export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
  * de guet, les îles sont plus petites ») — la Tour de guet de la BASE, elle, reste.
  */
 const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
-  1: ['mine', 'training', 'garden', 'scriptorium', 'mana'],
+  // 🎯 Le camp d'entraînement n'apparaît qu'à partir de l'île 2 (décision de l'utilisateur,
+  // 2026-10-03 : « on va déplacer le camp d'entraînement en île 2 »).
+  1: ['mine', 'garden', 'scriptorium', 'mana'],
   2: ['mine', 'training', 'mana', 'archives'],
   3: ['mine', 'training', 'mana', 'garden', 'ossuary'],
   4: ['mine', 'training', 'mana', 'arsenal', 'circle'],
