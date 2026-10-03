@@ -455,7 +455,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   // 🐞 Signalé : « comment on voit que le héros est en traversée ? » — la ligne disait « dispo ».
   it('AvailabilityLine : un héros en traversée n’est pas « dispo »', async () => {
     const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
-    const crossing = { from: 1, to: 2, bookedAt: 0, departAt: 3_600_000, arriveAt: 10_800_000, ids: [] };
+    const crossing = {
+      from: 1,
+      to: 2,
+      bookedAt: 0,
+      departAt: 3_600_000,
+      arriveAt: 10_800_000,
+      ids: [],
+    };
     const map = { seed: 1, spawnCount: 0, nextSpawnAt: 0, pois: [], crossing };
     let out = '';
     expect(
@@ -922,6 +929,48 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     let vide = '';
     await mountIt(SupplyPicker, { rows: [] }, undefined, undefined, '/', (h) => (vide = h));
     expect(vide).toContain('aucun en stock');
+  }, 30_000);
+
+  // ⛵ Demandé : la traversée du héros apparaît dans la rangée des voyages.
+  it('⛵ TripsPanel : une traversée montre les îles de départ et d’arrivée', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let out = '';
+    const trip = {
+      key: 'sea',
+      kind: 'hero',
+      who: '⛵',
+      cat: 'trips',
+      pending: true,
+      sea: { from: 1, to: 2 },
+      poi: MAP_POIS[0],
+      from: MAP_POIS[0],
+      time: '⏳ 1 h 02',
+      pct: 0,
+      back: false,
+      title: 'Ton héros vers l’île 2',
+      withHero: true,
+      members: ['a1'],
+      haul: [],
+      legs: {
+        go: null,
+        back: '⚓ 00:00',
+        detail: 'Départ à 22:00, arrivée à 00:00 (2 h de mer)',
+      },
+    };
+    expect(
+      await mountIt(
+        TripsPanel,
+        { trips: [trip], focus: 'sea', heroProfile: 'polyvalent' },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toMatch(/title="Île 1">🏝️<sub[^>]*>1</);
+    expect(out).toMatch(/title="Île 2">\s*🏝️<sub[^>]*>2</);
+    expect(out).toContain('⚓ 00:00');
+    expect(out).toMatch(/Partira vers\s+l(&#39;|')île 2/);
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {

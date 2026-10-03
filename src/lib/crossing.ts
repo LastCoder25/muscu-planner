@@ -178,12 +178,7 @@ export function openIslands(map: Pick<ExpeditionMap, 'archipel' | 'islands'>): n
   return [...open].sort((a, b) => a - b);
 }
 
-export type CrossingBlock =
-  | 'noArchipel'
-  | 'same'
-  | 'locked'
-  | 'atSea'
-  | 'heroBusy';
+export type CrossingBlock = 'noArchipel' | 'same' | 'locked' | 'atSea' | 'heroBusy';
 
 export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
   noArchipel: 'Le mode archipel est désactivé.',
@@ -494,4 +489,45 @@ export function landAdventurers(advs: Adventurer[], c: Crossing): Adventurer[] {
     }
     return a.elsewhere === undefined ? { ...a, elsewhere: c.from } : a;
   });
+}
+
+/** ⛵ Un voyage en mer tel que la rangée des voyages le montre. */
+export interface SeaTrip {
+  key: string;
+  crossing: Crossing;
+  /** Le héros est à bord (la traversée) ; sinon une navigation de champions seuls. */
+  hero: boolean;
+  /** Pas encore parti : la tuile décompte le DÉPART. */
+  waiting: boolean;
+  /** Le départ a glissé après l'heure pile qui suivait la réservation : des troupes rentrent. */
+  delayed: boolean;
+  /** Avancement de la mer seule (0..1). */
+  pct: number;
+}
+
+/**
+ * ⛵ Les voyages en mer (la traversée du héros, puis les navigations de champions) encore en
+ * cours, pour la rangée des voyages (demandé le 2026-10-03 : la traversée n'y apparaissait pas).
+ * ⚠️ Le temps de MER vaut toujours `CROSSING.travelMs` ; un départ tardif (`delayed`) est
+ * l'attente du retour des troupes (`postponeCrossing`), pas une mer plus longue.
+ */
+export function seaTrips(
+  map: Pick<ExpeditionMap, 'crossing' | 'sailings'> | null | undefined,
+  now: number,
+): SeaTrip[] {
+  const one = (key: string, c: Crossing, hero: boolean): SeaTrip => ({
+    key,
+    crossing: c,
+    hero,
+    waiting: now < c.departAt,
+    delayed: c.departAt > nextCrossingDeparture(c.bookedAt),
+    pct: Math.min(1, Math.max(0, (now - c.departAt) / Math.max(1, c.arriveAt - c.departAt))),
+  });
+  const out: SeaTrip[] = [];
+  const c = map?.crossing;
+  if (c && c.arriveAt > now) out.push(one('sea', c, true));
+  (map?.sailings ?? []).forEach((s, i) => {
+    if (s.arriveAt > now) out.push(one(`sail${i}_${s.bookedAt}`, s, false));
+  });
+  return out;
 }

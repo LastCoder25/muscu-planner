@@ -1277,6 +1277,7 @@
 
 <script setup lang="ts">
 import {
+  FORTRESS_ID,
   heroPostOf,
   islandConquest,
   islandTargetLabel,
@@ -1389,6 +1390,7 @@ import {
   islandChampions,
   nextCrossingDeparture,
   openIslands,
+  seaTrips,
   visitedIslands,
 } from '@/lib/crossing';
 import CrossingSheet from '@/components/CrossingSheet.vue';
@@ -3248,6 +3250,48 @@ const trips = computed(() => {
       title: m.recall
         ? `Retour programmé de ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`
         : `Renfort programmé — ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`,
+    });
+  }
+  // ⛵ EN MER (demandé : « comment on voit que le héros est en traversée ? ») : la traversée
+  // du héros et les navigations de champions, ancrées au port (la forteresse) ou à la ville.
+  const port =
+    pois.value.find((p) => p.id === FORTRESS_ID) ??
+    ({ id: 'port', type: 'control', x: TOWN.x, y: TOWN.y, level: 0 } as Poi);
+  const clock = (ms: number) =>
+    new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  for (const s of seaTrips(char.row?.expedition_map, now.value)) {
+    const c = s.crossing;
+    const isle = ISLANDS.find((i) => i.id === c.to)?.name ?? `île ${c.to}`;
+    ends.set(s.key, c.arriveAt);
+    out.push({
+      key: s.key,
+      kind: s.hero ? 'hero' : 'van',
+      who: '⛵',
+      cat: 'trips',
+      pending: s.waiting,
+      sea: { from: c.from, to: c.to },
+      poi: port,
+      time: s.waiting
+        ? `⏳ ${formatDuration(c.departAt - now.value)}`
+        : formatDuration(c.arriveAt - now.value),
+      pct: s.pct * 100,
+      back: false,
+      withHero: s.hero,
+      from: port,
+      members: c.ids,
+      haul: [],
+      legs: {
+        go: null,
+        back: `⚓ ${clock(c.arriveAt)}`,
+        detail:
+          `Départ à ${clock(c.departAt)}, arrivée à ${clock(c.arriveAt)} (2 h de mer)` +
+          (s.delayed ? ' — le départ attend le retour de tes troupes' : ''),
+      },
+      title:
+        `${s.hero ? 'Ton héros' : 'Champions'} vers ${isle} · ` +
+        (s.waiting ? `départ à ${clock(c.departAt)}` : 'en mer') +
+        ` · arrivée à ${clock(c.arriveAt)}` +
+        (s.delayed ? ' · le départ attend le retour de tes troupes' : ''),
     });
   }
   // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.
