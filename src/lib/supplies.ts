@@ -15,7 +15,8 @@
  * qu'ils remplacent (🧭 trajet, 👁️ embuscades, 🐫 cargaison). Un convoi qui a déjà ses
  * éclaireurs ne gagne presque rien à en ajouter : l'objet comble un trou, il ne dépasse pas.
  *
- * ⚠️ JAMAIS D'ÉNERGIE, D'XP NI DE RARETÉ DE BUTIN : ce serait acheter ce que le sport paie.
+ * ⚠️ JAMAIS D'ÉNERGIE, D'XP DU HÉROS NI DE RARETÉ DE BUTIN : ce serait acheter ce que le sport
+ * paie. (Les tomes 📘 donnent de l'XP aux CHAMPIONS, que les missions paient déjà.)
  */
 import { mulberry32, type Combatant } from './combat';
 import type { Poi, PoiType } from './expedition';
@@ -35,7 +36,12 @@ export type SupplyId =
   | 'boost10'
   | 'boost15'
   | 'boost30'
-  | 'boost60';
+  | 'boost60'
+  | 'tome100'
+  | 'tome250'
+  | 'tome600'
+  | 'tome1500'
+  | 'tome4000';
 
 export interface SupplyDef {
   emoji: string;
@@ -63,6 +69,11 @@ export const SUPPLY_IDS: readonly SupplyId[] = [
   'boost15',
   'boost30',
   'boost60',
+  'tome100',
+  'tome250',
+  'tome600',
+  'tome1500',
+  'tome4000',
 ];
 
 /** ⚡ LES BOOSTS DE VITESSE (2026-09-30, demandé : « des boosts de vitesse d'expédition en
@@ -79,6 +90,26 @@ export const BOOST_MIN = {
 export type BoostId = keyof typeof BOOST_MIN;
 export const BOOST_IDS = Object.keys(BOOST_MIN) as BoostId[];
 export const isBoostId = (id: string): id is BoostId => id in BOOST_MIN;
+
+/** 📘 LES TOMES D'EXPÉRIENCE (2026-10-03, demandé : « des consommables qui donnent de l'XP à
+ *  un champion et son équipement, plusieurs quantités pour aider les champions de tout
+ *  rang »). Ils ne partent PAS avec un voyage : on les ouvre sur un champion, depuis sa fiche
+ *  (`xpTome.ts`). Leur XP, en points d'XP de champion.
+ *
+ *  ⚠️ CALÉS SUR LA COURBE `advXpToNext` (40 + 22 × niveau) : le plus petit vaut ~1,5 niveau
+ *  d'un Bronze, le plus gros ~2 niveaux au niveau 90 — chaque rang a SON tome utile, comme
+ *  chaque étape de voyage a son boost. ⚠️ Ce n'est PAS de l'XP du héros (celle-là, seul le
+ *  sport la paie) : les champions apprennent déjà de leurs missions, le tome en avance une. */
+export const TOME_XP = {
+  tome100: 100,
+  tome250: 250,
+  tome600: 600,
+  tome1500: 1500,
+  tome4000: 4000,
+} as const satisfies Partial<Record<SupplyId, number>>;
+export type TomeId = keyof typeof TOME_XP;
+export const TOME_IDS = Object.keys(TOME_XP) as TomeId[];
+export const isTomeId = (id: string): id is TomeId => id in TOME_XP;
 
 /** Le POIDS de chaque consommable dans un tirage de butin. Les consommables d'avant valent 1
  *  (ils restent équiprobables entre eux) ; plus un boost est long, plus il est rare. */
@@ -98,6 +129,12 @@ export const SUPPLY_WEIGHT: Record<SupplyId, number> = {
   boost15: 0.5,
   boost30: 0.25,
   boost60: 0.1,
+  // 📘 Même échelle de rareté que les boosts : plus un tome est gros, plus il est rare.
+  tome100: 1,
+  tome250: 0.7,
+  tome600: 0.5,
+  tome1500: 0.25,
+  tome4000: 0.1,
 };
 const WEIGHT_TOTAL = SUPPLY_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
 
@@ -212,7 +249,22 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
   boost15: boostDef(15),
   boost30: boostDef(30),
   boost60: boostDef(60),
+  tome100: tomeDef(100),
+  tome250: tomeDef(250),
+  tome600: tomeDef(600),
+  tome1500: tomeDef(1500),
+  tome4000: tomeDef(4000),
 };
+
+function tomeDef(xp: number): SupplyDef {
+  const n = xp.toLocaleString('fr-FR');
+  return {
+    emoji: '📘',
+    name: `Tome d’expérience ${n}`,
+    what: `Sur un champion : +${n} XP, à lui et à l’équipement qu’il porte`,
+    voyage: false,
+  };
+}
 
 function boostDef(min: number): SupplyDef {
   const label = min >= 60 ? `${min / 60} h` : `${min} min`;
@@ -374,6 +426,12 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
     case 'boost30':
     case 'boost60':
       return 's’utilise sur un voyage en cours';
+    case 'tome100':
+    case 'tome250':
+    case 'tome600':
+    case 'tome1500':
+    case 'tome4000':
+      return 's’ouvre sur un champion, depuis sa fiche';
   }
 }
 
