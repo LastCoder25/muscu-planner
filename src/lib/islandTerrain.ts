@@ -86,8 +86,9 @@ export interface IslandTerrainData {
   pools: { cx: number; cy: number; rx: number; ry: number }[];
   /** Vaguelettes en mer. */
   waves: string[];
-  /** Le port d'arrivée (au fond de la baie) et la route qui y mène depuis la base. */
-  port: CoastAnchor;
+  /** Le port d'arrivée (au fond de la baie). ⚓ Aucun sur l'île 1 (demandé) : on y part de la
+   *  base, pas d'un port. */
+  port: CoastAnchor | null;
   road: string;
   /** La forteresse portuaire (sur le cap opposé). */
   fortress: CoastAnchor;
@@ -615,7 +616,7 @@ export function islandTerrain(id: number): IslandTerrainData {
     patches,
     pools,
     waves,
-    port,
+    port: id <= 1 ? null : port,
     road,
     fortress,
   };

@@ -39,6 +39,9 @@ export const CROSSING = {
   everyMs: 3600_000,
   /** 💠 Premier débarquement : l'équivalent de 10 tirages (multiplié par `pullCost`). */
   firstLandingPulls: 10,
+  /** 🎟️ Premier débarquement : 10 tickets d'invocation (demandé par l'utilisateur, une seule
+   *  fois par île — sinon des allers-retours de 2 h deviendraient une source de tickets). */
+  firstLandingTickets: 10,
   /** 🏰 Forteresse abattue : sceaux de champion au rang max de l'île. */
   fortressSeals: 3,
   /** 🏰 Forteresse abattue : runes = base + numéro de l'île. */
@@ -55,10 +58,11 @@ export function landingChestMessage(isl: Island, at: number): ExpeditionMessage 
     title: `⚓ Débarquement sur l'île ${isl.id}`,
     level: isl.minLevel,
     win: true,
-    text: `Premier pas sur ${isl.name}. Les marins t'offrent de quoi invoquer.`,
+    text: `Premier pas sur ${isl.name}. Les marins t'offrent de quoi invoquer, et 10 tickets.`,
     gold: 0,
     energy: 0,
     mana: CROSSING.firstLandingPulls * GACHA.pullCost,
+    tickets: CROSSING.firstLandingTickets,
     key: 0,
     resolvedAt: at,
     claimAt: at,
@@ -68,7 +72,7 @@ export function landingChestMessage(isl: Island, at: number): ExpeditionMessage 
 }
 
 /** 🏰 Le coffre de la forteresse portuaire abattue : runes et sceaux de champion au rang max
- *  de l'île (jamais d'XP ni de tickets sur la carte). */
+ *  de l'île (jamais d'XP sur la carte). */
 export function fortressChestMessage(isl: Island, at: number): ExpeditionMessage {
   return {
     id: `isl_fort_${isl.id}`,

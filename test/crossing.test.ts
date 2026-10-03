@@ -173,6 +173,7 @@ describe('🎁 récompenses', () => {
   it('premier débarquement : 10 tirages en pierres de mana, dérivés du prix', () => {
     const m = landingChestMessage(islandById(2)!, T0);
     expect(m.mana).toBe(CROSSING.firstLandingPulls * GACHA.pullCost);
+    expect(m.tickets).toBe(10);
     expect(m.claimed).toBe(false);
   });
   it('forteresse abattue : un coffre une seule fois, sceaux au rang max de l’île', () => {

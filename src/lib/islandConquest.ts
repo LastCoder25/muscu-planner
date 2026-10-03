@@ -880,8 +880,18 @@ export function heroHeldOnMap(
 export function recallPostedHero(map: ExpeditionMap, now: number, legMin: number): ExpeditionMap {
   if (!heroPosted(map)) return map;
   return {
-    ...map,
+    ...unpostHero(map),
     heroReturnAt: now + Math.max(0, Math.round(legMin)) * 60_000,
+  };
+}
+
+/** 🧝 Le héros QUITTE son poste pour partir ailleurs (demandé : « posté, je ne peux plus le
+ *  bouger ») : il part directement de là, sans repasser par la base — donc aucun trajet de
+ *  retour (`heroReturnAt`), contrairement au rappel. Le lieu perd sa défense héroïque. */
+export function unpostHero(map: ExpeditionMap): ExpeditionMap {
+  if (!heroPosted(map)) return map;
+  return {
+    ...map,
     pois: map.pois.map((p) => {
       if (!heroPostPoi(p)) return p;
       const { hero: _h, heroUnit: _u, ...c } = p.control!;

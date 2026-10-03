@@ -159,6 +159,7 @@ import {
   heroPosted,
   heroPostOf,
   recallPostedHero,
+  unpostHero,
   boardFromFortress,
 } from '@/lib/islandConquest';
 import {
@@ -2473,7 +2474,8 @@ export const useCharacterStore = defineStore('character', () => {
       fromPort.has(a.id) && a.posted === FORTRESS_ID ? { ...a, posted: undefined } : a,
     );
     const ids = [...new Set([...crossingTravellers(advs, now), ...port.ids])];
-    const map = startCrossing(port.map, to, ids, now);
+    // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste.
+    const map = startCrossing(unpostHero(port.map), to, ids, now);
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.crossing!),
@@ -2498,6 +2500,8 @@ export const useCharacterStore = defineStore('character', () => {
     if (heroInAttack(cur.attacks))
       throw new Error('Ton héros est réservé pour une attaque combinée.');
     if (cur.expedition_map?.crossing) throw new Error('Ton héros est en traversée.');
+    if (cur.expedition_map?.heroReturnAt !== undefined)
+      throw new Error('Ton héros rentre de son poste : attends son retour à la base.');
     // ⚔️🕳️ Un camp ET une faille s'attaquent en GROUPE (`sendParty`) : même le héros seul y
     // passe, pour que l'issue soit le combat de faction ou l'incursion, et jamais l'ancien
     // gardien — ni, pour une faille, la MINE D’OR dans laquelle `resolveOutcome` la faisait
@@ -2535,8 +2539,9 @@ export const useCharacterStore = defineStore('character', () => {
       cur.expedition_map ??
       createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost'));
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
+    // 🧝 Posté sur un lieu tenu, il en part directement (`unpostHero`).
     const map: ExpeditionMap = recordDeparture(
-      { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) },
+      unpostHero({ ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) }),
       now,
     );
     await persist(userId, { expedition: exp, expedition_map: map });
@@ -3623,8 +3628,11 @@ export const useCharacterStore = defineStore('character', () => {
       heroInAttack(attackList.value) ||
       // ⛵ En traversée (réservée ou en mer) : le héros est sur le bateau.
       !!row.value?.expedition_map?.crossing ||
-      // 🏰 Posté à la forteresse, ou en chemin vers la base.
-      heroOnMap(row.value?.expedition_map),
+      // 🧭 Rappelé de son poste et encore en chemin vers la base.
+      // ⚠️ POSTÉ sur un lieu tenu, il n'est PAS en expédition (signalé : « considéré partout
+      // ailleurs en expédition, je ne peux plus le bouger ») : il reste jouable (donjons,
+      // équipement) et repart de son poste vers une autre cible (`unpostHero` à l'envoi).
+      row.value?.expedition_map?.heroReturnAt !== undefined,
   );
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
@@ -3823,7 +3831,9 @@ export const useCharacterStore = defineStore('character', () => {
     const map1 =
       origin && map0 ? sortieLeaves(map0, origin.id, opts.escortIds, now, opts.playerLevel) : map0;
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
-    const map = map1 ? recordDeparture(map1, now) : map1;
+    // 🧝 Le héros posté sur un lieu tenu en part directement : il quitte la garnison.
+    const map2 = map1 && hero ? unpostHero(map1) : map1;
+    const map = map2 ? recordDeparture(map2, now) : map2;
     await persist(userId, {
       expedition_map: map,
       ...(supplies.length ? { supplies: stockAfter } : {}),
@@ -4164,7 +4174,11 @@ export const useCharacterStore = defineStore('character', () => {
     // Réservés : jusqu'à leur retour prévu. Ils restent chez eux jusqu'à leur départ.
     const returnOf = new Map(plan.wings.flatMap((w) => w.members.map((id) => [id, w.returnAt])));
     await persist(userId, {
-      expedition_map: recordDeparture(targetTaken(map, poi)!, now),
+      // 🧝 Réservé pour l'attaque, le héros posté quitte son poste.
+      expedition_map: recordDeparture(
+        hero ? unpostHero(targetTaken(map, poi)!) : targetTaken(map, poi)!,
+        now,
+      ),
       attacks: [...attackList.value, attack],
       ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>

@@ -14,7 +14,6 @@ import {
   poiDifficultyLevel,
   poiTravelLevel,
   revealRadius,
-  travelHourRings,
   travelOneWayMin,
   distNormAt,
   type ExpeditionMap,
@@ -144,14 +143,6 @@ describe('🏝️ archipel — la carte', () => {
     const b = tick(a, arrive - 2 * H + 1000);
     expect(b).toEqual(a);
     for (const p of b.pois) expect(poiTravelLevel(p)).toBe(0);
-  });
-
-  it('les cercles d’heures suivent la règle de l’île : plus larges qu’avec le facteur de niveau', () => {
-    const flat = travelHourRings(60, 1, 120, true);
-    const lvl = travelHourRings(60, 1, 120, false);
-    expect(flat[0]!.r).toBeGreaterThan(lvl[0]!.r);
-    // 2 h d'aller tombent vers le bord de l'île (étape 0 : 54 unités).
-    expect(Math.abs(flat[1]!.r - ISLAND_REACH)).toBeLessThan(3);
   });
 
   it('après une semaine, les lieux restent sur la terre ferme et couvrent l’île (v1.28.0)', () => {

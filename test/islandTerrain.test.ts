@@ -98,24 +98,32 @@ describe('🏝️ le décor', () => {
 describe('🏝️ port et forteresse', () => {
   it('sont sur la côte, aux deux bouts de l’île : le port à l’ouest, la forteresse à l’opposé exact', () => {
     for (const id of IDS) {
-      const { port, fortress } = islandTerrain(id);
+      const { fortress } = islandTerrain(id);
+      // ⚓ L'île 1 n'a pas de port (demandé) : seule sa forteresse est vérifiée.
+      const port = islandTerrain(id).port;
       const c = islandCenter(id);
-      for (const a of [port, fortress]) {
+      for (const a of port ? [port, fortress] : [fortress]) {
         const r = Math.hypot(a.x - c.x, a.y - c.y);
         expect(r).toBeGreaterThan(islandRadiusAt(id, a.angle) - 12);
         expect(r).toBeLessThanOrEqual(islandRadiusAt(id, a.angle));
       }
       // ⛵ Les îles sont en ligne, d’ouest en est : on arrive côté ouest, on repart côté est.
-      expect(Math.cos(port.angle)).toBeLessThan(0);
       expect(Math.cos(fortress.angle)).toBeGreaterThan(0);
+      if (!port) continue;
+      expect(Math.cos(port.angle)).toBeLessThan(0);
       expect(Math.abs(angDiff(port.angle, fortress.angle))).toBeCloseTo(Math.PI, 6);
     }
+  });
+
+  it('l’île 1 ne dessine pas de port (demandé) : on y part de la base', () => {
+    expect(islandTerrain(1).port).toBeNull();
+    for (const id of IDS.filter((i) => i > 1)) expect(islandTerrain(id).port).not.toBeNull();
   });
 
   it('îles 2 à 5 : on débarque au port, l’île s’étend devant le village ; l’île 1 est la capitale', () => {
     expect(islandCenter(1)).toEqual({ x: 100, y: 100 });
     for (const id of IDS.filter((i) => i > 1)) {
-      const { port } = islandTerrain(id);
+      const port = islandTerrain(id).port!;
       // Le point de départ (la ville, 100,100) est le village, tout près du port.
       expect(Math.hypot(port.x - 100, port.y - 100)).toBeLessThan(6);
       expect(onIsland(id, 100, 100)).toBe(true);

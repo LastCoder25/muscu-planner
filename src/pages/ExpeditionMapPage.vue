@@ -95,26 +95,6 @@
             class="fog-rim"
             :class="{ lifting: fogPlan }"
           />
-          <!-- 🗼 LE RAYON DE DÉTECTION DE LA BASE (demandé) : là où les armées qui marchent sur
-               ta base ou sur un point fixe deviennent visibles — la distance qu'elles
-               parcourent pendant le préavis de la Tour de guet. Dessiné au rayon RÉELLEMENT vu
-               (`seenRadius`, borné par la zone révélée), la même règle que les armées. -->
-          <g v-if="detectRing" class="detect">
-            <circle :cx="TOWN.x" :cy="TOWN.y" :r="detectRing.r" class="detect-ring" />
-            <text :x="TOWN.x" :y="TOWN.y + detectRing.r + 3.4" class="detect-lab">
-              🗼 Détection · {{ detectRing.label }}
-            </text>
-          </g>
-          <!-- ⏱️ Un cercle par heure de trajet aller du héros (v0.1238). -->
-          <g class="hour-rings">
-            <template v-for="ring in hourRings" :key="ring.hours">
-              <circle :cx="TOWN.x" :cy="TOWN.y" :r="ring.r" class="hour-ring" />
-              <text :x="TOWN.x" :y="TOWN.y - ring.r - 0.8" class="hour-lab">
-                {{ ring.hours }} h
-              </text>
-            </template>
-          </g>
-
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
           <rect
             :x="V.x + 1.5"
@@ -146,7 +126,10 @@
               :x2="hero.x"
               :y2="hero.y"
               class="trail"
-              :class="hero.phase === 'return' ? 'done' : 'todo'"
+              :class="[
+                hero.phase === 'return' ? 'done' : 'todo',
+                { 'trail-focus': focusTrip === 'hero' },
+              ]"
             />
             <line
               :x1="TOWN.x"
@@ -154,7 +137,10 @@
               :x2="hero.x"
               :y2="hero.y"
               class="trail"
-              :class="hero.phase === 'return' ? 'todo' : 'done'"
+              :class="[
+                hero.phase === 'return' ? 'todo' : 'done',
+                { 'trail-focus': focusTrip === 'hero' },
+              ]"
             />
             <!-- Chevrons de direction : s'allument un à un du héros vers la cible
                (sens du déplacement), orientés dans la direction, en boucle. -->
@@ -179,7 +165,11 @@
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
-              :class="[v.at.phase === 'return' ? 'done' : 'todo', v.kind]"
+              :class="[
+                v.at.phase === 'return' ? 'done' : 'todo',
+                v.kind,
+                { 'trail-focus': v.tripKey === focusTrip },
+              ]"
             />
             <line
               :x1="v.origin?.x ?? TOWN.x"
@@ -187,7 +177,11 @@
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
-              :class="[v.at.phase === 'return' ? 'todo' : 'done', v.kind]"
+              :class="[
+                v.at.phase === 'return' ? 'todo' : 'done',
+                v.kind,
+                { 'trail-focus': v.tripKey === focusTrip },
+              ]"
             />
           </template>
 
@@ -1039,7 +1033,7 @@
                   v-if="g.id === 'base'"
                   :on="partyHeroOn"
                   :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
-                  sub="part de la base · sans XP"
+                  :sub="heroPostSub ?? 'part de la base · sans XP'"
                   :gain="partyGain.hero"
                   @toggle="partyHero = !partyHero"
                 />
@@ -1068,7 +1062,7 @@
               <HeroPickTile
                 :on="partyHeroOn"
                 :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
-                sub="sans XP"
+                :sub="heroPostSub ?? 'sans XP'"
                 :gain="partyGain.hero"
                 @toggle="partyHero = !partyHero"
               />
@@ -1275,12 +1269,10 @@ import HeroPickTile from '@/components/HeroPickTile.vue';
 import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
 import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import {
-  FIELD_ARMY,
   activeAttacks,
   armyTrajectory,
   controlAttackHold,
   fieldArmySpec,
-  seenRadius,
   type ArmyPath,
 } from '@/lib/fieldArmy';
 import { poiRank } from '@/lib/poiRank';
@@ -1324,7 +1316,6 @@ import {
   expeditionTerrain,
   mapViewOf,
   mapReach,
-  travelHourRings,
   type Poi,
   type PoiType,
   HARVEST_TYPES,
@@ -1561,10 +1552,6 @@ const islandProgress = computed(() => islandConquest(char.row?.expedition_map));
 const reveal = computed(() =>
   mapReach(char.row?.expedition_map, mapOutpostLevel(char.row?.expedition_map, char.comptoirLevel)),
 );
-/** ⏱️ Rayons des heures pleines de trajet aller du héros, dans la zone révélée. */
-const hourRings = computed(() =>
-  travelHourRings(progressionLevel.value, travelMult.value, reveal.value, !!island.value),
-);
 const islandTerr = computed(() => (island.value ? islandTerrain(island.value.id) : null));
 const archBusy = ref(false);
 /** ⛵ La traversée : îles ouvertes, visitées, raisons de refus, embarqués possibles, et les
@@ -1620,22 +1607,6 @@ async function toggleArchipel(on: boolean) {
     archBusy.value = false;
   }
 }
-/** 🗼 Le cercle de détection : rayon vu (borné par la zone révélée) et son libellé. Rien
- *  tant que la Tour ne voit pas plus loin que la ville elle-même. */
-const detectRing = computed(() => {
-  const full = char.detectRadiusOf(char.row?.base, char.row?.expedition_map);
-  const r = seenRadius(full, reveal.value);
-  if (r < 14) return null;
-  const hours = full / FIELD_ARMY.speedPerHour;
-  const lead =
-    hours >= 1
-      ? `${Math.floor(hours)} h ${String(Math.round((hours % 1) * 60)).padStart(2, '0')}`
-      : `${Math.round(hours * 60)} min`;
-  return {
-    r,
-    label: r < full - 0.5 ? `${lead} de préavis · limitée par l’Avant-poste` : `${lead} de préavis`,
-  };
-});
 const FOG_SOFT = 10; // largeur du fondu du brouillard
 const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG_SOFT)));
 
@@ -2039,6 +2010,11 @@ const freeSorted = computed(() => sortByGradeThenRank(freeStable.value));
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
 const heroHealIn = computed(() => woundRemainingMs(char.row?.base, now.value));
 /** Le héros ne peut pas partir : il est sur la route, OU à l'infirmerie. */
+/** 🧝 Posté sur un lieu tenu, le héros en part directement (il quitte la garnison). */
+const heroPostSub = computed(() => {
+  const post = heroPostOf(char.row?.expedition_map);
+  return post ? `🏰 quitte son poste : ${poiLabel(post)}` : null;
+});
 const heroUnavailable = computed(() => char.heroEngaged || heroHealIn.value > 0);
 /** Ce que ce lieu accepte MAINTENANT — la regle vit dans `caravan.ts`, pas dans un v-if.
  *  Le panneau etait entierement garde par « le heros est disponible », donc un convoi
@@ -2934,6 +2910,7 @@ const attacksOnMap = computed(() =>
 const travelersOnMap = computed(() => [
   ...attacksOnMap.value.map((w) => ({
     ...w,
+    tripKey: w.id,
     emo: w.waiting ? '⏳' : '⚔️',
     kind: 'party' as const,
     recall: undefined as RecallTarget | undefined,
@@ -2942,6 +2919,7 @@ const travelersOnMap = computed(() => [
   })),
   ...partiesOnMap.value.map((g) => ({
     ...g,
+    tripKey: 'g' + g.id,
     emo: '⚔️',
     kind: 'party' as const,
     recall: g.recallable ? { kind: 'party' as const, id: g.id } : undefined,
@@ -2960,6 +2938,7 @@ const travelersOnMap = computed(() => [
   // rentrer sur son point d'origine, `recallReinforcements`).
   ...reinforcementsOnMap.value.map((r) => ({
     ...r,
+    tripKey: r.id,
     emo: '🛡️',
     kind: 'reinf' as const,
     recall: r.recallable
@@ -2982,6 +2961,7 @@ const travelersOnMap = computed(() => [
   // sauf s'il est lui-même un demi-tour.
   ...returnsOnMap.value.map((r) => ({
     ...r,
+    tripKey: r.id,
     emo: '🏠',
     kind: 'reinf' as const,
     recall: r.turned ? undefined : { kind: 'return' as const, pointId: r.poi.id, ids: r.members },
@@ -5682,40 +5662,6 @@ onUnmounted(() => {
   stroke-width: 1;
   opacity: 0.9;
 }
-/* 🗼 Le rayon de détection : corail en tirets longs, pour ne pas se confondre avec les
-   heures de trajet (pointillés crème) ni le bord du brouillard. */
-.detect-ring {
-  fill: #ff8a65;
-  fill-opacity: 0.04;
-  stroke: #ff8a65;
-  stroke-width: 0.6;
-  stroke-dasharray: 4 2;
-  opacity: 0.75;
-  pointer-events: none;
-}
-.detect-lab {
-  fill: #ff8a65;
-  font-size: 2.8px;
-  font-weight: 700;
-  text-anchor: middle;
-  opacity: 0.85;
-  pointer-events: none;
-}
-.hour-ring {
-  fill: none;
-  stroke: #e8dcc0;
-  stroke-width: 0.45;
-  stroke-dasharray: 1 2.5;
-  opacity: 0.42;
-  pointer-events: none;
-}
-.hour-lab {
-  fill: #e8dcc0;
-  font-size: 2.6px;
-  text-anchor: middle;
-  opacity: 0.5;
-  pointer-events: none;
-}
 .fog-rim {
   fill: none;
   stroke: #e8dcc0;
@@ -5772,6 +5718,13 @@ onUnmounted(() => {
 }
 .trail.done {
   stroke: var(--line);
+}
+/* 🔴 Le trajet du voyage touché sous la carte (demandé) : en rouge, plus épais, par-dessus
+   toutes les teintes (héros, équipes, renforts) — on voit tout de suite lequel c'est. */
+.trail.trail-focus {
+  stroke: #ff4d4d !important;
+  stroke-width: 1.9 !important;
+  filter: drop-shadow(0 0 1.2px rgba(255, 77, 77, 0.8)) !important;
 }
 .trail.todo {
   stroke: #4a9eff;

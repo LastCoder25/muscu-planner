@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createMap, type ExpeditionMap, type Poi, type PostedHero } from '@/lib/expedition';
 import { captureControl, ensureControls } from '@/lib/controlPoints';
-import { heroHeldOnMap, heroPostOf, heroPosted, recallPostedHero } from '@/lib/islandConquest';
+import {
+  heroHeldOnMap,
+  heroPostOf,
+  heroPosted,
+  recallPostedHero,
+  unpostHero,
+} from '@/lib/islandConquest';
 import { heroCanStay, heroStaysAt, partySendBlocker } from '@/lib/party';
 
 /**
@@ -59,6 +65,17 @@ describe('🧝 le héros tient garnison partout', () => {
     expect(mine(r).control!.heroUnit).toBeUndefined();
     expect(heroHeldOnMap(r, NOW + 59 * 60_000)).toBe(true);
     expect(heroHeldOnMap(r, NOW + 60 * 60_000)).toBe(false);
+  });
+  it('il QUITTE son poste pour partir ailleurs : sans retour à la base, la garnison reste', () => {
+    const m0 = map();
+    const m = captureControl(m0, mine(m0).id, ['a'], NOW, 7, HERO);
+    const u = unpostHero(m);
+    expect(heroPosted(u)).toBe(false);
+    expect(u.heroReturnAt).toBeUndefined();
+    expect(heroHeldOnMap(u, NOW)).toBe(false);
+    expect(mine(u).control!.garrison).toEqual(mine(m).control!.garrison);
+    expect(mine(u).control!.heroUnit).toBeUndefined();
+    expect(unpostHero(u)).toBe(u);
   });
   it('sans héros, rien n’est posté', () => {
     const m0 = map();

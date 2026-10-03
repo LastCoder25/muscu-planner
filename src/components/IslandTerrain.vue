@@ -67,6 +67,7 @@
 
     <!-- ⚓ LE PORT D'ARRIVÉE : quai, ponton qui avance en mer, un navire amarré. -->
     <g
+      v-if="t.port"
       class="it-port"
       :transform="`translate(${t.port.x} ${t.port.y}) rotate(${deg(t.port.angle)})`"
     >
