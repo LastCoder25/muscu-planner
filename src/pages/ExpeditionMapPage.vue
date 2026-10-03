@@ -5,17 +5,6 @@
        fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
        ici aussi doublerait chaque notification. -->
   <div class="emap">
-    <!-- 🎚️🗺️ Filtres par type (état + mémorisation : `usePoiFilters`). -->
-    <MapFilterBar
-      :type-chips="typeChips"
-      :type-filter="typeFilterShown"
-      :troops="troopCount"
-      :troop-mode="troopMode"
-      @cycle-type="cycleTypeChip"
-      @cycle-troops="cycleTroops"
-      @reset="resetFilters"
-    />
-
     <!-- 🏝️ L'archipel : toute la carte depuis la bascule (étape 7 de la roadmap). -->
     <ArchipelPanel
       :island="island"
@@ -131,7 +120,7 @@
           </g>
 
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
-          <template v-if="active && hero && !troopsHidden">
+          <template v-if="active && hero">
             <line
               :x1="heroEnd.x"
               :y1="heroEnd.y"
@@ -260,7 +249,7 @@
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
 
-          <g v-if="active && hero && !troopsHidden" :class="{ recallable: heroRecallable }">
+          <g v-if="active && hero" :class="{ recallable: heroRecallable }">
             <circle
               v-if="heroRecallable"
               :cx="hero.x"
@@ -1379,7 +1368,6 @@ import {
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
-import MapFilterBar from '@/components/MapFilterBar.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
@@ -1426,8 +1414,6 @@ import {
   winClass,
   type PoiFact,
 } from '@/lib/poiFacts';
-import { usePoiFilters } from '@/composables/usePoiFilters';
-import { mapPoisFor } from '@/lib/poiTypeFilter';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
@@ -1953,24 +1939,8 @@ const selected = ref<Poi | null>(null);
  *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
-// ── 🎚️🗺️ Filtres par type (mémorisés par appareil) ──
-const {
-  typeFilterShown,
-  typeChips,
-  cycleTypeChip,
-  resetFilters,
-  shownPois,
-  troopMode,
-  troopsHidden,
-  cycleTroops,
-} = usePoiFilters(pois);
-/** 🚶 Les lieux où se rendent tes voyages en cours (renforts vers un point tenu, retours…) :
- *  ce qui reste dessiné quand les déplacements sont « seuls ». */
-const troopPoiIds = computed(() => new Set(travelersOnMap.value.map((v) => v.poi.id)));
-/** Les lieux que la carte dessine (filtres ET mode des déplacements, `mapPoisFor`). */
-const mapPois = computed(() =>
-  mapPoisFor(troopMode.value, shownPois.value, pois.value, troopPoiIds.value),
-);
+/** Les lieux que la carte dessine : tous (la barre de filtres est retirée, v1.40.2). */
+const mapPois = pois;
 /** ⚔️ Les armées en campagne se dessinent au premier plan, au-dessus de la ville et des
  *  lieux (cf. le second `MapPoiLayer`) ; les autres lieux restent dessous. */
 const isMarching = (p: Poi) => p.type === 'warband' || !!p.army;
@@ -3072,14 +3042,8 @@ const travelersOnMap = computed(() => [
     } as RecallInfo,
   })),
 ]);
-/** 🚶 Le filtre « Déplacements de troupes » : masqués, les voyages ne se dessinent plus sur la
- *  carte (tracés, marqueurs, colonnes d'interception) — ils restent dans la liste dessous. */
-const shownTravelers = computed(() => (troopsHidden.value ? [] : travelersOnMap.value));
-const shownBands = computed(() => (troopsHidden.value ? [] : bandsOnMap.value));
-/** Combien de déplacements la tuile annonce : le héros en route, plus chaque groupe. */
-const troopCount = computed(
-  () => (active.value && hero.value ? 1 : 0) + travelersOnMap.value.length,
-);
+const shownTravelers = travelersOnMap;
+const shownBands = bandsOnMap;
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte. ⚠️ APRÈS
 // `travelersOnMap` : le watch lit `mapPois` dès le setup, qui lit `travelersOnMap` (zone
 // morte temporelle sinon — le défaut de la v0.910).

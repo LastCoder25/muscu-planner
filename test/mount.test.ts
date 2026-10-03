@@ -158,16 +158,20 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Mine d’or');
   });
 
-  // 🏝️ La vue d'ensemble de l'archipel : repliée elle dit l'île active, dépliée les cinq îles.
-  it("ArchipelPanel : l'île active repliée, les cinq îles dépliées", async () => {
+  // 🏝️ Les cinq îles en sélecteur : l'active pleine, les verrouillées sous cadenas ; toucher
+  // une île déplie sa fiche.
+  it("ArchipelPanel : les cinq îles, l'active marquée, la fiche au toucher", async () => {
     const { default: ArchipelPanel } = await import('@/components/ArchipelPanel.vue');
     const { islandById } = await import('@/lib/archipelago');
     let closed = '';
     let open = '';
     const props = { island: islandById(1), busy: false, now: Date.now() };
     await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (closed = h));
-    expect(closed).toContain('Île 1 · Île des Brigands');
-    expect(closed).not.toContain('am-isl');
+    // Cinq tuiles, l'active est le segment choisi, les quatre autres sous cadenas ; pas de fiche.
+    expect(closed.match(/class="isl(?=[ "])/g)?.length).toBe(5);
+    expect(closed).toContain('aria-current="location"');
+    expect(closed.split('🔒').length - 1).toBe(4);
+    expect(closed).not.toContain('Tu es ici');
     expect(
       await mountIt(
         ArchipelPanel,
@@ -176,12 +180,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         undefined,
         '/',
         (h) => (open = h),
-        (host) => host.querySelector<HTMLElement>('.arch-head')?.click(),
+        (host) => host.querySelector<HTMLElement>('.isl.active')?.click(),
       ),
     ).toBeNull();
-    // La carte : cinq îles, dont l'active ; la fiche de l'île touchée (l'active d'abord).
-    expect(open.split('class="am-isl').length - 1).toBe(5);
-    expect(open).toContain('am-here');
+    // La fiche de l'île touchée.
     expect(open).toContain('Tu es ici');
     expect(open).toContain('Le Fort des pillards');
     // 🏝️ Étape 7 : tout le monde joue l'archipel, plus d'interrupteur pour en sortir.
@@ -205,7 +207,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       away: {},
       militia: { 1: 4 },
     };
-    const openHead = (host: HTMLElement) => host.querySelector<HTMLElement>('.arch-head')?.click();
+    const openHead = (host: HTMLElement) => host.querySelector<HTMLElement>('.isl.active')?.click();
     await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (here = h), openHead);
     expect(here).toMatch(/🛡️ 4 miliciens/);
     await mountIt(
@@ -216,9 +218,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (there = h),
       async (host) => {
-        openHead(host);
+        host.querySelectorAll<HTMLElement>('.isl')[1]?.click();
         await nextTick();
-        host.querySelectorAll('.am-isl')[1]?.dispatchEvent(new Event('click'));
       },
     );
     expect(there).toContain('Traverser vers l');
@@ -239,9 +240,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (back = h),
       async (host) => {
-        openHead(host);
+        host.querySelectorAll<HTMLElement>('.isl')[1]?.click();
         await nextTick();
-        host.querySelectorAll('.am-isl')[1]?.dispatchEvent(new Event('click'));
       },
     );
     expect(back).toMatch(/Faire venir 3\s+champions/);
@@ -680,100 +680,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // Personne ne tient le point : les places libres le disent en rouge.
     expect(await render('c1:fff')).toMatch(/ctl-dots[^"]*empty/);
     expect(await render('')).not.toContain('ctl-dots');
-  }, 30_000);
-
-  it('🎚️ MapFilterBar repliée résume les types filtrés, sans aucun filtre de rang', async () => {
-    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
-    let out = '';
-    expect(
-      await mountIt(
-        MapFilterBar,
-        {
-          typeChips: [
-            { type: 'mine', total: 1 },
-            { type: 'archive', total: 1 },
-          ],
-          typeFilter: { only: ['mine'], hidden: [] },
-        },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      ),
-    ).toBeNull();
-    // REPLIÉE par défaut : le résumé dit ce qui est filtré, sans rendre le corps.
-    expect(out).toContain('class="filters active"');
-    expect(out).toContain('>Mine seulement<');
-    expect(out).not.toContain('rangs');
-    expect(out).not.toContain('flt-dot');
-  }, 30_000);
-
-  it('🎚️ MapFilterBar dépliée : types en tuiles qui écrivent leur état, pas de rangs', async () => {
-    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
-    let out = '';
-    expect(
-      await mountIt(
-        MapFilterBar,
-        {
-          typeChips: [
-            { type: 'mine', total: 1 },
-            { type: 'archive', total: 1 },
-            { type: 'rift', total: 1 },
-          ],
-          typeFilter: { only: ['mine'], hidden: ['archive'] },
-          defaultOpen: true,
-        },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      ),
-    ).toBeNull();
-    expect(out).not.toContain('rf-chip');
-    expect(out).not.toContain('Rangs');
-    // Mine « seul », archives masquées : les deux états sont ÉCRITS.
-    expect(out).toContain('rm-only');
-    expect(out).toContain('>seul<');
-    expect(out).toContain('>✕<');
-    expect(out).toContain('Tout afficher');
-  }, 30_000);
-
-  it('🚶 MapFilterBar : la tuile des déplacements de troupes', async () => {
-    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
-    const base = {
-      typeChips: [{ type: 'mine' as const, total: 2 }],
-      typeFilter: { only: [], hidden: [] },
-      defaultOpen: true,
-    };
-    const render = async (extra: object) => {
-      let out = '';
-      expect(
-        await mountIt(
-          MapFilterBar,
-          { ...base, ...extra },
-          undefined,
-          undefined,
-          '/',
-          (h) => (out = h),
-        ),
-      ).toBeNull();
-      return out;
-    };
-    // Des voyages en cours : la barre s'affiche même sans rien d'autre à filtrer, avec leur compte.
-    const shown = await render({ troops: 3, troopMode: 'all' });
-    expect(shown).toContain('Déplacements de troupes');
-    expect(shown).toMatch(/class="tc-state">3</);
-    // Seuls : l'état est ÉCRIT, comme pour un type de lieu.
-    const only = await render({ troops: 3, troopMode: 'only' });
-    expect(only).toContain('rm-only');
-    expect(only).toMatch(/class="tc-state">seul</);
-    expect(only).toContain('déplacements seulement');
-    // Masqués : l'état est écrit, et le résumé l'annonce.
-    const hidden = await render({ troops: 3, troopMode: 'none' });
-    expect(hidden).toContain('rm-none');
-    expect(hidden).toContain('sans déplacements');
-    // Aucun voyage : pas de tuile (elle ne filtrerait rien).
-    expect(await render({ troops: 0 })).not.toContain('Déplacements de troupes');
   }, 30_000);
 
   it('🗂️ PoiCard : la fiche d’un lieu — nom, rang, infos, trajet/réussite, sceau', async () => {

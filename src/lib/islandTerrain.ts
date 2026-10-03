@@ -152,7 +152,7 @@ const f1 = (v: number) => +v.toFixed(1);
 const COAST_STEPS = 144;
 
 /** Le contour lissé d'une île centrée en (cx, cy), à l'échelle `scale`. */
-export function islandOutline(
+function islandOutline(
   id: number,
   cx: number = islandCenter(id).x,
   cy: number = islandCenter(id).y,
