@@ -53,10 +53,6 @@
       <path v-for="(rv, i) in t.rivers" :key="'rw' + i" :d="rv" class="it-river-in" />
     </g>
 
-    <!-- La route : de la base au port (île 1), du village vers l'intérieur (îles 2 à 5). -->
-    <path :d="t.road" class="it-road" />
-    <path :d="t.road" class="it-road-in" />
-
     <path
       v-for="(f, i) in t.decor"
       :key="'d' + i"
@@ -128,7 +124,6 @@ const vars = computed(() => ({
   '--it-sand': props.t.style.sand,
   '--it-patch': props.t.style.patch,
   '--it-tuft': props.t.style.tuft,
-  '--it-road': props.t.style.road,
 }));
 </script>
 
@@ -185,19 +180,6 @@ const vars = computed(() => ({
   stroke: #74a9cb;
   stroke-width: 0.5;
   stroke-linecap: round;
-}
-.it-road {
-  fill: none;
-  stroke: #00000040;
-  stroke-width: 2.6;
-  stroke-linecap: round;
-}
-.it-road-in {
-  fill: none;
-  stroke: var(--it-road);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-dasharray: 2.2 0.8;
 }
 .it-decor {
   pointer-events: none;
