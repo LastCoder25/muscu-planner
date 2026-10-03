@@ -113,38 +113,33 @@ export function parseTypeFilter(raw: unknown, legacyRift?: string | null): TypeF
 }
 
 /** Les puces à afficher : un type par type PRÉSENT sur la carte, dans l'ordre, avec le
- *  nombre de lieux de ce type dans les rangs affichés. */
+ *  nombre de lieux de ce type. */
 export function typeOptions<P extends Pick<Poi, 'type' | 'army'>>(
   pois: readonly P[],
-  inRanks: (p: P) => boolean,
-): { type: FilterKey; total: number; inRanks: number }[] {
-  return TYPE_ORDER.map((type) => {
-    const of = pois.filter((p) => filterKeyOf(p) === type);
-    return { type, total: of.length, inRanks: of.filter(inRanks).length };
-  }).filter((o) => o.total > 0);
+): { type: FilterKey; total: number }[] {
+  return TYPE_ORDER.map((type) => ({
+    type,
+    total: pois.filter((p) => filterKeyOf(p) === type).length,
+  })).filter((o) => o.total > 0);
 }
 
 /**
  * 🎚️ Ce que dit la ligne REPLIÉE des filtres (v0.1239) : la carte ne doit jamais avoir l'air
  * vide sans raison. `active` = un filtre retire réellement des lieux de la carte.
  *
- * ⚠️ On ne compte que ce qui existe sur la carte AUJOURD'HUI : un rang ou un type masqué
+ * ⚠️ On ne compte que ce qui existe sur la carte AUJOURD'HUI : un type masqué
  * (mémorisé par appareil) mais absent de la carte ne filtre rien — l'annoncer ferait croire à
  * une carte filtrée.
  */
 export function filterSummary(
-  ranks: readonly number[],
-  hiddenRanks: ReadonlySet<number>,
   f: TypeFilter,
   presentTypes: readonly FilterKey[],
   /** 🚶 Le mode des déplacements de troupes — `'all'` quand il n'y en a aucun en cours. */
   troops: TypeMode = 'all',
 ): { active: boolean; text: string } {
-  // « Seuls » l'emporte sur tout : aucun lieu n'est dessiné, rangs et types ne comptent plus.
+  // « Seuls » l'emporte sur tout : aucun lieu n'est dessiné, les types ne comptent plus.
   if (troops === 'only') return { active: true, text: 'déplacements seulement' };
   const parts: string[] = [];
-  const rankOff = ranks.filter((r) => hiddenRanks.has(r)).length;
-  if (rankOff > 0) parts.push(`${ranks.length - rankOff}/${ranks.length} rangs`);
   // On NOMME les types tant que c’est court (deux au plus) : « Mine seulement » dit plus que
   // « 1 type seul ». Au-delà, un compte.
   const only = presentTypes.filter((t) => f.only.includes(t));

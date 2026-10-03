@@ -352,7 +352,9 @@ import {
   type BoostId,
   type SupplyId,
   type SupplyStock,
+  type TomeId,
 } from '@/lib/supplies';
+import { openTome } from '@/lib/xpTome';
 import {
   attackBoostPlan,
   boostAttack,
@@ -5710,6 +5712,30 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
+   * 📘 OUVRIR UN TOME D'EXPÉRIENCE sur un champion (2026-10-03, demandé) : l'XP passe par
+   * `openTome` (= `grantAdvXp`, plafonds et excédent conservé), l'équipement porté apprend
+   * avec lui (`gearTrainedPatch`), et l'animation est celle d'un retour de mission. Rend la
+   * RAISON d'un refus, `null` si c'est fait.
+   */
+  async function openXpTome(userId: string, advId: string, tomeId: TomeId): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return 'personnage non chargé';
+    const stock = takeSupplies(cur.supplies, [tomeId]);
+    if (!stock) return 'tu n’as plus ce tome';
+    const before = advList.value;
+    const adv = before.find((a) => a.id === advId);
+    if (!adv) return 'champion introuvable';
+    const { after } = openTome(adv, tomeId, pantheonLevel.value);
+    const advs = before.map((a) => (a.id === advId ? after : a));
+    const gearPatch = gearTrainedPatch(cur, before, advs);
+    const tracks = gearAwareTracks(cur, before, advs, gearPatch);
+    await persist(userId, { supplies: stock, adventurers: advs, ...gearPatch });
+    if (tracks.length) useAdvXpFx().show(tracks, 'Tome d’expérience');
+    return null;
+  }
+
+  /**
    * ⚡ BOOST DE VITESSE (2026-09-30, demandé) : un boost du stock avance l'étape en cours d'un
    * voyage (`speedBoost.ts`). Une attaque combinée pas encore toute partie avance EN BLOC ;
    * partie, ses groupes liés avancent ensemble à l'aller. Les champions suivent leur nouveau
@@ -6247,6 +6273,7 @@ export const useCharacterStore = defineStore('character', () => {
     plannedTick,
     recallTrip,
     applySpeedBoost,
+    openXpTome,
     sendMilitiaToControl,
     applyExpedition,
     equip,

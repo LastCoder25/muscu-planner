@@ -1,12 +1,10 @@
-// 🎚️🗺️ LES FILTRES DE LA CARTE D'EXPÉDITION — par RANG et par TYPE de lieu, mémorisés par
+// 🎚️🗺️ LES FILTRES DE LA CARTE D'EXPÉDITION — par TYPE de lieu, mémorisés par
 // appareil. Sorti de `ExpeditionMapPage` (découpage de la page, 2026-09-27) : l'état et sa
 // persistance vivent ici, l'écran (`MapFilterBar`) ne fait que les montrer.
-//
-// ⚠️ On mémorise les rangs MASQUÉS, pas les affichés : un rang nouveau apparaît visible par
-// défaut. La règle des types (affiché · seul · masqué) vit dans `lib/poiTypeFilter.ts`.
+// La règle des types (affiché · seul · masqué) vit dans `lib/poiTypeFilter.ts`.
+// ⚠️ Le filtre par RANG est retiré (v1.35.1, décision de l'utilisateur) : une île ne porte plus
+// que deux rangs de lieux, il ne triait plus rien.
 import { computed, ref, type Ref } from 'vue';
-import { poiRankCounts } from '@/lib/poiRank';
-import { isHeldControl } from '@/lib/controlPoints';
 import {
   cycleType,
   effectiveTypeFilter,
@@ -22,7 +20,6 @@ import {
 } from '@/lib/poiTypeFilter';
 import type { Poi } from '@/lib/expedition';
 
-const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
 // ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
 const TYPE_FILTER_KEY = 'muscu:emap:type-filter';
 const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
@@ -37,15 +34,6 @@ function loadTroopMode(): TypeMode {
   }
 }
 
-function loadHiddenRanks(): Set<number> {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RANK_FILTER_KEY) ?? '[]') as unknown;
-    if (Array.isArray(raw)) return new Set(raw.filter((r): r is number => Number.isInteger(r)));
-  } catch {
-    /* stockage indisponible : tout est affiché */
-  }
-  return new Set();
-}
 function loadTypeFilter(): TypeFilter {
   try {
     const raw = localStorage.getItem(TYPE_FILTER_KEY);
@@ -65,29 +53,9 @@ function save(key: string, v: unknown) {
   }
 }
 
-/** `rankIndexOf` : le rang d'un lieu — celui que la page a déjà mis en cache. */
-export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number) {
-  const hiddenRanks = ref<Set<number>>(loadHiddenRanks());
-  // 🏰 Un lieu fixe TENU n'a plus de rang (couleur neutre, rang masqué) : il ne compte dans
-  // aucune pastille de rang, et aucun filtre de rang ne le cache (le filtre de type, oui).
-  const rankOptions = computed(() => poiRankCounts(pois.value.filter((p) => !isHeldControl(p))));
-  function toggleRank(r: number) {
-    const next = new Set(hiddenRanks.value);
-    if (next.has(r)) next.delete(r);
-    else {
-      // Jamais de carte vide : on ne masque pas le dernier rang encore affiché.
-      const visible = rankOptions.value.filter((o) => !next.has(o.rankIndex)).length;
-      if (visible <= 1) return;
-      next.add(r);
-    }
-    hiddenRanks.value = next;
-    save(RANK_FILTER_KEY, [...next]);
-  }
-
+export function usePoiFilters(pois: Ref<Poi[]>) {
   const typeFilter = ref<TypeFilter>(loadTypeFilter());
-  const rankShown = (p: Poi) => isHeldControl(p) || !hiddenRanks.value.has(rankIndexOf(p));
-  // Le compte d'une puce de type ne parle que des lieux des rangs affichés.
-  const typeChips = computed(() => typeOptions(pois.value, rankShown));
+  const typeChips = computed(() => typeOptions(pois.value));
   function cycleTypeChip(t: FilterKey) {
     typeFilter.value = cycleType(
       typeFilter.value,
@@ -105,7 +73,7 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     ),
   );
   const shownPois = computed(() =>
-    pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, filterKeyOf(p))),
+    pois.value.filter((p) => typeShown(typeFilterShown.value, filterKeyOf(p))),
   );
 
   /** 🚶 Les tracés et marqueurs des voyages en cours (héros, équipes, renforts, retours,
@@ -122,19 +90,14 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
   }
   const cycleTroops = () => setTroopMode(nextTroopMode(troopMode.value));
 
-  /** « Tout afficher » : rangs, types ET déplacements d’un geste. */
+  /** « Tout afficher » : types ET déplacements d’un geste. */
   function resetFilters() {
     if (troopMode.value !== 'all') setTroopMode('all');
-    hiddenRanks.value = new Set();
     typeFilter.value = { only: [], hidden: [] };
-    save(RANK_FILTER_KEY, []);
     save(TYPE_FILTER_KEY, typeFilter.value);
   }
 
   return {
-    hiddenRanks,
-    rankOptions,
-    toggleRank,
     typeFilter,
     typeFilterShown,
     typeChips,

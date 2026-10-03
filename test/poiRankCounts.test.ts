@@ -1,54 +1,16 @@
-// 🏅 LE FILTRE DE DIFFICULTÉ DE LA CARTE — cf. `poiRankCounts` (poiRank.ts).
+// 🏅 LE RANG AFFICHÉ D'UN LIEU — cf. `poiRank` (poiRank.ts).
 //
-// ⚠️ RÉÉCRIT le 2026-09-23. Il épinglait « le rang d'un lieu = `characterRank(p.level)` »,
-// c'est-à-dire précisément ce qui a changé : le rang affiché dit maintenant la DIFFICULTÉ
-// (niveau × nombre d'ennemis) et non plus le seul niveau. Ce qui reste vrai, et qui compte
-// davantage, c'est l'ACCORD : le filtre doit ranger les lieux exactement là où la pastille
-// les affiche — sinon filtrer « Argent » cesse de montrer les lieux marqués Argent.
+// Le rang affiché dit la DIFFICULTÉ (niveau × nombre d'ennemis), pas le seul niveau.
+// (Le filtre de rang de la carte et `poiRankCounts` sont retirés en v1.35.1.)
 import { describe, it, expect } from 'vitest';
-import { poiRank, poiRankCounts } from '@/lib/poiRank';
+import { poiRank } from '@/lib/poiRank';
 import { characterRank } from '@/lib/characterRank';
 import { campSpecOf, harvestGuardOf, type Poi } from '@/lib/expedition';
 
 const lieu = (id: string, level: number, type: Poi['type'] = 'camp') =>
   ({ id, level, type }) as Pick<Poi, 'id' | 'type' | 'level'>;
 
-describe('poiRankCounts — les options du filtre de difficulté de la carte', () => {
-  it('range chaque lieu là où sa PASTILLE l’affiche', () => {
-    // Test d'ACCORD : une seconde définition du rang ferait mentir le filtre.
-    const pois = [
-      lieu('a', 35),
-      lieu('b', 3),
-      lieu('c', 8, 'lair'),
-      lieu('d', 15, 'mine'),
-      lieu('e', 60, 'arena'),
-    ];
-    const attendu = new Map<number, number>();
-    for (const p of pois) {
-      const r = poiRank(p).rankIndex;
-      attendu.set(r, (attendu.get(r) ?? 0) + 1);
-    }
-    const out = poiRankCounts(pois);
-    // ⚠️ La BOUCLE seule passerait à vide si la fonction ne rendait rien : on épingle
-    //    d'abord le nombre de seaux et le total des lieux.
-    expect(out).toHaveLength(attendu.size);
-    expect(out.reduce((n, o) => n + o.count, 0)).toBe(pois.length);
-    for (const { rankIndex, count } of out) expect(count).toBe(attendu.get(rankIndex));
-  });
-
-  it('rend les rangs du plus bas au plus haut, et aucun rang vide', () => {
-    const pois = [lieu('a', 35), lieu('b', 3), lieu('c', 8), lieu('d', 90)];
-    const out = poiRankCounts(pois);
-    expect(out.every((o) => o.count > 0)).toBe(true);
-    for (let i = 1; i < out.length; i++)
-      expect(out[i]!.rankIndex).toBeGreaterThan(out[i - 1]!.rankIndex);
-    expect(out.reduce((s, o) => s + o.count, 0)).toBe(pois.length);
-  });
-
-  it('ne propose rien sur une carte vide', () => {
-    expect(poiRankCounts([])).toEqual([]);
-  });
-
+describe('poiRank — le rang affiché d’un lieu', () => {
   it('un lieu SANS ennemis à compter garde le rang de son niveau', () => {
     // L'arène se joue au héros seul, la faille affiche son effectif à côté : leur rang
     // reste celui de leur niveau (décision v0.928 pour les failles).
