@@ -620,21 +620,16 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await render('')).not.toContain('ctl-dots');
   }, 30_000);
 
-  it('🎚️ MapFilterBar montre une puce par rang et par type', async () => {
+  it('🎚️ MapFilterBar repliée résume les types filtrés, sans aucun filtre de rang', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
     let out = '';
     expect(
       await mountIt(
         MapFilterBar,
         {
-          rankOptions: [
-            { rankIndex: 0, count: 2 },
-            { rankIndex: 1, count: 1 },
-          ],
-          hiddenRanks: new Set([1]),
           typeChips: [
-            { type: 'mine', inRanks: 1 },
-            { type: 'archive', inRanks: 1 },
+            { type: 'mine', total: 1 },
+            { type: 'archive', total: 1 },
           ],
           typeFilter: { only: ['mine'], hidden: [] },
         },
@@ -646,27 +641,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     // REPLIÉE par défaut : le résumé dit ce qui est filtré, sans rendre le corps.
     expect(out).toContain('class="filters active"');
-    expect(out).toContain('1/2 rangs · Mine seulement');
-    expect(out.match(/class="flt-dot off"/g)?.length).toBe(1);
-    expect(out).not.toContain('rf-chip');
+    expect(out).toContain('>Mine seulement<');
+    expect(out).not.toContain('rangs');
+    expect(out).not.toContain('flt-dot');
   }, 30_000);
 
-  it('🎚️ MapFilterBar dépliée : rangs nommés, types en tuiles qui écrivent leur état', async () => {
+  it('🎚️ MapFilterBar dépliée : types en tuiles qui écrivent leur état, pas de rangs', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
     let out = '';
     expect(
       await mountIt(
         MapFilterBar,
         {
-          rankOptions: [
-            { rankIndex: 0, count: 2 },
-            { rankIndex: 1, count: 1 },
-          ],
-          hiddenRanks: new Set([1]),
           typeChips: [
-            { type: 'mine', inRanks: 1 },
-            { type: 'archive', inRanks: 1 },
-            { type: 'rift', inRanks: 1 },
+            { type: 'mine', total: 1 },
+            { type: 'archive', total: 1 },
+            { type: 'rift', total: 1 },
           ],
           typeFilter: { only: ['mine'], hidden: ['archive'] },
           defaultOpen: true,
@@ -677,9 +667,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    // 2 rangs dont 1 masqué, nommés.
-    expect(out.match(/class="rf-chip on"/g)?.length).toBe(1);
-    expect(out).toContain('Bronze');
+    expect(out).not.toContain('rf-chip');
+    expect(out).not.toContain('Rangs');
     // Mine « seul », archives masquées : les deux états sont ÉCRITS.
     expect(out).toContain('rm-only');
     expect(out).toContain('>seul<');
@@ -690,9 +679,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   it('🚶 MapFilterBar : la tuile des déplacements de troupes', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
     const base = {
-      rankOptions: [{ rankIndex: 0, count: 2 }],
-      hiddenRanks: new Set<number>(),
-      typeChips: [{ type: 'mine' as const, inRanks: 2 }],
+      typeChips: [{ type: 'mine' as const, total: 2 }],
       typeFilter: { only: [], hidden: [] },
       defaultOpen: true,
     };

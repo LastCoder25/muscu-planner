@@ -3,10 +3,10 @@
   « pouvoir replier les filtres et optimiser leur affichage dans la tuile »). L'état et sa
   mémorisation vivent dans `usePoiFilters` ; ce composant les MONTRE.
 
-  Repliée : une ligne de 40 px — les rangs en mini-boules et un RÉSUMÉ de ce qui est filtré
-  (`filterSummary`), bordée d'accent quand un filtre retire des lieux : la carte ne doit jamais
-  avoir l'air vide sans raison. Dépliée : chaque rang porte son NOM et son compte, chaque type
-  de lieu est une tuile qui ÉCRIT son état (plus de pastille muette qu'on déchiffre au survol).
+  Repliée : une ligne de 40 px — un RÉSUMÉ de ce qui est filtré (`filterSummary`), bordée
+  d'accent quand un filtre retire des lieux : la carte ne doit jamais avoir l'air vide sans
+  raison. Dépliée : chaque type de lieu est une tuile qui ÉCRIT son état.
+  ⚠️ Plus de filtre par RANG (v1.35.0) : une île ne porte que deux rangs de lieux.
   ⚠️ Repliée à CHAQUE ouverture, jamais mémorisée : la carte et les voyages passent avant, et un
   pli mémorisé se lit comme « ça se rouvre tout seul » (leçon de la carte des mondes, v0.994).
 -->
@@ -21,45 +21,13 @@
     >
       <span class="flt-ico" aria-hidden="true">🎚️</span>
       <span class="flt-title">Filtres</span>
-      <span v-if="rankOptions.length > 1" class="flt-dots" aria-hidden="true">
-        <span
-          v-for="o in rankOptions"
-          :key="o.rankIndex"
-          class="flt-dot"
-          :class="{ off: hiddenRanks.has(o.rankIndex) }"
-          :style="{ '--rk': rkColor(o.rankIndex) }"
-        />
-      </span>
       <span class="flt-sum">{{ summary.text }}</span>
       <span class="flt-chev" :class="{ up: open }" aria-hidden="true">▾</span>
     </button>
 
     <div v-if="open" id="map-filters" class="flt-body">
-      <!-- 🎚️ Par RANG (la langue de la carte). On garde les rangs MASQUÉS, pas les affichés :
-           un rang nouveau apparaît visible par défaut. -->
-      <section v-if="rankOptions.length > 1" class="flt-sec">
-        <div class="flt-lab">Rangs</div>
-        <div class="rank-filter" role="group" aria-label="Filtrer les lieux par rang">
-          <button
-            v-for="o in rankOptions"
-            :key="o.rankIndex"
-            type="button"
-            class="rf-chip"
-            :class="{ on: !hiddenRanks.has(o.rankIndex) }"
-            :style="{ '--rk': rkColor(o.rankIndex) }"
-            :aria-pressed="!hiddenRanks.has(o.rankIndex)"
-            @click="emit('toggle-rank', o.rankIndex)"
-          >
-            <span class="rf-dot" />
-            <span class="rf-name">{{ rkName(o.rankIndex) }}</span>
-            <span class="rf-n">{{ o.count }}</span>
-          </button>
-        </div>
-      </section>
-
       <!-- 🗺️ Par TYPE de lieu : une tuile par type présent, à TROIS états (un toucher passe au
-           suivant) — affiché · SEUL · masqué. Plusieurs types « seuls » se cumulent, et le
-           filtre se COMBINE aux rangs : le compte ne parle que des lieux des rangs affichés.
+           suivant) — affiché · SEUL · masqué. Plusieurs types « seuls » se cumulent.
            Règle dans `lib/poiTypeFilter.ts`. -->
       <section v-if="typeChips.length > 1" class="flt-sec">
         <div class="flt-lab">
@@ -120,7 +88,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { CHARACTER_RANKS } from '@/lib/characterRank';
 import {
   FILTER_EMO,
   FILTER_LABEL,
@@ -133,9 +100,7 @@ import {
 } from '@/lib/poiTypeFilter';
 
 const props = defineProps<{
-  rankOptions: { rankIndex: number; count: number }[];
-  hiddenRanks: Set<number>;
-  typeChips: { type: FilterKey; inRanks: number }[];
+  typeChips: { type: FilterKey; total: number }[];
   typeFilter: TypeFilter;
   /** 🚶 Combien de voyages sont en cours, et s'ils sont masqués sur la carte. */
   troops?: number;
@@ -144,7 +109,6 @@ const props = defineProps<{
   defaultOpen?: boolean;
 }>();
 const emit = defineEmits<{
-  'toggle-rank': [r: number];
   'cycle-type': [t: FilterKey];
   'cycle-troops': [];
   reset: [];
@@ -154,12 +118,10 @@ const open = ref(props.defaultOpen ?? false);
 const troops = computed(() => props.troops ?? 0);
 const troopMode = computed<TypeMode>(() => props.troopMode ?? 'all');
 const hasAny = computed(
-  () => props.rankOptions.length > 1 || props.typeChips.length > 1 || troops.value > 0,
+  () => props.typeChips.length > 1 || troops.value > 0,
 );
 const summary = computed(() =>
   filterSummary(
-    props.rankOptions.map((o) => o.rankIndex),
-    props.hiddenRanks,
     props.typeFilter,
     props.typeChips.map((o) => o.type),
     // Masqués alors qu'il n'y a rien en route : ça ne retire rien, on ne l'annonce pas.
@@ -167,21 +129,19 @@ const summary = computed(() =>
   ),
 );
 
-const rkColor = (i: number) => CHARACTER_RANKS[i]?.color ?? '#9a8f7e';
-const rkName = (i: number) => CHARACTER_RANKS[i]?.name ?? '';
 /** Ce qu'une tuile de type dit d'elle-même : son compte quand elle est affichée, son état
  *  sinon — « seul » et « masqué » doivent se LIRE, pas se deviner à une teinte. */
-function stateText(o: { type: FilterKey; inRanks: number }) {
+function stateText(o: { type: FilterKey; total: number }) {
   const m = typeMode(props.typeFilter, o.type);
   if (m === 'only') return 'seul';
   // Masqué : un ✕ — le nom est déjà barré et la tuile en pointillé. Écrit en entier, « masqué »
   // mangeait le nom à 344 px (« Sanctuai… »).
   if (m === 'none') return '✕';
-  return String(o.inRanks);
+  return String(o.total);
 }
 const TYPE_MODE_LABEL = { all: 'affichés', only: 'seuls', none: 'masqués' } as const;
-const typeChipLabel = (o: { type: FilterKey; inRanks: number }) =>
-  `${FILTER_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(props.typeFilter, o.type)]} · ${o.inRanks} dans les rangs affichés — toucher pour changer`;
+const typeChipLabel = (o: { type: FilterKey; total: number }) =>
+  `${FILTER_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(props.typeFilter, o.type)]} · ${o.total} sur la carte — toucher pour changer`;
 </script>
 
 <style scoped lang="scss">
@@ -220,22 +180,6 @@ const typeChipLabel = (o: { type: FilterKey; inRanks: number }) =>
 .flt-title {
   font-weight: 700;
   font-size: 13px;
-}
-/* Les rangs en miniature : on lit ce qui est filtré sans déplier. */
-.flt-dots {
-  display: flex;
-  gap: 3px;
-}
-.flt-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--rk);
-}
-.flt-dot.off {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--rk);
-  opacity: 0.45;
 }
 .flt-sum {
   flex: 1;
@@ -287,57 +231,6 @@ const typeChipLabel = (o: { type: FilterKey; inRanks: number }) =>
   letter-spacing: 0;
   text-transform: none;
   opacity: 0.8;
-}
-/* Rangs : une pastille par rang, boule + NOM + compte, qui passe à la ligne au besoin.
-   Affiché = cerclée de la couleur du rang, boule PLEINE ; masqué = pointillé, boule réduite à
-   un anneau estompé, texte grisé : l'état se lit sans dépendre de la couleur. */
-.rank-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.rf-chip {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border-radius: 18px;
-  border: 1px dashed var(--line);
-  background: var(--surface);
-  color: var(--dim);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-.rf-chip.on {
-  border-style: solid;
-  border-color: var(--rk);
-  background: color-mix(in srgb, var(--rk) 14%, var(--surface));
-  color: var(--text);
-}
-.rf-name {
-  font-weight: 600;
-}
-.rf-n {
-  font-size: 11px;
-  opacity: 0.7;
-}
-.rf-dot {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--rk);
-  background: transparent;
-  opacity: 0.45;
-}
-.rf-chip.on .rf-dot {
-  background: var(--rk);
-  opacity: 1;
 }
 /* Types : des tuiles en grille — deux colonnes sur téléphone, plus au-delà. */
 .type-filter {
@@ -411,7 +304,6 @@ const typeChipLabel = (o: { type: FilterKey; inRanks: number }) =>
   color: var(--rk);
   text-transform: uppercase;
 }
-.rf-chip:focus-visible,
 .type-chip:focus-visible,
 .flt-reset:focus-visible {
   outline: 2px solid var(--accent);

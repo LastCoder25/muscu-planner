@@ -36,7 +36,7 @@ describe('le filtre par type de lieu', () => {
     const band = { type: 'warband' as const };
     expect(filterKeyOf(army as never)).toBe('army');
     expect(filterKeyOf(band)).toBe('warband');
-    const opts = typeOptions([army, army, band] as never[], () => true);
+    const opts = typeOptions([army, army, band] as never[]);
     expect(opts.find((o) => o.type === 'army')?.total).toBe(2);
     expect(opts.find((o) => o.type === 'warband')?.total).toBe(1);
     expect(FILTER_LABEL.army).toBe('Armées ennemies');
@@ -99,46 +99,40 @@ describe('le filtre par type de lieu', () => {
     expect(parseTypeFilter(null, 'all')).toEqual({ only: [], hidden: [] });
   });
 
-  it('une puce par type présent, dans l’ordre, comptée dans les rangs affichés', () => {
-    const pois = [
-      { type: 'camp' as PoiType, r: 1 },
-      { type: 'mine' as PoiType, r: 0 },
-      { type: 'mine' as PoiType, r: 1 },
-    ];
-    const opts = typeOptions(pois, (p) => (p as { r: number }).r === 1);
-    expect(opts).toEqual([
-      { type: 'mine', total: 2, inRanks: 1 },
-      { type: 'camp', total: 1, inRanks: 1 },
+  it('une puce par type présent, dans l’ordre, avec son compte', () => {
+    const pois = [{ type: 'camp' as PoiType }, { type: 'mine' as PoiType }, { type: 'mine' as PoiType }];
+    expect(typeOptions(pois)).toEqual([
+      { type: 'mine', total: 2 },
+      { type: 'camp', total: 1 },
     ]);
   });
 });
 
 describe('🎚️ le résumé des filtres repliés', () => {
-  const R = [0, 1, 2];
   it('rien de filtré : tout affiché, pas actif', () => {
-    expect(filterSummary(R, new Set(), EMPTY_TYPE_FILTER, present)).toEqual({
+    expect(filterSummary(EMPTY_TYPE_FILTER, present)).toEqual({
       active: false,
       text: 'tout affiché',
     });
   });
-  it('rangs masqués et types seuls se lisent ensemble', () => {
-    const s = filterSummary(R, new Set([2]), { only: ['mine', 'rift'], hidden: [] }, present);
-    expect(s).toEqual({ active: true, text: '2/3 rangs · Mine, Faille seulement' });
+  it('les types seuls se nomment', () => {
+    const s = filterSummary({ only: ['mine', 'rift'], hidden: [] }, present);
+    expect(s).toEqual({ active: true, text: 'Mine, Faille seulement' });
   });
   it('« seuls » l’emporte : on ne compte pas les masqués derrière', () => {
-    expect(filterSummary(R, new Set(), { only: ['mine'], hidden: ['camp'] }, present).text).toBe(
+    expect(filterSummary({ only: ['mine'], hidden: ['camp'] }, present).text).toBe(
       'Mine seulement',
     );
-    expect(filterSummary(R, new Set(), { only: [], hidden: ['camp'] }, present).text).toBe(
+    expect(filterSummary({ only: [], hidden: ['camp'] }, present).text).toBe(
       'sans Camp',
     );
   });
   it('au-delà de deux types, un compte', () => {
     const f = { only: ['mine', 'camp', 'rift'] as PoiType[], hidden: [] };
-    expect(filterSummary([0], new Set(), f, present).text).toBe('3 types seuls');
+    expect(filterSummary(f, present).text).toBe('3 types seuls');
   });
-  it('un rang ou un type mémorisé mais ABSENT de la carte ne filtre rien', () => {
-    const s = filterSummary(R, new Set([7]), { only: [], hidden: ['arena'] }, present);
+  it('un type mémorisé mais ABSENT de la carte ne filtre rien', () => {
+    const s = filterSummary({ only: [], hidden: ['arena'] }, present);
     expect(s).toEqual({ active: false, text: 'tout affiché' });
   });
 });
@@ -148,18 +142,18 @@ describe('🗺️ le filtre effectif (types présents aujourd’hui)', () => {
     const f = effectiveTypeFilter({ only: ['arena'], hidden: [] }, present);
     expect(present.filter((t) => typeShown(f, t))).toEqual(present);
     // …et le résumé le dit : rien n’est filtré.
-    expect(filterSummary([0], new Set(), { only: ['arena'], hidden: [] }, present).active).toBe(
+    expect(filterSummary({ only: ['arena'], hidden: [] }, present).active).toBe(
       false,
     );
   });
   // 🚶 Demandé : « rajoute un filtre pour les déplacements de troupes ». Masqués, le résumé
   // replié le DIT — sinon des voyages en cours invisibles se liraient comme une carte vide.
   it('des déplacements masqués ou seuls se lisent dans le résumé', () => {
-    const s = filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, 'none');
+    const s = filterSummary(EMPTY_TYPE_FILTER, present, 'none');
     expect(s).toEqual({ active: true, text: 'sans déplacements' });
-    expect(filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, 'all').active).toBe(false);
-    // « Seuls » l'emporte : aucun lieu n'est dessiné, rangs et types ne comptent plus.
-    expect(filterSummary([0, 1], new Set([1]), EMPTY_TYPE_FILTER, present, 'only')).toEqual({
+    expect(filterSummary(EMPTY_TYPE_FILTER, present, 'all').active).toBe(false);
+    // « Seuls » l'emporte : aucun lieu n'est dessiné, les types ne comptent plus.
+    expect(filterSummary(EMPTY_TYPE_FILTER, present, 'only')).toEqual({
       active: true,
       text: 'déplacements seulement',
     });

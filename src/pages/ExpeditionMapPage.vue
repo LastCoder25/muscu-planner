@@ -5,13 +5,10 @@
        fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
        ici aussi doublerait chaque notification. -->
   <div class="emap">
-    <!-- 🎚️🗺️ Filtres par rang et par type (état + mémorisation : `usePoiFilters`). -->
+    <!-- 🎚️🗺️ Filtres par type (état + mémorisation : `usePoiFilters`). -->
     <MapFilterBar
-      :rank-options="rankOptions"
-      :hidden-ranks="hiddenRanks"
       :type-chips="typeChips"
       :type-filter="typeFilterShown"
-      @toggle-rank="toggleRank"
       :troops="troopCount"
       :troop-mode="troopMode"
       @cycle-type="cycleTypeChip"
@@ -1857,11 +1854,8 @@ const selected = ref<Poi | null>(null);
  *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
-// ── 🎚️🗺️ Filtres par rang et par type (mémorisés par appareil) ──
+// ── 🎚️🗺️ Filtres par type (mémorisés par appareil) ──
 const {
-  hiddenRanks,
-  rankOptions,
-  toggleRank,
   typeFilterShown,
   typeChips,
   cycleTypeChip,
@@ -1870,7 +1864,7 @@ const {
   troopMode,
   troopsHidden,
   cycleTroops,
-} = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
+} = usePoiFilters(pois);
 /** 🚶 Les lieux où se rendent tes voyages en cours (renforts vers un point tenu, retours…) :
  *  ce qui reste dessiné quand les déplacements sont « seuls ». */
 const troopPoiIds = computed(() => new Set(travelersOnMap.value.map((v) => v.poi.id)));
