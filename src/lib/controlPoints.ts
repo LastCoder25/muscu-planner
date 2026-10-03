@@ -1096,7 +1096,7 @@ export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly C
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
 }
 
-/** 🛡️🏝️ Les places de milice qu'une île ajoute au plafond de la Caserne : une garnison
+/** 🛡️🏝️ Le plafond de milice d’une île (il remplace celui de la Caserne) : une garnison
  *  PLEINE (`MILITIA.perPoint`) sur chacun de ses lieux fixes. 0 hors archipel. */
 export function militiaSeatsOf(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): number {
   return map?.archipel ? controlKindsOf(map).length * MILITIA.perPoint : 0;

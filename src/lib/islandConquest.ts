@@ -951,26 +951,31 @@ export function unpostHero(map: ExpeditionMap): ExpeditionMap {
 }
 
 /** ⛵ Ceux qui EMBARQUENT de la forteresse (elle est le port de l'île) : sa garnison de
- *  champions et le héros. Rend la carte sans eux et leurs ids (les miliciens restent). */
-export function boardFromFortress(map: ExpeditionMap): { map: ExpeditionMap; ids: string[] } {
+ *  champions et le héros. Rend la carte sans eux et leurs ids (les miliciens restent).
+ *  `only` (option A, 2026-10-03) : seuls ces champions embarquent, les autres gardent la
+ *  forteresse ; `hero: false` : le héros n'embarque pas (navigation sans lui). */
+export function boardFromFortress(
+  map: ExpeditionMap,
+  only?: ReadonlySet<string>,
+  hero = true,
+): { map: ExpeditionMap; ids: string[] } {
   const f = map.pois.find(heldFortress);
   if (!f) return { map, ids: [] };
   const c = f.control!;
-  const ids = c.garrison.filter((x) => !isMilitiaId(x));
-  if (!ids.length && !c.hero) return { map, ids: [] };
-  const { hero: _h, heroUnit: _u, ...rest } = c;
-  void _h;
-  void _u;
+  const boards = (x: string) => !isMilitiaId(x) && (!only || only.has(x));
+  const ids = c.garrison.filter(boards);
+  const heroBoards = hero && !!c.hero;
+  if (!ids.length && !heroBoards) return { map, ids: [] };
+  let control = { ...c, garrison: c.garrison.filter((x) => !boards(x)) };
+  if (heroBoards) {
+    const { hero: _h, heroUnit: _u, ...rest } = control;
+    void _h;
+    void _u;
+    control = { ...rest, garrison: control.garrison };
+  }
   return {
     ids,
-    map: {
-      ...map,
-      pois: map.pois.map((p) =>
-        p.id === f.id
-          ? { ...p, control: { ...rest, garrison: c.garrison.filter(isMilitiaId) } }
-          : p,
-      ),
-    },
+    map: { ...map, pois: map.pois.map((p) => (p.id === f.id ? { ...p, control } : p)) },
   };
 }
 

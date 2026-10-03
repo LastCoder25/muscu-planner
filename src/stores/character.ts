@@ -137,6 +137,11 @@ import {
   crossingBlocker,
   crossingTravellers,
   fortressReward,
+  islandChampions,
+  SAILING_BLOCK_LABEL,
+  sailingBlocker,
+  settleSailings,
+  startSailing,
   endlessReward,
   landAdventurers,
   landCrossing,
@@ -2384,7 +2389,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🌀 Île 5 : un coffre par victoire sur la brèche sans fin.
     const endless = endlessReward(fort?.map ?? mapP, now);
     // 🛡️ La Caserne produit aussi pour les îles rangées (une réserve par île).
-    const map = produceIslandMilitia(
+    const mapM = produceIslandMilitia(
       endless?.map ?? fort?.map ?? mapP,
       buildingLevel(cur.buildings, 'barracks'),
       now,
@@ -2398,6 +2403,11 @@ export const useCharacterStore = defineStore('character', () => {
         : []),
     ];
     const advLanded = land?.crossing ? landAdventurers(advList.value, land.crossing) : null;
+    // ⛵ Les champions partis SANS le héros arrivent : APRÈS le débarquement du héros (qui a
+    // pu changer l'île active), pour qu'ils sachent s'ils sont « ici » ou ailleurs.
+    const sail = settleSailings(mapM, advLanded ?? advList.value, now);
+    const map = sail?.map ?? mapM;
+    const advNext = sail?.advs ?? advLanded;
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
@@ -2427,7 +2437,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(mapChanged ? { expedition_map: map } : {}),
       ...(baseChanged ? { base } : {}),
       ...(pil?.msg ? { buildings: pil.buildings } : {}),
-      ...(advLanded ? { adventurers: advLanded } : {}),
+      ...(advNext ? { adventurers: advNext } : {}),
       ...(ovfMsgs.length ? { messages: boxWith(cur, ovfMsgs, MESSAGES_CAP) } : {}),
     });
     if (land?.crossing) {
@@ -2477,26 +2487,69 @@ export const useCharacterStore = defineStore('character', () => {
       troopsMoving: troopsMoving(cur),
     });
   }
-  /** ⛵ RÉSERVE LA TRAVERSÉE vers l'île `to` : départ à l'heure pile suivante, arrivée 2 h
-   *  après ; le héros et TOUS les champions libres embarquent (décision de l'utilisateur). */
-  async function crossIsland(userId: string, to: number, now: number) {
-    await writesSettled();
-    const cur = row.value;
-    if (!cur?.expedition_map) return;
-    const why = crossingBlock(to);
-    if (why) throw new Error(CROSSING_BLOCK_LABEL[why]);
-    // 🏰 La forteresse est le port : sa garnison de champions et le héros embarquent de là.
-    const port = boardFromFortress(cur.expedition_map);
+  /** ⛵ Les champions qui PEUVENT embarquer depuis l'île `from` : sur l'île active, les libres
+   *  ET la garnison de la forteresse (le port) ; sur une île rangée, ses champions libres. */
+  function boardableIds(from: number, now: number): string[] {
+    const map = row.value?.expedition_map;
+    const active = map?.archipel?.island;
+    if (!map || active === undefined) return [];
+    if (from !== active) return islandChampions(advList.value, from, active, now).map((a) => a.id);
+    return [
+      ...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids]),
+    ];
+  }
+  /** 🏰 Les champions choisis quittent la garnison de la forteresse (le port) avant d'embarquer. */
+  function leavePort(map: ExpeditionMap, ids: readonly string[], hero: boolean) {
+    const port = boardFromFortress(map, new Set(ids), hero);
     const fromPort = new Set(port.ids);
     const advs = advList.value.map((a) =>
       fromPort.has(a.id) && a.posted === FORTRESS_ID ? { ...a, posted: undefined } : a,
     );
-    const ids = [...new Set([...crossingTravellers(advs, now), ...port.ids])];
+    return { map: port.map, advs };
+  }
+  /** ⛵ RÉSERVE LA TRAVERSÉE du héros vers l'île `to` : départ à l'heure pile suivante, arrivée
+   *  2 h après. `pick` = les champions qui l'accompagnent (option A, 2026-10-03) ; absent =
+   *  tous ceux qui peuvent embarquer. */
+  async function crossIsland(userId: string, to: number, now: number, pick?: readonly string[]) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map?.archipel) return;
+    const why = crossingBlock(to);
+    if (why) throw new Error(CROSSING_BLOCK_LABEL[why]);
+    const ok = boardableIds(cur.expedition_map.archipel.island, now);
+    const ids = pick ? ok.filter((id) => pick.includes(id)) : ok;
+    // 🏰 La forteresse est le port : les choisis de sa garnison et le héros embarquent de là.
+    const { map: m, advs } = leavePort(cur.expedition_map, ids, true);
     // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste.
-    const map = startCrossing(unpostHero(port.map), to, ids, now);
+    const map = startCrossing(unpostHero(m), to, ids, now);
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.crossing!),
+    });
+  }
+  /** ⛵ Fait NAVIGUER des champions SANS le héros, de l'île `from` vers l'île `to` (deux îles
+   *  déjà visitées). La carte active ne change pas ; ils changent d'île à l'arrivée. */
+  async function sailChampions(
+    userId: string,
+    from: number,
+    to: number,
+    ids: readonly string[],
+    now: number,
+  ) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map?.archipel) return;
+    const why = sailingBlocker(cur.expedition_map, from, to, ids, boardableIds(from, now));
+    if (why) throw new Error(SAILING_BLOCK_LABEL[why]);
+    const active = cur.expedition_map.archipel.island;
+    const { map: m, advs } =
+      from === active
+        ? leavePort(cur.expedition_map, ids, false)
+        : { map: cur.expedition_map, advs: advList.value };
+    const map = startSailing(m, from, to, ids, now);
+    await persist(userId, {
+      expedition_map: map,
+      adventurers: boardTravellers(advs, map.sailings![map.sailings!.length - 1]!),
     });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
@@ -6214,6 +6267,8 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     expeSyncMap,
     crossIsland,
+    sailChampions,
+    boardableIds,
     crossingBlock,
     expeSend,
     expeTick,

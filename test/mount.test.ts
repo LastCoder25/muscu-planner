@@ -202,7 +202,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       openIds: [1, 2],
       visitedIds: [1],
       blocks: { 1: null, 2: null, 3: null, 4: null, 5: null },
-      travellers: 3,
       away: {},
       militia: { 1: 4 },
     };
@@ -223,7 +222,67 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       },
     );
     expect(there).toContain('Traverser vers l');
-    expect(there).toMatch(/3\s+champions/);
+    expect(there).toContain('avec le héros, tu choisis les champions');
+    // ⛵ Option A : une île déjà visitée où attendent des champions propose de les faire venir,
+    // même si le héros est retenu (sa traversée bloquée n'empêche pas la leur).
+    let back = '';
+    await mountIt(
+      ArchipelPanel,
+      {
+        ...props,
+        visitedIds: [1, 2],
+        fetchable: { 2: 3 },
+        blocks: { 1: null, 2: 'Ton héros doit être rentré pour embarquer.' },
+      },
+      undefined,
+      undefined,
+      '/',
+      (h) => (back = h),
+      async (host) => {
+        openHead(host);
+        await nextTick();
+        host.querySelectorAll('.am-isl')[1]?.dispatchEvent(new Event('click'));
+      },
+    );
+    expect(back).toMatch(/Faire venir 3\s+champions/);
+    expect(back).toContain('avec ou sans le héros');
+  });
+
+  it('CrossingSheet : héros imposé vers une île neuve, facultatif vers une île visitée', async () => {
+    const { default: CrossingSheet } = await import('@/components/CrossingSheet.vue');
+    const adv = (id: string) =>
+      ({ id, name: id, seed: 1, path: ['guerrier'], level: 5, xp: 0 }) as unknown;
+    const base = {
+      modelValue: true,
+      from: 1,
+      to: 2,
+      activeId: 1,
+      heroBlock: null,
+      candidates: [adv('a'), adv('b')],
+      departAt: Date.UTC(2026, 9, 3, 18),
+    };
+    let forced = '';
+    await mountIt(
+      CrossingSheet,
+      { ...base, heroMode: 'forced' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (forced = h),
+    );
+    expect(forced).toContain('Première traversée vers cette île');
+    expect(forced).toMatch(/2\/2\s+champions/);
+    let alone = '';
+    await mountIt(
+      CrossingSheet,
+      { ...base, heroMode: 'optional' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (alone = h),
+      (host) => host.querySelector<HTMLElement>('.cs-hero')?.click(),
+    );
+    expect(alone).toContain('Les champions naviguent seuls');
   });
 
   // 🏝️ Le sol d'une île : la côte, le port et la forteresse portuaire nommée.

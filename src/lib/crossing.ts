@@ -256,6 +256,112 @@ export function boardTravellers(advs: Adventurer[], c: Crossing): Adventurer[] {
   return advs.map((a) => (on.has(a.id) ? { ...a, busyUntil: c.arriveAt } : a));
 }
 
+/**
+ * ⛵ CHAMPIONS SEULS (option A, décision de l'utilisateur 2026-10-03) : la PREMIÈRE traversée
+ * vers une île se fait avec le héros (c'est elle qui fait naître l'île) ; ensuite, des
+ * champions peuvent naviguer SANS lui entre deux îles déjà VISITÉES — pour aller attendre sur
+ * une autre île, ou revenir. La carte active ne change pas : ils changent d'île à l'arrivée.
+ */
+
+/** Les champions LIBRES qui se trouvent sur l'île `island` (l'active : pas de `elsewhere`). */
+export function islandChampions(
+  advs: readonly Adventurer[],
+  island: number,
+  active: number,
+  now: number,
+): Adventurer[] {
+  return advs.filter(
+    (a) =>
+      (island === active ? a.elsewhere === undefined : a.elsewhere === island) &&
+      !a.posted &&
+      (a.busyUntil ?? 0) <= now &&
+      (a.hurtUntil ?? 0) <= now,
+  );
+}
+
+export type SailingBlock = 'noArchipel' | 'same' | 'notVisited' | 'empty' | 'notHere';
+
+export const SAILING_BLOCK_LABEL: Record<SailingBlock, string> = {
+  noArchipel: 'Le mode archipel est désactivé.',
+  same: 'Ils sont déjà sur cette île.',
+  notVisited: 'Sans le héros, on ne navigue que vers une île déjà visitée.',
+  empty: 'Choisis au moins un champion.',
+  notHere: 'Un des champions n’est pas libre sur l’île de départ.',
+};
+
+/** ⚠️ SOURCE UNIQUE écran + store : peut-on faire naviguer `ids` de `from` à `to` sans héros ?
+ *  `eligible` = les ids libres sur `from` (la fortresse de l'île active comprise). */
+export function sailingBlocker(
+  map: Pick<ExpeditionMap, 'archipel' | 'islands'>,
+  from: number,
+  to: number,
+  ids: readonly string[],
+  eligible: readonly string[],
+): SailingBlock | null {
+  if (!map.archipel) return 'noArchipel';
+  if (from === to) return 'same';
+  const visited = visitedIslands(map);
+  if (!visited.includes(to) || !visited.includes(from)) return 'notVisited';
+  if (!ids.length) return 'empty';
+  const ok = new Set(eligible);
+  if (ids.some((id) => !ok.has(id))) return 'notHere';
+  return null;
+}
+
+/** ⛵ Réserve une navigation sans héros : même horaire qu'une traversée (heure pile, 2 h). */
+export function startSailing(
+  map: ExpeditionMap,
+  from: number,
+  to: number,
+  ids: readonly string[],
+  now: number,
+): ExpeditionMap {
+  const departAt = nextCrossingDeparture(now);
+  const s: Crossing = {
+    from,
+    to,
+    bookedAt: now,
+    departAt,
+    arriveAt: departAt + CROSSING.travelMs,
+    ids: [...ids],
+  };
+  return { ...map, sailings: [...(map.sailings ?? []), s] };
+}
+
+/**
+ * ⚓ Les navigations arrivées : leurs champions sont désormais sur l'île d'arrivée — « ici »
+ * si c'est l'île ACTIVE (lue au moment de l'arrivée, après un éventuel débarquement du héros),
+ * `elsewhere` sinon. ⚠️ À appeler APRÈS `landAdventurers` : un débarquement du héros pendant la
+ * navigation a pu leur poser un `elsewhere` provisoire, que l'arrivée corrige.
+ * `null` si rien n'est arrivé (l'appelant n'écrit pas à vide).
+ */
+export function settleSailings(
+  map: ExpeditionMap,
+  advs: Adventurer[],
+  now: number,
+): { map: ExpeditionMap; advs: Adventurer[] } | null {
+  const done = (map.sailings ?? []).filter((s) => s.arriveAt <= now);
+  if (!done.length || !map.archipel) return null;
+  const active = map.archipel.island;
+  const where = new Map<string, number>();
+  for (const s of done) for (const id of s.ids) where.set(id, s.to);
+  const out = advs.map((a) => {
+    const to = where.get(a.id);
+    if (to === undefined) return a;
+    if (to === active) {
+      if (a.elsewhere === undefined) return a;
+      const { elsewhere: _e, ...rest } = a;
+      void _e;
+      return rest;
+    }
+    return { ...a, elsewhere: to };
+  });
+  const left = (map.sailings ?? []).filter((s) => s.arriveAt > now);
+  const { sailings: _s, ...rest } = map;
+  void _s;
+  return { map: left.length ? { ...rest, sailings: left } : rest, advs: out };
+}
+
 /** La graine d'une île neuve : dérivée de la carte quittée et du numéro de l'île (une île
  *  ne se dessine pas comme la précédente, mais reste la même d'un tick à l'autre). */
 export function islandSeed(seed: number, island: number): number {
@@ -289,7 +395,9 @@ export function landCrossing(
   const c = map.crossing;
   if (!c || now < c.arriveAt || !map.archipel)
     return { map, crossing: null, firstTime: false, militia: null };
-  const { islands, crossing: _c, citadelStash, ...left } = map;
+  // ⛵ Les navigations sans héros sont GLOBALES : elles suivent la carte active, jamais l'île
+  // rangée (sinon elles se figeraient avec elle et n'arriveraient jamais).
+  const { islands, crossing: _c, citadelStash, sailings, ...left } = map;
   void _c;
   const stash: Record<string, ExpeditionMap> = { ...(islands ?? {}) };
   const found = stash[String(c.to)];
@@ -319,6 +427,7 @@ export function landCrossing(
       ...target,
       islands: stash,
       ...(citadelStash ? { citadelStash } : {}),
+      ...(sailings?.length ? { sailings } : {}),
     },
     crossing: c,
     firstTime: !saved,
