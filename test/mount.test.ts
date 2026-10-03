@@ -467,6 +467,26 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toMatch(/🦸<\/span>dispo/);
   }, 30_000);
 
+  // 🐞 Signalé : « comment on voit que le héros est en traversée ? » — la ligne disait « dispo ».
+  it('AvailabilityLine : un héros en traversée n’est pas « dispo »', async () => {
+    const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
+    const crossing = { from: 1, to: 2, bookedAt: 0, departAt: 3_600_000, arriveAt: 10_800_000, ids: [] };
+    const map = { seed: 1, spawnCount: 0, nextSpawnAt: 0, pois: [], crossing };
+    let out = '';
+    expect(
+      await mountIt(
+        AvailabilityLine,
+        { now: 1 },
+        { ...ROW, expedition_map: map },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toMatch(/🦸<\/span>⛵/);
+    expect(out).toMatch(/title="Héros en traversée vers l.{1,6}île 2/);
+  }, 30_000);
+
   // 🎯 Demandé : l'apport de chaque membre à la réussite, sur sa tuile.
   it('AdvPickTile affiche ce qu’il apporte à la réussite', async () => {
     const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
@@ -697,69 +717,33 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await render('')).not.toContain('ctl-dots');
   }, 30_000);
 
-  it('🎚️ MapFilterBar repliée résume les types filtrés, sans aucun filtre de rang', async () => {
+  it('🎚️ MapFilterBar : plus aucun filtre par type de lieu, ni par rang', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
     let out = '';
     expect(
       await mountIt(
         MapFilterBar,
-        {
-          typeChips: [
-            { type: 'mine', total: 1 },
-            { type: 'archive', total: 1 },
-          ],
-          typeFilter: { only: ['mine'], hidden: [] },
-        },
+        { troops: 2, troopMode: 'all', defaultOpen: true },
         undefined,
         undefined,
         '/',
         (h) => (out = h),
       ),
     ).toBeNull();
-    // REPLIÉE par défaut : le résumé dit ce qui est filtré, sans rendre le corps.
-    expect(out).toContain('class="filters active"');
-    expect(out).toContain('>Mine seulement<');
-    expect(out).not.toContain('rangs');
-    expect(out).not.toContain('flt-dot');
-  }, 30_000);
-
-  it('🎚️ MapFilterBar dépliée : types en tuiles qui écrivent leur état, pas de rangs', async () => {
-    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
-    let out = '';
-    expect(
-      await mountIt(
-        MapFilterBar,
-        {
-          typeChips: [
-            { type: 'mine', total: 1 },
-            { type: 'archive', total: 1 },
-            { type: 'rift', total: 1 },
-          ],
-          typeFilter: { only: ['mine'], hidden: ['archive'] },
-          defaultOpen: true,
-        },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      ),
-    ).toBeNull();
-    expect(out).not.toContain('rf-chip');
+    expect(out).toContain('Déplacements de troupes');
+    expect(out).not.toContain('Types de lieu');
     expect(out).not.toContain('Rangs');
-    // Mine « seul », archives masquées : les deux états sont ÉCRITS.
-    expect(out).toContain('rm-only');
-    expect(out).toContain('>seul<');
-    expect(out).toContain('>✕<');
-    expect(out).toContain('Tout afficher');
+    // Sans voyage en cours, il n'y a rien à filtrer : pas de barre du tout.
+    let empty = '';
+    expect(
+      await mountIt(MapFilterBar, { troops: 0 }, undefined, undefined, '/', (h) => (empty = h)),
+    ).toBeNull();
+    expect(empty).not.toContain('class="filters');
   }, 30_000);
 
   it('🚶 MapFilterBar : la tuile des déplacements de troupes', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
-    const base = {
-      typeChips: [{ type: 'mine' as const, total: 2 }],
-      typeFilter: { only: [], hidden: [] },
-      defaultOpen: true,
-    };
+    const base = { defaultOpen: true };
     const render = async (extra: object) => {
       let out = '';
       expect(

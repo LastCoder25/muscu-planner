@@ -100,6 +100,9 @@ export type ControlKind =
   | 'mana'
   /** 🏝️🧪 La DISTILLERIE (île 5) : des boosts de vitesse d'expédition. */
   | 'distillery'
+  /** 🏝️🧱 Le FORTIN (île 4) : ne produit rien, affaiblit les reprises sur les autres lieux
+   *  tenus de l'île. */
+  | 'fort'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
   /** 🏝️ ARCHIPEL (étape 2) : un OBJECTIF SECONDAIRE de l'île (camp de brigands, nid…) et la
@@ -180,6 +183,9 @@ export interface ControlState {
    *  mise de côté AVANT tout changement de règle : on ne recalcule jamais le passé. */
   yieldMult?: number;
   flatTier?: boolean;
+  /** 🧱 Le FORTIN de l'île tenu (`fortMultOf`, posé par `ensureIslandConquest`) : la troupe
+   *  qui vient reprendre CE lieu est multipliée par ce facteur (< 1). Absent sans fortin. */
+  fortMult?: number;
   /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
    *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
    *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */
@@ -291,6 +297,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   altar: 'Autel des runes',
   mana: 'Source de mana',
   distillery: 'Distillerie',
+  fort: 'Fortin',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
   fortress: 'Forteresse portuaire',
@@ -308,6 +315,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   altar: '🗿',
   mana: '⛲',
   distillery: '🧪',
+  fort: '🧱',
   citadel: '🏯',
   objective: '⛺',
   fortress: '🏰',

@@ -90,19 +90,21 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
   });
 });
 
-describe('⚱️ l’ossuaire de l’île 3', () => {
-  it('l’île 3 porte le socle + l’ossuaire seulement (4 lieux fixes)', () => {
-    const k = islandMap().pois.flatMap((p) => (p.control ? [p.control.kind] : []));
-    for (const x of ['mine', 'training', 'mana', 'ossuary']) expect(k).toContain(x);
-    expect(new Set(k.filter((x) => (ALL_CONTROL_KINDS as string[]).includes(x))).size).toBe(4);
-    expect(k).not.toContain('garden');
-    expect(k).not.toContain('tower');
-    expect(k).not.toContain('archives');
-    expect(k).not.toContain('scriptorium');
+// ⚱️ L'ossuaire est passé sur l'île 2 (2026-10-03) : la 1re ascension tombe au niveau 10, les
+// sceaux de champion servent dès la 2e île.
+describe('⚱️ l’ossuaire, sur l’île 2', () => {
+  it('l’île 3 n’a plus d’ossuaire ; l’île 2 le porte', () => {
+    const k3 = islandMap().pois.flatMap((p) => (p.control ? [p.control.kind] : []));
+    expect(k3).not.toContain('ossuary');
+    const fixed3 = k3.filter((x) => (ALL_CONTROL_KINDS as string[]).includes(x));
+    expect(fixed3).not.toContain('mine');
+    expect(fixed3).not.toContain('mana');
+    const k2 = islandMap(2, 40).pois.flatMap((p) => (p.control ? [p.control.kind] : []));
+    expect(k2).toContain('ossuary');
   });
-  it('tenu au complet, un sceau de champion au rang de l’île tous les 3 jours (étape 0)', () => {
+  it('tenu au complet, un sceau de champion au rang du joueur tous les 3 jours (étape 0)', () => {
     const id = controlIdOf('ossuary');
-    let m = islandMap();
+    let m = islandMap(2, LV);
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Ossuaire');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
     const got = harvestOver(m, id, NOW, 12 * 24, LV);
@@ -111,11 +113,11 @@ describe('⚱️ l’ossuaire de l’île 3', () => {
     expect(got.champSeals).toBeLessThanOrEqual(6);
     expect(collectControl(m, id, NOW + 72 * H, LV).champSealRank).toBe(characterRank(LV).rankIndex);
     expect(got.gold + got.mana + got.keys + got.runes + got.summon + got.gearSeals).toBe(0);
-    const one = captureControl(islandMap(), id, ['a'], NOW, 7);
+    const one = captureControl(islandMap(2, LV), id, ['a'], NOW, 7);
     expect(harvestOver(one, id, NOW, 12 * 24, LV).champSeals).toBeLessThan(got.champSeals);
   });
   it('le rapport dit les sceaux de champion', () => {
-    const p = islandMap().pois.find((q) => q.id === controlIdOf('ossuary'))!;
+    const p = islandMap(2, LV).pois.find((q) => q.id === controlIdOf('ossuary'))!;
     expect(controlLootMessage(p, NOW, {}, 0, 0, 0, 0, 2)!.title).toContain('2 sceaux de champion');
   });
 });
