@@ -1077,14 +1077,17 @@ export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
  * de guet, les îles sont plus petites ») — la Tour de guet de la BASE, elle, reste.
  */
 const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
-  // 🎯 Le camp d'entraînement n'apparaît qu'à partir de l'île 2 (décision de l'utilisateur,
-  // 2026-10-03 : « on va déplacer le camp d'entraînement en île 2 »).
-  1: ['mine', 'garden', 'scriptorium', 'mana'],
-  2: ['mine', 'training', 'mana', 'archives'],
-  // 🏝️ QUATRE LIEUX FIXES PAR ÎLE : le socle (mine, camp, source) + UNE spécialité (décision
-  // de l'utilisateur, 2026-10-03). Retirés : jardin (île 3), cercle (île 4, la source donne
-  // déjà le mana), scriptorium (île 5, l'autel donne déjà les runes). Un lieu retiré encore
-  // tenu est rappelé puis effacé (`retiredHeld`).
+  // 🏝️ AUCUN DOUBLON D'UNE ÎLE À L'AUTRE, sauf le camp d'entraînement (décision de
+  // l'utilisateur, 2026-10-03 : « les îles produisent selon le niveau du joueur, pas besoin de
+  // remettre les mêmes lieux fixes sur d'autres îles »). Une île QUITTÉE continue de produire
+  // (`autoCollectControls`), au niveau du joueur : une 2ᵉ mine sur l'île 2 ne ferait
+  // qu'empiler de l'or. Le camp, lui, est sur chaque île : il entraîne les champions POSTÉS
+  // là où l'on se bat. Rien qui alimente la partie héros (clés, pierres d'invocation).
+  // Un lieu retiré encore tenu est rappelé puis effacé (`retiredHeld`).
+  1: ['training', 'mine', 'mana', 'garden'],
+  2: ['training', 'scriptorium', 'ossuary'],
+  // ⏳ Îles 3 à 5 : composition d'avant tant que leurs lieux nouveaux (lapidaire, cartographe,
+  // fortin, distillerie) ne sont pas écrits — personne n'a encore quitté l'île 1.
   3: ['mine', 'training', 'mana', 'ossuary'],
   4: ['mine', 'training', 'mana', 'arsenal'],
   5: ['mine', 'training', 'mana', 'altar'],

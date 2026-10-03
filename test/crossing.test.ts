@@ -20,7 +20,7 @@ import { createMap, type ExpeditionMap } from '@/lib/expedition';
 import { FORTRESS_ID } from '@/lib/islandConquest';
 import { characterRank } from '@/lib/characterRank';
 import { emptyMilitia, militiaCap, produceMilitia } from '@/lib/militia';
-import { militiaSeatsOf } from '@/lib/controlPoints';
+import { controlKindsOf, militiaSeatsOf } from '@/lib/controlPoints';
 
 const H = 3600_000;
 const T0 = Date.UTC(2026, 9, 2, 10, 0, 0);
@@ -172,8 +172,8 @@ describe('🛡️ une réserve de milice par île', () => {
     // de miliciens (5 par point) — jamais plus.
     for (const isl of [1, 2, 3, 4, 5]) {
       const seats = militiaSeatsOf({ archipel: archipelOn(isl) });
-      expect(seats % 5).toBe(0);
-      expect(seats).toBeGreaterThanOrEqual(4 * 5);
+      expect(seats).toBe(controlKindsOf({ archipel: archipelOn(isl) }).length * 5);
+      expect(seats).toBeGreaterThan(0);
       for (const b of [1, 5, 30, 100]) expect(militiaCap(b, seats)).toBe(Math.min(b, seats));
     }
     // Île 1 : 4 lieux fixes → 20 miliciens, atteints pile à la Caserne 20 (on la quitte au niveau 20).

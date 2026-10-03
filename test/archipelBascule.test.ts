@@ -39,24 +39,24 @@ describe('🏝️ bascule des comptes sur l’archipel (étape 7)', () => {
   });
 
   it('les lieux tenus de l’île 1 restent tenus, sans compensation', () => {
-    const b = basculeToArchipel(classicMap(['mine', 'garden', 'scriptorium', 'mana']), NOW)!;
+    const b = basculeToArchipel(classicMap(['mine', 'garden', 'training', 'mana']), NOW)!;
     expect(b.refunds).toEqual([]);
     expect(b.message).toBeNull();
     const held = b.map.pois
       .filter((p) => p.control?.owner === 'player')
       .map((p) => p.control!.kind);
-    expect(held.sort()).toEqual(['garden', 'mana', 'mine', 'scriptorium']);
+    expect(held.sort()).toEqual(['garden', 'mana', 'mine', 'training']);
     // ⚠️ Aucun d'eux n'est rappelé au tick suivant.
     expect(retiredHeld(b.map)).toEqual([]);
   });
 
   it('un lieu absent de l’île 1 est compensé de 2 jours de sa production en or', () => {
-    const m = classicMap(['training', 'mine']);
+    const m = classicMap(['scriptorium', 'mine']);
     const refunds = basculeRefunds(m);
-    expect(refunds.map((r) => r.kind)).toEqual(['training']);
-    const camp = m.pois.find((p) => p.control?.kind === 'training')!;
-    // La règle de production du jeu, garnison pleine (3 au camp), au rang du lieu, × 48 h.
-    const expected = Math.round(controlGoldPerHour(camp, seatsOf('training'), camp.level) * 48);
+    expect(refunds.map((r) => r.kind)).toEqual(['scriptorium']);
+    const camp = m.pois.find((p) => p.control?.kind === 'scriptorium')!;
+    // La règle de production du jeu, garnison pleine, au rang du lieu, × 48 h.
+    const expected = Math.round(controlGoldPerHour(camp, seatsOf('scriptorium'), camp.level) * 48);
     expect(refunds[0]!.gold).toBe(expected);
     expect(refunds[0]!.gold).toBeGreaterThan(0);
     expect(BASCULE.compensationHours).toBe(48);
@@ -64,7 +64,7 @@ describe('🏝️ bascule des comptes sur l’archipel (étape 7)', () => {
 
   it('le coffre porte la somme des compensations, à encaisser une seule fois', () => {
     // 🗼 Une tour de guet tenue (type retiré, encore présent sur de vieilles cartes).
-    const m = classicMap(['training']);
+    const m = classicMap(['scriptorium']);
     const mine = m.pois.find((p) => p.control?.kind === 'mine')!;
     m.pois.push({
       ...mine,
@@ -81,8 +81,8 @@ describe('🏝️ bascule des comptes sur l’archipel (étape 7)', () => {
   });
 
   it('la garnison d’un lieu rendu est rappelée au tick suivant (`retiredHeld`)', () => {
-    const b = basculeToArchipel(classicMap(['training']), NOW)!;
-    expect(retiredHeld(b.map).map((p) => p.control!.kind)).toEqual(['training']);
+    const b = basculeToArchipel(classicMap(['scriptorium']), NOW)!;
+    expect(retiredHeld(b.map).map((p) => p.control!.kind)).toEqual(['scriptorium']);
   });
 
   it('les lieux ennemis ne sont pas compensés', () => {
