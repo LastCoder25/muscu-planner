@@ -703,6 +703,15 @@ export function settleParties(
       q = shortenWonReturn({ ...p, reported: true });
       changed = true;
     }
+    // 🩹 Déjà arrivé mais encore sur son ancien retour (un voyage rescapé d'avant le
+    // correctif) : le raccourci se rejoue — il ne fait que raccourcir, donc sans risque.
+    if (p.reported) {
+      const s = shortenWonReturn(p);
+      if (s !== p) {
+        q = s;
+        changed = true;
+      }
+    }
     if (now >= q.returnAt) {
       changed = true;
       continue;

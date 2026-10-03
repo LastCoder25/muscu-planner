@@ -876,6 +876,19 @@ describe('📬 settleParties — un groupe parti sans le héros : rapport à l�
     expect(settleParties([p], [], p.returnAt, 30).parties).toEqual([]);
   });
 
+  it('🏰 un voyage déjà arrivé resté sur son ancien retour est raccourci (toute l’équipe en garnison)', () => {
+    const p0 = trip('a', 0);
+    expect(p0.outcome.win).toBe(true);
+    // Rescapé d'avant le correctif : arrivé, point pris, personne ne rentre — mais l'ancien retour.
+    const p = { ...p0, reported: true as const, wingOf: 'atk1', returnLegs: { won: 0, lost: 30 } };
+    const r = settleParties([p], [], p.midAt + 1, 30);
+    expect(r.changed).toBe(true);
+    expect(r.parties).toEqual([]);
+    // Un voyage qui rentre vraiment (perdu) garde son retour.
+    const lost = { ...p, outcome: { ...p.outcome, win: false } };
+    expect(settleParties([lost], [], p.midAt + 1, 30).parties).toEqual([lost]);
+  });
+
   it('⚠️ un rapport déjà présent (même id) n’est jamais dupliqué', () => {
     const p = trip('a', 0);
     const r = settleParties([p], [buildMessage(p)], p.midAt, 30);

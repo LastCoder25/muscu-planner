@@ -4460,9 +4460,12 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ APRÈS `settleParties` : le rapport est déjà bâti sur l'escorte complète (XP,
     // blessures) ; on ne retouche que le voyage. Les voyages rentrés dans ce même tick y
     // passent aussi, pour que leurs blessés ne soient pas renvoyés du point.
+    // ⚠️ Dans leur version RACCOURCIE (`shortenWonReturn`) : relus d'avant, un point pris
+    // dont toute l'équipe est restée en garnison ressuscitait avec son ancien retour, et la
+    // fiche du lieu annonçait « une équipe sur le retour » (signalé sur la forteresse).
     const gone = partiesIn
       .filter((p) => !t0.parties.some((q) => q.id === p.id))
-      .map((p) => ({ ...p, reported: true as const }));
+      .map((p) => shortenWonReturn({ ...p, reported: true as const }));
     const sp = splitSorties(cur, [...t0.parties, ...gone], advList.value, clock);
     const t = sp.changed
       ? { ...t0, parties: sp.list.filter((p) => clock < p.returnAt), changed: true }
