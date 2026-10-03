@@ -19,7 +19,6 @@ import {
   SKILLS,
   SKILL_MAX_LEVEL,
   RUNE_PLACE,
-  canUseRune,
   pickTier,
   placeRuneChance,
   skillsOfTier,
@@ -243,11 +242,10 @@ export function fuseSkills(bank: RuneBank, uidA: string, uidB: string): RuneBank
 /** Ce que la compétence ferait à ce champion. */
 export type GiveKind = 'new' | 'stack' | 'replace';
 
-export type GiveBlock = 'missing' | 'rank' | 'over' | 'full';
+export type GiveBlock = 'missing' | 'over' | 'full';
 
 export const GIVE_BLOCK_LABEL: Record<GiveBlock, string> = {
   missing: 'introuvable',
-  rank: 'rang trop bas pour cette couleur',
   over: `dépasserait le niveau ${SKILL_MAX_LEVEL}`,
   full: 'choisis la compétence à remplacer',
 };
@@ -256,8 +254,6 @@ export interface ChampionSlots {
   skills: readonly ChampSkill[];
   /** Emplacements du champion (A 2 · S 3 · X 4) ; 0 hors champion. */
   slots: number;
-  /** Rang de prestige du champion (index de `CHARACTER_RANKS`). */
-  rankIndex: number;
 }
 
 /** Ce que donner cet exemplaire ferait, sans rien décider. `full` : il faudra choisir quoi
@@ -280,7 +276,6 @@ export function giveBlocker(
 ): GiveBlock | null {
   const sk = bank.skills.find((s) => s.uid === uid);
   if (!sk || c.slots <= 0) return 'missing';
-  if (!canUseRune(SKILLS[sk.id].tier, c.rankIndex)) return 'rank';
   const kind = giveKind(c, sk.id);
   if (kind === 'stack') {
     const cur = c.skills.find((s) => s.id === sk.id)!;

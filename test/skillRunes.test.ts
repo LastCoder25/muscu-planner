@@ -7,7 +7,6 @@ import {
   SKILL_IDS,
   SKILL_MAX_LEVEL,
   SKILL_SLOTS,
-  canUseRune,
   skillValue,
   skillsOfTier,
   RUNE_PLACE,
@@ -81,15 +80,6 @@ describe('📈 le cumul', () => {
 describe('🎟️ poser une rune', () => {
   it('emplacements : A 2 · S 3 · X 4', () => {
     expect(SKILL_SLOTS).toEqual({ A: 2, S: 3, X: 4 });
-  });
-
-  it('⚠️ garde-fou de rang : violet dès Argent, doré dès Or', () => {
-    expect(canUseRune('green', 0)).toBe(true);
-    expect(canUseRune('blue', 0)).toBe(true);
-    expect(canUseRune('violet', 0)).toBe(false);
-    expect(canUseRune('violet', 1)).toBe(true);
-    expect(canUseRune('gold', 1)).toBe(false);
-    expect(canUseRune('gold', 2)).toBe(true);
   });
 });
 

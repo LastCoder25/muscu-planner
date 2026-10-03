@@ -30,13 +30,13 @@ import {
 export type RuneTier = 'green' | 'blue' | 'violet' | 'gold';
 export const RUNE_TIERS: readonly RuneTier[] = ['green', 'blue', 'violet', 'gold'];
 
-export const RUNE_INFO: Record<RuneTier, { emoji: string; label: string; minRank: number }> = {
-  green: { emoji: '🟢', label: 'Rune verte', minRank: 0 },
-  blue: { emoji: '🔵', label: 'Rune bleue', minRank: 0 },
-  // ⚠️ Le garde-fou « rareté ≤ rang » du jeu (équipement, familiers) : un champion fraîchement
-  // tiré ne devient pas un monstre en une rune. Indices de `CHARACTER_RANKS` (1 = Argent).
-  violet: { emoji: '🟣', label: 'Rune violette', minRank: 1 },
-  gold: { emoji: '🟠', label: 'Rune dorée', minRank: 2 },
+/** ⚠️ Aucune couleur n'est réservée à un rang (décision de l'utilisateur, v1.34.0) : un
+ *  champion Bronze peut porter une compétence dorée. */
+export const RUNE_INFO: Record<RuneTier, { emoji: string; label: string }> = {
+  green: { emoji: '🟢', label: 'Rune verte' },
+  blue: { emoji: '🔵', label: 'Rune bleue' },
+  violet: { emoji: '🟣', label: 'Rune violette' },
+  gold: { emoji: '🟠', label: 'Rune dorée' },
 };
 
 export type SkillId =
@@ -163,11 +163,6 @@ export const SKILL_SLOTS: Record<'A' | 'S' | 'X', number> = { A: 2, S: 3, X: 4 }
 export interface ChampSkill {
   id: SkillId;
   level: number;
-}
-
-/** Le rang du champion permet-il de poser cette rune ? */
-export function canUseRune(tier: RuneTier, championRankIndex: number): boolean {
-  return championRankIndex >= RUNE_INFO[tier].minRank;
 }
 
 /**
