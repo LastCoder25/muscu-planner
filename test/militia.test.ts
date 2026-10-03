@@ -83,7 +83,7 @@ describe('une garnison de 5 au plus, champions et miliciens compris', () => {
       const trois = garrisonHoldChance(point(L), militiaUnits(ids(3), L), 1, 60);
       const cinq = garrisonHoldChance(point(L), militiaUnits(ids(5), L), 1, 60);
       expect(cinq).toBeGreaterThan(trois);
-      expect(garrisonHold(point(L, 'garden'), militiaUnits(ids(5), L))).toBeLessThanOrEqual(0.9);
+      expect(garrisonHold(point(L, 'garden'), militiaUnits(ids(5), L), 1)).toBeLessThanOrEqual(0.9);
     }
   });
 });

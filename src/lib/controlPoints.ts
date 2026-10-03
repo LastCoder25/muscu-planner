@@ -1495,6 +1495,8 @@ export function garrisonHoldChance(
   allies: readonly SkirmishUnit[],
   boost = 1,
   samples: number = CONTROL.holdSamples,
+  /** 🧱🏹 L'enceinte divise la troupe ennemie (`fortifyMult`, ≥ 1). */
+  fort = 1,
 ): number {
   if (!allies.length) return 0;
   // ⚠️ Calée sur une garnison de RÉFÉRENCE (3 au plus) : poster 4 ou 5 personnes renforce la
@@ -1507,7 +1509,7 @@ export function garrisonHoldChance(
   for (const size of CONTROL.sizes)
     w += campWinPct(
       p,
-      { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * boost },
+      { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * (boost / fort) },
       allies,
       samples,
     );
@@ -1517,24 +1519,27 @@ export function garrisonHoldChance(
 /** 🎲 De combien l'ennemi grossit sa troupe face à CETTE garnison : 1 tant qu'elle ne tient
  *  pas plus de `CONTROL.maxHold` (le cas normal), sinon juste assez pour y redescendre.
  *  ⚠️ Un champion faible n'est donc jamais pénalisé ; seul un choix « sans risque » l'est. */
-export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[]): number {
-  if (!allies.length || garrisonHoldChance(p, allies) <= CONTROL.maxHold) return 1;
+export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[], fort = 1): number {
+  const hold = (b: number) => garrisonHoldChance(p, allies, b, CONTROL.holdSamples, fort);
+  if (!allies.length || hold(1) <= CONTROL.maxHold) return 1;
   let lo = 1;
   let hi = 2;
-  while (garrisonHoldChance(p, allies, hi) > CONTROL.maxHold && hi < 256) {
+  while (hold(hi) > CONTROL.maxHold && hi < 256) {
     lo = hi;
     hi *= 2;
   }
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
-    if (garrisonHoldChance(p, allies, mid) > CONTROL.maxHold) lo = mid;
+    if (hold(mid) > CONTROL.maxHold) lo = mid;
     else hi = mid;
   }
   return hi;
 }
 
-/** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`). */
-export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
+/** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`).
+ *  ⚠️ `fort` REQUIS (`fortifyMult`) : oublié, l'écran annoncerait une tenue sans l'enceinte
+ *  alors que la bataille la compte. */
+export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[], fort: number): number {
   // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
   const threat =
     tierThreatMult(tierAtAttack(p.control)) *
@@ -1543,7 +1548,13 @@ export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
       p.control?.attackAt ?? p.control?.angerSince ?? 0,
       activityOf(p.control),
     );
-  return garrisonHoldChance(p, allies, retakeBoost(p, allies) * threat);
+  return garrisonHoldChance(
+    p,
+    allies,
+    retakeBoost(p, allies, fort) * threat,
+    CONTROL.holdSamples,
+    fort,
+  );
 }
 
 /** ⏰ L'heure de l'attaque, telle que le joueur la CONNAÎT : seulement dans les dernières
@@ -1579,11 +1590,13 @@ export function controlDefenseHold(
   advs: readonly Adventurer[],
   kit: EscortKit,
   playerLevel: number,
+  /** 🧱🏹 `fortifyMult`, REQUIS. */
+  fort: number,
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
   const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
-  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies);
+  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies, fort);
 }
 
 /** La troupe qui vient REPRENDRE le point — tirée sur l'instant de l'attaque. */

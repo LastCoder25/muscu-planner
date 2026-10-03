@@ -1394,3 +1394,104 @@ export function brigandPillage(
     msg,
   };
 }
+
+/**
+ * ⛵ Les CHAMPIONS quittent les lieux fixes d'une île (décision de l'utilisateur, 2026-10-03 :
+ * « tous les champions partent » sur l'île suivante) : garnisons, renforts en route, retours,
+ * sorties et héros posté. ⚠️ LES MILICIENS RESTENT — ce sont eux qui gardent l'île et font
+ * tourner ses lieux. La production déjà faite est mise de côté AVANT (`bankAt`) : elle repart
+ * au débit de la garnison restante, jamais recalculée. Rend la MÊME carte si rien ne change.
+ */
+export function stripChampions(map: ExpeditionMap, at: number, playerLevel: number): ExpeditionMap {
+  let changed = false;
+  const pois = map.pois.map((p) => {
+    const c = p.control;
+    if (!c || c.owner !== 'player') return p;
+    const champ = (id: string) => !isMilitiaId(id);
+    const hasChamp =
+      c.garrison.some(champ) ||
+      (c.reinforcing ?? []).some((r) => champ(r.id)) ||
+      (c.returning ?? []).some((r) => champ(r.id)) ||
+      !!c.away?.length ||
+      !!c.hero;
+    if (!hasChamp) return p;
+    changed = true;
+    const banked = c.collectedAt !== undefined ? bankAt(p, at, playerLevel) : c;
+    const { hero: _h, heroUnit: _u, away: _a, reinforcing, returning, perXp, ...rest } = banked;
+    void _h;
+    void _u;
+    void _a;
+    const reinf = (reinforcing ?? []).filter((r) => !champ(r.id));
+    const ret = (returning ?? []).filter((r) => !champ(r.id));
+    const kept = Object.fromEntries(Object.entries(perXp ?? {}).filter(([id]) => !champ(id)));
+    const control: ControlState = {
+      ...rest,
+      garrison: rest.garrison.filter((id) => !champ(id)),
+      ...(reinf.length ? { reinforcing: reinf } : {}),
+      ...(ret.length ? { returning: ret } : {}),
+      ...(Object.keys(kept).length ? { perXp: kept } : {}),
+    };
+    return { ...p, control };
+  });
+  return changed ? { ...map, pois } : map;
+}
+
+/**
+ * ⛵ L'ÎLE QUITTÉE VERS LA SUIVANTE (décision de l'utilisateur, 2026-10-03 : « on pacifie
+ * l'île précédente des lieux sauf les lieux fixes qui produisent »). Elle est PACIFIÉE d'office
+ * (objectifs et forteresse comptés abattus : ils ne reviennent pas, plus aucune attaque), VIDÉE
+ * de tout ce qui n'est pas un lieu fixe (camps, failles, armées, embuscades, convois) et plus
+ * rien n'y apparaît (`vacatedAt`, lu par `advanceWorld`). Ses champions partent
+ * (`stripChampions`) ; ses miliciens restent. Le socle passe à la règle d'une île pacifiée
+ * (`islandYieldRule`), la production faite au débit d'avant étant mise de côté. Idempotente.
+ */
+export function vacateIsland(map: ExpeditionMap, at: number, playerLevel: number): ExpeditionMap {
+  const isl = activeIsland(map);
+  const a = map.archipel;
+  if (!isl || !a || a.vacatedAt !== undefined) return map;
+  const destroyed = [
+    ...new Set([...(a.destroyed ?? []), ...objectiveIds(isl, a.nests ?? []), FORTRESS_ID]),
+  ];
+  const archipel = {
+    ...a,
+    destroyed,
+    pacifiedAt: a.pacifiedAt ?? at,
+    vacatedAt: at,
+  };
+  const stripped = stripChampions(map, at, playerLevel);
+  const next: ExpeditionMap = { ...stripped, archipel };
+  const pois = stripped.pois
+    .filter((p) => !!p.control && !isIslandTargetId(p.id) && !p.convoy && !p.army)
+    .map((p) => {
+      const c0 = p.control!;
+      // 🕊️ Plus aucune attaque, et la troupe ennemie d'un lieu non tenu ne bouge plus.
+      const {
+        attackAt: _a,
+        raidAt: _r,
+        assault: _s,
+        retakeCut: _c,
+        fieldHits: _f,
+        angerSince: _g,
+        ...c
+      } = c0;
+      void _a;
+      void _r;
+      void _s;
+      void _c;
+      void _f;
+      void _g;
+      if (!ALL_CONTROL_KINDS.includes(c.kind)) return { ...p, control: c };
+      const rule = islandYieldRule(next, c.kind);
+      const banked =
+        c.owner === 'player' && c.collectedAt !== undefined
+          ? bankAt({ ...p, control: c }, at, playerLevel)
+          : c;
+      const { yieldMult: _m, flatTier: _t, ...base } = banked;
+      void _m;
+      void _t;
+      return { ...p, control: { ...base, ...rule } };
+    });
+  const { ambushes: _am, ...clean } = next;
+  void _am;
+  return { ...clean, pois };
+}

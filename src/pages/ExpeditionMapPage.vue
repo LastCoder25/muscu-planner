@@ -30,9 +30,11 @@
       :hero-depart-at="char.crossingDepartAt(now)"
       :away="crossInfo.away"
       :militia="crossInfo.militia"
+      :remote="remoteInfo"
       :now="now"
       @cross="crossTo"
       @fetch="fetchFrom"
+      @militia="moveMilitia"
     />
     <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
     <CrossingSheet
@@ -1389,7 +1391,9 @@ import {
   islandChampions,
   nextCrossingDeparture,
   openIslands,
+  remotePoints,
   visitedIslands,
+  type RemotePoint,
 } from '@/lib/crossing';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
@@ -1634,6 +1638,26 @@ const crossInfo = computed(() => {
     militia,
   };
 });
+/** 🛡️ Les lieux fixes tenus de chaque île RANGÉE, avec leur milice (gérée à distance). */
+const remoteInfo = computed(() => {
+  const out: Record<number, RemotePoint[]> = {};
+  for (const [k, im] of Object.entries(char.row?.expedition_map?.islands ?? {}))
+    out[Number(k)] = remotePoints(im);
+  return out;
+});
+/** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
+async function moveMilitia(e: { island: number; pointId: string; delta: number }) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.moveIslandMilitia(uid, e.island, e.pointId, e.delta, Date.now(), heroLevel.value);
+  } catch (err) {
+    $q.notify({ type: 'negative', message: (err as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 /** ⛵ La traversée en cours (réservée ou en mer), s'il y en a une. */
 const sailing = computed(() => char.row?.expedition_map?.crossing ?? null);
 /** ⛵ Les îles où l'on peut traverser depuis le port (toutes les ouvertes, sauf celle-ci),
@@ -2436,9 +2460,11 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const map = char.row?.expedition_map;
   const vsArmy =
     !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
+  // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (la règle de la bataille).
+  const fort = char.fortifyFor(heroLevel.value);
   const hold = vsArmy
-    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value)
-    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
+    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort)
+    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort);
   return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
 }
 const defenseNow = computed(() => defenseOf(livePoi.value));

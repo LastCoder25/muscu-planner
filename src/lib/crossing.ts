@@ -27,10 +27,25 @@ import {
   type Island,
 } from './archipelago';
 import { characterRank } from './characterRank';
-import { createMap, type Crossing, type ExpeditionMap, type ExpeditionMessage } from './expedition';
-import { ENDLESS, FORTRESS_ID } from './islandConquest';
-import { emptyMilitia, militiaOnMap, produceMilitia, type MilitiaState } from './militia';
-import { militiaSeatsOf } from './controlPoints';
+import {
+  createMap,
+  poiEmo,
+  poiLabel,
+  type Crossing,
+  type ExpeditionMap,
+  type ExpeditionMessage,
+} from './expedition';
+import { ENDLESS, FORTRESS_ID, stripChampions, vacateIsland } from './islandConquest';
+import {
+  emptyMilitia,
+  militiaIn,
+  militiaOnMap,
+  produceMilitia,
+  returnMilitia,
+  takeMilitia,
+  type MilitiaState,
+} from './militia';
+import { bankAt, militiaFreeSeats, militiaSeatsOf } from './controlPoints';
 
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
@@ -146,6 +161,13 @@ export function endlessReward(
   return { map: { ...map, archipel: { ...a, endless: { ...e, paid: e.tier } } }, msgs };
 }
 
+/** ⛵ Une traversée VERS L'AVANT (vers une île de numéro plus grand) : c'est elle qui pacifie
+ *  l'île quittée et emmène tous les champions. Un retour vers une île déjà visitée ne change
+ *  rien de tout ça. */
+export function isForwardCrossing(c: Pick<Crossing, 'from' | 'to'>): boolean {
+  return c.to > c.from;
+}
+
 /** Le prochain départ (l'heure pile à venir, ou maintenant si on y est pile). */
 export function nextCrossingDeparture(now: number): number {
   return Math.ceil(now / CROSSING.everyMs) * CROSSING.everyMs;
@@ -178,12 +200,7 @@ export function openIslands(map: Pick<ExpeditionMap, 'archipel' | 'islands'>): n
   return [...open].sort((a, b) => a - b);
 }
 
-export type CrossingBlock =
-  | 'noArchipel'
-  | 'same'
-  | 'locked'
-  | 'atSea'
-  | 'heroBusy';
+export type CrossingBlock = 'noArchipel' | 'same' | 'locked' | 'atSea' | 'heroBusy';
 
 export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
   noArchipel: 'Le mode archipel est désactivé.',
@@ -420,9 +437,19 @@ export function landCrossing(
     return { map, crossing: null, firstTime: false, militia: null };
   // ⛵ Les navigations sans héros sont GLOBALES : elles suivent la carte active, jamais l'île
   // rangée (sinon elles se figeraient avec elle et n'arriveraient jamais).
-  const { islands, crossing: _c, citadelStash, sailings, ...left } = map;
+  const { islands, crossing: _c, citadelStash, sailings: sailing0, ...left0 } = map;
   void _c;
-  const stash: Record<string, ExpeditionMap> = { ...(islands ?? {}) };
+  // ⛵ VERS L'ÎLE SUIVANTE (décision de l'utilisateur, 2026-10-03) : l'île quittée est
+  // pacifiée et vidée de ses lieux (`vacateIsland`), et TOUS les champions partent — ils
+  // quittent aussi les garnisons des îles rangées (`stripChampions`). Les miliciens restent.
+  // Les navigations sans héros en cours n'ont plus d'objet : leurs champions suivent le héros.
+  const forward = isForwardCrossing(c);
+  const lvl = (m: Pick<ExpeditionMap, 'archipel'>) => mapPlayerLevel(m, playerLevel);
+  const left = forward ? vacateIsland(left0, c.arriveAt, lvl(left0)) : left0;
+  const sailings = forward ? undefined : sailing0;
+  const stash: Record<string, ExpeditionMap> = {};
+  for (const [k, im] of Object.entries(islands ?? {}))
+    stash[k] = forward ? stripChampions(im, c.arriveAt, lvl(im)) : im;
   const found = stash[String(c.to)];
   delete stash[String(c.to)];
   stash[String(c.from)] = militia ? { ...left, militia } : left;
@@ -479,11 +506,93 @@ export function produceIslandMilitia(
   return islands === map.islands ? map : { ...map, islands };
 }
 
+/** 🛡️ Un lieu fixe tenu d'une île RANGÉE, vu pour gérer sa milice à distance. */
+export interface RemotePoint {
+  id: string;
+  label: string;
+  emoji: string;
+  militia: number;
+  /** Places encore libres pour des miliciens. */
+  room: number;
+}
+
+/** 🛡️ Les lieux fixes tenus d'une île rangée, avec leur milice (pour l'écran de l'archipel). */
+export function remotePoints(im: ExpeditionMap): RemotePoint[] {
+  return im.pois
+    .filter((p) => p.control?.owner === 'player')
+    .map((p) => ({
+      id: p.id,
+      label: poiLabel(p),
+      emoji: poiEmo(p),
+      militia: militiaIn(p.control!.garrison).length,
+      room: militiaFreeSeats(p.control),
+    }));
+}
+
+/**
+ * 🛡️ LA MILICE D'UNE ÎLE RANGÉE SE GÈRE À DISTANCE (demandé par l'utilisateur, 2026-10-03 :
+ * « sur l'île 1 on peut faire basculer les miliciens entre les lieux fixes et la base »).
+ * `delta` > 0 : de la réserve de l'île vers le lieu ; < 0 : du lieu vers la réserve.
+ * ⚠️ IMMÉDIAT, contrairement à l'île active : une île rangée est figée (aucun tick n'y règle
+ * de trajet), un milicien en route n'arriverait jamais. La production faite est mise de côté
+ * AVANT le changement d'effectif (`bankAt`). `null` si le mouvement est impossible.
+ */
+export function moveRemoteMilitia(
+  im: ExpeditionMap,
+  pointId: string,
+  delta: number,
+  at: number,
+  playerLevel: number,
+): ExpeditionMap | null {
+  const n = Math.trunc(Math.abs(delta));
+  const p = im.pois.find((x) => x.id === pointId);
+  const c = p?.control;
+  if (!n || !p || !c || c.owner !== 'player') return null;
+  const reserve = im.militia ?? emptyMilitia(at);
+  const banked = c.collectedAt !== undefined ? bankAt(p, at, mapPlayerLevel(im, playerLevel)) : c;
+  let garrison: string[];
+  let militia: MilitiaState;
+  if (delta > 0) {
+    if (militiaFreeSeats(c) < n) return null;
+    const took = takeMilitia(reserve, n);
+    if (!took) return null;
+    garrison = [...banked.garrison, ...took.ids];
+    militia = took.state;
+  } else {
+    const mine = militiaIn(banked.garrison);
+    if (mine.length < n) return null;
+    const out = new Set(mine.slice(-n));
+    garrison = banked.garrison.filter((id) => !out.has(id));
+    militia = returnMilitia(reserve, n);
+  }
+  return {
+    ...im,
+    militia,
+    pois: im.pois.map((x) => (x.id === pointId ? { ...x, control: { ...banked, garrison } } : x)),
+  };
+}
+
 /**
  * Les champions au débarquement : les embarqués et ceux qui ATTENDAIENT sur l'île d'arrivée
  * redeviennent « ici » ; tous les autres restent sur l'île quittée.
  */
 export function landAdventurers(advs: Adventurer[], c: Crossing): Adventurer[] {
+  // ⛵ Vers l'île suivante, TOUS les champions débarquent avec le héros, d'où qu'ils viennent
+  // (garnisons, autres îles) ; un poste sur une île quittée est levé (`stripChampions`). Ceux
+  // qui attendaient déjà sur l'île d'arrivée gardent leur poste.
+  if (isForwardCrossing(c))
+    return advs.map((a) => {
+      if (a.elsewhere === c.to) {
+        const { elsewhere: _e, ...rest } = a;
+        void _e;
+        return rest;
+      }
+      if (a.elsewhere === undefined && a.posted === undefined) return a;
+      const { elsewhere: _e, posted: _p, ...rest } = a;
+      void _e;
+      void _p;
+      return rest;
+    });
   const on = new Set(c.ids);
   return advs.map((a) => {
     if (on.has(a.id) || a.elsewhere === c.to) {

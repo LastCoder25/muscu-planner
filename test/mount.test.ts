@@ -272,8 +272,23 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (forced = h),
     );
     expect(forced).toContain('Première traversée vers cette île');
-    expect(forced).toMatch(/2\/2\s+champions/);
+    // ⛵ Vers l'île suivante : pas de choix, tout le monde part et l'île quittée est pacifiée.
+    expect(forced).toContain('Tous tes champions te suivent');
+    expect(forced).toContain('île 1 est pacifiée');
+    expect(forced).not.toMatch(/2\/2\s+champions/);
     expect(forced).toContain('Le départ attend le retour de tes troupes');
+    let back = '';
+    await mountIt(
+      CrossingSheet,
+      { ...base, from: 2, to: 1, activeId: 2, heroMode: 'optional' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (back = h),
+    );
+    // Au retour, on choisit toujours qui embarque.
+    expect(back).toMatch(/2\/2\s+champions/);
+    expect(back).not.toContain('Tous tes champions te suivent');
     let alone = '';
     await mountIt(
       CrossingSheet,

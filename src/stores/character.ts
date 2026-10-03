@@ -148,6 +148,7 @@ import {
   endlessReward,
   landAdventurers,
   landCrossing,
+  moveRemoteMilitia,
   landingChestMessage,
   produceIslandMilitia,
   startCrossing,
@@ -235,6 +236,7 @@ import {
   type DefenseStructure,
   type Raid,
   type RaidReport,
+  fortifyMult,
   islandRaidBand,
 } from '@/lib/raid';
 import {
@@ -2509,9 +2511,7 @@ export const useCharacterStore = defineStore('character', () => {
     const active = map?.archipel?.island;
     if (!map || active === undefined) return [];
     if (from !== active) return islandChampions(advList.value, from, active, now).map((a) => a.id);
-    return [
-      ...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids]),
-    ];
+    return [...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids])];
   }
   /** 🏰 Les champions choisis quittent la garnison de la forteresse (le port) avant d'embarquer. */
   function leavePort(map: ExpeditionMap, ids: readonly string[], hero: boolean) {
@@ -2565,6 +2565,41 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.sailings![map.sailings!.length - 1]!),
+    });
+  }
+  /** 🧱🏹 Ce que l'enceinte de la base retire aux troupes qui reprennent un lieu fixe
+   *  (`fortifyMult`, au niveau du héros). Lu par la bataille ET par le % affiché. */
+  function fortify(cur: CharacterRow | null | undefined, heroLevel: number): number {
+    return fortifyMult(cur?.base?.defenses ?? [], heroLevel);
+  }
+  /** 🧱🏹 Idem pour l'écran. */
+  function fortifyFor(heroLevel: number): number {
+    return fortify(row.value, heroLevel);
+  }
+  /** 🛡️ Déplace des miliciens sur une île RANGÉE (`moveRemoteMilitia`) : `delta` > 0 de sa
+   *  réserve vers le lieu fixe `pointId`, < 0 du lieu vers la réserve. Immédiat. */
+  async function moveIslandMilitia(
+    userId: string,
+    island: number,
+    pointId: string,
+    delta: number,
+    now: number,
+    level: number,
+  ) {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    const im = map?.islands?.[String(island)];
+    if (!cur || !map || !im) return;
+    const next = moveRemoteMilitia(im, pointId, delta, now, level);
+    if (!next)
+      throw new Error(
+        delta > 0
+          ? 'Plus de place sur ce lieu, ou plus de milicien en réserve sur cette île.'
+          : 'Aucun milicien à ramener de ce lieu.',
+      );
+    await persist(userId, {
+      expedition_map: { ...map, islands: { ...map.islands, [String(island)]: next } },
     });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
@@ -4956,6 +4991,8 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return none;
     knownActiveDays7 = activeDays7;
+    // 🧱🏹 L'enceinte se mesure au niveau du HÉROS (le sport), pas au plafond de l'île.
+    const heroLevel = playerLevel;
     // 🏝️ Les assaillants d'une île ne dépassent pas son rang max (le tirage lit ce niveau).
     playerLevel = mapPlayerLevel(cur.expedition_map, playerLevel);
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
@@ -5040,6 +5077,8 @@ export const useCharacterStore = defineStore('character', () => {
         p,
         [...partyAllies(escort, kit, heroUnit), ...militia],
         playerLevel,
+        // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (`fortifyMult`).
+        fortify(cur, heroLevel),
       );
       const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
@@ -6282,6 +6321,8 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     expeSyncMap,
     crossIsland,
+    moveIslandMilitia,
+    fortifyFor,
     crossingDepartAt,
     sailChampions,
     boardableIds,
