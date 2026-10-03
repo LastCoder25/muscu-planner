@@ -27,6 +27,7 @@
       :blocks="crossInfo.blocks"
       :fetchable="crossInfo.fetchable"
       :sailings="char.row?.expedition_map?.sailings ?? []"
+      :hero-depart-at="char.crossingDepartAt(now)"
       :away="crossInfo.away"
       :militia="crossInfo.militia"
       :now="now"
@@ -43,6 +44,7 @@
       :hero-block="crossAsk ? (crossInfo.blocks[crossAsk.to] ?? null) : null"
       :candidates="crossCandidates"
       :depart-at="nextCrossingDeparture(now)"
+      :hero-depart-at="char.crossingDepartAt(now)"
       :busy="archBusy"
       @confirm="confirmCross"
     />

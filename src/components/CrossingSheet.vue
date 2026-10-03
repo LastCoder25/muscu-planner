@@ -15,7 +15,10 @@
             {{ from === activeId ? `Vers l'île ${to}` : `De l'île ${from} vers l'île ${to}` }}
           </div>
           <div class="cs-sub">
-            Départ à {{ clock(departAt) }} · arrivée à {{ clock(departAt + travelMs) }}
+            Départ à {{ clock(leaveAt) }} · arrivée à {{ clock(leaveAt + travelMs) }}
+          </div>
+          <div v-if="hero && heroDepartAt > departAt" class="cs-wait">
+            ⏳ Le départ attend le retour de tes troupes parties vers un lieu fixe.
           </div>
         </div>
       </header>
@@ -99,7 +102,10 @@ const props = defineProps<{
   /** Pourquoi le héros ne peut pas partir (texte), null s'il le peut. */
   heroBlock: string | null;
   candidates: Adventurer[];
+  /** Le départ d'une navigation sans héros (heure pile suivante). */
   departAt: number;
+  /** Le départ avec le héros : après le retour des troupes encore en marche. */
+  heroDepartAt: number;
   busy?: boolean;
 }>();
 const emit = defineEmits<{
@@ -108,6 +114,7 @@ const emit = defineEmits<{
 }>();
 
 const travelMs = CROSSING.travelMs;
+const leaveAt = computed(() => (hero.value ? props.heroDepartAt : props.departAt));
 const hero = ref(true);
 const picked = ref<string[]>([]);
 // À chaque ouverture : héros embarqué s'il le peut, tous les champions cochés.
@@ -167,6 +174,11 @@ const clock = (t: number) =>
   font-family: Oswald, sans-serif;
   font-size: 19px;
   font-weight: 600;
+}
+.cs-wait {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--d3);
 }
 .cs-sub,
 .cs-note,

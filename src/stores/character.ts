@@ -135,8 +135,11 @@ import {
   boardTravellers,
   CROSSING_BLOCK_LABEL,
   crossingBlocker,
+  crossingDeparture,
   crossingTravellers,
   fortressReward,
+  nextCrossingDeparture,
+  postponeCrossing,
   islandChampions,
   SAILING_BLOCK_LABEL,
   sailingBlocker,
@@ -2340,10 +2343,15 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     const orig = cur.expedition_map;
+    // ⏳ Des troupes encore en route à l'heure du départ : la traversée attend leur retour
+    // (`postponeCrossing`) — avant le débarquement, qui sinon changerait la carte sous leurs pieds.
+    const post = orig ? postponeCrossing(orig, advList.value, troopsBackAt(cur)) : null;
+    const advBase = post?.advs ?? advList.value;
+    const src = post?.map ?? orig;
     // ⛵ DÉBARQUER d'abord (`crossing.ts`) : l'île quittée est rangée, l'île d'arrivée sort de
     // sa réserve ou naît neuve — tout le reste du tick travaille sur la carte d'arrivée.
-    const land = orig ? landCrossing(orig, now, level, cur.base?.militia) : null;
-    const prev = land?.map ?? orig;
+    const land = src ? landCrossing(src, now, level, cur.base?.militia) : null;
+    const prev = land?.map ?? src;
     // 🕳️ LES FAILLES MÛRES SE LISENT ICI, AVANT `advanceWorld` — c'est le SEUL instant où
     // elles sont encore sur la carte : lui les remplace par leur mine de mana résiduel.
     // Après lui, il n'y a plus rien à voir, et l'armée disparaîtrait avec la faille.
@@ -2402,12 +2410,12 @@ export const useCharacterStore = defineStore('character', () => {
         ? [landingChestMessage(landIsl, land!.crossing!.arriveAt)]
         : []),
     ];
-    const advLanded = land?.crossing ? landAdventurers(advList.value, land.crossing) : null;
+    const advLanded = land?.crossing ? landAdventurers(advBase, land.crossing) : null;
     // ⛵ Les champions partis SANS le héros arrivent : APRÈS le débarquement du héros (qui a
     // pu changer l'île active), pour qu'ils sachent s'ils sont « ici » ou ailleurs.
-    const sail = settleSailings(mapM, advLanded ?? advList.value, now);
+    const sail = settleSailings(mapM, advLanded ?? advBase, now);
     const map = sail?.map ?? mapM;
-    const advNext = sail?.advs ?? advLanded;
+    const advNext = sail?.advs ?? advLanded ?? post?.advs ?? null;
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
@@ -2463,16 +2471,24 @@ export const useCharacterStore = defineStore('character', () => {
         rarity: 'legendary',
       });
   }
-  /** ⛵ Des troupes marchent-elles vers un lieu fixe ou en reviennent-elles ? Leur arrivée
-   *  se règle sur la carte ACTIVE : la traversée attend qu'elles soient arrivées. */
-  function troopsMoving(cur: CharacterRow): boolean {
-    if (attackList.value.length) return true;
-    if (partyList.value.some((p) => p.homeId || p.poi.type === 'control')) return true;
-    return (cur.expedition_map?.pois ?? []).some(
-      (p) =>
-        !!p.control &&
-        ((p.control.reinforcing?.length ?? 0) > 0 || (p.control.returning?.length ?? 0) > 0),
-    );
+  /** ⏳ Quand les troupes qui marchent vers un lieu fixe ou en reviennent seront-elles toutes
+   *  rentrées ? (0 s'il n'y en a pas). Leur arrivée se règle sur la carte ACTIVE : la traversée
+   *  du héros part après (`crossingDeparture`, `postponeCrossing`). */
+  function troopsBackAt(cur: CharacterRow): number {
+    let t = 0;
+    for (const a of attackList.value) for (const w of a.wings) t = Math.max(t, w.returnAt);
+    for (const p of partyList.value)
+      if (p.homeId || p.poi.type === 'control') t = Math.max(t, p.returnAt);
+    for (const p of cur.expedition_map?.pois ?? []) {
+      for (const r of p.control?.reinforcing ?? []) t = Math.max(t, r.at);
+      for (const r of p.control?.returning ?? []) t = Math.max(t, r.at);
+    }
+    return t;
+  }
+  /** ⛵ Le départ qu'aurait une traversée du héros réservée maintenant. */
+  function crossingDepartAt(now: number): number {
+    const cur = row.value;
+    return cur ? crossingDeparture(now, troopsBackAt(cur)) : nextCrossingDeparture(now);
   }
   /** ⛵ La raison qui empêche de traverser vers l'île `to` (null = possible). */
   function crossingBlock(to: number) {
@@ -2484,7 +2500,6 @@ export const useCharacterStore = defineStore('character', () => {
         !!cur.expedition ||
         heroInAttack(attackList.value) ||
         cur.expedition_map.heroReturnAt !== undefined,
-      troopsMoving: troopsMoving(cur),
     });
   }
   /** ⛵ Les champions qui PEUVENT embarquer depuis l'île `from` : sur l'île active, les libres
@@ -2521,7 +2536,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 La forteresse est le port : les choisis de sa garnison et le héros embarquent de là.
     const { map: m, advs } = leavePort(cur.expedition_map, ids, true);
     // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste.
-    const map = startCrossing(unpostHero(m), to, ids, now);
+    const map = startCrossing(unpostHero(m), to, ids, now, troopsBackAt(cur));
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.crossing!),
@@ -6267,6 +6282,7 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     expeSyncMap,
     crossIsland,
+    crossingDepartAt,
     sailChampions,
     boardableIds,
     crossingBlock,

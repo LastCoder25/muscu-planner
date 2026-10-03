@@ -183,8 +183,7 @@ export type CrossingBlock =
   | 'same'
   | 'locked'
   | 'atSea'
-  | 'heroBusy'
-  | 'troopsMoving';
+  | 'heroBusy';
 
 export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
   noArchipel: 'Le mode archipel est désactivé.',
@@ -192,28 +191,50 @@ export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
   locked: 'Abats d’abord la forteresse portuaire de l’île précédente.',
   atSea: 'Une traversée est déjà en cours.',
   heroBusy: 'Ton héros doit être rentré pour embarquer.',
-  troopsMoving:
-    'Des troupes marchent encore vers un lieu fixe, ou en reviennent : attends qu’elles soient arrivées.',
 };
 
 /**
  * Peut-on traverser vers l'île `to` ? ⚠️ SOURCE UNIQUE écran + store.
- * `heroBusy` : le héros est en expédition ou réservé ; `troopsMoving` : une équipe marche sur
- * un lieu fixe ou en revient, ou des renforts sont en route — leur arrivée se règle sur la
- * carte ACTIVE, qui changerait sous leurs pieds.
+ * `heroBusy` : le héros est en expédition ou réservé.
+ * ⚠️ Des troupes qui marchent vers un lieu fixe ou en reviennent NE BLOQUENT PLUS la
+ * réservation (signalé le 2026-10-03 : « le héros est dispo et je ne peux pas traverser ») :
+ * le départ attend leur retour (`startCrossing`, `postponeCrossing`) — leur arrivée se règle
+ * sur la carte ACTIVE, qui ne doit pas changer sous leurs pieds.
  */
 export function crossingBlocker(
   map: Pick<ExpeditionMap, 'archipel' | 'islands' | 'crossing'>,
   to: number,
-  ctx: { heroBusy: boolean; troopsMoving: boolean },
+  ctx: { heroBusy: boolean },
 ): CrossingBlock | null {
   if (!map.archipel) return 'noArchipel';
   if (map.crossing) return 'atSea';
   if (map.archipel.island === to) return 'same';
   if (!openIslands(map).includes(to)) return 'locked';
   if (ctx.heroBusy) return 'heroBusy';
-  if (ctx.troopsMoving) return 'troopsMoving';
   return null;
+}
+
+/** ⛵ Le départ d'une traversée du héros : l'heure pile qui suit maintenant ET le retour des
+ *  troupes encore en marche (`troopsBackAt`, 0 s'il n'y en a pas). */
+export function crossingDeparture(now: number, troopsBackAt: number): number {
+  return nextCrossingDeparture(Math.max(now, troopsBackAt));
+}
+
+/**
+ * ⏳ Des troupes sont encore en route à l'heure du départ (envoyées après la réservation, ou
+ * rentrées plus tard que prévu) : le départ glisse à l'heure pile qui suit leur retour, et les
+ * embarqués restent occupés jusqu'à la nouvelle arrivée. `null` si rien ne change.
+ */
+export function postponeCrossing(
+  map: ExpeditionMap,
+  advs: Adventurer[],
+  troopsBackAt: number,
+): { map: ExpeditionMap; advs: Adventurer[] } | null {
+  const c = map.crossing;
+  if (!c || troopsBackAt <= c.departAt) return null;
+  const departAt = nextCrossingDeparture(troopsBackAt);
+  const next: Crossing = { ...c, departAt, arriveAt: departAt + CROSSING.travelMs };
+  return { map: { ...map, crossing: next }, advs: boardTravellers(advs, next) };
 }
 
 /** Les champions qui embarquent : tous ceux qui sont LIBRES (ni en route, ni blessés, ni
@@ -230,15 +251,17 @@ export function crossingTravellers(advs: readonly Adventurer[], now: number): st
     .map((a) => a.id);
 }
 
-/** Réserve la traversée : départ à la prochaine heure pile, arrivée 2 h plus tard. */
+/** Réserve la traversée : départ à la prochaine heure pile (après le retour des troupes encore
+ *  en marche, `troopsBackAt`), arrivée 2 h plus tard. */
 export function startCrossing(
   map: ExpeditionMap,
   to: number,
   ids: readonly string[],
   now: number,
+  troopsBackAt = 0,
 ): ExpeditionMap {
   if (!map.archipel) return map;
-  const departAt = nextCrossingDeparture(now);
+  const departAt = crossingDeparture(now, troopsBackAt);
   const crossing: Crossing = {
     from: map.archipel.island,
     to,

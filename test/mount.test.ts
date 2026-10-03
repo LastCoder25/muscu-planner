@@ -260,6 +260,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       heroBlock: null,
       candidates: [adv('a'), adv('b')],
       departAt: Date.UTC(2026, 9, 3, 18),
+      heroDepartAt: Date.UTC(2026, 9, 3, 20),
     };
     let forced = '';
     await mountIt(
@@ -272,6 +273,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(forced).toContain('Première traversée vers cette île');
     expect(forced).toMatch(/2\/2\s+champions/);
+    expect(forced).toContain('Le départ attend le retour de tes troupes');
     let alone = '';
     await mountIt(
       CrossingSheet,

@@ -180,7 +180,9 @@
           >
             <span class="ac-main">⛵ Traverser vers l'île {{ selTile.id }}</span>
             <span class="ac-sub"
-              >Départ à {{ clock(departAt) }} · arrivée {{ clock(departAt + CROSSING.travelMs) }} ·
+              >Départ {{ heroDepartAt && heroDepartAt > departAt ? 'avec le héros' : '' }} à
+              {{ clock(Math.max(departAt, heroDepartAt ?? 0)) }} · arrivée
+              {{ clock(Math.max(departAt, heroDepartAt ?? 0) + CROSSING.travelMs) }} ·
               {{
                 selTile.visited
                   ? 'avec ou sans le héros, tu choisis qui embarque'
@@ -249,6 +251,8 @@ const props = defineProps<{
   fetchable?: Record<number, number>;
   /** ⛵ Les navigations sans héros en cours. */
   sailings?: Crossing[];
+  /** ⛵ Le départ avec le héros (après le retour des troupes encore en marche). */
+  heroDepartAt?: number;
   /** ⛵ Champions restés sur chaque autre île. */
   away?: Record<number, number>;
   /** 🛡️ La réserve de milice de chaque île visitée (la milice ne traverse pas). */
