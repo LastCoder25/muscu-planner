@@ -134,17 +134,32 @@ describe('🕯️ l’hospice (île 3)', () => {
 });
 
 describe('⚗️ le laboratoire (île 5)', () => {
-  it('deux fois moins vite que le scriptorium, toutes ses runes bénies', () => {
-    expect(CONTROL.labSlowdown).toBe(2);
+  it('la formule de l’autel, deux fois plus lente : 96 h dérivées des 48 h de l’autel', () => {
+    expect(CONTROL.labHoursPerRune).toBe(2 * CONTROL.altarHoursPerRune);
+    expect(CONTROL.labHoursPerRune).toBe(96);
+    for (const crew of [['a'], ['a', 'b', 'c'], ['a', 'b', 'c', 'd', 'e']]) {
+      const lab = held(islandMap(5), controlIdOf('lab'), crew);
+      const alt = held(islandMap(5), controlIdOf('altar'), crew);
+      const T = NOW + 40 * CONTROL.altarHoursPerRune * H;
+      const gl = collectControl(lab, controlIdOf('lab'), T, L);
+      const ga = collectControl(alt, controlIdOf('altar'), T, L);
+      expect(ga.runes).toBeGreaterThan(10);
+      expect(Math.abs(gl.runes - ga.runes / 2)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('toutes ses runes « à partir du violet », jamais comptées bénies', () => {
     const crew = ['a', 'b', 'c', 'd', 'e'];
     const lab = held(islandMap(5), controlIdOf('lab'), crew);
-    const scr = held(islandMap(2), controlIdOf('scriptorium'), crew);
-    const T = NOW + 20 * CONTROL.runeHoursPerItem * H;
+    const alt = held(islandMap(5), controlIdOf('altar'), crew);
+    const T = NOW + 20 * CONTROL.labHoursPerRune * H;
     const gl = collectControl(lab, controlIdOf('lab'), T, L);
-    const gs = collectControl(scr, controlIdOf('scriptorium'), T, L);
-    expect(gs.runes).toBeGreaterThan(10);
-    expect(Math.abs(gl.runes - gs.runes / 2)).toBeLessThanOrEqual(1);
-    expect(gl.blessedRunes).toBe(gl.runes);
-    expect(gs.blessedRunes).toBe(0);
+    const ga = collectControl(alt, controlIdOf('altar'), T, L);
+    expect(gl.runes).toBeGreaterThan(5);
+    expect(gl.exaltedRunes).toBe(gl.runes);
+    expect(gl.blessedRunes).toBe(0);
+    // L'autel, lui, garde ses runes bénies.
+    expect(ga.blessedRunes).toBe(ga.runes);
+    expect(ga.exaltedRunes).toBe(0);
   });
 });

@@ -5062,6 +5062,7 @@ export const useCharacterStore = defineStore('character', () => {
     const msgs: ExpeditionMessage[] = [];
     let runesIn = 0;
     let blessedIn = 0;
+    let exaltedIn = 0;
     let keysIn = 0;
     let summonIn = 0;
     let gearSealsIn = 0;
@@ -5082,6 +5083,7 @@ export const useCharacterStore = defineStore('character', () => {
       gearStock = h.stock;
       runesIn += h.runes;
       blessedIn += h.blessedRunes;
+      exaltedIn += h.exaltedRunes;
       keysIn += h.keys;
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
@@ -5264,7 +5266,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...forged,
       ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
-      ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn, blessedIn) } : {}),
+      ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn, blessedIn, exaltedIn) } : {}),
       // 📖 Les clés des archives, de même.
       ...(keysIn ? { keys: cur.keys + keysIn } : {}),
       // ⚱️ Les pierres de l'ossuaire, de même.
@@ -5301,6 +5303,7 @@ export const useCharacterStore = defineStore('character', () => {
     supplies: SupplyStock;
     runes: number;
     blessedRunes: number;
+    exaltedRunes: number;
     keys: number;
     summon: number;
     gearSeals: number;
@@ -5325,6 +5328,7 @@ export const useCharacterStore = defineStore('character', () => {
         supplies: c.supplies,
         runes: c.runes,
         blessedRunes: c.blessedRunes,
+        exaltedRunes: c.exaltedRunes,
         keys: c.keys,
         summon: c.summon,
         gearSeals: c.gearSeals,
@@ -5354,6 +5358,7 @@ export const useCharacterStore = defineStore('character', () => {
       supplies: c.supplies,
       runes: c.runes,
       blessedRunes: c.blessedRunes,
+      exaltedRunes: c.exaltedRunes,
       keys: c.keys,
       summon: c.summon,
       gearSeals: c.gearSeals,
@@ -5398,6 +5403,7 @@ export const useCharacterStore = defineStore('character', () => {
     let supplies: SupplyStock = {};
     let runes = 0;
     let blessed = 0;
+    let exalted = 0;
     let keys = 0;
     let summon = 0;
     let gearSeals = 0;
@@ -5417,6 +5423,7 @@ export const useCharacterStore = defineStore('character', () => {
         supplies = addSupplies(supplies, h.supplies);
         runes += h.runes;
         blessed += h.blessedRunes;
+        exalted += h.exaltedRunes;
         keys += h.keys;
         summon += h.summon;
         gearSeals += h.gearSeals;
@@ -5457,7 +5464,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(gold > 0 ? { gold: cur.gold + gold } : {}),
       ...(mana > 0 ? { mana: cur.mana + mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, supplies) } : {}),
-      ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed) } : {}),
+      ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed, exalted) } : {}),
       ...(keys ? { keys: cur.keys + keys } : {}),
       ...(summon ? { summon_stones: (cur.summon_stones ?? 0) + summon } : {}),
       ...(gearSeals || champSeals.length
@@ -5497,7 +5504,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes) } : {}),
+      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) } : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
@@ -5553,7 +5560,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes) } : {}),
+      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) } : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals

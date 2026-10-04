@@ -212,6 +212,7 @@ describe('relecture et migration', () => {
     expect(b).toEqual({
       runes: 3,
       blessed: 0,
+      exalted: 0,
       opened: 0,
       comp: 0,
       skills: [sk('a', 'crit', 5), sk('b', 'pv', 1)],

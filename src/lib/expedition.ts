@@ -112,8 +112,8 @@ export type ControlKind =
   /** 🏝️🕯️ L'HOSPICE (île 3) : ne produit rien ; tenu, les champions blessés sur l'île
    *  guérissent plus vite (`hospiceHealMult`, jusqu'à ×2 garnison pleine). */
   | 'hospice'
-  /** 🏝️⚗️ Le LABORATOIRE (île 5) : des runes multicolores « à partir du bleu », deux fois
-   *  moins vite que le scriptorium (`CONTROL.labSlowdown`). */
+  /** 🏝️⚗️ Le LABORATOIRE (île 5) : des runes multicolores « à partir du violet », deux fois
+   *  moins vite que l'autel des runes (`CONTROL.labHoursPerRune`). */
   | 'lab'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'

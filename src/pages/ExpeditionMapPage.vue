@@ -2852,7 +2852,7 @@ const controlNote = computed(() => {
   if (liveControl.value?.kind === 'scriptorium')
     return 'Il recopie des runes multicolores : leur couleur se tire à l’ouverture, au Panthéon. Le copiste n’apprend rien.';
   if (liveControl.value?.kind === 'lab')
-    return 'Deux fois moins vite que le Scriptorium, mais ses runes sont bénies : jamais vertes, bleues ou mieux à l’ouverture. L’alchimiste n’apprend rien.';
+    return '1 rune multicolore tous les 4 jours au complet, à partir du violet : jamais verte ni bleue à l’ouverture. Deux fois moins vite que l’autel des runes. L’alchimiste n’apprend rien.';
   if (liveControl.value?.kind === 'hospice')
     return 'Il ne produit rien : tenu, les champions blessés sur l’île guérissent plus vite — deux fois plus vite au complet. Le héros n’est pas concerné.';
   if (liveControl.value?.kind !== 'training') return '';

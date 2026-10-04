@@ -73,6 +73,9 @@ import {
   type Poi,
 } from './expedition';
 
+/** 🪬 L'autel des runes : heures pour 1 rune « à partir du bleu » au complet (le labo en dérive). */
+const ALTAR_HOURS_PER_RUNE = 48;
+
 export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
@@ -99,7 +102,13 @@ export const CONTROL = {
   lapidaryHours: { green: 24, blue: 48, violet: 96, gold: 192 } as Record<RuneTier, number>,
   arsenalHoursPerRuin: 144,
   circleHoursPerAttempt: 48,
-  altarHoursPerRune: 48,
+  altarHoursPerRune: ALTAR_HOURS_PER_RUNE,
+  /** ⚗️ Laboratoire (île 5, 2026-10-04, décision de l'utilisateur : « comme l'autel de rune mais
+   *  sans la rareté de base de l'autel » et « si la rareté est supérieure, le temps est
+   *  supérieur ») : même formule que l'autel, 1 rune multicolore « à partir du VIOLET »
+   *  (`runeBank.EXALTED_ODDS`, jamais verte ni bleue) — deux fois plus longue à venir.
+   *  ⚠️ DÉRIVÉE de `altarHoursPerRune` : si l'autel bouge, le labo suit. */
+  labHoursPerRune: 2 * ALTAR_HOURS_PER_RUNE,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -183,13 +192,6 @@ export const CONTROL = {
    *  recopie une rune MULTICOLORE (la couleur se tire à l'ouverture). Sa réserve tient UNE
    *  rune (une seule attend d'être ramassée), quel que soit l'effectif. */
   runeHoursPerItem: 16,
-  /** ⚗️ Laboratoire (île 5, 2026-10-04, décision de l'utilisateur : « plus lent et en meilleure
-   *  couleur que le scriptorium ») : il distille une rune MULTICOLORE toutes les
-   *  `runeHoursPerItem × labSlowdown` heures au même effectif — et elle est « BÉNIE » (à partir
-   *  du bleu, jamais verte : `runeBank.BLESSED_ODDS`), là où celle du scriptorium peut sortir
-   *  verte. ⚠️ La couleur d'une rune se tire à l'OUVERTURE (`openRune`) : « meilleure couleur »
-   *  ne peut donc vouloir dire que « bénie », la seule qualité que la réserve sait porter. */
-  labSlowdown: 2,
   /** 🕯️ Hospice (île 3, 2026-10-04) : il ne produit rien. Tenu, la convalescence d'un champion
    *  blessé sur l'île est DIVISÉE par `1 + hospiceCut × part` (part = `garrisonShare` rapportée
    *  à la garnison pleine) : ÷2 au complet, rien sans personne (`hospiceHealMult`). */
@@ -484,7 +486,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
   lapidary: 'un niveau de plus sur une compétence de son champion 💎',
   hospice: 'des champions blessés de l’île guéris plus vite 🕯️',
-  lab: 'runes multicolores bleues ou mieux 🔷',
+  lab: 'runes multicolores violettes ou mieux 🟣',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
@@ -1176,7 +1178,7 @@ const UNIT_LOOK: Record<
   arsenal: { unit: '⚜️', what: 'du prochain sceau d’objet, versé directement' },
   circle: { unit: '🔮', what: 'de la prochaine pierre d’invocation, versée directement' },
   altar: { unit: '🪬', what: 'de la prochaine rune, versée directement' },
-  lab: { unit: '🔷', what: 'de la prochaine rune bleue ou mieux, versée directement' },
+  lab: { unit: '🟣', what: 'de la prochaine rune violette ou mieux, versée directement' },
 };
 
 /** 🗑️ Un point d'un type retiré est-il encore occupé (garnison, renforts, retours, héros) ? */
@@ -1874,8 +1876,8 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
       // 🪬 Une rune toutes les 48 h au complet.
       return shareOf(n) / CONTROL.altarHoursPerRune;
     case 'lab':
-      // ⚗️ Le rythme du scriptorium, `labSlowdown` fois moins vite (runes bénies).
-      return shareOf(n) / (CONTROL.runeHoursPerItem * CONTROL.labSlowdown);
+      // ⚗️ La formule de l'autel, deux fois plus lente (runes « à partir du violet »).
+      return shareOf(n) / CONTROL.labHoursPerRune;
     case 'circle':
       // 🌀 Une tentative de boss de l'île toutes les 48 h au complet.
       return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.circleHoursPerAttempt;
@@ -2138,6 +2140,8 @@ export function collectControl(
   runes: number;
   /** 🪬 Parmi `runes`, celles de l'autel (« à partir du bleu »). */
   blessedRunes: number;
+  /** ⚗️ Parmi `runes`, celles du laboratoire (« à partir du violet »). */
+  exaltedRunes: number;
   /** 📖 Clés du Labyrinthe (les archives). */
   keys: number;
   /** ⚱️ Pierres d'invocation (l'ossuaire). */
@@ -2160,6 +2164,7 @@ export function collectControl(
     supplies: {},
     runes: 0,
     blessedRunes: 0,
+    exaltedRunes: 0,
     keys: 0,
     summon: 0,
     gearSeals: 0,
@@ -2220,7 +2225,7 @@ export function collectControl(
     }
   }
   // 📜 Des runes MULTICOLORES : leur couleur se tire à l'ouverture (`runeBank.openRune`).
-  // ⚗️ Le laboratoire en verse aussi — toutes bénies, comme l'autel.
+  // ⚗️ Le laboratoire en verse aussi — toutes « à partir du violet ».
   const runes = c.kind === 'scriptorium' || c.kind === 'altar' || c.kind === 'lab' ? whole : 0;
   const until = Math.min(now, c.attackAt ?? now);
   return {
@@ -2241,7 +2246,8 @@ export function collectControl(
     gearXp: {},
     supplies,
     runes,
-    blessedRunes: c.kind === 'altar' || c.kind === 'lab' ? whole : 0,
+    blessedRunes: c.kind === 'altar' ? whole : 0,
+    exaltedRunes: c.kind === 'lab' ? whole : 0,
     keys: c.kind === 'archives' ? whole : 0,
     summon: c.kind === 'circle' ? whole : 0,
     gearSeals: c.kind === 'arsenal' ? whole : 0,

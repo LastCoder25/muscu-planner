@@ -9,9 +9,15 @@
         <span class="rb-title font-display">🪬 Runes</span>
         <span class="rb-wallet font-display"><RuneIcon size="18px" /> {{ bank.runes }}</span>
         <span
+          v-if="bank.exalted"
+          class="rb-blessed"
+          :title="`${bank.exalted} rune${bank.exalted > 1 ? 's' : ''} du laboratoire : jamais verte${bank.exalted > 1 ? 's' : ''} ni bleue${bank.exalted > 1 ? 's' : ''}, ouverte${bank.exalted > 1 ? 's' : ''} en premier`"
+          >dont {{ bank.exalted }} 🟣 violette{{ bank.exalted > 1 ? 's' : '' }} ou mieux</span
+        >
+        <span
           v-if="bank.blessed"
           class="rb-blessed"
-          :title="`${bank.blessed} rune${bank.blessed > 1 ? 's' : ''} de l’autel : jamais verte${bank.blessed > 1 ? 's' : ''}, ouverte${bank.blessed > 1 ? 's' : ''} en premier`"
+          :title="`${bank.blessed} rune${bank.blessed > 1 ? 's' : ''} de l’autel : jamais verte${bank.blessed > 1 ? 's' : ''}, ouverte${bank.blessed > 1 ? 's' : ''} avant les ordinaires`"
           >dont {{ bank.blessed }} 🔷 bleue{{ bank.blessed > 1 ? 's' : '' }} ou mieux</span
         >
       </div>
