@@ -108,16 +108,17 @@ export function seenRadius(detectR: number, reach: number): number {
  *  ou pas. */
 export const DETECT_FLOOR = 30;
 
-/** 🏝️🗼 La part de l'île que voit la Tour de guet de la base : son niveau rapporté au niveau
- *  MAX de l'île (décision de l'utilisateur, 2026-10-04 : « détection totale sur l'île au niveau
- *  de l'île ») — Tour 40 voit toute l'île 2, et il faut la monter jusqu'à 60 pour l'île 3. Les
- *  Tours tenues sur la carte (`controlDetectBoost`) la multiplient, comme le préavis. */
+/** 🏝️🗼 La part de l'île que voit la Tour de guet de la base : sa place dans la TRANCHE de
+ *  niveaux de l'île (décision de l'utilisateur, 2026-10-04 : « détection totale sur l'île au
+ *  niveau de l'île ») — rien au premier niveau de l'île, tout à son niveau max : Tour 40 voit
+ *  toute l'île 2, Tour 50 la moitié de l'île 3. ⚠️ Rapportée au seul niveau max, une Tour 32
+ *  annonçait 53 % de l'île 3 (41-60) à un joueur qui n'y a pas accès (signalé le même jour).
+ *  Les Tours tenues sur la carte (`controlDetectBoost`) multiplient le niveau, comme le préavis. */
 export function islandDetectShare(scout: number, islandId: number, boost: number): number {
   const isl = islandById(islandId) ?? ISLANDS[0]!;
-  return Math.min(
-    1,
-    (Math.max(0, scout) * (1 + Math.max(0, boost || 0))) / Math.max(1, isl.maxLevel),
-  );
+  const eff = Math.max(0, scout) * (1 + Math.max(0, boost || 0));
+  const span = Math.max(1, isl.maxLevel - isl.minLevel + 1);
+  return Math.min(1, Math.max(0, (eff - (isl.minLevel - 1)) / span));
 }
 
 /** 🏝️🗼 Le rayon de détection de la base sur une île : la part (`islandDetectShare`) de la
@@ -133,6 +134,8 @@ export interface PerceptionRow {
   id: number;
   emoji: string;
   name: string;
+  /** Niveau de Tour à partir duquel on commence à voir l'île (son premier niveau). */
+  fromAt: number;
   /** Niveau de Tour qui voit toute l'île (le niveau max de l'île). */
   fullAt: number;
   /** Part de l'île vue aujourd'hui (0..1). */
@@ -148,6 +151,7 @@ export function islandPerception(
     id: i.id,
     emoji: i.emoji,
     name: i.name,
+    fromAt: i.minLevel,
     fullAt: i.maxLevel,
     share: islandDetectShare(scout, i.id, boost),
     current: i.id === currentIsland,

@@ -892,7 +892,9 @@
                 {{
                   r.share >= 1
                     ? '✅ totale'
-                    : `${Math.round(r.share * 100)} % · totale à ${r.fullAt}`
+                    : r.share <= 0
+                      ? `🔒 dès le niveau ${r.fromAt}`
+                      : `${Math.round(r.share * 100)} % · totale à ${r.fullAt}`
                 }}
               </span>
             </div>

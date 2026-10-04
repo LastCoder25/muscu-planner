@@ -37,26 +37,34 @@ const held = (id: string, x: number, y: number, owner: 'player' | 'enemy' = 'pla
 });
 
 describe('🗼 la part de l’île vue par la Tour', () => {
-  it('totale au niveau max de l’île, proportionnelle en dessous', () => {
+  it('dans la TRANCHE de l’île : rien à son premier niveau, tout à son niveau max', () => {
     expect(islandDetectShare(40, 2, 0)).toBe(1);
-    expect(islandDetectShare(20, 2, 0)).toBeCloseTo(0.5, 9);
-    expect(islandDetectShare(40, 3, 0)).toBeCloseTo(40 / 60, 9);
+    expect(islandDetectShare(30, 2, 0)).toBeCloseTo(0.5, 9);
+    expect(islandDetectShare(20, 2, 0)).toBe(0);
+    expect(islandDetectShare(10, 1, 0)).toBeCloseTo(0.5, 9);
+    expect(islandDetectShare(50, 3, 0)).toBeCloseTo(0.5, 9);
     expect(islandDetectShare(60, 3, 0)).toBe(1);
     expect(islandDetectShare(100, 3, 0)).toBe(1);
   });
-  it('les Tours tenues sur la carte la multiplient', () => {
-    expect(islandDetectShare(30, 3, 0.5)).toBeCloseTo(45 / 60, 9);
+  it('une île au-dessus de la Tour ne se voit PAS (signalé : Tour 32 annonçait 53 % de l’île 3)', () => {
+    expect(islandDetectShare(32, 3, 0)).toBe(0);
+    expect(islandDetectShare(40, 3, 0)).toBe(0);
+    expect(islandDetectShare(32, 5, 0)).toBe(0);
+  });
+  it('les Tours tenues sur la carte multiplient le niveau', () => {
+    expect(islandDetectShare(30, 3, 0.5)).toBeCloseTo(5 / 20, 9);
   });
   it('le rayon couvre toute l’île au plein, jamais sous le plancher', () => {
     expect(islandDetectRadius(40, 2, 0)).toBeCloseTo(islandSpan(2), 9);
     expect(islandDetectRadius(0, 2, 0)).toBe(DETECT_FLOOR);
-    expect(islandDetectRadius(20, 2, 0)).toBeCloseTo(Math.max(DETECT_FLOOR, islandSpan(2) / 2), 9);
+    expect(islandDetectRadius(30, 2, 0)).toBeCloseTo(Math.max(DETECT_FLOOR, islandSpan(2) / 2), 9);
   });
   it('les paliers : une ligne par île, l’île active marquée', () => {
-    const rows = islandPerception(40, 0, 2);
+    const rows = islandPerception(32, 0, 2);
     expect(rows.map((r) => r.fullAt)).toEqual([20, 40, 60, 80, 100]);
-    expect(rows[1]).toMatchObject({ id: 2, share: 1, current: true });
-    expect(rows[2]!.share).toBeCloseTo(2 / 3, 9);
+    expect(rows.map((r) => r.fromAt)).toEqual([1, 21, 41, 61, 81]);
+    expect(rows.map((r) => r.share)).toEqual([1, 0.6, 0, 0, 0]);
+    expect(rows[1]).toMatchObject({ id: 2, current: true });
     expect(rows.filter((r) => r.current)).toHaveLength(1);
   });
 });
