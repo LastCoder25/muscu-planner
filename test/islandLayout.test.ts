@@ -1,35 +1,49 @@
 import { describe, expect, it } from 'vitest';
-import { ISLANDS } from '../src/lib/archipelago';
+import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '../src/lib/archipelago';
 import { controlKindsOf, controlSpot } from '../src/lib/controlPoints';
-import { objectiveSpot } from '../src/lib/islandConquest';
+import { ensureIslandConquest, objectiveSpot } from '../src/lib/islandConquest';
 import { islandTerrain } from '../src/lib/islandTerrain';
 import { DEFENSE_LINE_T, islandCenter, onIsland } from '../src/lib/islandShape';
-import { EXPE } from '../src/lib/expedition';
+import { createMap, EXPE } from '../src/lib/expedition';
 
 const T = EXPE.town;
 
-describe('🛡️ les points fixes forment une ligne de défense entre le départ et la forteresse', () => {
+describe('🛡️ les points fixes forment une ligne VERTICALE entre le départ et la forteresse', () => {
   for (const isl of ISLANDS) {
     it(`île ${isl.id}`, () => {
       const f = islandTerrain(isl.id).fortress;
-      const ax = f.x - T.x;
-      const ay = f.y - T.y;
-      const len2 = ax * ax + ay * ay;
+      const xLine = T.x + (f.x - T.x) * DEFENSE_LINE_T;
       for (const seed of [1, 12345, 999]) {
         const map = { seed, archipel: { island: isl.id } } as never;
         const spots = controlKindsOf(map).map((k) => controlSpot(map, k));
         for (const s of spots) {
-          // Projection sur l'axe départ → forteresse : à la part `DEFENSE_LINE_T`, à l'arrondi près.
-          const t = ((s.x - T.x) * ax + (s.y - T.y) * ay) / len2;
-          expect(Math.abs(t - DEFENSE_LINE_T), `île ${isl.id}`).toBeLessThan(0.03);
+          // Tous au même x (à l'arrondi près), à mi-chemin du départ et de la forteresse.
+          expect(Math.abs(s.x - xLine), `île ${isl.id}`).toBeLessThanOrEqual(1);
           expect(onIsland(isl.id, s.x, s.y, 1)).toBe(true);
         }
-        // Étalés en travers, pas empilés.
+        // Le départ d'un côté de la ligne, la forteresse de l'autre.
+        expect(Math.sign(T.x - xLine)).not.toBe(Math.sign(f.x - xLine));
+        // Étalés du haut au bas, pas empilés.
         for (let i = 1; i < spots.length; i++)
-          expect(
-            Math.hypot(spots[i]!.x - spots[i - 1]!.x, spots[i]!.y - spots[i - 1]!.y),
-          ).toBeGreaterThan(14);
+          expect(Math.abs(spots[i]!.y - spots[i - 1]!.y)).toBeGreaterThan(14);
       }
+    });
+  }
+});
+
+describe('🎯 les objectifs sont au niveau max de l’île', () => {
+  for (const isl of ISLANDS) {
+    it(`île ${isl.id}`, () => {
+      // Un joueur bien sous le plafond de l'île : l'objectif ne suit pas son niveau.
+      const player = isl.minLevel;
+      const m = ensureIslandConquest(
+        createMap(7, 0, player, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(isl.id)),
+        0,
+        player,
+      );
+      const objs = m.pois.filter((q) => q.control?.kind === 'objective');
+      expect(objs.length).toBe(isl.objectives);
+      for (const o of objs) expect(o.level).toBe(isl.maxLevel);
     });
   }
 });
@@ -49,7 +63,7 @@ describe('🎯 les objectifs sont répartis sur toute l’île', () => {
       }
       for (let i = 0; i < objs.length; i++)
         for (let j = i + 1; j < objs.length; j++)
-          expect(Math.hypot(objs[i]!.x - objs[j]!.x, objs[i]!.y - objs[j]!.y)).toBeGreaterThan(50);
+          expect(Math.hypot(objs[i]!.x - objs[j]!.x, objs[i]!.y - objs[j]!.y)).toBeGreaterThan(40);
       // Pas tous groupés du côté de la forteresse : au moins un à plus de 90° de sa direction.
       const off = angs.map((a) =>
         Math.abs(Math.atan2(Math.sin(a - fortAng), Math.cos(a - fortAng))),

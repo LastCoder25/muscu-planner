@@ -473,12 +473,14 @@ function enemyTarget(
 }
 
 /** Les objectifs et la forteresse ATTENDUS sur la carte (ceux pas encore abattus). */
-function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: number): Poi[] {
+function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
   const gone = destroyedOf(map);
   const terrain = islandTerrain(isl.id);
   const f = terrain.fortress;
   const out: Poi[] = [];
-  const lv = Math.max(1, Math.min(level, isl.maxLevel));
+  // 🎯 Les objectifs (et les nids) sont au NIVEAU MAX de l'île, comme la forteresse (demandé
+  // le 2026-10-04 : « un objectif long terme pour pouvoir quitter l'île »).
+  const lv = isl.maxLevel;
   // 🏝️ Les objectifs ne s'attaquent qu'une fois deux lieux fixes tenus.
   const objLocked = heldPoints(map).length < OBJECTIVES_AFTER_HELD;
   objectiveAngles(isl.objectives).forEach((_, i) => {
@@ -574,7 +576,7 @@ export function ensureIslandConquest(
   // cimetières qui se relèvent.
   const map = raiseDead(layNests(map0, now), now);
   const isl = activeIsland(map);
-  const want = isl ? expectedTargets(map, isl, now, playerLevel) : [];
+  const want = isl ? expectedTargets(map, isl, now) : [];
   const wantIds = new Set(want.map((p) => p.id));
   let pois = map.pois;
   let changed = map !== map0;

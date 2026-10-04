@@ -279,38 +279,32 @@ export function islandFortressAt(id: number): { x: number; y: number } {
   return { x: c.x + Math.cos(t) * r, y: c.y + Math.sin(t) * r };
 }
 
-/** 🛡️ La LIGNE DE DÉFENSE (demandé : « les lieux fixes entre le village de départ et la
- *  forteresse, comme une ligne de défense ») : à cette part du chemin départ → forteresse… */
-export const DEFENSE_LINE_T = 0.45;
-/** …et étalée en travers jusqu'à cette part de la terre de chaque côté. */
+/** 🛡️ La LIGNE DE DÉFENSE (demandé le 2026-10-04 : « une ligne verticale qui sépare la partie
+ *  de l'île où le joueur accoste et la partie avec la forteresse ») : une ligne VERTICALE, à
+ *  cette part du chemin départ → forteresse en x… */
+export const DEFENSE_LINE_T = 0.5;
+/** …et étalée sur cette part de la hauteur de terre à cet x. */
 export const DEFENSE_LINE_SPREAD = 0.75;
 
-/** Les `n` places de la ligne de défense de l'île `id`, en travers de l'axe départ (la ville)
- *  → forteresse, régulièrement espacées d'un bord de la terre à l'autre. */
+/** Les `n` places de la ligne de défense de l'île `id` : à x constant, à mi-chemin du départ
+ *  (la ville) et de la forteresse, régulièrement espacées du haut au bas de la terre. */
 export function islandDefenseLine(id: number, n: number): { x: number; y: number }[] {
   if (n <= 0) return [];
   const f = islandFortressAt(id);
-  const dx = f.x - TOWN;
-  const dy = f.y - TOWN;
-  const len = Math.hypot(dx, dy) || 1;
-  const mx = TOWN + dx * DEFENSE_LINE_T;
-  const my = TOWN + dy * DEFENSE_LINE_T;
-  // La perpendiculaire à l'axe.
-  const vx = -dy / len;
-  const vy = dx / len;
+  const x = TOWN + (f.x - TOWN) * DEFENSE_LINE_T;
+  // Le point de l'axe à cet x : sur la terre (l'île est tracée en rayons depuis son centre).
+  const y0 = TOWN + (f.y - TOWN) * DEFENSE_LINE_T;
   const reach = (sign: number) => {
     let d = 0;
-    while (d < 200 && onIsland(id, mx + sign * vx * (d + 1), my + sign * vy * (d + 1), LAND_MARGIN))
-      d += 1;
+    while (d < 200 && onIsland(id, x, y0 + sign * (d + 1), LAND_MARGIN)) d += 1;
     return d;
   };
-  if (n === 1) return [{ x: mx, y: my }];
-  const lo = -reach(-1) * DEFENSE_LINE_SPREAD;
-  const hi = reach(1) * DEFENSE_LINE_SPREAD;
-  return Array.from({ length: n }, (_, i) => {
-    const s = lo + ((hi - lo) * i) / (n - 1);
-    return { x: mx + vx * s, y: my + vy * s };
-  });
+  const top = y0 - reach(-1);
+  const bottom = y0 + reach(1);
+  const mid = (top + bottom) / 2;
+  if (n === 1) return [{ x, y: mid }];
+  const half = ((bottom - top) / 2) * DEFENSE_LINE_SPREAD;
+  return Array.from({ length: n }, (_, i) => ({ x, y: mid - half + (2 * half * i) / (n - 1) }));
 }
 
 /** 🎯 Pas angulaire des places candidates d'`islandScatter`. */
