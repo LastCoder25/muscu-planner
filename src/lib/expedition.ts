@@ -824,9 +824,13 @@ export interface ExpeditionMap {
     pillageAt?: number;
     /** 🏰 Le coffre de la forteresse a été déposé (`fortressReward`) : une seule fois. */
     chestAt?: number;
-    /** 🪺 Île 2 : les NIDS nés en route (`layNests`) — index d'objectif, naissance, place. */
+    /** 🪺 Île 2 : les NIDS apparus en route (`spawnNests`) — index d'objectif, naissance, place. */
     nests?: { i: number; at: number; x: number; y: number; d: number }[];
-    /** 🪺 Dernière ponte de chaque nid debout (id → instant). */
+    /** 🪺 La dernière sortie comptée pour les apparitions de nids (`spawnNests`). */
+    nestFrom?: number;
+    /** 🪺 Sorties comptées depuis le dernier nid apparu. */
+    nestCharge?: number;
+    /** 🪺 LEGACY (pontes d'avant le 2026-10-04) : retiré à la première apparition. */
     nestLaid?: Record<string, number>;
     /** 🪦 Île 3 : quand chaque cimetière a été abattu (id → instant) — il se relève
      *  `RISE.riseMs` plus tard tant que la citadelle des morts tient. */

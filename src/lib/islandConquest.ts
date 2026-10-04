@@ -78,27 +78,31 @@ export const ISLAND_CONQUEST = {
 } as const;
 
 /**
- * 🪺 LES NIDS DE L'ÎLE 2 (décisions de l'utilisateur, 2026-10-02) : chaque nid debout en pond
- * un nouveau, 6 nids au plus sur l'île ; TOUS les nids debout comptent pour pacifier ; les
- * lieux à portée d'un nid ont des routes dangereuses (embuscades doublées).
- * 2026-10-04 (décisions de l'utilisateur) :
- * - un nid pris est ABATTU, jamais tenu (`ControlState.razes`) : d'autres peuvent naître ;
- * - la PONTE suit l'activité sur la carte (`mapHarass`, comme les reprises) : tous les 3 jours
- *   quand on ne sort pas, chaque jour quand on la parcourt à fond (`nestLayMs`) ;
- * - leur RANG est autour de celui du joueur (`nestLevel` : le même, un en dessous, un au-dessus,
- *   dans les bornes de l'île) — ils progressent avec lui au lieu de submerger qui débarque.
+ * 🪺 LES NIDS DE L'ÎLE 2 (décisions de l'utilisateur, 2026-10-04 ; remplacent les pontes du
+ * 2026-10-02) :
+ * - les nids APPARAISSENT sur la carte tant que l'île n'est pas pacifiée — ils ne pondent plus
+ *   (`spawnNests`). Pas de durée : **un nid toutes les `everyDepartures` sorties sur la carte**
+ *   (chaque héros ou équipe envoyé compte, `ExpeditionMap.departures`) — qui joue beaucoup en
+ *   revoit souvent, qui ne sort pas n'en voit plus ; 6 nids nés au plus en même temps ;
+ * - **un nid qui apparaît ATTAQUE** : il avance la reprise du lieu tenu le plus proche à
+ *   `strikeMs` après sa naissance (la bataille devient imminente, de quoi envoyer un renfort) ;
+ * - un nid pris est ABATTU, jamais tenu (`ControlState.razes`) ;
+ * - leur RANG est autour de celui du joueur (`nestLevel`) — ils progressent avec lui ;
+ * - seuls les 3 nids d'origine et la forteresse comptent pour pacifier : les nids nés ne
+ *   bloquent jamais la pacification, qui les fait disparaître et arrête les apparitions ;
+ * - les lieux à portée d'un nid ont des routes dangereuses (embuscades doublées).
  */
 export const NEST = {
   islands: new Set([2]) as ReadonlySet<number>,
-  layMaxMs: 3 * 24 * 3600_000,
-  layMinMs: 24 * 3600_000,
+  /** Un nid apparaît toutes les `everyDepartures` sorties sur la carte. */
+  everyDepartures: 4,
+  /** Le délai entre l'apparition d'un nid et son attaque sur le lieu tenu le plus proche. */
+  strikeMs: 2 * 3600_000,
   /** L'écart de rang de chaque nid à celui du joueur, par index (le premier à son rang). */
   rankOffsets: [0, -1, 1] as readonly number[],
   cap: 6,
   /** Portée des embuscades autour d'un nid (unités de carte). */
   radius: 25,
-  /** Rattrapage borné d'une absence (pontes traitées par tick). */
-  maxCatchUp: 40,
   /** La troupe d'un nid né en route. */
   size: 3,
 } as const;
@@ -107,12 +111,6 @@ export const NEST = {
 const LEVELS_PER_RANK = rankStartLevel(1) - 1;
 
 type NestBirth = NonNullable<NonNullable<ExpeditionMap['archipel']>['nests']>[number];
-
-/** 🪺 Le délai entre deux pontes d'un nid : 3 jours sans sortir, 1 jour à plein régime. */
-export function nestLayMs(map: Pick<ExpeditionMap, 'departures'>, at: number): number {
-  const h = Math.min(1, Math.max(0, mapHarass(map, at)));
-  return NEST.layMaxMs - h * (NEST.layMaxMs - NEST.layMinMs);
-}
 
 /** 🪺 Le niveau du nid d'index `i` : celui du joueur décalé de `NEST.rankOffsets` rangs, borné
  *  à l'île. Il suit le joueur : un nid né quand il était Argent devient Or avec lui. */
@@ -219,11 +217,10 @@ export function nextRiseAt(map: Pick<ExpeditionMap, 'archipel'>): number | null 
 }
 
 /** Les ids de TOUS les objectifs de l'île : ceux d'origine et les nids nés en route. */
-function objectiveIds(isl: Pick<Island, 'objectives'>, nests: readonly NestBirth[]): string[] {
-  return [
-    ...Array.from({ length: isl.objectives }, (_, i) => objectiveIdOf(i)),
-    ...nests.map((n) => objectiveIdOf(n.i)),
-  ];
+/** Les objectifs d'ORIGINE de l'île : eux seuls comptent pour la forteresse et la
+ *  pacification (les nids nés en route ne la bloquent jamais). */
+function objectiveIds(isl: Pick<Island, 'objectives'>): string[] {
+  return Array.from({ length: isl.objectives }, (_, i) => objectiveIdOf(i));
 }
 
 /** 🪺 La place d'un nid qui naît : sur l'anneau des objectifs ou un peu plus loin, du côté de
@@ -258,47 +255,65 @@ export function nestSpot(
 }
 
 /**
- * 🪺 LES PONTES : chaque nid debout pond un nid tous les `nestLayMs` (6 nids au plus ; au
- * plafond, la ponte est perdue et l'horloge repart). Déterministe, rattrape une absence
- * (bornée par tick). Rend la MÊME carte si rien ne change.
+ * 🪺 LES APPARITIONS (`NEST`) : chaque sortie sur la carte depuis la dernière lue
+ * (`archipel.nestFrom`) charge le compteur (`archipel.nestCharge`) ; à `everyDepartures`, un
+ * nid apparaît À L'HEURE DE CETTE SORTIE et attaque le lieu tenu le plus proche
+ * (`nestStrike`) — tant que l'île n'est pas pacifiée et qu'il y a moins de `NEST.cap` nids nés
+ * debout (au plafond, l'apparition est perdue). ⚠️ À la première lecture, les sorties passées
+ * ne comptent pas (`nestFrom` part de maintenant). Rend la MÊME carte si rien ne change.
  */
-export function layNests(map: ExpeditionMap, now: number): ExpeditionMap {
+export function spawnNests(map: ExpeditionMap, now: number): ExpeditionMap {
   const isl = activeIsland(map);
   const a = map.archipel;
   if (!isl || !a || !NEST.islands.has(isl.id) || a.pacifiedAt !== undefined) return map;
+  if (a.nestFrom === undefined) {
+    const { nestLaid: _l, ...rest } = a;
+    void _l;
+    return { ...map, archipel: { ...rest, nestFrom: now, nestCharge: 0 } };
+  }
+  const from = a.nestFrom;
+  const fresh = (map.departures ?? []).filter((t) => t > from && t <= now).sort((x, y) => x - y);
+  if (!fresh.length) return map;
   const gone = destroyedOf(map);
   const nests = [...(a.nests ?? [])];
-  const standing = () => objectiveIds(isl, nests).filter((id) => !gone.has(id));
-  const lay = nestLayMs(map, now);
-  const laid: Record<string, number> = {};
-  for (const id of standing())
-    laid[id] = a.nestLaid?.[id] ?? nests.find((n) => objectiveIdOf(n.i) === id)?.at ?? now;
-  for (let k = 0; k < NEST.maxCatchUp; k++) {
-    const ids = standing();
-    let first: string | null = null;
-    let due = Infinity;
-    for (const id of ids) {
-      const t = laid[id]! + lay;
-      if (t < due) {
-        due = t;
-        first = id;
-      }
-    }
-    if (!first || due > now) break;
-    // Au plafond, plus rien ne naît : chaque horloge saute à sa dernière ponte (perdue).
-    if (ids.length >= NEST.cap) {
-      for (const id of ids) laid[id] = laid[id]! + Math.floor((now - laid[id]!) / lay) * lay;
-      break;
-    }
-    laid[first] = due;
-    const spot = nestSpot(map, isl.id, nests);
+  let pois = map.pois;
+  let charge = a.nestCharge ?? 0;
+  for (const t of fresh) {
+    if (++charge < NEST.everyDepartures) continue;
+    charge = 0;
+    const standing = nests.filter((n) => !gone.has(objectiveIdOf(n.i))).length;
+    const spot = standing < NEST.cap ? nestSpot({ pois }, isl.id, nests) : null;
     if (!spot) continue;
-    const i = isl.objectives + nests.length;
-    nests.push({ i, at: due, ...spot });
-    laid[objectiveIdOf(i)] = due;
+    nests.push({ i: isl.objectives + nests.length, at: t, ...spot });
+    pois = nestStrike(pois, spot, t);
   }
-  if (same(nests, a.nests ?? []) && same(laid, a.nestLaid ?? {})) return map;
-  return { ...map, archipel: { ...a, nests, nestLaid: laid } };
+  return {
+    ...map,
+    pois,
+    archipel: { ...a, nests, nestFrom: fresh[fresh.length - 1]!, nestCharge: charge },
+  };
+}
+
+/** 🪺 Le nid né à `at` attaque : la reprise du lieu tenu le plus proche (hors objectifs et
+ *  forteresse) est avancée à `at + NEST.strikeMs`, jamais retardée. Rien si on ne tient rien. */
+function nestStrike(pois: Poi[], from: { x: number; y: number }, at: number): Poi[] {
+  const held = pois.filter(
+    (p) =>
+      p.control?.owner === 'player' &&
+      !isIslandTargetId(p.id) &&
+      ALL_CONTROL_KINDS.includes(p.control.kind),
+  );
+  if (!held.length) return pois;
+  const t = held.reduce((best, p) =>
+    Math.hypot(p.x - from.x, p.y - from.y) < Math.hypot(best.x - from.x, best.y - from.y)
+      ? p
+      : best,
+  );
+  const strike = at + NEST.strikeMs;
+  if ((t.control!.attackAt ?? Infinity) <= strike) return pois;
+  return pois.map((p) =>
+    p.id === t.id ? { ...p, control: { ...p.control!, attackAt: strike } } : p,
+  );
 }
 
 /** 🪺 Les lieux à portée d'un nid debout (routes dangereuses). */
@@ -468,7 +483,7 @@ export function islandConquest(
   const isl = activeIsland(map);
   if (!isl || !map) return null;
   const gone = destroyedOf(map);
-  const ids = objectiveIds(isl, map.archipel?.nests ?? []);
+  const ids = objectiveIds(isl);
   const down = ids.filter((id) => gone.has(id)).length;
   const pois = map.pois ?? [];
   return {
@@ -550,8 +565,8 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, playerLev
       }),
     );
   });
-  // 🪺 Les nids nés en route, à leur place.
-  for (const n of map.archipel?.nests ?? []) {
+  // 🪺 Les nids nés en route, à leur place (plus aucun une fois l'île pacifiée).
+  for (const n of map.archipel?.pacifiedAt === undefined ? (map.archipel?.nests ?? []) : []) {
     const id = objectiveIdOf(n.i);
     if (gone.has(id)) continue;
     out.push(
@@ -567,7 +582,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, playerLev
     );
   }
   if (!gone.has(FORTRESS_ID)) {
-    const down = objectiveIds(isl, map.archipel?.nests ?? []).filter((x) => gone.has(x)).length;
+    const down = objectiveIds(isl).filter((x) => gone.has(x)).length;
     const force = fortressForce(isl, down, convoyBonus(map));
     out.push(
       enemyTarget(
@@ -634,7 +649,7 @@ export function ensureIslandConquest(
 ): ExpeditionMap {
   // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🪦 De même les
   // cimetières qui se relèvent.
-  const map = raiseDead(layNests(map0, now), now);
+  const map = raiseDead(spawnNests(map0, now), now);
   const isl = activeIsland(map);
   const want = isl ? expectedTargets(map, isl, now, playerLevel) : [];
   const wantIds = new Set(want.map((p) => p.id));
@@ -799,7 +814,7 @@ export function razeIslandTarget(map: ExpeditionMap, id: string, at: number): Ex
     };
   }
   const destroyed = [...new Set([...(map.archipel.destroyed ?? []), id])];
-  const all = [...objectiveIds(isl, map.archipel.nests ?? []), FORTRESS_ID];
+  const all = [...objectiveIds(isl), FORTRESS_ID];
   const pacified = all.every((x) => destroyed.includes(x));
   // 🪦 Un cimetière abattu garde l'heure de sa chute : il se relève 3 jours plus tard.
   const rises = RISE.islands.has(isl.id) && id !== FORTRESS_ID && id !== keystoneIdOf(isl);
@@ -812,7 +827,12 @@ export function razeIslandTarget(map: ExpeditionMap, id: string, at: number): Ex
       ...(pacified && map.archipel.pacifiedAt === undefined ? { pacifiedAt: at } : {}),
     },
     pois: map.pois
-      .filter((p) => p.id !== id)
+      // 🪺 Pacifiée : les nids nés encore debout disparaissent avec elle.
+      .filter(
+        (p) =>
+          p.id !== id &&
+          !(pacified && p.control?.owner === 'enemy' && p.control.kind === 'objective'),
+      )
       .map((p) => {
         // 🕊️ Pacifiée : plus aucune attaque prévue.
         if (!pacified || !p.control) return p;
@@ -1123,7 +1143,7 @@ export function islandTargetLabel(
         (PILLAGE_ISLANDS.has(isl.id)
           ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
           : NEST.islands.has(isl.id)
-            ? ' · tant qu’il tient, il pond un nid (tous les 3 jours, chaque jour si tu parcours beaucoup la carte ; 6 au plus, à un rang autour du tien), ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tous les nids debout comptent pour pacifier'
+            ? ` · ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tant que l’île n’est pas pacifiée, un nouveau nid apparaît toutes les ${NEST.everyDepartures} sorties sur la carte (6 au plus, à un rang autour du tien) et attaque aussitôt ton lieu tenu le plus proche`
             : CURSE.islands.has(isl.id)
               ? ' · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (en moyenne toutes les 72 h, plus souvent avec plusieurs sanctuaires debout)'
               : WARLORD.islands.has(isl.id)
@@ -1556,7 +1576,12 @@ export function vacateIsland(map: ExpeditionMap, at: number, playerLevel: number
   const a = map.archipel;
   if (!isl || !a || a.vacatedAt !== undefined) return map;
   const destroyed = [
-    ...new Set([...(a.destroyed ?? []), ...objectiveIds(isl, a.nests ?? []), FORTRESS_ID]),
+    ...new Set([
+      ...(a.destroyed ?? []),
+      ...objectiveIds(isl),
+      ...(a.nests ?? []).map((n) => objectiveIdOf(n.i)),
+      FORTRESS_ID,
+    ]),
   ];
   const archipel = {
     ...a,

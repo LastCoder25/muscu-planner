@@ -6,7 +6,6 @@ import { heroCanStay } from '@/lib/party';
 import {
   FORTRESS_ID,
   NEST,
-  nestLayMs,
   nestLevel,
   heldNests,
   takeObjective,
@@ -31,32 +30,45 @@ const tick = (m: ExpeditionMap, t: number) => ensureIslandConquest(m, t, LV);
 const nests = (m: ExpeditionMap): Poi[] =>
   m.pois.filter((p) => p.control?.kind === 'objective' && p.control.owner === 'enemy');
 
-describe('🪺 les nids de l’île 2 pondent', () => {
-  it('chaque nid debout pond tous les 3 jours, 6 nids au plus', () => {
-    let m = islandMap(2);
+/** `n` sorties sur la carte, une seconde d'écart, à partir de `t0`, puis un tick. */
+function sorties(m: ExpeditionMap, n: number, t0 = NOW + 1000): ExpeditionMap {
+  const dep = Array.from({ length: n }, (_, k) => t0 + k * 1000);
+  return tick({ ...m, departures: [...(m.departures ?? []), ...dep] }, t0 + n * 1000);
+}
+
+describe('🪺 un nid apparaît toutes les N sorties sur la carte', () => {
+  it('jamais avant la N-ième sortie, puis un par paquet de N', () => {
+    const m = islandMap(2);
     expect(nests(m)).toHaveLength(3);
-    m = tick(m, NOW + 3 * DAY - 1);
-    expect(nests(m)).toHaveLength(3);
-    m = tick(m, NOW + 3 * DAY);
-    expect(nests(m)).toHaveLength(6);
-    m = tick(m, NOW + 9 * DAY);
-    expect(nests(m)).toHaveLength(NEST.cap);
+    expect(nests(sorties(m, NEST.everyDepartures - 1))).toHaveLength(3);
+    expect(nests(sorties(m, NEST.everyDepartures))).toHaveLength(4);
+    expect(nests(sorties(m, 2 * NEST.everyDepartures + 1))).toHaveLength(5);
   });
-  it('rattrape une absence et rend la même carte au tick suivant', () => {
-    const m = tick(islandMap(2), NOW + 30 * DAY);
-    expect(nests(m)).toHaveLength(NEST.cap);
-    expect(tick(m, NOW + 30 * DAY)).toBe(m);
-  });
-  it('un nid abattu ne pond plus ; les autres continuent', () => {
+  it('le compteur se garde d’un tick à l’autre', () => {
     let m = islandMap(2);
-    m = razeIslandTarget(m, 'isl_obj_0', NOW + DAY);
-    m = razeIslandTarget(m, 'isl_obj_1', NOW + DAY);
-    m = tick(m, NOW + 3 * DAY);
-    expect(nests(m)).toHaveLength(2);
+    m = sorties(m, NEST.everyDepartures - 1);
+    m = sorties(m, 1, NOW + DAY);
+    expect(nests(m)).toHaveLength(4);
+  });
+  it('les sorties d’avant la règle ne comptent pas', () => {
+    const fresh = createMap(5, NOW, LV, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(2));
+    const past = [NOW - 5000, NOW - 4000, NOW - 3000, NOW - 2000, NOW - 1000];
+    const m = ensureIslandConquest(
+      { ...ensureControls(fresh, NOW, LV, ISLAND_OUTPOST_LEVEL), departures: past },
+      NOW,
+      LV,
+    );
+    // Deux ticks : le premier pose le point de départ, le second compterait les sorties.
+    expect(nests(tick(m, NOW + 1000))).toHaveLength(3);
+  });
+  it('6 nids nés au plus ; la même carte au tick suivant', () => {
+    const m = sorties(islandMap(2), 40 * NEST.everyDepartures);
+    expect(nests(m)).toHaveLength(3 + NEST.cap);
+    expect(tick(m, NOW + 999 * 1000)).toBe(m);
   });
   it('les nids naissent sur la terre, à 10 unités au moins des autres lieux fixes', () => {
     for (const seed of [1, 5, 9, 13]) {
-      const m = tick(islandMap(2, seed), NOW + 30 * DAY);
+      const m = sorties(islandMap(2, seed), 40 * NEST.everyDepartures);
       const fixed = m.pois.filter((p) => p.control);
       for (const n of nests(m)) {
         expect(onIsland(2, n.x, n.y, 6), n.id).toBe(true);
@@ -66,22 +78,70 @@ describe('🪺 les nids de l’île 2 pondent', () => {
       }
     }
   });
-  it('pas de ponte hors de l’île 2', () => {
-    const m = tick(islandMap(1), NOW + 30 * DAY);
+  it('rien hors de l’île 2', () => {
+    const m = sorties(islandMap(1), 40 * NEST.everyDepartures);
     expect(m.archipel!.nests ?? []).toEqual([]);
   });
 });
 
-describe('🪺 tous les nids debout comptent pour pacifier', () => {
-  it('forteresse prise et nids d’origine abattus : pas pacifiée tant qu’un nid né tient', () => {
-    let m = tick(islandMap(2), NOW + 3 * DAY);
+describe('🪺 un nid qui apparaît attaque le lieu tenu le plus proche', () => {
+  /** L'île 2 avec un lieu fixe tenu, attaqué dans 10 jours. */
+  function heldMap(): { m: ExpeditionMap; id: string } {
+    const m = islandMap(2);
+    const p = m.pois.find((q) => q.control && !q.id.startsWith('isl_'))!;
+    const held: ExpeditionMap = {
+      ...m,
+      pois: m.pois.map((q) =>
+        q.id === p.id
+          ? {
+              ...q,
+              control: {
+                ...q.control!,
+                owner: 'player',
+                garrison: ['a'],
+                attackAt: NOW + 10 * DAY,
+              },
+            }
+          : q,
+      ),
+    };
+    return { m: held, id: p.id };
+  }
+  it('sa reprise est avancée à la naissance du nid + strikeMs', () => {
+    const { m, id } = heldMap();
+    const t0 = NOW + 1000;
+    const after = sorties(m, NEST.everyDepartures, t0);
+    const born = t0 + (NEST.everyDepartures - 1) * 1000;
+    expect(after.pois.find((p) => p.id === id)!.control!.attackAt).toBe(born + NEST.strikeMs);
+  });
+  it('une attaque déjà plus proche n’est jamais retardée', () => {
+    const { m, id } = heldMap();
+    const soon: ExpeditionMap = {
+      ...m,
+      pois: m.pois.map((q) =>
+        q.id === id ? { ...q, control: { ...q.control!, attackAt: NOW + 2000 } } : q,
+      ),
+    };
+    const after = sorties(soon, NEST.everyDepartures);
+    expect(after.pois.find((p) => p.id === id)!.control!.attackAt).toBe(NOW + 2000);
+  });
+});
+
+describe('🪺 seuls les nids d’origine et la forteresse comptent pour pacifier', () => {
+  it('pacifiée malgré les nids nés : ils disparaissent et n’apparaissent plus', () => {
+    let m = sorties(islandMap(2), 3 * NEST.everyDepartures);
+    expect(nests(m)).toHaveLength(6);
+    expect(islandConquest(m)!.objectivesTotal).toBe(3);
     for (const id of ['isl_obj_0', 'isl_obj_1', 'isl_obj_2'])
-      m = razeIslandTarget(m, id, NOW + 4 * DAY);
-    m = takeFortress(m, ['a'], false, NOW + 4 * DAY);
-    expect(islandPacified(m)).toBe(false);
-    expect(islandConquest(m)!.objectivesTotal).toBe(6);
-    for (const n of nests(m)) m = razeIslandTarget(m, n.id, NOW + 5 * DAY);
+      m = razeIslandTarget(m, id, NOW + DAY);
+    m = takeFortress(m, ['a'], false, NOW + DAY);
     expect(islandPacified(m)).toBe(true);
+    expect(nests(m)).toHaveLength(0);
+    const born = m.archipel!.nests!.length;
+    m = sorties(m, 3 * NEST.everyDepartures, NOW + 2 * DAY);
+    expect(nests(m)).toHaveLength(0);
+    // Plus aucune apparition, même invisible.
+    expect(m.archipel!.nests!).toHaveLength(born);
     expect(m.pois.find((p) => p.id === FORTRESS_ID)!.control!.owner).toBe('player');
   });
 });
@@ -106,23 +166,6 @@ describe('🪺 routes dangereuses autour des nids', () => {
   it('rien sur l’île 1', () => {
     const m = tick(islandMap(1), NOW + 3600_000);
     expect(m.pois.some((p) => p.nestPeril)).toBe(false);
-  });
-});
-
-describe('🪺 la ponte suit l’activité sur la carte', () => {
-  it('à plein régime (21 départs sur 7 jours), un nid pond chaque jour', () => {
-    let m = islandMap(2);
-    m = { ...m, departures: Array.from({ length: 21 }, (_, k) => NOW - k * 3600_000) };
-    expect(nestLayMs(m, NOW)).toBe(NEST.layMinMs);
-    expect(nests(tick(m, NOW + DAY - 1))).toHaveLength(3);
-    expect(nests(tick(m, NOW + DAY))).toHaveLength(6);
-  });
-  it('sans sortir, 3 jours ; à mi-régime, entre les deux', () => {
-    const m = islandMap(2);
-    expect(nestLayMs(m, NOW)).toBe(NEST.layMaxMs);
-    const half = { ...m, departures: Array.from({ length: 10 }, (_, k) => NOW - k * 3600_000) };
-    expect(nestLayMs(half, NOW)).toBeGreaterThan(NEST.layMinMs);
-    expect(nestLayMs(half, NOW)).toBeLessThan(NEST.layMaxMs);
   });
 });
 
