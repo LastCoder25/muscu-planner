@@ -136,30 +136,42 @@ export const SUPPLY_WEIGHT: Record<SupplyId, number> = {
   tome1500: 0.25,
   tome4000: 0.1,
 };
-const WEIGHT_TOTAL = SUPPLY_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
+/** 🎒 Les CONSOMMABLES au sens strict : tout sauf les boosts de vitesse et les tomes d'XP.
+ *  ⚠️ Boosts et tomes sont des DROPS INDÉPENDANTS (v1.52, demandé : « traiter les boosts de
+ *  trajet et d'XP comme des drops indépendants des consommables ») : ils ont chacun leur
+ *  propre chance par voyage (`SUPPLY.boostDropChance` / `tomeDropChance`) au lieu de prendre
+ *  la place d'un consommable dans le même tirage. */
+export const CONSUMABLE_IDS: readonly SupplyId[] = SUPPLY_IDS.filter(
+  (id) => !isBoostId(id) && !isTomeId(id),
+);
 
-/** Le consommable désigné par un tirage uniforme `r` ∈ [0, 1) — UN seul tirage, comme
- *  avant : aucun autre tirage de la résolution n'est décalé. SOURCE UNIQUE de tous les
- *  butins de consommable (voyage, camp, point fixe, récolte). */
+/** Tirage pondéré parmi `ids` (SUPPLY_WEIGHT), un seul tirage uniforme `r` ∈ [0, 1). */
+function pickWeighted<T extends SupplyId>(ids: readonly T[], r: number): T {
+  const total = ids.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
+  let x = r * total;
+  for (const id of ids) {
+    x -= SUPPLY_WEIGHT[id];
+    if (x < 0) return id;
+  }
+  return ids[ids.length - 1]!;
+}
+
 /** 🧪 Le BOOST désigné par un tirage uniforme `r` ∈ [0, 1), aux mêmes poids que dans le butin
  *  (un boost de 5 min est dix fois plus fréquent qu'un boost d'1 h). La distillerie. */
 export function pickBoost(r: number): BoostId {
-  const total = BOOST_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
-  let x = r * total;
-  for (const id of BOOST_IDS) {
-    x -= SUPPLY_WEIGHT[id];
-    if (x < 0) return id;
-  }
-  return BOOST_IDS[BOOST_IDS.length - 1]!;
+  return pickWeighted(BOOST_IDS, r);
 }
 
+/** 📘 Le TOME désigné par un tirage uniforme `r` (plus il est gros, plus il est rare). */
+export function pickTome(r: number): TomeId {
+  return pickWeighted(TOME_IDS, r);
+}
+
+/** Le CONSOMMABLE (jamais un boost ni un tome) désigné par un tirage uniforme `r` ∈ [0, 1)
+ *  — UN seul tirage : aucun autre tirage de la résolution n'est décalé. SOURCE UNIQUE des
+ *  butins de consommable (voyage, bêtes d'un camp, ruines d'un héros tombé, jardin). */
 export function pickSupply(r: number): SupplyId {
-  let x = r * WEIGHT_TOTAL;
-  for (const id of SUPPLY_IDS) {
-    x -= SUPPLY_WEIGHT[id];
-    if (x < 0) return id;
-  }
-  return SUPPLY_IDS[SUPPLY_IDS.length - 1]!;
+  return pickWeighted(CONSUMABLE_IDS, r);
 }
 
 /** Les réglages, en un seul endroit. Premier calage : à ajuster à l'usage. */
@@ -193,6 +205,11 @@ export const SUPPLY = {
   /** Chance qu'un voyage rapporte un consommable (un seul, tiré uniformément). ⚠️ Visé :
    *  un consommable pour 2 à 3 voyages — assez pour en avoir souvent, pas pour tout couvrir. */
   dropChance: 0.45,
+  /** ⚡ Chance INDÉPENDANTE qu'un voyage rapporte un boost de vitesse. ⚠️ Calée sur leur part
+   *  d'avant (≈ 0,45 × 2,55 / 15,1 ≈ 7,6 %) : on les sort du tirage, pas plus fréquents. */
+  boostDropChance: 0.08,
+  /** 📘 Chance INDÉPENDANTE qu'un voyage rapporte un tome d'XP (même calage). */
+  tomeDropChance: 0.08,
 } as const;
 
 export const SUPPLIES: Record<SupplyId, SupplyDef> = {
@@ -447,14 +464,21 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
   }
 }
 
-/** Butin d'un voyage : au plus UN consommable, n'importe lequel (« tout partout »), selon
- *  son poids (`pickSupply`).
- *  ⚠️ Tiré sur la graine du voyage : déterministe, et sur un générateur à part pour ne
- *  décaler aucun autre tirage de la résolution. */
+/** Butin d'un voyage : TROIS tirages indépendants — au plus un consommable (« tout
+ *  partout », `pickSupply`), au plus un boost de vitesse (`pickBoost`), au plus un tome d'XP
+ *  (`pickTome`). Un voyage peut donc rendre les trois.
+ *  ⚠️ Tiré sur la graine du voyage : déterministe, chaque drop sur SON générateur (aucun ne
+ *  décale l'autre, ni un autre tirage de la résolution). */
 export function rollSupplyDrop(seed: number): SupplyStock {
-  const next = mulberry32((seed ^ 0x2f6b0a13) >>> 0 || 1);
-  if (next() >= SUPPLY.dropChance) return {};
-  return { [pickSupply(next())]: 1 };
+  const out: SupplyStock = {};
+  const roll = (salt: number, chance: number, pick: (r: number) => SupplyId) => {
+    const next = mulberry32((seed ^ salt) >>> 0 || 1);
+    if (next() < chance) out[pick(next())] = 1;
+  };
+  roll(0x2f6b0a13, SUPPLY.dropChance, pickSupply);
+  roll(0x5be0cd19, SUPPLY.boostDropChance, pickBoost);
+  roll(0x1f83d9ab, SUPPLY.tomeDropChance, pickTome);
+  return out;
 }
 
 /**

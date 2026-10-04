@@ -9,6 +9,7 @@ import {
   TOME_XP,
   isTomeId,
   pickSupply,
+  pickTome,
   supplyUselessWhy,
 } from '../src/lib/supplies';
 import { openTome, tomeChoices } from '../src/lib/xpTome';
@@ -88,7 +89,9 @@ describe('📘 tomes d’expérience', () => {
       ).not.toBeNull();
     }
     const seen = new Set<string>();
-    for (let i = 0; i < 2000; i++) seen.add(pickSupply(i / 2000));
+    for (let i = 0; i < 2000; i++) seen.add(pickTome(i / 2000));
     expect([...seen].filter(isTomeId).length).toBe(TOME_IDS.length);
+    // Un tome ne sort plus du tirage de consommable : c'est un drop à part.
+    for (let i = 0; i < 2000; i++) expect(isTomeId(pickSupply(i / 2000))).toBe(false);
   });
 });

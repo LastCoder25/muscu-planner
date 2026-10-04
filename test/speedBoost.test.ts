@@ -10,10 +10,11 @@ import {
 import {
   BOOST_IDS,
   BOOST_MIN,
+  CONSUMABLE_IDS,
+  SUPPLY_IDS,
   pickSupply,
   rollSupplyDrop,
   SUPPLIES,
-  SUPPLY_IDS,
   SUPPLY_WEIGHT,
   supplyUselessWhy,
 } from '@/lib/supplies';
@@ -48,15 +49,16 @@ describe('⚡ consommables de vitesse', () => {
     for (let i = 1; i < w.length; i++) expect(w[i]).toBeLessThan(w[i - 1]!);
     expect(SUPPLY_WEIGHT.rations).toBe(SUPPLY_WEIGHT.sceau);
   });
-  it('le tirage suit les poids (un seul tirage uniforme)', () => {
+  it('le tirage de consommable suit les poids, et ne rend jamais un boost', () => {
     const n: Record<string, number> = {};
     const N = 20000;
     for (let i = 0; i < N; i++) {
       const id = pickSupply((i + 0.5) / N);
       n[id] = (n[id] ?? 0) + 1;
     }
-    const total = SUPPLY_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
-    for (const id of SUPPLY_IDS) expect(n[id]! / N).toBeCloseTo(SUPPLY_WEIGHT[id] / total, 2);
+    for (const id of BOOST_IDS) expect(n[id]).toBeUndefined();
+    const total = CONSUMABLE_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
+    for (const id of CONSUMABLE_IDS) expect(n[id]! / N).toBeCloseTo(SUPPLY_WEIGHT[id] / total, 2);
   });
   it('le butin d’un voyage peut rendre un boost', () => {
     let seen = false;
