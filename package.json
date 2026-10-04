@@ -1,6 +1,6 @@
 {
   "name": "muscu-planner",
-  "version": "1.50.4",
+  "version": "1.50.5",
   "description": "Appli de suivi de musculation (Quasar + Supabase)",
   "productName": "Muscu Planner",
   "author": "Alban Martinez",
