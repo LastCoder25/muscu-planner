@@ -70,7 +70,8 @@ export function runeOmen(t: RuneTier): number {
   return t === 'gold' ? 1 : t === 'violet' ? 0.5 : 0;
 }
 
-/** Une alcôve du lot ×10. `hot` : une rune rare, qu'on ouvre EN GRAND au toucher. */
+/** Une alcôve du lot ×10. `hot` : une rune hors basique (bleue et au-dessus), qu'on ouvre EN
+ *  GRAND au toucher. */
 export interface LotCell {
   index: number;
   id: SkillId;
@@ -80,14 +81,15 @@ export interface LotCell {
   autoAt: number | null;
 }
 
-/** Le lot : les vertes et bleues s'ouvrent en cascade (dans l'ordre du tirage) après la chute
- *  et la scrutation ; les violettes et dorées attendent qu'on les touche. */
+/** Le lot : seules les vertes (basiques) s'ouvrent en cascade (dans l'ordre du tirage) après la
+ *  chute et la scrutation ; toute rune hors basique attend qu'on la touche — comme un A ou un S
+ *  au ×10 des champions (v1.55.3, demandé). */
 export function lotCells(ids: readonly SkillId[]): LotCell[] {
   const start = lotCascadeStart(ids.length);
   let k = 0;
   return ids.map((id, index) => {
     const tier = SKILLS[id].tier;
-    const hot = tierRank(tier) >= 2;
+    const hot = tierRank(tier) >= 1;
     return {
       index,
       id,
