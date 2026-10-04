@@ -40,7 +40,8 @@ const ASCENSION = {
   /** Or d'une ascension = ce que coûte un cran de BÂTIMENT au premier niveau du rang visé,
    *  divisé par ce facteur. ⚠️ Adossé au puits d'or du projet (`buildingUpgradeCost`) plutôt
    *  qu'à un nombre écrit : si l'économie des bâtiments bouge, l'ascension suit. */
-  goldDiv: 4,
+  // ⚠️ 4 → 20/3 en v1.51 (or des ascensions ×0,6, avec `BUILD.upBase` ×0,75 ; cf. là-bas).
+  goldDiv: 20 / 3,
   /** Sceaux de champion par ascension = `sealPerRank` × rang VISÉ (Argent 4, Or 8, Or noir
    *  12… Tout-puissant 36). ⚠️ MESURÉ (v1.50, 20 simulations × 2 ans, `ascensionRhythm`) :
    *  sans rang, TOUS les sceaux servent à toute ascension, donc l'ancien barème (1 + ⌊rang/4⌋,

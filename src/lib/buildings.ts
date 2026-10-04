@@ -416,7 +416,12 @@ export const BUILD = {
   // choisissait parmi ~30 lieux au lieu de 16. Mesuré sur un an : à 900, 73,0 / 63,8 / 58,7 %
   // du plafond ; à 750, 76,7 / 67,6 / 62,2 % — la courbe d’avant (76,0 / 67,3 / 62,0). 775
   // laissait un cran de base à 32,8 jours de revenu au niveau 100 (borne 32).
-  upBase: 750, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
+  // ⚠️ 750 → 560 en v1.51 (×0,75, demandé : « je cours littéralement après l'or »). Mesuré
+  // sur un an avec 13 champions qui montent de rang avec leurs 4 pièces (le cas d'un compte
+  // réel), part du plafond (tranquille / régulier / très actif) : 750 → 74,7 / 64,9 / 57,6 %
+  // (très actif SOUS la bande) ; 560 + ascensions ×0,6 → 84,3 / 73,4 / 66,2 % (×0,65 menait à 88,5 / 77,0 / 69,5). Le profil très
+  // actif était le plus en retard : il monte de niveau plus vite que l'or ne rentre.
+  upBase: 560, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

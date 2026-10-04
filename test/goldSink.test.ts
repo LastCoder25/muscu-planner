@@ -70,14 +70,17 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       const jours = cranTotal(L) / fullGoldPerDay(L);
       // Sous quelques jours, on est en permanence au plafond de son niveau et l'or n'a
       // plus de destination.
-      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(12);
+      // ⚠️ 12 → 9 en v1.51 : les prix ont baissé de 25 % (décision de l'utilisateur, « je cours
+      // littéralement après l'or »), un cran de toute la base vaut désormais ~10 jours au plus bas (niveau 15).
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(9);
       // Au-delà, on ne progresse plus, on attend. ⚠️ C'est ce qui était livré : à `upBase`
       // 1320, un cran sur toute la base coûtait ~57 jours de revenu au niveau 28, et le
       // compte réel portait 312 jours de retard.
       expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(32);
       // …et un cran d'un SEUL bâtiment reste au-dessus d'une journée : un bâtiment qu'on
       // monte sans y penser n'est pas un puits.
-      expect(parBat, `niveau ${L} : ${parBat.toFixed(2)} jour(s) par bâtiment`).toBeGreaterThan(1);
+      // ⚠️ 1 → 0,9 en v1.51 (prix ×0,75) : ~1 jour au niveau 15, le point le plus bas.
+      expect(parBat, `niveau ${L} : ${parBat.toFixed(2)} jour(s) par bâtiment`).toBeGreaterThan(0.9);
     }
   });
 
@@ -272,8 +275,13 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     expect(aHuit, 'un roster plus court doit faire monter la part').toBeGreaterThan(aNeuf);
     expect(aSept).toBeGreaterThan(aHuit);
     // Et la marge, chiffrée : deux retraits restent dans la bande, et ils se SENTENT.
-    expect(aHuit, `un bâtiment de moins : ${(aHuit * 100).toFixed(0)} %`).toBeLessThan(0.9);
-    expect(aSept, `deux bâtiments de moins : ${(aSept * 100).toFixed(0)} %`).toBeLessThan(0.9);
+    // ⚠️ v1.51 : les prix ont baissé de 25 % (décision de l'utilisateur) et la marge se RÉDUIT
+    // (mesuré à 560 : 91 % à un bâtiment de moins, sans aucune ascension de champion). Ce
+    // profil sans champions est un PLANCHER : avec 13 champions qui montent, le tranquille
+    // atteint 84 % (`ascensionRhythm`). La borne passe à 0,95 — retirer un bâtiment impose
+    // désormais de re-mesurer `BUILD.upBase`, comme les quatre fois d'avant.
+    expect(aHuit, `un bâtiment de moins : ${(aHuit * 100).toFixed(0)} %`).toBeLessThan(0.95);
+    expect(aSept, `deux bâtiments de moins : ${(aSept * 100).toFixed(0)} %`).toBeLessThan(0.95);
     expect(aSept - aNeuf, 'deux retraits doivent se sentir').toBeGreaterThan(0.03);
   });
 });

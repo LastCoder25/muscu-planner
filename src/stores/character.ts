@@ -507,6 +507,7 @@ import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
 import { CHARACTER_RANKS, characterRank } from '@/lib/characterRank';
 import { useGoldFx } from '@/composables/useGoldFx';
+import { PRICE_REFUND_VERSION, priceRefund } from '@/lib/priceRefund';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 
 export interface CharacterRow {
@@ -552,6 +553,8 @@ export interface CharacterRow {
   seals: Seals; // 🔱 sceaux d'ascension (migr. 0083)
   /** 🗓️ Lundi de la dernière semaine de quêtes récupérée (migr. 0093), ou null. */
   quest_week: string | null;
+  /** 💰 Version du remboursement de la baisse des prix déjà versée (migr. 0099). */
+  price_refund: number;
   /** 🪬 Runes multicolores (migr. 0094, remodelée à la bascule du 2026-09-30) : runes à
    *  ouvrir, compétences au stock, compteur d'ouvertures, version de la bascule. */
   runes: RuneBank;
@@ -607,7 +610,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, attacks, planned_moves, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, attacks, planned_moves, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes, price_refund';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -746,6 +749,8 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     if (typeof r.quest_week !== 'string') r.quest_week = null; // 🗓️ migr. 0093
+    // 💰 migr. 0099 — absent = déjà versé : on ne rembourse jamais sur une lecture incomplète.
+    if (typeof r.price_refund !== 'number') r.price_refund = PRICE_REFUND_VERSION;
     // 🪬 LA BASCULE DES RUNES MULTICOLORES (2026-09-30), une fois : les compétences des
     // champions sont RETIRÉES et remboursées en runes (`REFUND_PER_LEVEL`), comme le stock
     // coloré et la rune en attente. ⚠️ ICI, sur la ligne brute, pour que les runes et le vivier
@@ -859,6 +864,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (row.value) await settleWipe(uid);
     if (row.value) await settleGachaReset(uid);
     if (row.value) await settleWelcomeTickets(uid);
+    if (row.value) await settlePriceRefund(uid);
     return row.value;
   }
 
@@ -915,6 +921,51 @@ export const useCharacterStore = defineStore('character', () => {
    * ligne : rien n'est écrit, on retentera au prochain chargement — jamais deux fois.
    * ⚠️ Et on le DIT : un bond d'or sans un mot se lit comme un bug.
    */
+  /**
+   * 💰 LE REMBOURSEMENT DE LA BAISSE DES PRIX (v1.51, `priceRefund`), une fois par compte.
+   * ⚠️ La marque est écrite dans la MÊME requête que l'or, et la condition vit dans la requête
+   * (`price_refund` sous la version) : deux onglets ne remboursent pas deux fois. Un compte
+   * sans crans payés est marqué quand même (0 or), sinon il serait remboursé plus tard pour des
+   * crans payés au nouveau prix. Un échec laisse la base intacte ; on retentera.
+   */
+  async function settlePriceRefund(userId: string) {
+    const cur = row.value;
+    if (!cur || cur.price_refund >= PRICE_REFUND_VERSION) return;
+    const levels = [
+      ...cur.buildings.map((b) => b.level),
+      ...(cur.base?.defenses ?? []).map((d) => d.level),
+    ];
+    const gold = priceRefund(levels);
+    let data: CharacterRow | null = null;
+    try {
+      const res = await supabase
+        .from('characters')
+        .update({
+          gold: cur.gold + gold,
+          price_refund: PRICE_REFUND_VERSION,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .lt('price_refund', PRICE_REFUND_VERSION)
+        .select(COLS)
+        .maybeSingle();
+      if (res.error) return;
+      data = res.data;
+    } catch {
+      return;
+    }
+    if (!data) return; // un autre onglet l'a déjà versé
+    row.value = normalizeRow(data);
+    if (gold > 0)
+      useGameFx().celebrate({
+        kind: 'unlock',
+        emoji: '💰',
+        title: 'Les prix baissent',
+        subtitle: `Bâtiments −25 %, ascensions −40 % — ${gold.toLocaleString('fr-FR')} 🪙 rendus sur ce que tu avais payé`,
+        rarity: 'legendary',
+      });
+  }
+
   async function settleLegacy(
     userId: string,
     back: { pantheon: number; scrap: number; kennel: number },

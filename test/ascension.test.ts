@@ -125,7 +125,8 @@ describe('les sceaux', () => {
 describe('le coût', () => {
   it('l’or est adossé au puits des bâtiments, au 1er niveau du rang visé', () => {
     for (const r of [1, 3, 6, 9])
-      expect(ascensionCost(r).gold).toBe(Math.round(buildingUpgradeCost(rankStartLevel(r)) / 4));
+      // ⚠️ ÷ 20/3 depuis la v1.51 (or ×0,6, décision de l'utilisateur ; c'était ÷ 4).
+      expect(ascensionCost(r).gold).toBe(Math.round(buildingUpgradeCost(rankStartLevel(r)) / (20 / 3)));
   });
 
   it('les sceaux : 4 × le rang visé (Argent 4, Or 8… Tout-puissant 36)', () => {
