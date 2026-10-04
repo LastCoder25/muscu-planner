@@ -5,24 +5,6 @@
        fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
        ici aussi doublerait chaque notification. -->
   <div class="emap">
-    <!-- 🏝️ L'archipel : toute la carte depuis la bascule (étape 7 de la roadmap). -->
-    <ArchipelPanel
-      :island="island"
-      :conquest="islandProgress"
-      :busy="archBusy"
-      :open-ids="crossInfo.open"
-      :visited-ids="crossInfo.visited"
-      :crossing="char.row?.expedition_map?.crossing ?? null"
-      :blocks="crossInfo.blocks"
-      :fetchable="crossInfo.fetchable"
-      :sailings="char.row?.expedition_map?.sailings ?? []"
-      :hero-depart-at="char.crossingDepartAt(now)"
-      :away="crossInfo.away"
-      :militia="crossInfo.militia"
-      :now="now"
-      @cross="crossTo"
-      @fetch="fetchFrom"
-    />
     <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
     <CrossingSheet
       v-model="crossOpen"
@@ -377,6 +359,26 @@
         </span>
         <span v-else class="ei-emo">{{ POI_EMO[e.poi.type] }}</span>
       </button>
+
+      <!-- 🏝️ L'archipel, en haut à droite de la carte : l'île actuelle, et au toucher toutes
+           les îles avec la fiche de celle qu'on choisit. -->
+      <ArchipelPanel
+        :island="island"
+        :conquest="islandProgress"
+        :busy="archBusy"
+        :open-ids="crossInfo.open"
+        :visited-ids="crossInfo.visited"
+        :crossing="char.row?.expedition_map?.crossing ?? null"
+        :blocks="crossInfo.blocks"
+        :fetchable="crossInfo.fetchable"
+        :sailings="char.row?.expedition_map?.sailings ?? []"
+        :hero-depart-at="char.crossingDepartAt(now)"
+        :away="crossInfo.away"
+        :militia="crossInfo.militia"
+        :now="now"
+        @cross="crossTo"
+        @fetch="fetchFrom"
+      />
 
       <!-- Zoom -->
       <div class="zoom-ctl">

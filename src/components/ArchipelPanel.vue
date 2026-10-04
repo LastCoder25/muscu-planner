@@ -1,24 +1,38 @@
 <!--
-  🏝️ LES CINQ ÎLES DE L'ARCHIPEL, en tête de la carte (v1.40.2, demandé par l'utilisateur : « à la
-  place de la liste archipel, les 5 options des 5 îles, cadenas pour celles encore bloquées »).
-  Une rangée de cinq tuiles basses (44 px) — la carte doit toujours finir en bas de l'écran ;
-  toucher une île déplie sa fiche (traversée, conquête, réserve) juste dessous, la toucher
-  encore la replie. ⚠️ Repliée à chaque ouverture : la carte passe avant.
+  🏝️ L'ARCHIPEL, posé EN HAUT À DROITE DE LA CARTE (v1.40.3, demandé par l'utilisateur : « en haut
+  à droite de la carte l'île actuelle, et quand on clique dessus on voit toutes les îles et on
+  peut switcher l'affichage de l'île »). Replié : une pastille « Île N · nom ». Déplié : les cinq
+  îles (cadenas sur les bloquées) et la fiche de l'île choisie (traversée, conquête, réserve),
+  qui s'ouvre sur l'île où l'on est. ⚠️ Replié à chaque ouverture : la carte passe avant.
 -->
 <template>
-  <div class="arch">
+  <div class="arch" :class="{ open }">
+    <button
+      type="button"
+      class="arch-cur"
+      :style="{ '--a': curTile?.color }"
+      :aria-expanded="open"
+      aria-controls="archipel-pop"
+      :aria-label="`Île actuelle : ${curTile ? `île ${curTile.id}, ${curTile.name}` : 'aucune'}. Voir l’archipel`"
+      @click="toggle"
+    >
+      <span class="ac-emo" aria-hidden="true">{{ curTile?.emoji ?? '🏝️' }}</span>
+      <span class="ac-txt">Île {{ curTile?.id ?? '?' }} · {{ curTile?.name }}</span>
+      <span v-if="crossing || sailings?.length" class="ac-sea" aria-hidden="true">⛵</span>
+      <span class="ac-chev" aria-hidden="true">{{ open ? '▴' : '▾' }}</span>
+    </button>
+    <div v-if="open" id="archipel-pop" class="arch-pop">
     <div class="isl-row" role="group" aria-label="Les îles de l’archipel">
       <button
         v-for="i in tiles"
         :key="i.id"
         type="button"
         class="isl"
-        :class="{ active: i.active, locked: i.locked, sel: open && sel === i.id, sea: i.sea }"
+        :class="{ active: i.active, locked: i.locked, sel: sel === i.id, sea: i.sea }"
         :style="{ '--a': i.color }"
         :aria-label="`Île ${i.id} · ${i.name}${i.locked ? ' (verrouillée)' : ''}`"
         :aria-current="i.active ? 'location' : undefined"
-        :aria-expanded="open && sel === i.id"
-        aria-controls="archipel-island"
+        :aria-pressed="sel === i.id"
         @click="pick(i.id)"
       >
         <span class="isl-emo" aria-hidden="true">{{ i.locked ? '🔒' : i.emoji }}</span>
@@ -28,7 +42,7 @@
       </button>
     </div>
 
-    <div v-if="open" id="archipel-island" class="arch-body">
+    <div class="arch-body">
       <!-- ⛵ La traversée réservée ou en cours. -->
       <div v-if="crossing" class="arch-sea">
         <span class="as-emo" aria-hidden="true">⛵</span>
@@ -173,6 +187,7 @@
         taille de l'île : l'Avant-poste ne règle plus que la vitesse.
       </p>
     </div>
+    </div>
   </div>
 </template>
 
@@ -251,14 +266,17 @@ const tiles = computed(() =>
   }),
 );
 const sel = ref(props.island?.id ?? 1);
-/** Toucher une île déplie sa fiche ; la même encore la replie. */
-function pick(id: number) {
-  if (open.value && sel.value === id) open.value = false;
-  else {
-    sel.value = id;
-    open.value = true;
-  }
+/** La pastille ouvre l'archipel sur l'île où l'on est ; la retoucher le referme. */
+function toggle() {
+  if (!open.value) sel.value = props.island?.id ?? 1;
+  open.value = !open.value;
 }
+/** Toucher une île affiche sa fiche. */
+function pick(id: number) {
+  sel.value = id;
+}
+/** 📍 L'île où l'on est, montrée sur la pastille. */
+const curTile = computed(() => tiles.value.find((t) => t.active) ?? null);
 const selTile = computed(() => tiles.value.find((t) => t.id === sel.value) ?? null);
 const islandCapRank = computed(() =>
   props.island ? characterRank(props.island.maxLevel).name : '',
@@ -266,8 +284,68 @@ const islandCapRank = computed(() =>
 </script>
 
 <style scoped lang="scss">
+/* 📍 En haut à droite de la carte, par-dessus elle (le parent est en `position: relative`). */
 .arch {
-  margin: 0 12px 6px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: calc(100% - 16px);
+}
+.arch-cur {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--a, var(--accent));
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.arch-cur:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ac-emo {
+  font-size: 16px;
+  line-height: 1;
+}
+.ac-txt {
+  min-width: 0;
+  font-family: 'Oswald', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-sea {
+  font-size: 13px;
+}
+.ac-chev {
+  color: var(--dim);
+  font-size: 11px;
+}
+/* Le déplié reste DANS la carte : il défile s'il est plus haut qu'elle. */
+.arch-pop {
+  margin-top: 6px;
+  width: 360px;
+  max-width: 100%;
+  max-height: calc(min(62vh, 100dvh - 314px) - 70px);
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 /* 🏝️ Cinq colonnes égales, 44 px de haut : la carte garde le bas de l'écran. */
 .isl-row {

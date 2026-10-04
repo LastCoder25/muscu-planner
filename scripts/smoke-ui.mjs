@@ -89,6 +89,8 @@ const ECRANS = [
       { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
       // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est.
       { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
+      // 🏝️ L'île actuelle, en haut à droite : toucher la pastille déplie les cinq îles.
+      { nom: 'archipel', clic: '.arch-cur', attendu: '.arch-pop', escape: true },
     ],
   },
   // 🌀 L'accueil du Labyrinthe en tuiles (v0.1305). ⚠️ On ne LANCE pas de palier : ça
