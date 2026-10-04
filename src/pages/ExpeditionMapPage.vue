@@ -3411,9 +3411,11 @@ watch(focusTrip, (k) => {
  *  il fallait remonter à la main). Quand le DERNIER affichage se ferme, on remonte juste sous
  *  la carte : la rangée des bas de la carte en bas de l'écran (demandé).
  *  Rien si un autre affichage vient de s'ouvrir à la place. */
+/** Vrai le temps d'un tick pendant la remontée en haut (cf. `slideMap`) : on ne recale rien. */
+let goingTop = false;
 watch([focusTrip, selected], ([k, s], [k0, s0]) => {
   const closed = (k0 && !k) || (s0 && !s);
-  if (closed && !k && !s) void nextTick(revealTabs);
+  if (closed && !k && !s && !goingTop) void nextTick(revealTabs);
 });
 /** Le BAS de la carte tombe tout en bas de l'écran (précisé par l'utilisateur), les onglets
  *  juste en dessous, hors écran. `revealBlock` garde le haut de la carte visible s'il le faut. */
@@ -3540,6 +3542,11 @@ function dimmed(p: Poi): boolean {
  *  restent en garnison à l'arrivée (`midAt`). */
 type MapPanel = 'trips' | 'ctl';
 const mapPanel = ref<MapPanel | null>(null);
+/** Refermer la partie Expéditions (ou passer aux Places fortes) désélectionne le voyage
+ *  touché : sinon son halo restait sur la carte sans sa tuile (signalé). */
+watch(mapPanel, (p) => {
+  if (p !== 'trips') focusTrip.value = null;
+});
 /** 📜 Ouvrir une tuile (Expéditions, Places fortes) cale la DERNIÈRE tuile de la partie
  *  dépliée en bas de l'écran (demandé : toutes les tuiles visibles, rien de vide dessous, le
  *  maximum de carte au-dessus). Si la partie est plus haute que l'écran, la rangée des onglets
@@ -3589,6 +3596,13 @@ function slideMap() {
     }
     void nextTick(revealTiles);
   } else {
+    // ↑ referme aussi la partie dépliée sous la carte (demandé), sans recaler le bas de la
+    // carte ensuite (`goingTop`) : le recalage contrarierait la remontée.
+    goingTop = true;
+    mapPanel.value = null;
+    void nextTick(() => {
+      goingTop = false;
+    });
     scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
