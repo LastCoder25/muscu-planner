@@ -569,45 +569,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(main).not.toContain('🪙');
   }, 30_000);
 
-  // 🛡️ 2026-09-28 : les miliciens postés sur des places fortes / tous ceux qui existent.
-  it('AvailabilityLine compte les miliciens postés sur le total', async () => {
+  // 🛡️ v1.49.8 : les miliciens ne sont plus dans la ligne des effectifs (on les voit sur
+  // la carte : points sous la base et garnison des lieux fixes). Seuls héros et champions.
+  it('AvailabilityLine ne compte plus les miliciens', async () => {
     const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
-    const control = {
-      kind: 'mine',
-      owner: 'player',
-      garrison: ['mil:1', 'mil:2', 'a1'],
-      reinforcing: [{ id: 'mil:3', at: 9e15 }],
-      retakes: 0,
-      faction: 'bandits',
-      size: 1,
-    };
-    const poi = { id: 'ctl_mine', type: 'control', level: 5, x: 0, y: 0, distNorm: 0.5 };
     const row = {
       ...ROW,
+      buildings: [{ slot: 0, level: 10, typeId: 'barracks', collectedAt: 0 }],
       base: { militia: { home: 4, producedAt: 0, seq: 9 } },
-      expedition_map: { pois: [{ ...poi, spawnedAt: 0, expiresAt: 9e15, control }] },
     };
     let out = '';
     expect(
       await mountIt(AvailabilityLine, { now: 1 }, row, undefined, '/', (h) => (out = h)),
     ).toBeNull();
-    // 4 disponibles à la base sur 7 (3 hors de la base : 2 postés + 1 en route).
-    // Le milicien a désormais son portrait (l'emoji 🛡️ n'est plus que le repli).
-    expect(out).toMatch(
-      /av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span><b[^>]*>4<\/b>\/7/,
-    );
-    expect(out).toContain("4 milicien(s) disponible(s) sur l'île, 3 posté(s)");
-    // 🏝️ Nouvelle île, personne à la base : la pastille dit quand vient le prochain.
-    const fresh = {
-      ...ROW,
-      buildings: [{ slot: 0, level: 10, typeId: 'barracks', collectedAt: 0 }],
-      base: { militia: { home: 0, producedAt: 0, seq: 0 } },
-    };
-    let out2 = '';
-    expect(
-      await mountIt(AvailabilityLine, { now: 1 }, fresh, undefined, '/', (h) => (out2 = h)),
-    ).toBeNull();
-    expect(out2).toMatch(/<b[^>]*>0<\/b>\/0<span[^>]*class="av-cap"[^>]*>·\+1 dans /);
+    expect(out).toContain('🦸');
+    expect(out).not.toContain('mil-portrait');
+    expect(out).not.toContain('milicien');
   }, 30_000);
 
   // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.
