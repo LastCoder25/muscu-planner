@@ -81,7 +81,8 @@ describe('🏝️ conquête — la carte', () => {
     }
     expect(poiLabel(objs[0]!)).toBe('Camp de brigands');
     expect(objs.map((p) => p.control!.size)).toEqual([3, 4]);
-    expect(objs.every((p) => p.level === LV)).toBe(true);
+    // Au niveau MAX de l'île, comme la forteresse (v1.49.1, demandé : un objectif long terme).
+    expect(objs.every((p) => p.level === ISLANDS[0]!.maxLevel)).toBe(true);
     expect(fort.control!.locked).toBe(true);
     expect(fort.control!.size).toBe(12);
   });
