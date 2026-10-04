@@ -3466,6 +3466,41 @@ export function controlLootMessage(
  * notif fais comme celles déjà présentes ») — une ligne `$q.notify`, comme les attaques
  * repoussées ou reprises. Une seule définition : la carte et l'Aventure disent la même chose.
  */
+/** ⛏️ Au-delà de cette absence, l'or récolté par un lieu fixe est ANNONCÉ (demandé,
+ *  2026-10-04 : « le matin je n'ai pas l'impression d'avoir la récolte de la nuit »). En
+ *  dessous, la récolte de chaque minute reste silencieuse — sinon un message par minute. */
+export const AWAY_HARVEST_MS = 60 * 60_000;
+
+/**
+ * ⛏️ Le rapport de ce qu'un lieu fixe a produit en OR pendant une absence (`since` = sa
+ * dernière récolte). `null` sous `AWAY_HARVEST_MS` ou sans or. ⚠️ L'or est DÉJÀ versé :
+ * le message ne porte pas `claimed`, il se lit, il ne s'encaisse pas.
+ */
+export function controlGoldMessage(
+  p: Poi,
+  at: number,
+  gold: number,
+  since: number,
+): ExpeditionMessage | null {
+  const g = Math.floor(gold);
+  if (g < 1 || at - since < AWAY_HARVEST_MS) return null;
+  const kind = p.control?.kind;
+  const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
+  const n = g.toLocaleString('fr-FR');
+  return {
+    id: `ctlgold_${p.id}_${at}`,
+    title: `${kind ? CONTROL_EMO[kind] : '🏰'} ${label} : ${n} 🪙 pendant ton absence`,
+    level: p.level,
+    win: true,
+    text: `Ta garnison a produit ${n} 🪙 en ${formatDuration(at - since)}, versés dans ton or.`,
+    gold: g,
+    energy: 0,
+    key: 0,
+    resolvedAt: at,
+    read: false,
+  };
+}
+
 export function controlNoticeText(m: ExpeditionMessage): string {
   const title = m.title ?? '🏰 Place forte';
   return m.id.startsWith('ascend_')

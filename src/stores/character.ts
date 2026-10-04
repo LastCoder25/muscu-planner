@@ -392,6 +392,7 @@ import {
   collectControl,
   autoCollectable,
   newAscensions,
+  controlGoldMessage,
   controlLootMessage,
   controlNoticeText,
   ascensionMessage,
@@ -5422,8 +5423,12 @@ export const useCharacterStore = defineStore('character', () => {
     const harvestAll = (m0: ExpeditionMap): ExpeditionMap => {
       let m = m0;
       for (const p of autoCollectable(m0, now)) {
+        const since = p.control?.collectedAt ?? now;
         const h = harvestControlIn(m, advs, stock, p.id, now, playerLevel);
         if (h.map === m) continue;
+        // ⛏️ L'or d'une absence se dit (`controlGoldMessage`) ; celui de chaque minute, non.
+        const goldMsg = controlGoldMessage(p, now, h.gold, since);
+        if (goldMsg) msgs.push(goldMsg);
         m = h.map;
         advs = h.advs;
         stock = h.stock;
