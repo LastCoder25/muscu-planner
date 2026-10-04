@@ -1,6 +1,7 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
+import { sinceEvent } from '@/lib/sinceEvent';
 import {
   makePlannedMove,
   makePlannedRecall,
@@ -121,6 +122,7 @@ import {
   dwellMsFor,
   type ActiveExpedition,
   type ExpeditionMap,
+  type CartoType,
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
@@ -148,6 +150,7 @@ import {
   endlessReward,
   landAdventurers,
   landCrossing,
+  moveRemoteMilitia,
   landingChestMessage,
   produceIslandMilitia,
   startCrossing,
@@ -235,6 +238,7 @@ import {
   type DefenseStructure,
   type Raid,
   type RaidReport,
+  fortifyMult,
   islandRaidBand,
 } from '@/lib/raid';
 import {
@@ -256,7 +260,12 @@ import {
   advChampionSlots,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RUNE_PLACE_OK, normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
+import {
+  RUNE_PLACE_OK,
+  normalizeChampSkills,
+  type ChampSkill,
+  type SkillId,
+} from '@/lib/skillRunes';
 import {
   AWAKEN_RUNE_COUNT,
   FUSE_BLOCK_LABEL,
@@ -377,7 +386,7 @@ import {
 import { resolveCamp } from '@/lib/camp';
 import { FACTION_EMOJI } from '@/lib/raid';
 import {
-  militiaSeatsOf,
+  islandMilitiaOf,
   CONTROL_LABEL,
   captureControl,
   collectControl,
@@ -391,6 +400,7 @@ import {
   trainingRoom,
   dueRetakes,
   retiredHeld,
+  hospiceHealMult,
   retakeDelayMs,
   withLastAttack,
   mapHarass,
@@ -428,6 +438,10 @@ import {
   campXpFor,
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
+  setCartoFavor,
+  defendsControl,
+  applyLapis,
+  setLapisSkill,
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
@@ -2343,9 +2357,9 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     const orig = cur.expedition_map;
-    // ⏳ Des troupes encore en route à l'heure du départ : la traversée attend leur retour
+    // ⏳ La traversée pas encore partie se recale sur le retour des troupes encore en route
     // (`postponeCrossing`) — avant le débarquement, qui sinon changerait la carte sous leurs pieds.
-    const post = orig ? postponeCrossing(orig, advList.value, troopsBackAt(cur)) : null;
+    const post = orig ? postponeCrossing(orig, advList.value, troopsBackAt(cur), now) : null;
     const advBase = post?.advs ?? advList.value;
     const src = post?.map ?? orig;
     // ⛵ DÉBARQUER d'abord (`crossing.ts`) : l'île quittée est rangée, l'île d'arrivée sort de
@@ -2377,6 +2391,15 @@ export const useCharacterStore = defineStore('character', () => {
       level,
       // 🐫 Un convoi battu avant son arrivée ne renforce pas la forteresse.
       convoyVanquished(partyList.value),
+      // ⚓ Un lieu d'où une équipe est partie garde sa place jusqu'à son retour.
+      new Set([
+        ...[...partyList.value, ...(cur.expedition ? [cur.expedition] : [])].flatMap((p) =>
+          p.homeId ? [p.homeId] : [],
+        ),
+        ...attackList.value.flatMap((a) =>
+          a.wings.flatMap((w) => (w.originId ? [w.originId] : [])),
+        ),
+      ]),
     );
     // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
     // détection de la Tour de guet (`fieldArmy.ts`).
@@ -2509,9 +2532,7 @@ export const useCharacterStore = defineStore('character', () => {
     const active = map?.archipel?.island;
     if (!map || active === undefined) return [];
     if (from !== active) return islandChampions(advList.value, from, active, now).map((a) => a.id);
-    return [
-      ...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids]),
-    ];
+    return [...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids])];
   }
   /** 🏰 Les champions choisis quittent la garnison de la forteresse (le port) avant d'embarquer. */
   function leavePort(map: ExpeditionMap, ids: readonly string[], hero: boolean) {
@@ -2522,7 +2543,7 @@ export const useCharacterStore = defineStore('character', () => {
     );
     return { map: port.map, advs };
   }
-  /** ⛵ RÉSERVE LA TRAVERSÉE du héros vers l'île `to` : départ à l'heure pile suivante, arrivée
+  /** ⛵ RÉSERVE LA TRAVERSÉE du héros vers l'île `to` : départ tout de suite (ou au retour des troupes), arrivée
    *  2 h après. `pick` = les champions qui l'accompagnent (option A, 2026-10-03) ; absent =
    *  tous ceux qui peuvent embarquer. */
   async function crossIsland(userId: string, to: number, now: number, pick?: readonly string[]) {
@@ -2565,6 +2586,41 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.sailings![map.sailings!.length - 1]!),
+    });
+  }
+  /** 🧱🏹 Ce que l'enceinte de la base retire aux troupes qui reprennent un lieu fixe
+   *  (`fortifyMult`, au niveau du héros). Lu par la bataille ET par le % affiché. */
+  function fortify(cur: CharacterRow | null | undefined, heroLevel: number): number {
+    return fortifyMult(cur?.base?.defenses ?? [], heroLevel);
+  }
+  /** 🧱🏹 Idem pour l'écran. */
+  function fortifyFor(heroLevel: number): number {
+    return fortify(row.value, heroLevel);
+  }
+  /** 🛡️ Déplace des miliciens sur une île RANGÉE (`moveRemoteMilitia`) : `delta` > 0 de sa
+   *  réserve vers le lieu fixe `pointId`, < 0 du lieu vers la réserve. Immédiat. */
+  async function moveIslandMilitia(
+    userId: string,
+    island: number,
+    pointId: string,
+    delta: number,
+    now: number,
+    level: number,
+  ) {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    const im = map?.islands?.[String(island)];
+    if (!cur || !map || !im) return;
+    const next = moveRemoteMilitia(im, pointId, delta, now, level);
+    if (!next)
+      throw new Error(
+        delta > 0
+          ? 'Plus de place sur ce lieu, ou plus de milicien en réserve sur cette île.'
+          : 'Aucun milicien à ramener de ce lieu.',
+      );
+    await persist(userId, {
+      expedition_map: { ...map, islands: { ...map.islands, [String(island)]: next } },
     });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
@@ -2853,6 +2909,8 @@ export const useCharacterStore = defineStore('character', () => {
         // 🎓 Versée à l'ARRIVÉE du rapport (`grantReportXp`) ; les rapports d'avant ce
         // changement ne l'ont pas reçue et la reçoivent ici.
         xpGranted: !!m.xpGranted,
+        // 🕯️ L'hospice tenu de l'île abrège les soins (1 sans hospice, hors archipel).
+        healMult: hospiceHealMult(cur.expedition_map),
       });
       advProgress = advProgressOf(advList.value, claim.adventurers);
       const gearPatch = gearTrainedPatch(cur, advList.value, claim.adventurers);
@@ -3110,7 +3168,7 @@ export const useCharacterStore = defineStore('character', () => {
         barracks,
         militiaOnMap(cur.expedition_map),
         now,
-        militiaSeatsOf(cur.expedition_map),
+        islandMilitiaOf(cur.expedition_map),
       );
       if (m1 !== t.base.militia) {
         t.base = { ...t.base, militia: m1 };
@@ -3232,6 +3290,16 @@ export const useCharacterStore = defineStore('character', () => {
     // revenait indemne pendant qu’on écrivait aux défenseurs une convalescence DÉJÀ dépassée.
     // `null` = elle est écoulée, personne ne part à l’infirmerie.
     const hurt = woundUntil ? new Set(siegeHurtIds(report)) : new Set<string>();
+    // 🕯️ Les CHAMPIONS de l'île guérissent plus vite si l'hospice est tenu (le héros, non) :
+    // la même échéance que le héros, sa durée multipliée par `hospiceHealMult`, comptée depuis
+    // la bataille — `null` si elle est déjà écoulée.
+    const champWoundUntil = woundUntil
+      ? sinceEvent(
+          report.resolvedAt,
+          (woundUntil - report.resolvedAt) * hospiceHealMult(cur.expedition_map),
+          now,
+        )
+      : null;
     let siegeGear: ReturnType<typeof gearTrainedPatch> = {};
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
@@ -3242,8 +3310,8 @@ export const useCharacterStore = defineStore('character', () => {
         const gain = siegeGains[a.id] ?? 0;
         gains[a.id] = gain;
         const next = grantAdvXp(a, gain, pantheonLevel.value);
-        return hurt.has(a.id)
-          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, woundUntil ?? 0) }
+        return hurt.has(a.id) && champWoundUntil
+          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, champWoundUntil) }
           : next;
       });
       siegeGear = gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]);
@@ -4956,6 +5024,8 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return none;
     knownActiveDays7 = activeDays7;
+    // 🧱🏹 L'enceinte se mesure au niveau du HÉROS (le sport), pas au plafond de l'île.
+    const heroLevel = playerLevel;
     // 🏝️ Les assaillants d'une île ne dépassent pas son rang max (le tirage lit ce niveau).
     playerLevel = mapPlayerLevel(cur.expedition_map, playerLevel);
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
@@ -5001,6 +5071,7 @@ export const useCharacterStore = defineStore('character', () => {
     const msgs: ExpeditionMessage[] = [];
     let runesIn = 0;
     let blessedIn = 0;
+    let exaltedIn = 0;
     let keysIn = 0;
     let summonIn = 0;
     let gearSealsIn = 0;
@@ -5021,25 +5092,31 @@ export const useCharacterStore = defineStore('character', () => {
       gearStock = h.stock;
       runesIn += h.runes;
       blessedIn += h.blessedRunes;
+      exaltedIn += h.exaltedRunes;
       keysIn += h.keys;
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
-      const escort = advs.filter((a) => ids.has(a.id));
+      // 💎 Le lapidaire : son champion ne se bat pas, il rentre (sans blessure) si le lieu tombe.
+      const fights = defendsControl(p.control!.kind);
+      const posted = advs.filter((a) => ids.has(a.id));
+      const escort = fights ? posted : [];
       // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
-      const militia = militiaUnits(p.control!.garrison, playerLevel);
+      const militia = fights ? militiaUnits(p.control!.garrison, playerLevel) : [];
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
-      const heroUnit = p.control!.hero ? (p.control!.heroUnit ?? null) : null;
+      const heroUnit = fights && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
         [...partyAllies(escort, kit, heroUnit), ...militia],
         playerLevel,
+        // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (`fortifyMult`).
+        fortify(cur, heroLevel),
       );
       const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
@@ -5127,7 +5204,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 🏠 Délogée, la garnison RENTRE À PIED à la base (le trajet d'un rappel) : elle est en
       // route jusqu'à son arrivée, et c'est là, à l'infirmerie, que ses soins commencent
       // (`partyClaimRoster` part de `busyUntil`). Les miliciens engagés sont morts.
-      const walkers = held ? [] : escort.map((a) => a.id);
+      const walkers = held ? [] : posted.map((a) => a.id);
       const home = walkers.length ? walkHome(cur, p.id, walkers, [], at) : null;
       if (home) map = home.map(map);
       // 📜 Le rapport reste lisible sur la fiche du lieu, même quand la boîte l'a oublié.
@@ -5178,6 +5255,8 @@ export const useCharacterStore = defineStore('character', () => {
           backAt: m.resolvedAt,
           now,
           xpGranted: true,
+          // 🕯️ L'hospice tel qu'il est APRÈS l'attaque (perdu, il ne soigne plus).
+          healMult: hospiceHealMult(map),
         }).adventurers;
     // 🗡️ L'ÉQUIPEMENT, en UN seul calcul : le bonus du camp versé avant l'attaque, puis tout
     // ce que les champions ont appris depuis l'état de départ — la récolte du camp ET l'XP
@@ -5196,7 +5275,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...forged,
       ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
-      ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn, blessedIn) } : {}),
+      ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn, blessedIn, exaltedIn) } : {}),
       // 📖 Les clés des archives, de même.
       ...(keysIn ? { keys: cur.keys + keysIn } : {}),
       // ⚱️ Les pierres de l'ossuaire, de même.
@@ -5233,6 +5312,7 @@ export const useCharacterStore = defineStore('character', () => {
     supplies: SupplyStock;
     runes: number;
     blessedRunes: number;
+    exaltedRunes: number;
     keys: number;
     summon: number;
     gearSeals: number;
@@ -5245,6 +5325,8 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚒️ Le camp verse AUSSI son XP aux PIÈCES portées — chacun la SIENNE, selon le temps
     // qu'il a passé sur place, même quand le champion bute sur son plafond.
     const nextStock = campGear(stock, advs, c.gearXp);
+    // 💎 Le lapidaire verse ses heures sur la compétence de son champion.
+    if (c.lapis) advs = applyLapis(advs, c.lapis).advs;
     if (!p?.control || !Object.keys(c.xpBy).length)
       return {
         map: c.map,
@@ -5255,6 +5337,7 @@ export const useCharacterStore = defineStore('character', () => {
         supplies: c.supplies,
         runes: c.runes,
         blessedRunes: c.blessedRunes,
+        exaltedRunes: c.exaltedRunes,
         keys: c.keys,
         summon: c.summon,
         gearSeals: c.gearSeals,
@@ -5284,6 +5367,7 @@ export const useCharacterStore = defineStore('character', () => {
       supplies: c.supplies,
       runes: c.runes,
       blessedRunes: c.blessedRunes,
+      exaltedRunes: c.exaltedRunes,
       keys: c.keys,
       summon: c.summon,
       gearSeals: c.gearSeals,
@@ -5328,6 +5412,7 @@ export const useCharacterStore = defineStore('character', () => {
     let supplies: SupplyStock = {};
     let runes = 0;
     let blessed = 0;
+    let exalted = 0;
     let keys = 0;
     let summon = 0;
     let gearSeals = 0;
@@ -5347,6 +5432,7 @@ export const useCharacterStore = defineStore('character', () => {
         supplies = addSupplies(supplies, h.supplies);
         runes += h.runes;
         blessed += h.blessedRunes;
+        exalted += h.exaltedRunes;
         keys += h.keys;
         summon += h.summon;
         gearSeals += h.gearSeals;
@@ -5387,7 +5473,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(gold > 0 ? { gold: cur.gold + gold } : {}),
       ...(mana > 0 ? { mana: cur.mana + mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, supplies) } : {}),
-      ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed) } : {}),
+      ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed, exalted) } : {}),
       ...(keys ? { keys: cur.keys + keys } : {}),
       ...(summon ? { summon_stones: (cur.summon_stones ?? 0) + summon } : {}),
       ...(gearSeals || champSeals.length
@@ -5427,7 +5513,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes) } : {}),
+      ...(h.runes
+        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+        : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
@@ -5483,7 +5571,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes) } : {}),
+      ...(h.runes
+        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+        : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
@@ -5542,6 +5632,43 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: recallPostedHero(map, now, heroHomeLegMin(cur, map, poi, now)),
     });
+  }
+
+  /** 💎 Le lapidaire tenu polit une autre compétence : ce qui a été poli est versé d'abord. */
+  async function chooseLapisSkill(
+    userId: string,
+    id: string,
+    skill: SkillId,
+    now: number,
+    playerLevel: number,
+  ): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const h = harvestControlIn(
+      cur.expedition_map,
+      advList.value,
+      cur.adv_gear?.stock ?? [],
+      id,
+      now,
+      playerLevel,
+    );
+    const next = setLapisSkill(h.map, id, skill, now);
+    if (next === h.map && h.map === cur.expedition_map) return;
+    await persist(userId, {
+      expedition_map: next,
+      ...(h.advs !== advList.value ? { adventurers: h.advs } : {}),
+    });
+  }
+
+  /** 🗺️ Le cartographe tenu fait revenir un autre type de lieu. */
+  async function chooseCartoFavor(userId: string, id: string, favor: CartoType): Promise<void> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const next = setCartoFavor(cur.expedition_map, id, favor);
+    if (next === cur.expedition_map) return;
+    await persist(userId, { expedition_map: next });
   }
 
   async function releaseControlChampions(
@@ -6282,6 +6409,8 @@ export const useCharacterStore = defineStore('character', () => {
     setPseudo,
     expeSyncMap,
     crossIsland,
+    moveIslandMilitia,
+    fortifyFor,
     crossingDepartAt,
     sailChampions,
     boardableIds,
@@ -6339,6 +6468,8 @@ export const useCharacterStore = defineStore('character', () => {
     collectControlPoint,
     recallControl,
     releaseControlChampions,
+    chooseCartoFavor,
+    chooseLapisSkill,
     recallHeroFromPost,
     reinforceControlPoint,
     plannedList,

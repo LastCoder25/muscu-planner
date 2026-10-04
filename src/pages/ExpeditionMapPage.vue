@@ -5,6 +5,21 @@
        fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
        ici aussi doublerait chaque notification. -->
   <div class="emap">
+    <!-- 🗺️ La carte d'une île RANGÉE (demandé : « cliquer sur l'île 1 et voir la carte pour
+         gérer les garnisons des miliciens ») : elle remplace la carte active tant qu'on la
+         regarde ; « Revenir » ou l'île active dans le sélecteur la referment. -->
+    <RemoteIslandMap
+      v-if="viewed"
+      :island="viewed.island"
+      :map="viewed.map"
+      :remote="viewed.remote"
+      :reserve="viewed.reserve"
+      :busy="archBusy"
+      @close="viewIsland = null"
+      @militia="(e) => moveMilitia({ island: viewed!.island.id, ...e })"
+    >
+      <ArchipelPanel v-bind="archBind" v-on="archOn" />
+    </RemoteIslandMap>
     <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
     <CrossingSheet
       v-model="crossOpen"
@@ -28,7 +43,7 @@
     </div>
 
     <!-- Carte -->
-    <div class="map-outer">
+    <div v-show="!viewed" class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
         <svg
           :viewBox="`${V.x} ${V.y} ${V.size} ${V.size}`"
@@ -37,12 +52,7 @@
         >
           <!-- Le SOL : mer, côte, prairie, reliefs — même langage que la Base (v0.749). -->
           <!-- 🏝️ En mode archipel : l'île, entourée de mer, avec son port et sa forteresse. -->
-          <IslandTerrain
-            v-if="islandTerr && island"
-            :t="islandTerr"
-            :view="V"
-            :fortress-name="island.fortress"
-          />
+          <IslandTerrain v-if="islandTerr && island" :t="islandTerr" :view="V" />
           <MapTerrain v-else :terrain="terrain" :view="{ min: V.x, size: V.size }" />
 
           <!-- 🌫️ BROUILLARD DE GUERRE (v0.1047) : l'Avant-poste révèle un disque autour de la
@@ -248,50 +258,20 @@
 
           <!-- Ville (centre) : la MÊME enceinte que l'écran Base, en miniature — terre
                battue, octogone, tourelles aux sommets, corps de garde au nord, porte au
-               sud et son chemin. On reconnaît sa base depuis la carte.
+               sud et son chemin. On reconnaît sa base depuis la carte. 🏘️ Sur les îles 2 à 5
+               c'est un VILLAGE DE PÊCHEURS (`MapTown`, signalé 2026-10-04).
                🏠 CLIQUABLE (2026-09-29, demandé) : comme un lieu fixe, elle montre qui s'y
                trouve (héros, champions, miliciens) et permet de les envoyer ailleurs. -->
           <g
             class="town"
             role="button"
             tabindex="0"
-            :aria-label="`Ta base — ${baseChamps.length} champion(s) présent(s)`"
+            :aria-label="`${townIsVillage ? 'Le village du port' : 'Ta base'} — ${baseChamps.length} champion(s) présent(s)`"
             @click="baseOpen = true"
             @keydown.enter.prevent="baseOpen = true"
             @keydown.space.prevent="baseOpen = true"
           >
-            <circle :cx="TOWN.x" :cy="TOWN.y" r="12.5" class="town-earth" />
-            <circle :cx="TOWN.x" :cy="TOWN.y" r="10.5" class="town-glow" />
-            <path :d="townRoad" class="town-road" />
-            <polygon :points="townWall" class="town-wall" />
-            <polygon :points="townYard" class="town-yard" />
-            <circle
-              v-for="(p, i) in townPts"
-              :key="'tt' + i"
-              :cx="p.x"
-              :cy="p.y"
-              r="1.15"
-              class="town-turret"
-            />
-            <!-- Corps de garde au nord, porte au sud : posés SUR le pan de mur (l'octogone
-                 est décalé d'un demi-pas, donc les milieux de pans tombent pile en haut et
-                 en bas) — mêmes repères que l'écran Base, en miniature. -->
-            <rect
-              :x="TOWN.x - 1.7"
-              :y="TOWN.y - TOWN_AP - 2.6"
-              width="3.4"
-              height="4.2"
-              rx="0.5"
-              class="town-keep"
-            />
-            <rect
-              :x="TOWN.x - 1.3"
-              :y="TOWN.y + TOWN_AP - 1.2"
-              width="2.6"
-              height="2.6"
-              rx="0.8"
-              class="town-gate"
-            />
+            <MapTown :island="island?.id ?? null" />
             <!-- ⚔️ Combien de champions attendent à la base : la ville se lit comme un lieu tenu. -->
             <g v-if="baseChamps.length" class="town-count">
               <rect
@@ -362,23 +342,7 @@
 
       <!-- 🏝️ L'archipel, en haut à droite de la carte : l'île actuelle, et au toucher toutes
            les îles avec la fiche de celle qu'on choisit. -->
-      <ArchipelPanel
-        :island="island"
-        :conquest="islandProgress"
-        :busy="archBusy"
-        :open-ids="crossInfo.open"
-        :visited-ids="crossInfo.visited"
-        :crossing="char.row?.expedition_map?.crossing ?? null"
-        :blocks="crossInfo.blocks"
-        :fetchable="crossInfo.fetchable"
-        :sailings="char.row?.expedition_map?.sailings ?? []"
-        :hero-depart-at="char.crossingDepartAt(now)"
-        :away="crossInfo.away"
-        :militia="crossInfo.militia"
-        :now="now"
-        @cross="crossTo"
-        @fetch="fetchFrom"
-      />
+      <ArchipelPanel v-if="!viewed" v-bind="archBind" v-on="archOn" />
 
       <!-- Zoom -->
       <div class="zoom-ctl">
@@ -394,7 +358,7 @@
          ennemies dans des tuiles, avec une tuile expéditions, et au clic ça déplie la partie
          correspondante »). Une seule partie ouverte à la fois ; retoucher sa tuile la replie.
          La pastille dit ce qui appelle : voyages en cours, points qui appellent, armées. -->
-    <div ref="tabsEl" class="map-tabs" role="tablist">
+    <div v-show="!viewed" ref="tabsEl" class="map-tabs" role="tablist">
       <button
         v-for="t in mapTabs"
         :key="t.id"
@@ -548,6 +512,48 @@
                 {{ yieldCard.full ? '✅' : '⏳' }} {{ yieldCard.gauge }}
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
+            </div>
+            <!-- 💎 LE LAPIDAIRE : la compétence que son champion polit, et où il en est. -->
+            <div v-if="liveControl.kind === 'lapidary'" class="carto-box">
+              <p class="carto-q">💎 Quelle compétence polir ?</p>
+              <p v-if="!lapisRows.length" class="carto-q">
+                Poste un champion qui porte une compétence sous le niveau 5.
+              </p>
+              <div v-else class="carto-grid">
+                <button
+                  v-for="r in lapisRows"
+                  :key="r.id"
+                  type="button"
+                  class="carto-tile"
+                  :class="{ on: liveControl.lapis === r.id }"
+                  :aria-pressed="liveControl.lapis === r.id"
+                  :disabled="ctlBusy || r.max"
+                  @click="chooseLapis(r.id)"
+                >
+                  <span class="carto-emo">{{ r.emoji }}</span>
+                  <span class="carto-lab">{{ r.name }} · niv {{ r.level }}</span>
+                  <span class="carto-lab">{{ r.max ? 'au maximum' : r.left }}</span>
+                </button>
+              </div>
+            </div>
+            <!-- 🗺️ LE CARTOGRAPHE : le lieu qu'il fait revenir sur l'île (`CARTO_TYPES`). -->
+            <div v-if="liveControl.kind === 'cartographer'" class="carto-box">
+              <p class="carto-q">🗺️ Quel lieu faire revenir plus souvent ?</p>
+              <div class="carto-grid">
+                <button
+                  v-for="t in CARTO_TYPES"
+                  :key="t"
+                  type="button"
+                  class="carto-tile"
+                  :class="{ on: liveControl.favor === t }"
+                  :aria-pressed="liveControl.favor === t"
+                  :disabled="ctlBusy"
+                  @click="chooseCarto(t)"
+                >
+                  <span class="carto-emo">{{ POI_EMO[t] }}</span>
+                  <span class="carto-lab">{{ POI_LABEL[t] }}</span>
+                </button>
+              </div>
             </div>
             <!-- ⛵ LA FORTERESSE EST LE PORT (signalé : « elle me permet d'envoyer des champions
                mais je ne sais pas où ») : on dit à quoi sert sa garnison, et on traverse d'ici.
@@ -1264,13 +1270,17 @@
       :title="slideDir === 'down' ? 'Voir les expéditions' : 'Remonter en haut'"
       @click="slideMap"
     >
-      <q-icon :name="slideDir === 'down' ? 'keyboard_arrow_down' : 'keyboard_arrow_up'" size="28px" />
+      <q-icon
+        :name="slideDir === 'down' ? 'keyboard_arrow_down' : 'keyboard_arrow_up'"
+        size="28px"
+      />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import {
+  FORTRESS_ID,
   heroPostOf,
   islandConquest,
   islandTargetLabel,
@@ -1328,10 +1338,13 @@ import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildi
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
+import { SKILLS, SKILL_MAX_LEVEL, type SkillId } from '@/lib/skillRunes';
 import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import {
   POI_EMO,
   POI_LABEL,
+  CARTO_TYPES,
+  type CartoType,
   poiLabel,
   type ExpeditionMessage,
   EXPE,
@@ -1374,6 +1387,8 @@ import {
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
+import MapTown from '@/components/MapTown.vue';
+import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
 import { activeIsland, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
@@ -1382,7 +1397,10 @@ import {
   islandChampions,
   nextCrossingDeparture,
   openIslands,
+  remotePoints,
+  seaTrips,
   visitedIslands,
+  type RemotePoint,
 } from '@/lib/crossing';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
@@ -1465,6 +1483,7 @@ import {
   attackImminent,
   attackerHidden,
   controlDefenseHold,
+  lapidaryHours,
   defendersAtAttack,
   imminentControlKey,
   knownAttackAt,
@@ -1507,25 +1526,6 @@ const gameFx = useGameFx();
 const advXpFx = useAdvXpFx();
 
 const TOWN = EXPE.town;
-/** La ville en miniature = l'enceinte de la Base (octogone décalé d'un demi-pas : pans
- *  au nord et au sud, tourelles aux sommets). Rayon 6,4 : la ville tient sous le
- *  premier anneau de lieux (`distMin` 18). */
-const TOWN_R = 7.2;
-const townPts = Array.from({ length: 8 }, (_, i) => {
-  const a = (i / 8) * Math.PI * 2 - Math.PI / 2 + Math.PI / 8;
-  return { x: TOWN.x + Math.cos(a) * TOWN_R, y: TOWN.y + Math.sin(a) * TOWN_R };
-});
-const townWall = townPts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
-const townYard = townPts
-  .map(
-    (p) =>
-      `${(TOWN.x + (p.x - TOWN.x) * 0.72).toFixed(2)},${(TOWN.y + (p.y - TOWN.y) * 0.72).toFixed(2)}`,
-  )
-  .join(' ');
-/** Distance du centre au MILIEU d'un pan (et non au sommet) : c'est elle qui porte le
- *  corps de garde, la porte et le départ du chemin — exactement comme sur l'écran Base. */
-const TOWN_AP = TOWN_R * Math.cos(Math.PI / 8);
-const townRoad = `M${TOWN.x - 1.2} ${TOWN.y + TOWN_AP} L${TOWN.x - 2.2} ${TOWN.y + 14} L${TOWN.x + 2.2} ${TOWN.y + 14} L${TOWN.x + 1.2} ${TOWN.y + TOWN_AP} Z`;
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -1582,6 +1582,8 @@ const V = computed(() => mapViewOf(char.row?.expedition_map));
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 // 🏝️ En mode archipel, la carte a la taille de l'île : l'Avant-poste ne règle que la vitesse.
 const island = computed(() => activeIsland(char.row?.expedition_map));
+/** 🏘️ Sur les îles 2 à 5, le point de départ est un village de pêcheurs, pas la base. */
+const townIsVillage = computed(() => (island.value?.id ?? 1) >= 2);
 /** 🏝️ La conquête de l'île active (objectifs, forteresse, pacification). */
 const islandProgress = computed(() => islandConquest(char.row?.expedition_map));
 // 🏝️ Sur une île : toute sa terre ferme (`mapReach`, v1.28.0).
@@ -1625,6 +1627,74 @@ const crossInfo = computed(() => {
     militia,
   };
 });
+/** 🛡️ Les lieux fixes tenus de chaque île RANGÉE, avec leur milice (gérée à distance). */
+const remoteInfo = computed(() => {
+  const out: Record<number, RemotePoint[]> = {};
+  for (const [k, im] of Object.entries(char.row?.expedition_map?.islands ?? {}))
+    out[Number(k)] = remotePoints(im);
+  return out;
+});
+/** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
+/** 🗺️ L'île rangée qu'on regarde (`null` = la carte active). */
+const viewIsland = ref<number | null>(null);
+/** Sa carte, ses lieux tenus et sa réserve — `null` si elle n'est pas (ou plus) rangée. */
+const viewed = computed(() => {
+  const id = viewIsland.value;
+  const im = id === null ? null : char.row?.expedition_map?.islands?.[String(id)];
+  const isl = ISLANDS.find((i) => i.id === id);
+  if (!im || !isl) return null;
+  return {
+    island: isl,
+    map: im,
+    remote: remoteInfo.value[isl.id] ?? [],
+    reserve: crossInfo.value.militia[isl.id] ?? 0,
+  };
+});
+function viewIslandMap(id: number | null) {
+  viewIsland.value = id;
+  // Les panneaux de la carte active n'ont rien à faire sous une île rangée.
+  if (id !== null) {
+    mapPanel.value = null;
+    selected.value = null;
+  }
+}
+/** 🏝️ Le panneau de l'archipel, posé en haut à droite de la carte AFFICHÉE (active ou île
+ *  rangée) : une seule liaison pour les deux emplacements. La pastille nomme l'île affichée. */
+const archBind = computed(() => ({
+  island: island.value,
+  shown: viewed.value?.island.id ?? null,
+  conquest: islandProgress.value,
+  busy: archBusy.value,
+  openIds: crossInfo.value.open,
+  visitedIds: crossInfo.value.visited,
+  crossing: char.row?.expedition_map?.crossing ?? null,
+  blocks: crossInfo.value.blocks,
+  fetchable: crossInfo.value.fetchable,
+  sailings: char.row?.expedition_map?.sailings ?? [],
+  heroDepartAt: char.crossingDepartAt(now.value),
+  away: crossInfo.value.away,
+  militia: crossInfo.value.militia,
+  remote: remoteInfo.value,
+  now: now.value,
+}));
+const archOn = {
+  view: viewIslandMap,
+  cross: crossTo,
+  fetch: fetchFrom,
+  militia: moveMilitia,
+};
+async function moveMilitia(e: { island: number; pointId: string; delta: number }) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.moveIslandMilitia(uid, e.island, e.pointId, e.delta, Date.now(), heroLevel.value);
+  } catch (err) {
+    $q.notify({ type: 'negative', message: (err as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 /** ⛵ La traversée en cours (réservée ou en mer), s'il y en a une. */
 const sailing = computed(() => char.row?.expedition_map?.crossing ?? null);
 /** ⛵ Les îles où l'on peut traverser depuis le port (toutes les ouvertes, sauf celle-ci),
@@ -2411,9 +2481,11 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const map = char.row?.expedition_map;
   const vsArmy =
     !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
+  // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (la règle de la bataille).
+  const fort = char.fortifyFor(heroLevel.value);
   const hold = vsArmy
-    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value)
-    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
+    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort)
+    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort);
   return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
 }
 const defenseNow = computed(() => defenseOf(livePoi.value));
@@ -2698,6 +2770,48 @@ async function scheduleCtlRecall(ids: readonly string[], whole: boolean) {
     ctlBusy.value = false;
   }
 }
+/** 💎 Les compétences du champion du lapidaire : niveau, et temps de polissage restant. */
+const lapisRows = computed(() => {
+  const c = liveControl.value;
+  if (c?.kind !== 'lapidary') return [];
+  const adv = char.advList.find((a) => c.garrison.includes(a.id));
+  return (adv?.skills ?? []).map((s) => {
+    const def = SKILLS[s.id];
+    const max = s.level >= SKILL_MAX_LEVEL;
+    const need = max ? 0 : lapidaryHours(s.id, s.level);
+    const done = adv?.lapisHours?.[s.id] ?? 0;
+    return {
+      id: s.id,
+      emoji: def.emoji,
+      name: def.name,
+      level: s.level,
+      max,
+      left: `${formatDuration(Math.max(0, need - done) * 3600_000)} restantes`,
+    };
+  });
+});
+async function chooseLapis(skill: SkillId) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    await char.chooseLapisSkill(uid, p.id, skill, Date.now(), heroLevel.value);
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+async function chooseCarto(t: CartoType) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    await char.chooseCartoFavor(uid, p.id, t);
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 async function releaseCtl() {
   const uid = auth.user?.id;
   const p = livePoi.value;
@@ -2739,7 +2853,11 @@ const yieldCard = computed(() =>
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
   if (liveControl.value?.kind === 'scriptorium')
-    return 'La couleur de la rune suit le rang du lieu face au tien : un Scriptorium de ton rang copie plus souvent des bleues et des violettes. Le copiste n’apprend rien.';
+    return 'Il recopie des runes multicolores : leur couleur se tire à l’ouverture, au Panthéon. Le copiste n’apprend rien.';
+  if (liveControl.value?.kind === 'lab')
+    return '1 rune multicolore tous les 4 jours au complet, à partir du violet : jamais verte ni bleue à l’ouverture. Deux fois moins vite que l’autel des runes. L’alchimiste n’apprend rien.';
+  if (liveControl.value?.kind === 'hospice')
+    return 'Il ne produit rien : tenu, les champions blessés sur l’île guérissent plus vite — deux fois plus vite au complet. Le héros n’est pas concerné.';
   if (liveControl.value?.kind !== 'training') return '';
   const cap = trainingCapLevel(heroLevel.value);
   if (!cap)
@@ -3217,6 +3335,48 @@ const trips = computed(() => {
       title: m.recall
         ? `Retour programmé de ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`
         : `Renfort programmé — ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`,
+    });
+  }
+  // ⛵ EN MER (demandé : « comment on voit que le héros est en traversée ? ») : la traversée
+  // du héros et les navigations de champions, ancrées au port (la forteresse) ou à la ville.
+  const port =
+    pois.value.find((p) => p.id === FORTRESS_ID) ??
+    ({ id: 'port', type: 'control', x: TOWN.x, y: TOWN.y, level: 0 } as Poi);
+  const clock = (ms: number) =>
+    new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  for (const s of seaTrips(char.row?.expedition_map, now.value)) {
+    const c = s.crossing;
+    const isle = ISLANDS.find((i) => i.id === c.to)?.name ?? `île ${c.to}`;
+    ends.set(s.key, c.arriveAt);
+    out.push({
+      key: s.key,
+      kind: s.hero ? 'hero' : 'van',
+      who: '⛵',
+      cat: 'trips',
+      pending: s.waiting,
+      sea: { from: c.from, to: c.to },
+      poi: port,
+      time: s.waiting
+        ? `⏳ ${formatDuration(c.departAt - now.value)}`
+        : formatDuration(c.arriveAt - now.value),
+      pct: s.pct * 100,
+      back: false,
+      withHero: s.hero,
+      from: port,
+      members: c.ids,
+      haul: [],
+      legs: {
+        go: null,
+        back: `⚓ ${clock(c.arriveAt)}`,
+        detail:
+          `Départ à ${clock(c.departAt)}, arrivée à ${clock(c.arriveAt)} (2 h de mer)` +
+          (s.delayed ? ' — le départ attend le retour de tes troupes' : ''),
+      },
+      title:
+        `${s.hero ? 'Ton héros' : 'Champions'} vers ${isle} · ` +
+        (s.waiting ? `départ à ${clock(c.departAt)}` : 'en mer') +
+        ` · arrivée à ${clock(c.arriveAt)}` +
+        (s.delayed ? ' · le départ attend le retour de tes troupes' : ''),
     });
   }
   // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.
@@ -5249,6 +5409,47 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
 }
+.carto-box {
+  margin-top: 10px;
+}
+.carto-q {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.carto-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.carto-tile {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.carto-tile.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.carto-emo {
+  font-size: 20px;
+  line-height: 1;
+}
+.carto-lab {
+  font-size: 11px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
 .yield-rate {
   margin: 6px 0 0;
   font-size: 11px;
@@ -5599,11 +5800,11 @@ onUnmounted(() => {
   background: #d7d0bd;
   scrollbar-width: none;
 }
-/* La carte laisse toujours voir, en bas de l'écran, la rangée des trois tuiles (en-tête ~60 px,
-   ressources ~34, filtres repliés ~48, disponibilités ~72, tuiles ~64, marges). Jamais plus haute qu'avant (62vh). */
+/* La rangée des îles calée sous l'en-tête, la carte va jusqu'en bas de l'écran avec ses tuiles
+   dessous (mesuré au banc, v1.45.0 : en-tête 51 + marge 20, îles 50 + 7, tuiles 57, marge 8). */
 .map-scroll {
-  height: min(62vh, calc(100vh - 314px));
-  height: min(62vh, calc(100dvh - 314px));
+  height: calc(100vh - 172px);
+  height: calc(100dvh - 172px);
 }
 /* 🗂️ Les trois tuiles sous la carte : une ligne, trois colonnes égales, cibles ≥ 44 px. */
 .map-tabs {
@@ -5793,24 +5994,6 @@ onUnmounted(() => {
 }
 .compass .comp-needle {
   fill: var(--accent, #ffd23f);
-}
-.town-glow {
-  fill: color-mix(in srgb, var(--accent) 22%, transparent);
-  animation: town-pulse 2.4s ease-in-out infinite;
-}
-@keyframes town-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.75;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .town-glow {
-    animation: none;
-  }
 }
 .trail {
   stroke-width: 1.4;
@@ -6017,7 +6200,7 @@ onUnmounted(() => {
 .town:focus-visible {
   outline: none;
 }
-.town:focus-visible .town-wall {
+.town:focus-visible :deep(.town-wall) {
   stroke: var(--accent);
 }
 .town-count-bg {
@@ -6030,41 +6213,6 @@ onUnmounted(() => {
   font-size: 2.9px;
   font-weight: 700;
   text-anchor: middle;
-}
-.town-earth {
-  fill: #5a4730;
-  opacity: 0.9;
-}
-.town-road {
-  fill: #5c4a32;
-  stroke: #3f3220;
-  stroke-width: 0.3;
-}
-.town-wall {
-  fill: #9a8768;
-  stroke: #3a2f1f;
-  stroke-width: 0.7;
-  stroke-linejoin: round;
-}
-.town-yard {
-  fill: #4a3c28;
-  stroke: #3a2f1f;
-  stroke-width: 0.3;
-}
-.town-turret {
-  fill: #c2ae88;
-  stroke: #3a2f1f;
-  stroke-width: 0.35;
-}
-.town-keep {
-  fill: #c2ae88;
-  stroke: #3a2f1f;
-  stroke-width: 0.4;
-}
-.town-gate {
-  fill: #241c12;
-  stroke: #3a2f1f;
-  stroke-width: 0.3;
 }
 /* ── Rangée des voyages : une tuile par voyageur, sur UNE ligne ── */
 /* ⚠️ DEUX COLONNES, plus une rangée qui défile (demandé par l'utilisateur). Le défilement

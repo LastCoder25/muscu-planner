@@ -24,6 +24,7 @@ import {
   ensureIslandConquest,
   fortressForce,
   islandConquest,
+  islandYieldRule,
   objectiveIdOf,
   objectiveSize,
   razeIslandTarget,
@@ -80,7 +81,8 @@ describe('🏝️ conquête — la carte', () => {
     }
     expect(poiLabel(objs[0]!)).toBe('Camp de brigands');
     expect(objs.map((p) => p.control!.size)).toEqual([3, 4]);
-    expect(objs.every((p) => p.level === LV)).toBe(true);
+    // Au niveau MAX de l'île, comme la forteresse (v1.49.1, demandé : un objectif long terme).
+    expect(objs.every((p) => p.level === ISLANDS[0]!.maxLevel)).toBe(true);
     expect(fort.control!.locked).toBe(true);
     expect(fort.control!.size).toBe(12);
   });
@@ -222,7 +224,7 @@ describe('🕊️ île pacifiée', () => {
     expect(b / a).toBeCloseTo(1 / 3, 1);
   });
 
-  it('pacifiée : le socle produit à 25 %, la production déjà faite reste au débit d’avant', () => {
+  it('pacifiée, île 1 : le socle garde 100 %, la production déjà faite reste au débit d’avant', () => {
     const m0 = held();
     const at = NOW + 10 * H;
     const before = collectControl(m0, controlIdOf('mine'), at, LV).gold;
@@ -231,14 +233,25 @@ describe('🕊️ île pacifiée', () => {
     expect(c.flatTier).toBe(true);
     // Rien de perdu : à l'instant de la pacification, la réserve est la même.
     expect(collectControl(m, controlIdOf('mine'), at, LV).gold).toBe(before);
-    // Après, 10 h rendent le quart de ce qu'elles rendaient.
+    // Après, 10 h rendent autant qu'avant (l'île 1 est exemptée de la part du socle).
     const later = collectControl(m, controlIdOf('mine'), at + 10 * H, LV).gold - before;
-    expect(later / before).toBeCloseTo(ISLAND_CONQUEST.socleShare, 1);
+    expect(later / before).toBeCloseTo(1, 1);
     // Une spécialité (le jardin) n'est pas touchée.
     expect(poi(m, controlIdOf('garden'))!.control!.yieldMult).toBeUndefined();
   });
 
-  it('pacifiée : le socle perd ses crans (une mine ancienne retombe au débit de base × 25 %)', () => {
+  it('pacifiée : ailleurs que sur l’île 1, le socle produit à 25 % ; la spécialité est intacte', () => {
+    const pac = (island: number) => ({ archipel: { ...archipelOn(island), pacifiedAt: NOW } });
+    const mine = CONTROL.mineHoursPerHaul / ISLAND_CONQUEST.mineHours;
+    expect(islandYieldRule(pac(2), 'mine').yieldMult).toBeCloseTo(
+      mine * ISLAND_CONQUEST.socleShare,
+    );
+    expect(islandYieldRule(pac(1), 'mine').yieldMult).toBeCloseTo(mine);
+    expect(islandYieldRule(pac(1), 'mine').flatTier).toBe(true);
+    expect(islandYieldRule(pac(2), 'garden').yieldMult).toBeUndefined();
+  });
+
+  it('pacifiée : le socle perd ses crans (une mine ancienne retombe au débit de base, île 1 à 100 %)', () => {
     const m0 = held();
     const at = NOW + 72 * H;
     expect(controlTier(poi(m0, controlIdOf('mine'))!.control, at)).toBeGreaterThan(0);
@@ -249,7 +262,7 @@ describe('🕊️ île pacifiée', () => {
     const base =
       (10 * controlGoldPerHour(poi(m, id)!, 3, LV) * CONTROL.mineHoursPerHaul) /
       ISLAND_CONQUEST.mineHours;
-    expect(gain / base).toBeCloseTo(ISLAND_CONQUEST.socleShare, 2);
+    expect(gain / base).toBeCloseTo(1, 2);
   });
 });
 

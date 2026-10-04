@@ -15,12 +15,13 @@ import {
   FORTRESS_ID,
   heldPoints,
   islandConquest,
+  islandTargetLabel,
   objectiveIdOf,
   OBJECTIVES_AFTER_HELD,
   withRelays,
 } from '@/lib/islandConquest';
 import { ensureControls, islandControlLevel } from '@/lib/controlPoints';
-import { partySendBlocker } from '@/lib/party';
+import { PARTY_SEND_BLOCK_LABEL, partySendBlocker } from '@/lib/party';
 import { islandPort } from '@/lib/islandShape';
 
 /**
@@ -164,6 +165,25 @@ describe('🏳️ les objectifs s’ouvrent une fois DEUX lieux tenus, n’impor
     expect(obj(both).control!.locked).toBeUndefined();
     expect(partySendBlocker(obj(both), 3, false, 10, 0.5, 0)).toBeNull();
   });
+  // 📝 Les textes (2026-10-03) : plus de « Tour de guet, Camp d'entraînement », retirés des îles.
+  it('le refus et la fiche disent combien de lieux fixes tenir, et lesquels n’importe', () => {
+    const label = PARTY_SEND_BLOCK_LABEL.objectiveLocked;
+    expect(OBJECTIVES_AFTER_HELD).toBe(2); // le refus écrit « deux »
+    expect(label).toContain('deux lieux fixes');
+    expect(label).not.toMatch(/Tour de guet|Camp d.entra/);
+    const m = island(2, 4);
+    const fiche = islandTargetLabel(m, objectiveIdOf(0))!;
+    expect(fiche.title).toContain('🔒');
+    expect(fiche.title).toContain(`0/${OBJECTIVES_AFTER_HELD} lieux fixes tenus`);
+    expect(fiche.detail).toContain(`tiens d’abord ${OBJECTIVES_AFTER_HELD} lieux fixes`);
+    const [a, b] = ordinary(m).slice(-2);
+    const open = islandTargetLabel(
+      ensureIslandConquest(hold(m, [a!.id, b!.id]), DAY * 7, 40),
+      objectiveIdOf(0),
+    )!;
+    expect(open.title).not.toContain('🔒');
+    expect(open.detail).not.toContain('tiens d’abord');
+  });
   it('plus aucune marque « avant-poste » : celles d’avant tombent', () => {
     const m = island(1, 9);
     const marked = {
@@ -186,7 +206,7 @@ describe('🏅 le rang d’un lieu fixe monte en s’éloignant du port', () => 
         .sort(
           (a, b) => Math.hypot(a.x - port.x, a.y - port.y) - Math.hypot(b.x - port.x, b.y - port.y),
         );
-      expect(pts.length).toBeGreaterThan(2);
+      expect(pts.length).toBeGreaterThanOrEqual(2);
       for (let i = 1; i < pts.length; i++)
         expect(pts[i]!.level, `île ${isl.id}`).toBeGreaterThanOrEqual(pts[i - 1]!.level);
       for (const p of pts) {
@@ -194,10 +214,11 @@ describe('🏅 le rang d’un lieu fixe monte en s’éloignant du port', () => 
         expect(p.level).toBeLessThanOrEqual(lv);
         expect(p.level).toBe(islandControlLevel(m, p, lv));
       }
-      // Le plus proche est bas dans la tranche, le plus loin haut.
-      expect(pts.at(-1)!.level - pts[0]!.level, `île ${isl.id}`).toBeGreaterThan(
-        (lv - isl.minLevel) * 0.2,
-      );
+      // 🛡️ Les points fixes forment une LIGNE DE DÉFENSE à mi-chemin du départ et de la
+      // forteresse (v1.41, demandé) : presque à égale distance du port, donc à des rangs voisins,
+      // tous au-delà du bas de la tranche (on ne les prend pas comme les premiers lieux venus).
+      for (const p of pts)
+        expect(p.level, `île ${isl.id}`).toBeGreaterThan(isl.minLevel + (lv - isl.minLevel) * 0.3);
     }
   });
   it('jamais au-dessus du joueur', () => {

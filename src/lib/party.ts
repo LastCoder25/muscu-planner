@@ -251,7 +251,7 @@ export function partySendBlocker(
     if (citadelRestingUntil(poi, now) > 0) return 'citadelResting';
     // 🏝️ La forteresse portuaire ne s'attaque qu'après assez d'objectifs abattus (le verrou).
     if (poi.control.kind === 'fortress' && poi.control.locked) return 'fortressLocked';
-    // 🏝️ Les objectifs, eux, attendent que les deux avant-postes soient tenus.
+    // 🏝️ Les objectifs, eux, attendent que deux lieux fixes de l'île soient tenus.
     if (poi.control.kind === 'objective' && poi.control.locked) return 'objectiveLocked';
     // 🏯🏝️ Ce qu'on abat ne se tient pas : le héros seul peut l'attaquer. 🧝 Un point ordinaire
     // se tient par au moins un champion OU le héros, qui y reste alors (étape 6 bis).
@@ -309,8 +309,8 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
     'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
   citadelResting: 'cette citadelle vient d’être abattue — elle se reconstruit pendant sa trêve',
   fortressLocked: 'la forteresse est verrouillée — abats d’abord les objectifs de l’île',
-  objectiveLocked:
-    'prends d’abord les deux avant-postes de l’île (Tour de guet, Camp d’entraînement)',
+  // ⚠️ « deux » = `OBJECTIVES_AFTER_HELD` (islandConquest), vérifié par un test.
+  objectiveLocked: 'tiens d’abord deux lieux fixes de l’île (n’importe lesquels)',
   controlHeld: 'ce point n’est pas à prendre : il est déjà à toi',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',
@@ -777,6 +777,10 @@ export function partyClaimRoster(
     /** ⚠️ REQUIS : l'XP a-t-elle déjà été versée à l'arrivée (`grantReportXp`) ? L'oublier
      *  la verserait deux fois. */
     xpGranted: boolean;
+    /** 🕯️ L'HOSPICE de l'île (`hospiceHealMult`) : il multiplie la convalescence (½ au mieux,
+     *  1 sans hospice tenu). ⚠️ REQUIS : optionnel, un appelant l'oublierait et les blessés de
+     *  l'île guériraient au rythme normal sans que rien ne le dise. */
+    healMult: number;
   },
 ): { adventurers: Adventurer[]; escort: Adventurer[] } {
   const escort = party.escort
@@ -785,7 +789,7 @@ export function partyClaimRoster(
   // ⏱️ DEPUIS LE RETOUR DU GROUPE, pas depuis le clic « Encaisser » — même règle que les
   // convois et que le siège. `null` = déjà écoulée, personne ne part à l'infirmerie.
   // 🩹 La trousse de soins emportée divise la convalescence (`healMult`, posé au départ).
-  const fullMs = caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1);
+  const fullMs = caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1) * ctx.healMult;
   const hurt = new Set(party.hurt);
   const light = new Set((party.lightHurt ?? []).filter((id) => !hurt.has(id)));
   const adventurers = roster.map((a) => {

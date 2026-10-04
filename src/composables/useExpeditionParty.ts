@@ -839,7 +839,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const ids = new Set(stayIds.value);
     const g = partyAdvs.value.filter((a) => ids.has(a.id));
     return g.length
-      ? Math.round(garrisonHold(heldAt(p), partyAllies(g, roadCtx.value, null)) * 100)
+      ? Math.round(
+          garrisonHold(
+            heldAt(p),
+            partyAllies(g, roadCtx.value, null),
+            char.fortifyFor(heroLevel.value),
+          ) * 100,
+        )
       : null;
   });
   /** 🌿 Un point à UNE place : la tenue de chaque candidat, pour choisir qui reste. */
@@ -849,7 +855,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
     return Object.fromEntries(
       partyAdvs.value.map((a) => [
         a.id,
-        Math.round(garrisonHold(heldAt(p), partyAllies([a], roadCtx.value, null)) * 100),
+        Math.round(
+          garrisonHold(
+            heldAt(p),
+            partyAllies([a], roadCtx.value, null),
+            char.fortifyFor(heroLevel.value),
+          ) * 100,
+        ),
       ]),
     );
   });

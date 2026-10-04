@@ -30,12 +30,14 @@ import {
   attackSlow,
   bankAt,
   controlSpot,
+  fortMultOf,
+  islandControlSpots,
   mapHarass,
   retakeDelayMs,
   seatsOf,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
-import { islandPoint } from './islandShape';
+import { islandPoint, islandScatter } from './islandShape';
 import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -69,6 +71,9 @@ export const ISLAND_CONQUEST = {
   mineHours: 24,
   /** 🕊️ Le socle d'une île pacifiée produit à cette part, sans crans. */
   socleShare: 0.25,
+  /** 🕊️ …sauf sur ces îles, où il garde sa production entière (décision de l'utilisateur,
+   *  2026-10-03 : l'île 1 pacifiée reste à 100 %). Les crans disparaissent quand même. */
+  socleFullIslands: new Set([1]) as ReadonlySet<number>,
 } as const;
 
 /**
@@ -311,20 +316,21 @@ function fortressSideSpot(id: number, frac: number, off: number) {
   return islandSpot(id, islandTerrain(id).fortress.angle + off, frac);
 }
 
-/** 🏝️ La place de l'objectif `i` de l'île `id` : du côté de la forteresse, vers la côte. */
+/** 🏝️ La place de l'objectif `i` de l'île `id` : DISPERSÉS sur toute l'île (demandé le
+ *  2026-10-04 : « répartis sur l'île pour attaquer de partout » ; ils étaient tous groupés côté
+ *  forteresse). Chacun aussi loin que possible de la ville, de la forteresse, de la ligne de
+ *  défense des points fixes et des autres objectifs (`islandScatter`). */
 export function objectiveSpot(id: number, i: number): { x: number; y: number; d: number } {
   const isl = ISLANDS.find((x) => x.id === id);
-  const off = objectiveAngles(isl?.objectives ?? 0)[i] ?? 0;
-  // ⚠️ Pas collé à la forteresse : sur une île où le cap est étroit, l'objectif d'en face
-  // tombait à 9 unités d'elle. On le recule vers l'intérieur jusqu'à 14 unités.
-  const f = islandTerrain(id).fortress;
-  let frac = ISLAND_CONQUEST.objectiveFrac;
-  let s = fortressSideSpot(id, frac, off);
-  while (frac > 0.3 && Math.hypot(s.x - f.x, s.y - f.y) < 14) {
-    frac -= 0.04;
-    s = fortressSideSpot(id, frac, off);
-  }
-  return s;
+  const p =
+    islandScatter(id, Math.max(1, isl?.objectives ?? 0), ISLAND_CONQUEST.objectiveFrac, [
+      EXPE.town,
+      islandTerrain(id).fortress,
+      ...islandControlSpots(id),
+    ])[i] ?? islandPoint(id, 0, ISLAND_CONQUEST.objectiveFrac);
+  const x = Math.round(p.x);
+  const y = Math.round(p.y);
+  return { x, y, d: Math.hypot(x - EXPE.town.x, y - EXPE.town.y) };
 }
 
 /** 🕊️ Le SOCLE d'une île (règle 10) : ce qui produit sur toutes les îles. */
@@ -435,7 +441,8 @@ export function islandYieldRule(
   if (!map.archipel) return {};
   let mult = kind === 'mine' ? CONTROL.mineHoursPerHaul / ISLAND_CONQUEST.mineHours : 1;
   const flat = islandPacified(map) && SOCLE.has(kind);
-  if (flat) mult *= ISLAND_CONQUEST.socleShare;
+  if (flat && !ISLAND_CONQUEST.socleFullIslands.has(map.archipel.island))
+    mult *= ISLAND_CONQUEST.socleShare;
   return {
     ...(mult !== 1 ? { yieldMult: mult } : {}),
     ...(flat ? { flatTier: true } : {}),
@@ -466,12 +473,14 @@ function enemyTarget(
 }
 
 /** Les objectifs et la forteresse ATTENDUS sur la carte (ceux pas encore abattus). */
-function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: number): Poi[] {
+function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
   const gone = destroyedOf(map);
   const terrain = islandTerrain(isl.id);
   const f = terrain.fortress;
   const out: Poi[] = [];
-  const lv = Math.max(1, Math.min(level, isl.maxLevel));
+  // 🎯 Les objectifs (et les nids) sont au NIVEAU MAX de l'île, comme la forteresse (demandé
+  // le 2026-10-04 : « un objectif long terme pour pouvoir quitter l'île »).
+  const lv = isl.maxLevel;
   // 🏝️ Les objectifs ne s'attaquent qu'une fois deux lieux fixes tenus.
   const objLocked = heldPoints(map).length < OBJECTIVES_AFTER_HELD;
   objectiveAngles(isl.objectives).forEach((_, i) => {
@@ -548,6 +557,8 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, level: nu
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** Les seules coordonnées d'une place (sans sa distance à la ville, recalculée par `withRelays`). */
+const xyOf = ({ x, y }: { x: number; y: number }) => ({ x, y });
 
 /**
  * 🏝️ Tient la carte à jour : objectifs et forteresse POSÉS s'ils manquent (retirés hors du
@@ -562,12 +573,15 @@ export function ensureIslandConquest(
   playerLevel: number,
   /** 🐫 Les convois BATTUS par un voyage avant leur arrivée (`convoyVanquished`). */
   vanquished: ReadonlySet<string> = new Set(),
+  /** ⚓ Les lieux d'où une équipe est partie (sortie, attaque combinée) : ils ne bougent pas
+   *  tant qu'elle n'est pas rentrée, sinon son trajet partirait d'un endroit vide. */
+  anchored: ReadonlySet<string> = new Set(),
 ): ExpeditionMap {
   // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🪦 De même les
   // cimetières qui se relèvent.
   const map = raiseDead(layNests(map0, now), now);
   const isl = activeIsland(map);
-  const want = isl ? expectedTargets(map, isl, now, playerLevel) : [];
+  const want = isl ? expectedTargets(map, isl, now) : [];
   const wantIds = new Set(want.map((p) => p.id));
   let pois = map.pois;
   let changed = map !== map0;
@@ -610,23 +624,24 @@ export function ensureIslandConquest(
     );
     changed = true;
   }
-  // 2 bis. 🏝️ LES POINTS FIXES ENCORE À L'ENNEMI se posent à leur place d'île (v1.28.0,
-  // « espace les lieux ») : à mi-chemin de la côte au lieu de serrés autour de la base. Ceux
-  // qu'on tient, qu'on attaque ou où des champions marchent ne bougent pas.
+  // 2 bis. 🏝️ LES POINTS FIXES se posent à leur place d'île — la ligne de défense (v1.49) —,
+  // ENNEMIS COMME TENUS (v1.49.3, signalé : « je n'ai pas les modifs » — les lieux tenus
+  // restaient à l'ancienne place). De même les objectifs QU'ON TIENT (ceux encore ennemis
+  // suivent à l'étape 2). Ne bougent pas : un lieu attaqué, un lieu où des champions marchent
+  // (renforts, retours) ou d'où une équipe est partie (`anchored`).
   if (isl)
     pois = pois.map((p) => {
       const c = p.control;
-      if (
-        !c ||
-        c.owner !== 'enemy' ||
-        c.assault ||
-        c.reinforcing?.length ||
-        c.returning?.length ||
-        isIslandTargetId(p.id) ||
-        !ALL_CONTROL_KINDS.includes(c.kind)
-      )
+      if (!c || c.assault || c.reinforcing?.length || c.returning?.length || anchored.has(p.id))
         return p;
-      const s = controlSpot(map, c.kind);
+      const heldObj =
+        c.owner === 'player' &&
+        c.kind === 'objective' &&
+        objectiveAngles(isl.objectives).some((_, i) => objectiveIdOf(i) === p.id);
+      if (!heldObj && (isIslandTargetId(p.id) || !ALL_CONTROL_KINDS.includes(c.kind))) return p;
+      const s = heldObj
+        ? xyOf(objectiveSpot(isl.id, Number(p.id.slice('isl_obj_'.length))))
+        : controlSpot(map, c.kind);
       if (p.x === s.x && p.y === s.y) return p;
       changed = true;
       return { ...p, ...s };
@@ -655,6 +670,18 @@ export function ensureIslandConquest(
     void _m;
     void _f;
     return { ...p, control: { ...rest, ...rule } };
+  });
+  // 3 bis. 🧱 Le fortin de l'île : son facteur sur chaque AUTRE lieu tenu (la clé est retirée
+  // sans fortin, ou sur un lieu à l'ennemi).
+  pois = pois.map((p) => {
+    const c = p.control;
+    if (!c || !ALL_CONTROL_KINDS.includes(c.kind)) return p;
+    const f = c.owner === 'player' ? fortMultOf(pois, p.id) : 1;
+    if ((c.fortMult ?? 1) === f) return p;
+    changed = true;
+    const { fortMult: _f, ...rest } = c;
+    void _f;
+    return { ...p, control: f < 1 ? { ...rest, fortMult: f } : rest };
   });
   // 4. 🪺 Les routes dangereuses autour des nids (dérivé ; la clé est RETIRÉE hors portée).
   const peril = nestPerilIds(pois, isl?.id ?? null, islandPacified(map));
@@ -1003,8 +1030,13 @@ export function islandTargetLabel(
   const riseAt = rise && isKey ? nextRiseAt(map!) : null;
   if (p.control.kind === 'objective')
     return {
-      title: `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} pris`,
+      title: p.control.locked
+        ? `🔒 Objectif de l’île · verrouillé (${Math.min(st.pointsHeld, OBJECTIVES_AFTER_HELD)}/${OBJECTIVES_AFTER_HELD} lieux fixes tenus)`
+        : `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} pris`,
       detail:
+        (p.control.locked
+          ? `tiens d’abord ${OBJECTIVES_AFTER_HELD} lieux fixes de l’île (n’importe lesquels) pour l’attaquer · `
+          : '') +
         `troupe de ${p.control.size} champions de référence · ` +
         (rise && !isKey
           ? 'pris, il se tient — mais ses morts l’attaquent 3 jours plus tard tant que la citadelle des morts tient'
@@ -1393,4 +1425,105 @@ export function brigandPillage(
     stolen,
     msg,
   };
+}
+
+/**
+ * ⛵ Les CHAMPIONS quittent les lieux fixes d'une île (décision de l'utilisateur, 2026-10-03 :
+ * « tous les champions partent » sur l'île suivante) : garnisons, renforts en route, retours,
+ * sorties et héros posté. ⚠️ LES MILICIENS RESTENT — ce sont eux qui gardent l'île et font
+ * tourner ses lieux. La production déjà faite est mise de côté AVANT (`bankAt`) : elle repart
+ * au débit de la garnison restante, jamais recalculée. Rend la MÊME carte si rien ne change.
+ */
+export function stripChampions(map: ExpeditionMap, at: number, playerLevel: number): ExpeditionMap {
+  let changed = false;
+  const pois = map.pois.map((p) => {
+    const c = p.control;
+    if (!c || c.owner !== 'player') return p;
+    const champ = (id: string) => !isMilitiaId(id);
+    const hasChamp =
+      c.garrison.some(champ) ||
+      (c.reinforcing ?? []).some((r) => champ(r.id)) ||
+      (c.returning ?? []).some((r) => champ(r.id)) ||
+      !!c.away?.length ||
+      !!c.hero;
+    if (!hasChamp) return p;
+    changed = true;
+    const banked = c.collectedAt !== undefined ? bankAt(p, at, playerLevel) : c;
+    const { hero: _h, heroUnit: _u, away: _a, reinforcing, returning, perXp, ...rest } = banked;
+    void _h;
+    void _u;
+    void _a;
+    const reinf = (reinforcing ?? []).filter((r) => !champ(r.id));
+    const ret = (returning ?? []).filter((r) => !champ(r.id));
+    const kept = Object.fromEntries(Object.entries(perXp ?? {}).filter(([id]) => !champ(id)));
+    const control: ControlState = {
+      ...rest,
+      garrison: rest.garrison.filter((id) => !champ(id)),
+      ...(reinf.length ? { reinforcing: reinf } : {}),
+      ...(ret.length ? { returning: ret } : {}),
+      ...(Object.keys(kept).length ? { perXp: kept } : {}),
+    };
+    return { ...p, control };
+  });
+  return changed ? { ...map, pois } : map;
+}
+
+/**
+ * ⛵ L'ÎLE QUITTÉE VERS LA SUIVANTE (décision de l'utilisateur, 2026-10-03 : « on pacifie
+ * l'île précédente des lieux sauf les lieux fixes qui produisent »). Elle est PACIFIÉE d'office
+ * (objectifs et forteresse comptés abattus : ils ne reviennent pas, plus aucune attaque), VIDÉE
+ * de tout ce qui n'est pas un lieu fixe (camps, failles, armées, embuscades, convois) et plus
+ * rien n'y apparaît (`vacatedAt`, lu par `advanceWorld`). Ses champions partent
+ * (`stripChampions`) ; ses miliciens restent. Le socle passe à la règle d'une île pacifiée
+ * (`islandYieldRule`), la production faite au débit d'avant étant mise de côté. Idempotente.
+ */
+export function vacateIsland(map: ExpeditionMap, at: number, playerLevel: number): ExpeditionMap {
+  const isl = activeIsland(map);
+  const a = map.archipel;
+  if (!isl || !a || a.vacatedAt !== undefined) return map;
+  const destroyed = [
+    ...new Set([...(a.destroyed ?? []), ...objectiveIds(isl, a.nests ?? []), FORTRESS_ID]),
+  ];
+  const archipel = {
+    ...a,
+    destroyed,
+    pacifiedAt: a.pacifiedAt ?? at,
+    vacatedAt: at,
+  };
+  const stripped = stripChampions(map, at, playerLevel);
+  const next: ExpeditionMap = { ...stripped, archipel };
+  const pois = stripped.pois
+    .filter((p) => !!p.control && !isIslandTargetId(p.id) && !p.convoy && !p.army)
+    .map((p) => {
+      const c0 = p.control!;
+      // 🕊️ Plus aucune attaque, et la troupe ennemie d'un lieu non tenu ne bouge plus.
+      const {
+        attackAt: _a,
+        raidAt: _r,
+        assault: _s,
+        retakeCut: _c,
+        fieldHits: _f,
+        angerSince: _g,
+        ...c
+      } = c0;
+      void _a;
+      void _r;
+      void _s;
+      void _c;
+      void _f;
+      void _g;
+      if (!ALL_CONTROL_KINDS.includes(c.kind)) return { ...p, control: c };
+      const rule = islandYieldRule(next, c.kind);
+      const banked =
+        c.owner === 'player' && c.collectedAt !== undefined
+          ? bankAt({ ...p, control: c }, at, playerLevel)
+          : c;
+      const { yieldMult: _m, flatTier: _t, ...base } = banked;
+      void _m;
+      void _t;
+      return { ...p, control: { ...base, ...rule } };
+    });
+  const { ambushes: _am, ...clean } = next;
+  void _am;
+  return { ...clean, pois };
 }

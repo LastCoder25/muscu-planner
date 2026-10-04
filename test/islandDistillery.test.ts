@@ -23,11 +23,11 @@ function island5(L = 90): ExpeditionMap {
 const id = controlIdOf('distillery');
 
 describe('🧪 la distillerie de l’île 5', () => {
-  it('l’île 5 : camp, autel des runes, distillerie — sans mine ni source', () => {
+  it('l’île 5 : autel des runes, distillerie, laboratoire — sans mine ni source', () => {
     expect([...controlKindsOf({ archipel: archipelOn(5) })].sort()).toEqual([
       'altar',
       'distillery',
-      'training',
+      'lab',
     ]);
     const p = island5().pois.find((q) => q.id === id)!;
     expect(poiLabel(p)).toContain('Distillerie');

@@ -47,27 +47,43 @@
       </button>
       <p v-if="hero && heroBlock" class="cs-block">{{ heroBlock }}</p>
 
-      <div class="cs-bar">
-        <span>{{ picked.length }}/{{ candidates.length }} champion{{
-          candidates.length > 1 ? 's' : ''
-        }}</span>
-        <button v-if="candidates.length" type="button" class="cs-all" @click="toggleAll">
-          {{ picked.length === candidates.length ? 'Aucun' : 'Tous' }}
-        </button>
+      <!-- ⛵ Vers l'île suivante (décision de l'utilisateur, 2026-10-03) : pas de choix, tout
+           le monde part, et l'île quittée est pacifiée. -->
+      <div v-if="forward" class="cs-forward">
+        <p>
+          <b>🧭 Tous tes champions te suivent</b>, y compris ceux postés sur un lieu fixe ou restés
+          sur une autre île. Ils débarquent avec toi à l'arrivée.
+        </p>
+        <p>
+          <b>🕊️ L'île {{ from }} est pacifiée</b> : camps, failles et armées disparaissent, seuls
+          ses lieux fixes restent. Ils produisent toujours, gardés par ta milice.
+        </p>
       </div>
-      <div v-if="candidates.length" class="cs-grid">
-        <AdvPickTile
-          v-for="a in candidates"
-          :key="a.id"
-          :adv="a"
-          :on="picked.includes(a.id)"
-          @toggle="toggle(a.id)"
-        />
-      </div>
-      <p v-else class="cs-empty">Aucun champion libre ici.</p>
-      <p class="cs-note">
-        Les champions postés sur un lieu, en route ou blessés restent où ils sont.
-      </p>
+      <template v-else>
+        <div class="cs-bar">
+          <span
+            >{{ picked.length }}/{{ candidates.length }} champion{{
+              candidates.length > 1 ? 's' : ''
+            }}</span
+          >
+          <button v-if="candidates.length" type="button" class="cs-all" @click="toggleAll">
+            {{ picked.length === candidates.length ? 'Aucun' : 'Tous' }}
+          </button>
+        </div>
+        <div v-if="candidates.length" class="cs-grid">
+          <AdvPickTile
+            v-for="a in candidates"
+            :key="a.id"
+            :adv="a"
+            :on="picked.includes(a.id)"
+            @toggle="toggle(a.id)"
+          />
+        </div>
+        <p v-else class="cs-empty">Aucun champion libre ici.</p>
+        <p class="cs-note">
+          Les champions postés sur un lieu, en route ou blessés restent où ils sont.
+        </p>
+      </template>
 
       <div class="cs-actions">
         <q-btn flat no-caps label="Annuler" @click="emit('update:modelValue', false)" />
@@ -102,7 +118,7 @@ const props = defineProps<{
   /** Pourquoi le héros ne peut pas partir (texte), null s'il le peut. */
   heroBlock: string | null;
   candidates: Adventurer[];
-  /** Le départ d'une navigation sans héros (heure pile suivante). */
+  /** Le départ d'une navigation sans héros (tout de suite). */
   departAt: number;
   /** Le départ avec le héros : après le retour des troupes encore en marche. */
   heroDepartAt: number;
@@ -124,8 +140,7 @@ watch(
     if (!open) return;
     // Héros retenu (expédition, troupes en marche) : on part sur « champions seuls », pas
     // sur un bouton grisé — sauf vers une île neuve, où il est obligatoire.
-    hero.value =
-      props.heroMode === 'forced' || (props.heroMode === 'optional' && !props.heroBlock);
+    hero.value = props.heroMode === 'forced' || (props.heroMode === 'optional' && !props.heroBlock);
     picked.value = props.candidates.map((a) => a.id);
   },
   { immediate: true },
@@ -139,8 +154,13 @@ const toggleAll = () => {
   picked.value =
     picked.value.length === props.candidates.length ? [] : props.candidates.map((a) => a.id);
 };
+/** ⛵ Le héros part vers l'île suivante : tout le monde suit, l'île quittée est pacifiée. */
+const forward = computed(
+  () => hero.value && props.to !== null && props.from === props.activeId && props.to > props.from,
+);
 const canGo = computed(() => (hero.value ? !props.heroBlock : picked.value.length > 0));
 const goLabel = computed(() => {
+  if (forward.value) return '⛵ Embarquer avec tous les champions';
   const n = picked.value.length;
   const champs = `${n} champion${n > 1 ? 's' : ''}`;
   return hero.value ? `⛵ Embarquer : le héros et ${champs}` : `⛵ Faire naviguer ${champs}`;
@@ -231,6 +251,19 @@ const clock = (t: number) =>
   margin: 0;
   font-size: 12.5px;
   color: var(--d3);
+}
+.cs-forward {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 13px;
+  p {
+    margin: 0;
+  }
 }
 .cs-bar {
   display: flex;

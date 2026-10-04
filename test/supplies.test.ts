@@ -305,6 +305,7 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
       backAt: 1_000_000,
       now: 1_000_000,
       xpGranted: false,
+      healMult: 1,
     };
     const full = partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil!;
     const half = partyClaimRoster({ ...party, healMult: SUPPLY.healMult }, escort, ctx)

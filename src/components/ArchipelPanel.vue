@@ -22,171 +22,196 @@
       <span class="ac-chev" aria-hidden="true">{{ open ? '▴' : '▾' }}</span>
     </button>
     <div v-if="open" id="archipel-pop" class="arch-pop">
-    <div class="isl-row" role="group" aria-label="Les îles de l’archipel">
-      <button
-        v-for="i in tiles"
-        :key="i.id"
-        type="button"
-        class="isl"
-        :class="{ active: i.active, locked: i.locked, sel: sel === i.id, sea: i.sea }"
-        :style="{ '--a': i.color }"
-        :aria-label="`Île ${i.id} · ${i.name}${i.locked ? ' (verrouillée)' : ''}`"
-        :aria-current="i.active ? 'location' : undefined"
-        :aria-pressed="sel === i.id"
-        @click="pick(i.id)"
-      >
-        <span class="isl-emo" aria-hidden="true">{{ i.locked ? '🔒' : i.emoji }}</span>
-        <span class="isl-num">Île {{ i.id }}</span>
-        <span v-if="i.active" class="isl-tag" aria-hidden="true">📍</span>
-        <span v-else-if="i.sea" class="isl-tag" aria-hidden="true">⛵</span>
-      </button>
-    </div>
+      <div class="isl-row" role="group" aria-label="Les îles de l’archipel">
+        <button
+          v-for="i in tiles"
+          :key="i.id"
+          type="button"
+          class="isl"
+          :class="{ active: i.active, locked: i.locked, sel: sel === i.id, sea: i.sea }"
+          :style="{ '--a': i.color }"
+          :aria-label="`Île ${i.id} · ${i.name}${i.locked ? ' (verrouillée)' : ''}`"
+          :aria-current="i.active ? 'location' : undefined"
+          :aria-pressed="sel === i.id"
+          @click="pick(i.id)"
+        >
+          <span class="isl-emo" aria-hidden="true">{{ i.locked ? '🔒' : i.emoji }}</span>
+          <span class="isl-num">Île {{ i.id }}</span>
+          <span v-if="i.active" class="isl-tag" aria-hidden="true">📍</span>
+          <span v-else-if="i.sea" class="isl-tag" aria-hidden="true">⛵</span>
+        </button>
+      </div>
 
-    <div class="arch-body">
-      <!-- ⛵ La traversée réservée ou en cours. -->
-      <div v-if="crossing" class="arch-sea">
-        <span class="as-emo" aria-hidden="true">⛵</span>
-        <span class="as-txt">
-          <b>Vers l'île {{ crossing.to }}</b>
-          <template v-if="now < crossing.departAt">
-            · départ à {{ clock(crossing.departAt) }} (dans
-            {{ formatDuration(crossing.departAt - now) }})
-          </template>
-          <template v-else>
-            · en mer, arrivée à {{ clock(crossing.arriveAt) }} (dans
-            {{ formatDuration(Math.max(0, crossing.arriveAt - now)) }})
-          </template>
-          <span class="as-sub"
-            >Le héros et {{ crossing.ids.length }} champion{{
-              crossing.ids.length > 1 ? 's' : ''
-            }}
-            à bord</span
-          >
-        </span>
-      </div>
-      <!-- ⛵ Les champions qui naviguent seuls (option A). -->
-      <div v-for="(s, k) in sailings ?? []" :key="'s' + k" class="arch-sea">
-        <span class="as-emo" aria-hidden="true">⛵</span>
-        <span class="as-txt">
-          <b>Île {{ s.from }} → île {{ s.to }}</b>
-          <template v-if="now < s.departAt">
-            · départ à {{ clock(s.departAt) }} (dans {{ formatDuration(s.departAt - now) }})
-          </template>
-          <template v-else>
-            · arrivée à {{ clock(s.arriveAt) }} (dans
-            {{ formatDuration(Math.max(0, s.arriveAt - now)) }})
-          </template>
-          <span class="as-sub"
-            >{{ s.ids.length }} champion{{ s.ids.length > 1 ? 's' : '' }} sans le héros</span
-          >
-        </span>
-      </div>
-      <div
-        v-if="selTile"
-        class="arch-tile"
-        :class="{ active: selTile.active, locked: selTile.locked }"
-        :style="{ '--a': selTile.color }"
-      >
-        <div class="at-top">
-          <span class="at-emo" aria-hidden="true">{{ selTile.emoji }}</span>
-          <span class="at-num">Île {{ selTile.id }} · {{ selTile.name }}</span>
-          <span v-if="selTile.active" class="at-chip">Tu es ici</span>
-          <span v-else-if="!selTile.locked" class="at-chip open">⛵ ouverte</span>
-          <span v-else class="at-chip dim">🔒 à venir</span>
-        </div>
-        <div class="at-ranks">
-          <span class="at-rank" :style="{ '--rk': selTile.lo.color }">{{ selTile.lo.name }}</span>
-          <span class="at-rank" :style="{ '--rk': selTile.hi.color }">{{ selTile.hi.name }}</span>
-          <span class="at-lvl">niv. {{ selTile.minLevel }}-{{ selTile.maxLevel }}</span>
-        </div>
-        <div class="at-threat">⚔️ {{ selTile.threat }}</div>
-        <div class="at-fort">🏰 {{ selTile.fortress }}</div>
-        <!-- 🏝️ La conquête de l'île active : objectifs abattus, forteresse, pacification. -->
-        <div v-if="selTile.active && conquest" class="at-conq">
-          <span class="at-pill" :class="{ done: conquest.pointsHeld >= OBJECTIVES_AFTER_HELD }"
-            >🏳️ {{ Math.min(conquest.pointsHeld, OBJECTIVES_AFTER_HELD) }}/{{
-              OBJECTIVES_AFTER_HELD
-            }}
-            lieux tenus</span
-          >
-          <span
-            class="at-pill"
-            :class="{ done: conquest.objectivesDown >= conquest.objectivesTotal }"
-            >{{ selTile.objectiveEmoji }} {{ conquest.objectivesDown }}/{{
-              conquest.objectivesTotal
-            }}
-            pris</span
-          >
-          <span class="at-pill" :class="{ done: conquest.fortressDown, dim: conquest.locked }">{{
-            conquest.fortressDown
-              ? '🏰 abattue'
-              : conquest.locked
-                ? '🔒 forteresse verrouillée'
-                : '🏰 forteresse à abattre'
-          }}</span>
-          <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
-        </div>
-        <!-- ⛵ Les champions restés sur cette île, et la traversée pour la rejoindre. -->
-        <div v-if="awayOn(selTile.id)" class="at-away">
-          ⛵ {{ awayOn(selTile.id) }} champion{{ awayOn(selTile.id) > 1 ? 's' : '' }} resté{{
-            awayOn(selTile.id) > 1 ? 's' : ''
-          }}
-          ici{{
-            selTile.visited && !selTile.active ? ' · ses lieux tenus produisent à distance' : ''
-          }}
-        </div>
-        <div v-if="selTile.visited || selTile.active" class="at-away mil">
-          🛡️ {{ militiaOn(selTile.id) }} milicien{{ militiaOn(selTile.id) > 1 ? 's' : '' }} en
-          réserve{{ selTile.active ? '' : ' · la Caserne continue de produire' }}
-        </div>
-        <template v-if="island && !selTile.active && !selTile.locked">
-          <!-- ⛵ Option A (2026-10-03) : le héros retenu bloque SA traversée, pas celle des
-               champions vers une île déjà visitée — la feuille propose alors de les envoyer seuls. -->
-          <p v-if="blocks?.[selTile.id]" class="at-block">{{ blocks[selTile.id] }}</p>
-          <button
-            v-if="!blocks?.[selTile.id] || selTile.visited"
-            type="button"
-            class="at-cross"
-            :disabled="busy"
-            @click="$emit('cross', selTile.id)"
-          >
-            <span class="ac-main">⛵ Traverser vers l'île {{ selTile.id }}</span>
-            <span class="ac-sub"
-              >Départ {{ heroDepartAt && heroDepartAt > departAt ? 'avec le héros' : '' }} à
-              {{ clock(Math.max(departAt, heroDepartAt ?? 0)) }} · arrivée
-              {{ clock(Math.max(departAt, heroDepartAt ?? 0) + CROSSING.travelMs) }} ·
-              {{
-                selTile.visited
-                  ? 'avec ou sans le héros, tu choisis qui embarque'
-                  : 'avec le héros, tu choisis les champions'
-              }}</span
-            >
-          </button>
-          <button
-            v-if="fetchable?.[selTile.id]"
-            type="button"
-            class="at-cross alt"
-            :disabled="busy"
-            @click="$emit('fetch', selTile.id)"
-          >
-            <span class="ac-main"
-              >⛵ Faire venir {{ fetchable[selTile.id] }} champion{{
-                fetchable[selTile.id]! > 1 ? 's' : ''
+      <div class="arch-body">
+        <!-- ⛵ La traversée réservée ou en cours. -->
+        <div v-if="crossing" class="arch-sea">
+          <span class="as-emo" aria-hidden="true">⛵</span>
+          <span class="as-txt">
+            <b>Vers l'île {{ crossing.to }}</b>
+            <template v-if="now < crossing.departAt">
+              · départ à {{ clock(crossing.departAt) }} (dans
+              {{ formatDuration(crossing.departAt - now) }})
+            </template>
+            <template v-else>
+              · en mer, arrivée à {{ clock(crossing.arriveAt) }} (dans
+              {{ formatDuration(Math.max(0, crossing.arriveAt - now)) }})
+            </template>
+            <span class="as-sub"
+              >Le héros et {{ crossing.ids.length }} champion{{
+                crossing.ids.length > 1 ? 's' : ''
               }}
-              sur l'île {{ island.id }}</span
+              à bord</span
             >
-            <span class="ac-sub">Ils naviguent seuls, sans le héros.</span>
-          </button>
-        </template>
-        <p v-else-if="island && selTile.locked" class="at-block">
-          🔒 Abats {{ prevFortress(selTile.id) }} pour ouvrir la traversée.
+          </span>
+        </div>
+        <!-- ⛵ Les champions qui naviguent seuls (option A). -->
+        <div v-for="(s, k) in sailings ?? []" :key="'s' + k" class="arch-sea">
+          <span class="as-emo" aria-hidden="true">⛵</span>
+          <span class="as-txt">
+            <b>Île {{ s.from }} → île {{ s.to }}</b>
+            <template v-if="now < s.departAt">
+              · départ à {{ clock(s.departAt) }} (dans {{ formatDuration(s.departAt - now) }})
+            </template>
+            <template v-else>
+              · arrivée à {{ clock(s.arriveAt) }} (dans
+              {{ formatDuration(Math.max(0, s.arriveAt - now)) }})
+            </template>
+            <span class="as-sub"
+              >{{ s.ids.length }} champion{{ s.ids.length > 1 ? 's' : '' }} sans le héros</span
+            >
+          </span>
+        </div>
+        <div
+          v-if="selTile"
+          class="arch-tile"
+          :class="{ active: selTile.active, locked: selTile.locked }"
+          :style="{ '--a': selTile.color }"
+        >
+          <div class="at-top">
+            <span class="at-emo" aria-hidden="true">{{ selTile.emoji }}</span>
+            <span class="at-num">Île {{ selTile.id }} · {{ selTile.name }}</span>
+            <span v-if="selTile.active" class="at-chip">Tu es ici</span>
+            <span v-else-if="!selTile.locked" class="at-chip open">⛵ ouverte</span>
+            <span v-else class="at-chip dim">🔒 à venir</span>
+          </div>
+          <div class="at-ranks">
+            <span class="at-rank" :style="{ '--rk': selTile.lo.color }">{{ selTile.lo.name }}</span>
+            <span class="at-rank" :style="{ '--rk': selTile.hi.color }">{{ selTile.hi.name }}</span>
+            <span class="at-lvl">niv. {{ selTile.minLevel }}-{{ selTile.maxLevel }}</span>
+          </div>
+          <div class="at-threat">⚔️ {{ selTile.threat }}</div>
+          <div class="at-fort">🏰 {{ selTile.fortress }}</div>
+          <!-- 🏝️ La conquête de l'île active : objectifs abattus, forteresse, pacification. -->
+          <div v-if="selTile.active && conquest" class="at-conq">
+            <span class="at-pill" :class="{ done: conquest.pointsHeld >= OBJECTIVES_AFTER_HELD }"
+              >🏳️ {{ Math.min(conquest.pointsHeld, OBJECTIVES_AFTER_HELD) }}/{{
+                OBJECTIVES_AFTER_HELD
+              }}
+              lieux tenus</span
+            >
+            <span
+              class="at-pill"
+              :class="{ done: conquest.objectivesDown >= conquest.objectivesTotal }"
+              >{{ selTile.objectiveEmoji }} {{ conquest.objectivesDown }}/{{
+                conquest.objectivesTotal
+              }}
+              pris</span
+            >
+            <span class="at-pill" :class="{ done: conquest.fortressDown, dim: conquest.locked }">{{
+              conquest.fortressDown
+                ? '🏰 abattue'
+                : conquest.locked
+                  ? '🔒 forteresse verrouillée'
+                  : '🏰 forteresse à abattre'
+            }}</span>
+            <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
+          </div>
+          <!-- ⛵ Les champions restés sur cette île, et la traversée pour la rejoindre. -->
+          <div v-if="awayOn(selTile.id)" class="at-away">
+            ⛵ {{ awayOn(selTile.id) }} champion{{ awayOn(selTile.id) > 1 ? 's' : '' }} resté{{
+              awayOn(selTile.id) > 1 ? 's' : ''
+            }}
+            ici{{
+              selTile.visited && !selTile.active ? ' · ses lieux tenus produisent à distance' : ''
+            }}
+          </div>
+          <div v-if="selTile.visited || selTile.active" class="at-away mil">
+            🛡️ {{ militiaOn(selTile.id) }} milicien{{ militiaOn(selTile.id) > 1 ? 's' : '' }} en
+            réserve{{ selTile.active ? '' : ' · la Caserne continue de produire' }}
+          </div>
+          <!-- 🛡️ Île quittée : sa milice se gère d'ici, entre sa réserve et ses lieux fixes. -->
+          <div v-if="!selTile.active && remote?.[selTile.id]?.length" class="at-remote">
+            <div v-for="rp in remote[selTile.id]" :key="rp.id" class="ar-row">
+              <span class="ar-name">{{ rp.emoji }} {{ rp.label }}</span>
+              <span class="ar-count">🛡️ {{ rp.militia }}</span>
+              <button
+                type="button"
+                class="ar-btn"
+                :aria-label="`Ramener un milicien de ${rp.label}`"
+                :disabled="busy || rp.militia < 1"
+                @click="$emit('militia', { island: selTile.id, pointId: rp.id, delta: -1 })"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                class="ar-btn"
+                :aria-label="`Poster un milicien sur ${rp.label}`"
+                :disabled="busy || rp.room < 1 || militiaOn(selTile.id) < 1"
+                @click="$emit('militia', { island: selTile.id, pointId: rp.id, delta: 1 })"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <template v-if="island && !selTile.active && !selTile.locked">
+            <!-- ⛵ Option A (2026-10-03) : le héros retenu bloque SA traversée, pas celle des
+               champions vers une île déjà visitée — la feuille propose alors de les envoyer seuls. -->
+            <p v-if="blocks?.[selTile.id]" class="at-block">{{ blocks[selTile.id] }}</p>
+            <button
+              v-if="!blocks?.[selTile.id] || selTile.visited"
+              type="button"
+              class="at-cross"
+              :disabled="busy"
+              @click="$emit('cross', selTile.id)"
+            >
+              <span class="ac-main">⛵ Traverser vers l'île {{ selTile.id }}</span>
+              <span class="ac-sub"
+                >Départ {{ heroDepartAt && heroDepartAt > departAt ? 'avec le héros' : '' }} à
+                {{ clock(Math.max(departAt, heroDepartAt ?? 0)) }} · arrivée
+                {{ clock(Math.max(departAt, heroDepartAt ?? 0) + CROSSING.travelMs) }} ·
+                {{
+                  selTile.visited
+                    ? 'avec ou sans le héros, tu choisis qui embarque'
+                    : 'avec le héros, tu choisis les champions'
+                }}</span
+              >
+            </button>
+            <button
+              v-if="fetchable?.[selTile.id]"
+              type="button"
+              class="at-cross alt"
+              :disabled="busy"
+              @click="$emit('fetch', selTile.id)"
+            >
+              <span class="ac-main"
+                >⛵ Faire venir {{ fetchable[selTile.id] }} champion{{
+                  fetchable[selTile.id]! > 1 ? 's' : ''
+                }}
+                sur l'île {{ island.id }}</span
+              >
+              <span class="ac-sub">Ils naviguent seuls, sans le héros.</span>
+            </button>
+          </template>
+          <p v-else-if="island && selTile.locked" class="at-block">
+            🔒 Abats {{ prevFortress(selTile.id) }} pour ouvrir la traversée.
+          </p>
+        </div>
+        <p v-if="island" class="arch-note">
+          Lieux plafonnés au rang {{ islandCapRank }}, trajets selon la seule distance, carte à la
+          taille de l'île : l'Avant-poste ne règle plus que la vitesse.
         </p>
       </div>
-      <p v-if="island" class="arch-note">
-        Lieux plafonnés au rang {{ islandCapRank }}, trajets selon la seule distance, carte à la
-        taille de l'île : l'Avant-poste ne règle plus que la vitesse.
-      </p>
-    </div>
     </div>
   </div>
 </template>
@@ -194,7 +219,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ISLANDS, type Island } from '@/lib/archipelago';
-import { CROSSING, nextCrossingDeparture } from '@/lib/crossing';
+import { CROSSING, nextCrossingDeparture, type RemotePoint } from '@/lib/crossing';
 import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
@@ -229,9 +254,19 @@ const props = defineProps<{
   away?: Record<number, number>;
   /** 🛡️ La réserve de milice de chaque île visitée (la milice ne traverse pas). */
   militia?: Record<number, number>;
+  /** 🛡️ Les lieux fixes tenus de chaque île rangée, avec leur milice (`remotePoints`). */
+  remote?: Record<number, RemotePoint[]>;
+  /** 🗺️ L'île rangée dont on regarde la carte (null : la carte active). */
+  shown?: number | null;
   now: number;
 }>();
-defineEmits<{ cross: [to: number]; fetch: [from: number] }>();
+const emit = defineEmits<{
+  /** 🗺️ Montrer la carte d'une île rangée (`null` = revenir à l'île active). */
+  view: [id: number | null];
+  cross: [to: number];
+  fetch: [from: number];
+  militia: [{ island: number; pointId: string; delta: number }];
+}>();
 
 /** Heure d'horloge (« 14:00 »). */
 const clock = (t: number) =>
@@ -266,17 +301,22 @@ const tiles = computed(() =>
   }),
 );
 const sel = ref(props.island?.id ?? 1);
-/** La pastille ouvre l'archipel sur l'île où l'on est ; la retoucher le referme. */
+/** 📍 L'île AFFICHÉE : une île rangée qu'on regarde, sinon celle où l'on est. */
+const shownId = computed(() => props.shown ?? props.island?.id ?? 1);
+/** La pastille ouvre l'archipel sur l'île affichée ; la retoucher le referme. */
 function toggle() {
-  if (!open.value) sel.value = props.island?.id ?? 1;
+  if (!open.value) sel.value = shownId.value;
   open.value = !open.value;
 }
-/** Toucher une île affiche sa fiche. */
+/** Toucher une île affiche sa fiche — et, pour une île déjà visitée qu'on a quittée, sa carte
+ *  (gérer sa milice sans traverser, v1.48.0). L'île active (ou jamais visitée) : la carte active. */
 function pick(id: number) {
   sel.value = id;
+  const t = tiles.value.find((x) => x.id === id);
+  emit('view', t && t.visited && !t.active ? id : null);
 }
-/** 📍 L'île où l'on est, montrée sur la pastille. */
-const curTile = computed(() => tiles.value.find((t) => t.active) ?? null);
+/** L'île affichée, montrée sur la pastille. */
+const curTile = computed(() => tiles.value.find((t) => t.id === shownId.value) ?? null);
 const selTile = computed(() => tiles.value.find((t) => t.id === sel.value) ?? null);
 const islandCapRank = computed(() =>
   props.island ? characterRank(props.island.maxLevel).name : '',
@@ -545,6 +585,42 @@ const islandCapRank = computed(() =>
 }
 .at-away.mil {
   color: var(--dim);
+}
+.at-remote {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.ar-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ar-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.ar-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 .at-block {
   margin: 8px 0 0;

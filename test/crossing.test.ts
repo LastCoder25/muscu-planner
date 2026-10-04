@@ -8,19 +8,28 @@ import {
   landAdventurers,
   landCrossing,
   landingChestMessage,
+  moveRemoteMilitia,
   nextCrossingDeparture,
   openIslands,
   produceIslandMilitia,
+  remotePoints,
   startCrossing,
   visitedIslands,
 } from '@/lib/crossing';
 import { archipelOn, islandById } from '@/lib/archipelago';
 import { advUnavailableReason, type Adventurer } from '@/lib/adventurers';
-import { createMap, type ExpeditionMap } from '@/lib/expedition';
-import { FORTRESS_ID } from '@/lib/islandConquest';
+import {
+  advanceWorld,
+  createMap,
+  EXPE,
+  type ControlState,
+  type ExpeditionMap,
+  type Poi,
+} from '@/lib/expedition';
+import { FORTRESS_ID, vacateIsland } from '@/lib/islandConquest';
 import { characterRank } from '@/lib/characterRank';
 import { emptyMilitia, militiaCap, produceMilitia } from '@/lib/militia';
-import { controlKindsOf, militiaSeatsOf } from '@/lib/controlPoints';
+import { controlKindsOf, islandMilitiaOf } from '@/lib/controlPoints';
 
 const H = 3600_000;
 const T0 = Date.UTC(2026, 9, 2, 10, 0, 0);
@@ -33,11 +42,11 @@ const adv = (id: string, extra: Partial<Adventurer> = {}): Adventurer =>
   ({ id, name: id, seed: 1, path: ['guerrier'], level: 5, xp: 0, ...extra }) as Adventurer;
 const free = { heroBusy: false };
 
-describe('⛵ départs à l’heure pile', () => {
-  it('le prochain départ est l’heure pile suivante, ou maintenant pile', () => {
+describe('⛵ départ immédiat (plus d’heure pile, v1.46.0)', () => {
+  it('le prochain départ est maintenant, quelle que soit l’heure', () => {
     expect(nextCrossingDeparture(T0)).toBe(T0);
-    expect(nextCrossingDeparture(T0 + 1)).toBe(T0 + H);
-    expect(nextCrossingDeparture(T0 + H - 1)).toBe(T0 + H);
+    expect(nextCrossingDeparture(T0 + 1)).toBe(T0 + 1);
+    expect(nextCrossingDeparture(T0 + H - 1)).toBe(T0 + H - 1);
   });
 });
 
@@ -82,8 +91,8 @@ describe('⛵ qui embarque', () => {
   });
   it('les embarqués sont occupés jusqu’à l’arrivée (2 h après le départ)', () => {
     const m = startCrossing(island1([FORTRESS_ID]), 2, ['a'], T0 + 1);
-    expect(m.crossing!.departAt).toBe(T0 + H);
-    expect(m.crossing!.arriveAt).toBe(T0 + H + CROSSING.travelMs);
+    expect(m.crossing!.departAt).toBe(T0 + 1);
+    expect(m.crossing!.arriveAt).toBe(T0 + 1 + CROSSING.travelMs);
     const b = boardTravellers([adv('a'), adv('z')], m.crossing!);
     expect(b[0]!.busyUntil).toBe(m.crossing!.arriveAt);
     expect(b[1]!.busyUntil).toBeUndefined();
@@ -99,7 +108,9 @@ describe('⚓ débarquer', () => {
     expect(l.crossing).toBeNull();
     expect(l.map).toBe(booked);
   });
-  it('l’île quittée est rangée telle quelle, l’île 2 naît peuplée à son rang', () => {
+  it('vers l’île suivante, l’île quittée est PACIFIÉE : seuls ses lieux fixes restent', () => {
+    // Décision de l'utilisateur (2026-10-03) : « on pacifie l'île précédente des lieux sauf
+    // les lieux fixes qui produisent ».
     const l = landCrossing(booked, arrive, 30, undefined);
     expect(l.firstTime).toBe(true);
     expect(l.map.crossing).toBeUndefined();
@@ -108,32 +119,191 @@ describe('⚓ débarquer', () => {
     expect(l.map.pois.length).toBeGreaterThan(0);
     expect(l.map.citadelStash).toEqual([]);
     const left = l.map.islands!['1']!;
-    expect(left.pois).toEqual(start.pois);
-    expect(left.archipel!.destroyed).toEqual([FORTRESS_ID]);
+    expect(left.archipel!.pacifiedAt).toBe(arrive);
+    expect(left.archipel!.vacatedAt).toBe(arrive);
+    expect(left.archipel!.destroyed).toContain(FORTRESS_ID);
+    expect(left.archipel!.destroyed).toContain('isl_obj_0');
+    const fixed = start.pois.filter((p) => p.control && !p.id.startsWith('isl_'));
+    expect(start.pois.length).toBeGreaterThan(fixed.length); // il y avait autre chose
+    expect(left.pois.map((p) => p.id).sort()).toEqual(fixed.map((p) => p.id).sort());
     expect(left.islands).toBeUndefined();
     expect(left.crossing).toBeUndefined();
   });
-  it('retraverser rend l’île 1 intacte et range l’île 2', () => {
+  it('retraverser (retour) rend l’île 1 telle qu’on l’a laissée et range l’île 2 intacte', () => {
     const on2 = landCrossing(booked, arrive, 30, undefined).map;
     const back = startCrossing(on2, 1, [], arrive + 10);
     const l = landCrossing(back, back.crossing!.arriveAt, 30, undefined);
     expect(l.firstTime).toBe(false);
     expect(l.map.archipel!.island).toBe(1);
-    expect(l.map.pois).toEqual(start.pois);
+    expect(l.map.pois).toEqual(on2.islands!['1']!.pois);
+    // ⚠️ Un RETOUR ne pacifie rien : l'île 2 est rangée telle quelle.
     expect(l.map.islands!['2']!.pois).toEqual(on2.pois);
+    expect(l.map.islands!['2']!.archipel!.vacatedAt).toBeUndefined();
     expect(l.map.islands!['1']).toBeUndefined();
   });
-  it('les champions : embarqués et attendus redeviennent « ici », les autres restent', () => {
+  it('vers l’île suivante, TOUS les champions débarquent, postes levés', () => {
     const c = booked.crossing!;
     const out = landAdventurers(
-      [adv('a'), adv('p', { posted: 'x' }), adv('w', { elsewhere: 2 }), adv('o', { elsewhere: 3 })],
+      [
+        adv('a'),
+        adv('p', { posted: 'x' }),
+        adv('w', { elsewhere: 2, posted: 'y' }),
+        adv('o', { elsewhere: 3 }),
+      ],
       c,
     );
-    expect(out.map((a) => a.elsewhere)).toEqual([undefined, 1, undefined, 3]);
+    expect(out.map((a) => a.elsewhere)).toEqual([undefined, undefined, undefined, undefined]);
+    // Celui qui attendait sur l'île d'arrivée garde son poste ; les autres le perdent.
+    expect(out.map((a) => a.posted)).toEqual([undefined, undefined, 'y', undefined]);
+  });
+  it('au retour : embarqués et attendus redeviennent « ici », les autres restent', () => {
+    const c = { from: 2, to: 1, bookedAt: T0, departAt: T0, arriveAt: T0 + 2 * H, ids: ['a'] };
+    const out = landAdventurers(
+      [adv('a'), adv('p', { posted: 'x' }), adv('w', { elsewhere: 1 }), adv('o', { elsewhere: 3 })],
+      c,
+    );
+    expect(out.map((a) => a.elsewhere)).toEqual([undefined, 2, undefined, 3]);
+    expect(out[1]!.posted).toBe('x');
   });
   it('un champion resté ailleurs est indisponible ici', () => {
     expect(advUnavailableReason(adv('x', { elsewhere: 1 }), T0)).toBe('away');
     expect(advUnavailableReason(adv('x'), T0)).toBeNull();
+  });
+});
+
+describe('🕊️ vider l’île quittée', () => {
+  const ctl = (id: string, c: Partial<ControlState>): Poi =>
+    ({
+      id,
+      type: 'control',
+      level: 10,
+      x: EXPE.town.x + 12,
+      y: EXPE.town.y - 6,
+      distNorm: 0.3,
+      spawnedAt: T0,
+      expiresAt: 9e15,
+      control: {
+        kind: 'mine',
+        owner: 'player',
+        faction: 'bandits',
+        size: 1,
+        garrison: [],
+        retakes: 0,
+        ...c,
+      },
+    }) as Poi;
+  const base = island1([FORTRESS_ID]);
+  const held = ctl('ctl_mine', {
+    garrison: ['a', 'mil:1', 'mil:2'],
+    since: T0,
+    collectedAt: T0,
+    attackAt: T0 + 24 * H,
+    hero: true,
+    reinforcing: [
+      { id: 'b', at: T0 + H },
+      { id: 'mil:3', at: T0 + H },
+    ],
+  });
+  const enemy = ctl('ctl_garden', { kind: 'garden', owner: 'enemy', attackAt: T0 + H });
+  const target = ctl('isl_obj_0', { kind: 'mine', owner: 'enemy' });
+  const m: ExpeditionMap = {
+    ...base,
+    pois: [...base.pois, held, enemy, target],
+    ambushes: [{ id: 'amb', x: 1, y: 1, until: T0 + 9 * H }],
+  };
+  const v = vacateIsland(m, T0 + 2 * H, 18);
+
+  it('ne garde que les lieux fixes, sans attaque ; objectifs et forteresse abattus', () => {
+    expect(v.pois.map((p) => p.id).sort()).toEqual(['ctl_garden', 'ctl_mine']);
+    expect(v.pois.every((p) => p.control!.attackAt === undefined)).toBe(true);
+    expect(v.archipel!.destroyed).toEqual(expect.arrayContaining(['isl_obj_0', FORTRESS_ID]));
+    expect(v.ambushes).toBeUndefined();
+    expect(v.archipel!.pacifiedAt).toBe(T0 + 2 * H);
+  });
+  it('les champions et le héros partent, les miliciens restent', () => {
+    const c = v.pois.find((p) => p.id === 'ctl_mine')!.control!;
+    expect(c.garrison).toEqual(['mil:1', 'mil:2']);
+    expect(c.reinforcing).toEqual([{ id: 'mil:3', at: T0 + H }]);
+    expect(c.hero).toBeUndefined();
+    // La production faite avec le champion est mise de côté avant son départ.
+    expect(c.collectedAt).toBe(T0 + 2 * H);
+    expect(c.banked ?? 0).toBeGreaterThan(0);
+  });
+  it('idempotente, et plus rien n’apparaît sur l’île quittée', () => {
+    expect(vacateIsland(v, T0 + 3 * H, 18)).toBe(v);
+    const later = advanceWorld(v, T0 + 72 * H, 18, 3);
+    expect(later.pois.map((p) => p.id).sort()).toEqual(['ctl_garden', 'ctl_mine']);
+  });
+});
+
+describe('🛡️ la milice d’une île quittée se gère à distance', () => {
+  const p = (garrison: string[]): Poi =>
+    ({
+      id: 'ctl_mine',
+      type: 'control',
+      level: 10,
+      x: 50,
+      y: 50,
+      distNorm: 0.3,
+      spawnedAt: T0,
+      expiresAt: 9e15,
+      control: {
+        kind: 'mine',
+        owner: 'player',
+        faction: 'bandits',
+        size: 1,
+        garrison,
+        retakes: 0,
+        since: T0,
+        collectedAt: T0,
+      },
+    }) as Poi;
+  const im = (garrison: string[], home: number): ExpeditionMap => ({
+    ...island1([FORTRESS_ID]),
+    pois: [p(garrison)],
+    militia: { home, producedAt: T0, seq: 5 },
+  });
+  it('de la réserve vers un lieu, et retour, immédiatement', () => {
+    const up = moveRemoteMilitia(im([], 3), 'ctl_mine', 2, T0 + H, 18)!;
+    expect(up.militia!.home).toBe(1);
+    expect(up.pois[0]!.control!.garrison).toEqual(['mil:6', 'mil:7']);
+    const down = moveRemoteMilitia(up, 'ctl_mine', -1, T0 + 2 * H, 18)!;
+    expect(down.militia!.home).toBe(2);
+    expect(down.pois[0]!.control!.garrison).toEqual(['mil:6']);
+    expect(remotePoints(down)).toEqual([
+      expect.objectContaining({ id: 'ctl_mine', militia: 1, room: 4 }),
+    ]);
+  });
+  it('un lieu d’un type retiré de l’île n’apparaît que s’il garde des miliciens', () => {
+    const camp = (garrison: string[]) =>
+      ({
+        ...p(garrison),
+        id: 'ctl_training',
+        control: { ...p(garrison).control!, kind: 'training' },
+      }) as Poi;
+    const withCamp = (garrison: string[]): ExpeditionMap => ({
+      ...im([], 3),
+      pois: [p([]), camp(garrison)],
+    });
+    expect(remotePoints(withCamp([])).map((r) => r.id)).toEqual(['ctl_mine']);
+    expect(remotePoints(withCamp(['mil:1'])).map((r) => r.id)).toEqual([
+      'ctl_mine',
+      'ctl_training',
+    ]);
+  });
+  it('refuse sans réserve, sans place, ou sans milicien à ramener', () => {
+    expect(moveRemoteMilitia(im([], 0), 'ctl_mine', 1, T0, 18)).toBeNull();
+    expect(
+      moveRemoteMilitia(
+        im(['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'], 3),
+        'ctl_mine',
+        1,
+        T0,
+        18,
+      ),
+    ).toBeNull();
+    expect(moveRemoteMilitia(im(['a'], 3), 'ctl_mine', -1, T0, 18)).toBeNull();
+    expect(moveRemoteMilitia(im([], 3), 'nope', 1, T0, 18)).toBeNull();
   });
 });
 
@@ -162,31 +332,45 @@ describe('🛡️ une réserve de milice par île', () => {
     const later = produceIslandMilitia(on2, 10, T0 + 48 * H);
     const home = later.islands!['1']!.militia!.home;
     expect(home).toBeGreaterThan(0);
-    expect(home).toBeLessThanOrEqual(militiaCap(10, militiaSeatsOf({ archipel: archipelOn(1) })));
+    expect(home).toBeLessThanOrEqual(militiaCap(10, islandMilitiaOf({ archipel: archipelOn(1) })));
     expect(produceIslandMilitia(on2, 0, T0 + 48 * H)).toBe(on2);
     expect(produceIslandMilitia(later, 10, T0 + 48 * H)).toBe(later);
   });
 
-  it('sur une île : 1 milicien par niveau de Caserne, borné à ses lieux fixes × 5', () => {
-    // Les champions partent sur l'île suivante : chaque lieu fixe garde sa garnison pleine
-    // de miliciens (5 par point) — jamais plus.
-    for (const isl of [1, 2, 3, 4, 5]) {
-      const seats = militiaSeatsOf({ archipel: archipelOn(isl) });
-      expect(seats).toBe(controlKindsOf({ archipel: archipelOn(isl) }).length * 5);
-      expect(seats).toBeGreaterThan(0);
-      for (const b of [1, 5, 30, 100]) expect(militiaCap(b, seats)).toBe(Math.min(b, seats));
+  it('sur une île : le plafond monte avec la Caserne jusqu’aux places EXACTES au dernier niveau', () => {
+    for (const id of [1, 2, 3, 4, 5]) {
+      const a = archipelOn(id);
+      const isl = islandMilitiaOf({ archipel: a })!;
+      // Les places : une garnison pleine (5) sur chacun des lieux fixes de l'île.
+      expect(isl.seats).toBe(controlKindsOf({ archipel: a }).length * 5);
+      expect(isl.minLevel).toBe(a.levelFloor);
+      expect(isl.maxLevel).toBe(a.levelCap);
+      // Au premier niveau de l'île : 1 milicien ; au dernier : exactement les places.
+      expect(militiaCap(isl.minLevel, isl)).toBe(1);
+      expect(militiaCap(isl.maxLevel, isl)).toBe(isl.seats);
+      // Jamais atteint avant le dernier niveau, jamais dépassé après.
+      expect(militiaCap(isl.maxLevel - 1, isl)).toBeLessThan(isl.seats);
+      expect(militiaCap(isl.maxLevel + 30, isl)).toBe(isl.seats);
+      // Progressif : chaque niveau débloque 0 ou 1 milicien, jamais de recul.
+      for (let L = isl.minLevel + 1; L <= isl.maxLevel; L++) {
+        const d = militiaCap(L, isl) - militiaCap(L - 1, isl);
+        expect(d === 0 || d === 1).toBe(true);
+      }
+      // Une Caserne en retard sur la tranche de l'île garde au moins 1 milicien.
+      if (isl.minLevel > 1) expect(militiaCap(isl.minLevel - 5, isl)).toBe(1);
+      expect(militiaCap(0, isl)).toBe(0);
     }
-    // Île 1 : 4 lieux fixes → 20 miliciens, atteints pile à la Caserne 20 (on la quitte au niveau 20).
-    const s1 = militiaSeatsOf({ archipel: archipelOn(1) });
-    expect(militiaCap(19, s1)).toBe(19);
-    expect(militiaCap(20, s1)).toBe(20);
-    expect(militiaCap(37, s1)).toBe(20);
-    expect(militiaCap(0, 20)).toBe(0);
-    expect(militiaSeatsOf({})).toBe(0);
-    // La production remplit bien jusqu'à ce plafond, pas seulement jusqu'à l'ancien.
-    const seats = militiaSeatsOf({ archipel: archipelOn(1) });
-    const full = produceMilitia(emptyMilitia(0), 1, 0, 1e13, seats);
-    expect(full.home).toBe(militiaCap(1, seats));
+    // Île 1 : 3 lieux fixes → 15 miliciens, atteints à la Caserne 20 (on quitte l'île).
+    const i1 = islandMilitiaOf({ archipel: archipelOn(1) })!;
+    expect(militiaCap(19, i1)).toBe(14);
+    expect(militiaCap(20, i1)).toBe(15);
+    expect(militiaCap(37, i1)).toBe(15);
+    // Hors archipel : 1 par niveau, sans borne d'île.
+    expect(islandMilitiaOf({})).toBeNull();
+    expect(militiaCap(37, null)).toBe(37);
+    // La production remplit jusqu'au plafond de l'île, pas au-delà.
+    const full = produceMilitia(emptyMilitia(0), 10, 0, 1e13, i1);
+    expect(full.home).toBe(militiaCap(10, i1));
   });
 });
 

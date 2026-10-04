@@ -32,10 +32,10 @@ function islandMap(id = 4, L = LV): ExpeditionMap {
 }
 const kinds = (m: ExpeditionMap) => m.pois.flatMap((p) => (p.control ? [p.control.kind] : []));
 
-/** Deux lieux tenus : la mine à 3 champions, l’arsenal à 1, attaques lointaines. */
+/** Deux lieux tenus : le cartographe à 3 champions, le fortin à 1, attaques lointaines. */
 function held(m: ExpeditionMap): ExpeditionMap {
-  let out = captureControl(m, controlIdOf('mine'), ['a', 'b', 'c'], NOW, 7);
-  out = captureControl(out, controlIdOf('arsenal'), ['d'], NOW, 7);
+  let out = captureControl(m, controlIdOf('cartographer'), ['a', 'b', 'c'], NOW, 7);
+  out = captureControl(out, controlIdOf('fort'), ['d'], NOW, 7);
   const far = NOW + 30 * DAY;
   return {
     ...out,
@@ -54,7 +54,7 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
   });
   it('vise le lieu tenu le moins défendu', () => {
     const m = held(islandMap());
-    expect(weakestHeld(m.pois, NOW, m.seed)!.control!.kind).toBe('arsenal');
+    expect(weakestHeld(m.pois, NOW, m.seed)!.control!.kind).toBe('fort');
   });
   it('à son heure, avance l’attaque du moins défendu et seulement elle', () => {
     let m = warlordRaids(held(islandMap()), NOW);
@@ -62,8 +62,8 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
     expect(at).toBeGreaterThan(NOW);
     expect(at - NOW).toBeLessThanOrEqual((WARLORD.raidMs / 3) * (1 + WARLORD.jitter));
     m = warlordRaids(m, at);
-    expect(attackOf(m, 'arsenal')).toBe(at);
-    expect(attackOf(m, 'mine')).toBe(NOW + 30 * DAY);
+    expect(attackOf(m, 'fort')).toBe(at);
+    expect(attackOf(m, 'cartographer')).toBe(NOW + 30 * DAY);
     expect(m.archipel!.warAt!).toBeGreaterThan(at);
     // Même carte tant qu’elle n’est pas due.
     expect(warlordRaids(m, at + 1)).toBe(m);
@@ -78,7 +78,7 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
     m = razeIslandTarget(warlordRaids(m, NOW), 'isl_obj_2', NOW);
     m = warlordRaids(m, NOW + 10 * DAY);
     expect(m.archipel!.warAt).toBeUndefined();
-    expect(attackOf(m, 'arsenal')).toBe(NOW + 30 * DAY);
+    expect(attackOf(m, 'fort')).toBe(NOW + 30 * DAY);
   });
   it('ne recule jamais une attaque déjà plus proche que la sortie', () => {
     const m0 = held(islandMap());
@@ -86,19 +86,19 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
     const m1 = {
       ...m0,
       pois: m0.pois.map((p) =>
-        p.control?.kind === 'arsenal' ? { ...p, control: { ...p.control, attackAt: soon } } : p,
+        p.control?.kind === 'fort' ? { ...p, control: { ...p.control, attackAt: soon } } : p,
       ),
       archipel: { ...m0.archipel!, warAt: NOW + 12 * H },
     };
     const m = warlordRaids(m1, NOW + 12 * H);
-    expect(attackOf(m, 'arsenal')).toBe(soon);
-    expect(attackOf(m, 'mine')).toBe(NOW + 12 * H);
+    expect(attackOf(m, 'fort')).toBe(soon);
+    expect(attackOf(m, 'cartographer')).toBe(NOW + 12 * H);
   });
   it('branchée sur le tick de la carte', () => {
     const m0 = held(islandMap());
     const at = m0.archipel!.warAt!;
     const m = ensureIslandConquest(m0, at, LV);
-    expect(attackOf(m, 'arsenal')).toBe(at);
+    expect(attackOf(m, 'fort')).toBe(at);
   });
   it('les autres îles n’ont pas d’armée mobile', () => {
     const m = warlordRaids(held(islandMap(3, 50)), NOW + 10 * DAY);
@@ -119,10 +119,17 @@ function withOldCircle(m: ExpeditionMap): ExpeditionMap {
   };
 }
 
-describe('⚒️🌀 l’arsenal, et le cercle d’invocation retiré', () => {
-  it('l’île 4 porte le socle + l’arsenal seulement (4 lieux fixes)', () => {
-    const k = kinds(islandMap());
-    for (const x of ['mine', 'training', 'mana', 'arsenal']) expect(k).toContain(x);
+describe('⚒️🌀 l’arsenal (île 3), et le cercle d’invocation retiré', () => {
+  it('l’île 3 porte l’arsenal, l’île 4 le fortin — et plus aucun camp d’entraînement', () => {
+    const k = kinds(islandMap(3));
+    expect(k).toContain('arsenal');
+    expect(k).not.toContain('training');
+    expect(k).not.toContain('mine');
+    expect(k).not.toContain('mana');
+    const k4 = kinds(islandMap(4));
+    expect(k4).toContain('fort');
+    expect(k4).not.toContain('training');
+    expect(k4).not.toContain('arsenal');
     expect(k).not.toContain('circle');
     expect(k).not.toContain('tower');
     expect(k).not.toContain('garden');
@@ -130,7 +137,7 @@ describe('⚒️🌀 l’arsenal, et le cercle d’invocation retiré', () => {
   });
   it('l’arsenal : ⅙ de la part d’objet d’une ruine par jour au complet (étape 0)', () => {
     const id = controlIdOf('arsenal');
-    let m = islandMap();
+    let m = islandMap(3);
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Arsenal');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
     const ruin = RUINS_SEALS.gearPerRank * (1 + characterRank(LV).rankIndex);
@@ -139,13 +146,13 @@ describe('⚒️🌀 l’arsenal, et le cercle d’invocation retiré', () => {
     expect(got.gearSeals).toBeGreaterThanOrEqual(Math.floor(ruin * 0.85));
     expect(got.gearSeals).toBeLessThanOrEqual(Math.ceil(ruin * 1.6));
     expect(got.gold + got.mana + got.keys + got.summon).toBe(0);
-    const one = captureControl(islandMap(), id, ['a'], NOW, 7);
+    const one = captureControl(islandMap(3), id, ['a'], NOW, 7);
     // Un seul armurier : environ moitié moins (share 1 contre 3).
     expect(harvestOver(one, id, NOW, 144, LV).gearSeals).toBeLessThanOrEqual(got.gearSeals * 0.6);
   });
   it('un cercle tenu d’avant la règle est rappelé, et produit jusque-là', () => {
     const id = controlIdOf('circle');
-    let m = withOldCircle(islandMap());
+    let m = withOldCircle(islandMap(3));
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Cercle');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
     const price = bossSummonCost(LV);
@@ -154,11 +161,11 @@ describe('⚒️🌀 l’arsenal, et le cercle d’invocation retiré', () => {
     expect(got.summon).toBeLessThanOrEqual(Math.ceil(price * 1.6));
     expect(got.gold + got.mana + got.gearSeals + got.keys).toBe(0);
     expect(retiredHeld(m).map((q) => q.id)).toEqual([id]);
-    const one = captureControl(withOldCircle(islandMap()), id, ['a'], NOW, 7);
+    const one = captureControl(withOldCircle(islandMap(3)), id, ['a'], NOW, 7);
     expect(collectControl(one, id, NOW + 48 * H, LV).summon).toBeLessThanOrEqual(got.summon * 0.6);
   });
   it('le rapport dit les sceaux', () => {
-    const p = islandMap().pois.find((q: Poi) => q.id === controlIdOf('arsenal'))!;
+    const p = islandMap(3).pois.find((q: Poi) => q.id === controlIdOf('arsenal'))!;
     expect(controlLootMessage(p, NOW, {}, 0, 0, 0, 5)!.title).toContain('5 sceaux d’objet');
   });
 });

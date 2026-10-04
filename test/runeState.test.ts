@@ -61,6 +61,7 @@ describe('🔁 la bascule, une fois', () => {
     expect(out.bank).toEqual({
       runes: 26,
       blessed: 0,
+      exalted: 0,
       skills: [],
       opened: 0,
       comp: RUNE_BANK_VERSION,

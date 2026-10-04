@@ -1337,6 +1337,9 @@ export interface Adventurer {
    *  rôle écrits, il porte ce que le joueur lui a posé. Absent = aucune (JSONB, aucune
    *  migration). ⚠️ Lu par le combat (`escortEffects`), les convois (`roleShare`) et l'écran. */
   skills?: ChampSkill[];
+  /** 💎 Les heures de LAPIDAIRE déjà passées sur chacune de ses compétences : gardées quoi
+   *  qu'il arrive au lieu (décision 2026-10-03 : « la progression est gardée »). */
+  lapisHours?: Partial<Record<SkillId, number>>;
   // ⚠️ Plus de COMPAGNON ni de TALENT (v0.996) : familiers et talents sont réservés au
   // HÉROS. Les champs `familiarId`/`talentId` des sauvegardes d'avant ne sont plus lus
   // (et sont retirés au chargement). Ce qu'ils apportaient est rendu par `CHAMPION_SOLO`.

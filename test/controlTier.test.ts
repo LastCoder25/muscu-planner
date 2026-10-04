@@ -115,8 +115,8 @@ describe('🏅 un point ancien est plus convoité', () => {
       { advGear: [] },
       null,
     );
-    const y = garrisonHold(at(H), allies);
-    const o = garrisonHold(at(10 * D + H), allies);
+    const y = garrisonHold(at(H), allies, 1);
+    const o = garrisonHold(at(10 * D + H), allies, 1);
     expect(y).toBeLessThanOrEqual(0.9);
     expect(o).toBeLessThan(y);
   }, 60_000);

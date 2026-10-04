@@ -46,7 +46,7 @@ describe('🎲 une garnison ne repousse jamais plus de 90 % des reprises', () =>
       // Le cas existe vraiment — sinon le test ne prouverait rien.
       expect(raw).toBeGreaterThan(CONTROL.maxHold);
       expect(retakeBoost(p, strong)).toBeGreaterThan(1);
-      const held = garrisonHold(p, strong);
+      const held = garrisonHold(p, strong, 1);
       expect(held).toBeLessThanOrEqual(CONTROL.maxHold);
       // …mais il reste le meilleur choix : on ne le ramène pas au niveau d'un faible.
       expect(held).toBeGreaterThan(0.8);
@@ -59,7 +59,7 @@ describe('🎲 une garnison ne repousse jamais plus de 90 % des reprises', () =>
       const weak = allies(L - 5, 0);
       expect(garrisonHoldChance(p, weak)).toBeLessThanOrEqual(CONTROL.maxHold);
       expect(retakeBoost(p, weak)).toBe(1);
-      expect(garrisonHold(p, weak)).toBe(garrisonHoldChance(p, weak));
+      expect(garrisonHold(p, weak, 1)).toBe(garrisonHoldChance(p, weak));
     }
   }, 60_000);
 

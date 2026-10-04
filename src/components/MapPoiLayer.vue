@@ -39,6 +39,11 @@
            plus encore : on les repère sur la carte. Agrandi autour de son centre, garnison,
            cran et alerte compris. -->
       <g v-else-if="p.control" :transform="fixedScale(p)">
+        <!-- 🏰 La FORTERESSE adverse porte un cadre que nul autre lieu ne porte : halo et
+             équerres rouges (`QgFrame`, demandé). Ta base a le même, en or. -->
+        <g v-if="p.control.kind === 'fortress'" :transform="`translate(${p.x} ${p.y})`">
+          <QgFrame :half="7.4" tone="foe" />
+        </g>
         <rect
           :x="p.x - 5.2"
           :y="p.y - 5.2"
@@ -189,6 +194,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import QgFrame from '@/components/QgFrame.vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
 import { CONTROL_EMO, HELD_COLOR, isHeldControl } from '@/lib/controlPoints';
@@ -237,7 +243,11 @@ const attacked = computed(() => toSet(props.attackedKey ?? ''));
 const FIXED_SCALE = 1.3;
 const CITADEL_SCALE = 1.55;
 const scaleOf = (p: Poi) =>
-  !p.control ? 1 : p.control.kind === 'citadel' ? CITADEL_SCALE : FIXED_SCALE;
+  !p.control
+    ? 1
+    : p.control.kind === 'citadel' || p.control.kind === 'fortress'
+      ? CITADEL_SCALE
+      : FIXED_SCALE;
 const fixedScale = (p: Poi) => {
   const k = scaleOf(p);
   return `translate(${p.x} ${p.y}) scale(${k}) translate(${-p.x} ${-p.y})`;

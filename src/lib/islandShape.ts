@@ -163,6 +163,12 @@ export function islandCenter(id: number): { x: number; y: number } {
   return c;
 }
 
+/** 🧭 La marge qu'une armée garde avec la côte en marchant tout droit : son glyphe (3 unités)
+ *  doit tenir sur la terre. À 1, une marche qui longeait la baie passait à 1,8 de la côte et
+ *  son glyphe tombait à la mer (île 5). Les deux rayons par le centre restent au-dessus : un
+ *  lieu est posé à `LAND_MARGIN` (8) de la côte, la ville à 6. */
+const MARCH_MARGIN = 3;
+
 /** 🧭 Le point de passage d'une armée qui marche de `from` à `to` sur l'île `id`. Les
  *  attaques vont TOUT DROIT (décision de l'utilisateur : « les cartes d'îles sont assez simples
  *  pour des trajets directs ») ; seulement si la ligne droite coupe la mer — une faille de
@@ -180,7 +186,7 @@ export function islandVia(
     const t = k / steps;
     const x = from.x + (to.x - from.x) * t;
     const y = from.y + (to.y - from.y) * t;
-    if (!onIsland(id, x, y, 1)) return islandCenter(id);
+    if (!onIsland(id, x, y, MARCH_MARGIN)) return islandCenter(id);
   }
   return undefined;
 }
@@ -260,4 +266,82 @@ export function islandPortSpan(id: number): number {
 export function islandView(id: number, half: number): { x: number; y: number; size: number } {
   const c = islandCenter(id);
   return { x: c.x - half, y: c.y - half, size: 2 * half };
+}
+
+/** 🏰 La forteresse de l'île `id` : sur le cap, à `FORTRESS_INSET` de la côte. ⚠️ MÊME règle
+ *  que `islandTerrain` (qui la dessine) : le placement des lieux la lit ici sans importer le
+ *  décor. */
+export const FORTRESS_INSET = 9;
+export function islandFortressAt(id: number): { x: number; y: number } {
+  const c = islandCenter(id);
+  const t = islandShape(id).cape;
+  const r = islandRadiusAt(id, t) - FORTRESS_INSET;
+  return { x: c.x + Math.cos(t) * r, y: c.y + Math.sin(t) * r };
+}
+
+/** 🛡️ La LIGNE DE DÉFENSE (demandé le 2026-10-04 : « une ligne verticale qui sépare la partie
+ *  de l'île où le joueur accoste et la partie avec la forteresse ») : une ligne VERTICALE, à
+ *  cette part du chemin départ → forteresse en x… */
+export const DEFENSE_LINE_T = 0.5;
+/** …et étalée sur cette part de la hauteur de terre à cet x. */
+export const DEFENSE_LINE_SPREAD = 0.75;
+
+/** Les `n` places de la ligne de défense de l'île `id` : à x constant, à mi-chemin du départ
+ *  (la ville) et de la forteresse, régulièrement espacées du haut au bas de la terre. */
+export function islandDefenseLine(id: number, n: number): { x: number; y: number }[] {
+  if (n <= 0) return [];
+  const f = islandFortressAt(id);
+  const x = TOWN + (f.x - TOWN) * DEFENSE_LINE_T;
+  // Le point de l'axe à cet x : sur la terre (l'île est tracée en rayons depuis son centre).
+  const y0 = TOWN + (f.y - TOWN) * DEFENSE_LINE_T;
+  const reach = (sign: number) => {
+    let d = 0;
+    while (d < 200 && onIsland(id, x, y0 + sign * (d + 1), LAND_MARGIN)) d += 1;
+    return d;
+  };
+  const top = y0 - reach(-1);
+  const bottom = y0 + reach(1);
+  const mid = (top + bottom) / 2;
+  if (n === 1) return [{ x, y: mid }];
+  const half = ((bottom - top) / 2) * DEFENSE_LINE_SPREAD;
+  return Array.from({ length: n }, (_, i) => ({ x, y: mid - half + (2 * half * i) / (n - 1) }));
+}
+
+/** 🎯 Pas angulaire des places candidates d'`islandScatter`. */
+const SCATTER_STEP = Math.PI / 72;
+const scatterCache = new Map<string, { x: number; y: number }[]>();
+/**
+ * 🎯 `n` places DISPERSÉES sur l'île (demandé : « les objectifs répartis sur l'île pour
+ * attaquer de partout ») : à la part `frac` de la terre utile, chacune la plus éloignée possible
+ * de tout ce qui est déjà posé (`taken` : la ville, la forteresse, la ligne de défense) et des
+ * précédentes — un tirage glouton du plus grand écart. Déterministe, en cache.
+ */
+export function islandScatter(
+  id: number,
+  n: number,
+  frac: number,
+  taken: readonly { x: number; y: number }[],
+): { x: number; y: number }[] {
+  const key = `${id}:${n}:${frac}:${taken.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(';')}`;
+  const hit = scatterCache.get(key);
+  if (hit) return hit;
+  const cands: { x: number; y: number }[] = [];
+  for (let t = 0; t < Math.PI * 2; t += SCATTER_STEP) cands.push(islandPoint(id, t, frac));
+  const placed: { x: number; y: number }[] = [];
+  const others = [...taken];
+  for (let i = 0; i < n; i++) {
+    let best = cands[0]!;
+    let bestGap = -1;
+    for (const c of cands) {
+      const g = Math.min(...others.map((p) => Math.hypot(c.x - p.x, c.y - p.y)));
+      if (g > bestGap) {
+        bestGap = g;
+        best = c;
+      }
+    }
+    placed.push(best);
+    others.push(best);
+  }
+  scatterCache.set(key, placed);
+  return placed;
 }

@@ -39,7 +39,13 @@
         class="trip"
         :class="[
           t.kind,
-          { back: t.back, focus: focus === t.key, pending: t.pending, failed: !!t.failed },
+          {
+            back: t.back,
+            focus: focus === t.key,
+            pending: t.pending,
+            failed: !!t.failed,
+            sea: !!t.sea,
+          },
         ]"
         :title="t.title"
         :aria-pressed="focus === t.key"
@@ -47,7 +53,10 @@
       >
         <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, miroir de l'objectif :
            la base 🏰, ou le point fixe d'où elle est partie. -->
-        <span class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
+        <span v-if="t.sea" class="tr-from" :title="`Île ${t.sea.from}`"
+          >🏝️<sub>{{ t.sea.from }}</sub></span
+        >
+        <span v-else class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
           t.from ? poiEmo(t.from) : '🏰'
         }}</span>
         <span class="tr-who">{{ t.who }}</span>
@@ -59,12 +68,18 @@
             <MilitiaPortrait v-if="f.militia" />
             <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
           </span>
-          <span v-if="t.members.length > FACES_MAX" class="tr-face-more"
-            >+{{ t.members.length - FACES_MAX }}</span
+          <span v-if="t.members.length > facesMax(t)" class="tr-face-more"
+            >+{{ t.members.length - facesMax(t) }}</span
           >
         </span>
-        <span class="tr-poi" :title="t.toBase ? 'La base' : poiLabel(t.poi)">
-          <template v-if="t.toBase">🏰</template>
+        <span
+          class="tr-poi"
+          :title="t.sea ? `Île ${t.sea.to}` : t.toBase ? 'La base' : poiLabel(t.poi)"
+        >
+          <template v-if="t.sea"
+            >🏝️<sub>{{ t.sea.to }}</sub></template
+          >
+          <template v-else-if="t.toBase">🏰</template>
           <span v-else-if="isRiftPoi(t.poi)" class="tr-rift">
             <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
           </span>
@@ -77,7 +92,7 @@
         }}</span>
         <template v-if="t.legs">
           <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
-          <span class="tr-legs">↩ {{ t.legs.back }}</span>
+          <span class="tr-legs">{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span>
         </template>
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
       </button>
@@ -111,7 +126,13 @@
   <div v-if="crew" class="trip-crew">
     <div class="tc-head">
       👥 {{ crew.pending ? 'Partira vers' : 'En route vers' }}
-      {{ crew.toBase ? 'la base' : `${poiLabel(crew.poi)} niv ${crew.poi.level}` }}
+      {{
+        crew.sea
+          ? `l'île ${crew.sea.to}`
+          : crew.toBase
+            ? 'la base'
+            : `${poiLabel(crew.poi)} niv ${crew.poi.level}`
+      }}
     </div>
     <p v-if="crew.legs" class="tc-legs">⏱️ {{ crew.legs }}</p>
     <div v-if="crew.haul.length" class="tc-haul">
@@ -222,6 +243,8 @@ export interface MapTrip {
   cancelPlan?: string;
   /** ✖ Mission ratée (rapport tombé) : la tuile le dit, pour voir ce qu'il faut refaire. */
   failed?: VoyageFailure | null;
+  /** ⛵ Un voyage en MER d'une île à l'autre : `poi` n'est que le port d'ancrage. */
+  sea?: { from: number; to: number };
 }
 </script>
 
@@ -378,10 +401,13 @@ watch(
 /** 🛡️ Au plus ce nombre de portraits sur une tuile (au-delà : « +N »), pour tenir sur une
  *  ligne dans une tuile de tiers de largeur à 344 px. */
 const FACES_MAX = 4;
+/** ⛵ Une traversée prend toute la ligne : la place de plus de portraits. */
+const SEA_FACES_MAX = 10;
+const facesMax = (t: MapTrip) => (t.sea ? SEA_FACES_MAX : FACES_MAX);
 /** 🛡️ Les portraits d'un renfort : champions (portrait, repli emoji) et miliciens. */
 function facesOf(t: MapTrip) {
   const byId = new Map(char.advList.map((a) => [a.id, a]));
-  return t.members.slice(0, FACES_MAX).map((id) => {
+  return t.members.slice(0, facesMax(t)).map((id) => {
     if (isMilitiaId(id))
       return { id, militia: true, name: MILITIA_NAME, championId: null, emoji: '' };
     const a = byId.get(id);
@@ -419,6 +445,7 @@ const crew = computed(() => {
     legs: t.legs?.detail ?? null,
     pending: !!t.pending,
     toBase: !!t.toBase,
+    sea: t.sea ?? null,
     cancelPlan: t.cancelPlan ?? null,
   };
 });
@@ -620,6 +647,11 @@ const crew = computed(() => {
   box-sizing: border-box;
   flex: 0 0 calc((100% - 16px) / 3);
 }
+/* ⛵ Une traversée en bateau prend TOUTE la ligne (demandé) : île de départ et d'arrivée aux
+   deux coins, l'équipage entier au milieu. */
+.trips > .trip.sea {
+  flex-basis: 100%;
+}
 .trip {
   position: relative;
   min-width: 0;
@@ -691,6 +723,12 @@ const crew = computed(() => {
   pointer-events: none;
 }
 /* 🧭 La provenance, en encart haut-gauche : le miroir exact de l'objectif. */
+.tr-from sub,
+.tr-poi sub {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
 .tr-from {
   position: absolute;
   top: 0;

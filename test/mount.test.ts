@@ -279,8 +279,23 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (forced = h),
     );
     expect(forced).toContain('Première traversée vers cette île');
-    expect(forced).toMatch(/2\/2\s+champions/);
+    // ⛵ Vers l'île suivante : pas de choix, tout le monde part et l'île quittée est pacifiée.
+    expect(forced).toContain('Tous tes champions te suivent');
+    expect(forced).toContain('île 1 est pacifiée');
+    expect(forced).not.toMatch(/2\/2\s+champions/);
     expect(forced).toContain('Le départ attend le retour de tes troupes');
+    let back = '';
+    await mountIt(
+      CrossingSheet,
+      { ...base, from: 2, to: 1, activeId: 2, heroMode: 'optional' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (back = h),
+    );
+    // Au retour, on choisit toujours qui embarque.
+    expect(back).toMatch(/2\/2\s+champions/);
+    expect(back).not.toContain('Tous tes champions te suivent');
     let alone = '';
     await mountIt(
       CrossingSheet,
@@ -295,7 +310,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   });
 
   // 🏝️ Le sol d'une île : la côte, le port et la forteresse portuaire nommée.
-  it('IslandTerrain : côte, port et forteresse', async () => {
+  it('IslandTerrain : côte et décor, sans port ni forteresse dessinés (ce sont des lieux fixes)', async () => {
     const { default: IslandTerrain } = await import('@/components/IslandTerrain.vue');
     const { islandTerrain } = await import('@/lib/islandTerrain');
     const { MAP_VIEW } = await import('@/lib/expedition');
@@ -303,7 +318,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(
         IslandTerrain,
-        { t: islandTerrain(2), view: MAP_VIEW, fortressName: 'La Tanière-port' },
+        { t: islandTerrain(2), view: MAP_VIEW },
         undefined,
         undefined,
         '/',
@@ -311,8 +326,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     expect(out).toContain('it-land');
-    expect(out).toContain('⚓ Port');
-    expect(out).toContain('La Tanière-port');
+    expect(out).not.toContain('⚓ Port');
+    expect(out).not.toContain('it-fort');
     expect(out).toContain('k-pine');
   });
 
@@ -459,6 +474,33 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toMatch(/🦸<\/span>dispo/);
   }, 30_000);
 
+  // 🐞 Signalé : « comment on voit que le héros est en traversée ? » — la ligne disait « dispo ».
+  it('AvailabilityLine : un héros en traversée n’est pas « dispo »', async () => {
+    const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
+    const crossing = {
+      from: 1,
+      to: 2,
+      bookedAt: 0,
+      departAt: 3_600_000,
+      arriveAt: 10_800_000,
+      ids: [],
+    };
+    const map = { seed: 1, spawnCount: 0, nextSpawnAt: 0, pois: [], crossing };
+    let out = '';
+    expect(
+      await mountIt(
+        AvailabilityLine,
+        { now: 1 },
+        { ...ROW, expedition_map: map },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toMatch(/🦸<\/span>⛵/);
+    expect(out).toMatch(/title="Héros en traversée vers l.{1,6}île 2/);
+  }, 30_000);
+
   // 🎯 Demandé : l'apport de chaque membre à la réussite, sur sa tuile.
   it('AdvPickTile affiche ce qu’il apporte à la réussite', async () => {
     const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
@@ -528,10 +570,23 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(AvailabilityLine, { now: 1 }, row, undefined, '/', (h) => (out = h)),
     ).toBeNull();
-    // 3 hors de la base (2 postés + 1 en route) sur 7 (4 à la base).
+    // 4 disponibles à la base sur 7 (3 hors de la base : 2 postés + 1 en route).
     // Le milicien a désormais son portrait (l'emoji 🛡️ n'est plus que le repli).
-    expect(out).toMatch(/av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span>3\/7/);
-    expect(out).toContain('3 milicien(s) posté(s) sur 7 (4 à la base)');
+    expect(out).toMatch(
+      /av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span><b[^>]*>4<\/b>\/7/,
+    );
+    expect(out).toContain("4 milicien(s) disponible(s) sur l'île, 3 posté(s)");
+    // 🏝️ Nouvelle île, personne à la base : la pastille dit quand vient le prochain.
+    const fresh = {
+      ...ROW,
+      buildings: [{ slot: 0, level: 10, typeId: 'barracks', collectedAt: 0 }],
+      base: { militia: { home: 0, producedAt: 0, seq: 0 } },
+    };
+    let out2 = '';
+    expect(
+      await mountIt(AvailabilityLine, { now: 1 }, fresh, undefined, '/', (h) => (out2 = h)),
+    ).toBeNull();
+    expect(out2).toMatch(/<b[^>]*>0<\/b>\/0<span[^>]*class="av-cap"[^>]*>·\+1 dans /);
   }, 30_000);
 
   // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.
@@ -815,6 +870,139 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     let vide = '';
     await mountIt(SupplyPicker, { rows: [] }, undefined, undefined, '/', (h) => (vide = h));
     expect(vide).toContain('aucun en stock');
+  }, 30_000);
+
+  // 🗺️ Demandé : voir la carte d'une île rangée pour gérer sa milice sans traverser.
+  it('🗺️ RemoteIslandMap : la carte d’une île rangée, ses lieux tenus et leur milice', async () => {
+    const { default: RemoteIslandMap } = await import('@/components/RemoteIslandMap.vue');
+    const { ISLANDS } = await import('@/lib/archipelago');
+    const isl = ISLANDS[0]!;
+    const map = {
+      seed: 1,
+      pois: [{ id: 'ctl_mine', type: 'control', x: 110, y: 95, level: 10 }],
+      archipel: { island: 1, levelCap: 20, levelFloor: 1 },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        RemoteIslandMap,
+        {
+          island: isl,
+          map,
+          remote: [{ id: 'ctl_mine', label: 'Mine fortifiée', emoji: '⛏️', militia: 5, room: 0 }],
+          reserve: 10,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain(`Île 1 · ${isl.name}`);
+    expect(out).toContain('10 en réserve');
+    expect(out).toContain('Mine fortifiée');
+    expect(out).toMatch(/class="rim-n"[^>]*>5</);
+    // 🏰 L'île 1 est la capitale : sa carte rangée montre la base.
+    expect(out).toContain('mt-wall');
+  }, 30_000);
+
+  // 🏘️ Signalé : « on a une base sur l'île 2 alors qu'on devait avoir un village portuaire ».
+  it('🏘️ MapTown : la base sur l’île 1 et hors archipel, un gros lieu fixe pour le village du port des îles 2 à 5', async () => {
+    const { default: MapTown } = await import('@/components/MapTown.vue');
+    for (const [island, base] of [
+      [null, true],
+      [1, true],
+      [2, false],
+      [5, false],
+    ] as const) {
+      let out = '';
+      expect(await mountIt(MapTown, { island }, ROW, undefined, '/', (h) => (out = h))).toBeNull();
+      expect(out.includes('mt-wall'), `île ${island}`).toBe(base);
+      expect(out.includes('mt-place'), `île ${island}`).toBe(!base);
+      // 👑 Demandé : ta base porte un cadre à part, base comme village.
+      expect(out, `île ${island}`).toContain('qg mine');
+    }
+  }, 30_000);
+
+  // 🏰 Demandé : « juste un gros lieu fixe » pour la forteresse — à l'échelle d'une citadelle.
+  it('🏰 MapPoiLayer : la forteresse est un GROS lieu fixe, une mine un lieu fixe ordinaire', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    const ctl = (id: string, kind: string) => ({
+      id,
+      type: 'control',
+      x: 100,
+      y: 100,
+      level: 20,
+      control: { kind, owner: 'enemy', garrison: [] },
+    });
+    const scaleOf = async (kind: string) => {
+      let out = '';
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: [ctl('p', kind)],
+          selectedId: null,
+          dimmedKey: '',
+          veiledKey: '',
+          imminentKey: '',
+          target: null,
+          travelTargets: [],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      return { scale: out.match(/scale\(([\d.]+)\)/)?.[1], frame: out.includes('qg foe') };
+    };
+    // 🏰 Demandé : la forteresse adverse porte un cadre que nul autre lieu ne porte.
+    expect(await scaleOf('fortress')).toEqual({ scale: '1.55', frame: true });
+    expect(await scaleOf('mine')).toEqual({ scale: '1.3', frame: false });
+    expect((await scaleOf('citadel')).frame).toBe(false);
+  }, 30_000);
+
+  // ⛵ Demandé : la traversée du héros apparaît dans la rangée des voyages.
+  it('⛵ TripsPanel : une traversée montre les îles de départ et d’arrivée', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let out = '';
+    const trip = {
+      key: 'sea',
+      kind: 'hero',
+      who: '⛵',
+      cat: 'trips',
+      pending: true,
+      sea: { from: 1, to: 2 },
+      poi: MAP_POIS[0],
+      from: MAP_POIS[0],
+      time: '⏳ 1 h 02',
+      pct: 0,
+      back: false,
+      title: 'Ton héros vers l’île 2',
+      withHero: true,
+      members: ['a1'],
+      haul: [],
+      legs: {
+        go: null,
+        back: '⚓ 00:00',
+        detail: 'Départ à 22:00, arrivée à 00:00 (2 h de mer)',
+      },
+    };
+    expect(
+      await mountIt(
+        TripsPanel,
+        { trips: [trip], focus: 'sea', heroProfile: 'polyvalent' },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toMatch(/title="Île 1">🏝️<sub[^>]*>1</);
+    expect(out).toMatch(/title="Île 2">\s*🏝️<sub[^>]*>2</);
+    expect(out).toContain('⚓ 00:00');
+    // ⛵ Demandé : une traversée prend toute la ligne (classe sea, flex-basis 100 %).
+    expect(out).toMatch(/class="trip hero[^"]*sea/);
+    expect(out).toMatch(/Partira vers\s+l(&#39;|')île 2/);
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
@@ -3366,7 +3554,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('tr-filter');
     // ⚠️ Jamais la classe nue de la catégorie : `trips` est celle de la GRILLE des tuiles,
     // dont le padding décentrait « Expéditions » dans sa pastille (signalé).
-    expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
+    expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
     expect(out).not.toContain('trf-trips');
     expect(out).toMatch(/class="trf trf-attacks"/);
     expect(out).toMatch(/class="trf trf-all on"/);

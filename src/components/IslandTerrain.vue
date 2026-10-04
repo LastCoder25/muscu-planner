@@ -1,7 +1,7 @@
 <template>
   <!-- 🏝️ LE SOL D'UNE ÎLE DE L'ARCHIPEL (`islandTerrain.ts`) : la mer tout autour, la côte
-       propre à l'île, son décor (biome de sa menace), la route vers le port et la forteresse
-       portuaire. ⚠️ Composant à part pour la même raison que `MapTerrain` : la carte se
+       propre à l'île et son décor (biome de sa menace) — ni port ni forteresse, qui sont des
+       lieux fixes de la carte. ⚠️ Composant à part pour la même raison que `MapTerrain` : la carte se
        re-rend chaque seconde, ce sol ne change jamais pour une île donnée. -->
   <g class="it" aria-hidden="true" :style="vars">
     <defs>
@@ -61,44 +61,9 @@
       :class="'k-' + f.kind"
     />
 
-    <!-- ⚓ LE PORT D'ARRIVÉE : quai, ponton qui avance en mer, un navire amarré. -->
-    <g
-      v-if="t.port"
-      class="it-port"
-      :transform="`translate(${t.port.x} ${t.port.y}) rotate(${deg(t.port.angle)})`"
-    >
-      <rect x="-3" y="-5" width="5" height="10" rx="0.6" class="it-quay" />
-      <rect x="2" y="-1" width="11" height="2" class="it-pier" />
-      <g transform="translate(9 -5.2)">
-        <path d="M -4 0 L 4 0 L 2.6 2 L -2.6 2 Z" class="it-hull" />
-        <path d="M 0 0 L 0 -5.6 M 0 -5.4 L 3.2 -1 L 0 -1" class="it-sail" />
-      </g>
-      <text x="0" y="0" class="it-lab" :transform="`rotate(${-deg(t.port.angle)}) translate(0 -7)`">
-        ⚓ Port
-      </text>
-    </g>
-
-    <!-- 🏰 LA FORTERESSE PORTUAIRE : enceinte carrée, quatre tours, donjon, bannière. -->
-    <g
-      class="it-fort"
-      :transform="`translate(${t.fortress.x} ${t.fortress.y}) rotate(${deg(t.fortress.angle)})`"
-    >
-      <rect x="6" y="-1" width="9" height="2" class="it-pier" />
-      <rect x="-6" y="-6" width="12" height="12" class="it-wall" />
-      <circle
-        v-for="(c, i) in TOWERS"
-        :key="'t' + i"
-        :cx="c[0]"
-        :cy="c[1]"
-        r="2.2"
-        class="it-tower"
-      />
-      <rect x="-2.6" y="-2.6" width="5.2" height="5.2" class="it-keep" />
-      <g :transform="`rotate(${-deg(t.fortress.angle)})`">
-        <path d="M 0 -2.6 L 0 -9.5 M 0 -9.5 L 4 -8.3 L 0 -7" class="it-flag" />
-        <text x="0" y="12" class="it-lab">🏰 {{ fortressName }}</text>
-      </g>
-    </g>
+    <!-- ⚓🏰 Ni port ni forteresse dessinés ici (demandé, 2026-10-04 : « juste un gros lieu
+         fixe ») : le village du port (`MapTown`) et la forteresse (un point de contrôle de la
+         carte) se lisent comme des lieux fixes. -->
   </g>
 </template>
 
@@ -109,16 +74,8 @@ import type { IslandTerrainData } from '@/lib/islandTerrain';
 const props = defineProps<{
   t: IslandTerrainData;
   view: { x: number; y: number; size: number };
-  fortressName: string;
 }>();
 
-const deg = (a: number) => +((a * 180) / Math.PI).toFixed(1);
-const TOWERS: [number, number][] = [
-  [-6, -6],
-  [6, -6],
-  [-6, 6],
-  [6, 6],
-];
 const vars = computed(() => ({
   '--it-shoal': props.t.style.shoal,
   '--it-sand': props.t.style.sand,
@@ -272,55 +229,5 @@ const vars = computed(() => ({
   stroke: #e0c88f;
   stroke-width: 0.45;
   opacity: 0.85;
-}
-.it-quay {
-  fill: #8a7356;
-  stroke: #3d3022;
-  stroke-width: 0.4;
-}
-.it-pier {
-  fill: #a88a62;
-  stroke: #4a3826;
-  stroke-width: 0.35;
-}
-.it-hull {
-  fill: #6b4a2c;
-  stroke: #2e1f12;
-  stroke-width: 0.35;
-}
-.it-sail {
-  fill: #efe6d2;
-  stroke: #4a3826;
-  stroke-width: 0.35;
-}
-.it-wall {
-  fill: #6d6457;
-  stroke: #2a251f;
-  stroke-width: 0.5;
-}
-.it-tower {
-  fill: #7d7366;
-  stroke: #2a251f;
-  stroke-width: 0.45;
-}
-.it-keep {
-  fill: #5a5246;
-  stroke: #2a251f;
-  stroke-width: 0.4;
-}
-.it-flag {
-  fill: #b5372f;
-  stroke: #2a251f;
-  stroke-width: 0.4;
-}
-.it-lab {
-  font-size: 3.2px;
-  font-weight: 700;
-  fill: #f3eee6;
-  stroke: #15120e;
-  stroke-width: 0.7;
-  paint-order: stroke;
-  text-anchor: middle;
-  pointer-events: none;
 }
 </style>

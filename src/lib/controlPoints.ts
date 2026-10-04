@@ -19,7 +19,7 @@
  */
 import { formatDuration } from './duration';
 import { activeIsland, islandPacified } from './archipelago';
-import { islandPoint, islandPort, islandPortSpan } from './islandShape';
+import { islandDefenseLine, islandPoint, islandPort, islandPortSpan } from './islandShape';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -38,7 +38,8 @@ import {
 } from './advGear';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
-import { MILITIA, isMilitiaId, militiaUnits } from './militia';
+import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
+import { SKILLS, SKILL_MAX_LEVEL, type RuneTier, type SkillId } from './skillRunes';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { bossSummonCost } from '../data/bosses';
 import type { SkirmishUnit } from './skirmish';
@@ -50,6 +51,10 @@ import {
   archipelFloor,
   RUINS_SEALS,
   CAMP_FACTIONS,
+  CARTO_TYPES,
+  cartoPick,
+  POI_LABEL,
+  type CartoType,
   CONTROL_MAX_GARRISON,
   CONTROL_KIND_EMO,
   CONTROL_KIND_LABEL,
@@ -67,6 +72,9 @@ import {
   type ExpeditionMessage,
   type Poi,
 } from './expedition';
+
+/** 🪬 L'autel des runes : heures pour 1 rune « à partir du bleu » au complet (le labo en dérive). */
+const ALTAR_HOURS_PER_RUNE = 48;
 
 export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
@@ -88,9 +96,19 @@ export const CONTROL = {
    *   ne s'ouvre jamais verte (`runeBank.BLESSED_ODDS`).
    */
   ossuaryHoursPerSeal: 72,
+  /** 💎 Lapidaire (île 3, 2026-10-03) : heures de polissage pour passer une compétence du
+   *  niveau 1 au 2, selon sa couleur ; chaque niveau au-dessus en demande la moitié de plus
+   *  (`lapidaryHours`). Une verte 1 → 2 en un jour, une dorée 4 → 5 en vingt. Premier calage. */
+  lapidaryHours: { green: 24, blue: 48, violet: 96, gold: 192 } as Record<RuneTier, number>,
   arsenalHoursPerRuin: 144,
   circleHoursPerAttempt: 48,
-  altarHoursPerRune: 48,
+  altarHoursPerRune: ALTAR_HOURS_PER_RUNE,
+  /** ⚗️ Laboratoire (île 5, 2026-10-04, décision de l'utilisateur : « comme l'autel de rune mais
+   *  sans la rareté de base de l'autel » et « si la rareté est supérieure, le temps est
+   *  supérieur ») : même formule que l'autel, 1 rune multicolore « à partir du VIOLET »
+   *  (`runeBank.EXALTED_ODDS`, jamais verte ni bleue) — deux fois plus longue à venir.
+   *  ⚠️ DÉRIVÉE de `altarHoursPerRune` : si l'autel bouge, le labo suit. */
+  labHoursPerRune: 2 * ALTAR_HOURS_PER_RUNE,
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -158,6 +176,11 @@ export const CONTROL = {
    *  BOOSTS de vitesse (`pickBoost`, leurs poids de butin) — un toutes les 12 h pour un
    *  distillateur, plus vite à plusieurs (`garrisonShare`). */
   distilleryHoursPerItem: 12,
+  /** 🧱 Fortin (île 4, 2026-10-03) : il ne produit rien. Tenu par 3, il retire cette part à
+   *  la troupe qui vient reprendre CHACUN des autres lieux tenus de l'île (×0,5/0,8/1/1,15/1,3
+   *  de cette part de 1 à 5, `garrisonShare`). Appliqué APRÈS le plafond de tenue de 90 %
+   *  (`retakeBoost`), comme le cran : un lieu épaulé par un fortin peut tenir mieux que 90 %. */
+  fortCut: 0.25,
   /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
    *  recopie une RUNE de compétence. Depuis le 2026-09-28 (demandé : « comme les autres lieux
    *  fixes »), il garde jusqu'à 5 copistes (3 avant le 2026-09-28) et produit selon l'effectif (`garrisonShare`) : une
@@ -169,6 +192,10 @@ export const CONTROL = {
    *  recopie une rune MULTICOLORE (la couleur se tire à l'ouverture). Sa réserve tient UNE
    *  rune (une seule attend d'être ramassée), quel que soit l'effectif. */
   runeHoursPerItem: 16,
+  /** 🕯️ Hospice (île 3, 2026-10-04) : il ne produit rien. Tenu, la convalescence d'un champion
+   *  blessé sur l'île est DIVISÉE par `1 + hospiceCut × part` (part = `garrisonShare` rapportée
+   *  à la garnison pleine) : ÷2 au complet, rien sans personne (`hospiceHealMult`). */
+  hospiceCut: 1,
   /** ⛲ Source de mana (2026-09-29, demandé) : une garnison de 3 produit par jour la MOITIÉ du
    *  mana d'une faille refermée de ton niveau (`riftClearMana`), 5 personnes ×1,3. ⚠️ DÉRIVÉ du
    *  mana d'une faille, jamais écrit : si les failles bougent, la Source suit.
@@ -381,6 +408,12 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   training: CONTROL_MAX_GARRISON,
   garden: PRODUCER_SEATS,
   distillery: PRODUCER_SEATS,
+  fort: PRODUCER_SEATS,
+  cartographer: PRODUCER_SEATS,
+  hospice: PRODUCER_SEATS,
+  lab: PRODUCER_SEATS,
+  // 💎 UN seul champion, et personne pour le défendre (pas de milice : `garrisonCap`).
+  lapidary: 1,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
@@ -394,7 +427,11 @@ export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
 /** 🏰 La garnison ENTIÈRE (champions et miliciens) d'un point : 5, sans limite pour la
  *  forteresse. */
 export const garrisonCap = (kind: ControlKind): number =>
-  Number.isFinite(CONTROL_SEATS[kind]) ? MILITIA.perPoint : Infinity;
+  kind === 'lapidary' ? 1 : Number.isFinite(CONTROL_SEATS[kind]) ? MILITIA.perPoint : Infinity;
+/** 🛡️ Sa garnison le DÉFEND-elle ? Pas le lapidaire : son champion polit, il ne se bat pas —
+ *  le lieu ne se protège qu'en interceptant l'armée qui marche dessus. ⚠️ Lu par la reprise
+ *  (store) ET par chaque pronostic de tenue. */
+export const defendsControl = (kind: ControlKind | undefined): boolean => kind !== 'lapidary';
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
  *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
  *  la Forge de campagne (2026-09-29). */
@@ -405,17 +442,29 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   tower: 3,
   // 📜 La place de la tour de guet, retirée le 2026-10-02 (sa citadelle garde une cible).
   scriptorium: 3,
-  // 📖 Île 2 : la place du jardin, qui n'y est pas.
-  archives: 2,
+  // 📖 Île 2 (2026-10-04, 3ᵉ lieu de l'île) : la place du camp, qui n'y est pas — à un quart
+  // de tour de l'ossuaire (2,5) et du scriptorium (3), plutôt qu'à 45° de l'ossuaire.
+  archives: 1,
   // ⚱️ Île 3 : la place du scriptorium, qui n'y est pas.
   ossuary: 2.5,
-  // ⚒️🌀 Île 4 : les places du jardin et du scriptorium, qui n'y sont pas.
-  arsenal: 2,
-  circle: 2.5,
+  // ⚒️ Île 3 (2026-10-03) : face au camp, assez loin de lui pour un rang différent.
+  arsenal: 3,
+  // 🌀 Île 4 (2026-10-04, 3ᵉ lieu de l'île) : la place du camp (fortin en 2, cartographe en 3).
+  circle: 1,
   // 🗿 Île 5 : la place du jardin, qui n'y est pas.
   altar: 2,
   // 🧪 Île 5 : la place de la tour de guet (camp en 1, autel en 2).
   distillery: 3,
+  // 🧱 Île 4 : la place du jardin (camp en 1).
+  fort: 2,
+  // 🗺️ Île 4 : la place de la tour de guet (camp en 1, fortin en 2).
+  cartographer: 3,
+  // 💎 Île 3 : la place du jardin (camp en 1, arsenal en 3).
+  lapidary: 2,
+  // 🕯️ Île 3 : la place du camp (lapidaire en 2, arsenal en 3).
+  hospice: 1,
+  // ⚗️ Île 5 : la place du camp (autel en 2, distillerie en 3).
+  lab: 1,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -433,6 +482,11 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   training: 'XP pour la garnison 🎓 et son équipement ⚒️',
   garden: 'consommables 🎒',
   distillery: 'boosts de vitesse ⚡',
+  fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
+  cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
+  lapidary: 'un niveau de plus sur une compétence de son champion 💎',
+  hospice: 'des champions blessés de l’île guéris plus vite 🕯️',
+  lab: 'runes multicolores violettes ou mieux 🟣',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
@@ -1030,15 +1084,32 @@ function controlLevel(
   return Math.min(pl, riftLevelFor(rng, pl, [pl + 1], false, floorLevel));
 }
 
-/** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. Sur une île, à
- *  `CONTROL.islandFrac` de la terre utile à son angle (`islandPoint`). */
+/** 🛡️ Les places des points fixes de l'île `id`, dans l'ordre de ses types : la LIGNE DE
+ *  DÉFENSE entre le point de départ et la forteresse (`islandDefenseLine`, demandé le
+ *  2026-10-04 : ils étaient posés à un angle tiré autour du centre, sans rapport avec l'axe). */
+export function islandControlSpots(id: number): { kind: ControlKind; x: number; y: number }[] {
+  const kinds = ISLAND_KINDS[id] ?? [];
+  const line = islandDefenseLine(id, kinds.length);
+  return kinds.map((kind, i) => ({ kind, ...line[i]! }));
+}
+
+/** Où se pose un point : FIXE. Sur une île, sa place sur la ligne de défense ; un type que
+ *  l'île n'a pas (retiré mais encore tenu) garde l'ancienne règle, à `CONTROL.islandFrac` de
+ *  la terre utile à son angle. Ailleurs, dérivé de la graine de la carte et du type. */
 export function controlSpot(
   map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
   kind: ControlKind,
 ): Pick<Poi, 'x' | 'y' | 'distNorm'> {
   const id = map.archipel?.island;
-  if (id !== undefined)
+  if (id !== undefined) {
+    const s = islandControlSpots(id).find((c) => c.kind === kind);
+    if (s) {
+      const x = Math.round(s.x);
+      const y = Math.round(s.y);
+      return { x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
+    }
     return spotAt(map, CONTROL_QUARTER[kind], (ang) => islandPoint(id, ang, CONTROL.islandFrac));
+  }
   // Chaque point a son angle, en quarts de tour à partir de l'angle de la MINE (tiré comme
   // avant : une mine déjà posée ne bouge pas). ⚠️ UNE TABLE, pas l'index dans `kinds` : un
   // cinquième type divisait le tour en cinq, et le nouveau point tombait à 18° d'un point
@@ -1085,40 +1156,55 @@ export const ALL_CONTROL_KINDS: readonly ControlKind[] = [
  * de guet, les îles sont plus petites ») — la Tour de guet de la BASE, elle, reste.
  */
 const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
-  // 🏝️ AUCUN DOUBLON D'UNE ÎLE À L'AUTRE, sauf le camp d'entraînement (décision de
+  // 🎯 PLUS DE CAMP D'ENTRAÎNEMENT SUR LES ÎLES (2026-10-03, décision de l'utilisateur) : un
+  // camp encore tenu est rappelé puis effacé (`retiredHeld`), comme la tour de guet. Il reste
+  // sur la carte ordinaire (`CONTROL.kinds`).
+  // 🏝️ AUCUN DOUBLON D'UNE ÎLE À L'AUTRE (décision de
   // l'utilisateur, 2026-10-03 : « les îles produisent selon le niveau du joueur, pas besoin de
   // remettre les mêmes lieux fixes sur d'autres îles »). Une île QUITTÉE continue de produire
   // (`autoCollectControls`), au niveau du joueur : une 2ᵉ mine sur l'île 2 ne ferait
   // qu'empiler de l'or. Le camp, lui, est sur chaque île : il entraîne les champions POSTÉS
-  // là où l'on se bat. Rien qui alimente la partie héros (clés, pierres d'invocation).
+  // là où l'on se bat. ⚠️ Les archives (clés) et le cercle (pierres d'invocation), retirés
+  // un temps pour ne rien verser à la partie héros, reviennent sur les îles 2 et 4
+  // (2026-10-04, décision de l'utilisateur : trois lieux fixes par île).
   // Un lieu retiré encore tenu est rappelé puis effacé (`retiredHeld`).
-  1: ['training', 'mine', 'mana', 'garden'],
-  2: ['training', 'scriptorium', 'ossuary'],
-  // ⏳ Îles 3 à 5 : composition d'avant tant que leurs lieux nouveaux (lapidaire, cartographe,
-  // fortin, distillerie) ne sont pas écrits — personne n'a encore quitté l'île 1.
-  3: ['mine', 'training', 'mana', 'ossuary'],
-  4: ['mine', 'training', 'mana', 'arsenal'],
-  5: ['training', 'altar', 'distillery'],
+  1: ['mine', 'mana', 'garden'],
+  // 🏝️ TROIS LIEUX FIXES PAR ÎLE (2026-10-04, décision de l'utilisateur) : archives (île 2),
+  // hospice (île 3), cercle d'invocation (île 4), laboratoire (île 5).
+  2: ['scriptorium', 'ossuary', 'archives'],
+  3: ['lapidary', 'arsenal', 'hospice'],
+  4: ['cartographer', 'fort', 'circle'],
+  5: ['altar', 'distillery', 'lab'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
 }
 
-/** 🛡️🏝️ Le plafond de milice d’une île (il remplace celui de la Caserne) : une garnison
- *  PLEINE (`MILITIA.perPoint`) sur chacun de ses lieux fixes. 0 hors archipel. */
-export function militiaSeatsOf(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): number {
-  return map?.archipel ? controlKindsOf(map).length * MILITIA.perPoint : 0;
+/** 🛡️🏝️ Ce qu'une île impose à la milice (`militiaCap`) : une garnison PLEINE
+ *  (`MILITIA.perPoint`) sur chacun de ses lieux fixes, et sa tranche de niveaux. `null` hors
+ *  archipel. */
+export function islandMilitiaOf(
+  map: Pick<ExpeditionMap, 'archipel'> | null | undefined,
+): IslandMilitia | null {
+  const a = map?.archipel;
+  if (!a) return null;
+  return {
+    seats: controlKindsOf({ archipel: a }).length * MILITIA.perPoint,
+    minLevel: Math.max(1, a.levelFloor ?? 1),
+    maxLevel: a.levelCap,
+  };
 }
 
 /** ⚒️🌀🗿 L'unité produite et ce qu'en dit la tuile, pour les spécialités des îles 4 et 5. */
 const UNIT_LOOK: Record<
-  'ossuary' | 'arsenal' | 'circle' | 'altar',
+  'ossuary' | 'arsenal' | 'circle' | 'altar' | 'lab',
   { unit: string; what: string }
 > = {
   ossuary: { unit: '🔱', what: 'du prochain sceau de champion, versé directement' },
   arsenal: { unit: '⚜️', what: 'du prochain sceau d’objet, versé directement' },
   circle: { unit: '🔮', what: 'de la prochaine pierre d’invocation, versée directement' },
   altar: { unit: '🪬', what: 'de la prochaine rune, versée directement' },
+  lab: { unit: '🟣', what: 'de la prochaine rune violette ou mieux, versée directement' },
 };
 
 /** 🗑️ Un point d'un type retiré est-il encore occupé (garnison, renforts, retours, héros) ? */
@@ -1314,6 +1400,85 @@ function withControl(map: ExpeditionMap, id: string, f: (p: Poi) => Poi): Expedi
   return { ...map, pois: map.pois.map((p) => (p.id === id && p.control ? f(p) : p)) };
 }
 
+/** 💎 Ce que le lapidaire a poli depuis la dernière récolte. */
+export interface LapisGain {
+  advId: string;
+  skill: SkillId;
+  hours: number;
+}
+
+/** 💎 Les heures pour passer `id` de `level` à `level + 1` (`CONTROL.lapidaryHours`). */
+export function lapidaryHours(id: SkillId, level: number): number {
+  return CONTROL.lapidaryHours[SKILLS[id].tier] * (1 + 0.5 * (Math.max(1, level) - 1));
+}
+
+/**
+ * 💎 Verse les heures du lapidaire sur la compétence : +1 niveau chaque fois que le temps de
+ * son niveau est atteint, 5 au plus. ⚠️ Les heures sont GARDÉES sur le champion
+ * (`lapisHours`), pas sur le lieu : perdu ou quitté, le travail fait reste acquis. Une
+ * compétence qu'il n'a pas, ou au maximum, ne reçoit rien.
+ */
+export function applyLapis(
+  advs: Adventurer[],
+  g: LapisGain | undefined,
+): { advs: Adventurer[]; up: number } {
+  // ⚠️ Rien à verser → le MÊME tableau : le store compare par identité pour ne pas écrire.
+  if (!g || g.hours <= 0) return { advs, up: 0 };
+  let up = 0;
+  let changed = false;
+  const next = advs.map((a) => {
+    if (a.id !== g.advId) return a;
+    const skills = a.skills ?? [];
+    const i = skills.findIndex((s) => s.id === g.skill);
+    if (i < 0 || skills[i]!.level >= SKILL_MAX_LEVEL) return a;
+    changed = true;
+    let level = skills[i]!.level;
+    let h = (a.lapisHours?.[g.skill] ?? 0) + g.hours;
+    while (level < SKILL_MAX_LEVEL && h + 1e-9 >= lapidaryHours(g.skill, level)) {
+      h -= lapidaryHours(g.skill, level);
+      level++;
+      up++;
+    }
+    const hours = { ...(a.lapisHours ?? {}) };
+    if (level >= SKILL_MAX_LEVEL) delete hours[g.skill];
+    else hours[g.skill] = h;
+    return {
+      ...a,
+      skills: skills.map((s, k) => (k === i ? { ...s, level } : s)),
+      lapisHours: hours,
+    };
+  });
+  return { advs: changed ? next : advs, up };
+}
+
+/** 💎 Le lapidaire tenu change la compétence qu'il polit. Refus (carte inchangée) : pas un
+ *  lapidaire, pas à nous, ou une compétence inconnue. */
+export function setLapisSkill(
+  map: ExpeditionMap,
+  id: string,
+  skill: SkillId,
+  now: number,
+): ExpeditionMap {
+  const c = map.pois.find((p) => p.id === id)?.control;
+  if (!c || c.kind !== 'lapidary' || c.owner !== 'player') return map;
+  if (!(skill in SKILLS) || c.lapis === skill) return map;
+  // ⚠️ Le temps part de MAINTENANT : sans compétence choisie le lieu n'a rien poli, et ce
+  // qui a été poli sur l'ancienne a été récolté juste avant (store).
+  return withControl(map, id, (p) => ({
+    ...p,
+    control: { ...p.control!, lapis: skill, collectedAt: now, banked: 0 },
+  }));
+}
+
+/** 🗺️ Le CARTOGRAPHE tenu change le type qu'il fait revenir. Refus (carte inchangée) : pas un
+ *  cartographe, pas à nous, ou un type hors de `CARTO_TYPES`. */
+export function setCartoFavor(map: ExpeditionMap, id: string, favor: CartoType): ExpeditionMap {
+  const c = map.pois.find((p) => p.id === id)?.control;
+  if (!c || c.kind !== 'cartographer' || c.owner !== 'player') return map;
+  if (!(CARTO_TYPES as readonly string[]).includes(favor) || c.favor === favor) return map;
+  return withControl(map, id, (p) => ({ ...p, control: { ...p.control!, favor } }));
+}
+
 /** 🏰 Une équipe part à l'assaut : on ne l'attaque pas deux fois. */
 export function markAssault(map: ExpeditionMap, id: string, on: boolean): ExpeditionMap {
   return withControl(map, id, (p) => ({ ...p, control: { ...p.control!, assault: on } }));
@@ -1495,6 +1660,8 @@ export function garrisonHoldChance(
   allies: readonly SkirmishUnit[],
   boost = 1,
   samples: number = CONTROL.holdSamples,
+  /** 🧱🏹 L'enceinte divise la troupe ennemie (`fortifyMult`, ≥ 1). */
+  fort = 1,
 ): number {
   if (!allies.length) return 0;
   // ⚠️ Calée sur une garnison de RÉFÉRENCE (3 au plus) : poster 4 ou 5 personnes renforce la
@@ -1507,7 +1674,7 @@ export function garrisonHoldChance(
   for (const size of CONTROL.sizes)
     w += campWinPct(
       p,
-      { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * boost },
+      { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * (boost / fort) },
       allies,
       samples,
     );
@@ -1517,24 +1684,29 @@ export function garrisonHoldChance(
 /** 🎲 De combien l'ennemi grossit sa troupe face à CETTE garnison : 1 tant qu'elle ne tient
  *  pas plus de `CONTROL.maxHold` (le cas normal), sinon juste assez pour y redescendre.
  *  ⚠️ Un champion faible n'est donc jamais pénalisé ; seul un choix « sans risque » l'est. */
-export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[]): number {
-  if (!allies.length || garrisonHoldChance(p, allies) <= CONTROL.maxHold) return 1;
+export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[], fort = 1): number {
+  const hold = (b: number) => garrisonHoldChance(p, allies, b, CONTROL.holdSamples, fort);
+  if (!allies.length || hold(1) <= CONTROL.maxHold) return 1;
   let lo = 1;
   let hi = 2;
-  while (garrisonHoldChance(p, allies, hi) > CONTROL.maxHold && hi < 256) {
+  while (hold(hi) > CONTROL.maxHold && hi < 256) {
     lo = hi;
     hi *= 2;
   }
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
-    if (garrisonHoldChance(p, allies, mid) > CONTROL.maxHold) lo = mid;
+    if (hold(mid) > CONTROL.maxHold) lo = mid;
     else hi = mid;
   }
   return hi;
 }
 
-/** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`). */
-export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
+/** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`).
+ *  ⚠️ `fort` REQUIS (`fortifyMult`) : oublié, l'écran annoncerait une tenue sans l'enceinte
+ *  alors que la bataille la compte. */
+export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[], fort: number): number {
+  // 💎 Le lapidaire ne se défend pas (`defendsControl`).
+  if (!defendsControl(p.control?.kind)) return 0;
   // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
   const threat =
     tierThreatMult(tierAtAttack(p.control)) *
@@ -1543,7 +1715,13 @@ export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
       p.control?.attackAt ?? p.control?.angerSince ?? 0,
       activityOf(p.control),
     );
-  return garrisonHoldChance(p, allies, retakeBoost(p, allies) * threat);
+  return garrisonHoldChance(
+    p,
+    allies,
+    retakeBoost(p, allies, fort) * threat * (p.control?.fortMult ?? 1),
+    CONTROL.holdSamples,
+    fort,
+  );
 }
 
 /** ⏰ L'heure de l'attaque, telle que le joueur la CONNAÎT : seulement dans les dernières
@@ -1579,11 +1757,13 @@ export function controlDefenseHold(
   advs: readonly Adventurer[],
   kit: EscortKit,
   playerLevel: number,
+  /** 🧱🏹 `fortifyMult`, REQUIS. */
+  fort: number,
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
   const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
-  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies);
+  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies, fort);
 }
 
 /** La troupe qui vient REPRENDRE le point — tirée sur l'instant de l'attaque. */
@@ -1606,7 +1786,9 @@ export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction'
       p.control?.attackAt ?? p.control?.angerSince ?? 0,
       activityOf(p.control),
     );
-  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat };
+  // 🧱 Un fortin tenu sur l'île affaiblit la troupe (après le plafond de tenue, comme le cran).
+  const fort = p.control?.fortMult ?? 1;
+  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat * fort };
 }
 
 const shareOf = (n: number) =>
@@ -1692,6 +1874,11 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
       return n > 0 ? trainingXpPerHour(playerLevel) : 0;
     case 'distillery':
       return shareOf(n) / shareOf(1) / CONTROL.distilleryHoursPerItem;
+    case 'lapidary':
+      // 💎 Des HEURES de polissage, versées sur la compétence choisie (`applyLapis`). Sans
+      // compétence choisie rien n'est versé (`collectControl`), et la choisir remet l'horloge
+      // à zéro (`setLapisSkill`).
+      return n > 0 ? 1 : 0;
     case 'garden':
       // Un jardinier : un consommable toutes les 12 h, comme avant ; plus de monde, plus vite.
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
@@ -1714,6 +1901,9 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'altar':
       // 🪬 Une rune toutes les 48 h au complet.
       return shareOf(n) / CONTROL.altarHoursPerRune;
+    case 'lab':
+      // ⚗️ La formule de l'autel, deux fois plus lente (runes « à partir du violet »).
+      return shareOf(n) / CONTROL.labHoursPerRune;
     case 'circle':
       // 🌀 Une tentative de boss de l'île toutes les 48 h au complet.
       return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.circleHoursPerAttempt;
@@ -1874,6 +2064,50 @@ export function gardenStock(p: Poi, now: number): number {
   return p.control?.kind === 'garden' ? Math.floor(stockUnits(p, now, 1) + 1e-9) : 0;
 }
 
+/** 🧱 La part qu'un fortin de `n` sentinelles retire aux reprises (0 sans personne). */
+export function fortCutFor(n: number): number {
+  return CONTROL.fortCut * shareOf(n);
+}
+
+/** 🕯️ Le diviseur de convalescence d'un hospice de `n` soigneurs : `1 + hospiceCut × part`,
+ *  la part étant `garrisonShare` RAPPORTÉE à la garnison pleine — 1 sans personne, 2 au complet. */
+export function hospiceDivisor(n: number): number {
+  return 1 + (CONTROL.hospiceCut * shareOf(n)) / shareOf(PRODUCER_SEATS);
+}
+
+/**
+ * 🕯️ LE FACTEUR DE L'HOSPICE sur la convalescence d'un CHAMPION blessé sur l'île : 1 hors
+ * archipel, sans hospice tenu ou sans soigneur ; ½ avec une garnison pleine (règle : « les
+ * champions blessés de l'île guérissent plus vite, jusqu'à 2× »). Il ne produit rien, comme le
+ * fortin. ⚠️ SOURCE UNIQUE, lue par le store là où une blessure de champion est POSÉE
+ * (`partyClaimRoster` — missions, lieux fixes perdus — et le siège de la base) : il multiplie
+ * la DURÉE de soin au moment où elle est fixée. Le HÉROS n'est pas concerné.
+ */
+export function hospiceHealMult(
+  map: Pick<ExpeditionMap, 'archipel' | 'pois'> | null | undefined,
+): number {
+  if (!map?.archipel) return 1;
+  let m = 1;
+  for (const p of map.pois)
+    if (p.control?.kind === 'hospice' && p.control.owner === 'player')
+      m = Math.min(m, 1 / hospiceDivisor(p.control.garrison.length));
+  return m;
+}
+
+/**
+ * 🧱 LE FACTEUR DU FORTIN pour la troupe qui reprend un AUTRE lieu tenu de la carte : 1 sans
+ * fortin tenu (ou sans sentinelle). Le fortin ne se couvre pas lui-même : sa propre garnison
+ * le défend. ⚠️ SOURCE UNIQUE, posée sur chaque lieu par `ensureIslandConquest` (`fortMult`),
+ * puis lue par la reprise réelle (`retakeForce`) ET le pronostic (`garrisonHold`).
+ */
+export function fortMultOf(pois: readonly Poi[], forId: string): number {
+  let m = 1;
+  for (const p of pois)
+    if (p.id !== forId && p.control?.kind === 'fort' && p.control.owner === 'player')
+      m *= 1 - fortCutFor(p.control.garrison.length);
+  return m;
+}
+
 /**
  * 🗼 Le multiplicateur de trajet des TOURS DE GUET tenues : `1 − towerCut × part`. Il
  * MULTIPLIE le trajet déjà réduit par l'Avant-poste (décision de l'utilisateur) — on ne
@@ -1932,6 +2166,8 @@ export function collectControl(
   runes: number;
   /** 🪬 Parmi `runes`, celles de l'autel (« à partir du bleu »). */
   blessedRunes: number;
+  /** ⚗️ Parmi `runes`, celles du laboratoire (« à partir du violet »). */
+  exaltedRunes: number;
   /** 📖 Clés du Labyrinthe (les archives). */
   keys: number;
   /** ⚱️ Pierres d'invocation (l'ossuaire). */
@@ -1941,6 +2177,8 @@ export function collectControl(
   /** 🗿 Sceaux de champion (l'autel des runes), au rang `champSealRank`. */
   champSeals: number;
   champSealRank: number;
+  /** 💎 Les heures de polissage du lapidaire (`applyLapis`). */
+  lapis?: LapisGain;
 } {
   const p = map.pois.find((x) => x.id === id);
   const none = {
@@ -1952,6 +2190,7 @@ export function collectControl(
     supplies: {},
     runes: 0,
     blessedRunes: 0,
+    exaltedRunes: 0,
     keys: 0,
     summon: 0,
     gearSeals: 0,
@@ -1986,6 +2225,20 @@ export function collectControl(
     };
   }
   const units = stockUnits(p, now, playerLevel);
+  // 💎 Le lapidaire verse des HEURES, fraction comprise : rien ne s'arrondit ni ne se perd.
+  if (c.kind === 'lapidary') {
+    const advId = c.garrison.find((g) => !isMilitiaId(g));
+    if (units <= 0 || !advId || !c.lapis) return none;
+    const until = Math.min(now, c.attackAt ?? now);
+    return {
+      ...none,
+      map: withControl(map, id, (q) => ({
+        ...q,
+        control: { ...q.control!, collectedAt: until, banked: 0 },
+      })),
+      lapis: { advId, skill: c.lapis as SkillId, hours: units },
+    };
+  }
   const whole = Math.floor(units + 1e-9);
   if (whole <= 0) return none;
   const supplies: SupplyStock = {};
@@ -1998,7 +2251,8 @@ export function collectControl(
     }
   }
   // 📜 Des runes MULTICOLORES : leur couleur se tire à l'ouverture (`runeBank.openRune`).
-  const runes = c.kind === 'scriptorium' || c.kind === 'altar' ? whole : 0;
+  // ⚗️ Le laboratoire en verse aussi — toutes « à partir du violet ».
+  const runes = c.kind === 'scriptorium' || c.kind === 'altar' || c.kind === 'lab' ? whole : 0;
   const until = Math.min(now, c.attackAt ?? now);
   return {
     map: withControl(map, id, (q) => ({
@@ -2019,6 +2273,7 @@ export function collectControl(
     supplies,
     runes,
     blessedRunes: c.kind === 'altar' ? whole : 0,
+    exaltedRunes: c.kind === 'lab' ? whole : 0,
     keys: c.kind === 'archives' ? whole : 0,
     summon: c.kind === 'circle' ? whole : 0,
     gearSeals: c.kind === 'arsenal' ? whole : 0,
@@ -2046,6 +2301,34 @@ function leftFor(units: number, rate: number): string | null {
 export function controlProgress(p: Poi, now: number, playerLevel: number): ControlProgress | null {
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
+  if (c.kind === 'lapidary') {
+    const sk = c.lapis ? SKILLS[c.lapis as SkillId] : null;
+    return {
+      text: sk ? `💎 Polit ${sk.emoji} ${sk.name}` : '💎 Choisis la compétence à polir',
+      pct: null,
+    };
+  }
+  if (c.kind === 'cartographer') {
+    const k = cartoPick([p]);
+    return {
+      text: k
+        ? `🗺️ ${POI_LABEL[k.favor]} : ${Math.round(k.chance * 100)} % des lieux tirés`
+        : '🗺️ Choisis le lieu à faire revenir',
+      pct: null,
+    };
+  }
+  if (c.kind === 'hospice') {
+    return {
+      text: `🕯️ convalescence ÷${hospiceDivisor(c.garrison.length).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} sur l’île`,
+      pct: null,
+    };
+  }
+  if (c.kind === 'fort') {
+    return {
+      text: `🛡️ −${Math.round(fortCutFor(c.garrison.length) * 100)} % sur les reprises voisines`,
+      pct: null,
+    };
+  }
   if (c.kind === 'tower') {
     const cut = towerCutOf(c, now);
     const det = towerDetectOf(c, now);
@@ -2091,7 +2374,8 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
     case 'ossuary':
     case 'arsenal':
     case 'circle':
-    case 'altar': {
+    case 'altar':
+    case 'lab': {
       const next = Math.max(0, units - Math.floor(units + 1e-9));
       const left = leftFor(1 - next, rate);
       const e = UNIT_LOOK[c.kind].unit;
@@ -2133,6 +2417,11 @@ const WORKER: Record<ControlKind, [string, string]> = {
   training: ['champion', 'champions'],
   garden: ['jardinier', 'jardiniers'],
   distillery: ['distillateur', 'distillateurs'],
+  fort: ['sentinelle', 'sentinelles'],
+  cartographer: ['arpenteur', 'arpenteurs'],
+  lapidary: ['lapidaire', 'lapidaires'],
+  hospice: ['soigneur', 'soigneurs'],
+  lab: ['alchimiste', 'alchimistes'],
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
@@ -2159,6 +2448,58 @@ export function controlYieldCard(
   const [one, many] = WORKER[c.kind];
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
+  if (c.kind === 'lapidary') {
+    const sk = c.lapis ? SKILLS[c.lapis as SkillId] : null;
+    return {
+      emoji: '💎',
+      value: sk ? `${sk.emoji} ${sk.name}` : '—',
+      what: sk ? 'polie : un niveau de plus au bout du temps' : 'choisis ci-dessous la compétence',
+      pct: null,
+      gauge: idle,
+      rate: `${crew} · personne ne le défend : intercepte l’armée`,
+      ready: false,
+      full: false,
+    };
+  }
+  if (c.kind === 'cartographer') {
+    const k = cartoPick([p]);
+    return {
+      emoji: '🗺️',
+      value: k ? `${Math.round(k.chance * 100)} %` : '—',
+      what: k
+        ? `des lieux tirés sur l’île deviennent : ${POI_LABEL[k.favor]}`
+        : 'choisis ci-dessous le lieu à faire revenir',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
+  if (c.kind === 'hospice') {
+    return {
+      emoji: '🕯️',
+      value: `÷${hospiceDivisor(n).toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`,
+      what: 'sur la convalescence des champions blessés de l’île',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
+  if (c.kind === 'fort') {
+    return {
+      emoji: '🛡️',
+      value: `−${Math.round(fortCutFor(n) * 100)} %`,
+      what: 'de troupe ennemie sur chacun de tes autres lieux de l’île',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
   if (c.kind === 'tower') {
     const cut = towerCutOf(c, now);
     const det = towerDetectOf(c, now);
@@ -2248,7 +2589,8 @@ export function controlYieldCard(
     case 'ossuary':
     case 'arsenal':
     case 'circle':
-    case 'altar': {
+    case 'altar':
+    case 'lab': {
       const next = Math.max(0, units - Math.floor(units + 1e-9));
       const left = leftFor(1 - next, rate);
       const look = UNIT_LOOK[c.kind];
@@ -2332,6 +2674,10 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
 /** 🛡️ Places libres pour des MILICIENS : ce qui reste de la garnison de 5, champions compris. */
 export function militiaFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
+  // 🛡️ PAS DE MILICIEN DANS LES OBJECTIFS, LA FORTERESSE NI LA CITADELLE (2026-10-04, décision
+  // de l'utilisateur : « seulement dans les lieux fixes de production et les bases »). Source
+  // unique : renforts, transferts, envoi depuis la base et milice des îles rangées la lisent.
+  if (RAZE_KINDS.has(c.kind)) return 0;
   return garrisonRoom(c);
 }
 

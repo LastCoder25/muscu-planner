@@ -39,11 +39,10 @@ function rift(m: ExpeditionMap): Poi {
     expiresAt: NOW + EXPE.lifespanMs.rift,
   };
 }
-/** Trois lieux tenus, attaques lointaines. */
+/** Deux lieux tenus, attaques lointaines. */
 function held(m: ExpeditionMap): ExpeditionMap {
   let out = captureControl(m, controlIdOf('distillery'), ['a', 'b', 'c'], NOW, 7);
   out = captureControl(out, controlIdOf('altar'), ['d'], NOW, 7);
-  out = captureControl(out, controlIdOf('training'), ['e', 'f'], NOW, 7);
   const far = NOW + 30 * DAY;
   return {
     ...out,
@@ -126,9 +125,10 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
 });
 
 describe('🗿 l’autel des runes', () => {
-  it('l’île 5 porte le camp, l’autel et la distillerie — sans mine ni source', () => {
+  it('l’île 5 porte l’autel et la distillerie — sans camp, ni mine, ni source', () => {
     const k = kinds(islandMap());
-    for (const x of ['training', 'altar', 'distillery']) expect(k).toContain(x);
+    for (const x of ['altar', 'distillery']) expect(k).toContain(x);
+    expect(k).not.toContain('training');
     expect(k).not.toContain('mine');
     expect(k).not.toContain('mana');
     expect(k).not.toContain('scriptorium');

@@ -54,6 +54,32 @@ export const BLESSED_ODDS: Record<RuneTier, number> = (() => {
   };
 })();
 
+/**
+ * ⚗️ LES RUNES « À PARTIR DU VIOLET » (le laboratoire de l'île 5, 2026-10-04, décision de
+ * l'utilisateur : « comme l'autel de rune mais sans la rareté de base de l'autel ») : la même
+ * table SANS le vert NI le bleu, renormalisée — violet 87,5 %, doré 12,5 %. Dérivée de `RUNE_ODDS`
+ * comme `BLESSED_ODDS` : si la table bouge, celle-ci suit.
+ */
+export const EXALTED_ODDS: Record<RuneTier, number> = (() => {
+  const rest = RUNE_ODDS.violet + RUNE_ODDS.gold;
+  return {
+    green: 0,
+    blue: 0,
+    violet: RUNE_ODDS.violet / rest,
+    gold: RUNE_ODDS.gold / rest,
+  };
+})();
+
+/** La qualité d'une rune avant ouverture : ordinaire, « à partir du bleu » (autel), « à partir
+ *  du violet » (laboratoire). */
+export type RuneGrade = 'base' | 'blessed' | 'exalted';
+
+const GRADE_ODDS: Record<RuneGrade, Record<RuneTier, number>> = {
+  base: RUNE_ODDS,
+  blessed: BLESSED_ODDS,
+  exalted: EXALTED_ODDS,
+};
+
 /** Une compétence au stock : un EXEMPLAIRE, avec son niveau. Deux exemplaires de la même
  *  compétence restent séparés tant que le joueur ne les fusionne pas. */
 export interface StockSkill {
@@ -74,9 +100,11 @@ function hashStr(s: string): number {
  * cette couleur, uniformément. ⚠️ DÉTERMINISTE (graine = joueur + numéro d'ouverture) : un
  * rechargement pendant l'animation ne fait pas retirer une autre compétence.
  */
-export function openRune(owner: string, n: number, blessed = false): StockSkill {
+export function openRune(owner: string, n: number, grade: boolean | RuneGrade = false): StockSkill {
   const rng = mulberry32(hashStr(`rune:${owner}:${n}`));
-  const tier = pickTier(rng, blessed ? BLESSED_ODDS : RUNE_ODDS);
+  // `true` = l'ancien drapeau « bénie » (autel), gardé pour les appels d'avant.
+  const g: RuneGrade = grade === true ? 'blessed' : grade === false ? 'base' : grade;
+  const tier = pickTier(rng, GRADE_ODDS[g]);
   const pool = skillsOfTier(tier);
   const id = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
   return { uid: `sk${n}`, id, level: 1 };
@@ -90,6 +118,9 @@ export interface RuneBank {
   /** 🪬 Parmi `runes`, celles « à partir du bleu » (l'autel des runes) : jamais vertes.
    *  Ouvertes EN PREMIER (elles valent plus). Toujours ≤ `runes`. */
   blessed: number;
+  /** ⚗️ Parmi `runes`, celles « à partir du violet » (le laboratoire) : jamais vertes ni
+   *  bleues. Ouvertes AVANT les bénies. `blessed + exalted` ≤ `runes`. */
+  exalted: number;
   /** Compétences ouvertes, chacune à part. */
   skills: StockSkill[];
   /** Nombre de runes déjà ouvertes : graine du tirage et source des `uid`. */
@@ -104,18 +135,25 @@ export const RUNE_BANK_VERSION = 2;
 export const emptyBank = (): RuneBank => ({
   runes: 0,
   blessed: 0,
+  exalted: 0,
   skills: [],
   opened: 0,
   comp: RUNE_BANK_VERSION,
 });
 
 /** Ajoute `n` runes multicolores (rend un NOUVEL état), dont `blessed` « à partir du bleu »
- *  (comptées dans les `n`). */
-export function addRuneCount(bank: RuneBank, n: number, blessed = 0): RuneBank {
+ *  et `exalted` « à partir du violet » (toutes comptées dans les `n`). */
+export function addRuneCount(bank: RuneBank, n: number, blessed = 0, exalted = 0): RuneBank {
   const k = Math.max(0, Math.floor(n));
   if (!k) return bank;
-  const b = Math.min(k, Math.max(0, Math.floor(blessed)));
-  return { ...bank, runes: bank.runes + k, blessed: (bank.blessed ?? 0) + b };
+  const e = Math.min(k, Math.max(0, Math.floor(exalted)));
+  const b = Math.min(k - e, Math.max(0, Math.floor(blessed)));
+  return {
+    ...bank,
+    runes: bank.runes + k,
+    blessed: (bank.blessed ?? 0) + b,
+    exalted: (bank.exalted ?? 0) + e,
+  };
 }
 
 /** Combien de runes porte un butin. ⚠️ Les rapports écrits AVANT la bascule portent un
@@ -147,9 +185,11 @@ export function normalizeRuneBank(raw: unknown): RuneBank {
     });
   }
   const runes = int(r.runes);
+  const exalted = Math.min(runes, int(r.exalted));
   return {
     runes,
-    blessed: Math.min(runes, int(r.blessed)),
+    blessed: Math.min(runes - exalted, int(r.blessed)),
+    exalted,
     skills,
     opened: int(r.opened),
     comp: int(r.comp),
@@ -185,17 +225,25 @@ export function openRunes(
 ): { bank: RuneBank; opened: StockSkill[] } | null {
   if (openBlocker(bank, count)) return null;
   const cost = count === RUNE_LOT.size ? RUNE_LOT.cost : count;
-  // 🪬 Les runes de l'autel s'ouvrent d'abord : la rune gratuite d'un lot reste ordinaire.
-  const held = Math.min(bank.blessed ?? 0, bank.runes);
-  const used = Math.min(held, cost);
+  // ⚗️🪬 Les runes du laboratoire s'ouvrent d'abord, puis celles de l'autel : la rune gratuite
+  // d'un lot reste ordinaire.
+  const heldE = Math.min(bank.exalted ?? 0, bank.runes);
+  const held = Math.min(bank.blessed ?? 0, bank.runes - heldE);
+  const usedE = Math.min(heldE, cost);
+  const used = Math.min(held, cost - usedE);
   const opened = Array.from({ length: count }, (_, i) =>
-    openRune(owner, bank.opened + i + 1, i < used),
+    openRune(
+      owner,
+      bank.opened + i + 1,
+      i < usedE ? 'exalted' : i < usedE + used ? 'blessed' : 'base',
+    ),
   );
   return {
     bank: {
       ...bank,
       runes: bank.runes - cost,
       blessed: held - used,
+      exalted: heldE - usedE,
       skills: [...bank.skills, ...opened],
       opened: bank.opened + count,
     },

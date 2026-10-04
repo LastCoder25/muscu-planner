@@ -38,14 +38,19 @@ describe('🏝️ bascule des comptes sur l’archipel (étape 7)', () => {
     expect(basculeToArchipel(b.map, NOW + 1000)).toBeNull();
   });
 
+  it('un camp d’entraînement tenu est compensé : il n’existe plus sur les îles', () => {
+    const b = basculeToArchipel(classicMap(['mine', 'training']), NOW)!;
+    expect(b.refunds.map((r) => r.kind)).toEqual(['training']);
+  });
+
   it('les lieux tenus de l’île 1 restent tenus, sans compensation', () => {
-    const b = basculeToArchipel(classicMap(['mine', 'garden', 'training', 'mana']), NOW)!;
+    const b = basculeToArchipel(classicMap(['mine', 'garden', 'mana']), NOW)!;
     expect(b.refunds).toEqual([]);
     expect(b.message).toBeNull();
     const held = b.map.pois
       .filter((p) => p.control?.owner === 'player')
       .map((p) => p.control!.kind);
-    expect(held.sort()).toEqual(['garden', 'mana', 'mine', 'training']);
+    expect(held.sort()).toEqual(['garden', 'mana', 'mine']);
     // ⚠️ Aucun d'eux n'est rappelé au tick suivant.
     expect(retiredHeld(b.map)).toEqual([]);
   });
