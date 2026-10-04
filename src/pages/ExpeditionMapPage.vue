@@ -21,9 +21,23 @@
       :militia="crossInfo.militia"
       :remote="remoteInfo"
       :now="now"
+      @view="viewIslandMap"
       @cross="crossTo"
       @fetch="fetchFrom"
       @militia="moveMilitia"
+    />
+    <!-- 🗺️ La carte d'une île RANGÉE (demandé : « cliquer sur l'île 1 et voir la carte pour
+         gérer les garnisons des miliciens ») : elle remplace la carte active tant qu'on la
+         regarde ; « Revenir » ou l'île active dans le sélecteur la referment. -->
+    <RemoteIslandMap
+      v-if="viewed"
+      :island="viewed.island"
+      :map="viewed.map"
+      :remote="viewed.remote"
+      :reserve="viewed.reserve"
+      :busy="archBusy"
+      @close="viewIsland = null"
+      @militia="(e) => moveMilitia({ island: viewed!.island.id, ...e })"
     />
     <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
     <CrossingSheet
@@ -48,7 +62,7 @@
     </div>
 
     <!-- Carte -->
-    <div class="map-outer">
+    <div v-show="!viewed" class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
         <svg
           :viewBox="`${V.x} ${V.y} ${V.size} ${V.size}`"
@@ -403,7 +417,7 @@
          ennemies dans des tuiles, avec une tuile expéditions, et au clic ça déplie la partie
          correspondante »). Une seule partie ouverte à la fois ; retoucher sa tuile la replie.
          La pastille dit ce qui appelle : voyages en cours, points qui appellent, armées. -->
-    <div ref="tabsEl" class="map-tabs" role="tablist">
+    <div v-show="!viewed" ref="tabsEl" class="map-tabs" role="tablist">
       <button
         v-for="t in mapTabs"
         :key="t.id"
@@ -1417,6 +1431,7 @@ import {
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
+import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
 import { activeIsland, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
@@ -1680,6 +1695,29 @@ const remoteInfo = computed(() => {
   return out;
 });
 /** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
+/** 🗺️ L'île rangée qu'on regarde (`null` = la carte active). */
+const viewIsland = ref<number | null>(null);
+/** Sa carte, ses lieux tenus et sa réserve — `null` si elle n'est pas (ou plus) rangée. */
+const viewed = computed(() => {
+  const id = viewIsland.value;
+  const im = id === null ? null : char.row?.expedition_map?.islands?.[String(id)];
+  const isl = ISLANDS.find((i) => i.id === id);
+  if (!im || !isl) return null;
+  return {
+    island: isl,
+    map: im,
+    remote: remoteInfo.value[isl.id] ?? [],
+    reserve: crossInfo.value.militia[isl.id] ?? 0,
+  };
+});
+function viewIslandMap(id: number | null) {
+  viewIsland.value = id;
+  // Les panneaux de la carte active n'ont rien à faire sous une île rangée.
+  if (id !== null) {
+    mapPanel.value = null;
+    selected.value = null;
+  }
+}
 async function moveMilitia(e: { island: number; pointId: string; delta: number }) {
   const uid = auth.user?.id;
   if (!uid || archBusy.value) return;

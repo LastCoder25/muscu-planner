@@ -274,6 +274,23 @@ describe('🛡️ la milice d’une île quittée se gère à distance', () => {
       expect.objectContaining({ id: 'ctl_mine', militia: 1, room: 4 }),
     ]);
   });
+  it('un lieu d’un type retiré de l’île n’apparaît que s’il garde des miliciens', () => {
+    const camp = (garrison: string[]) =>
+      ({
+        ...p(garrison),
+        id: 'ctl_training',
+        control: { ...p(garrison).control!, kind: 'training' },
+      }) as Poi;
+    const withCamp = (garrison: string[]): ExpeditionMap => ({
+      ...im([], 3),
+      pois: [p([]), camp(garrison)],
+    });
+    expect(remotePoints(withCamp([])).map((r) => r.id)).toEqual(['ctl_mine']);
+    expect(remotePoints(withCamp(['mil:1'])).map((r) => r.id)).toEqual([
+      'ctl_mine',
+      'ctl_training',
+    ]);
+  });
   it('refuse sans réserve, sans place, ou sans milicien à ramener', () => {
     expect(moveRemoteMilitia(im([], 0), 'ctl_mine', 1, T0, 18)).toBeNull();
     expect(
