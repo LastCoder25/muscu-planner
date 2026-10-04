@@ -303,10 +303,15 @@ export function syncFieldArmies(
   }
   for (const p of map.pois) {
     if (p.type !== 'control') continue;
-    // 🏯 Elle part de la citadelle qui attaque ce point.
-    const cit = p.control
-      ? map.pois.find((q) => q.id === citadelIdFor(map.pois, p.control!.kind))
-      : undefined;
+    // 🪺 Elle part du NID qui vient d'apparaître (`raidFrom`, pour CETTE échéance), sinon de
+    // la citadelle qui attaque ce point.
+    const rf = p.control?.raidFrom;
+    const cit =
+      rf && rf.at === p.control?.attackAt
+        ? rf
+        : p.control
+          ? map.pois.find((q) => q.id === citadelIdFor(map.pois, p.control!.kind))
+          : undefined;
     const r = retakeArmyPoi(
       p,
       map,

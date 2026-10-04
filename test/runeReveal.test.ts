@@ -78,9 +78,9 @@ describe('🪬 le lot ×10', () => {
     cells.forEach((c) => expect(c.tier).toBe(SKILLS[c.id].tier));
   });
 
-  it('les violettes et dorées attendent qu’on les touche, les autres s’ouvrent seules', () => {
+  it('toute rune hors basique attend qu’on la touche, seules les vertes s’ouvrent seules', () => {
     for (const c of cells) {
-      const rare = c.tier === 'violet' || c.tier === 'gold';
+      const rare = c.tier !== 'green';
       expect(c.hot).toBe(rare);
       expect(c.autoAt === null).toBe(rare);
     }
