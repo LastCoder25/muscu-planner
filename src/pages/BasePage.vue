@@ -1023,7 +1023,7 @@ import {
   type RaidReport,
   type ScoutReport,
 } from '@/lib/raid';
-import { controlDetectBoost, militiaSeatsOf } from '@/lib/controlPoints';
+import { controlDetectBoost, islandMilitiaOf } from '@/lib/controlPoints';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
@@ -1406,7 +1406,7 @@ const HIT_PAD = 1;
 function militiaTimer(level: number): string {
   const s = char.row?.base?.militia ?? emptyMilitia(now.value);
   const away = militiaOnMap(char.row?.expedition_map);
-  const seats = militiaSeatsOf(char.row?.expedition_map);
+  const seats = islandMilitiaOf(char.row?.expedition_map);
   if (s.home + away >= militiaCap(level, seats)) return 'complet';
   const ms = nextMilitiaMs(s, level, away, now.value, seats);
   return ms > 0 ? formatDuration(ms) : '…';

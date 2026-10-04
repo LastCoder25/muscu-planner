@@ -386,7 +386,7 @@ import {
 import { resolveCamp } from '@/lib/camp';
 import { FACTION_EMOJI } from '@/lib/raid';
 import {
-  militiaSeatsOf,
+  islandMilitiaOf,
   CONTROL_LABEL,
   captureControl,
   collectControl,
@@ -3168,7 +3168,7 @@ export const useCharacterStore = defineStore('character', () => {
         barracks,
         militiaOnMap(cur.expedition_map),
         now,
-        militiaSeatsOf(cur.expedition_map),
+        islandMilitiaOf(cur.expedition_map),
       );
       if (m1 !== t.base.militia) {
         t.base = { ...t.base, militia: m1 };

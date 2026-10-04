@@ -45,7 +45,7 @@ import {
   takeMilitia,
   type MilitiaState,
 } from './militia';
-import { bankAt, controlKindsOf, militiaFreeSeats, militiaSeatsOf } from './controlPoints';
+import { bankAt, controlKindsOf, militiaFreeSeats, islandMilitiaOf } from './controlPoints';
 
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
@@ -504,7 +504,7 @@ export function produceIslandMilitia(
   let islands = map.islands;
   for (const [k, im] of Object.entries(map.islands)) {
     if (!im.militia) continue;
-    const seats = militiaSeatsOf({ archipel: archipelOn(Number(k)) });
+    const seats = islandMilitiaOf({ archipel: archipelOn(Number(k)) });
     const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now, seats);
     if (m !== im.militia) islands = { ...islands, [k]: { ...im, militia: m } };
   }

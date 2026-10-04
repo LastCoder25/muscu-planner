@@ -38,7 +38,7 @@ import {
 } from './advGear';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
-import { MILITIA, isMilitiaId, militiaUnits } from './militia';
+import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
 import { SKILLS, SKILL_MAX_LEVEL, type RuneTier, type SkillId } from './skillRunes';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { bossSummonCost } from '../data/bosses';
@@ -1180,10 +1180,19 @@ export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly C
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
 }
 
-/** 🛡️🏝️ Le plafond de milice d’une île (il remplace celui de la Caserne) : une garnison
- *  PLEINE (`MILITIA.perPoint`) sur chacun de ses lieux fixes. 0 hors archipel. */
-export function militiaSeatsOf(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): number {
-  return map?.archipel ? controlKindsOf(map).length * MILITIA.perPoint : 0;
+/** 🛡️🏝️ Ce qu'une île impose à la milice (`militiaCap`) : une garnison PLEINE
+ *  (`MILITIA.perPoint`) sur chacun de ses lieux fixes, et sa tranche de niveaux. `null` hors
+ *  archipel. */
+export function islandMilitiaOf(
+  map: Pick<ExpeditionMap, 'archipel'> | null | undefined,
+): IslandMilitia | null {
+  const a = map?.archipel;
+  if (!a) return null;
+  return {
+    seats: controlKindsOf({ archipel: a }).length * MILITIA.perPoint,
+    minLevel: Math.max(1, a.levelFloor ?? 1),
+    maxLevel: a.levelCap,
+  };
 }
 
 /** ⚒️🌀🗿 L'unité produite et ce qu'en dit la tuile, pour les spécialités des îles 4 et 5. */
