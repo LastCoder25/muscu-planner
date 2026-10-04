@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   SUPPLY,
-  SUPPLY_IDS,
+  CONSUMABLE_IDS,
+  isBoostId,
+  isTomeId,
   addSupplies,
   normalizeSupplies,
   rollSupplyDrop,
@@ -85,13 +87,12 @@ describe('🎒 le stock', () => {
 });
 
 describe('🎒 le butin : tout partout', () => {
-  it('environ un voyage sur 2 à 3, et chaque consommable peut tomber', () => {
+  it('environ un voyage sur 2 à 3 rend un consommable, et chacun peut tomber', () => {
     const seen = new Set<string>();
     let drops = 0;
     const N = 4000;
     for (let s = 1; s <= N; s++) {
-      const d = rollSupplyDrop(s);
-      const ids = Object.keys(d);
+      const ids = Object.keys(rollSupplyDrop(s)).filter((k) => !isBoostId(k) && !isTomeId(k));
       expect(ids.length).toBeLessThanOrEqual(1);
       if (ids.length) {
         drops++;
@@ -100,7 +101,41 @@ describe('🎒 le butin : tout partout', () => {
     }
     expect(drops / N).toBeGreaterThan(0.35);
     expect(drops / N).toBeLessThan(0.55);
-    expect(seen.size).toBe(SUPPLY_IDS.length);
+    expect(seen.size).toBe(CONSUMABLE_IDS.length);
+  });
+  it('boosts et tomes sont des drops INDÉPENDANTS du consommable', () => {
+    const N = 20000;
+    let cons = 0,
+      boost = 0,
+      tome = 0,
+      consAndBoost = 0,
+      all3 = 0;
+    for (let s = 1; s <= N; s++) {
+      const ids = Object.keys(rollSupplyDrop(s));
+      const c = ids.some((k) => !isBoostId(k) && !isTomeId(k));
+      const b = ids.some(isBoostId);
+      const t = ids.some(isTomeId);
+      expect(ids.filter(isBoostId).length).toBeLessThanOrEqual(1);
+      expect(ids.filter(isTomeId).length).toBeLessThanOrEqual(1);
+      cons += +c;
+      boost += +b;
+      tome += +t;
+      consAndBoost += +(c && b);
+      all3 += +(c && b && t);
+    }
+    // Chaque drop garde sa propre chance…
+    expect(boost / N).toBeCloseTo(SUPPLY.boostDropChance, 1);
+    expect(tome / N).toBeCloseTo(SUPPLY.tomeDropChance, 1);
+    expect(cons / N).toBeCloseTo(SUPPLY.dropChance, 1);
+    // …et un boost ne prend pas la place d'un consommable : P(c et b) ≈ P(c) × P(b).
+    expect(consAndBoost / N).toBeCloseTo((cons / N) * (boost / N), 2);
+    expect(all3).toBeGreaterThan(0);
+  });
+  it('calage : boosts et tomes gardent leur fréquence d’avant (~7,6 % par voyage)', () => {
+    for (const c of [SUPPLY.boostDropChance, SUPPLY.tomeDropChance]) {
+      expect(c).toBeGreaterThan(0.05);
+      expect(c).toBeLessThan(0.12);
+    }
   });
   it('se voit dans les pastilles de butin', () => {
     expect(
