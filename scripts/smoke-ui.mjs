@@ -69,7 +69,21 @@ const ECRANS = [
   // ⚠️ L'Aventure est l'écran le plus dense du projet, et ses onglets rendent des choses
   // très différentes (fiche, grille d'équipement, carte des mondes, enceinte en SVG).
   // Les visiter séparément est tout l'intérêt d'un smoke connecté.
-  { route: '/aventure', nom: 'aventure', onglets: ['Héros', 'Équipement', 'Explorer', 'Base'] },
+  {
+    route: '/aventure',
+    nom: 'aventure',
+    onglets: ['Héros', 'Équipement', 'Explorer', 'Base'],
+    // 📬 La boîte à messages et ses filtres (v1.57). ⚠️ Refermée après coup (`ferme`) : laissée
+    // ouverte, sa modale recouvrirait l'écran suivant et bloquerait ses clics.
+    gestes: [
+      {
+        nom: 'messages',
+        clic: '.inbox-btn[aria-label="Messages"]',
+        attendu: '.inbox-list',
+        ferme: '.shop-x[aria-label="Fermer"]',
+      },
+    ],
+  },
   // 🗺️ La carte d'expédition (v0.1202) : l'écran le plus lourd du projet, découpé en
   // composants — il n'était visité par aucune porte.
   // ⚠️ Le compte de test a un Avant-poste, deux champions et une expédition en cours
@@ -309,6 +323,10 @@ try {
             fullPage: true,
           });
           await verifier(page, width, `${e.nom}/${geste.nom}`, errors, av);
+          if (geste.ferme) {
+            await page.locator(geste.ferme).first().click({ timeout: 5000 });
+            await page.waitForTimeout(400);
+          }
         }
         console.log(`  ✓ ${e.nom} ${width}px — ${w}px`);
       }

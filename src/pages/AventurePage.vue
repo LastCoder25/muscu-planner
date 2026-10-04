@@ -1792,6 +1792,32 @@
             <div class="shop-title font-display">📬 Messages</div>
             <button class="shop-x" aria-label="Fermer" @click="closeInbox">✕</button>
           </div>
+          <!-- 🔎 Filtres par origine (v1.57) : seulement les catégories présentes. -->
+          <div
+            v-if="inboxCats.length > 1"
+            class="inbox-filters"
+            role="group"
+            aria-label="Filtrer les messages"
+          >
+            <button
+              class="inbox-chip"
+              :class="{ on: !inboxCat }"
+              :aria-pressed="!inboxCat"
+              @click="inboxFilter = null"
+            >
+              Tous <span class="ic-n">{{ inboxMessages.length }}</span>
+            </button>
+            <button
+              v-for="c in inboxCats"
+              :key="c.id"
+              class="inbox-chip"
+              :class="{ on: inboxCat === c.id }"
+              :aria-pressed="inboxCat === c.id"
+              @click="inboxFilter = inboxCat === c.id ? null : c.id"
+            >
+              {{ c.emoji }} {{ c.label }} <span class="ic-n">{{ c.n }}</span>
+            </button>
+          </div>
           <div class="inbox-list">
             <div v-if="!inboxMessages.length" class="inbox-empty">
               Aucun message. Les rapports de tes expéditions apparaîtront ici.
@@ -1799,7 +1825,7 @@
             <!-- 📜 Un rapport = une carte compacte (v0.1116) : trois lignes, le reste replié,
                  toutes REPLIÉES par défaut, chacune dans sa tuile (v0.1123). Le butin ne se verse qu'au geste. -->
             <MissionReportCard
-              v-for="m in inboxMessages"
+              v-for="m in inboxShown"
               :key="m.id"
               :folded="m.id !== focusMsgId"
               :card="messageCard(m, char.advList)"
@@ -3254,6 +3280,12 @@ import {
   type PartyResult,
   poiLabel,
 } from '@/lib/expedition';
+import {
+  categoryCounts,
+  effectiveCategory,
+  filterMessages,
+  type MessageCategory,
+} from '@/lib/messageFilter';
 import { logicalToday } from '@/lib/challenges';
 import { plunderForecast } from '@/lib/archipelago';
 
@@ -5541,6 +5573,12 @@ const unreadMessages = computed(
   () => inboxMessages.value.filter((m) => !m.read || isClaimable(m, expeNow.value)).length,
 );
 const inboxOpen = ref(false);
+/** 🔎 Filtre de la boîte (null = tout) : il RESTE entre deux ouvertures, mais retombe sur tout
+ *  quand sa catégorie n'a plus de message (`effectiveCategory`). */
+const inboxFilter = ref<MessageCategory | null>(null);
+const inboxCats = computed(() => categoryCounts(inboxMessages.value));
+const inboxCat = computed(() => effectiveCategory(inboxMessages.value, inboxFilter.value));
+const inboxShown = computed(() => filterMessages(inboxMessages.value, inboxCat.value));
 function openInbox() {
   inboxOpen.value = true;
   const uid = auth.user?.id;
@@ -10596,6 +10634,34 @@ button.pt-mini:active {
   flex-direction: column;
   gap: 8px;
   padding: 4px 2px;
+}
+.inbox-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 2px 8px;
+}
+.inbox-chip {
+  flex: none;
+  min-height: 36px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.inbox-chip.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+.inbox-chip .ic-n {
+  color: var(--dim);
+  font-weight: 500;
+  margin-left: 2px;
 }
 .inbox-empty {
   color: var(--dim);
