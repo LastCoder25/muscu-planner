@@ -3,17 +3,14 @@
 // dans le rayon de détection.
 import { describe, expect, it } from 'vitest';
 import { entryPoint, retakeArmyPoi, syncFieldArmies } from '@/lib/fieldArmy';
-import {
-  captureControl,
-  citadelIdFor,
-  controlIdOf,
-  ensureControls,
-} from '@/lib/controlPoints';
+import { captureControl, citadelIdFor, controlIdOf, ensureControls } from '@/lib/controlPoints';
 import { EXPE, createMap, warbandAt, type Poi } from '@/lib/expedition';
 
 const H = 3_600_000;
 const T = EXPE.town;
 const at = 100 * H;
+/** Le seul cercle de la base, de rayon `r`. */
+const baseC = (r: number) => [{ id: 'base', x: T.x, y: T.y, r }];
 const dist = (p: { x: number; y: number }, q: { x: number; y: number }) =>
   Math.hypot(p.x - q.x, p.y - q.y);
 const point = (x: number, y: number): Poi => ({
@@ -36,8 +33,11 @@ const point = (x: number, y: number): Poi => ({
   },
 });
 /** Le point de l'axe (x) et la position de l'armée sur son segment. */
-const onSegment = (a: { x: number; y: number }, b: { x: number; y: number }, q: { x: number; y: number }) =>
-  Math.abs(dist(a, q) + dist(q, b) - dist(a, b)) < 1e-6;
+const onSegment = (
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  q: { x: number; y: number },
+) => Math.abs(dist(a, q) + dist(q, b) - dist(a, b)) < 1e-6;
 
 describe('🏯 entryPoint', () => {
   it('rend l’entrée du trajet dans le cercle', () => {
@@ -61,7 +61,7 @@ describe('🏯 l’armée part de sa citadelle', () => {
   const cit = { x: T.x + 20, y: T.y - 60 };
   const R = 50;
   it('elle entre dans le rayon sur la droite citadelle → point, et finit sur le point', () => {
-    const a = retakeArmyPoi(p, 42, R, 200, at - 0.1 * H, 30, cit)!;
+    const a = retakeArmyPoi(p, 42, baseC(R), 200, at - 0.1 * H, 30, cit)!;
     expect(dist(a.from!, T)).toBeCloseTo(R, 6);
     expect(onSegment(cit, p, a.from!)).toBe(true);
     expect(dist(warbandAt(a, at), p)).toBeLessThan(0.01);
@@ -69,16 +69,18 @@ describe('🏯 l’armée part de sa citadelle', () => {
   it('son préavis vaut le trajet visible, jamais moins que dans l’axe ville → point', () => {
     const from = entryPoint(cit, p, R)!;
     const lead = (dist(from, p) / 10) * H;
-    expect(retakeArmyPoi(p, 42, R, 200, at - lead - H / 100, 30, cit)).toBeNull();
-    expect(retakeArmyPoi(p, 42, R, 200, at - lead + H / 100, 30, cit)).not.toBeNull();
+    expect(retakeArmyPoi(p, 42, baseC(R), 200, at - lead - H / 100, 30, cit)).toBeNull();
+    expect(retakeArmyPoi(p, 42, baseC(R), 200, at - lead + H / 100, 30, cit)).not.toBeNull();
     expect(dist(from, p)).toBeGreaterThanOrEqual(R - 30 - 1e-9);
   });
   it('avec une grande détection, on la voit sortir de la citadelle', () => {
-    const a = retakeArmyPoi(p, 42, 90, 200, at - 0.1 * H, 30, cit)!;
+    const a = retakeArmyPoi(p, 42, baseC(90), 200, at - 0.1 * H, 30, cit)!;
     expect(dist(a.from!, cit)).toBeLessThan(1e-9);
   });
-  it('hors du rayon, toujours invisible', () => {
-    expect(retakeArmyPoi(p, 42, 25, 200, at - 0.1 * H, 30, cit)).toBeNull();
+  it('hors du rayon de la base, on ne la voit que sur les DETECT_FLOOR derniers pas', () => {
+    expect(retakeArmyPoi(p, 42, baseC(25), 200, at - 3.1 * H, 30, cit)).toBeNull();
+    const a = retakeArmyPoi(p, 42, baseC(25), 200, at - 2.9 * H, 30, cit)!;
+    expect(dist(a.from!, p)).toBeCloseTo(30, 6);
   });
 });
 

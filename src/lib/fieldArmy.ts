@@ -44,7 +44,8 @@ import {
   type RaidGroup,
 } from './raid';
 import { BATTLE } from './siegeBattle';
-import { islandCenter, islandVia, onIsland } from './islandShape';
+import { islandCenter, islandSpan, islandVia, onIsland } from './islandShape';
+import { ISLANDS, islandById } from './archipelago';
 import {
   CONTROL,
   attackerLevel,
@@ -100,6 +101,90 @@ export function detectRadius(leadMs: number): number {
  *  les armées n'apparaissent qu'en deçà, et le cercle dessiné sur la carte le lit aussi. */
 export function seenRadius(detectR: number, reach: number): number {
   return Math.max(0, Math.min(detectR, reach - 1));
+}
+
+/** 👁️ LE PLANCHER DE DÉTECTION (décision de l'utilisateur, 2026-10-04) : tout lieu qu'on
+ *  tient — la base comme chaque lieu fixe — voit les armées à 30 unités autour de lui, Tour
+ *  ou pas. */
+export const DETECT_FLOOR = 30;
+
+/** 🏝️🗼 La part de l'île que voit la Tour de guet de la base : son niveau rapporté au niveau
+ *  MAX de l'île (décision de l'utilisateur, 2026-10-04 : « détection totale sur l'île au niveau
+ *  de l'île ») — Tour 40 voit toute l'île 2, et il faut la monter jusqu'à 60 pour l'île 3. Les
+ *  Tours tenues sur la carte (`controlDetectBoost`) la multiplient, comme le préavis. */
+export function islandDetectShare(scout: number, islandId: number, boost: number): number {
+  const isl = islandById(islandId) ?? ISLANDS[0]!;
+  return Math.min(
+    1,
+    (Math.max(0, scout) * (1 + Math.max(0, boost || 0))) / Math.max(1, isl.maxLevel),
+  );
+}
+
+/** 🏝️🗼 Le rayon de détection de la base sur une île : la part (`islandDetectShare`) de la
+ *  plus grande distance entre le port et la terre de l'île (`islandSpan`), jamais sous le
+ *  plancher. */
+export function islandDetectRadius(scout: number, islandId: number, boost: number): number {
+  return Math.max(DETECT_FLOOR, islandDetectShare(scout, islandId, boost) * islandSpan(islandId));
+}
+
+/** 🗼 Les PALIERS de perception, île par île (affichés sur la Tour de guet) : la part de
+ *  chaque île que la Tour voit, et le niveau de Tour qui la couvre en entier. */
+export interface PerceptionRow {
+  id: number;
+  emoji: string;
+  name: string;
+  /** Niveau de Tour qui voit toute l'île (le niveau max de l'île). */
+  fullAt: number;
+  /** Part de l'île vue aujourd'hui (0..1). */
+  share: number;
+  current: boolean;
+}
+export function islandPerception(
+  scout: number,
+  boost: number,
+  currentIsland: number | null,
+): PerceptionRow[] {
+  return ISLANDS.map((i) => ({
+    id: i.id,
+    emoji: i.emoji,
+    name: i.name,
+    fullAt: i.maxLevel,
+    share: islandDetectShare(scout, i.id, boost),
+    current: i.id === currentIsland,
+  }));
+}
+
+/** 👁️ Un cercle de détection : autour de la base ou d'un lieu fixe tenu. */
+export interface DetectCircle {
+  id: string;
+  x: number;
+  y: number;
+  r: number;
+}
+
+/** 👁️ LES CERCLES DE DÉTECTION de la carte : la base (rayon de la Tour, jamais sous le
+ *  plancher) et chaque lieu fixe TENU (le plancher). ⚠️ SOURCE UNIQUE : les armées n'y
+ *  apparaissent que dedans, et la carte les dessine en pointillé. Un lieu posé sur la ville
+ *  (le village du port) n'a pas de cercle à lui : celui de la base le couvre. */
+export function detectionCircles(
+  map: Pick<ExpeditionMap, 'pois'>,
+  detectR: number,
+  reach: number,
+): DetectCircle[] {
+  const out: DetectCircle[] = [
+    {
+      id: 'base',
+      x: EXPE.town.x,
+      y: EXPE.town.y,
+      r: seenRadius(Math.max(DETECT_FLOOR, detectR), reach),
+    },
+  ];
+  for (const p of map.pois) {
+    if (p.type !== 'control' || p.control?.owner !== 'player') continue;
+    if (Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) < 1) continue;
+    out.push({ id: p.id, x: p.x, y: p.y, r: DETECT_FLOOR });
+  }
+  return out;
 }
 
 function marching(
@@ -206,16 +291,17 @@ export function siegeArmyPoi(
   );
 }
 
-/** 🏰 L'armée d'une REPRISE sur la carte, ou `null` tant qu'elle n'est pas entrée dans le
- *  rayon de détection. 🏯 Elle part de SA CITADELLE (`origin`, 2026-09-30, demandé) et marche en
- *  ligne droite sur le point ; on ne la voit que sur la part de ce trajet qui est dans le rayon
- *  de détection. Sans citadelle connue, elle arrive dans l'axe ville → point (comme avant).
- *  ⚠️ Le préavis ne peut que GRANDIR face à l'axe ville → point : le trajet visible va du bord
- *  du cercle (à `vis` de la ville) jusqu'au point (à `d`), donc il mesure au moins `vis − d`. */
+/** 🏰 L'armée d'une REPRISE sur la carte, ou `null` tant qu'elle n'est entrée dans AUCUN
+ *  cercle de détection (`detectionCircles` : la base, et chaque lieu tenu — le point attaqué
+ *  compris, donc on la voit toujours au moins sur les `DETECT_FLOOR` derniers pas). 🏯 Elle
+ *  part de SA CITADELLE (`origin`) et marche en ligne droite sur le point ; sans citadelle
+ *  connue, elle vient du bout de la carte dans l'axe ville → point. On ne la voit que sur la
+ *  part de ce trajet qui suit sa PREMIÈRE entrée dans un cercle. */
 export function retakeArmyPoi(
   p: Poi,
   map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
-  detectR: number,
+  /** 👁️ Les cercles de détection (`detectionCircles`). Le point attaqué a toujours le sien. */
+  circles: readonly DetectCircle[],
   reach: number,
   now: number,
   playerLevel: number,
@@ -225,20 +311,28 @@ export function retakeArmyPoi(
   const c = p.control;
   if (!c || c.owner !== 'player' || c.attackAt === undefined || now >= c.attackAt) return null;
   const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
-  const vis = seenRadius(detectR, reach);
   if (d <= 0) return null;
-  // Hors du rayon (`d ≥ vis`) la marche visible est ≤ 0 : `spawnedAt ≥ attackAt > now`, donc
-  // elle n'apparaît jamais — c'est la règle « vue seulement dans le rayon », sans garde à part.
-  const axis = {
-    x: EXPE.town.x + ((p.x - EXPE.town.x) / d) * vis,
-    y: EXPE.town.y + ((p.y - EXPE.town.y) / d) * vis,
-  };
-  const from = ashore(
-    (d < vis && origin && entryPoint(origin, p, vis)) || axis,
+  const isl = map.archipel?.island;
+  const start = ashore(
+    origin ?? {
+      x: EXPE.town.x + ((p.x - EXPE.town.x) / d) * Math.max(reach, d + DETECT_FLOOR),
+      y: EXPE.town.y + ((p.y - EXPE.town.y) / d) * Math.max(reach, d + DETECT_FLOOR),
+    },
     p,
-    map.archipel?.island,
+    isl,
   );
-  const march = d < vis ? Math.hypot(p.x - from.x, p.y - from.y) : vis - d;
+  // ⚠️ Le point attaqué voit TOUJOURS ses abords : son cercle est ajouté s'il manque.
+  const all = circles.some((k) => k.id === p.id)
+    ? circles
+    : [...circles, { id: p.id, x: p.x, y: p.y, r: DETECT_FLOOR }];
+  let tMin = Infinity;
+  for (const k of all) {
+    const t = entryParam(start, p, k, k.r);
+    if (t !== null && t < tMin) tMin = t;
+  }
+  if (!Number.isFinite(tMin)) return null;
+  const from = { x: start.x + (p.x - start.x) * tMin, y: start.y + (p.y - start.y) * tMin };
+  const march = Math.hypot(p.x - from.x, p.y - from.y);
   const spawnedAt = c.attackAt - (march / FIELD_ARMY.speedPerHour) * H;
   if (now < spawnedAt) return null;
   const force = retakeForce(p, 1);
@@ -264,19 +358,30 @@ export function entryPoint(
   to: { x: number; y: number },
   r: number,
 ): { x: number; y: number } | null {
-  const fx = from.x - EXPE.town.x;
-  const fy = from.y - EXPE.town.y;
+  const t = entryParam(from, to, EXPE.town, r);
+  return t === null ? null : { x: from.x + t * (to.x - from.x), y: from.y + t * (to.y - from.y) };
+}
+
+/** La part (0..1) du trajet `from` → `to` où il ENTRE dans le cercle (`center`, `r`) : 0 si
+ *  `from` y est déjà, `null` s'il ne le traverse pas. */
+function entryParam(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  center: { x: number; y: number },
+  r: number,
+): number | null {
+  const fx = from.x - center.x;
+  const fy = from.y - center.y;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const cc = fx * fx + fy * fy - r * r;
-  if (cc <= 0) return { x: from.x, y: from.y };
+  if (cc <= 0) return 0;
   const a = dx * dx + dy * dy;
   const b = 2 * (fx * dx + fy * dy);
   const disc = b * b - 4 * a * cc;
   if (a <= 0 || disc < 0) return null;
   const t = (-b - Math.sqrt(disc)) / (2 * a);
-  if (t < 0 || t > 1) return null;
-  return { x: from.x + t * dx, y: from.y + t * dy };
+  return t < 0 || t > 1 ? null : t;
 }
 
 /**
@@ -301,6 +406,7 @@ export function syncFieldArmies(
     const s = siegeArmyPoi(ctx.raid, ctx.reach, ctx.now, ctx.playerLevel, map.archipel?.island);
     if (s) want0.push(s);
   }
+  const circles = detectionCircles(map, ctx.detectR, ctx.reach);
   for (const p of map.pois) {
     if (p.type !== 'control') continue;
     // 🪺 Elle part du NID qui vient d'apparaître (`raidFrom`, pour CETTE échéance), sinon de
@@ -315,7 +421,7 @@ export function syncFieldArmies(
     const r = retakeArmyPoi(
       p,
       map,
-      ctx.detectR,
+      circles,
       ctx.reach,
       ctx.now,
       ctx.playerLevel,

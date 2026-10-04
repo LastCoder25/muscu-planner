@@ -184,6 +184,16 @@
              sélectionner : le joueur voit un disque, et les destinations dedans.
              ⚠️ Dessinée AVANT les POI (donc dessous) et en `pointer-events: none` : elle
              ne doit ni recouvrir un glyphe ni voler son clic. -->
+          <!-- 👁️ LES CERCLES DE DÉTECTION (demandé, 2026-10-04) : la base et chaque lieu fixe
+               tenu, en pointillé — on y voit d'où les armées ennemies deviennent visibles. -->
+          <circle
+            v-for="k in detectCircles"
+            :key="'det-' + k.id"
+            :cx="k.x"
+            :cy="k.y"
+            :r="k.r"
+            class="detect-ring"
+          />
           <circle
             v-for="r in ambushHalos"
             :key="'halo-' + r.id"
@@ -1368,6 +1378,7 @@ import {
   activeAttacks,
   armyTrajectory,
   controlAttackHold,
+  detectionCircles,
   fieldArmySpec,
   type ArmyPath,
 } from '@/lib/fieldArmy';
@@ -2116,6 +2127,12 @@ const attackedKey = computed(() =>
 // 🕳️ Les auréoles d'EMBUSCADE — les monstres restés autour d'une faille qui a débordé
 // (v0.1009). ⚠️ Horloge GROSSIÈRE : une embuscade dure deux jours, la recalculer à la
 // seconde re-diffuserait ces cercles à chaque tick pour rien.
+/** 👁️ Les cercles de détection (`detectionCircles`, la règle que suivent les armées). */
+const detectCircles = computed(() => {
+  const m = char.row?.expedition_map;
+  if (!m) return [];
+  return detectionCircles(m, char.detectRadiusOf(char.row?.base, m), reveal.value);
+});
 const ambushHalos = computed(() =>
   (char.row?.expedition_map?.ambushes ?? [])
     .filter((a) => a.until > coarseNow.value)
@@ -6390,6 +6407,13 @@ onUnmounted(() => {
    leur clic. Teinte du DANGER (--d4), comme l'encart de la Tour de guet : les deux parlent
    de la même chose. Discrète (c'est un fond, pas un objet), mais son bord pointillé la
    distingue des cercles pleins de la carte. */
+.detect-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 45%, transparent);
+  stroke-width: 0.6;
+  stroke-dasharray: 1.6 1.6;
+  pointer-events: none;
+}
 .rift-halo {
   fill: color-mix(in srgb, var(--d4) 9%, transparent);
   stroke: color-mix(in srgb, var(--d4) 42%, transparent);

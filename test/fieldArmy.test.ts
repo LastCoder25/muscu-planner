@@ -5,6 +5,7 @@ import {
   armyTrajectory,
   applyFieldHitToBase,
   applyFieldHitToMap,
+  DETECT_FLOOR,
   detectRadius,
   fieldArmyMana,
   pendingFieldHits,
@@ -26,6 +27,9 @@ const H = 3_600_000;
 const T0 = 1_000 * H;
 const dist = (p: { x: number; y: number }, q: { x: number; y: number }) =>
   Math.hypot(p.x - q.x, p.y - q.y);
+
+/** Le seul cercle de la base, de rayon `r`. */
+const baseC = (r: number) => [{ id: 'base', x: EXPE.town.x, y: EXPE.town.y, r }];
 
 const raidAt = (arrivesAt: number, leadMs: number, level = 30) =>
   rollRaid(7, level, arrivesAt, leadMs);
@@ -113,13 +117,16 @@ describe('⚔️ l’armée d’un siège sur la carte', () => {
 
 describe('⚔️ l’armée d’une reprise : vue SEULEMENT dans le rayon de détection', () => {
   const at = T0 + 10 * H;
-  it('invisible si le point est hors du rayon', () => {
-    expect(retakeArmyPoi(controlPoi(), { seed: 42 }, 25, 200, at - H / 2, 30)).toBeNull();
+  it('hors du rayon de la base, on la voit quand même à DETECT_FLOOR du point (le plancher)', () => {
+    // Point à 30, rayon de base 25 : seul le cercle du point (30) la voit → 3 h de marche.
+    expect(retakeArmyPoi(controlPoi(), { seed: 42 }, baseC(25), 200, at - 3.1 * H, 30)).toBeNull();
+    const p = retakeArmyPoi(controlPoi(), { seed: 42 }, baseC(25), 200, at - 2.9 * H, 30)!;
+    expect(dist(p.from!, { x: EXPE.town.x + 30, y: EXPE.town.y })).toBeCloseTo(DETECT_FLOOR, 3);
   });
   it('visible les (rayon − distance) / vitesse dernières heures, en marche vers le point', () => {
-    const R = 50; // point à 30 → 20 unités de marche visibles → 2 h
-    expect(retakeArmyPoi(controlPoi(), { seed: 42 }, R, 200, at - 2.1 * H, 30)).toBeNull();
-    const p = retakeArmyPoi(controlPoi(), { seed: 42 }, R, 200, at - 1.9 * H, 30)!;
+    const R = 80; // point à 30 → 50 unités de marche visibles → 5 h
+    expect(retakeArmyPoi(controlPoi(), { seed: 42 }, baseC(R), 200, at - 5.1 * H, 30)).toBeNull();
+    const p = retakeArmyPoi(controlPoi(), { seed: 42 }, baseC(R), 200, at - 4.9 * H, 30)!;
     expect(p).not.toBeNull();
     expect(p.army).toMatchObject({ kind: 'retake', targetId: 'ctl_mine', at });
     expect(dist(p.from!, EXPE.town)).toBeCloseTo(R, 3);
@@ -129,14 +136,14 @@ describe('⚔️ l’armée d’une reprise : vue SEULEMENT dans le rayon de dé
   it('ni point tenu par l’ennemi, ni attaque passée', () => {
     const enemy = controlPoi();
     enemy.control = { ...enemy.control!, owner: 'enemy' };
-    expect(retakeArmyPoi(enemy, { seed: 42 }, 80, 200, at - H, 30)).toBeNull();
-    expect(retakeArmyPoi(controlPoi(), { seed: 42 }, 80, 200, at, 30)).toBeNull();
+    expect(retakeArmyPoi(enemy, { seed: 42 }, baseC(80), 200, at - H, 30)).toBeNull();
+    expect(retakeArmyPoi(controlPoi(), { seed: 42 }, baseC(80), 200, at, 30)).toBeNull();
   });
   it('amputée de ce qui a déjà été abattu', () => {
     const cut = controlPoi();
     cut.control = { ...cut.control!, retakeCut: 0.5 };
-    const a = retakeArmyPoi(controlPoi(), { seed: 42 }, 80, 200, at - H, 30)!.army!.size;
-    const b = retakeArmyPoi(cut, { seed: 42 }, 80, 200, at - H, 30)!.army!.size;
+    const a = retakeArmyPoi(controlPoi(), { seed: 42 }, baseC(80), 200, at - H, 30)!.army!.size;
+    const b = retakeArmyPoi(cut, { seed: 42 }, baseC(80), 200, at - H, 30)!.army!.size;
     expect(b).toBeCloseTo(a / 2, 6);
   });
 });
@@ -323,7 +330,7 @@ describe('🗺️ armyTrajectory — la ligne jusqu’au lieu attaqué', () => {
   });
   it('reprise : vers le POINT FIXE, pas vers la ville', () => {
     const at = T0 + 10 * H;
-    const p = retakeArmyPoi(controlPoi({}, at), { seed: 42 }, 80, 200, at - 3 * H, 30)!;
+    const p = retakeArmyPoi(controlPoi({}, at), { seed: 42 }, baseC(80), 200, at - 3 * H, 30)!;
     const a = armyTrajectory(p)!;
     expect([a.tx, a.ty]).toEqual([EXPE.town.x + 30, EXPE.town.y]);
     expect(dist({ x: a.x2, y: a.y2 }, { x: a.tx, y: a.ty })).toBeCloseTo(ARMY_PATH.pointR, 6);

@@ -876,6 +876,31 @@
               </template>
             </p>
           </div>
+          <!-- 👁️ LES PALIERS DE PERCEPTION, île par île (demandé, 2026-10-04) : la Tour voit
+               toute une île quand elle atteint le niveau max de l'île. -->
+          <div class="panel perception">
+            <div class="p-title">👁️ Perception des ennemis</div>
+            <div
+              v-for="r in perception"
+              :key="r.id"
+              class="perc-row"
+              :class="{ full: r.share >= 1, current: r.current }"
+            >
+              <span class="perc-name">{{ r.emoji }} Île {{ r.id }}</span>
+              <span class="perc-bar"><span :style="{ width: r.share * 100 + '%' }" /></span>
+              <span class="perc-val">
+                {{
+                  r.share >= 1
+                    ? '✅ totale'
+                    : `${Math.round(r.share * 100)} % · totale à ${r.fullAt}`
+                }}
+              </span>
+            </div>
+            <p class="perc-note">
+              Et toujours <b>{{ DETECT_FLOOR }}</b> autour de chacun de tes lieux (base et lieux
+              fixes tenus) — les cercles en pointillé de la carte.
+            </p>
+          </div>
           <div v-if="lastReport" class="panel">
             <div class="p-title">
               {{
@@ -1024,6 +1049,7 @@ import {
   type ScoutReport,
 } from '@/lib/raid';
 import { controlDetectBoost, islandMilitiaOf } from '@/lib/controlPoints';
+import { DETECT_FLOOR, islandPerception } from '@/lib/fieldArmy';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
@@ -1800,6 +1826,14 @@ const scoutLeadLabel = computed(() => {
   // sans que rien n'explique pourquoi.
   return boost > 0 ? `${txt} (🗼 +${Math.round(boost * 100)} % par les tours de la carte)` : txt;
 });
+/** 👁️ Les paliers de perception, île par île (`islandPerception`). */
+const perception = computed(() =>
+  islandPerception(
+    scoutLevel(defenses.value),
+    controlDetectBoost(char.row?.expedition_map, now.value),
+    char.row?.expedition_map?.archipel?.island ?? null,
+  ),
+);
 const freezeIn = computed(() => (freeze.value ? fmtDelay(freeze.value.until - now.value) : ''));
 const healIn = computed(() =>
   base.value?.wound ? fmtDelay(base.value.wound.until - now.value) : '',
@@ -3252,6 +3286,47 @@ function doHarvest() {
 }
 .calm-watch {
   font-size: 12.5px;
+  color: var(--dim);
+}
+.perc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12.5px;
+}
+.perc-row.current .perc-name {
+  color: var(--accent);
+  font-weight: 700;
+}
+.perc-name {
+  flex: 0 0 auto;
+  min-width: 58px;
+}
+.perc-bar {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+}
+.perc-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.perc-row.full .perc-bar > span {
+  background: var(--d1);
+}
+.perc-val {
+  flex: 0 0 auto;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.perc-note {
+  margin: 6px 0 0;
+  font-size: 12px;
   color: var(--dim);
 }
 </style>

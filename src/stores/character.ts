@@ -466,6 +466,7 @@ import {
   applyFieldHitToBase,
   applyFieldHitToMap,
   detectRadius,
+  islandDetectRadius,
   pendingFieldHits,
   resolveFieldArmy,
   retakeBattle,
@@ -2366,6 +2367,13 @@ export const useCharacterStore = defineStore('character', () => {
     map: ExpeditionMap | null | undefined,
   ): number {
     const defenses = base?.defenses ?? [];
+    // 🏝️ Sur une île : la part de l'île que la Tour voit (niveau ÷ niveau max de l'île).
+    if (map?.archipel)
+      return islandDetectRadius(
+        scoutLevel(defenses),
+        map.archipel.island,
+        controlDetectBoost(map, Date.now()),
+      );
     return detectRadius(
       baseLeadMs(
         scoutLevel(defenses),
