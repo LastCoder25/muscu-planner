@@ -6153,11 +6153,14 @@ onUnmounted(() => {
   max-height: calc(100% - 16px);
   overflow-y: auto;
 }
-/* Contrôles de zoom */
+/* Contrôles de zoom. ⚠️ Au-dessus de la rangée de boutons fixés au bas de l'écran (↕️ et les
+   tuiles, bas 16 px + 48 px de haut) : la carte finit pile en bas de l'écran, et à 8 px du bas
+   le « + » passait sous le ↕️ (signalé, vu au banc à 344/390/600 px). Décaler la rangée vers
+   la gauche ne tient pas à 344 px : elle buterait sur la barre ⚡/🔙/✕ du voyage touché. */
 .zoom-ctl {
   position: absolute;
   right: 8px;
-  bottom: 8px;
+  bottom: calc(72px + env(safe-area-inset-bottom));
   display: flex;
   align-items: flex-end;
   gap: 6px;
