@@ -46,7 +46,7 @@
       :viewBox="viewBox"
       class="board"
       role="img"
-      aria-label="Assaut de la base"
+      :aria-label="village ? 'Assaut du village du port' : 'Assaut de la base'"
     >
       <defs>
         <radialGradient id="siege-meadow" cx="50%" cy="50%" r="62%">
@@ -73,6 +73,34 @@
         <circle cx="100" cy="100" :r="EARTH_R" fill="url(#siege-earth)" />
         <path v-for="(t, i) in decor.tufts" :key="'g' + i" :d="t" class="s-tuft" />
         <path v-for="(t, i) in decor.trees" :key="'tr' + i" :d="t" class="s-tree" />
+      </g>
+
+      <!-- ── 🌊 LE VILLAGE DU PORT : la mer dans son dos (v-once, rien de réactif) ──
+           Posée PAR-DESSUS l'herbe : ce qui serait semé sous le rivage disparaît dans l'eau. -->
+      <g v-if="village" v-once class="sea" aria-hidden="true">
+        <path :d="SEA" class="v-sea" />
+        <path :d="BEACH" class="v-beach" />
+        <path v-for="(w, i) in WAVES" :key="'wv' + i" :d="w" class="v-wave" />
+        <!-- La jetée, et les barques amarrées -->
+        <rect :x="97" :y="VILLAGE.shoreY - 3" width="6" height="30" rx="1" class="v-pier" />
+        <line
+          v-for="k in 5"
+          :key="'pp' + k"
+          :x1="96.4"
+          :x2="103.6"
+          :y1="VILLAGE.shoreY + k * 5"
+          :y2="VILLAGE.shoreY + k * 5"
+          class="v-plank"
+        />
+        <g
+          v-for="(bt, i) in BOATS"
+          :key="'bt' + i"
+          :transform="`translate(${bt.x} ${bt.y}) scale(${bt.s})`"
+        >
+          <path d="M -7 0 Q 0 5 7 0 L 5.5 -1.6 L -5.5 -1.6 Z" class="v-hull" />
+          <line x1="0" y1="-1.6" x2="0" y2="-11" class="v-mast" />
+          <path d="M 0.6 -10.4 L 6 -3 L 0.6 -3 Z" class="v-sail" />
+        </g>
       </g>
 
       <!-- ── L'ENCEINTE ──
@@ -109,6 +137,22 @@
         :style="{ opacity: crackOpacity(k.at), strokeWidth: crackWidth(k.at) }"
       />
       <polygon :points="innerPoints" class="s-yard" />
+      <!-- 🏘️ Les maisons du village, à l'abri de la muraille -->
+      <g v-if="village" v-once class="houses" aria-hidden="true">
+        <g v-for="(h, i) in HOUSES" :key="'h' + i" :transform="`translate(${h.x} ${h.y})`">
+          <rect x="-4.2" y="-3" width="8.4" height="6" class="v-house" />
+          <path d="M -5.4 -2.6 L 0 -7.4 L 5.4 -2.6 Z" class="v-roof" :class="{ alt: i % 2 }" />
+          <rect x="-1" y="0.4" width="2" height="2.6" class="v-door" />
+        </g>
+        <!-- Le bastion du rivage : la muraille s'achève sur la grève -->
+        <circle
+          :cx="verts[TURRET_SLOTS]!.x"
+          :cy="verts[TURRET_SLOTS]!.y"
+          r="6.5"
+          class="v-bastion"
+        />
+        <circle :cx="verts[0]!.x" :cy="verts[0]!.y" r="6.5" class="v-bastion" />
+      </g>
       <!-- ── LA TROUÉE ──
            ⚠️ Un simple manque dans le trait du mur ne se LISAIT pas : sur le banc, le pan
            ouvert passait pour intact. La brèche est donc un PASSAGE — une bande de terre
@@ -254,7 +298,7 @@
       <div v-if="finished" class="endcard">
         <div class="end-emo">{{ stage.held ? '🛡️' : '💥' }}</div>
         <div class="end-title font-display">
-          {{ stage.held ? 'Assaut repoussé' : 'L’enceinte a cédé' }}
+          {{ stage.held ? 'Assaut repoussé' : village ? 'Le village a cédé' : 'L’enceinte a cédé' }}
         </div>
         <div class="end-sub">
           {{ stage.defeated }}/{{ stage.total }} groupes abattus · {{ corpseCount }} corps
@@ -297,6 +341,9 @@ import {
   SIEGE_STAGE,
   SIEGE_WALL_R,
   turnToward,
+  VILLAGE,
+  villageAngle,
+  villageVertexAngle,
   yardAttackerSpot,
   type SiegeBeat,
   type SiegeBody,
@@ -340,26 +387,77 @@ const TURRET_S = 1.35;
 /** Marge entre la fin du pivot et le lâcher (une image de transition CSS + du jeu). */
 const PIVOT_MARGIN_MS = 45;
 const decor = battlefieldDecor(EARTH_R);
-const octagon = Array.from({ length: TURRET_SLOTS }, (_, i) => {
-  const a = (i / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS;
-  return {
-    x: 100 + Math.cos(a) * WALL_R,
-    y: 100 + Math.sin(a) * WALL_R,
-    rot: (a * 180) / Math.PI + 90,
-  };
+/** 🏘️ Le village du port (îles 2 à 5) : la même bataille, repliée sur une muraille côté
+ *  terre, la mer dans le dos (`villageAngle`). Le rapport ne change pas d'une instance à
+ *  l'autre (`:key`), la géométrie se pose donc une fois. */
+const village = (props.report.island ?? 0) >= 2;
+/** Un angle du moteur, tel qu'on le DESSINE (replié sur l'arc côté terre au village). */
+const geoA = (a: number): number => (village ? villageAngle(a) : a);
+const vertexAt = (a: number) => ({
+  x: 100 + Math.cos(a) * WALL_R,
+  y: 100 + Math.sin(a) * WALL_R,
+  rot: (a * 180) / Math.PI + 90,
 });
-const wallPoints = octagon.map((p) => `${p.x},${p.y}`).join(' ');
-const innerPoints = octagon
+/** Les SOMMETS de la muraille, un de plus que de pans : refermée sur la base (le dernier
+ *  est le premier), ouverte sur la mer au village. ⚠️ Le pan i va de `verts[i]` à
+ *  `verts[i + 1]`, dans les deux cas. */
+const verts = Array.from({ length: TURRET_SLOTS + 1 }, (_, i) =>
+  vertexAt(
+    village
+      ? villageVertexAngle(i)
+      : ((i % TURRET_SLOTS) / TURRET_SLOTS) * Math.PI * 2 - Math.PI / 2 + Math.PI / TURRET_SLOTS,
+  ),
+);
+/** Une baliste par pan, sur son premier sommet. */
+const octagon = verts.slice(0, TURRET_SLOTS);
+/** La muraille fermée (la base), ou l'arc refermé par le rivage (le village). */
+const ring = village ? verts : octagon;
+const wallPoints = ring.map((p) => `${p.x},${p.y}`).join(' ');
+const innerPoints = ring
   .map((p) => `${100 + (p.x - 100) * 0.86},${100 + (p.y - 100) * 0.86}`)
   .join(' ');
 const merlons = octagon.map((p, i) => {
-  const q = octagon[(i + 1) % octagon.length]!;
+  const q = verts[i + 1]!;
   return {
     x: (p.x + q.x) / 2,
     y: (p.y + q.y) / 2,
     a: (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI,
   };
 });
+
+// ── 🌊 Le décor du village (figé) ──
+const SHORE = VILLAGE.shoreY;
+/** Le rivage, ondulé, de bord à bord du cadre. */
+const shoreLine = (dy: number) => {
+  const pts: string[] = [];
+  for (let x = -120; x <= 320; x += 20) {
+    const y = SHORE + dy + Math.sin(x * 0.11) * 1.6 + Math.sin(x * 0.037) * 2.2;
+    pts.push(`${x},${y.toFixed(1)}`);
+  }
+  return pts;
+};
+const SEA = `M ${shoreLine(2).join(' L ')} L 320,320 L -120,320 Z`;
+const BEACH = `M ${shoreLine(-3).join(' L ')} L ${shoreLine(2).reverse().join(' L ')} Z`;
+const WAVES = Array.from({ length: 7 }, (_, k) => {
+  const y = SHORE + 14 + k * 15;
+  const x0 = -60 + ((k * 37) % 90);
+  return `M ${x0} ${y} q 6 -3 12 0 t 12 0 M ${x0 + 150} ${y + 6} q 6 -3 12 0 t 12 0`;
+});
+const BOATS = [
+  { x: 82, y: SHORE + 22, s: 1 },
+  { x: 118, y: SHORE + 30, s: 1.15 },
+  { x: 60, y: SHORE + 44, s: 0.9 },
+];
+/** Les maisons, en éventail dans la cour (au nord du rivage, à l'abri du rempart). */
+const HOUSES = [
+  { x: 74, y: 92 },
+  { x: 88, y: 84 },
+  { x: 112, y: 84 },
+  { x: 126, y: 92 },
+  { x: 100, y: 74 },
+  { x: 84, y: 64 },
+  { x: 116, y: 64 },
+];
 
 // ── Déroulé ──
 const idx = ref(-1);
@@ -381,7 +479,11 @@ const struckDefs = ref(new Set<string>());
  *  dehors, et ne bouge que quand SA baliste tire. */
 const aim = reactive(octagon.map((p) => p.rot));
 const ghostPct = ref(100);
-const cam = reactive<{ cx: number; cy: number; field: number }>({ cx: 100, cy: 100, field: FIELD });
+const cam = reactive<{ cx: number; cy: number; field: number }>({
+  cx: 100,
+  cy: village ? VILLAGE.camCy : 100,
+  field: FIELD,
+});
 const viewBox = computed(
   () => `${cam.cx - cam.field} ${cam.cy - cam.field} ${cam.field * 2} ${cam.field * 2}`,
 );
@@ -478,14 +580,14 @@ function bodyPos(b: SiegeBody, i: number): { x: number; y: number } {
   if (e) return yardAttackerSpot(e.angle, e.k);
   const tour = dead.value.get(i) ?? curRound.value;
   const d = assaultRadius(b.dist, tour);
-  const a = bodyAngleAt(b, tour);
+  const a = geoA(bodyAngleAt(b, tour));
   return { x: 100 + Math.cos(a) * d, y: 100 + Math.sin(a) * d };
 }
 
 /** Où se tient un défenseur, compte tenu de ceux qui sont descendus du rempart. */
 const defenderLayout = computed(() => {
   const out = new Map<string, { x: number; y: number }>();
-  const angle = stage.value.breachAngle;
+  const angle = geoA(stage.value.breachAngle);
   const desc = state.value.descended;
   const rampart = stage.value.defenders.filter((d) => d.post === 'rampart' && !desc.includes(d.id));
   const yard = [
@@ -517,9 +619,11 @@ const entries = computed(() => {
     for (const a of b.attackers) {
       if (out.has(a)) continue;
       const body = stage.value.bodies[a];
-      const angle = body
-        ? entryAngle(bodyAngleAt(body, b.round), stage.value.breachAngle, b.basePv <= 0)
-        : stage.value.breachAngle;
+      const angle = geoA(
+        body
+          ? entryAngle(bodyAngleAt(body, b.round), stage.value.breachAngle, b.basePv <= 0)
+          : stage.value.breachAngle,
+      );
       const key = Math.round(angle * 1000);
       const k = perAngle.get(key) ?? 0;
       perAngle.set(key, k + 1);
@@ -531,7 +635,7 @@ const entries = computed(() => {
 /** Les chicots des pans ouverts — le reste des pans est intact. */
 const wallSegments = computed(() =>
   octagon.flatMap((p, i) => {
-    const q = octagon[(i + 1) % octagon.length]!;
+    const q = verts[i + 1]!;
     const g = openGap.value.get(i) ?? 0;
     if (g <= 0) return [{ x1: p.x, y1: p.y, x2: q.x, y2: q.y }];
     const at = (t: number) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
@@ -547,13 +651,13 @@ const wallSegments = computed(() =>
  *  cour) et ses gravats — graine fixe par rapport ET par pan, pour qu'ils ne sautillent pas. */
 const breaches = computed(() =>
   [...openGap.value].map(([pan, g]) => {
-    const p = octagon[pan]!;
-    const q = octagon[(pan + 1) % octagon.length]!;
+    const p = verts[pan]!;
+    const q = verts[pan + 1]!;
     const at = (t: number) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
     const a = at(0.5 - g / 2);
     const b = at(0.5 + g / 2);
-    const nx = Math.cos(panAngle(pan));
-    const ny = Math.sin(panAngle(pan));
+    const nx = Math.cos(geoA(panAngle(pan)));
+    const ny = Math.sin(geoA(panAngle(pan)));
     const pt = (o: { x: number; y: number }, k: number) =>
       `${(o.x + nx * k).toFixed(1)},${(o.y + ny * k).toFixed(1)}`;
     const floor = [pt(a, 9), pt(b, 9), pt(b, -12), pt(a, -12)].join(' ');
@@ -585,7 +689,7 @@ const cracks = computed(() => {
     ((props.report.groups.length * 7919 + props.report.total) ^ 0x7f4a7c15) >>> 0 || 1,
   );
   return octagon.map((p, i) => {
-    const q = octagon[(i + 1) % octagon.length]!;
+    const q = verts[i + 1]!;
     const t = 0.25 + rng() * 0.5;
     const x0 = p.x + (q.x - p.x) * t;
     const y0 = p.y + (q.y - p.y) * t;
@@ -800,7 +904,7 @@ function play() {
         say('🧱 LA MURAILLE CÈDE !', true, 1400);
         shakeLevel.value = 2;
         hurt.value = 0.4;
-        moveCamera(breachCamera(stage.value.breachAngle), 900);
+        moveCamera(breachCamera(geoA(stage.value.breachAngle)), 900);
       }
       break;
     case 'enter':
@@ -846,7 +950,7 @@ function finish() {
   floats.value = [];
   banner.value = '';
   if (stage.value.beats.some((b) => b.width > 0))
-    Object.assign(cam, breachCamera(stage.value.breachAngle));
+    Object.assign(cam, breachCamera(geoA(stage.value.breachAngle)));
   finished.value = true;
 }
 function skip() {
@@ -861,6 +965,60 @@ onUnmounted(clearTimers);
 </script>
 
 <style scoped>
+/* 🌊 Le village du port */
+.v-sea {
+  fill: #1d4a66;
+}
+.v-beach {
+  fill: #c9b27a;
+}
+.v-wave {
+  fill: none;
+  stroke: #7fb6d3;
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+.v-pier {
+  fill: #6b4a2b;
+}
+.v-plank {
+  stroke: #3d2a18;
+  stroke-width: 0.5;
+}
+.v-hull {
+  fill: #5a3a20;
+  stroke: #2a1a0c;
+  stroke-width: 0.5;
+}
+.v-mast {
+  stroke: #3d2a18;
+  stroke-width: 0.7;
+}
+.v-sail {
+  fill: #efe6d2;
+}
+.v-house {
+  fill: #b89a72;
+  stroke: #5a4630;
+  stroke-width: 0.5;
+}
+.v-roof {
+  fill: #a8452e;
+  stroke: #5e2416;
+  stroke-width: 0.5;
+}
+.v-roof.alt {
+  fill: #7d5a3c;
+}
+.v-door {
+  fill: #3a2a1a;
+}
+.v-bastion {
+  fill: #8a7856;
+  stroke: #4d4231;
+  stroke-width: 1.2;
+}
 .siege {
   position: relative;
   width: 100%;

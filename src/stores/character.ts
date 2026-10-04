@@ -132,7 +132,14 @@ import {
   recordDeparture,
   archipelFloor,
 } from '@/lib/expedition';
-import { archipelOn, islandById, mapOutpostLevel, mapPlayerLevel } from '@/lib/archipelago';
+import {
+  activeIsland,
+  archipelOn,
+  islandById,
+  islandPacified,
+  mapOutpostLevel,
+  mapPlayerLevel,
+} from '@/lib/archipelago';
 import {
   boardTravellers,
   CROSSING_BLOCK_LABEL,
@@ -3194,8 +3201,10 @@ export const useCharacterStore = defineStore('character', () => {
       {
         ...ctx,
         towerBoost: controlDetectBoost(cur.expedition_map, now),
-        // 🕊️ Île pacifiée : plus aucun siège.
-        onIsland: !!cur.expedition_map?.archipel,
+        // 🕊️ Île pacifiée : plus aucun siège. Sinon le point de départ de l'île (la base, ou
+        // le village du port) se fait assiéger par les armées de ses points ennemis.
+        pacified: islandPacified(cur.expedition_map),
+        faction: activeIsland(cur.expedition_map)?.faction ?? null,
         // 🏝️ Sur une île, l'armée reste dans la tranche de l'île, jamais au-dessus du joueur.
         levelBand: islandRaidBand(
           cur.expedition_map?.archipel ? archipelFloor(cur.expedition_map) : null,
@@ -3286,6 +3295,9 @@ export const useCharacterStore = defineStore('character', () => {
       t.dueRaid,
       home,
     );
+    // 🏝️ Le rejeu dessine le village du port sur les îles 2 à 5 (`SiegeStage`).
+    const island = cur.expedition_map?.archipel?.island;
+    if (island !== undefined) report.island = island;
     const {
       base: nb,
       damage,

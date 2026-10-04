@@ -565,6 +565,41 @@ export function panAngle(pan: number): number {
   return sectorAngle(pan) + STEP / 2;
 }
 
+// ── 🏘️ LE VILLAGE DU PORT (îles 2 à 5) ─────────────────────────────────────────────
+
+/**
+ * 🏘️ LE SIÈGE DU VILLAGE DU PORT : un village en bord de mer, sa muraille côté TERRE.
+ *
+ * ⚠️ PUREMENT VISUEL, comme tout ce module : le moteur range toujours ses assaillants sur 8
+ * pans répartis sur 360°. Le rejeu du village REPLIE ce tour complet sur un ARC tourné vers
+ * l'intérieur des terres (`villageAngle`) : la mer est dans le dos du village, l'armée vient
+ * de la terre. Les mêmes pans, les mêmes balistes, les mêmes temps — un autre décor.
+ */
+export const VILLAGE = {
+  /** Ouverture de la muraille : un demi-cercle (un peu moins), centré sur le nord. Ses deux
+   *  extrémités tombent sur le rivage, AU-DESSUS de la mer — sinon les corps des pans
+   *  extrêmes naîtraient dans l'eau. */
+  span: (Math.PI * 170) / 180,
+  /** Le rivage (y du dessin) : la mer commence sous lui. */
+  shoreY: 104,
+  /** La caméra, relevée : on garde la mer dans le dos sans qu'elle mange l'écran. */
+  camCy: 50,
+} as const;
+
+/** 🏘️ Un angle du moteur (tour complet) REPLIÉ sur l'arc de la muraille du village. */
+export function villageAngle(a: number): number {
+  const v0 = sectorAngle(0);
+  const T = Math.PI * 2;
+  const t = (((a - v0) % T) + T) % T;
+  return -Math.PI / 2 - VILLAGE.span / 2 + (t / T) * VILLAGE.span;
+}
+
+/** 🏘️ Le i-ème sommet de la muraille du village (0 à `BATTLE.sectors` : un de plus que de
+ *  pans, la muraille est OUVERTE sur la mer). */
+export function villageVertexAngle(i: number): number {
+  return -Math.PI / 2 - VILLAGE.span / 2 + (i / BATTLE.sectors) * VILLAGE.span;
+}
+
 /** Le pan qui fait face à un angle (inverse de `panAngle`). */
 export function panOfAngle(angle: number): number {
   const n = BATTLE.sectors;

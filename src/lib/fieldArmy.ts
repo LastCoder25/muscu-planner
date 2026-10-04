@@ -247,6 +247,24 @@ function ashore(
   return { x: to.x, y: to.y };
 }
 
+/**
+ * 🏝️ D'OÙ SORT L'ARMÉE D'UN SIÈGE SUR UNE ÎLE : un de ses points ENNEMIS (objectif,
+ * forteresse, lieu fixe tenu par l'ennemi), tiré sur la graine du raid — donc toujours le
+ * même pour un même siège. `undefined` s'il n'en reste aucun (l'île est alors pacifiée, et
+ * plus aucun siège ne part).
+ */
+export function siegeOrigin(
+  raid: Pick<Raid, 'seed'>,
+  pois: readonly Poi[],
+): { x: number; y: number } | undefined {
+  const enemy = pois
+    .filter((p) => p.type === 'control' && p.control?.owner === 'enemy')
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  if (!enemy.length) return undefined;
+  const p = enemy[(raid.seed >>> 0) % enemy.length]!;
+  return { x: p.x, y: p.y };
+}
+
 /** 🏰 L'armée d'un SIÈGE sur la carte, ou `null` tant qu'on ne la voit pas. Elle part du bord
  *  du rayon de détection, du côté où elle frappera l'enceinte (`raidFirstSector`). */
 export function siegeArmyPoi(
@@ -256,6 +274,9 @@ export function siegeArmyPoi(
   playerLevel: number,
   /** 🏝️ L'île de la carte : l'armée y vient de l'INTÉRIEUR des terres, jamais de la mer. */
   island?: number,
+  /** 🏝️ D'où elle sort : un point ENNEMI de l'île (`siegeOrigin`). On la voit là où son
+   *  trajet entre dans le rayon de détection — comme une reprise part de sa citadelle. */
+  origin?: { x: number; y: number },
 ): Poi | null {
   if (now >= raid.arrivesAt || !raid.groups.length) return null;
   const lead = detectRadius(raid.arrivesAt - raid.detectedAt);
@@ -272,7 +293,10 @@ export function siegeArmyPoi(
       : null;
   const ang = inland === null ? sector * 2 * Math.PI : inland + (sector - 0.5) * Math.PI * 0.8;
   const from = ashore(
-    { x: EXPE.town.x + Math.cos(ang) * dist, y: EXPE.town.y + Math.sin(ang) * dist },
+    (origin && entryPoint(origin, EXPE.town, dist)) || {
+      x: EXPE.town.x + Math.cos(ang) * dist,
+      y: EXPE.town.y + Math.sin(ang) * dist,
+    },
     EXPE.town,
     island,
   );
@@ -413,7 +437,14 @@ export function syncFieldArmies(
 ): ExpeditionMap {
   const want0: Poi[] = [];
   if (ctx.raid) {
-    const s = siegeArmyPoi(ctx.raid, ctx.reach, ctx.now, ctx.playerLevel, map.archipel?.island);
+    const s = siegeArmyPoi(
+      ctx.raid,
+      ctx.reach,
+      ctx.now,
+      ctx.playerLevel,
+      map.archipel?.island,
+      map.archipel ? siegeOrigin(ctx.raid, map.pois) : undefined,
+    );
     if (s) want0.push(s);
   }
   const circles = detectionCircles(map, ctx.detectR, ctx.reach);

@@ -306,6 +306,9 @@ export interface RaidReport {
   /** PV du mur au départ. */
   maxPv: number;
   heroHome: boolean;
+  /** 🏝️ L'île où le siège a eu lieu (archipel) : 2 à 5 = le village du port, que le rejeu
+   *  dessine en bord de mer. Absente hors archipel et pour les rapports d'avant. */
+  island?: number;
   /** ⚠️ Le log du moteur en DEUX PHASES, pas une suite de combats de donjon. C'est lui
    *  que le rejeu animé relit — il ne re-simule jamais rien. */
   log: BattleEvent[];
@@ -1005,12 +1008,15 @@ export function rollRaid(
   overflow?: RiftOverflow | null,
   /** 🏝️ Sur une île : les niveaux de l'armée restent dans cette tranche (`islandRaidBand`). */
   band?: RaidLevelBand | null,
+  /** 🏝️ La faction imposée (celle de l'île active). Le tirage reste consommé : le flux
+   *  aléatoire ne décale pas. Un débordement de faille garde la sienne. */
+  imposed?: RaidFaction | null,
 ): Raid {
   const rng = mulberry32(seed >>> 0 || 1);
   // 🕳️ Une armée sortie d'une faille porte LA FACTION DE SA FAILLE — donc le butin du
   // siège se lit sur la carte avant même que la Tour de guet ne parle.
   const rolled = pick(rng, ['bandits', 'betes', 'mortsvivants'] as const);
-  const faction = overflow ? overflow.faction : rolled;
+  const faction = overflow ? overflow.faction : (imposed ?? rolled);
   const roster = ROSTERS[faction];
   const L = Math.max(1, playerLevel);
   const nGroups = RAID.minGroups + Math.floor(rng() * (RAID.maxGroups - RAID.minGroups + 1));
@@ -3164,18 +3170,20 @@ export function defenseReadiness(defenses: DefenseStructure[], playerLevel: numb
  *  et ils reprennent tout seuls une fois rattrapé. C’est cohérent avec la règle 1 (on ne
  *  punit jamais) — et sans exploit, un siège étant un ROBINET (butin, cadavres, ferraille) :
  *  s’en priver coûte du contenu, ça n’achète pas de la sécurité. */
-/** ⚠️ `onIsland` REQUIS : 🏝️ sur une île (archipel), AUCUN siège « venu de la mer » — les
- *  attaques n'y partent que des points fixes ennemis (camps, objectifs, forteresse), et
- *  plus rien une fois l'île pacifiée (décision de l'utilisateur, 2026-10-02 : « enlève les
- *  attaques liées à aucun point fixe »). */
+/** ⚠️ `pacified` REQUIS : 🕊️ une île PACIFIÉE (objectifs et forteresse abattus) ne lance plus
+ *  aucun siège — ses armées partent de ses points ennemis, il n'en reste aucun (décision de
+ *  l'utilisateur, 2026-10-02 : « enlève les attaques liées à aucun point fixe »). Tant qu'ils
+ *  tiennent, le point de départ de l'île (la base sur l'île 1, le village du port sur les
+ *  îles 2 à 5) se fait assiéger comme la base (2026-10-04 : « le village de départ doit
+ *  pouvoir se faire attaquer aussi »). */
 export function raidsEnabled(
   base: BaseState,
   activeDays7: number,
   playerLevel: number,
-  onIsland: boolean,
+  pacified: boolean,
 ): boolean {
   return (
-    !onIsland &&
+    !pacified &&
     playerLevel >= RAID.minRaidLevel &&
     defenseReadiness(base.defenses, playerLevel) >= RAID.enableShare &&
     activeDays7 >= 1
@@ -3194,9 +3202,9 @@ export interface BaseTickResult {
  *  là et ce que vaut la garnison ; il le signale via `dueRaid`. */
 /**
  * 🧱🏹 L'ENCEINTE RENFORCE LES GARNISONS (décision de l'utilisateur, 2026-10-03, « piste 1 ») :
- * depuis l'archipel, plus aucun siège ne vient sur la base — la muraille et les tourelles
- * qu'on a montées ne servaient plus à rien. Elles renforcent désormais la défense de TOUS les
- * lieux fixes tenus, sur toutes les îles. Chacune vaut sa PART du niveau du héros (la règle de
+ * la muraille et les tourelles renforcent la défense de TOUS les lieux fixes tenus, sur
+ * toutes les îles — en plus de tenir le siège du point de départ de l'île (la base, ou le
+ * village du port sur les îles 2 à 5, qui garde les MÊMES structures, v1.61). Chacune vaut sa PART du niveau du héros (la règle de
  * `defenseReadiness` : surmonter au-delà n'achète rien, le sport reste le plafond), moyennées.
  */
 export const FORTIFY = {
@@ -3242,8 +3250,11 @@ export function advanceBase(
     globalXp: number;
     /** 🗼 Bonus de détection des Tours de guet tenues (`controlDetectBoost`). */
     towerBoost: number;
-    /** 🏝️ Mode archipel : pas de siège venu de la mer (`raidsEnabled`). */
-    onIsland: boolean;
+    /** 🕊️ L'île active est pacifiée : plus aucun siège (`raidsEnabled`). */
+    pacified: boolean;
+    /** 🏝️ La faction de l'île active : ses armées viennent de ses points ennemis. Absente ou
+     *  `null` hors archipel (faction tirée). */
+    faction?: RaidFaction | null;
     /** 🏝️ La tranche de niveaux des armées sur l'île active (`islandRaidBand`), `null` hors archipel. */
     levelBand: RaidLevelBand | null;
   },
@@ -3279,10 +3290,10 @@ export function advanceBase(
     changed = true;
   }
 
-  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.onIsland)) {
-    // 🏝️ Sur une île, un siège déjà en marche (détecté avant la bascule ou la pacification)
-    // n'a plus de point fixe d'origine : il se disperse au lieu d'arriver.
-    if (ctx.onIsland && b.raid) {
+  if (!raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.pacified)) {
+    // 🕊️ L'île vient d'être pacifiée : un siège déjà en marche n'a plus de point fixe
+    // d'origine, il se disperse au lieu d'arriver.
+    if (ctx.pacified && b.raid) {
       b = { ...b, raid: null };
       changed = true;
     }
@@ -3323,7 +3334,15 @@ export function advanceBase(
     // 🕳️ Le débordement en attente est CONSOMMÉ ici : l'armée qui se met en marche est
     // celle de la faille, et le marquage s'efface. C'est ce qui garantit qu'il ne
     // s'applique qu'UNE fois — sans ça, chaque siège suivant serait renforcé à vie.
-    const raid = rollRaid(seed, ctx.playerLevel, b.nextRaidAt, lead, b.overflow, ctx.levelBand);
+    const raid = rollRaid(
+      seed,
+      ctx.playerLevel,
+      b.nextRaidAt,
+      lead,
+      b.overflow,
+      ctx.levelBand,
+      ctx.faction ?? null,
+    );
     b = { ...b, raid, overflow: null };
     detected = raid;
     changed = true;

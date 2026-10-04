@@ -326,7 +326,7 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
     ).toBe(NOW + 40 * H);
   });
 
-  it('🏝️ sur une île, aucun siège venu de la mer', () => {
+  it('🕊️ une île pacifiée ne lance plus de siège ; tant qu’elle ne l’est pas, le point de départ en subit', () => {
     const base = {
       defenses: [
         { typeId: 'wall', level: 26 },
@@ -337,7 +337,7 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
     expect(raidsEnabled(base, 7, 26, true)).toBe(false);
   });
 
-  it('🏝️ un siège déjà en marche se disperse en passant sur une île', () => {
+  it('🕊️ un siège déjà en marche se disperse quand l’île est pacifiée', () => {
     const b0 = emptyBase(3, NOW);
     const base: BaseState = {
       ...b0,
@@ -348,8 +348,8 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
       raid: rollRaid(7, 26, NOW + 4 * H, H, null, null),
     };
     const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, towerBoost: 0, levelBand: null };
-    expect(advanceBase(base, { ...ctx, onIsland: false }, NOW).base.raid).not.toBe(null);
-    const r = advanceBase(base, { ...ctx, onIsland: true }, NOW);
+    expect(advanceBase(base, { ...ctx, pacified: false }, NOW).base.raid).not.toBe(null);
+    const r = advanceBase(base, { ...ctx, pacified: true }, NOW);
     expect(r.base.raid).toBe(null);
     expect(r.dueRaid).toBe(null);
   });
