@@ -240,8 +240,8 @@ const down = computed(() => toSet(props.downKey ?? ''));
 const imminent = computed(() => toSet(props.imminentKey));
 const attacked = computed(() => toSet(props.attackedKey ?? ''));
 /** 🏰 Agrandissement d'un lieu fixe (citadelle encore plus) ; 1 pour un lieu ordinaire. */
-const FIXED_SCALE = 1.3;
-const CITADEL_SCALE = 1.55;
+const FIXED_SCALE = 1.15;
+const CITADEL_SCALE = 1.35;
 const scaleOf = (p: Poi) =>
   !p.control
     ? 1

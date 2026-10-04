@@ -38,6 +38,8 @@
           </g>
         </g>
       </svg>
+      <!-- 🏝️ L'archipel (pastille en haut à droite), fourni par la carte qui nous héberge. -->
+      <slot />
     </div>
     <!-- 🛡️ Les lieux tenus, en tuiles : le lieu touché (sur la carte ou ici) se gère dessous. -->
     <div class="rim-list">
@@ -170,6 +172,7 @@ watch(
   cursor: pointer;
 }
 .rim-map {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;

@@ -167,10 +167,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     let open = '';
     const props = { island: islandById(1), busy: false, now: Date.now() };
     await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (closed = h));
-    // Cinq tuiles, l'active est le segment choisi, les quatre autres sous cadenas ; pas de fiche.
-    expect(closed.match(/class="isl(?=[ "])/g)?.length).toBe(5);
-    expect(closed).toContain('aria-current="location"');
-    expect(closed.split('🔒').length - 1).toBe(4);
+    // Replié : la seule pastille de l'île actuelle, ni îles ni fiche.
+    expect(closed).toContain('class="arch-cur"');
+    expect(closed).toContain('Île 1 · ');
+    expect(closed.match(/class="isl(?=[ "])/g)).toBeNull();
     expect(closed).not.toContain('Tu es ici');
     expect(
       await mountIt(
@@ -180,10 +180,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         undefined,
         '/',
         (h) => (open = h),
-        (host) => host.querySelector<HTMLElement>('.isl.active')?.click(),
+        (host) => host.querySelector<HTMLElement>('.arch-cur')?.click(),
       ),
     ).toBeNull();
-    // La fiche de l'île touchée.
+    // Déplié : cinq îles, l'active marquée, les quatre autres sous cadenas, et sa fiche.
+    expect(open.match(/class="isl(?=[ "])/g)?.length).toBe(5);
+    expect(open).toContain('aria-current="location"');
+    expect(open.split('🔒').length - 1).toBeGreaterThanOrEqual(4);
     expect(open).toContain('Tu es ici');
     expect(open).toContain('Le Fort des pillards');
     // 🏝️ Étape 7 : tout le monde joue l'archipel, plus d'interrupteur pour en sortir.
@@ -207,7 +210,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       away: {},
       militia: { 1: 4 },
     };
-    const openHead = (host: HTMLElement) => host.querySelector<HTMLElement>('.isl.active')?.click();
+    const openHead = (host: HTMLElement) => host.querySelector<HTMLElement>('.arch-cur')?.click();
     await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (here = h), openHead);
     expect(here).toMatch(/🛡️ 4 miliciens/);
     await mountIt(
@@ -218,6 +221,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (there = h),
       async (host) => {
+        host.querySelector<HTMLElement>('.arch-cur')?.click();
+        await nextTick();
         host.querySelectorAll<HTMLElement>('.isl')[1]?.click();
         await nextTick();
       },
@@ -240,6 +245,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (back = h),
       async (host) => {
+        host.querySelector<HTMLElement>('.arch-cur')?.click();
+        await nextTick();
         host.querySelectorAll<HTMLElement>('.isl')[1]?.click();
         await nextTick();
       },
@@ -696,7 +703,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(one.match(/attack-dot/g)?.length).toBe(1);
     expect(await render('')).not.toContain('attack-dot');
     // Le fort (citadelle) est agrandi, le lieu ordinaire non.
-    expect(one).toMatch(/scale\(1\.55\)/);
+    expect(one).toMatch(/scale\(1\.35\)/);
     expect(one.match(/scale\(/g)?.length).toBe(1);
   }, 30_000);
   it('⚫ MapPoiLayer dessine la garnison en points sous le fort', async () => {
@@ -949,8 +956,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       return { scale: out.match(/scale\(([\d.]+)\)/)?.[1], frame: out.includes('qg foe') };
     };
     // 🏰 Demandé : la forteresse adverse porte un cadre que nul autre lieu ne porte.
-    expect(await scaleOf('fortress')).toEqual({ scale: '1.55', frame: true });
-    expect(await scaleOf('mine')).toEqual({ scale: '1.3', frame: false });
+    expect(await scaleOf('fortress')).toEqual({ scale: '1.35', frame: true });
+    expect(await scaleOf('mine')).toEqual({ scale: '1.15', frame: false });
     expect((await scaleOf('citadel')).frame).toBe(false);
   }, 30_000);
 

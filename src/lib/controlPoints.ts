@@ -417,8 +417,10 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
-  // 🏝️ Les objectifs de l'île se TIENNENT une fois pris (étape 6 bis) : 3 champions.
-  objective: CONTROL_MAX_GARRISON,
+  // 🏝️ Les objectifs de l'île se TIENNENT une fois pris (étape 6 bis). 5 champions
+  // (2026-10-04, demandé : « la garnison des objectifs est passée à 3 au lieu de 5 ») : la
+  // garnison entière, comme les lieux qui produisent.
+  objective: PRODUCER_SEATS,
   // 🏰 La forteresse PRISE se tient, garnison SANS LIMITE, comme la base (décision de
   // l'utilisateur, 2026-10-02 : « la forteresse a une garnison sans limite »).
   fortress: Infinity,

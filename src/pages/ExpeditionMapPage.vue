@@ -5,27 +5,6 @@
        fait tourner la boucle de mise à jour (rapports, retours, reprises, carte) : la lancer
        ici aussi doublerait chaque notification. -->
   <div class="emap">
-    <!-- 🏝️ L'archipel : toute la carte depuis la bascule (étape 7 de la roadmap). -->
-    <ArchipelPanel
-      :island="island"
-      :conquest="islandProgress"
-      :busy="archBusy"
-      :open-ids="crossInfo.open"
-      :visited-ids="crossInfo.visited"
-      :crossing="char.row?.expedition_map?.crossing ?? null"
-      :blocks="crossInfo.blocks"
-      :fetchable="crossInfo.fetchable"
-      :sailings="char.row?.expedition_map?.sailings ?? []"
-      :hero-depart-at="char.crossingDepartAt(now)"
-      :away="crossInfo.away"
-      :militia="crossInfo.militia"
-      :remote="remoteInfo"
-      :now="now"
-      @view="viewIslandMap"
-      @cross="crossTo"
-      @fetch="fetchFrom"
-      @militia="moveMilitia"
-    />
     <!-- 🗺️ La carte d'une île RANGÉE (demandé : « cliquer sur l'île 1 et voir la carte pour
          gérer les garnisons des miliciens ») : elle remplace la carte active tant qu'on la
          regarde ; « Revenir » ou l'île active dans le sélecteur la referment. -->
@@ -38,7 +17,9 @@
       :busy="archBusy"
       @close="viewIsland = null"
       @militia="(e) => moveMilitia({ island: viewed!.island.id, ...e })"
-    />
+    >
+      <ArchipelPanel v-bind="archBind" v-on="archOn" />
+    </RemoteIslandMap>
     <!-- ⛵ Qui embarque ? (option A) : avec ou sans le héros, les champions au choix. -->
     <CrossingSheet
       v-model="crossOpen"
@@ -358,6 +339,10 @@
         </span>
         <span v-else class="ei-emo">{{ POI_EMO[e.poi.type] }}</span>
       </button>
+
+      <!-- 🏝️ L'archipel, en haut à droite de la carte : l'île actuelle, et au toucher toutes
+           les îles avec la fiche de celle qu'on choisit. -->
+      <ArchipelPanel v-if="!viewed" v-bind="archBind" v-on="archOn" />
 
       <!-- Zoom -->
       <div class="zoom-ctl">
@@ -1285,7 +1270,10 @@
       :title="slideDir === 'down' ? 'Voir les expéditions' : 'Remonter en haut'"
       @click="slideMap"
     >
-      <q-icon :name="slideDir === 'down' ? 'keyboard_arrow_down' : 'keyboard_arrow_up'" size="28px" />
+      <q-icon
+        :name="slideDir === 'down' ? 'keyboard_arrow_down' : 'keyboard_arrow_up'"
+        size="28px"
+      />
     </button>
   </div>
 </template>
@@ -1670,6 +1658,31 @@ function viewIslandMap(id: number | null) {
     selected.value = null;
   }
 }
+/** 🏝️ Le panneau de l'archipel, posé en haut à droite de la carte AFFICHÉE (active ou île
+ *  rangée) : une seule liaison pour les deux emplacements. La pastille nomme l'île affichée. */
+const archBind = computed(() => ({
+  island: island.value,
+  shown: viewed.value?.island.id ?? null,
+  conquest: islandProgress.value,
+  busy: archBusy.value,
+  openIds: crossInfo.value.open,
+  visitedIds: crossInfo.value.visited,
+  crossing: char.row?.expedition_map?.crossing ?? null,
+  blocks: crossInfo.value.blocks,
+  fetchable: crossInfo.value.fetchable,
+  sailings: char.row?.expedition_map?.sailings ?? [],
+  heroDepartAt: char.crossingDepartAt(now.value),
+  away: crossInfo.value.away,
+  militia: crossInfo.value.militia,
+  remote: remoteInfo.value,
+  now: now.value,
+}));
+const archOn = {
+  view: viewIslandMap,
+  cross: crossTo,
+  fetch: fetchFrom,
+  militia: moveMilitia,
+};
 async function moveMilitia(e: { island: number; pointId: string; delta: number }) {
   const uid = auth.user?.id;
   if (!uid || archBusy.value) return;
