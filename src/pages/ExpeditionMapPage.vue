@@ -344,6 +344,42 @@
           <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
         </div>
       </div>
+
+      <!-- 🗂️ LES TUILES PAR-DESSUS LA CARTE (essai, demandé : un bouton à côté de ↕️ pour les
+           expéditions et un pour les places fortes ; toucher une tuile ferme l'affichage et
+           centre la carte sur son tracé ou son lieu). Les tuiles sous la carte restent le temps
+           de l'essai. -->
+      <div v-if="overlay && !viewed" class="map-overlay" role="dialog" :aria-label="overlayTitle">
+        <div class="mo-head" :class="{ bare: overlay === 'ctl' }">
+          <span v-if="overlay !== 'ctl'" class="mo-title">{{ overlayTitle }}</span>
+          <button type="button" class="mo-x" aria-label="Fermer" @click="overlay = null">✕</button>
+        </div>
+        <template v-if="overlay === 'trips'">
+          <p v-if="!trips.length && !attacks.length" class="map-tab-empty">
+            Aucune expédition en cours ni armée en marche.
+          </p>
+          <TripsPanel
+            :focus="focusTrip"
+            :trips="trips"
+            :hero-profile="character.profile"
+            :attacks="attacks"
+            :holds="attackHolds"
+            :now="coarseNow"
+            @update:focus="pickOverlayTrip"
+            @attack="(p: Poi) => ((overlay = null), openAttack(p))"
+          />
+        </template>
+        <ControlPointsSheet
+          v-else
+          :model-value="true"
+          inline
+          :rows="ctlRoster"
+          :advs="char.advList"
+          :reinforceable="reinforceable"
+          @open="(p: Poi) => ((overlay = null), openFromList(p))"
+          @reinforce="(p: Poi) => ((overlay = null), (quickId = p.id))"
+        />
+      </div>
     </div>
 
     <!-- 🗂️ TROIS TUILES SOUS LA CARTE (2026-09-29, demandé : « les lieux fixes et les attaques
@@ -1256,6 +1292,24 @@
       bientôt.
     </div>
 
+    <!-- 🧭🏰 À gauche du ↕️ : les tuiles des expéditions et des places fortes, par-dessus la
+         carte (essai). La pastille reprend celle des tuiles sous la carte. -->
+    <button
+      v-for="(t, i) in mapTabs"
+      v-show="!viewed"
+      :key="'fab-' + t.id"
+      type="button"
+      class="slide-fab tile-fab"
+      :class="{ on: overlay === t.id, alert: t.alert }"
+      :style="{ right: 16 + 56 * (mapTabs.length - i) + 'px' }"
+      :aria-label="t.label"
+      :title="t.label"
+      :aria-pressed="overlay === t.id"
+      @click="toggleOverlay(t.id)"
+    >
+      <span class="tf-emo">{{ t.emo }}</span>
+      <span v-if="t.n" class="tf-dot">{{ t.n }}</span>
+    </button>
     <!-- ↕️ FIXE EN BAS DE L'ÉCRAN (demandé) : ↓ ouvre le détail des expéditions et le cale en
          bas, ↑ remonte en haut. Le sens suit la place des tuiles à l'écran (`mapSlide.ts`). -->
     <button
@@ -3542,6 +3596,28 @@ function dimmed(p: Poi): boolean {
  *  restent en garnison à l'arrivée (`midAt`). */
 type MapPanel = 'trips' | 'ctl';
 const mapPanel = ref<MapPanel | null>(null);
+/** 🗂️ Les tuiles affichées PAR-DESSUS la carte (essai, cf. le gabarit). */
+const overlay = ref<MapPanel | null>(null);
+const overlayTitle = computed(() =>
+  overlay.value === 'ctl' ? '🏰 Places fortes' : '🧭 Expéditions',
+);
+function toggleOverlay(id: MapPanel) {
+  overlay.value = overlay.value === id ? null : id;
+  if (!overlay.value) return;
+  // Un seul affichage ouvert à la fois, et la carte ramenée à l'écran (elle porte les tuiles).
+  selected.value = null;
+  mapPanel.value = null;
+  void nextTick(revealTabs);
+}
+/** Toucher un voyage ferme les tuiles et centre la carte sur son tracé (`frameTrip`, via le
+ *  watch de `focusTrip`). Retoucher le voyage déjà mis en avant le centre de nouveau. */
+function pickOverlayTrip(key: string | null) {
+  overlay.value = null;
+  const k = key ?? focusTrip.value;
+  if (!k) return;
+  if (focusTrip.value === k) frameTrip(k);
+  else focusTrip.value = k;
+}
 /** Refermer la partie Expéditions (ou passer aux Places fortes) désélectionne le voyage
  *  touché : sinon son halo restait sur la carte sans sa tuile (signalé). */
 watch(mapPanel, (p) => {
@@ -4294,6 +4370,7 @@ function selectPoi(p: Poi) {
   selected.value = p;
   // Un seul affichage ouvert à la fois : le lieu referme l'onglet déplié et le voyage touché.
   mapPanel.value = null;
+  overlay.value = null;
   focusTrip.value = null;
   // ⚠️ La carte occupe 62vh et la feuille vit SOUS elle, dans le flux : sur un téléphone
   // elle s'ouvre donc hors écran, et cliquer un lieu semble ne rien faire.
@@ -5969,6 +6046,81 @@ onUnmounted(() => {
 }
 /* ↕️ Le bouton de glissement, fixe en bas à droite de l'écran : en accent, c'est un
    déplacement de page, pas un zoom. Sous les fenêtres Quasar (z-index 6000). */
+/* 🗂️ Les tuiles par-dessus la carte : au-dessus de la fiche des îles (z 5), sous leur rangée, et des boutons
+   fixes du bas de l'écran, qui recouvrent le bas de la carte. */
+.map-overlay {
+  position: absolute;
+  top: 56px;
+  left: 8px;
+  right: 8px;
+  bottom: 72px;
+  z-index: 6;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.mo-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 0 0 8px;
+  background: var(--bg);
+}
+/* 🏰 Les places fortes portent déjà leur titre : on ne garde que la croix, posée à droite. */
+.mo-head.bare {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-height: 0;
+  padding: 0;
+  background: none;
+}
+.mo-title {
+  font-weight: 800;
+  font-size: 14px;
+}
+.mo-x {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 18px;
+  cursor: pointer;
+}
+.tile-fab .tf-emo {
+  font-size: 20px;
+  line-height: 1;
+}
+.tile-fab.on {
+  background: var(--accent);
+}
+.tf-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 18px;
+}
+.tile-fab.alert .tf-dot {
+  background: var(--d4);
+  color: #fff;
+}
 .slide-fab {
   position: fixed;
   right: 16px;

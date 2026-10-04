@@ -91,6 +91,19 @@ const ECRANS = [
       { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
       // 🏝️ L'île actuelle, en haut à droite : toucher la pastille déplie les cinq îles.
       { nom: 'archipel', clic: '.arch-cur', attendu: '.arch-pop', escape: true },
+      // 🗂️ (essai) Les tuiles par-dessus la carte, par les boutons à côté de ↕️ : toucher un
+      // voyage ferme l'affichage et met son tracé en avant.
+      {
+        nom: 'tuiles-expe',
+        clic: '.tile-fab[aria-label="Expéditions"]',
+        attendu: '.map-overlay .trip',
+      },
+      { nom: 'tuile-trace', clic: '.map-overlay .trip', attendu: '.trail-focus' },
+      {
+        nom: 'tuiles-forts',
+        clic: '.tile-fab[aria-label="Places fortes"]',
+        attendu: '.map-overlay .cps-tile',
+      },
     ],
   },
   // 🌀 L'accueil du Labyrinthe en tuiles (v0.1305). ⚠️ On ne LANCE pas de palier : ça
