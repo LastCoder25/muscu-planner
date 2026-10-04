@@ -913,7 +913,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       expect(out.includes('mt-wall'), `île ${island}`).toBe(base);
       expect(out.includes('mt-place'), `île ${island}`).toBe(!base);
       // 👑 Demandé : ta base porte un cadre à part, base comme village.
-      expect(out, `île ${island}`).toContain('qg-frame mine');
+      expect(out, `île ${island}`).toContain('qg mine');
     }
   }, 30_000);
 
@@ -946,7 +946,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         '/',
         (h) => (out = h),
       );
-      return { scale: out.match(/scale\(([\d.]+)\)/)?.[1], frame: out.includes('qg-frame foe') };
+      return { scale: out.match(/scale\(([\d.]+)\)/)?.[1], frame: out.includes('qg foe') };
     };
     // 🏰 Demandé : la forteresse adverse porte un cadre que nul autre lieu ne porte.
     expect(await scaleOf('fortress')).toEqual({ scale: '1.55', frame: true });
