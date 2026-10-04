@@ -77,7 +77,14 @@ describe('🩹 encaissement', () => {
     journal: [],
     ...over,
   });
-  const ctx = { pantheonLevel: 50, infirmaryLevel: 0, backAt: 1000, now: 1000, xpGranted: true };
+  const ctx = {
+    pantheonLevel: 50,
+    infirmaryLevel: 0,
+    backAt: 1000,
+    now: 1000,
+    xpGranted: true,
+    healMult: 1,
+  };
   const roster = [adv('a', 0), adv('b', 1), adv('c', 2)];
 
   it('un blessé léger part à l’infirmerie pour la courte durée, les autres restent debout', () => {

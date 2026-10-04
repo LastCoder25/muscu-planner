@@ -183,6 +183,17 @@ export const CONTROL = {
    *  recopie une rune MULTICOLORE (la couleur se tire à l'ouverture). Sa réserve tient UNE
    *  rune (une seule attend d'être ramassée), quel que soit l'effectif. */
   runeHoursPerItem: 16,
+  /** ⚗️ Laboratoire (île 5, 2026-10-04, décision de l'utilisateur : « plus lent et en meilleure
+   *  couleur que le scriptorium ») : il distille une rune MULTICOLORE toutes les
+   *  `runeHoursPerItem × labSlowdown` heures au même effectif — et elle est « BÉNIE » (à partir
+   *  du bleu, jamais verte : `runeBank.BLESSED_ODDS`), là où celle du scriptorium peut sortir
+   *  verte. ⚠️ La couleur d'une rune se tire à l'OUVERTURE (`openRune`) : « meilleure couleur »
+   *  ne peut donc vouloir dire que « bénie », la seule qualité que la réserve sait porter. */
+  labSlowdown: 2,
+  /** 🕯️ Hospice (île 3, 2026-10-04) : il ne produit rien. Tenu, la convalescence d'un champion
+   *  blessé sur l'île est DIVISÉE par `1 + hospiceCut × part` (part = `garrisonShare` rapportée
+   *  à la garnison pleine) : ÷2 au complet, rien sans personne (`hospiceHealMult`). */
+  hospiceCut: 1,
   /** ⛲ Source de mana (2026-09-29, demandé) : une garnison de 3 produit par jour la MOITIÉ du
    *  mana d'une faille refermée de ton niveau (`riftClearMana`), 5 personnes ×1,3. ⚠️ DÉRIVÉ du
    *  mana d'une faille, jamais écrit : si les failles bougent, la Source suit.
@@ -397,6 +408,8 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   distillery: PRODUCER_SEATS,
   fort: PRODUCER_SEATS,
   cartographer: PRODUCER_SEATS,
+  hospice: PRODUCER_SEATS,
+  lab: PRODUCER_SEATS,
   // 💎 UN seul champion, et personne pour le défendre (pas de milice : `garrisonCap`).
   lapidary: 1,
   tower: PRODUCER_SEATS,
@@ -427,14 +440,15 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   tower: 3,
   // 📜 La place de la tour de guet, retirée le 2026-10-02 (sa citadelle garde une cible).
   scriptorium: 3,
-  // 📖 Île 2 : la place du jardin, qui n'y est pas.
-  archives: 2,
+  // 📖 Île 2 (2026-10-04, 3ᵉ lieu de l'île) : la place du camp, qui n'y est pas — à un quart
+  // de tour de l'ossuaire (2,5) et du scriptorium (3), plutôt qu'à 45° de l'ossuaire.
+  archives: 1,
   // ⚱️ Île 3 : la place du scriptorium, qui n'y est pas.
   ossuary: 2.5,
   // ⚒️ Île 3 (2026-10-03) : face au camp, assez loin de lui pour un rang différent.
   arsenal: 3,
-  // 🌀 Retiré (plus sur aucune île).
-  circle: 2.5,
+  // 🌀 Île 4 (2026-10-04, 3ᵉ lieu de l'île) : la place du camp (fortin en 2, cartographe en 3).
+  circle: 1,
   // 🗿 Île 5 : la place du jardin, qui n'y est pas.
   altar: 2,
   // 🧪 Île 5 : la place de la tour de guet (camp en 1, autel en 2).
@@ -445,6 +459,10 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   cartographer: 3,
   // 💎 Île 3 : la place du jardin (camp en 1, arsenal en 3).
   lapidary: 2,
+  // 🕯️ Île 3 : la place du camp (lapidaire en 2, arsenal en 3).
+  hospice: 1,
+  // ⚗️ Île 5 : la place du camp (autel en 2, distillerie en 3).
+  lab: 1,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
   // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
@@ -465,6 +483,8 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
   cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
   lapidary: 'un niveau de plus sur une compétence de son champion 💎',
+  hospice: 'des champions blessés de l’île guéris plus vite 🕯️',
+  lab: 'runes multicolores bleues ou mieux 🔷',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
   archives: 'clés du Labyrinthe',
@@ -1125,15 +1145,17 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   // remettre les mêmes lieux fixes sur d'autres îles »). Une île QUITTÉE continue de produire
   // (`autoCollectControls`), au niveau du joueur : une 2ᵉ mine sur l'île 2 ne ferait
   // qu'empiler de l'or. Le camp, lui, est sur chaque île : il entraîne les champions POSTÉS
-  // là où l'on se bat. Rien qui alimente la partie héros (clés, pierres d'invocation).
+  // là où l'on se bat. ⚠️ Les archives (clés) et le cercle (pierres d'invocation), retirés
+  // un temps pour ne rien verser à la partie héros, reviennent sur les îles 2 et 4
+  // (2026-10-04, décision de l'utilisateur : trois lieux fixes par île).
   // Un lieu retiré encore tenu est rappelé puis effacé (`retiredHeld`).
   1: ['mine', 'mana', 'garden'],
-  2: ['scriptorium', 'ossuary'],
-  // ⏳ Îles 3 à 5 : composition d'avant tant que leurs lieux nouveaux (lapidaire, cartographe,
-  // fortin, distillerie) ne sont pas écrits — personne n'a encore quitté l'île 1.
-  3: ['lapidary', 'arsenal'],
-  4: ['cartographer', 'fort'],
-  5: ['altar', 'distillery'],
+  // 🏝️ TROIS LIEUX FIXES PAR ÎLE (2026-10-04, décision de l'utilisateur) : archives (île 2),
+  // hospice (île 3), cercle d'invocation (île 4), laboratoire (île 5).
+  2: ['scriptorium', 'ossuary', 'archives'],
+  3: ['lapidary', 'arsenal', 'hospice'],
+  4: ['cartographer', 'fort', 'circle'],
+  5: ['altar', 'distillery', 'lab'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;
@@ -1147,13 +1169,14 @@ export function militiaSeatsOf(map: Pick<ExpeditionMap, 'archipel'> | null | und
 
 /** ⚒️🌀🗿 L'unité produite et ce qu'en dit la tuile, pour les spécialités des îles 4 et 5. */
 const UNIT_LOOK: Record<
-  'ossuary' | 'arsenal' | 'circle' | 'altar',
+  'ossuary' | 'arsenal' | 'circle' | 'altar' | 'lab',
   { unit: string; what: string }
 > = {
   ossuary: { unit: '🔱', what: 'du prochain sceau de champion, versé directement' },
   arsenal: { unit: '⚜️', what: 'du prochain sceau d’objet, versé directement' },
   circle: { unit: '🔮', what: 'de la prochaine pierre d’invocation, versée directement' },
   altar: { unit: '🪬', what: 'de la prochaine rune, versée directement' },
+  lab: { unit: '🔷', what: 'de la prochaine rune bleue ou mieux, versée directement' },
 };
 
 /** 🗑️ Un point d'un type retiré est-il encore occupé (garnison, renforts, retours, héros) ? */
@@ -1850,6 +1873,9 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'altar':
       // 🪬 Une rune toutes les 48 h au complet.
       return shareOf(n) / CONTROL.altarHoursPerRune;
+    case 'lab':
+      // ⚗️ Le rythme du scriptorium, `labSlowdown` fois moins vite (runes bénies).
+      return shareOf(n) / (CONTROL.runeHoursPerItem * CONTROL.labSlowdown);
     case 'circle':
       // 🌀 Une tentative de boss de l'île toutes les 48 h au complet.
       return (bossSummonCost(playerLevel) * shareOf(n)) / CONTROL.circleHoursPerAttempt;
@@ -2015,6 +2041,31 @@ export function fortCutFor(n: number): number {
   return CONTROL.fortCut * shareOf(n);
 }
 
+/** 🕯️ Le diviseur de convalescence d'un hospice de `n` soigneurs : `1 + hospiceCut × part`,
+ *  la part étant `garrisonShare` RAPPORTÉE à la garnison pleine — 1 sans personne, 2 au complet. */
+export function hospiceDivisor(n: number): number {
+  return 1 + (CONTROL.hospiceCut * shareOf(n)) / shareOf(PRODUCER_SEATS);
+}
+
+/**
+ * 🕯️ LE FACTEUR DE L'HOSPICE sur la convalescence d'un CHAMPION blessé sur l'île : 1 hors
+ * archipel, sans hospice tenu ou sans soigneur ; ½ avec une garnison pleine (règle : « les
+ * champions blessés de l'île guérissent plus vite, jusqu'à 2× »). Il ne produit rien, comme le
+ * fortin. ⚠️ SOURCE UNIQUE, lue par le store là où une blessure de champion est POSÉE
+ * (`partyClaimRoster` — missions, lieux fixes perdus — et le siège de la base) : il multiplie
+ * la DURÉE de soin au moment où elle est fixée. Le HÉROS n'est pas concerné.
+ */
+export function hospiceHealMult(
+  map: Pick<ExpeditionMap, 'archipel' | 'pois'> | null | undefined,
+): number {
+  if (!map?.archipel) return 1;
+  let m = 1;
+  for (const p of map.pois)
+    if (p.control?.kind === 'hospice' && p.control.owner === 'player')
+      m = Math.min(m, 1 / hospiceDivisor(p.control.garrison.length));
+  return m;
+}
+
 /**
  * 🧱 LE FACTEUR DU FORTIN pour la troupe qui reprend un AUTRE lieu tenu de la carte : 1 sans
  * fortin tenu (ou sans sentinelle). Le fortin ne se couvre pas lui-même : sa propre garnison
@@ -2169,7 +2220,8 @@ export function collectControl(
     }
   }
   // 📜 Des runes MULTICOLORES : leur couleur se tire à l'ouverture (`runeBank.openRune`).
-  const runes = c.kind === 'scriptorium' || c.kind === 'altar' ? whole : 0;
+  // ⚗️ Le laboratoire en verse aussi — toutes bénies, comme l'autel.
+  const runes = c.kind === 'scriptorium' || c.kind === 'altar' || c.kind === 'lab' ? whole : 0;
   const until = Math.min(now, c.attackAt ?? now);
   return {
     map: withControl(map, id, (q) => ({
@@ -2189,7 +2241,7 @@ export function collectControl(
     gearXp: {},
     supplies,
     runes,
-    blessedRunes: c.kind === 'altar' ? whole : 0,
+    blessedRunes: c.kind === 'altar' || c.kind === 'lab' ? whole : 0,
     keys: c.kind === 'archives' ? whole : 0,
     summon: c.kind === 'circle' ? whole : 0,
     gearSeals: c.kind === 'arsenal' ? whole : 0,
@@ -2230,6 +2282,12 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       text: k
         ? `🗺️ ${POI_LABEL[k.favor]} : ${Math.round(k.chance * 100)} % des lieux tirés`
         : '🗺️ Choisis le lieu à faire revenir',
+      pct: null,
+    };
+  }
+  if (c.kind === 'hospice') {
+    return {
+      text: `🕯️ convalescence ÷${hospiceDivisor(c.garrison.length).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} sur l’île`,
       pct: null,
     };
   }
@@ -2284,7 +2342,8 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
     case 'ossuary':
     case 'arsenal':
     case 'circle':
-    case 'altar': {
+    case 'altar':
+    case 'lab': {
       const next = Math.max(0, units - Math.floor(units + 1e-9));
       const left = leftFor(1 - next, rate);
       const e = UNIT_LOOK[c.kind].unit;
@@ -2329,6 +2388,8 @@ const WORKER: Record<ControlKind, [string, string]> = {
   fort: ['sentinelle', 'sentinelles'],
   cartographer: ['arpenteur', 'arpenteurs'],
   lapidary: ['lapidaire', 'lapidaires'],
+  hospice: ['soigneur', 'soigneurs'],
+  lab: ['alchimiste', 'alchimistes'],
   tower: ['guetteur', 'guetteurs'],
   scriptorium: ['copiste', 'copistes'],
   archives: ['archiviste', 'archivistes'],
@@ -2376,6 +2437,18 @@ export function controlYieldCard(
       what: k
         ? `des lieux tirés sur l’île deviennent : ${POI_LABEL[k.favor]}`
         : 'choisis ci-dessous le lieu à faire revenir',
+      pct: null,
+      gauge: idle,
+      rate: crew,
+      ready: false,
+      full: false,
+    };
+  }
+  if (c.kind === 'hospice') {
+    return {
+      emoji: '🕯️',
+      value: `÷${hospiceDivisor(n).toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`,
+      what: 'sur la convalescence des champions blessés de l’île',
       pct: null,
       gauge: idle,
       rate: crew,
@@ -2484,7 +2557,8 @@ export function controlYieldCard(
     case 'ossuary':
     case 'arsenal':
     case 'circle':
-    case 'altar': {
+    case 'altar':
+    case 'lab': {
       const next = Math.max(0, units - Math.floor(units + 1e-9));
       const left = leftFor(1 - next, rate);
       const look = UNIT_LOOK[c.kind];

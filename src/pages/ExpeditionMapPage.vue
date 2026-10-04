@@ -2850,7 +2850,11 @@ const yieldCard = computed(() =>
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
   if (liveControl.value?.kind === 'scriptorium')
-    return 'La couleur de la rune suit le rang du lieu face au tien : un Scriptorium de ton rang copie plus souvent des bleues et des violettes. Le copiste n’apprend rien.';
+    return 'Il recopie des runes multicolores : leur couleur se tire à l’ouverture, au Panthéon. Le copiste n’apprend rien.';
+  if (liveControl.value?.kind === 'lab')
+    return 'Deux fois moins vite que le Scriptorium, mais ses runes sont bénies : jamais vertes, bleues ou mieux à l’ouverture. L’alchimiste n’apprend rien.';
+  if (liveControl.value?.kind === 'hospice')
+    return 'Il ne produit rien : tenu, les champions blessés sur l’île guérissent plus vite — deux fois plus vite au complet. Le héros n’est pas concerné.';
   if (liveControl.value?.kind !== 'training') return '';
   const cap = trainingCapLevel(heroLevel.value);
   if (!cap)

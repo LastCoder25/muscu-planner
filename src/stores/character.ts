@@ -1,6 +1,7 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
+import { sinceEvent } from '@/lib/sinceEvent';
 import {
   makePlannedMove,
   makePlannedRecall,
@@ -399,6 +400,7 @@ import {
   trainingRoom,
   dueRetakes,
   retiredHeld,
+  hospiceHealMult,
   retakeDelayMs,
   withLastAttack,
   mapHarass,
@@ -2898,6 +2900,8 @@ export const useCharacterStore = defineStore('character', () => {
         // 🎓 Versée à l'ARRIVÉE du rapport (`grantReportXp`) ; les rapports d'avant ce
         // changement ne l'ont pas reçue et la reçoivent ici.
         xpGranted: !!m.xpGranted,
+        // 🕯️ L'hospice tenu de l'île abrège les soins (1 sans hospice, hors archipel).
+        healMult: hospiceHealMult(cur.expedition_map),
       });
       advProgress = advProgressOf(advList.value, claim.adventurers);
       const gearPatch = gearTrainedPatch(cur, advList.value, claim.adventurers);
@@ -3277,6 +3281,16 @@ export const useCharacterStore = defineStore('character', () => {
     // revenait indemne pendant qu’on écrivait aux défenseurs une convalescence DÉJÀ dépassée.
     // `null` = elle est écoulée, personne ne part à l’infirmerie.
     const hurt = woundUntil ? new Set(siegeHurtIds(report)) : new Set<string>();
+    // 🕯️ Les CHAMPIONS de l'île guérissent plus vite si l'hospice est tenu (le héros, non) :
+    // la même échéance que le héros, sa durée multipliée par `hospiceHealMult`, comptée depuis
+    // la bataille — `null` si elle est déjà écoulée.
+    const champWoundUntil = woundUntil
+      ? sinceEvent(
+          report.resolvedAt,
+          (woundUntil - report.resolvedAt) * hospiceHealMult(cur.expedition_map),
+          now,
+        )
+      : null;
     let siegeGear: ReturnType<typeof gearTrainedPatch> = {};
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
@@ -3287,8 +3301,8 @@ export const useCharacterStore = defineStore('character', () => {
         const gain = siegeGains[a.id] ?? 0;
         gains[a.id] = gain;
         const next = grantAdvXp(a, gain, pantheonLevel.value);
-        return hurt.has(a.id)
-          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, woundUntil ?? 0) }
+        return hurt.has(a.id) && champWoundUntil
+          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, champWoundUntil) }
           : next;
       });
       siegeGear = gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]);
@@ -5230,6 +5244,8 @@ export const useCharacterStore = defineStore('character', () => {
           backAt: m.resolvedAt,
           now,
           xpGranted: true,
+          // 🕯️ L'hospice tel qu'il est APRÈS l'attaque (perdu, il ne soigne plus).
+          healMult: hospiceHealMult(map),
         }).adventurers;
     // 🗡️ L'ÉQUIPEMENT, en UN seul calcul : le bonus du camp versé avant l'attaque, puis tout
     // ce que les champions ont appris depuis l'état de départ — la récolte du camp ET l'XP

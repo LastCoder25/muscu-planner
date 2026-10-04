@@ -47,9 +47,10 @@ const adv = (over: Partial<Adventurer> = {}): Adventurer =>
   }) as Adventurer;
 
 describe('💎 le lapidaire de l’île 3', () => {
-  it('l’île 3 : lapidaire, arsenal', () => {
+  it('l’île 3 : lapidaire, arsenal, hospice', () => {
     expect([...controlKindsOf({ archipel: archipelOn(3) })].sort()).toEqual([
       'arsenal',
+      'hospice',
       'lapidary',
     ]);
     expect(poiLabel(island3().pois.find((p) => p.id === id)!)).toContain('Lapidaire');

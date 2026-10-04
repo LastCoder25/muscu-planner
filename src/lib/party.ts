@@ -777,6 +777,10 @@ export function partyClaimRoster(
     /** ⚠️ REQUIS : l'XP a-t-elle déjà été versée à l'arrivée (`grantReportXp`) ? L'oublier
      *  la verserait deux fois. */
     xpGranted: boolean;
+    /** 🕯️ L'HOSPICE de l'île (`hospiceHealMult`) : il multiplie la convalescence (½ au mieux,
+     *  1 sans hospice tenu). ⚠️ REQUIS : optionnel, un appelant l'oublierait et les blessés de
+     *  l'île guériraient au rythme normal sans que rien ne le dise. */
+    healMult: number;
   },
 ): { adventurers: Adventurer[]; escort: Adventurer[] } {
   const escort = party.escort
@@ -785,7 +789,7 @@ export function partyClaimRoster(
   // ⏱️ DEPUIS LE RETOUR DU GROUPE, pas depuis le clic « Encaisser » — même règle que les
   // convois et que le siège. `null` = déjà écoulée, personne ne part à l'infirmerie.
   // 🩹 La trousse de soins emportée divise la convalescence (`healMult`, posé au départ).
-  const fullMs = caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1);
+  const fullMs = caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1) * ctx.healMult;
   const hurt = new Set(party.hurt);
   const light = new Set((party.lightHurt ?? []).filter((id) => !hurt.has(id)));
   const adventurers = roster.map((a) => {

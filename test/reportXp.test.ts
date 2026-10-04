@@ -92,7 +92,7 @@ describe('🎓 grantReportXp — XP versée à l’arrivée du rapport', () => {
 });
 
 describe('🎁 partyClaimRoster — l’encaissement ne reverse pas l’XP déjà versée', () => {
-  const ctx = { pantheonLevel: 30, infirmaryLevel: 0, backAt: 0, now: 0 };
+  const ctx = { pantheonLevel: 30, infirmaryLevel: 0, backAt: 0, now: 0, healMult: 1 };
   it('xpGranted : aucun champion ne bouge', () => {
     const r = partyClaimRoster(party({ a: 50 }), roster, { ...ctx, xpGranted: true });
     expect(r.adventurers[0]).toBe(roster[0]);

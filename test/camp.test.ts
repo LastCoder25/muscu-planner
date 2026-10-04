@@ -952,6 +952,7 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     backAt: 1_000_000,
     now: 1_000_000,
     xpGranted: false,
+    healMult: 1,
   };
 
   it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {

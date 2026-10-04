@@ -109,6 +109,12 @@ export type ControlKind =
   /** 🏝️💎 Le LAPIDAIRE (île 3) : UN champion y polit une de SES compétences (+1 niveau, 5 au
    *  plus). Personne ne le défend : on intercepte l'armée qui marche dessus. */
   | 'lapidary'
+  /** 🏝️🕯️ L'HOSPICE (île 3) : ne produit rien ; tenu, les champions blessés sur l'île
+   *  guérissent plus vite (`hospiceHealMult`, jusqu'à ×2 garnison pleine). */
+  | 'hospice'
+  /** 🏝️⚗️ Le LABORATOIRE (île 5) : des runes multicolores « à partir du bleu », deux fois
+   *  moins vite que le scriptorium (`CONTROL.labSlowdown`). */
+  | 'lab'
   /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
   | 'citadel'
   /** 🏝️ ARCHIPEL (étape 2) : un OBJECTIF SECONDAIRE de l'île (camp de brigands, nid…) et la
@@ -310,6 +316,8 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   fort: 'Fortin',
   cartographer: 'Cartographe',
   lapidary: 'Lapidaire',
+  hospice: 'Hospice',
+  lab: 'Laboratoire',
   citadel: 'Citadelle ennemie',
   objective: 'Objectif de l’île',
   fortress: 'Forteresse portuaire',
@@ -330,6 +338,8 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   fort: '🧱',
   cartographer: '🗺️',
   lapidary: '💎',
+  hospice: '🕯️',
+  lab: '⚗️',
   citadel: '🏯',
   objective: '⛺',
   fortress: '🏰',
