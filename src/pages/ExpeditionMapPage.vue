@@ -217,7 +217,11 @@
             :attacked-key="attackedKey"
             :tier-key="tierKey"
             :garrison-key="garrisonKey"
-            :target="active && voyageTargetShown(active, now) ? active.poi : null"
+            :target="
+              active && voyageTargetShown(active, now) && !fixedOnMap(active.poi)
+                ? active.poi
+                : null
+            "
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
             @select="selectPoi"
@@ -2027,6 +2031,10 @@ const mapPois = pois;
 /** ⚔️ Les armées en campagne se dessinent au premier plan, au-dessus de la ville et des
  *  lieux (cf. le second `MapPoiLayer`) ; les autres lieux restent dessous. */
 const isMarching = (p: Poi) => p.type === 'warband' || !!p.army;
+/** 🏰 Un lieu FIXE (point de contrôle) toujours dessiné sur la carte : il porte lui-même son
+ *  état (tenu, en assaut), on ne le redouble pas d'une cible de voyage. */
+const livePoiIds = computed(() => new Set(mapPois.value.map((p) => p.id)));
+const fixedOnMap = (p: Poi) => !!p.control && livePoiIds.value.has(p.id);
 const placePois = computed(() => mapPois.value.filter((p) => !isMarching(p)));
 const armyPois = computed(() => mapPois.value.filter(isMarching));
 /** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
@@ -4616,7 +4624,9 @@ const dimmedKey = computed(() =>
  *  départ (elle continue sa marche) — elle se grise elle aussi, jusqu'au retour des vainqueurs. */
 const downKey = computed(() =>
   [
-    ...(heroTargetDown.value && active.value ? [active.value.poi.id] : []),
+    ...(heroTargetDown.value && active.value && !fixedOnMap(active.value.poi)
+      ? [active.value.poi.id]
+      : []),
     ...travelTargets.value.filter((v) => v.down).map((v) => v.poi.id),
   ].join('|'),
 );
@@ -4669,6 +4679,9 @@ const travelTargets = stableBy(
   () =>
     travelersOnMap.value
       .filter((v) => v.kind !== 'reinf') // le point tenu est déjà dessiné par MapPoiLayer
+      // 🏰 Un lieu FIXE encore sur la carte (pris et tenu) se dessine lui-même : sa cible,
+      // marquée terrassée, le grisait et le barrait tant que l'équipe rentrait (signalé).
+      .filter((v) => !fixedOnMap(v.poi))
       // 🗺️ Un lieu non terrassé est REVENU sur la carte dès le rapport : ne pas le redessiner.
       .filter((v) => !hiddenTargets.value.has(v.id))
       .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind, down: 'down' in v && v.down })),
