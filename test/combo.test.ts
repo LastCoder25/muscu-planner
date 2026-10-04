@@ -1350,17 +1350,18 @@ describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
     target: 10,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  it('argent avant les séries de base, jaune ensuite (terminés compris)', () => {
+  it('argent avant les séries de base, jaune ensuite, aucune zone une fois terminé', () => {
     expect(legBarZone(ex('A', 7))).toBe('sec');
     expect(legBarZone(ex('A', 8))).toBe('obj');
-    expect(legBarZone(ex('A', 10))).toBe('obj');
-    expect(legBarZone(ex('A', 12))).toBe('obj');
+    expect(legBarZone(ex('A', 9))).toBe('obj');
+    expect(legBarZone(ex('A', 10))).toBeNull();
+    expect(legBarZone(ex('A', 12))).toBeNull();
   });
-  it('filtre sans réordonner ; « all » garde tout', () => {
-    const legs = [ex('A', 12), ex('B', 2), ex('C', 9), ex('D', 10)];
-    expect(filterLegsByZone(legs, 'obj').map((l) => l.exercise_name)).toEqual(['A', 'C', 'D']);
+  it('filtre sans réordonner, « Objectif » sans les terminés ; « all » garde tout', () => {
+    const legs = [ex('A', 12), ex('B', 2), ex('C', 9), ex('E', 8), ex('D', 10)];
+    expect(filterLegsByZone(legs, 'obj').map((l) => l.exercise_name)).toEqual(['C', 'E']);
     expect(filterLegsByZone(legs, 'sec').map((l) => l.exercise_name)).toEqual(['B']);
-    expect(filterLegsByZone(legs, 'all')).toHaveLength(4);
+    expect(filterLegsByZone(legs, 'all')).toHaveLength(5);
   });
   it('sans filtre, les exos terminés passent en bas, chacun dans son ordre', () => {
     const legs = [ex('A', 12), ex('B', 2), ex('C', 10), ex('D', 9)];

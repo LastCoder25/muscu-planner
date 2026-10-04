@@ -2680,7 +2680,7 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
       target: 10,
       sets: Array.from({ length: faites }, () => ({ date: '2026-01-05', reps: 10 })),
     });
-    const combo = { id: 'c', legs: [leg('A', 12), leg('B', 3)], status: 'active' };
+    const combo = { id: 'c', legs: [leg('A', 12), leg('B', 3), leg('C', 9)], status: 'active' };
     let out = '';
     expect(
       await mountIt(
@@ -2693,7 +2693,7 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
       ),
     ).toBeNull();
     // Les barres sont des boutons (elles filtrent), avec leur compte d’exos (A terminé
-    // compte dans le jaune, B au secondaire : aucune zone vide).
+    // n’est dans aucune zone, B au secondaire, C dans le jaune : aucune zone vide).
     expect((out.match(/<button/g) ?? []).length).toBe(2);
     expect(out).not.toContain('disabled');
     // Deux barres SÉPARÉES, chacune avec son remplissage — plus de zone bonus (v1.53).

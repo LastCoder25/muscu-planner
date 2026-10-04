@@ -77,7 +77,10 @@ const LABEL: Record<ComboBarZone, string> = { sec: 'Secondaire', obj: 'Objectif'
 const zones = computed(() => comboBarSegments(props.combo, props.pace));
 const counts = computed(() => {
   const n: Record<ComboBarZone, number> = { sec: 0, obj: 0 };
-  for (const l of props.combo.legs) n[legBarZone(l)]++;
+  for (const l of props.combo.legs) {
+    const z = legBarZone(l);
+    if (z) n[z]++;
+  }
   return n;
 });
 

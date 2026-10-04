@@ -600,12 +600,14 @@ export interface ComboBarSegment {
   mark: number | null;
 }
 /** 🔎 LES BARRES FILTRENT : toucher une barre ne garde que les exos qui y travaillent.
- *  L'argent tant que les séries de base d'un exo ne sont pas faites, le jaune ensuite —
- *  exos terminés compris (ils ont rempli leur jaune). Lue sur `legStage`. */
+ *  L'argent tant que les séries de base d'un exo ne sont pas faites, le jaune ensuite.
+ *  Un exo TERMINÉ (`legStage` 'done') n'est dans AUCUNE zone (`null`) : il n'y travaille
+ *  plus, donc le filtre « Objectif » ne le montre pas (demandé). Il reste visible sans filtre. */
 export type ComboBarZone = ComboBarSegment['id'];
 export type ComboLegFilter = 'all' | ComboBarZone;
-export function legBarZone(l: ComboLeg): ComboBarZone {
-  return legStage(l) === 'secondary' ? 'sec' : 'obj';
+export function legBarZone(l: ComboLeg): ComboBarZone | null {
+  const st = legStage(l);
+  return st === 'done' ? null : st === 'secondary' ? 'sec' : 'obj';
 }
 /** Sans filtre (« all »), les exos TERMINÉS (objectif atteint, `legStage` 'done') passent en bas de la
  *  liste, chacun dans son ordre d'origine (demandé par l'utilisateur) : ce qui reste à faire
