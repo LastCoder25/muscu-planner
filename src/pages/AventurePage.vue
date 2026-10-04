@@ -3252,10 +3252,10 @@ import {
   arenaRewards,
   ARENA_PLAY,
   type PartyResult,
-  nextPlunderSpawn,
   poiLabel,
 } from '@/lib/expedition';
 import { logicalToday } from '@/lib/challenges';
+import { plunderForecast } from '@/lib/archipelago';
 
 interface RunFight {
   monster: string;
@@ -5695,7 +5695,7 @@ async function syncPush(force = false) {
           label: poiLabel(p),
         })),
       plunder: char.row.expedition_map
-        ? nextPlunderSpawn(
+        ? plunderForecast(
             char.row.expedition_map,
             now,
             c.value.level.level,

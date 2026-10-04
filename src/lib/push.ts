@@ -200,8 +200,10 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       // change d'avis (un lieu pris laisse la place à un autre tirage).
       dedupe: `plunder:${ctx.plunder.id}`,
       sendAt: ctx.plunder.at,
-      title: '🏴‍☠️ Une caravane pillée',
-      body: 'Des pillards l’ont prise — son or est à qui ira le chercher, pendant quelques heures.',
+      // ⚠️ Un LIEU qui apparaît sur la carte, pas un rapport : le dire (signalé, 2026-10-04 —
+      // « pillée » se lisait comme un pillage de MES biens, à chercher dans la boîte).
+      title: '🏴‍☠️ Une caravane pillée est apparue sur la carte',
+      body: 'Des pillards l’ont prise : va la reprendre, son or est à toi. Elle repart dans quelques heures.',
       url: '/expedition-map',
     });
   }

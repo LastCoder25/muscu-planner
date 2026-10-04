@@ -11,7 +11,7 @@
  *   règle plus que la VITESSE ;
  * - les lieux tenus produisent **au rang de l'île**, plus au niveau du héros.
  */
-import { revealRadius, type ExpeditionMap } from './expedition';
+import { nextPlunderSpawn, revealRadius, type ExpeditionMap } from './expedition';
 import type { RaidFaction } from './raid';
 
 export interface Island {
@@ -161,6 +161,30 @@ export function mapOutpostLevel(
   outpostLevel: number,
 ): number {
   return map?.archipel ? ISLAND_OUTPOST_LEVEL : outpostLevel;
+}
+
+/**
+ * 🏴‍☠️ La PROCHAINE caravane pillée, telle que le JEU la fera apparaître (signalé, 2026-10-04 :
+ * « des notifications au drapeau pirate, mais rien dans la boîte ni sur la carte »).
+ * ⚠️ Le jeu fait avancer la carte avec le niveau VU PAR LA CARTE (`mapPlayerLevel`) et la
+ * taille de l'île (`mapOutpostLevel`) ; la prévision passait le niveau du héros et le vrai
+ * Avant-poste, donc simulait une AUTRE carte sur une île et annonçait des caravanes qui
+ * n'apparaissaient jamais. Seule porte d'entrée de la prévision : on ne peut plus l'oublier.
+ */
+export function plunderForecast(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  outpostBuildingLevel: number,
+  protectedPoiId?: string,
+): { id: string; at: number } | null {
+  return nextPlunderSpawn(
+    map,
+    now,
+    mapPlayerLevel(map, playerLevel),
+    mapOutpostLevel(map, outpostBuildingLevel),
+    protectedPoiId,
+  );
 }
 
 /** 🕊️ L'île active est-elle PACIFIÉE (objectifs et forteresse abattus) ? Plus aucune attaque
