@@ -39,10 +39,10 @@ const held = (id: string, x: number, y: number, owner: 'player' | 'enemy' = 'pla
 describe('🗼 la part de l’île vue par la Tour', () => {
   it('dans la TRANCHE de l’île : rien à son premier niveau, tout à son niveau max', () => {
     expect(islandDetectShare(40, 2, 0)).toBe(1);
-    expect(islandDetectShare(30, 2, 0)).toBeCloseTo(0.5, 9);
+    expect(islandDetectShare(30, 2, 0)).toBeCloseTo(0.25, 9);
     expect(islandDetectShare(20, 2, 0)).toBe(0);
-    expect(islandDetectShare(10, 1, 0)).toBeCloseTo(0.5, 9);
-    expect(islandDetectShare(50, 3, 0)).toBeCloseTo(0.5, 9);
+    expect(islandDetectShare(10, 1, 0)).toBeCloseTo(0.25, 9);
+    expect(islandDetectShare(50, 3, 0)).toBeCloseTo(0.25, 9);
     expect(islandDetectShare(60, 3, 0)).toBe(1);
     expect(islandDetectShare(100, 3, 0)).toBe(1);
   });
@@ -51,19 +51,32 @@ describe('🗼 la part de l’île vue par la Tour', () => {
     expect(islandDetectShare(40, 3, 0)).toBe(0);
     expect(islandDetectShare(32, 5, 0)).toBe(0);
   });
+  it('courbe ACCÉLÉRÉE (signalé : « toujours très grand » à la Tour 32 sur l’île 2)', () => {
+    // En droite : 60 % de l’île (79 unités). Au carré : 36 % (47 unités), sous la moitié.
+    expect(islandDetectShare(32, 2, 0)).toBeCloseTo(0.36, 9);
+    expect(islandDetectRadius(32, 2, 0)).toBeLessThan(islandSpan(2) / 2);
+    // Monotone sur la tranche, toujours toute l’île au niveau max.
+    let prev = -1;
+    for (let t = 20; t <= 40; t++) {
+      const v = islandDetectShare(t, 2, 0);
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
+    expect(prev).toBe(1);
+  });
   it('les Tours tenues sur la carte multiplient le niveau', () => {
-    expect(islandDetectShare(30, 3, 0.5)).toBeCloseTo(5 / 20, 9);
+    expect(islandDetectShare(30, 3, 0.5)).toBeCloseTo((5 / 20) ** 2, 9);
   });
   it('le rayon couvre toute l’île au plein, jamais sous le plancher', () => {
     expect(islandDetectRadius(40, 2, 0)).toBeCloseTo(islandSpan(2), 9);
     expect(islandDetectRadius(0, 2, 0)).toBe(DETECT_FLOOR);
-    expect(islandDetectRadius(30, 2, 0)).toBeCloseTo(Math.max(DETECT_FLOOR, islandSpan(2) / 2), 9);
+    expect(islandDetectRadius(36, 2, 0)).toBeCloseTo(islandSpan(2) * 0.64, 9);
   });
   it('les paliers : une ligne par île, l’île active marquée', () => {
     const rows = islandPerception(32, 0, 2);
     expect(rows.map((r) => r.fullAt)).toEqual([20, 40, 60, 80, 100]);
     expect(rows.map((r) => r.fromAt)).toEqual([1, 21, 41, 61, 81]);
-    expect(rows.map((r) => r.share)).toEqual([1, 0.6, 0, 0, 0]);
+    expect(rows.map((r) => r.share)).toEqual([1, 0.6 ** 2, 0, 0, 0]);
     expect(rows[1]).toMatchObject({ id: 2, current: true });
     expect(rows.filter((r) => r.current)).toHaveLength(1);
   });

@@ -111,14 +111,20 @@ export const DETECT_FLOOR = 30;
 /** 🏝️🗼 La part de l'île que voit la Tour de guet de la base : sa place dans la TRANCHE de
  *  niveaux de l'île (décision de l'utilisateur, 2026-10-04 : « détection totale sur l'île au
  *  niveau de l'île ») — rien au premier niveau de l'île, tout à son niveau max : Tour 40 voit
- *  toute l'île 2, Tour 50 la moitié de l'île 3. ⚠️ Rapportée au seul niveau max, une Tour 32
- *  annonçait 53 % de l'île 3 (41-60) à un joueur qui n'y a pas accès (signalé le même jour).
- *  Les Tours tenues sur la carte (`controlDetectBoost`) multiplient le niveau, comme le préavis. */
+ *  toute l'île 2. ⚠️ Rapportée au seul niveau max, une Tour 32 annonçait 53 % de l'île 3
+ *  (41-60) à un joueur qui n'y a pas accès (signalé le même jour).
+ *  ⚠️ COURBE ACCÉLÉRÉE (`ISLAND_DETECT_EXP`, choix de l'utilisateur, même jour) : en droite, une
+ *  Tour 32 voyait 79 unités autour du port de l'île 2 (60 % de 131), assez pour couvrir tous
+ *  les lieux tenus — signalé « toujours très grand ». Au carré : 47 unités à la Tour 32,
+ *  toujours toute l'île au niveau max. Les Tours tenues sur la carte (`controlDetectBoost`)
+ *  multiplient le niveau, comme le préavis. */
+const ISLAND_DETECT_EXP = 2;
 export function islandDetectShare(scout: number, islandId: number, boost: number): number {
   const isl = islandById(islandId) ?? ISLANDS[0]!;
   const eff = Math.max(0, scout) * (1 + Math.max(0, boost || 0));
   const span = Math.max(1, isl.maxLevel - isl.minLevel + 1);
-  return Math.min(1, Math.max(0, (eff - (isl.minLevel - 1)) / span));
+  const lin = Math.min(1, Math.max(0, (eff - (isl.minLevel - 1)) / span));
+  return lin ** ISLAND_DETECT_EXP;
 }
 
 /** 🏝️🗼 Le rayon de détection de la base sur une île : la part (`islandDetectShare`) de la
