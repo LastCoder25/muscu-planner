@@ -342,6 +342,10 @@
         <span v-else class="ei-emo">{{ POI_EMO[e.poi.type] }}</span>
       </button>
 
+      <!-- 🧭 QUI PEUT PARTIR, en colonne à gauche de la carte (demandé) : le héros, puis les
+           champions par rang. Même composant que la ligne de l'Aventure : mêmes règles. -->
+      <AvailabilityLine v-if="!viewed" class="map-avail" :now="now" by-rank vertical />
+
       <!-- 🏝️ L'archipel, en haut à droite de la carte : l'île actuelle, et au toucher toutes
            les îles avec la fiche de celle qu'on choisit. -->
       <ArchipelPanel v-if="!viewed" v-bind="archBind" v-on="archOn" />
@@ -1502,6 +1506,7 @@ import {
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
+import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import MapTown from '@/components/MapTown.vue';
 import { townDots } from '@/lib/townDots';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
@@ -6138,6 +6143,15 @@ onUnmounted(() => {
 }
 .ei-emo {
   font-size: 13px;
+}
+/* Dispos héros + champions, en haut à gauche de la carte. */
+.map-avail {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 3;
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
 }
 /* Contrôles de zoom */
 .zoom-ctl {

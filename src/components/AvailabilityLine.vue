@@ -6,7 +6,7 @@
   <component
     :is="interactive ? 'button' : 'div'"
     class="av-line"
-    :class="{ interactive, ranked: byRank }"
+    :class="{ interactive, ranked: byRank, vertical }"
     :title="title"
     :aria-label="interactive ? `${title} — ouvrir la carte d'expédition` : title"
     @click="interactive && emit('open')"
@@ -61,6 +61,8 @@ const props = defineProps<{
   interactive?: boolean;
   /** Vrai sur la carte : les champions disponibles se détaillent par rang. */
   byRank?: boolean;
+  /** Vrai en overlay sur la carte : une colonne à gauche, du haut vers le bas. */
+  vertical?: boolean;
 }>();
 const emit = defineEmits<{ open: [] }>();
 const char = useCharacterStore();
@@ -256,6 +258,24 @@ const title = computed(() => {
 }
 .av-ribbon {
   fill: color-mix(in srgb, var(--rk) 45%, #3a2f24);
+}
+/* 🗺️ EN COLONNE SUR LA CARTE (demandé : « à gauche, verticalement en partant du haut ») :
+   héros en tête, puis l'infirmerie, puis un rang par ligne, du plus haut au plus bas. */
+.av-line.vertical {
+  flex: none;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 4px;
+  min-height: 0;
+  padding: 6px 7px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+.av-line.vertical .av-cell,
+.av-line.vertical .av-rank {
+  font-size: 12px;
 }
 /* Centrée, la ligne garde son chevron à côté du reste (un auto le repousserait seul au bord). */
 .av-line.ranked .av-go {

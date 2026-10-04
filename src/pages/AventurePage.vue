@@ -67,7 +67,14 @@
           <ResourceTray part="rest" :energy="c.energy" interactive @pick="pickResource" />
         </div>
         <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
-        <AvailabilityLine :now="expeNow" interactive by-rank @open="mapView = true" />
+        <!-- Carte ouverte : la ligne passe en colonne SUR la carte (à gauche), pas en double ici. -->
+        <AvailabilityLine
+          v-if="!mapView"
+          :now="expeNow"
+          interactive
+          by-rank
+          @open="mapView = true"
+        />
       </div>
 
       <!-- 🗺️ LA CARTE VIT ICI (demandé : « switcher juste cette partie, sans perdre le haut
