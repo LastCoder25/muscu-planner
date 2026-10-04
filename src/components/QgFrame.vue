@@ -1,7 +1,8 @@
 <!--
   👑 LE CADRE D'UN QG (ta base, la forteresse adverse) : aucun autre lieu ne le porte. Subtil
   (demandé, 2026-10-04 : « l'encadrement est horrible, fais un truc plus subtil et design ») :
-  un halo doux de la couleur du camp et quatre équerres fines aux coins, rien d'autre. Centré
+  un halo doux de la couleur du camp (rayon ×1,15 du demi-côté : à ×1,35 il faisait deux fois
+  la taille du lieu, signalé 2026-10-04) et quatre équerres fines aux coins. Centré
   en (0, 0) : le parent le place. Or pour toi, rouge pour l'ennemi.
 -->
 <template>
@@ -13,7 +14,7 @@
         <stop offset="1" :stop-color="color" stop-opacity="0" />
       </radialGradient>
     </defs>
-    <circle :r="half * 1.35" :fill="`url(#qg-halo-${tone})`" />
+    <circle :r="half * 1.15" :fill="`url(#qg-halo-${tone})`" />
     <path :d="brackets" class="qg-br" />
   </g>
 </template>
