@@ -6,6 +6,10 @@ describe('townDots', () => {
     expect(townDots(true, 3)).toEqual({ dots: 'hccc', more: 0 });
     expect(townDots(false, 2)).toEqual({ dots: 'cc', more: 0 });
   });
+  it('les miliciens en réserve suivent les champions', () => {
+    expect(townDots(true, 1, 2)).toEqual({ dots: 'hcmm', more: 0 });
+    expect(townDots(false, 0, 3)).toEqual({ dots: 'mmm', more: 0 });
+  });
   it('personne : aucun point', () => {
     expect(townDots(false, 0)).toEqual({ dots: '', more: 0 });
   });

@@ -16,7 +16,7 @@
       <svg :viewBox="`${view.x} ${view.y} ${view.size} ${view.size}`" class="rim-svg">
         <IslandTerrain :t="terr" :view="view" />
         <!-- 🏰 La base (île 1) ou 🏘️ le village du port (îles 2 à 5) : le même dessin que la carte active. -->
-        <MapTown :island="island.id" />
+        <MapTown :island="island.id" :row="townRow" />
         <g
           v-for="p in points"
           :key="p.id"
@@ -104,6 +104,7 @@ import type { Island } from '@/lib/archipelago';
 import type { RemotePoint } from '@/lib/crossing';
 import { mapViewOf, type ExpeditionMap } from '@/lib/expedition';
 import { islandTerrain } from '@/lib/islandTerrain';
+import { townDots } from '@/lib/townDots';
 
 const props = defineProps<{
   island: Island;
@@ -113,6 +114,8 @@ const props = defineProps<{
   remote: RemotePoint[];
   /** La réserve de milice de l'île. */
   reserve: number;
+  /** Les champions restés sur l'île (`crossInfo.away`). */
+  champions?: number;
   busy?: boolean;
 }>();
 const emit = defineEmits<{
@@ -121,6 +124,8 @@ const emit = defineEmits<{
 }>();
 
 const view = computed(() => mapViewOf(props.map));
+/** ⚫ Sous le village : les champions restés là, puis la milice en réserve (le héros est ailleurs). */
+const townRow = computed(() => townDots(false, props.champions ?? 0, props.reserve));
 const terr = computed(() => islandTerrain(props.island.id));
 /** Les lieux tenus, à leur place sur la carte rangée. */
 const points = computed(() =>
