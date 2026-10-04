@@ -43,6 +43,14 @@ const point = (L: number, kind: 'mine' | 'garden' = 'mine'): Poi =>
   }) as unknown as Poi;
 
 describe('une garnison de 5 au plus, champions et miliciens compris', () => {
+  it('pas de milicien dans les objectifs, la forteresse ni la citadelle — seulement les lieux de production', () => {
+    for (const kind of ['objective', 'fortress', 'citadel'] as const) {
+      const p = point(30, kind as 'mine');
+      expect(militiaFreeSeats(p.control)).toBe(0);
+      expect(reinforceBlocker(p.control, 1, true)).toBe('full');
+    }
+    expect(militiaFreeSeats(point(30).control)).toBe(MILITIA.perPoint);
+  });
   it('les miliciens prennent ce qui reste des 5, champions compris', () => {
     const p = point(30);
     p.control!.garrison = ['adv_a', 'adv_b', 'mil:1'];
