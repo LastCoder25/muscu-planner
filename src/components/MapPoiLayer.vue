@@ -307,8 +307,8 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   stroke: var(--d4, #ff6a45);
 }
 .ctl-bg.player {
-  fill: color-mix(in srgb, #b57bff 24%, var(--surface));
-  stroke: #b57bff;
+  fill: color-mix(in srgb, var(--held) 24%, var(--surface));
+  stroke: var(--held);
 }
 .ctl-bg.assault {
   stroke-dasharray: 1.6 1.2;
@@ -324,7 +324,7 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   fill: var(--d4, #ff6a45);
 }
 .ctl-flag.player {
-  fill: #b57bff;
+  fill: var(--held);
 }
 /* ⚔️ Bataille imminente : pastille rouge au coin du fort, lente pulsation (une menace qui
    approche en heures, pas une alarme). Figée si l'on préfère moins de mouvement. */

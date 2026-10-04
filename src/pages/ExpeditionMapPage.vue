@@ -5307,8 +5307,8 @@ onUnmounted(() => {
   margin: 0 0 10px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, #b57bff 55%, var(--line));
-  background: color-mix(in srgb, #b57bff 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--held) 55%, var(--line));
+  background: color-mix(in srgb, var(--held) 8%, var(--surface));
 }
 .ctl-tier b {
   color: var(--accent);
@@ -5527,7 +5527,7 @@ onUnmounted(() => {
 }
 .ctl-back {
   color: var(--text);
-  border-color: color-mix(in srgb, #b57bff 55%, var(--line));
+  border-color: color-mix(in srgb, var(--held) 55%, var(--line));
 }
 .ctl-plan {
   display: flex;

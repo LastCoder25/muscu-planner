@@ -196,8 +196,8 @@ watch(
   fill: transparent;
 }
 .rim-fort {
-  fill: color-mix(in srgb, #b57bff 35%, #211c16);
-  stroke: #b57bff;
+  fill: color-mix(in srgb, var(--held) 35%, #211c16);
+  stroke: var(--held);
   stroke-width: 0.9;
 }
 .rim-pt.sel .rim-fort {
@@ -211,7 +211,7 @@ watch(
 }
 .rim-badge {
   fill: #15120e;
-  stroke: #b57bff;
+  stroke: var(--held);
   stroke-width: 0.4;
 }
 .rim-n {

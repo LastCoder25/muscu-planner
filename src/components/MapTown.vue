@@ -180,8 +180,8 @@ const DOT_GAP = 2.7;
   stroke-width: 0.3;
 }
 .mt-place {
-  fill: color-mix(in srgb, #b57bff 24%, var(--surface, #211c16));
-  stroke: #b57bff;
+  fill: color-mix(in srgb, var(--held, #ff6fb5) 24%, var(--surface, #211c16));
+  stroke: var(--held, #ff6fb5);
   stroke-width: 1.2;
 }
 .mt-emo {
@@ -194,6 +194,6 @@ const DOT_GAP = 2.7;
   stroke-width: 0.5;
 }
 .mt-flag {
-  fill: #b57bff;
+  fill: var(--held, #ff6fb5);
 }
 </style>

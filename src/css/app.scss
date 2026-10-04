@@ -9,6 +9,9 @@
   // transparence et la page se relit à travers (cases vertes du Défi 360, v0.843 → v0.847).
   --veil: color-mix(in srgb, var(--bg) 55%, #000);
   --surface: #211c16; // cartes
+  // 🏰 Lieu fixe TENU par nous (fort, drapeau, fiche) : un rose qu'aucun trajet n'emploie
+  // (héros bleu, équipes violet, renforts vert) ni aucun rang. ⚠️ = HELD_COLOR (controlPoints.ts).
+  --held: #ff6fb5;
   --surface-2: #2c261e; // cartes actives
   --surface-3: #373026; // éléments surélevés (anneau timer)
   --line: #3a332a; // bordures

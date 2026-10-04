@@ -3384,8 +3384,9 @@ export function controlRoster(
  * rang n'appartient qu'aux ENNEMIS — ceux qui le défendent, puis ceux qui le reprennent.
  */
 export const isHeldControl = (p: Pick<Poi, 'control'>): boolean => p.control?.owner === 'player';
-/** 🏳️ La couleur d'un point tenu : ni celle d'un rang, ni l'accent. */
-export const HELD_COLOR = '#9a8f7e';
+/** 🏳️ La couleur d'un point tenu : ni celle d'un rang, ni l'accent, ni celle d'un trajet
+ *  (héros bleu, équipes violet, renforts vert). ⚠️ Même valeur que `--held` (app.scss). */
+export const HELD_COLOR = '#ff6fb5';
 
 /**
  * 🏰 PLUS DE RÉSERVE À RÉCOLTER (2026-09-29, demandé : « faire directement une augmentation de
