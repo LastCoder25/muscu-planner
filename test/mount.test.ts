@@ -565,7 +565,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     // 4 disponibles à la base sur 7 (3 hors de la base : 2 postés + 1 en route).
     // Le milicien a désormais son portrait (l'emoji 🛡️ n'est plus que le repli).
-    expect(out).toMatch(/av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span><b[^>]*>4<\/b>\/7/);
+    expect(out).toMatch(
+      /av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span><b[^>]*>4<\/b>\/7/,
+    );
     expect(out).toContain("4 milicien(s) disponible(s) sur l'île, 3 posté(s)");
     // 🏝️ Nouvelle île, personne à la base : la pastille dit quand vient le prochain.
     const fresh = {
@@ -893,6 +895,24 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('10 en réserve');
     expect(out).toContain('Mine fortifiée');
     expect(out).toMatch(/class="rim-n"[^>]*>5</);
+    // 🏰 L'île 1 est la capitale : sa carte rangée montre la base.
+    expect(out).toContain('town-wall');
+  }, 30_000);
+
+  // 🏘️ Signalé : « on a une base sur l'île 2 alors qu'on devait avoir un village portuaire ».
+  it('🏘️ MapTown : la base sur l’île 1 et hors archipel, un village de pêcheurs sur les îles 2 à 5', async () => {
+    const { default: MapTown } = await import('@/components/MapTown.vue');
+    for (const [island, base] of [
+      [null, true],
+      [1, true],
+      [2, false],
+      [5, false],
+    ] as const) {
+      let out = '';
+      expect(await mountIt(MapTown, { island }, ROW, undefined, '/', (h) => (out = h))).toBeNull();
+      expect(out.includes('town-wall'), `île ${island}`).toBe(base);
+      expect(out.includes('mt-house'), `île ${island}`).toBe(!base);
+    }
   }, 30_000);
 
   // ⛵ Demandé : la traversée du héros apparaît dans la rangée des voyages.
