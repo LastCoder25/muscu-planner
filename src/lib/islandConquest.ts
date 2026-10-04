@@ -269,8 +269,8 @@ function nestPerilIds(
   return out;
 }
 
-/** 🏝️ Les lieux fixes TENUS par le joueur sur la carte (étape 6 bis : tout lieu tenu est un
- *  relais — plus d'avant-postes désignés). */
+/** 🏝️ Les lieux fixes TENUS par le joueur sur la carte (ils ouvrent les objectifs ;
+ *  on peut en partir en sortie). */
 export function heldPoints(map: Pick<ExpeditionMap, 'pois'>): Poi[] {
   return map.pois.filter((p) => p.control?.owner === 'player');
 }
@@ -279,21 +279,20 @@ export function heldPoints(map: Pick<ExpeditionMap, 'pois'>): Poi[] {
  *  lesquels) : on s'implante avant d'aller frapper le cœur de l'île. */
 export const OBJECTIVES_AFTER_HELD = 2;
 
-/** 🧭 LES TRAJETS PARTENT DU LIEU TENU LE PLUS PROCHE (étape 6 bis) : la distance d'un lieu,
- *  celle qui règle le temps de trajet, est mesurée depuis le point de départ (base ou village)
- *  OU depuis le plus proche des lieux fixes qu'on tient. Chaque lieu pris rapproche le reste.
- *  ⚠️ Un lieu tenu ne compte pas pour lui-même (le renforcer, c'est venir d'ailleurs). Les
- *  armées en marche gardent la leur (leur marche ne dépend pas de nous). Rend la MÊME carte si
- *  rien ne change. Hors archipel, rien. */
-export function withRelays(map: ExpeditionMap): ExpeditionMap {
+/** 🧭 LE TRAJET SE MESURE DEPUIS LE VRAI POINT DE DÉPART (demandé le 2026-10-04 ; remplace
+ *  les relais de l'étape 6 bis). La distance d'un lieu (`distNorm`) est TOUJOURS celle du
+ *  point de départ (base ou village). ⚠️ Les relais la ramenaient au lieu tenu le plus proche
+ *  pour TOUT envoi : un héros parti du port payait le trajet depuis un point où personne
+ *  n'était (une faille à 83 unités du port, à 14 du Scriptorium : ~4 min). Partir d'un lieu
+ *  tenu reste possible : c'est une SORTIE (`legFromSpot`), mesurée depuis ce lieu.
+ *  Remet aussi d'aplomb les cartes sauvegardées avec des distances de relais. Les armées en
+ *  marche gardent la leur. Rend la MÊME carte si rien ne change. Hors archipel, rien. */
+export function withTownDistance(map: ExpeditionMap): ExpeditionMap {
   if (!map.archipel) return map;
-  const relays = heldPoints(map);
   let changed = false;
   const pois = map.pois.map((p) => {
     if (p.type === 'warband') return p;
-    let d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
-    for (const r of relays) if (r.id !== p.id) d = Math.min(d, Math.hypot(p.x - r.x, p.y - r.y));
-    const dn = distNormAt(d);
+    const dn = distNormAt(Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y));
     if (Math.abs(dn - p.distNorm) < 1e-9) return p;
     changed = true;
     return { ...p, distNorm: dn };
@@ -464,7 +463,7 @@ function enemyTarget(
     travelLevel: ARCHIPEL_TRAVEL_LEVEL,
     x: spot.x,
     y: spot.y,
-    // Depuis la ville ; `withRelays` la ramène au lieu tenu le plus proche.
+    // Depuis le point de départ (base ou village).
     distNorm: distNormAt(spot.d),
     spawnedAt: now,
     expiresAt: EXPE.lifespanMs.control,
@@ -557,7 +556,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-/** Les seules coordonnées d'une place (sans sa distance à la ville, recalculée par `withRelays`). */
+/** Les seules coordonnées d'une place (sans sa distance à la ville, recalculée par `withTownDistance`). */
 const xyOf = ({ x, y }: { x: number; y: number }) => ({ x, y });
 
 /**
@@ -618,7 +617,7 @@ export function ensureIslandConquest(
     // la règle le pose aujourd'hui — une île déjà ouverte s'espace d'elle-même.
     const moved = p.x !== w.x || p.y !== w.y;
     if (!moved && p.level === w.level && same(next, c)) continue;
-    // ⚠️ La distance (le trajet) est celle de `withRelays`, recalculée en fin de passage.
+    // ⚠️ La distance (le trajet) est celle de `withTownDistance`, recalculée en fin de passage.
     pois = pois.map((q, j) =>
       j === k ? { ...p, x: w.x, y: w.y, level: w.level, control: next } : q,
     );
@@ -704,8 +703,8 @@ export function ensureIslandConquest(
   }
   // 6. 🚩 L'armée mobile du seigneur de guerre (île 4), 🔮 les invasions combinées (île 5).
   // 7. 🐫 Les convois de ravitaillement de l'île 4.
-  // 8. 🧭 Les trajets partent du lieu tenu le plus proche.
-  return withRelays(
+  // 8. 🧭 Les trajets se mesurent depuis le point de départ.
+  return withTownDistance(
     warlordConvoys(warlordRaids(changed ? { ...map, pois } : map, now), now, vanquished),
   );
 }

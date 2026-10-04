@@ -18,16 +18,17 @@ import {
   islandTargetLabel,
   objectiveIdOf,
   OBJECTIVES_AFTER_HELD,
-  withRelays,
+  withTownDistance,
 } from '@/lib/islandConquest';
 import { ensureControls, islandControlLevel } from '@/lib/controlPoints';
+import { legFromSpot } from '@/lib/controlRoutes';
 import { PARTY_SEND_BLOCK_LABEL, partySendBlocker } from '@/lib/party';
 import { islandPort } from '@/lib/islandShape';
 
 /**
  * 🧭 ÉTAPE 6 BIS (décisions de l'utilisateur, 2026-10-02) : on débarque au village du port et
- * on s'étend. Plus d'avant-postes désignés ni de durée imposée à la forteresse : les trajets
- * partent du lieu tenu le PLUS PROCHE — chaque lieu pris rapproche le reste.
+ * on s'étend. Plus d'avant-postes désignés ni de durée imposée à la forteresse. Les trajets se
+ * mesurent depuis le VRAI point de départ (2026-10-04) : le village, ou le lieu tenu d'où l'on sort.
  */
 const DAY = 86_400_000;
 const leg = (p: Poi) => travelOneWayMin(poiTravelLevel(p), p.distNorm);
@@ -108,44 +109,40 @@ describe('🏝️ toute l’île, jusqu’aux côtes', () => {
   });
 });
 
-describe('🧭 les trajets partent du lieu tenu le plus proche', () => {
-  it('chaque lieu se mesure depuis le village OU le lieu tenu le plus proche', () => {
+describe('🧭 les trajets se mesurent depuis le vrai point de départ', () => {
+  it('tenir un lieu ne raccourcit AUCUN trajet parti du village', () => {
     for (const isl of ISLANDS) {
       const m0 = island(isl.id, 5);
-      const relay = ordinary(m0).at(-1)!; // le plus loin du village
-      const m = ensureIslandConquest(hold(m0, [relay.id]), DAY * 7, isl.maxLevel);
+      const held = ordinary(m0).map((p) => p.id);
+      const m = ensureIslandConquest(hold(m0, held), DAY * 7, isl.maxLevel);
       for (const p of m.pois) {
         if (p.type === 'warband') continue;
-        const d =
-          p.id === relay.id
-            ? fromTown(p)
-            : Math.min(fromTown(p), Math.hypot(p.x - relay.x, p.y - relay.y));
-        expect(p.distNorm, `île ${isl.id} ${p.id}`).toBeCloseTo(distNormAt(d), 9);
+        expect(p.distNorm, `île ${isl.id} ${p.id}`).toBeCloseTo(distNormAt(fromTown(p)), 9);
       }
     }
   });
-  it('tenir un lieu vers la forteresse raccourcit son trajet', () => {
-    for (const isl of ISLANDS) {
-      const m0 = island(isl.id, 5);
-      const f0 = m0.pois.find((p) => p.id === FORTRESS_ID)!;
-      const near = ordinary(m0).sort(
-        (a, b) => Math.hypot(a.x - f0.x, a.y - f0.y) - Math.hypot(b.x - f0.x, b.y - f0.y),
-      )[0]!;
-      const m = ensureIslandConquest(hold(m0, [near.id]), DAY * 7, isl.maxLevel);
-      const f = m.pois.find((p) => p.id === FORTRESS_ID)!;
-      expect(leg(f), `île ${isl.id}`).toBeLessThan(leg(f0));
-    }
-  });
-  it('un lieu tenu ne se rapproche pas de lui-même ; sans rien tenir, rien ne change', () => {
+  it('une carte sauvegardée avec des distances de relais est remise d’aplomb', () => {
     const m0 = island(2, 9);
-    expect(withRelays(m0)).toBe(m0);
-    const p = ordinary(m0)[0]!;
-    const m = withRelays(hold(m0, [p.id]));
+    const p = ordinary(m0).at(-1)!;
+    const stale = { ...m0, pois: m0.pois.map((q) => (q.id === p.id ? { ...q, distNorm: 0 } : q)) };
+    const m = withTownDistance(stale);
     expect(m.pois.find((q) => q.id === p.id)!.distNorm).toBeCloseTo(distNormAt(fromTown(p)), 9);
   });
-  it('hors archipel, rien', () => {
+  it('partir d’un lieu tenu (sortie) reste plus court vers un lieu proche de lui', () => {
+    for (const isl of ISLANDS) {
+      const m0 = island(isl.id, 5);
+      const f = m0.pois.find((p) => p.id === FORTRESS_ID)!;
+      const near = ordinary(m0).sort(
+        (a, b) => Math.hypot(a.x - f.x, a.y - f.y) - Math.hypot(b.x - f.x, b.y - f.y),
+      )[0]!;
+      expect(legFromSpot(f, near, leg), `île ${isl.id}`).toBeLessThan(leg(f));
+    }
+  });
+  it('rien ne change → la même carte ; hors archipel, rien', () => {
+    const m0 = island(2, 9);
+    expect(withTownDistance(m0)).toBe(m0);
     const m = createMap(3, 0, 20, 10);
-    expect(withRelays(m)).toBe(m);
+    expect(withTownDistance(m)).toBe(m);
   });
 });
 

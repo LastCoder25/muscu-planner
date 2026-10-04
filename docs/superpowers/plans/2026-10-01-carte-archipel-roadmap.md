@@ -409,8 +409,9 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
         Les armées viennent de l'**intérieur des terres**, jamais de la mer ; elles vont **tout
         droit** (« les cartes d'îles sont assez simples »), et ne passent par le centre de
         l'île que si la ligne droite coupe la baie (`islandVia`, v1.29.0).
-      - [x] **Les trajets partent du lieu tenu le plus proche** : chaque lieu pris rapproche le
-        reste (`withRelays`, v1.29.0). Plus de règle spéciale de forteresse (3 h / 2 h en
+      - [x] **Les trajets se mesurent depuis le VRAI point de départ** (v1.52.3, remplace les relais
+        `withRelays` de la v1.29.0 : un héros parti du port payait le trajet depuis un lieu tenu
+        où personne n'était) : le village, ou le lieu tenu d'où l'on sort (`legFromSpot`). Plus de règle spéciale de forteresse (3 h / 2 h en
         relais) ni d'avant-postes désignés : tout lieu tenu en est un. Les objectifs s'ouvrent
         une fois **deux lieux fixes tenus**, n'importe lesquels (`OBJECTIVES_AFTER_HELD`).
       - [x] **Le rang des LIEUX FIXES monte en s'éloignant du port d'arrivée** (bas de la
@@ -422,8 +423,8 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
         « 🏰 le héros reste en garnison » ; seul, il reste d'office ; à la forteresse, toujours
         (`heroStaysAt`). Il **défend** le lieu aux reprises avec son instantané de combat figé
         au départ (`ControlState.heroUnit`), se rappelle depuis la fiche du lieu, et rentre à
-        pied s'il est délogé (jamais blessé hors d'un siège de la base). Il part de la base, mais
-        ses trajets partent du lieu tenu le plus proche (`withRelays`).
+        pied s'il est délogé (jamais blessé hors d'un siège de la base). Il part de la base (ou de
+        son poste), et son trajet se mesure depuis là.
       - [x] Un blessé rentre se soigner au village ; la milice y est produite et en part : sur
         les îles 2 à 5, la base EST le village du port (l'île est dessinée devant lui), donc
         l'infirmerie, la Caserne et les transferts y sont déjà (v1.29.0, rien à ajouter).
