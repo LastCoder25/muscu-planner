@@ -246,9 +246,8 @@ export function legMode(leg: ComboLeg): ComboCountMode {
  *
  *  ⚠️ L'ORDRE EST STABLE : il ne dépend PAS de l'avancement. Avant la v0.903 les écrans
  *  triaient par avancement, donc la liste se réordonnait PENDANT la saisie et on perdait sa
- *  place au milieu d'une séance. Pour la même raison, un exo fini ne descend plus en bas
- *  (retiré à la demande de l'utilisateur : les filtres par zone font ce travail) — il reste
- *  à sa place, grisé.
+ *  place au milieu d'une séance. Un exo fini ne descend en bas que SANS filtre actif
+ *  (`filterLegsByZone`, 'all'), et seulement une fois son objectif atteint.
  *
  *  ⚠️ NE RÉORDONNE JAMAIS `legs` — la copie est délibérée. La séance générée indexe les
  *  emplacements (`buildComboSessionFromCounts` reçoit un `counts` par exo, le runner
@@ -608,8 +607,15 @@ export type ComboLegFilter = 'all' | ComboBarZone;
 export function legBarZone(l: ComboLeg): ComboBarZone {
   return legStage(l) === 'secondary' ? 'sec' : 'obj';
 }
+/** Sans filtre (« all »), les exos TERMINÉS (objectif atteint, `legStage` 'done') passent en bas de la
+ *  liste, chacun dans son ordre d'origine (demandé par l'utilisateur) : ce qui reste à faire
+ *  est en tête. Avec un filtre, l'ordre par groupe est gardé tel quel. Copie, jamais en place. */
 export function filterLegsByZone<T extends ComboLeg>(legs: readonly T[], f: ComboLegFilter): T[] {
-  return f === 'all' ? [...legs] : legs.filter((l) => legBarZone(l) === f);
+  if (f !== 'all') return legs.filter((l) => legBarZone(l) === f);
+  return [
+    ...legs.filter((l) => legStage(l) !== 'done'),
+    ...legs.filter((l) => legStage(l) === 'done'),
+  ];
 }
 
 export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {

@@ -1362,6 +1362,11 @@ describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
     expect(filterLegsByZone(legs, 'sec').map((l) => l.exercise_name)).toEqual(['B']);
     expect(filterLegsByZone(legs, 'all')).toHaveLength(4);
   });
+  it('sans filtre, les exos terminés passent en bas, chacun dans son ordre', () => {
+    const legs = [ex('A', 12), ex('B', 2), ex('C', 10), ex('D', 9)];
+    expect(filterLegsByZone(legs, 'all').map((l) => l.exercise_name)).toEqual(['B', 'D', 'A', 'C']);
+    expect(legs.map((l) => l.exercise_name)).toEqual(['A', 'B', 'C', 'D']);
+  });
 });
 
 describe('🔎 L’ÉTAPE EN COURS d’un exo (filtres du 360)', () => {
