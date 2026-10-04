@@ -863,6 +863,38 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(vide).toContain('aucun en stock');
   }, 30_000);
 
+  // 🗺️ Demandé : voir la carte d'une île rangée pour gérer sa milice sans traverser.
+  it('🗺️ RemoteIslandMap : la carte d’une île rangée, ses lieux tenus et leur milice', async () => {
+    const { default: RemoteIslandMap } = await import('@/components/RemoteIslandMap.vue');
+    const { ISLANDS } = await import('@/lib/archipelago');
+    const isl = ISLANDS[0]!;
+    const map = {
+      seed: 1,
+      pois: [{ id: 'ctl_mine', type: 'control', x: 110, y: 95, level: 10 }],
+      archipel: { island: 1, levelCap: 20, levelFloor: 1 },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        RemoteIslandMap,
+        {
+          island: isl,
+          map,
+          remote: [{ id: 'ctl_mine', label: 'Mine fortifiée', emoji: '⛏️', militia: 5, room: 0 }],
+          reserve: 10,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain(`Île 1 · ${isl.name}`);
+    expect(out).toContain('10 en réserve');
+    expect(out).toContain('Mine fortifiée');
+    expect(out).toMatch(/class="rim-n"[^>]*>5</);
+  }, 30_000);
+
   // ⛵ Demandé : la traversée du héros apparaît dans la rangée des voyages.
   it('⛵ TripsPanel : une traversée montre les îles de départ et d’arrivée', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');

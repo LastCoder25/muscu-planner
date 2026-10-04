@@ -243,7 +243,9 @@ const props = defineProps<{
   remote?: Record<number, RemotePoint[]>;
   now: number;
 }>();
-defineEmits<{
+const emit = defineEmits<{
+  /** 🗺️ Montrer la carte d'une île rangée (`null` = revenir à l'île active). */
+  view: [id: number | null];
   cross: [to: number];
   fetch: [from: number];
   militia: [{ island: number; pointId: string; delta: number }];
@@ -289,6 +291,10 @@ function pick(id: number) {
     sel.value = id;
     open.value = true;
   }
+  // 🗺️ Une île déjà visitée qu'on a quittée : sa carte s'affiche, pour gérer sa milice sans
+  // traverser (demandé, 2026-10-04). L'île active (ou une île jamais visitée) : la carte active.
+  const t = tiles.value.find((x) => x.id === id);
+  emit('view', t && t.visited && !t.active ? id : null);
 }
 const selTile = computed(() => tiles.value.find((t) => t.id === sel.value) ?? null);
 const islandCapRank = computed(() =>

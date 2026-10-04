@@ -45,7 +45,7 @@ import {
   takeMilitia,
   type MilitiaState,
 } from './militia';
-import { bankAt, militiaFreeSeats, militiaSeatsOf } from './controlPoints';
+import { bankAt, controlKindsOf, militiaFreeSeats, militiaSeatsOf } from './controlPoints';
 
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
@@ -521,10 +521,14 @@ export interface RemotePoint {
   room: number;
 }
 
-/** 🛡️ Les lieux fixes tenus d'une île rangée, avec leur milice (pour l'écran de l'archipel). */
+/** 🛡️ Les lieux fixes tenus d'une île rangée, avec leur milice (pour l'écran de l'archipel).
+ *  Un lieu d'un type RETIRÉ de l'île (le camp d'entraînement, le 2026-10-03) n'est montré que
+ *  s'il garde des miliciens : il faut pouvoir les ramener, mais un lieu vide n'existe plus. */
 export function remotePoints(im: ExpeditionMap): RemotePoint[] {
+  const kinds = controlKindsOf(im);
   return im.pois
     .filter((p) => p.control?.owner === 'player')
+    .filter((p) => kinds.includes(p.control!.kind) || militiaIn(p.control!.garrison).length > 0)
     .map((p) => ({
       id: p.id,
       label: poiLabel(p),
