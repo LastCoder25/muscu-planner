@@ -267,7 +267,7 @@ import {
 } from '@/lib/buildings';
 import { buildingPreview, nextMilestone, previewNote } from '@/lib/buildingPreview';
 import { emptyMilitia, militiaCap, militiaOnMap, nextMilitiaMs } from '@/lib/militia';
-import { militiaSeatsOf } from '@/lib/controlPoints';
+import { islandMilitiaOf } from '@/lib/controlPoints';
 import { formatDuration } from '@/lib/duration';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
@@ -333,8 +333,8 @@ const militia = computed(() => {
   return {
     home: s.home,
     away,
-    cap: militiaCap(b.level, militiaSeatsOf(char.row?.expedition_map)),
-    next: nextMilitiaMs(s, b.level, away, props.now, militiaSeatsOf(char.row?.expedition_map)),
+    cap: militiaCap(b.level, islandMilitiaOf(char.row?.expedition_map)),
+    next: nextMilitiaMs(s, b.level, away, props.now, islandMilitiaOf(char.row?.expedition_map)),
   };
 });
 /** 🛕 Le Panthéon a sa propre feuille : plein écran, trois grandes tuiles. */
@@ -365,9 +365,7 @@ const ascReady = computed(() => {
 const runesToOpen = computed(() => char.row?.runes.runes ?? 0);
 const runeSummary = computed(() => {
   const n = char.row?.runes.skills.length ?? 0;
-  return n
-    ? `${n} compétence${n > 1 ? 's' : ''} au stock`
-    : 'Ouvre, fusionne, donne';
+  return n ? `${n} compétence${n > 1 ? 's' : ''} au stock` : 'Ouvre, fusionne, donne';
 });
 /** 🎰 Ce que la tuile Tirage résume : combien de tirages la réserve permet. */
 const summonSummary = computed(() => {

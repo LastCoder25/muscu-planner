@@ -29,7 +29,7 @@ import {
 import { FORTRESS_ID, vacateIsland } from '@/lib/islandConquest';
 import { characterRank } from '@/lib/characterRank';
 import { emptyMilitia, militiaCap, produceMilitia } from '@/lib/militia';
-import { controlKindsOf, militiaSeatsOf } from '@/lib/controlPoints';
+import { controlKindsOf, islandMilitiaOf } from '@/lib/controlPoints';
 
 const H = 3600_000;
 const T0 = Date.UTC(2026, 9, 2, 10, 0, 0);
@@ -332,31 +332,45 @@ describe('🛡️ une réserve de milice par île', () => {
     const later = produceIslandMilitia(on2, 10, T0 + 48 * H);
     const home = later.islands!['1']!.militia!.home;
     expect(home).toBeGreaterThan(0);
-    expect(home).toBeLessThanOrEqual(militiaCap(10, militiaSeatsOf({ archipel: archipelOn(1) })));
+    expect(home).toBeLessThanOrEqual(militiaCap(10, islandMilitiaOf({ archipel: archipelOn(1) })));
     expect(produceIslandMilitia(on2, 0, T0 + 48 * H)).toBe(on2);
     expect(produceIslandMilitia(later, 10, T0 + 48 * H)).toBe(later);
   });
 
-  it('sur une île : 1 milicien par niveau de Caserne, borné à ses lieux fixes × 5', () => {
-    // Les champions partent sur l'île suivante : chaque lieu fixe garde sa garnison pleine
-    // de miliciens (5 par point) — jamais plus.
-    for (const isl of [1, 2, 3, 4, 5]) {
-      const seats = militiaSeatsOf({ archipel: archipelOn(isl) });
-      expect(seats).toBe(controlKindsOf({ archipel: archipelOn(isl) }).length * 5);
-      expect(seats).toBeGreaterThan(0);
-      for (const b of [1, 5, 30, 100]) expect(militiaCap(b, seats)).toBe(Math.min(b, seats));
+  it('sur une île : le plafond monte avec la Caserne jusqu’aux places EXACTES au dernier niveau', () => {
+    for (const id of [1, 2, 3, 4, 5]) {
+      const a = archipelOn(id);
+      const isl = islandMilitiaOf({ archipel: a })!;
+      // Les places : une garnison pleine (5) sur chacun des lieux fixes de l'île.
+      expect(isl.seats).toBe(controlKindsOf({ archipel: a }).length * 5);
+      expect(isl.minLevel).toBe(a.levelFloor);
+      expect(isl.maxLevel).toBe(a.levelCap);
+      // Au premier niveau de l'île : 1 milicien ; au dernier : exactement les places.
+      expect(militiaCap(isl.minLevel, isl)).toBe(1);
+      expect(militiaCap(isl.maxLevel, isl)).toBe(isl.seats);
+      // Jamais atteint avant le dernier niveau, jamais dépassé après.
+      expect(militiaCap(isl.maxLevel - 1, isl)).toBeLessThan(isl.seats);
+      expect(militiaCap(isl.maxLevel + 30, isl)).toBe(isl.seats);
+      // Progressif : chaque niveau débloque 0 ou 1 milicien, jamais de recul.
+      for (let L = isl.minLevel + 1; L <= isl.maxLevel; L++) {
+        const d = militiaCap(L, isl) - militiaCap(L - 1, isl);
+        expect(d === 0 || d === 1).toBe(true);
+      }
+      // Une Caserne en retard sur la tranche de l'île garde au moins 1 milicien.
+      if (isl.minLevel > 1) expect(militiaCap(isl.minLevel - 5, isl)).toBe(1);
+      expect(militiaCap(0, isl)).toBe(0);
     }
-    // Île 1 : 3 lieux fixes (plus de camp d'entraînement) → 15 miliciens, atteints à la Caserne 15.
-    const s1 = militiaSeatsOf({ archipel: archipelOn(1) });
-    expect(militiaCap(14, s1)).toBe(14);
-    expect(militiaCap(15, s1)).toBe(15);
-    expect(militiaCap(37, s1)).toBe(15);
-    expect(militiaCap(0, 20)).toBe(0);
-    expect(militiaSeatsOf({})).toBe(0);
-    // La production remplit bien jusqu'à ce plafond, pas seulement jusqu'à l'ancien.
-    const seats = militiaSeatsOf({ archipel: archipelOn(1) });
-    const full = produceMilitia(emptyMilitia(0), 1, 0, 1e13, seats);
-    expect(full.home).toBe(militiaCap(1, seats));
+    // Île 1 : 3 lieux fixes → 15 miliciens, atteints à la Caserne 20 (on quitte l'île).
+    const i1 = islandMilitiaOf({ archipel: archipelOn(1) })!;
+    expect(militiaCap(19, i1)).toBe(14);
+    expect(militiaCap(20, i1)).toBe(15);
+    expect(militiaCap(37, i1)).toBe(15);
+    // Hors archipel : 1 par niveau, sans borne d'île.
+    expect(islandMilitiaOf({})).toBeNull();
+    expect(militiaCap(37, null)).toBe(37);
+    // La production remplit jusqu'au plafond de l'île, pas au-delà.
+    const full = produceMilitia(emptyMilitia(0), 10, 0, 1e13, i1);
+    expect(full.home).toBe(militiaCap(10, i1));
   });
 });
 

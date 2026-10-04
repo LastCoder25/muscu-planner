@@ -43,7 +43,8 @@
          existent sur l'île, comme les champions (v1.46.1, demandé : « voir les miliciens dispos
          sur la nouvelle île »). Aucun dispo : le temps avant le prochain ; sinon le plafond. -->
     <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.home }"
-      ><span class="av-ico"><MilitiaPortrait /></span><b>{{ mil.home }}</b>/{{ mil.total
+      ><span class="av-ico"><MilitiaPortrait /></span><b>{{ mil.home }}</b
+      >/{{ mil.total
       }}<span v-if="!mil.home && milNextMs" class="av-cap"
         >·+1 dans {{ formatDuration(milNextMs) }}</span
       ><span v-else class="av-cap">·max {{ mil.cap }}</span></span
@@ -53,15 +54,10 @@
 </template>
 
 <script setup lang="ts">
-import { militiaSeatsOf } from '@/lib/controlPoints';
+import { islandMilitiaOf } from '@/lib/controlPoints';
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
-import {
-  advAtInfirmary,
-  advAvailable,
-  rankAvailability,
-  type Adventurer,
-} from '@/lib/adventurers';
+import { advAtInfirmary, advAvailable, rankAvailability, type Adventurer } from '@/lib/adventurers';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
@@ -152,7 +148,7 @@ const mil = computed(() =>
     char.row?.base?.militia,
     char.row?.expedition_map,
     barracks.value,
-    militiaSeatsOf(char.row?.expedition_map),
+    islandMilitiaOf(char.row?.expedition_map),
   ),
 );
 /** ⏳ Le prochain milicien de la Caserne (0 si pleine ou absente) — la règle de production. */
@@ -164,7 +160,7 @@ const milNextMs = computed(() => {
     barracks.value,
     mil.value.posted,
     props.now,
-    militiaSeatsOf(char.row?.expedition_map),
+    islandMilitiaOf(char.row?.expedition_map),
   );
 });
 
@@ -172,7 +168,8 @@ const milNextMs = computed(() => {
 const seaTitle = computed(() => {
   const c = char.row?.expedition_map?.crossing;
   if (!c) return '';
-  const wait = c.departAt > props.now ? `départ dans ${formatDuration(c.departAt - props.now)}, ` : '';
+  const wait =
+    c.departAt > props.now ? `départ dans ${formatDuration(c.departAt - props.now)}, ` : '';
   return `Héros en traversée vers l'île ${c.to} — ${wait}arrivée dans ${formatDuration(Math.max(0, c.arriveAt - props.now))}`;
 });
 

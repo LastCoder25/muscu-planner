@@ -79,18 +79,30 @@ export function militiaIntervalH(barracks: number): number {
   return fastH + ((slowH - fastH) * halfLevel) / (halfLevel + L);
 }
 
+/** 🏝️ Ce qu'une île impose à la milice : ses places (`islandMilitiaOf`) et sa tranche de
+ *  niveaux. `null` hors archipel. */
+export interface IslandMilitia {
+  /** Lieux fixes × `MILITIA.perPoint` : de quoi les tenir tous en garnison pleine. */
+  seats: number;
+  minLevel: number;
+  maxLevel: number;
+}
+
 /** Combien de miliciens la Caserne entretient au plus (base + postés + en route).
- *  ⚖️ UN MILICIEN PAR NIVEAU DE CASERNE (décision de l'utilisateur, 2026-10-03 : « la
- *  caserne débloque 1 milicien par lvl »).
- *  🏝️ `islandSeats` (REQUIS) : sur une île, plafonné à ses places de lieux fixes
- *  (`militiaSeatsOf`, 4 × 5 = 20 sur l'île 1) — atteint pile à la Caserne 20, le niveau où
- *  l'on quitte l'île 1 : de quoi la laisser en garnison pleine de miliciens, les champions
- *  partant sur l'île suivante. Au-delà, la Caserne n'y règle plus que la cadence. Les
- *  objectifs acceptent des miliciens mais n'en réclament pas. 0 hors archipel : pas de
- *  borne d'île. */
-export function militiaCap(barracks: number, islandSeats: number): number {
+ *  ⚖️ HORS ARCHIPEL : UN MILICIEN PAR NIVEAU DE CASERNE (décision de l'utilisateur,
+ *  2026-10-03 : « la caserne débloque 1 milicien par lvl »).
+ *  🏝️ SUR UNE ÎLE (2026-10-04, demandé : « débloquer les miliciens progressivement pour en
+ *  avoir le nombre exact en quittant l'île ») : le plafond monte avec la place de la Caserne
+ *  dans la tranche de l'île, jusqu'à ses places EXACTES à son dernier niveau (île 1 : 1 à la
+ *  Caserne 1, 15 à la Caserne 20 ; île 2 : de la Caserne 21 à 40). Jamais plus que les
+ *  places : un milicien de trop ne servirait nulle part (la milice ne traverse pas). Au moins
+ *  1 dès qu'il y a une Caserne, même en retard sur la tranche de l'île. */
+export function militiaCap(barracks: number, isl: IslandMilitia | null): number {
   const L = Math.max(0, Math.floor(barracks));
-  return islandSeats > 0 ? Math.min(L, islandSeats) : L;
+  if (!isl || L <= 0) return L;
+  const span = isl.maxLevel - isl.minLevel + 1;
+  const part = Math.min(1, Math.max(0, (L - isl.minLevel + 1) / span));
+  return Math.max(1, Math.round(isl.seats * part));
 }
 
 /**
@@ -105,10 +117,10 @@ export function produceMilitia(
   barracks: number,
   away: number,
   now: number,
-  islandSeats: number,
+  isl: IslandMilitia | null,
 ): MilitiaState {
   if (barracks <= 0) return s;
-  const room = militiaCap(barracks, islandSeats) - s.home - away;
+  const room = militiaCap(barracks, isl) - s.home - away;
   const step = militiaIntervalH(barracks) * 3_600_000;
   const made = Math.floor(Math.max(0, now - s.producedAt) / step);
   if (made <= 0) return s;
@@ -126,9 +138,9 @@ export function nextMilitiaMs(
   barracks: number,
   away: number,
   now: number,
-  islandSeats: number,
+  isl: IslandMilitia | null,
 ): number {
-  if (barracks <= 0 || s.home + away >= militiaCap(barracks, islandSeats)) return 0;
+  if (barracks <= 0 || s.home + away >= militiaCap(barracks, isl)) return 0;
   const step = militiaIntervalH(barracks) * 3_600_000;
   return Math.max(0, s.producedAt + step - now);
 }
@@ -176,12 +188,12 @@ export function militiaCount(
   s: MilitiaState | null | undefined,
   map: ExpeditionMap | null | undefined,
   barracks: number,
-  /** 🏝️ Les places de l'île (`militiaSeatsOf`), REQUIS : le même plafond que la Caserne. */
-  islandSeats: number,
+  /** 🏝️ L'île (`islandMilitiaOf`), REQUIS : le même plafond que la Caserne. */
+  isl: IslandMilitia | null,
 ): { posted: number; home: number; total: number; cap: number } {
   const posted = militiaOnMap(map);
   const home = s?.home ?? 0;
-  return { posted, home, total: posted + home, cap: militiaCap(barracks, islandSeats) };
+  return { posted, home, total: posted + home, cap: militiaCap(barracks, isl) };
 }
 
 const unitCache = new Map<number, Combatant>();

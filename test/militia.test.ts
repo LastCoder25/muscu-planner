@@ -96,13 +96,13 @@ describe('la Caserne : cadence et effectif', () => {
     }
   });
   it('la Caserne débloque UN milicien par niveau, et 0 sans Caserne', () => {
-    expect(militiaCap(0, 0)).toBe(0);
-    for (let l = 1; l <= 100; l++) expect(militiaCap(l, 0)).toBe(militiaCap(l - 1, 0) + 1);
-    expect(militiaCap(20, 0)).toBe(20);
+    expect(militiaCap(0, null)).toBe(0);
+    for (let l = 1; l <= 100; l++) expect(militiaCap(l, null)).toBe(militiaCap(l - 1, null) + 1);
+    expect(militiaCap(20, null)).toBe(20);
   });
   it('une garnison pleine (5) se forme en une demi-journée au plus, dès la Caserne 5', () => {
-    expect(militiaCap(4, 0)).toBeLessThan(MILITIA.perPoint);
-    expect(militiaCap(5, 0)).toBe(MILITIA.perPoint);
+    expect(militiaCap(4, null)).toBeLessThan(MILITIA.perPoint);
+    expect(militiaCap(5, null)).toBe(MILITIA.perPoint);
     expect(militiaIntervalH(1) * MILITIA.perPoint).toBeLessThanOrEqual(12.5);
     expect(militiaIntervalH(10) * MILITIA.perPoint).toBeLessThanOrEqual(9.5);
     expect(militiaIntervalH(30) * MILITIA.perPoint).toBeLessThanOrEqual(7);
@@ -112,32 +112,34 @@ describe('la Caserne : cadence et effectif', () => {
 describe('la production', () => {
   it('produit un milicien par intervalle, et garde la fraction entamée', () => {
     const step = militiaIntervalH(10) * H;
-    const s = produceMilitia(emptyMilitia(0), 10, 0, step * 2.5, 0);
+    const s = produceMilitia(emptyMilitia(0), 10, 0, step * 2.5, null);
     expect(s.home).toBe(2);
     expect(s.producedAt).toBe(step * 2);
   });
   it('s’arrête au plafond, en comptant ceux partis sur la carte', () => {
     const step = militiaIntervalH(5) * H;
-    const s = produceMilitia(emptyMilitia(0), 5, 2, step * 50, 0);
-    expect(s.home).toBe(militiaCap(5, 0) - 2);
+    const s = produceMilitia(emptyMilitia(0), 5, 2, step * 50, null);
+    expect(s.home).toBe(militiaCap(5, null) - 2);
   });
   it('au plafond l’horloge avance : vider un point ne relance pas une rafale', () => {
     const step = militiaIntervalH(5) * H;
-    const full = produceMilitia(emptyMilitia(0), 5, 0, step * 50, 0);
-    expect(full.home).toBe(militiaCap(5, 0));
-    const out = takeMilitia(full, militiaCap(5, 0))!.state;
-    const next = produceMilitia(out, 5, militiaCap(5, 0), step * 50 + step * 0.5, 0);
+    const full = produceMilitia(emptyMilitia(0), 5, 0, step * 50, null);
+    expect(full.home).toBe(militiaCap(5, null));
+    const out = takeMilitia(full, militiaCap(5, null))!.state;
+    const next = produceMilitia(out, 5, militiaCap(5, null), step * 50 + step * 0.5, null);
     expect(next.home).toBe(0);
   });
   it('rend le MÊME objet quand rien ne change (pas d’écriture à vide)', () => {
     const s = emptyMilitia(0);
-    expect(produceMilitia(s, 10, 0, 1000, 0)).toBe(s);
-    expect(produceMilitia(s, 0, 0, 1e12, 0)).toBe(s);
+    expect(produceMilitia(s, 10, 0, 1000, null)).toBe(s);
+    expect(produceMilitia(s, 0, 0, 1e12, null)).toBe(s);
   });
   it('annonce le prochain milicien, et rien quand l’effectif est complet', () => {
     const step = militiaIntervalH(10) * H;
-    expect(nextMilitiaMs(emptyMilitia(0), 10, 0, step / 4, 0)).toBeCloseTo(step * 0.75);
-    expect(nextMilitiaMs({ home: militiaCap(10, 0), producedAt: 0, seq: 0 }, 10, 0, 5, 0)).toBe(0);
+    expect(nextMilitiaMs(emptyMilitia(0), 10, 0, step / 4, null)).toBeCloseTo(step * 0.75);
+    expect(
+      nextMilitiaMs({ home: militiaCap(10, null), producedAt: 0, seq: 0 }, 10, 0, 5, null),
+    ).toBe(0);
   });
 });
 
@@ -167,14 +169,14 @@ describe('envoyer, rappeler', () => {
     expect(militiaOnMap(map)).toBe(2);
     expect(militiaOfControl(p.control)).toEqual(['mil:1', 'mil:2']);
     // 🛡️ La ligne des disponibilités : postés (ou en route) / total, base comprise / plafond.
-    expect(militiaCount({ home: 3, producedAt: 0, seq: 5 }, map, 6, 0)).toEqual({
+    expect(militiaCount({ home: 3, producedAt: 0, seq: 5 }, map, 6, null)).toEqual({
       posted: 2,
       home: 3,
       total: 5,
-      cap: militiaCap(6, 0),
+      cap: militiaCap(6, null),
     });
-    expect(militiaCap(6, 0)).toBe(6);
-    expect(militiaCount(null, null, 0, 0)).toEqual({ posted: 0, home: 0, total: 0, cap: 0 });
+    expect(militiaCap(6, null)).toBe(6);
+    expect(militiaCount(null, null, 0, null)).toEqual({ posted: 0, home: 0, total: 0, cap: 0 });
   });
 });
 

@@ -386,7 +386,7 @@ import {
 import { resolveCamp } from '@/lib/camp';
 import { FACTION_EMOJI } from '@/lib/raid';
 import {
-  militiaSeatsOf,
+  islandMilitiaOf,
   CONTROL_LABEL,
   captureControl,
   collectControl,
@@ -3159,7 +3159,7 @@ export const useCharacterStore = defineStore('character', () => {
         barracks,
         militiaOnMap(cur.expedition_map),
         now,
-        militiaSeatsOf(cur.expedition_map),
+        islandMilitiaOf(cur.expedition_map),
       );
       if (m1 !== t.base.militia) {
         t.base = { ...t.base, militia: m1 };
@@ -5504,7 +5504,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) } : {}),
+      ...(h.runes
+        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+        : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
@@ -5560,7 +5562,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) } : {}),
+      ...(h.runes
+        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+        : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
