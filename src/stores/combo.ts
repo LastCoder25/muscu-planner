@@ -4,7 +4,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import {
   comboChestEligible,
-  comboFinished,
+  legComplete,
   activeCombo,
   comboNextStatus,
   removeSetAt,
@@ -83,9 +83,9 @@ export const useComboStore = defineStore('combo', () => {
     loaded.value = true;
     // ⚠️ Un 360 dont la date de fin est passée se FERME ici : personne ne l'aurait fait
     // sinon (aucune série n'arrive), il restait « en cours » pour toujours et son coffre ne
-    // tombait jamais. Et un 360 fermé à l'objectif par une version d'avant, dont la
-    // période court encore, se ROUVRE pour les séries bonus — son coffre, déjà conservé
-    // sur le défi, ne sera pas reversé (`comboChestPlan`).
+    // tombait jamais. Et un 360 dont tous les objectifs sont atteints se ferme ici aussi
+    // (v1.53) — son coffre, s'il est déjà conservé sur le défi, n'est pas reversé
+    // (`comboChestPlan`).
     for (const c of list.value) {
       if (c.status === 'abandoned' || !refreshStatus(c)) continue;
       void supabase
@@ -134,7 +134,10 @@ export const useComboStore = defineStore('combo', () => {
   // Ajoute une SÉRIE (reps + poids) sur un exo, à la date donnée. OPTIMISTE : la
   // liste locale est mise à jour tout de suite (réponse instantanée), la
   // persistance Supabase part en arrière-plan. Mémorise le poids (préremplissage).
-  // Passe à « done » à la FERMETURE (date de fin, ou maximal partout) — plus à l'objectif.
+  // Passe à « done » à la FERMETURE (date de fin, ou objectif atteint partout).
+  // ⚠️ REFUSE une série sur un exo dont l'objectif est atteint (v1.53 : plus de séries en
+  // plus — qui veut en faire davantage lance un challenge à part). L'écran ne la propose
+  // plus, mais l'écran ne garantit rien : la séance générée, un double toucher…
   function addSet(
     id: string,
     exerciseId: string,
@@ -146,7 +149,7 @@ export const useComboStore = defineStore('combo', () => {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps <= 0) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
-    if (!leg) return;
+    if (!leg || legComplete(leg)) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
     leg.sets.push({ date, reps, weight: weight ?? null, assisted, at: new Date().toISOString() });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
@@ -248,28 +251,6 @@ export const useComboStore = defineStore('combo', () => {
     await persistLegs(id, legs, next.status);
   }
 
-  /** 🏁 CLÔTURER à l'objectif, à la demande du joueur (v0.964).
-   *
-   *  ⚠️ LE STATUT ET LA MARQUE PARTENT DANS LA MÊME ÉCRITURE : séparés, une coupure
-   *  entre les deux laisserait un `done` sans marque, que le recalcul ROUVRIRAIT.
-   *  ⚠️ Et on signale la fermeture APRÈS avoir écrit, par le même chemin que la fermeture
-   *  automatique (`closedChests`) : c'est lui qui dépose le coffre, et deux chemins de
-   *  dépôt finiraient par diverger. */
-  async function finish(id: string) {
-    const c = list.value.find((x) => x.id === id);
-    if (!c) return;
-    const fini = comboFinished(c);
-    const { error } = await supabase
-      .from('combo_challenges')
-      .update({ status: fini.status, config: fini.config })
-      .eq('id', id);
-    if (error) throw error;
-    const etait = c.status;
-    c.status = fini.status;
-    c.config = fini.config;
-    if (etait !== 'done' && comboChestEligible(c)) closedChests.value.push(c.id);
-  }
-
   /** Conserve le contenu du coffre de fin sur le défi : preuve durable du versement, et
    *  ce qui permet de le revoir une fois le message chassé de la boîte (30 messages). */
   async function setChest(id: string, chest: ComboChestRecord) {
@@ -299,7 +280,6 @@ export const useComboStore = defineStore('combo', () => {
     transferLeg,
     setWeight,
     setStatus,
-    finish,
     remove,
   };
 });

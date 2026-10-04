@@ -2692,7 +2692,7 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
 });
 
 describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
-  it('se monte et peint les trois zones', async () => {
+  it('se monte et peint les deux zones', async () => {
     const { default: ComboProgressBar } = await import('@/components/ComboProgressBar.vue');
     const { NO_PACE } = await import('@/lib/combo');
     const leg = (name: string, faites: number) => ({
@@ -2715,13 +2715,14 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    // Les barres sont des boutons (elles filtrent), avec leur compte d’exos ; une zone vide
-    // (ici l’objectif : A au bonus, B au secondaire) n’est pas cliquable.
-    expect((out.match(/<button/g) ?? []).length).toBe(3);
-    expect((out.match(/disabled/g) ?? []).length).toBe(1);
-    // Trois barres SÉPARÉES, chacune avec son remplissage.
-    for (const c of ['cpb-sec', 'cpb-obj', 'cpb-bonus']) expect(out).toContain(c);
-    expect((out.match(/cpb-fill/g) ?? []).length).toBe(3);
+    // Les barres sont des boutons (elles filtrent), avec leur compte d’exos (A terminé
+    // compte dans le jaune, B au secondaire : aucune zone vide).
+    expect((out.match(/<button/g) ?? []).length).toBe(2);
+    expect(out).not.toContain('disabled');
+    // Deux barres SÉPARÉES, chacune avec son remplissage — plus de zone bonus (v1.53).
+    for (const c of ['cpb-sec', 'cpb-obj']) expect(out).toContain(c);
+    expect(out).not.toContain('cpb-bonus');
+    expect((out.match(/cpb-fill/g) ?? []).length).toBe(2);
     // 🔎 Et elles DISENT qu'elles filtrent — sans cette ligne, rien ne l'indiquait.
     expect(out).toContain('cpb-hint');
     expect(out).toContain('Touche une barre');

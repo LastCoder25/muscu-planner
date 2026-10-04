@@ -42,9 +42,7 @@ function combo(over: Partial<ComboChallenge> = {}): ComboChallenge {
     start_date: TODAY,
     duration_days: 7,
     status: 'active',
-    // ⚠️ 10/10 est PILE à l'objectif mais PAS au palier maximal (12) : sans ce cas, « on
-    // compte ce qui n'est pas au max » et « on compte ce qui n'est pas bouclé » rendent le
-    // même chiffre et le test ne distingue rien (mutation survivante).
+    // 10/10 est PILE à l'objectif : il est fini, comme le 12/10 (360 d'avant la v1.53).
     legs: [leg(10, 0), leg(10, 12), leg(10, 5), leg(10, 10)],
     config: {},
     ...over,
@@ -93,10 +91,8 @@ describe('🔥 CE QUE LA GRANDE TUILE ANNONCE', () => {
   it('le 360 : son nom, son avancement, et ce qu’il RESTE à travailler', () => {
     const s = defisSummary([], [combo()], TODAY);
     expect(s.combo?.name).toBe('Full-body');
-    // ⚠️ Le palier MAXIMAL (120 %), pas l'objectif : la zone bonus compte et paie (v0.647),
-    // donc un exo PILE à 100 % a encore de quoi faire. Seul le 12/10 est au max, donc il
-    // reste 3 exos — dont celui qui a bouclé son objectif.
-    expect(s.combo?.left).toBe(3);
+    // Ce qui n'a pas atteint son objectif (v1.53 : plus de palier maximal) : 0/10 et 5/10.
+    expect(s.combo?.left).toBe(2);
     expect(s.combo?.pct).toBeGreaterThan(0);
     // Non arrondi : la tuile formate au dixième (fmtPct), comme la fiche du 360.
     expect(s.combo?.pct).toBe(comboProgressPct(combo()));

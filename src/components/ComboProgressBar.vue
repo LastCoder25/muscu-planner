@@ -1,6 +1,6 @@
 <template>
-  <!-- 🎨 Avancement du Défi 360 en TROIS BARRES SÉPARÉES : séries de base (argent, jusqu'à
-       80 %), objectif (jaune, 80 → 100 %), bonus (vert, 100 → 120 %). Chaque barre se remplit
+  <!-- 🎨 Avancement du Défi 360 en DEUX BARRES SÉPARÉES : séries de base (argent, jusqu'à
+       80 %) et objectif (jaune, 80 → 100 %). Chaque barre se remplit
        de ce que les exos ont fait dans SA zone, sommé sur tous les exos ; le rose est le
        RETARD réel, réparti dans le vide de l'argent puis du jaune (`comboBarSegments`).
        🔎 Et ELLES FILTRENT (demandé, à la place d'une rangée de filtres) : toucher une barre
@@ -71,12 +71,12 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ 'update:modelValue': [v: ComboLegFilter] }>();
 
-const LABEL: Record<ComboBarZone, string> = { sec: 'Secondaire', obj: 'Objectif', bonus: 'Bonus' };
+const LABEL: Record<ComboBarZone, string> = { sec: 'Secondaire', obj: 'Objectif' };
 
 // Remplissage, retard et trait : la règle vit dans la lib (`comboBarSegments`), testée.
 const zones = computed(() => comboBarSegments(props.combo, props.pace));
 const counts = computed(() => {
-  const n: Record<ComboBarZone, number> = { sec: 0, obj: 0, bonus: 0 };
+  const n: Record<ComboBarZone, number> = { sec: 0, obj: 0 };
   for (const l of props.combo.legs) n[legBarZone(l)]++;
   return n;
 });
@@ -120,7 +120,7 @@ watch(
 }
 /* Toute la colonne (barre + libellé) est la cible : 44 px au doigt, la barre reste fine.
    ⚠️ `min-width: max-content` : une barre ne descend JAMAIS sous la largeur de son libellé.
-   Proportionnées 80 · 20 · 20, les barres jaune et verte ne faisaient que ~45 px dans la
+   Proportionnées 80 · 20, la barre jaune ne faisaient que ~45 px dans la
    carte à 344 px, et « Objectif » était tronqué. C'est l'argent, le plus long, qui cède. */
 .cpb-hit {
   flex-basis: 0;
@@ -178,17 +178,11 @@ watch(
 .cpb-obj {
   --c: var(--accent);
 }
-.cpb-bonus {
-  --c: var(--d1);
-}
 .cpb-sec .cpb-seg {
   background: color-mix(in srgb, var(--tier-sec) 10%, var(--surface-2));
 }
 .cpb-obj .cpb-seg {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
-}
-.cpb-bonus .cpb-seg {
-  background: color-mix(in srgb, var(--d1) 14%, var(--surface-2));
 }
 .cpb-fill,
 .cpb-late {

@@ -165,7 +165,14 @@
             <span class="ec-time">{{ timerLabel(i) }}</span>
           </button>
           <span class="ec-prog">{{ doneCount(i) }}/{{ exo.sets.length }} séries</span>
-          <button class="s-adj" title="Une série de plus" @click="addSetSlot(i)">＋</button>
+          <button
+            class="s-adj"
+            :disabled="!canAddSlot(i)"
+            :title="canAddSlot(i) ? 'Une série de plus' : 'Objectif de l’exo atteint'"
+            @click="addSetSlot(i)"
+          >
+            ＋
+          </button>
           <button
             class="s-adj"
             :disabled="!canRemoveSlot(i)"
@@ -187,7 +194,14 @@
             <template v-else>{{ reps }}</template>
           </button>
           <!-- Ajuster le nb de séries de cet exo (en faire plus / moins). -->
-          <button class="s-adj" title="Une série de plus" @click="addSetSlot(i)">＋</button>
+          <button
+            class="s-adj"
+            :disabled="!canAddSlot(i)"
+            :title="canAddSlot(i) ? 'Une série de plus' : 'Objectif de l’exo atteint'"
+            @click="addSetSlot(i)"
+          >
+            ＋
+          </button>
           <button
             class="s-adj"
             :disabled="!canRemoveSlot(i)"
@@ -391,9 +405,19 @@ function canRemoveSlot(i: number) {
   if (!exo || exo.sets.length === 0) return false;
   return !isDone(i, exo.sets.length - 1); // on ne retire pas une série déjà faite
 }
+/** Une série de plus ne peut pas dépasser ce qu'il reste avant l'objectif de l'exo : le 360
+ *  n'accepte plus de série au-delà (v1.53). Compté dans l'unité de l'exo (séries, ou reps /
+ *  secondes planifiées). */
+function canAddSlot(i: number): boolean {
+  const exo = session.value[i];
+  const leg = c.value?.legs.find((l) => l.exercise_id === exo?.exercise_id);
+  if (!exo || !leg) return false;
+  const planned = legMode(leg) === 'sets' ? exo.sets.length : exo.sets.reduce((a, r) => a + r, 0);
+  return planned < legRemaining(leg);
+}
 function addSetSlot(i: number) {
   const exo = session.value[i];
-  if (!exo) return;
+  if (!exo || !canAddSlot(i)) return;
   exo.sets.push(exo.sets[exo.sets.length - 1] ?? 10); // même reps que la dernière
 }
 function removeSetSlot(i: number) {

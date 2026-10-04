@@ -103,7 +103,8 @@ export interface ComboChallenge {
 }
 
 interface ComboConfig {
-  /** Le joueur a CLÔTURÉ lui-même, à l'objectif, sans attendre le palier maximal. */
+  /** Le joueur a CLÔTURÉ lui-même (bouton retiré en v1.53 : le 360 se ferme seul à
+   *  l'objectif). Encore lu pour les 360 clôturés ainsi avant. */
   closed_by_user?: boolean;
 }
 
@@ -335,16 +336,11 @@ export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRan
  *  défi incomplet ne s’affiche pas 100 %, un défi entamé ne s’affiche pas 0 %. */
 export function comboProgressPct(c: ComboChallenge): number {
   if (!c.legs.length) return 0;
-  // ⚠️ LE DÉNOMINATEUR EST L'OBJECTIF (les séries JAUNES), jamais le palier maximal : 100 %
-  // veut dire « objectif bouclé ». Tant qu'un exo n'y est pas, chacun est borné à 100 % —
-  // sinon les séries bonus d'un exo compenseraient le retard d'un autre. Une fois TOUS les
-  // objectifs atteints, les séries VERTES font dépasser 100 % (demandé), jusqu'au palier
-  // maximal de chaque exo : au-delà, rien ne se gagne.
-  const all = comboComplete(c);
+  // ⚠️ Chaque exo est borné à 100 % : un exo d'avant la v1.53 qui a dépassé son objectif
+  // ne compense pas le retard d'un autre (il n'y a plus de séries bonus).
   const frac = c.legs.reduce((a, l) => {
     if (l.target <= 0) return a;
-    const cap = all ? legTierMarks(l).max / l.target : 1;
-    return a + Math.min(cap, legDone(l) / l.target);
+    return a + Math.min(1, legDone(l) / l.target);
   }, 0);
   const exact = (frac / c.legs.length) * 100;
   const pct = Math.round(exact * 10) / 10;
@@ -361,10 +357,9 @@ export function comboComplete(c: ComboChallenge): boolean {
 }
 
 // ── 📅 LE DÉLAI ET LA FERMETURE (v0.825 ; décisions de l'utilisateur) ─────────────────
-// ⚠️ UN 360 NE SE FERME PLUS À L'OBJECTIF. Il passait en « terminé » dès les séries de base,
-// ce qui retirait le défi de l'onglet 🎯 et interdisait les séries bonus (jusqu'à 120 %) —
-// précisément la zone que les paliers récompensent. Il se ferme désormais à la DATE DE FIN,
-// ou plus tôt quand tous les exos ont atteint le maximal (il n'y a alors plus rien à gagner).
+// Un 360 se ferme à sa DATE DE FIN, ou plus tôt dès que TOUS ses exos ont atteint leur
+// objectif (v1.53 : plus de palier maximal à 120 % ni de séries en plus — qui veut en faire
+// davantage lance un challenge à part).
 //
 // ⚠️ LA SAISIE RESTE OUVERTE APRÈS LA FIN, mais seules les séries FAITES DANS LES TEMPS
 // comptent pour la prime et le coffre (choix de l'utilisateur, plutôt que figer la saisie).
@@ -382,11 +377,10 @@ export function comboInDeadline(c: ComboChallenge): ComboChallenge {
 export function comboCompleteInTime(c: ComboChallenge): boolean {
   return comboComplete(comboInDeadline(c));
 }
-/** Le défi est-il FERMÉ : date de fin passée, ou tous les exos au maximal dans les temps ? */
+/** Le défi est-il FERMÉ : date de fin passée, ou tous les objectifs atteints dans les temps ? */
 export function comboClosed(c: ComboChallenge, today: string): boolean {
   if (c.duration_days > 0 && today > comboEndDate(c)) return true;
-  const d = comboInDeadline(c);
-  return d.legs.length > 0 && d.legs.every((l) => legTier(l) === 'max');
+  return comboCompleteInTime(c);
 }
 /** Le joueur a-t-il clôturé lui-même ? (v0.964) — privé : seul `comboNextStatus` s'en sert. */
 function comboClosedByUser(c: ComboChallenge): boolean {
@@ -430,60 +424,9 @@ export function comboChestEligible(c: ComboChallenge): boolean {
   return c.status !== 'abandoned' && comboCompleteInTime(c);
 }
 
-/**
- * 🏁 CLÔTURER UN DÉFI 360 À L'OBJECTIF, SANS ATTENDRE LE PALIER MAXIMAL (v0.964 ;
- * demandé par l'utilisateur : « avoir le choix de clôturer quand on arrive au palier
- * 100 % ou attendre le palier 120 % — actuellement il n'y a pas de bouton pour valider »).
- *
- * ⚠️ IL N'Y EN AVAIT AUCUN, ET C'ÉTAIT VOULU jusqu'ici : depuis la v0.825 un 360 ne se
- * ferme qu'à sa DATE DE FIN ou quand tous ses exos touchent le maximal. C'était la bonne
- * correction d'un vrai défaut (il se fermait à l'objectif et interdisait les séries bonus,
- * la zone que les paliers paient), mais elle a **retiré le choix** : objectif atteint au
- * jour 3 d'un défi de 7, on attendait quatre jours ou on n'y touchait plus.
- *
- * ⚠️ C'EST UN ARBITRAGE, PAS UN RACCOURCI, et l'écran doit le dire : clôturer FIGE la
- * prime et le coffre à ce qui est fait (une série au-delà de l'objectif vaut autant
- * qu'une série normale et le palier maximal paie 1,2 de part, v0.647), mais ça LIBÈRE la
- * place — on n'a qu'un seul 360 actif à la fois.
- */
-export interface ComboFinishPlan {
-  /** Peut-on clôturer à la main, maintenant ? */
-  can: boolean;
-  /** Pourquoi pas — à DIRE, jamais à griser en silence (leçon du gris de la carte, v0.738). */
-  why: 'notComplete' | 'alreadyClosed' | null;
-  /** Ce qu'on laisse : exos qui n'ont pas encore atteint leur palier maximal. */
-  bonusLeft: number;
-  /** Jours qu'il reste à courir (0 = dernier jour). */
-  daysLeft: number;
-}
-export function comboFinishPlan(c: ComboChallenge, today: string): ComboFinishPlan {
-  const d = comboInDeadline(c);
-  const bonusLeft = d.legs.filter((l) => legTier(l) !== 'max').length;
-  const daysLeft = Math.max(0, daysBetweenIso(today, comboEndDate(c)));
-  // ⚠️ `comboCompleteInTime` et non `comboComplete` : c'est EXACTEMENT la condition du
-  // coffre (`comboChestEligible`), donc le bouton ne peut pas promettre un coffre qu'on
-  // n'aurait pas. ⚠️ Les deux sont ÉQUIVALENTS ICI — une mutation qui les intervertit
-  // survit, et c'est prouvé plutôt que caché : cette branche exige `!comboClosed`, donc
-  // `today <= comboEndDate`, donc aucune série ne peut être hors délai. On garde la
-  // forme du coffre pour que les deux ne PUISSENT pas diverger le jour où l'une bouge.
-  const why: ComboFinishPlan['why'] =
-    c.status !== 'active' || comboClosed(c, today)
-      ? 'alreadyClosed'
-      : comboCompleteInTime(c)
-        ? null
-        : 'notComplete';
-  return { can: why === null, why, bonusLeft, daysLeft };
-}
-/** Le défi, clôturé par le joueur. ⚠️ Rend une NOUVELLE valeur : le statut ET la marque
- *  vont ensemble — les poser séparément laisserait une fenêtre où le recalcul rouvre. */
-export function comboFinished(c: ComboChallenge): ComboChallenge {
-  return { ...c, status: 'done', config: { ...(c.config ?? {}), closed_by_user: true } };
-}
-
 /** Fraction d'avance d'un Défi 360 terminé : jours gagnés / durée (0..~1).
- *  ⚠️ Mesurée au jour où l'objectif a été ATTEINT, pas à la dernière série : depuis que le
- *  360 reste ouvert pour les séries bonus, une série faite deux jours plus tard aurait
- *  fait fondre la prime d'avance — on aurait puni celui qui en fait plus. */
+ *  ⚠️ Mesurée au jour où l'objectif a été ATTEINT, pas à la dernière série (un 360 d'avant
+ *  la v1.53 a pu recevoir des séries bonus après). */
 function comboEarlyFraction(c: ComboChallenge): number {
   if (!comboComplete(c) || c.duration_days <= 0) return 0;
   const dates = [...new Set(c.legs.flatMap((l) => legSets(l).map((s) => s.date)))]
@@ -496,59 +439,22 @@ function comboEarlyFraction(c: ComboChallenge): number {
   return saved / c.duration_days;
 }
 
-// Bonus de dépassement : l'XP des séries faites AU-DELÀ de l'objectif est
-// re-bonifiée (en plus de son XP de base) → « en faire plus » est valorisé, pas
-// juste compté. Pondéré par la part d'exos dépassés (`balance`) pour récompenser
-// l'effort RÉPARTI sur le full-body plutôt que le bourrage d'un seul exo.
-const COMBO_SURPASS_MULT = 0.5;
-
-/** Détail du dépassement d'un Défi 360 (séries au-delà de l'objectif). */
-export function comboOverachievement(c: ComboChallenge): {
-  extraXp: number; // XP de base des séries en plus
-  legsOver: number; // nb d'exos ayant dépassé leur objectif
-  totalLegs: number;
-  balance: number; // legsOver / totalLegs (0..1)
-  bonusXp: number; // bonus final (déjà × XP_MULT) → affichable
-} {
-  let extraXp = 0;
-  let legsOver = 0;
-  const totalLegs = c.legs.length;
-  for (const l of c.legs) {
-    const sets = legSets(l);
-    // « done » dans l'unité du mode : nb de séries ('sets') ou total de reps ('reps').
-    const done = legDone(l);
-    if (l.target > 0 && done > l.target) {
-      const legRepXp = sets.reduce((s, st) => s + setRepXp(l, st), 0);
-      extraXp += (legRepXp * (done - l.target)) / done; // part de l'effort au-delà de l'objectif
-      legsOver++;
-    }
-  }
-  const balance = totalLegs ? legsOver / totalLegs : 0;
-  const bonusXp = Math.round(COMBO_SURPASS_MULT * extraXp * balance * XP_MULT);
-  return { extraXp, legsOver, totalLegs, balance, bonusXp };
-}
-
-// ── Objectifs À PALIERS (secondaire / principal / maximal) ────────────────────
-// Un exo a 3 paliers dérivés de sa cible (= le PRINCIPAL) : SECONDAIRE (plancher, une
-// semaine chargée) et MAXIMAL (ambition). Chaque palier atteint débloque une part
-// CUMULÉE de la prime de bouclage de cet exo → le principal en porte l'essentiel (80 %),
-// le secondaire et le maximal motivent (fini le tout-ou-rien ; un exo à la traîne ne
-// bloque plus les autres). Le dépassement est FUSIONNÉ dans le maximal.
+// ── Objectifs À PALIERS (secondaire / principal) ──────────────────────────────
+// Un exo a 2 paliers dérivés de sa cible (= le PRINCIPAL) : SECONDAIRE (plancher, une
+// semaine chargée, 80 %) et PRINCIPAL (l'objectif). Chaque palier débloque une part
+// CUMULÉE de la prime de bouclage de cet exo (fini le tout-ou-rien ; un exo à la traîne ne
+// bloque plus les autres).
+// ⚠️ PLUS DE PALIER MAXIMAL (120 %) NI DE SÉRIES EN PLUS (v1.53, décision de l'utilisateur) :
+// un exo qui a atteint son objectif n'accepte plus de série ; qui veut en faire davantage
+// lance un challenge à part. Mesuré avant de le retirer : un seul joueur l'utilisait.
 const COMBO_TIER_SECONDARY = 0.8; // secondaire = 80 % de la cible
-const COMBO_TIER_MAX = 1.2; // maximal = 120 % de la cible
-// Parts CUMULÉES de la prime d'un exo selon le palier atteint (secondaire 15 %,
-// principal +80 % → 95 %, maximal +5 % → 100 %).
-// Parts CUMULÉES de la prime de bouclage d'un exo par palier. Le principal (la cible)
-// porte l'essentiel ; le maximal dépasse 1 volontairement : franchir 120 % rapporte
-// PLUS qu'un bouclage pile — c'est la prime de dépassement, bornée par le palier.
-const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 0.95, max: 1.2 } as const;
+const COMBO_TIER_SHARE = { none: 0, secondary: 0.15, principal: 1 } as const;
 export type ComboTier = keyof typeof COMBO_TIER_SHARE;
 
 /** Palier atteint par un exo d'après son avancement (fait / cible). */
 export function legTier(l: ComboLeg): ComboTier {
   if (l.target <= 0) return 'none';
   const frac = legDone(l) / l.target;
-  if (frac >= COMBO_TIER_MAX) return 'max';
   if (frac >= 1) return 'principal';
   if (frac >= COMBO_TIER_SECONDARY) return 'secondary';
   return 'none';
@@ -558,78 +464,44 @@ export function legTierShare(l: ComboLeg): number {
   return COMBO_TIER_SHARE[legTier(l)];
 }
 
-/** Tout est fait sur cet exo : il a franchi son palier MAXIMAL, il n'y a plus rien à y gagner.
- *
- *  Prédicat NOMMÉ pour que les écrans n'écrivent pas chacun `legTier(l) === 'max'` : c'est ce
- *  seuil-là qui décide du grisage (fiche du 360 et onglet 🎯), les deux écrans doivent dire
- *  la même chose. L'exo reste à sa place dans la liste (`legsByGroup`). À ne pas confondre avec `legComplete` (l'OBJECTIF, 100 %), qui
- *  laisse la zone bonus ouverte. */
-export function legAllDone(l: ComboLeg): boolean {
-  return legTier(l) === 'max';
-}
-
-/** 🔎 L'ÉTAPE EN COURS d'un exo — ce que les filtres du 360 regroupent (demandé : filtrer
- *  plutôt que déplacer les exos). Étapes DISJOINTES, dans l'ordre des couleurs des cases :
+/** 🔎 L'ÉTAPE EN COURS d'un exo — ce que les filtres du 360 regroupent. Étapes DISJOINTES,
+ *  dans l'ordre des couleurs des cases :
  *  - `secondary` : les séries de base (argent) ne sont pas toutes faites ;
  *  - `principal` : il reste des séries JAUNES (objectif pas atteint) ;
- *  - `bonus`     : objectif atteint, il reste des séries VERTES avant le maximal ;
- *  - `done`      : palier maximal franchi (`legAllDone`).
- *  Lue sur `legTier`, la même source que les couleurs : un exo n'est jamais rangé dans une
- *  étape que sa barre contredit. Sur un petit objectif, le repère secondaire EST l'objectif :
- *  il n'y a pas de zone secondaire, l'exo commence directement en `principal`. */
-export type LegStage = 'secondary' | 'principal' | 'bonus' | 'done';
+ *  - `done`      : objectif atteint (`legComplete`), plus rien à saisir.
+ *  Sur un petit objectif, le repère secondaire EST l'objectif : il n'y a pas de zone
+ *  secondaire, l'exo commence directement en `principal`. */
+export type LegStage = 'secondary' | 'principal' | 'done';
 export function legStage(l: ComboLeg): LegStage {
   const t = legTier(l);
-  if (t === 'max') return 'done';
-  if (t === 'principal') return 'bonus';
+  if (t === 'principal') return 'done';
   if (t === 'secondary') return 'principal';
   const m = legTierMarks(l);
   return m.sec === m.principal ? 'principal' : 'secondary';
 }
 
-/** Repères AFFICHÉS des trois paliers d'un exo (nombre de séries/reps à atteindre).
+/** Repères AFFICHÉS des paliers d'un exo (nombre de séries/reps à atteindre).
  *
  *  `ceil` et NON `round` : atteindre le nombre affiché doit RÉELLEMENT décrocher le
- *  palier. Avec `round`, 32 objectifs sur 40 mentaient — un objectif de 9 affichait
- *  « Sec. 7 » alors que 7/9 = 78 % < 80 %, donc la pastille restait éteinte alors que
- *  le joueur avait fait le chiffre demandé.
- *
- *  Le maximal garde en plus au moins une série de marge au-dessus de l'objectif :
- *  sinon un objectif de 1 ou 2 affichait un « Max » égal à l'objectif lui-même. */
-export function legTierMarks(l: ComboLeg): { sec: number; principal: number; max: number } {
+ *  palier. Avec `round`, un objectif de 9 affichait « Sec. 7 » alors que 7/9 = 78 % < 80 %. */
+export function legTierMarks(l: ComboLeg): { sec: number; principal: number } {
   const t = Math.max(0, l.target);
-  return {
-    sec: Math.max(1, Math.ceil(t * COMBO_TIER_SECONDARY)),
-    principal: t,
-    max: Math.max(t + 1, Math.ceil(t * COMBO_TIER_MAX)),
-  };
+  return { sec: Math.max(1, Math.ceil(t * COMBO_TIER_SECONDARY)), principal: t };
 }
 
 /** Palier qu'une CASE de la barre de séries fait avancer (la n-ième série, n ≥ 1).
- *
- *  ⚠️ REMPLACE LES TROIS PASTILLES « Sec. / Principal / Max » (demandé par l'utilisateur,
- *  pour gagner de la place) : c'est la COULEUR des cases qui dit le palier. Il faut donc que
- *  la case colorée « secondaire » soit exactement celle qui débloque le palier secondaire —
- *  sinon la couleur mentirait comme les repères arrondis de la v0.621. D'où l'appui sur
- *  `legTierMarks`, la même source que `legTier`. `beyond` = au-delà du maximal (rien de plus). */
-export type SegZone = 'secondary' | 'principal' | 'max' | 'beyond';
+ *  C'est la COULEUR des cases qui dit le palier : la case « secondaire » est exactement celle
+ *  qui débloque le palier secondaire (même source que `legTier`). `beyond` = une série au-delà
+ *  de l'objectif, possible seulement sur un 360 d'avant la v1.53 (plus aucune ne s'ajoute). */
+export type SegZone = 'secondary' | 'principal' | 'beyond';
 export function legSegZone(l: ComboLeg, n: number): SegZone {
   const m = legTierMarks(l);
-  if (n > m.max) return 'beyond';
-  if (n > m.principal) return 'max';
+  if (n > m.principal) return 'beyond';
   // Sur un tout petit objectif le repère secondaire EST l'objectif : pas de zone secondaire.
   if (n > m.sec || m.sec === m.principal) return 'principal';
   return 'secondary';
 }
 
-/** Géométrie de la barre continue (modes REPS et DURÉE), rapportée au palier MAXIMAL.
- *
- *  Le mode séries montre ses cases bonus en pointillé ; la barre continue, elle, était
- *  écrêtée à 100 % → un exo de gainage ne laissait RIEN voir de la marge de dépassement,
- *  alors que le dépassement lui rapporte exactement comme aux autres modes (`legTier` et
- *  le crédit-durée sont mode-agnostiques). L'échelle va donc jusqu'au maximal (au-delà si
- *  déjà dépassé) : `fillPct` = la part faite jusqu'à l'objectif, `overPct` = la part faite
- *  au-delà, `objPct` = où se situe l'objectif sur l'échelle. */
 /**
  * 📅 OÙ L’ON DEVRAIT EN ÊTRE, et ce que la barre doit en montrer.
  *
@@ -690,79 +562,60 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
   };
 }
 
-/** 🎨 LA BARRE DU 360 PAR ZONE (demandé) : de 0 à 120 %, la part des séries de base (argent,
- *  jusqu'à 80 %), de l'objectif (jaune, 80 → 100 %) et du bonus (vert, 100 → 120 %), SOMMÉES
- *  sur tous les exos. Chaque exo apporte ce qu'il a fait dans chaque zone : on peut donc être
- *  à 75 % du secondaire avec un peu de jaune et de vert, parce que certains exos sont allés
- *  plus loin que d'autres.
+/** 🎨 LA BARRE DU 360 PAR ZONE : de 0 à 100 %, la part des séries de base (argent, jusqu'à
+ *  80 %) et de l'objectif (jaune, 80 → 100 %), SOMMÉES sur tous les exos. Chaque exo apporte
+ *  ce qu'il a fait dans chaque zone, borné à son objectif.
  *
- *  Valeurs en % de la LARGEUR de la barre (qui représente 0..120 %). Un exo au-delà de 120 %
- *  n'apporte rien de plus : la barre est pleine au maximal. ⚠️ Ce n'est PAS le % affiché en
- *  gros (`comboProgressPct`), qui ne laisse pas les bonus d'un exo compenser le retard d'un
- *  autre : la barre montre OÙ en est chaque zone, le chiffre dit si l'objectif est bouclé. */
-const COMBO_BAR_SCALE = COMBO_TIER_MAX;
-/** Position (en % de la largeur) d'un avancement exprimé en % de l'objectif. */
-export function comboBarPos(pctOfObjective: number): number {
-  return Math.max(0, Math.min(100, pctOfObjective / COMBO_BAR_SCALE));
-}
-export function comboBarParts(c: ComboChallenge): { sec: number; obj: number; bonus: number } {
+ *  Valeurs en % de la LARGEUR de la barre. ⚠️ Ce n'est PAS tout à fait le % affiché en gros
+ *  (`comboProgressPct`, au dixième, qui ne ment pas aux bornes) : la barre montre OÙ en est
+ *  chaque zone, le chiffre dit si l'objectif est bouclé. */
+export function comboBarParts(c: ComboChallenge): { sec: number; obj: number } {
   const n = c.legs.length;
-  if (!n) return { sec: 0, obj: 0, bonus: 0 };
+  if (!n) return { sec: 0, obj: 0 };
   let sec = 0,
-    obj = 0,
-    bonus = 0;
+    obj = 0;
   for (const l of c.legs) {
     if (l.target <= 0) continue;
-    const f = Math.min(COMBO_TIER_MAX, legDone(l) / l.target);
+    const f = Math.min(1, legDone(l) / l.target);
     sec += Math.min(f, COMBO_TIER_SECONDARY);
-    obj += Math.max(0, Math.min(f, 1) - COMBO_TIER_SECONDARY);
-    bonus += Math.max(0, f - 1);
+    obj += Math.max(0, f - COMBO_TIER_SECONDARY);
   }
-  const w = (x: number) => ((x / n) * 100) / COMBO_BAR_SCALE;
-  return { sec: w(sec), obj: w(obj), bonus: w(bonus) };
+  const w = (x: number) => (x / n) * 100;
+  return { sec: w(sec), obj: w(obj) };
 }
 
-/** 🎨 LES TROIS BARRES DU 360 (secondaire · objectif · bonus), chacune en % de SA longueur.
+/** 🎨 LES DEUX BARRES DU 360 (secondaire · objectif), chacune en % de SA longueur.
  *
- *  ⚠️ LE ROSE = LE RETARD RÉEL, pas « ce qui reste à faire avant le trait » dans chaque barre.
- *  Calculé barre par barre, il ignorait l'avance prise ailleurs : un exo déjà dans le jaune ne
- *  réduisait pas le rose de l'argent, et le retard affiché dépassait le vrai (signalé : tout le
- *  reste de l'argent en rose la veille de la fin). Le retard est celui de `comboPace` (points
- *  d'objectif), et il se RÉPARTIT dans le vide de l'argent puis dans celui du jaune — jamais
- *  dans le bonus : le retard porte sur le secondaire et l'objectif.
+ *  ⚠️ LE ROSE = LE RETARD RÉEL (`comboPace`, en points d'objectif), RÉPARTI dans le vide de
+ *  l'argent puis dans celui du jaune — jamais calculé barre par barre, sinon l'avance prise
+ *  ailleurs ne réduisait pas le rose de l'argent.
  *
  *  Le trait « dans les temps » se pose au bout du rose quand on est en retard (c'est là qu'on
  *  devrait être), sinon à l'avancement attendu (`onTimePct`) sur l'échelle argent → jaune. */
 export interface ComboBarSegment {
-  id: 'sec' | 'obj' | 'bonus';
-  /** Longueur relative (80 · 20 · 20). */
+  id: 'sec' | 'obj';
+  /** Longueur relative (80 · 20). */
   len: number;
   fill: number;
   late: number;
   mark: number | null;
 }
-/** 🔎 LES BARRES FILTRENT (demandé : toucher une barre plutôt qu'une rangée de filtres).
- *  La barre d'un exo = la zone où il travaille : l'argent tant que ses séries de base ne sont
- *  pas faites, le jaune tant que l'objectif n'est pas atteint, le vert ensuite — bonus en
- *  cours ET terminés, puisque tous deux ont passé l'objectif. Lue sur `legStage`. */
+/** 🔎 LES BARRES FILTRENT : toucher une barre ne garde que les exos qui y travaillent.
+ *  L'argent tant que les séries de base d'un exo ne sont pas faites, le jaune ensuite —
+ *  exos terminés compris (ils ont rempli leur jaune). Lue sur `legStage`. */
 export type ComboBarZone = ComboBarSegment['id'];
 export type ComboLegFilter = 'all' | ComboBarZone;
 export function legBarZone(l: ComboLeg): ComboBarZone {
-  const st = legStage(l);
-  return st === 'secondary' ? 'sec' : st === 'principal' ? 'obj' : 'bonus';
+  return legStage(l) === 'secondary' ? 'sec' : 'obj';
 }
 export function filterLegsByZone<T extends ComboLeg>(legs: readonly T[], f: ComboLegFilter): T[] {
   return f === 'all' ? [...legs] : legs.filter((l) => legBarZone(l) === f);
 }
 
 export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {
-  const p = comboBarParts(c);
-  // En points d'objectif (0..80, 0..20, 0..20).
-  const pts = (w: number) => w * COMBO_BAR_SCALE;
+  const done = comboBarParts(c);
   const secLen = COMBO_TIER_SECONDARY * 100;
   const objLen = (1 - COMBO_TIER_SECONDARY) * 100;
-  const bonusLen = (COMBO_TIER_MAX - 1) * 100;
-  const done = { sec: pts(p.sec), obj: pts(p.obj), bonus: pts(p.bonus) };
   let reste = Math.max(0, pace.latePct);
   const lateSec = Math.min(reste, Math.max(0, secLen - done.sec));
   reste -= lateSec;
@@ -777,26 +630,25 @@ export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSe
     else if (pace.onTimePct <= secLen) mark = { id: 'sec', at: pace.onTimePct };
     else mark = { id: 'obj', at: pace.onTimePct - secLen };
   }
-  const seg = (id: 'sec' | 'obj' | 'bonus', len: number, d: number, late: number) => ({
+  const seg = (id: 'sec' | 'obj', len: number, d: number, late: number) => ({
     id,
     len,
     fill: Math.min(100, (d / len) * 100),
     late: (late / len) * 100,
     mark: mark && mark.id === id && mark.at > 0 && mark.at < len ? (mark.at / len) * 100 : null,
   });
-  return [
-    seg('sec', secLen, done.sec, lateSec),
-    seg('obj', objLen, done.obj, lateObj),
-    seg('bonus', bonusLen, done.bonus, 0),
-  ];
+  return [seg('sec', secLen, done.sec, lateSec), seg('obj', objLen, done.obj, lateObj)];
 }
 
+/** Géométrie de la barre continue (modes REPS et DURÉE), rapportée à l'objectif : `fillPct`
+ *  = la part faite. `overPct` ne sert qu'aux 360 d'avant la v1.53, qui ont pu dépasser
+ *  l'objectif (l'échelle s'étend alors à ce qui a été fait). */
 export function legBarGeometry(l: ComboLeg): {
   objPct: number;
   fillPct: number;
   overPct: number;
 } {
-  const scale = Math.max(legTierMarks(l).max, legDone(l), 1);
+  const scale = Math.max(l.target, legDone(l), 1);
   const objPct = Math.min(100, (Math.max(0, l.target) / scale) * 100);
   const donePct = Math.min(100, (Math.max(0, legDone(l)) / scale) * 100);
   return { objPct, fillPct: Math.min(donePct, objPct), overPct: Math.max(0, donePct - objPct) };
@@ -832,8 +684,8 @@ function legPlannedEffort(l: ComboLeg): number {
 }
 
 /** Prime de bouclage À PALIERS (pré-XP_MULT). Par exo : sa part de prime `0,25 ×
- *  effort planifié` × la part CUMULÉE du palier atteint (15 / 95 / 100 %). Remplace
- *  l'ancienne prime tout-ou-rien ET le bonus de dépassement (fusionné dans le maximal).
+ *  effort planifié` × la part CUMULÉE du palier atteint (15 / 100 %). Remplace
+ *  l'ancienne prime tout-ou-rien.
  *  Un 360 entièrement bouclé « en avance » est amplifié par (1 + fraction d'avance). */
 /** Le défi est-il TERMINÉ — bouclé, ou sa période écoulée ? C'est ce moment qui déclenche
  *  le versement de la prime, et lui seul. `today` est passé pour rester pur (le projet
@@ -886,8 +738,8 @@ export function comboTieredBonus(
 // hebdo via le 360 ne rapportait que ~36 % d'une semaine loggée en séances (le même
 // volume !). On crédite ~3,5 min de séance par série (exécution + repos), un cran sous
 // une séance « pleine » (~4 min/série avec échauffement) → format efficace, honnête.
-// PLAFONNÉ à l'objectif (comboCountedSets) : pas de farm de séries vides au-delà du
-// plan ; le dépassement passe par le bonus `surpass`, pas par la durée.
+// PLAFONNÉ à l'objectif (comboCountedSets) : une série au-delà (360 d'avant la v1.53) ne
+// rapporte que ses reps.
 export const COMBO_SET_MIN = 3.5;
 
 /** Séries comptées vers l'objectif (mode-aware), plafonnées à la cible par exo. */
@@ -895,9 +747,9 @@ export function comboCountedSets(c: ComboChallenge): number {
   let n = 0;
   for (const l of c.legs) {
     if (legMode(l) !== 'sets') {
-      // Reps ou durée → « séries » équivalentes, plafonnées au palier maximal. Le plafond se
-      // lit dans l'unité de la cible, le crédit sur le travail réel (série convertie comprise).
-      let left = l.target > 0 ? l.target * COMBO_TIER_MAX : Infinity;
+      // Reps ou durée → « séries » équivalentes, plafonnées à l'objectif. Le plafond se lit
+      // dans l'unité de la cible, le crédit sur le travail réel (série convertie comprise).
+      let left = l.target > 0 ? l.target : Infinity;
       let work = 0;
       for (const s of legSets(l)) {
         if (left <= 0) break;
@@ -909,13 +761,7 @@ export function comboCountedSets(c: ComboChallenge): number {
       continue;
     }
     const done = legSetsDone(l);
-    // Plafond du crédit-durée = palier MAXIMAL (120 %), et non plus l'objectif. Une
-    // série faite en plus est du VRAI travail (même exécution, même repos) : la couper
-    // du terme de durée la ramenait à ~1/6 d'une série normale. Le garde-fou contre le
-    // farm de séries vides demeure — il se déplace au sommet de la zone récompensée,
-    // au-delà de laquelle seules les reps brutes comptent encore.
-    const cap = legTierMarks(l).max;
-    n += l.target > 0 ? Math.min(done, cap) : done;
+    n += l.target > 0 ? Math.min(done, l.target) : done;
   }
   return n;
 }
@@ -926,7 +772,7 @@ export function comboImpliedMinutes(c: ComboChallenge): number {
 }
 
 /** Décompose l'XP d'UN Défi 360 : durée (volume bouclé), reps (+ tonnage), prime de
- *  bouclage, dépassement (pour l'affichage sur les défis terminés). Mêmes formules que
+ *  bouclage (pour l'affichage sur les défis terminés). Mêmes formules que
  *  comboXpPoints. */
 /** Prime de bouclage (paliers) en XP — la MÊME valeur que celle déjà incluse dans
  *  comboXpPoints, isolée pour pouvoir l'AFFICHER (célébration de fin, historique
@@ -980,7 +826,6 @@ export function comboXpBreakdown(c: ComboChallenge): {
   reps: number;
   duration: number;
   bonus: number;
-  surpass: number;
   total: number;
 } {
   let reps = 0;
@@ -991,26 +836,18 @@ export function comboXpBreakdown(c: ComboChallenge): {
       tonnage += setTonnage(l, s);
     }
   }
-  // Prime à paliers, dont on ISOLE le premium du palier maximal (part au-delà du
-  // principal) → l'UI peut annoncer ce que le dépassement rapporte vraiment.
-  const bonusBase = comboTieredBonus(c, (l) =>
-    Math.min(legTierShare(l), COMBO_TIER_SHARE.principal),
-  );
   const durationXp = Math.round(comboImpliedMinutes(c) * MUSCU_MIN_XP * XP_MULT);
   const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
-  const bonusXp = Math.round(bonusBase * XP_MULT);
-  // Soustraction (et non 2 arrondis indépendants) → bonus + surpass = la prime réelle.
-  const surpassXp = Math.round(comboTieredBonus(c) * XP_MULT) - bonusXp;
+  const bonusXp = comboBonusXp(c);
   return {
     reps: repsXp,
     duration: durationXp,
     bonus: bonusXp,
-    surpass: surpassXp,
-    total: repsXp + durationXp + bonusXp + surpassXp,
+    total: repsXp + durationXp + bonusXp,
   };
 }
 
-/** XP d'un ensemble de Défis 360 (façon séance : durée + reps + prime + dépassement). */
+/** XP d'un ensemble de Défis 360 (façon séance : durée + reps + prime de bouclage). */
 export function comboXpPoints(combos: ComboChallenge[]): number {
   return combos.reduce((a, c) => {
     let reps = 0;
@@ -1022,7 +859,7 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
       }
     }
     const duration = comboImpliedMinutes(c) * MUSCU_MIN_XP;
-    // Prime À PALIERS (bouclage partiel récompensé + dépassement fusionné dans le maximal).
+    // Prime À PALIERS (bouclage partiel récompensé).
     const bonus = comboTieredBonus(c);
     return a + Math.round((reps + tonnage / 500 + duration + bonus) * XP_MULT);
   }, 0);
@@ -1449,14 +1286,13 @@ export function comboExportText(c: ComboChallenge, today: string): string {
   L.push('');
   for (const leg of c.legs) {
     const done = legDone(leg);
-    const sec = Math.round(leg.target * COMBO_TIER_SECONDARY);
-    const max = Math.round(leg.target * COMBO_TIER_MAX);
+    const { sec } = legTierMarks(leg);
     L.push(
       `• ${leg.exercise_name}${leg.weight_kg ? ` (${leg.weight_kg} kg)` : ''} — ` +
         `${done}/${leg.target} ${legUnitLabel(leg)}${legComplete(leg) ? ' ✓' : ''}` +
         (done > leg.target ? ` (+${done - leg.target} en plus)` : ''),
     );
-    L.push(`   paliers : sec. ${sec} · principal ${leg.target} · max ${max}`);
+    L.push(`   paliers : sec. ${sec} · objectif ${leg.target}`);
     const sets = legSets(leg);
     if (sets.length) {
       const detail =
@@ -1583,7 +1419,7 @@ export function legLoadAdvice(
 // On quitte un exo pour un autre DU MÊME GROUPE : un exo déjà présent dans le défi, ou un
 // exo neuf. L'exo quitté DISPARAÎT, et TOUT ce qu'il portait bascule sur la cible — son
 // objectif et ses séries déjà faites. L'objectif du groupe est donc conservé, et la cible
-// recalcule ses paliers (secondaire, objectif, maximal) sur l'objectif fusionné.
+// recalcule ses paliers (secondaire, objectif) sur l'objectif fusionné.
 //
 // ⚠️ LES SÉRIES BASCULÉES GARDENT LEUR ORIGINE (`ComboSet.origin`). Elles comptent pour
 // l'avancement et les paliers de la cible, mais leur XP, leur tonnage et leurs muscles

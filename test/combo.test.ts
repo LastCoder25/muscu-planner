@@ -21,7 +21,6 @@ import {
   comboCountedSets,
   comboImpliedMinutes,
   COMBO_SET_MIN,
-  comboOverachievement,
   legTier,
   legTierMarks,
   legSegZone,
@@ -54,16 +53,12 @@ import {
   comboCompleteInTime,
   comboEndDate,
   legsByGroup,
-  legAllDone,
   legStage,
   comboBarParts,
   comboBarSegments,
   filterLegsByZone,
   legBarZone,
   NO_PACE,
-  comboBarPos,
-  comboFinishPlan,
-  comboFinished,
 } from '@/lib/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
@@ -244,14 +239,11 @@ describe('comboXpPoints', () => {
     ]);
     expect(comboXpPoints([early])).toBeGreaterThan(comboXpPoints([late]));
   });
-  it('dépasser l’objectif rapporte un bonus (au-delà de l’XP de base des reps)', () => {
-    // Même objectif (2), mais l’un a fait 4 séries (2 en plus) → bonus de dépassement.
+  it('une série au-delà de l’objectif (360 d’avant la v1.53) ne rapporte que ses reps', () => {
     const exact = combo([leg({ target: 2, sets: [set(10), set(10)] })]);
     const over = combo([leg({ target: 2, sets: [set(10), set(10), set(10), set(10)] })]);
-    const baseGain = comboXpPoints([over]) - comboXpPoints([exact]);
-    // Sans bonus, 2 séries en plus vaudraient 2×10×0.2×XP_MULT = 8 pts. Avec bonus, plus.
-    expect(baseGain).toBeGreaterThan(8);
-    expect(comboOverachievement(over).bonusXp).toBeGreaterThan(0);
+    // 2 séries de 10 reps × REP_XP 0,2 × XP_MULT 2 = 8 pts : ni durée, ni prime en plus.
+    expect(comboXpPoints([over]) - comboXpPoints([exact])).toBe(8);
   });
 });
 
@@ -262,16 +254,15 @@ describe('terme de durée (parité avec les séances)', () => {
     expect(comboImpliedMinutes(c)).toBe(3 * COMBO_SET_MIN);
     expect(comboXpBreakdown(c).duration).toBeGreaterThan(0);
   });
-  it('la durée est plafonnée au palier MAXIMAL, plus à l’objectif (anti-farm conservé)', () => {
+  it('la durée est plafonnée à l’objectif (v1.53 : plus de palier maximal)', () => {
     const exact = combo([leg({ target: 2, sets: [set(10), set(10)] })]);
-    const atMax = combo([leg({ target: 2, sets: [set(10), set(10), set(10)] })]);
-    const spam = combo([leg({ target: 2, sets: Array.from({ length: 8 }, () => set(1)) })]);
-    // Une série EN PLUS est du vrai travail → elle compte…
-    expect(comboImpliedMinutes(atMax)).toBeGreaterThan(comboImpliedMinutes(exact));
-    // …mais le crédit s'arrête au palier maximal : 8 séries pour un objectif de 2 ne
-    // créditent pas plus que 3 → le farm de séries vides reste sans intérêt.
-    expect(comboImpliedMinutes(spam)).toBe(comboImpliedMinutes(atMax));
-    expect(comboXpBreakdown(spam).duration).toBe(comboXpBreakdown(atMax).duration);
+    const over = combo([leg({ target: 2, sets: [set(10), set(10), set(10)] })]);
+    expect(comboImpliedMinutes(over)).toBe(comboImpliedMinutes(exact));
+    expect(comboXpBreakdown(over).duration).toBe(comboXpBreakdown(exact).duration);
+  });
+  it('en mode REPS aussi, la durée s’arrête à l’objectif', () => {
+    const r = (reps: number) => combo([leg({ count_mode: 'reps', target: 20, sets: [set(reps)] })]);
+    expect(comboCountedSets(r(30))).toBe(comboCountedSets(r(20)));
   });
   it('la durée domine → un 360 bouclé au poids du corps reste rentable', () => {
     // Sans le terme de durée, un 360 100 % poids du corps ne touchait quasi rien.
@@ -281,62 +272,26 @@ describe('terme de durée (parité avec les séances)', () => {
   });
 });
 
-describe('comboOverachievement', () => {
-  it('balance = part d’exos dépassés (anti-spam d’un seul exo)', () => {
-    const oneOfTwo = combo([
-      leg({ slot: 'push', exercise_id: 'a', target: 2, sets: [set(10), set(10), set(10)] }),
-      leg({ slot: 'pull', exercise_id: 'b', target: 2, sets: [set(10), set(10)] }),
-    ]);
-    const bothOver = combo([
-      leg({ slot: 'push', exercise_id: 'a', target: 2, sets: [set(10), set(10), set(10)] }),
-      leg({ slot: 'pull', exercise_id: 'b', target: 2, sets: [set(10), set(10), set(10)] }),
-    ]);
-    expect(comboOverachievement(oneOfTwo).balance).toBeCloseTo(0.5);
-    expect(comboOverachievement(bothOver).balance).toBeCloseTo(1);
-    expect(comboOverachievement(bothOver).bonusXp).toBeGreaterThan(
-      comboOverachievement(oneOfTwo).bonusXp,
-    );
-  });
-});
-
-describe('paliers du Défi 360 (secondaire 80 % / principal 100 % / maximal 120 %)', () => {
+describe('paliers du Défi 360 (secondaire 80 % / objectif 100 %)', () => {
   const l10 = (reps: number) => leg({ count_mode: 'reps', target: 10, sets: [set(reps)] });
-  it('palier atteint selon fait/cible', () => {
+  it('palier atteint selon fait/cible — plus de palier au-delà de l’objectif', () => {
     expect(legTier(l10(7))).toBe('none'); // < 80 %
     expect(legTier(l10(8))).toBe('secondary'); // 80 %
     expect(legTier(l10(10))).toBe('principal'); // 100 %
-    expect(legTier(l10(12))).toBe('max'); // 120 %
+    expect(legTier(l10(12))).toBe('principal'); // 120 % : rien de plus qu'à 100 %
   });
-  it('parts cumulées 15 / 95 / 120 % — le principal porte 80 %, le maximal PRIME', () => {
+  it('parts cumulées 15 / 100 % — l’objectif paie la prime entière, pas plus', () => {
     expect(legTierShare(l10(7))).toBe(0);
     expect(legTierShare(l10(8))).toBeCloseTo(0.15);
-    expect(legTierShare(l10(10))).toBeCloseTo(0.95);
-    expect(legTierShare(l10(12))).toBeCloseTo(1.2);
-    // Le principal (la cible) reste le gros du bonus…
-    expect(legTierShare(l10(10)) - legTierShare(l10(8))).toBeCloseTo(0.8);
-    // …et le maximal DÉPASSE 1 : franchir 120 % rapporte plus qu'un bouclage pile.
-    expect(legTierShare(l10(12))).toBeGreaterThan(1);
-    expect(legTierShare(l10(12)) - legTierShare(l10(10))).toBeCloseTo(0.25);
+    expect(legTierShare(l10(10))).toBe(1);
+    expect(legTierShare(l10(13))).toBe(1);
   });
-
-  it('une série en plus vaut autant qu’une série normale, mais seulement jusqu’au maximal', () => {
-    const at = (n: number) =>
-      comboXpPoints([combo([leg({ target: 10, sets: Array.from({ length: n }, () => set(10)) })])]);
-    const normale = at(9) - at(8); // avant l'objectif (aucun palier franchi)
-    const enPlus = at(11) - at(10); // 1re série au-delà de l'objectif
-    const horsZone = at(14) - at(13); // au-delà de 120 % : plus de crédit-durée
-    expect(enPlus).toBe(normale);
-    expect(horsZone).toBeLessThan(normale / 2);
-  });
-
-  it('le détail isole ce que rapporte le dépassement', () => {
-    const pile = combo([leg({ target: 10, sets: Array.from({ length: 10 }, () => set(10)) })]);
-    const max = combo([leg({ target: 10, sets: Array.from({ length: 12 }, () => set(10)) })]);
-    expect(comboXpBreakdown(pile).surpass).toBe(0);
-    expect(comboXpBreakdown(max).surpass).toBeGreaterThan(0);
-    // bonus + dépassement = la prime réelle (pas deux arrondis qui divergent).
-    const b = comboXpBreakdown(max);
-    expect(b.total).toBe(b.reps + b.duration + b.bonus + b.surpass);
+  it('le détail de l’XP n’a plus de part « dépassement » : reps + durée + prime = total', () => {
+    const b = comboXpBreakdown(
+      combo([leg({ target: 10, sets: Array.from({ length: 12 }, () => set(10)) })]),
+    );
+    expect(b).not.toHaveProperty('surpass');
+    expect(b.total).toBe(b.reps + b.duration + b.bonus);
   });
   it('bouclage PARTIEL rapporte désormais une prime (fini le tout-ou-rien)', () => {
     // Un exo au principal + un seulement au secondaire → prime > 0 (avant : 0 si non complet).
@@ -647,24 +602,20 @@ describe('legTierMarks', () => {
     }) as unknown as Parameters<typeof legTier>[0];
 
   it('atteindre le repère affiché décroche VRAIMENT le palier (toutes les cibles)', () => {
-    const RANK = { none: 0, secondary: 1, principal: 2, max: 3 } as const;
+    const RANK = { none: 0, secondary: 1, principal: 2 } as const;
     for (let t = 1; t <= 80; t++) {
       const m = legTierMarks(leg(t, 0));
       expect(RANK[legTier(leg(t, m.sec))]).toBeGreaterThanOrEqual(RANK.secondary);
-      expect(RANK[legTier(leg(t, m.principal))]).toBeGreaterThanOrEqual(RANK.principal);
-      expect(RANK[legTier(leg(t, m.max))]).toBe(RANK.max);
+      expect(legTier(leg(t, m.principal))).toBe('principal');
     }
   });
 
-  it('le maximal laisse toujours au moins une série de marge au-dessus de l’objectif', () => {
-    for (let t = 1; t <= 80; t++) expect(legTierMarks(leg(t, 0)).max).toBeGreaterThan(t);
-  });
-
-  it('les repères sont ordonnés', () => {
+  it('les repères sont ordonnés, et il n’y en a plus au-delà de l’objectif', () => {
     for (let t = 1; t <= 80; t++) {
       const m = legTierMarks(leg(t, 0));
       expect(m.sec).toBeLessThanOrEqual(m.principal);
-      expect(m.principal).toBeLessThan(m.max);
+      expect(m.principal).toBe(t);
+      expect(m).not.toHaveProperty('max');
     }
   });
 });
@@ -684,8 +635,7 @@ describe('🎨 LA COULEUR D’UNE CASE DIT LE PALIER (remplace les pastilles)', 
   it('faire la DERNIÈRE case d’une couleur débloque exactement ce palier (toutes les cibles)', () => {
     // Sinon la couleur mentirait : une case « objectif » faite sans objectif atteint.
     for (let t = 1; t <= 80; t++) {
-      const max = legTierMarks(leg(t, 0)).max;
-      for (let n = 1; n <= max; n++) {
+      for (let n = 1; n <= t; n++) {
         const zone = legSegZone(leg(t, 0), n);
         const lastOfZone = legSegZone(leg(t, 0), n + 1) !== zone;
         if (lastOfZone) expect(legTier(leg(t, n)), `cible ${t}, case ${n}`).toBe(zone);
@@ -694,19 +644,17 @@ describe('🎨 LA COULEUR D’UNE CASE DIT LE PALIER (remplace les pastilles)', 
     }
   });
 
-  it('les couleurs se suivent dans l’ordre, et au-delà du maximal plus rien ne compte', () => {
-    const ORDER = ['secondary', 'principal', 'max', 'beyond'];
+  it('les couleurs se suivent dans l’ordre ; au-delà de l’objectif (360 d’avant), « beyond »', () => {
+    const ORDER = ['secondary', 'principal', 'beyond'];
     for (let t = 1; t <= 80; t++) {
       let prev = 0;
-      const max = legTierMarks(leg(t, 0)).max;
-      for (let n = 1; n <= max + 3; n++) {
+      for (let n = 1; n <= t + 3; n++) {
         const k = ORDER.indexOf(legSegZone(leg(t, 0), n));
         expect(k).toBeGreaterThanOrEqual(prev);
         prev = k;
       }
-      expect(legSegZone(leg(t, 0), max + 1)).toBe('beyond');
-      // L'objectif (principal) ne commence jamais avant la fin du secondaire.
-      expect(legSegZone(leg(t, 0), t)).not.toBe('max');
+      expect(legSegZone(leg(t, 0), t)).toBe('principal');
+      expect(legSegZone(leg(t, 0), t + 1)).toBe('beyond');
     }
   });
 });
@@ -724,14 +672,13 @@ describe('legBarGeometry (barre continue : reps et durée)', () => {
       progress: [],
     }) as unknown as Parameters<typeof legBarGeometry>[0];
 
-  it('laisse voir la marge de dépassement : l’objectif n’est PAS en bout de barre', () => {
+  it('l’objectif est au bout de la barre : plus de marge de dépassement (v1.53)', () => {
     const g = legBarGeometry(timeLeg(0));
-    expect(g.objPct).toBeGreaterThan(0);
-    expect(g.objPct).toBeLessThan(100); // ← avant, la barre s'arrêtait à l'objectif
-    expect(g.objPct).toBeCloseTo((120 / 144) * 100, 5); // maximal = 120 %
+    expect(g.objPct).toBe(100);
+    expect(legBarGeometry(timeLeg(120)).fillPct).toBe(100);
   });
 
-  it('sépare la part faite avant et après l’objectif', () => {
+  it('un 360 d’avant la v1.53 qui a dépassé : la part au-delà reste lisible', () => {
     const avant = legBarGeometry(timeLeg(60));
     expect(avant.overPct).toBe(0);
     expect(avant.fillPct).toBeGreaterThan(0);
@@ -1104,8 +1051,8 @@ describe('✏️ CORRIGER LA SÉRIE TOUCHÉE', () => {
 });
 
 // ── 📅 FERMETURE ET DÉLAI (v0.825) ─────────────────────────────────────────────────────
-describe('📅 le 360 reste ouvert après l’objectif, et paie ce qui est fait dans les temps', () => {
-  // Défi du 05 au 11/01. Deux exos à 4 séries (maximal = 5).
+describe('📅 le 360 se ferme à l’objectif, et paie ce qui est fait dans les temps', () => {
+  // Défi du 05 au 11/01. Deux exos à 4 séries.
   const JOUR = '2026-01-07';
   const APRES = '2026-01-12';
   const sets = (n: number, date = '2026-01-06') =>
@@ -1123,16 +1070,9 @@ describe('📅 le 360 reste ouvert après l’objectif, et paie ce qui est fait 
     expect(comboEndDate(combo([]))).toBe('2026-01-11');
   });
 
-  it('⚠️ LE DÉFAUT SIGNALÉ : objectif atteint ne FERME plus le défi (séries bonus possibles)', () => {
-    const c = deux(sets(4), sets(4));
-    expect(comboComplete(c)).toBe(true);
-    expect(comboClosed(c, JOUR)).toBe(false);
-    expect(comboNextStatus(c, JOUR)).toBe('active');
-  });
-
-  it('il se ferme quand TOUS les exos sont au maximal — plus rien à gagner', () => {
-    expect(comboNextStatus(deux(sets(5), sets(5)), JOUR)).toBe('done');
-    expect(comboNextStatus(deux(sets(5), sets(4)), JOUR)).toBe('active');
+  it('il se ferme dès que TOUS les objectifs sont atteints (v1.53)', () => {
+    expect(comboNextStatus(deux(sets(4), sets(4)), JOUR)).toBe('done');
+    expect(comboNextStatus(deux(sets(4), sets(3)), JOUR)).toBe('active');
   });
 
   it('il se ferme à la date de fin, même inachevé', () => {
@@ -1157,22 +1097,20 @@ describe('📅 le 360 reste ouvert après l’objectif, et paie ce qui est fait 
     );
   });
 
-  it('les séries bonus faites dans les temps GROSSISSENT la prime', () => {
-    const pile = deux(sets(4), sets(4));
-    const bonus = deux(sets(5), sets(5));
-    expect(comboTieredBonus(bonus, undefined, APRES)).toBeGreaterThan(
-      comboTieredBonus(pile, undefined, APRES),
+  it('des séries au-delà de l’objectif (360 d’avant) ne grossissent PAS la prime', () => {
+    expect(comboTieredBonus(deux(sets(5), sets(5)), undefined, APRES)).toBe(
+      comboTieredBonus(deux(sets(4), sets(4)), undefined, APRES),
     );
   });
 
-  it('⚠️ une série bonus faite plus tard ne fait pas fondre la prime d’avance', () => {
+  it('⚠️ une série en plus faite après coup ne fait pas fondre la prime d’avance', () => {
     const tot = deux(sets(4, '2026-01-05'), sets(4, '2026-01-05'));
     const plusTard = deux(
       [...sets(4, '2026-01-05'), set(10, 0, '2026-01-10')],
       sets(4, '2026-01-05'),
     );
-    // Même objectif atteint le 05 : l'avance est la même, la série bonus ajoute du palier.
-    expect(comboTieredBonus(plusTard, undefined, APRES)).toBeGreaterThan(
+    // Objectif atteint le 05 dans les deux cas : même avance, même prime.
+    expect(comboTieredBonus(plusTard, undefined, APRES)).toBe(
       comboTieredBonus(tot, undefined, APRES),
     );
   });
@@ -1285,17 +1223,11 @@ describe('🗂️ l’ordre d’affichage des exos : PAR GROUPE, puis alphabéti
   });
 
   it('⚠️ L’ORDRE EST STABLE : un exo FINI reste à sa place', () => {
-    // Les filtres de zone isolent ce qui reste : on ne renvoie plus les exos finis en bas.
-    expect(legAllDone(ex('Pompes', 'push', 5))).toBe(true);
-    for (const n of [0, 2, 4, 5, 6]) {
+    // Les filtres de zone isolent ce qui reste : on ne renvoie pas les exos finis en bas.
+    expect(legComplete(ex('Pompes', 'push', 4))).toBe(true);
+    for (const n of [0, 2, 4]) {
       expect(noms([ex('Squat', 'squat'), ex('Pompes', 'push', n)])).toEqual(['Pompes', 'Squat']);
     }
-  });
-
-  it('« FINI » = le palier MAXIMAL, jamais l’objectif (grisage)', () => {
-    expect(legComplete(ex('Pompes', 'push', 4))).toBe(true);
-    expect(legAllDone(ex('Pompes', 'push', 4))).toBe(false);
-    expect(legAllDone(ex('Pompes', 'push', 5))).toBe(true);
   });
 
   it('NE TOUCHE PAS la source (la séance indexe ses exos)', () => {
@@ -1306,7 +1238,7 @@ describe('🗂️ l’ordre d’affichage des exos : PAR GROUPE, puis alphabéti
   });
 });
 
-describe('📊 LE % SUIT L’OBJECTIF (séries jaunes), et le dépasse avec les séries vertes', () => {
+describe('📊 LE % SUIT L’OBJECTIF, et ne le dépasse jamais (v1.53)', () => {
   const ex = (name: string, target: number, faites: number): ComboLeg => ({
     slot: 'push',
     exercise_id: name,
@@ -1315,25 +1247,19 @@ describe('📊 LE % SUIT L’OBJECTIF (séries jaunes), et le dépasse avec les 
     target,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  it('le dénominateur est l’objectif, pas le palier maximal', () => {
-    // 5 séries sur un objectif de 10 = 50 %, pas 5/12 = 41,7 %.
+  it('le dénominateur est l’objectif', () => {
     expect(comboProgressPct(combo([ex('A', 10, 5)]))).toBe(50);
   });
-  it('tant qu’un exo n’est pas à l’objectif, les bonus d’un autre ne compensent pas', () => {
-    // A : 12/10 (bonus), B : 8/10 → (1 + 0,8)/2 = 90 %, jamais (1,2 + 0,8)/2 = 100 %.
+  it('un exo qui a dépassé (360 d’avant) ne compense pas le retard d’un autre', () => {
     expect(comboProgressPct(combo([ex('A', 10, 12), ex('B', 10, 8)]))).toBe(90);
   });
-  it('tous les objectifs faits + des séries vertes → au-delà de 100 %', () => {
+  it('tous les objectifs faits = 100 %, même avec des séries en plus', () => {
     expect(comboProgressPct(combo([ex('A', 10, 10), ex('B', 10, 10)]))).toBe(100);
-    expect(comboProgressPct(combo([ex('A', 10, 11), ex('B', 10, 10)]))).toBe(105);
-    expect(comboProgressPct(combo([ex('A', 10, 12), ex('B', 10, 12)]))).toBe(120);
-  });
-  it('au-delà du palier maximal, plus rien ne monte', () => {
-    expect(comboProgressPct(combo([ex('A', 10, 20)]))).toBe(120);
+    expect(comboProgressPct(combo([ex('A', 10, 12), ex('B', 10, 20)]))).toBe(100);
   });
 });
 
-describe('🎨 LA BARRE PAR ZONE : 0 → 120 %, argent / jaune / vert', () => {
+describe('🎨 LA BARRE PAR ZONE : 0 → 100 %, argent / jaune', () => {
   const ex = (name: string, target: number, faites: number): ComboLeg => ({
     slot: 'push',
     exercise_id: name,
@@ -1342,30 +1268,21 @@ describe('🎨 LA BARRE PAR ZONE : 0 → 120 %, argent / jaune / vert', () => {
     target,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  const pct = (x: number) => (x * 100) / 1.2; // part d'objectif → % de la largeur
-  it('les zones sont à 80 % et 100 % de l’objectif sur une barre à 120 %', () => {
-    expect(comboBarPos(80)).toBeCloseTo(66.667, 2);
-    expect(comboBarPos(100)).toBeCloseTo(83.333, 2);
-    expect(comboBarPos(120)).toBe(100);
-    expect(comboBarPos(200)).toBe(100);
-  });
   it('un exo seul remplit les zones dans l’ordre', () => {
     const p = comboBarParts(combo([ex('A', 10, 9)])); // 90 % : 80 d'argent + 10 de jaune
-    expect(p.sec).toBeCloseTo(pct(0.8), 6);
-    expect(p.obj).toBeCloseTo(pct(0.1), 6);
-    expect(p.bonus).toBe(0);
+    expect(p.sec).toBeCloseTo(80, 6);
+    expect(p.obj).toBeCloseTo(10, 6);
   });
-  it('on peut être sous 80 % en moyenne avec du jaune ET du vert (exos poussés plus loin)', () => {
-    // A : 12/10 (tout), B : 0/10 → argent (0,8 + 0)/2, jaune 0,2/2, vert 0,2/2.
-    const p = comboBarParts(combo([ex('A', 10, 12), ex('B', 10, 0)]));
-    expect(p.sec).toBeCloseTo(pct(0.4), 6);
-    expect(p.obj).toBeCloseTo(pct(0.1), 6);
-    expect(p.bonus).toBeCloseTo(pct(0.1), 6);
-  });
-  it('au-delà de 120 %, un exo n’apporte plus rien : la barre est pleine', () => {
+  it('un exo qui a dépassé n’apporte rien de plus : la barre est pleine', () => {
     const p = comboBarParts(combo([ex('A', 10, 30)]));
-    expect(p.sec + p.obj + p.bonus).toBeCloseTo(100, 6);
-    expect(p.bonus).toBeCloseTo(pct(0.2), 6);
+    expect(p.sec + p.obj).toBeCloseTo(100, 6);
+    expect(p).not.toHaveProperty('bonus');
+  });
+  it('deux barres seulement : argent (80) et jaune (20)', () => {
+    const segs = comboBarSegments(combo([ex('A', 10, 0)]), NO_PACE);
+    expect(segs.map((z) => z.id)).toEqual(['sec', 'obj']);
+    expect(segs[0]!.len).toBeCloseTo(80, 6);
+    expect(segs[1]!.len).toBeCloseTo(20, 6);
   });
 });
 
@@ -1385,7 +1302,7 @@ describe('🌸 LE ROSE = LE RETARD RÉEL, réparti dans l’argent puis le jaune
     latePct: Math.max(0, onTimePct - donePct),
     showMark: onTimePct > 0 && onTimePct < 100,
   });
-  // Points de retard peints (la barre argent fait 80 points, les deux autres 20).
+  // Points de retard peints (la barre argent fait 80 points, la jaune 20).
   const latePts = (segs: ReturnType<typeof comboBarSegments>) =>
     segs.reduce((a, z) => a + (z.late * z.len) / 100, 0);
 
@@ -1401,13 +1318,13 @@ describe('🌸 LE ROSE = LE RETARD RÉEL, réparti dans l’argent puis le jaune
     expect(segs[0]!.mark).toBeCloseTo(((65 + 11) / 80) * 100, 6);
     expect(segs[1]!.mark).toBeNull();
   });
-  it('jamais de rose dans le bonus, et le reste passe dans le jaune', () => {
+  it('le retard remplit l’argent puis passe dans le jaune', () => {
     // 0/10 partout, attendu 95 % : 80 points dans l’argent, 15 dans le jaune.
     const c = combo([ex('A', 10, 0)]);
     const segs = comboBarSegments(c, pace(95, 0));
+    expect(segs).toHaveLength(2);
     expect(segs[0]!.late).toBeCloseTo(100, 6);
     expect(segs[1]!.late).toBeCloseTo(75, 6);
-    expect(segs[2]!.late).toBe(0);
     expect(segs[1]!.mark).toBeCloseTo(75, 6); // le trait à 95 %, dans le jaune
   });
   it('dans les temps : aucun rose, le trait à l’avancement attendu', () => {
@@ -1433,15 +1350,15 @@ describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
     target: 10,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  it('argent avant les séries de base, jaune avant l’objectif, vert après (bonus ET terminés)', () => {
+  it('argent avant les séries de base, jaune ensuite (terminés compris)', () => {
     expect(legBarZone(ex('A', 7))).toBe('sec');
     expect(legBarZone(ex('A', 8))).toBe('obj');
-    expect(legBarZone(ex('A', 10))).toBe('bonus');
-    expect(legBarZone(ex('A', 12))).toBe('bonus');
+    expect(legBarZone(ex('A', 10))).toBe('obj');
+    expect(legBarZone(ex('A', 12))).toBe('obj');
   });
   it('filtre sans réordonner ; « all » garde tout', () => {
     const legs = [ex('A', 12), ex('B', 2), ex('C', 9), ex('D', 10)];
-    expect(filterLegsByZone(legs, 'bonus').map((l) => l.exercise_name)).toEqual(['A', 'D']);
+    expect(filterLegsByZone(legs, 'obj').map((l) => l.exercise_name)).toEqual(['A', 'C', 'D']);
     expect(filterLegsByZone(legs, 'sec').map((l) => l.exercise_name)).toEqual(['B']);
     expect(filterLegsByZone(legs, 'all')).toHaveLength(4);
   });
@@ -1456,31 +1373,29 @@ describe('🔎 L’ÉTAPE EN COURS d’un exo (filtres du 360)', () => {
     target,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  it('secondaire → objectif → bonus → terminé, aux repères des cases', () => {
-    // Objectif 10 : secondaire 8, maximal 12.
+  it('secondaire → objectif → terminé, aux repères des cases', () => {
+    // Objectif 10 : secondaire 8.
     expect(legStage(ex(10, 0))).toBe('secondary');
     expect(legStage(ex(10, 7))).toBe('secondary');
     expect(legStage(ex(10, 8))).toBe('principal');
     expect(legStage(ex(10, 9))).toBe('principal');
-    expect(legStage(ex(10, 10))).toBe('bonus');
-    expect(legStage(ex(10, 11))).toBe('bonus');
+    expect(legStage(ex(10, 10))).toBe('done');
     expect(legStage(ex(10, 12))).toBe('done');
   });
   it('petit objectif : pas de zone secondaire, on commence en « objectif »', () => {
     expect(legStage(ex(3, 0))).toBe('principal');
   });
   it('chaque étape correspond à la couleur de la PROCHAINE case à faire', () => {
-    const zone = { secondary: 'secondary', principal: 'principal', bonus: 'max' } as const;
     for (let t = 1; t <= 30; t++)
-      for (let n = 0; n <= Math.ceil(t * 1.2) + 1; n++) {
+      for (let n = 0; n <= t + 1; n++) {
         const st = legStage(ex(t, n));
-        if (st === 'done') expect(legAllDone(ex(t, n))).toBe(true);
-        else expect(legSegZone(ex(t, n), n + 1)).toBe(zone[st]);
+        if (st === 'done') expect(legComplete(ex(t, n))).toBe(true);
+        else expect(legSegZone(ex(t, n), n + 1)).toBe(st);
       }
   });
 });
 
-describe('🏁 CLÔTURER À L’OBJECTIF — le choix qui manquait (v0.964)', () => {
+describe('🏁 LA FERMETURE À L’OBJECTIF (v1.53 ; remplace la clôture manuelle de la v0.964)', () => {
   /** Un 360 d'une semaine, un seul exo, dont on choisit le nombre de séries faites. */
   const defi = (faites: number, opts: Partial<ComboChallenge> = {}): ComboChallenge => ({
     id: 'c1',
@@ -1500,60 +1415,29 @@ describe('🏁 CLÔTURER À L’OBJECTIF — le choix qui manquait (v0.964)', ()
     ...opts,
   });
 
-  it('⚠️ ON NE PEUT CLÔTURER QU’À L’OBJECTIF, et on DIT pourquoi sinon', () => {
-    const pasFini = comboFinishPlan(defi(8), '2026-09-16');
-    expect(pasFini.can).toBe(false);
-    expect(pasFini.why).toBe('notComplete');
-    const fini = comboFinishPlan(defi(10), '2026-09-16');
-    expect(fini.can).toBe(true);
-    expect(fini.why).toBeNull();
-  });
-
-  it('⚠️ RIEN À CLÔTURER quand le 360 se ferme DÉJÀ tout seul', () => {
-    // Tous les exos au palier maximal : la fermeture automatique s'en charge.
-    const auMax = defi(12);
-    expect(legTier(auMax.legs[0]!)).toBe('max');
-    expect(comboFinishPlan(auMax, '2026-09-16').why).toBe('alreadyClosed');
-    // Période passée : idem.
-    expect(comboFinishPlan(defi(10), '2026-09-30').why).toBe('alreadyClosed');
-    // Et un défi déjà terminé ou abandonné n'a plus rien à clôturer.
-    expect(comboFinishPlan(defi(10, { status: 'done' }), '2026-09-16').why).toBe('alreadyClosed');
-    expect(comboFinishPlan(defi(10, { status: 'abandoned' }), '2026-09-16').why).toBe(
-      'alreadyClosed',
-    );
-  });
-
-  it('il DIT ce qu’on laisse : les exos pas encore au maximal, et les jours restants', () => {
-    const p = comboFinishPlan(defi(10), '2026-09-16');
-    expect(p.bonusLeft).toBe(1);
-    expect(p.daysLeft).toBe(4); // 14 + 6 = 20 ; du 16 au 20
-    // Au maximal, il ne reste plus rien à gagner — c'est ce qui rend la clôture inutile.
-    expect(comboFinishPlan(defi(12), '2026-09-16').bonusLeft).toBe(0);
-    // ⚠️ `daysLeft` est rendu MÊME quand on ne peut pas clôturer : il ne doit jamais
-    // partir en négatif, sinon un futur lecteur afficherait « il te reste −3 jours ».
-    expect(comboFinishPlan(defi(10), '2026-09-30').daysLeft).toBe(0);
-  });
-
-  it('⚠️ UNE DÉCISION DU JOUEUR NE SE RECALCULE PAS — sinon elle serait rouverte', () => {
-    const c = comboFinished(defi(10));
-    expect(c.status).toBe('done');
-    expect(c.config?.closed_by_user).toBe(true);
-    // Le recalcul, alors que la période court encore, ne doit PAS le rouvrir.
+  it('un 360 clôturé à la main par une version d’avant reste clôturé', () => {
+    const c = defi(9, { status: 'done', config: { closed_by_user: true } });
     expect(comboNextStatus(c, '2026-09-16')).toBe('done');
-    // …et sans la marque, il le rouvrirait bel et bien (la règle de la v0.825).
-    expect(comboNextStatus({ ...defi(10), status: 'done' }, '2026-09-16')).toBe('active');
   });
 
   it('⚠️ UNE FERMETURE AUTOMATIQUE RESTE RÉVERSIBLE — corriger une série ne doit pas bloquer', () => {
-    // Au maximal, il se ferme seul ; on retire une série, il doit rouvrir.
-    expect(comboNextStatus({ ...defi(12), status: 'active' }, '2026-09-16')).toBe('done');
-    expect(comboNextStatus({ ...defi(11), status: 'done' }, '2026-09-16')).toBe('active');
+    expect(comboNextStatus(defi(10), '2026-09-16')).toBe('done');
+    expect(comboNextStatus({ ...defi(9), status: 'done' }, '2026-09-16')).toBe('active');
   });
 
-  it('un 360 clôturé à l’objectif OUVRE bien son coffre', () => {
-    // ⚠️ La condition du bouton est EXACTEMENT celle du coffre : il ne peut pas promettre
-    // ce qu'on n'aurait pas.
-    expect(comboChestEligible(comboFinished(defi(10)))).toBe(true);
-    expect(comboFinishPlan(defi(10), '2026-09-16').can).toBe(true);
+  it('un 360 fermé à l’objectif ouvre son coffre', () => {
+    expect(comboChestEligible({ ...defi(10), status: 'done' })).toBe(true);
+  });
+});
+
+describe('🚫 PLUS DE SÉRIE EN PLUS (v1.53)', () => {
+  it('le store refuse une série sur un exo dont l’objectif est atteint', async () => {
+    // ⚠️ Test de CÂBLAGE (le store est hors du harnais) : l'écran ne propose plus l'ajout,
+    // mais l'écran ne garantit rien (séance générée, double toucher). Le refus doit vivre
+    // dans `addSet`.
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/stores/combo.ts', 'utf8');
+    const add = src.slice(src.indexOf('function addSet('), src.indexOf('function removeSet('));
+    expect(add).toMatch(/if \(!leg \|\| legComplete\(leg\)\) return;/);
   });
 });

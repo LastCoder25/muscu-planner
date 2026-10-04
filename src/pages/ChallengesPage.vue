@@ -342,9 +342,6 @@
               <span v-if="comboXpb(c).bonus > 0" class="xp-pill bonus"
                 >+{{ comboXpb(c).bonus }} XP bouclage</span
               >
-              <span v-if="comboXpb(c).surpass > 0" class="xp-pill surpass"
-                >+{{ comboXpb(c).surpass }} XP dépassement</span
-              >
             </div>
             <ComboChestView v-if="c.chest" :combo-id="c.id" :chest="c.chest" compact />
           </div>
@@ -383,15 +380,9 @@
                    travail dedans (l'XP est déjà comptée). -->
               <button class="c3-stop" :title="comboStop.ok" @click="confirmStopCombo">🗑</button>
             </div>
-            <!-- Barre de 0 à 120 % en trois zones (secondaire / objectif / bonus). -->
+            <!-- Barre de 0 à 100 % en deux zones (secondaire / objectif). -->
             <ComboProgressBar v-model="legFilter" :combo="activeCombo" :pace="pace" thin />
           </div>
-          <!-- 🏁 CLÔTURER À L'OBJECTIF (v0.964, demandé) : ici aussi, parce que c'est
-               ici qu'on regarde son 360 — la leçon du 🗑, qui ne vivait que sur la
-               fiche. Même règle, même libellés : ils viennent de la lib. -->
-          <button v-if="comboFinish.can" class="c3-finish" @click="confirmFinishCombo">
-            🏁 Clôturer mon Défi 360
-          </button>
           <div class="c3-cta-row q-mb-sm">
             <q-btn
               class="c3-cta-grow"
@@ -416,7 +407,7 @@
             v-for="leg in shownComboLegs"
             :key="leg.exercise_id"
             class="combo-leg"
-            :class="{ done: legAllDone(leg) }"
+            :class="{ done: legComplete(leg) }"
           >
             <!-- Même en-tête que la fiche du 360 : c’est souvent ICI qu’on consulte son
                  défi en cours, pas sur /combo/:id. -->
@@ -433,16 +424,20 @@
             <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
                  prenaient la largeur, et les cases partaient à la ligne. La prochaine case vide
                  porte le « ＋ » ; le retrait vit dans la fenêtre de saisie. Seul le chrono du
-                 mode durée garde ses boutons (il n'a pas de fenêtre de saisie). -->
+                 mode durée garde ses boutons (il n'a pas de fenêtre de saisie).
+                 Objectif atteint : plus d'ajout (v1.53) — on peut encore corriger une série. -->
             <div class="cl-bottom">
               <div
                 v-if="legMode(leg) === 'sets'"
-                class="seg-bar tap"
-                role="button"
-                tabindex="0"
-                :aria-label="`Ajouter une série : ${leg.exercise_name}`"
-                @click="openSet(leg, 1)"
-                @keydown.enter="openSet(leg, 1)"
+                class="seg-bar"
+                :class="{ tap: !legComplete(leg) }"
+                :role="legComplete(leg) ? undefined : 'button'"
+                :tabindex="legComplete(leg) ? undefined : 0"
+                :aria-label="
+                  legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`
+                "
+                @click="addFromBar(leg)"
+                @keydown.enter="addFromBar(leg)"
               >
                 <span
                   v-for="n in segCount(leg)"
@@ -468,19 +463,14 @@
                     segSetLabel(legSets(leg)[n - 1])
                   }}</template>
                   <template v-else-if="n === legDone(leg) + 1">＋</template>
-                  <template v-else-if="n > leg.target">+</template>
                 </span>
               </div>
               <div
                 v-else
                 class="reps-bar"
-                :class="{ tap: legMode(leg) === 'reps' }"
-                @click="legMode(leg) === 'reps' && openSet(leg, 1)"
+                :class="{ tap: legMode(leg) === 'reps' && !legComplete(leg) }"
+                @click="legMode(leg) === 'reps' && addFromBar(leg)"
               >
-                <!-- Zone BONUS encore possible (de l'objectif au palier maximal) : hachures vertes.
-                     Équivalent des cases pointillées du mode séries — la marge se voit AVANT d'être
-                     prise, alors qu'avant la barre était écrêtée à 100 % et ne montrait rien. -->
-                <span class="reps-bonus" :style="{ left: bar(leg).objPct + '%' }" />
                 <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
                 <span
                   class="reps-over"
@@ -489,7 +479,7 @@
                 <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
               </div>
               <button
-                v-if="legMode(leg) === 'reps'"
+                v-if="legMode(leg) === 'reps' && !legComplete(leg)"
                 class="cl-add"
                 :aria-label="`Ajouter une série : ${leg.exercise_name}`"
                 @click="openSet(leg, 1)"
@@ -497,24 +487,26 @@
                 ＋
               </button>
               <div v-else-if="legMode(leg) === 'time'" class="cl-actions">
-                <!-- Mode DURÉE : chrono (Démarrer/Pause → série de la durée réelle). -->
-                <button
-                  class="cl-chrono"
-                  :class="{ running: isChronoOn(leg) }"
-                  title="Chrono : Démarrer puis Pause pour enregistrer la durée"
-                  @click="toggleChrono(leg)"
-                >
-                  {{ isChronoOn(leg) ? '⏸' : '▶' }} {{ chronoDisplay(leg) }}
-                </button>
-                <HoldGameLauncher
-                  compact
-                  :exercise-id="leg.exercise_id"
-                  :target-sec="holdTargetSec(leg)"
-                  :elapsed-sec="isChronoOn(leg) ? chronoSec : 0"
-                  :running="isChronoOn(leg)"
-                  @start="toggleChrono(leg)"
-                  @stop="toggleChrono(leg)"
-                />
+                <template v-if="!legComplete(leg)">
+                  <!-- Mode DURÉE : chrono (Démarrer/Pause → série de la durée réelle). -->
+                  <button
+                    class="cl-chrono"
+                    :class="{ running: isChronoOn(leg) }"
+                    title="Chrono : Démarrer puis Pause pour enregistrer la durée"
+                    @click="toggleChrono(leg)"
+                  >
+                    {{ isChronoOn(leg) ? '⏸' : '▶' }} {{ chronoDisplay(leg) }}
+                  </button>
+                  <HoldGameLauncher
+                    compact
+                    :exercise-id="leg.exercise_id"
+                    :target-sec="holdTargetSec(leg)"
+                    :elapsed-sec="isChronoOn(leg) ? chronoSec : 0"
+                    :running="isChronoOn(leg)"
+                    @start="toggleChrono(leg)"
+                    @stop="toggleChrono(leg)"
+                  />
+                </template>
                 <button
                   class="cl-corr"
                   :disabled="!legSetsDone(leg)"
@@ -615,11 +607,9 @@ import {
   legSetsDone,
   legDone,
   legComplete,
-  legAllDone,
   legsByGroup,
   filterLegsByZone,
   type ComboLegFilter,
-  legTierMarks,
   legSegZone,
   legBarGeometry,
   legMode,
@@ -630,8 +620,6 @@ import {
   setOriginLabel,
   legRepRange,
   comboStopPlan,
-  comboFinishPlan,
-  type ComboFinishPlan,
   comboPace,
   activeCombo as activeComboOf,
   NO_PACE,
@@ -672,7 +660,7 @@ function celebrateCombo(c: ComboChallenge) {
     kind: 'generic',
     emoji: '🎯',
     title: 'Objectif du Défi 360 atteint !',
-    subtitle: `Prime +${comboBonusXp(c)} ⚡ — continue jusqu’au maximal, le coffre tombe à la fin`,
+    subtitle: `Prime +${comboBonusXp(c)} ⚡ — ton coffre t’attend dans ta boîte 📬`,
     rarity: 'divin',
   });
 }
@@ -744,38 +732,6 @@ function onSwapped(name: string) {
 const comboStop = computed(() =>
   comboStopPlan(activeCombo.value ?? ({ legs: [] } as unknown as ComboChallenge)),
 );
-/** Ce qu'une clôture manuelle ferait — même source que la fiche. */
-const comboFinish = computed(() =>
-  comboFinishPlan(
-    activeCombo.value ?? ({ legs: [], status: 'done' } as unknown as ComboChallenge),
-    logicalToday(),
-  ),
-);
-/** 🏁 La confirmation de clôture : elle DIT ce qu'on laisse (les paliers maximaux
- *  encore atteignables, les jours restants) et ce qu'on gagne (la place pour un
- *  nouveau 360). Sans ça, « Clôturer » ressemble à un raccourci alors que c'est un
- *  arbitrage : une série au-delà de l'objectif vaut autant qu'une série normale. */
-function finishMessage(plan: ComboFinishPlan): string {
-  const reste = plan.bonusLeft
-    ? `${plan.bonusLeft} exo${plan.bonusLeft > 1 ? 's' : ''} ${plan.bonusLeft > 1 ? 'peuvent' : 'peut'} encore monter jusqu'au palier maximal`
-    : 'tous tes exos sont déjà au palier maximal';
-  const jours = plan.daysLeft
-    ? `, et il te reste ${plan.daysLeft} jour${plan.daysLeft > 1 ? 's' : ''}`
-    : ', et c’est ton dernier jour';
-  return `Ton objectif est atteint : ${reste}${jours}. Clôturer fige ta prime et ton coffre à ce qui est fait — mais tu pourras lancer un nouveau Défi 360 tout de suite.`;
-}
-function confirmFinishCombo() {
-  const cur = activeCombo.value;
-  if (!cur) return;
-  $q.dialog({
-    title: 'Clôturer maintenant ?',
-    message: finishMessage(comboFinish.value),
-    cancel: { label: 'Continuer le défi', flat: true },
-    ok: { label: 'Clôturer', color: 'primary' },
-  }).onOk(() => {
-    void comboStore.finish(cur.id);
-  });
-}
 function confirmStopCombo() {
   const cur = activeCombo.value;
   if (!cur) return;
@@ -795,14 +751,13 @@ function confirmStopCombo() {
 }
 // Ordre d'affichage des exos du Défi 360 : les MOINS avancés d'abord (moins de restant),
 // les TERMINÉS relégués en bas → on voit tout de suite ce qu'il reste à faire.
-// Nombre de cases affichées : jusqu'au palier MAXIMAL (et au-delà si déjà dépassé).
-// Sans ça, la barre s'arrêtait à l'objectif → rien ne montrait qu'on pouvait aller plus loin.
-// Géométrie de la barre continue (reps/durée) → montre la marge de dépassement.
+// Nombre de cases affichées : l'objectif (au-delà seulement sur un 360 d'avant la v1.53).
+// Géométrie de la barre continue (reps/durée).
 function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } {
   return legBarGeometry(l);
 }
 function segCount(l: ComboLeg): number {
-  return Math.max(legTierMarks(l).max, legDone(l));
+  return Math.max(l.target, legDone(l));
 }
 // Ordre d'affichage : par GROUPE MUSCULAIRE (l'ordre des emplacements du 360), puis
 // alphabétique dans un groupe (`legsByGroup` — la MÊME règle sur la fiche, l'onglet 🎯 et la
@@ -874,6 +829,11 @@ const undoLabel = computed(() => {
   const last = sets[sets.length - 1];
   return last ? `↩ Retirer la dernière (${segSetLabel(last)})` : undefined;
 });
+/** Toucher la barre ajoute une série — sauf objectif atteint : le 360 n'accepte plus de
+ *  série en plus (v1.53), qui veut en faire davantage lance un challenge à part. */
+function addFromBar(leg: ComboLeg) {
+  if (!legComplete(leg)) openSet(leg, 1);
+}
 function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
@@ -885,7 +845,7 @@ function openSet(leg: ComboLeg, count: number) {
 }
 function saveSet(v: { reps: number; weight: number | null; assisted: boolean }) {
   const leg = setLeg.value;
-  // ⚠️ On garde l'OBJET : si la série ferme le défi (maximal partout), `activeCombo`
+  // ⚠️ On garde l'OBJET : si la série ferme le défi (objectif partout), `activeCombo`
   // devient null juste après — le relire ici plantait.
   const co = activeCombo.value;
   if (!co || !leg) return;
@@ -971,7 +931,7 @@ async function exportCombo() {
  *  vide ajoute une série. */
 function onSeg(leg: ComboLeg, n: number) {
   if (n <= legSetsDone(leg)) openEdit(leg, n - 1);
-  else openSet(leg, 1);
+  else addFromBar(leg);
 }
 /** Retire UNE série (par défaut la dernière) — celle dont on a touché la case. */
 function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
@@ -1468,10 +1428,6 @@ onMounted(async () => {
   background: color-mix(in srgb, var(--d1) 20%, transparent);
   color: var(--d1);
 }
-.xp-pill.surpass {
-  background: color-mix(in srgb, var(--d3) 20%, transparent);
-  color: var(--d3);
-}
 .cc-badge {
   flex: none;
   font-size: 11px;
@@ -1533,22 +1489,6 @@ onMounted(async () => {
   opacity: 1;
 }
 /* Ligne d'actions du Défi 360 : « Générer une séance » (extensible) + « Exporter ». */
-/* 🏁 LA CLÔTURE EST UNE ACTION POSITIVE — l'accent, là où l'abandon juste en dessous
-   reste gris : deux boutons de même teinte se liraient comme le même geste, et l'un
-   des deux est destructeur. Cible tactile 44 px (règle mobile du projet). */
-.c3-finish {
-  width: 100%;
-  min-height: 44px;
-  margin-bottom: 8px;
-  padding: 10px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
-  border-radius: 10px;
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-}
 .c3-cta-row {
   display: flex;
   gap: 8px;
@@ -1564,8 +1504,7 @@ onMounted(async () => {
   padding: 7px 10px;
   margin-bottom: 6px;
 }
-/* ✅ Exo FINI (palier maximal franchi) : renvoyé en bas de liste et grisé — plus rien à y
-   gagner. Même langage que la fiche du 360 (`.leg.done`) : le même exo doit se lire pareil
+/* ✅ Exo FINI (objectif atteint) : grisé — plus rien à y saisir. Même langage que la fiche du 360 (`.leg.done`) : le même exo doit se lire pareil
    aux deux endroits. L'opacité ne descend pas plus bas (ça reste du travail accompli, et
    l'historique des séries s'ouvre toujours) et rien n'est rendu inerte : on peut corriger. */
 .combo-leg.done {
@@ -1609,26 +1548,14 @@ onMounted(async () => {
   overflow: hidden;
   position: relative; /* les repères de dépassement sont positionnés dessus */
 }
-/* Repères de dépassement de la barre continue (reps / durée). */
-.reps-bonus {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    color-mix(in srgb, var(--d1) 26%, transparent) 0 3px,
-    transparent 3px 6px
-  );
-}
-/* Part réalisée AU-DELÀ de l'objectif → vert plein, comme les cases bonus des séries. */
+/* Part réalisée AU-DELÀ de l'objectif (360 d'avant la v1.53 seulement) → vert plein. */
 .reps-over {
   position: absolute;
   top: 0;
   bottom: 0;
   background: var(--d1);
 }
-/* Trait de l'objectif : on voit où finit la cible et où commence le bonus. */
+/* Trait de l'objectif. */
 .reps-mark {
   position: absolute;
   top: 0;
@@ -1673,13 +1600,6 @@ onMounted(async () => {
 .seg.tier-principal {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
 }
-.seg.tier-max,
-.seg.tier-beyond {
-  background: transparent;
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
-  color: color-mix(in srgb, var(--d1) 75%, var(--dim));
-}
 .seg.on.tier-secondary {
   background: var(--tier-sec);
   border-color: var(--tier-sec);
@@ -1699,7 +1619,6 @@ onMounted(async () => {
     rgba(0, 0, 0, 0.2) 5px 7px
   );
 }
-.seg.on.tier-max,
 .seg.on.tier-beyond {
   background: var(--d1);
   border-style: solid;

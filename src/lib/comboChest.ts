@@ -78,8 +78,7 @@ export function sessionStones(level: number): number {
 }
 
 /** Facteur d'effort d'un 360, borné. `sets` = séries RÉELLEMENT comptées (donc déjà
- *  plafonnées au palier maximal par `comboCountedSets` : empiler des séries vides ne
- *  paie pas au-delà de 120 % de l'objectif). */
+ *  plafonnées à l'objectif par `comboCountedSets`). */
 export function chestEffortMult(sets: number): number {
   const raw = Math.max(0, sets) / CHEST_REF_SETS;
   return Math.min(CHEST_MAX_MULT, Math.max(CHEST_MIN_MULT, raw));

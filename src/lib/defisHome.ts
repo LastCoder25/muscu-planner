@@ -12,7 +12,7 @@
  */
 
 import { challengeStats, type Challenge } from './challenges';
-import { activeCombo, comboProgressPct, legAllDone, type ComboChallenge } from './combo';
+import { activeCombo, comboProgressPct, legComplete, type ComboChallenge } from './combo';
 
 export interface DefisSummary {
   /** Défis solo EN COURS (statut actif), quel que soit leur état du jour. */
@@ -29,9 +29,7 @@ export interface DefisSummary {
     name: string;
     /** Avancement global, arrondi à l'entier pour une tuile étroite. */
     pct: number;
-    /** Exercices qui n'ont pas atteint leur palier MAXIMAL — ce qu'il reste à travailler.
-     *  ⚠️ Le maximal, pas l'objectif : la zone bonus jusqu'à 120 % compte et paie
-     *  (v0.647), donc un exo « à 100 % » a encore de quoi faire. */
+    /** Exercices qui n'ont pas atteint leur objectif — ce qu'il reste à travailler. */
     left: number;
   } | null;
 }
@@ -65,7 +63,7 @@ export function defisSummary(
           name: c.name,
           // Brut : l'écran l'affiche avec fmtPct, comme les autres écrans du 360 (dixième, bornes justes).
           pct: comboProgressPct(c),
-          left: c.legs.filter((l) => !legAllDone(l)).length,
+          left: c.legs.filter((l) => !legComplete(l)).length,
         }
       : null,
   };

@@ -108,7 +108,7 @@ describe('vers un exo déjà présent du même groupe', () => {
   });
 
   it("les paliers sont recalculés sur l'objectif fusionné", () => {
-    expect(legTierMarks(d)).toEqual({ sec: 10, principal: 12, max: 15 });
+    expect(legTierMarks(d)).toEqual({ sec: 10, principal: 12 });
   });
 
   it("le défi d'origine n'est pas modifié", () => {
