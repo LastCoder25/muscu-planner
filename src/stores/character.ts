@@ -129,6 +129,8 @@ import {
   restoreUnvanquished,
   supersedeLate,
   staysUnderAttack,
+  forgetDeparture,
+  moveDeparture,
   recordDeparture,
   archipelFloor,
 } from '@/lib/expedition';
@@ -2765,9 +2767,11 @@ export const useCharacterStore = defineStore('character', () => {
     };
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
     // 🧝 Posté sur un lieu tenu, il en part directement (`unpostHero`).
+    // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
     const map: ExpeditionMap = recordDeparture(
       unpostHero({ ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) }),
       now,
+      exp.midAt,
     );
     await persist(userId, { expedition: exp, expedition_map: map });
   }
@@ -4084,7 +4088,8 @@ export const useCharacterStore = defineStore('character', () => {
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
     // 🧝 Le héros posté sur un lieu tenu en part directement : il quitte la garnison.
     const map2 = map1 && hero ? unpostHero(map1) : map1;
-    const map = map2 ? recordDeparture(map2, now) : map2;
+    // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
+    const map = map2 ? recordDeparture(map2, now, trip.midAt) : map2;
     await persist(userId, {
       expedition_map: map,
       ...(supplies.length ? { supplies: stockAfter } : {}),
@@ -4429,6 +4434,7 @@ export const useCharacterStore = defineStore('character', () => {
       expedition_map: recordDeparture(
         hero ? unpostHero(targetTaken(map, poi)!) : targetTaken(map, poi)!,
         now,
+        plan.midAt,
       ),
       attacks: [...attackList.value, attack],
       ...(supplies.length ? { supplies: stockAfter } : {}),
@@ -6005,7 +6011,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (block) return `Demi-tour impossible : ${RECALL_BLOCK_LABEL[block]}.`;
     const back = recallVoyage(v, now)!;
     const advs = rescheduleReturners(advList.value, tripCrew(v), v.returnAt, back.returnAt);
-    const map = targetBack(cur.expedition_map, v.poi, now);
+    // 🔙 Le départ de ce voyage ne compte pas (nids, harcèlement) : il est retiré.
+    const back0 = targetBack(cur.expedition_map, v.poi, now);
+    const map = back0 ? forgetDeparture(back0, v.midAt) : back0;
     await persist(userId, {
       ...(target.kind === 'hero'
         ? { expedition: back }
@@ -6100,9 +6108,13 @@ export const useCharacterStore = defineStore('character', () => {
       const { attack, moved } = boostAttack(a, plan.gainMs, now);
       let advs = advList.value;
       for (const m of moved) advs = rescheduleReturners(advs, m.members, m.from, m.to);
+      const amap = cur.expedition_map
+        ? moveDeparture(cur.expedition_map, a.midAt, attack.midAt)
+        : cur.expedition_map;
       await persist(userId, {
         supplies: stock,
         attacks: attackList.value.map((x) => (x.id === a.id ? attack : x)),
+        ...(amap !== cur.expedition_map ? { expedition_map: amap } : {}),
         ...(advs !== advList.value ? { adventurers: advs } : {}),
       });
       return null;
@@ -6122,9 +6134,12 @@ export const useCharacterStore = defineStore('character', () => {
     let advs = advList.value;
     let expedition = cur.expedition;
     let parties = partyList.value;
+    let bmap = cur.expedition_map;
     for (const t of group) {
       const nt = boostVoyage(t, plan);
       advs = rescheduleReturners(advs, tripCrew(t), t.returnAt, nt.returnAt);
+      // ⚡ Le départ (daté de l'arrivée) avance avec le voyage.
+      if (bmap) bmap = moveDeparture(bmap, t.midAt, nt.midAt);
       if (t === cur.expedition) expedition = nt;
       else parties = parties.map((p) => (p === t ? (nt as ActiveParty) : p));
     }
@@ -6132,6 +6147,7 @@ export const useCharacterStore = defineStore('character', () => {
       supplies: stock,
       ...(expedition !== cur.expedition ? { expedition } : {}),
       ...(parties !== partyList.value ? { parties } : {}),
+      ...(bmap !== cur.expedition_map ? { expedition_map: bmap } : {}),
       ...(advs !== advList.value ? { adventurers: advs } : {}),
     });
     return null;

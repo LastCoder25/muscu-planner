@@ -185,10 +185,12 @@ describe('🏰 prise, production, reprise', () => {
     expect(mapHarass(x, 12 * D)).toBe(1);
     // Au-delà de 7 jours, les départs s'oublient.
     expect(mapHarass(x, 30 * D)).toBe(0);
-    // Et ils survivent à l'avancée du monde.
-    expect(advanceWorld(x, 12 * D, 30, 3).departures?.length).toBe(
-      recentDepartures(x, 12 * D).length,
-    );
+    // Et ils survivent à l'avancée du monde — y compris ceux encore EN ROUTE (datés de
+    // leur arrivée, dans le futur), qui ne comptent qu'à l'arrivée.
+    const kept = advanceWorld(x, 12 * D, 30, 3).departures ?? [];
+    expect(kept.length).toBe(x.departures!.filter((t) => t > 12 * D - 7 * D).length);
+    expect(kept.some((t) => t > 12 * D)).toBe(true);
+    expect(recentDepartures({ departures: kept }, 12 * D).every((t) => t <= 12 * D)).toBe(true);
   });
   it('produit de l’or, sans plafond de temps, arrêté à l’attaque, plus avec plus de monde', () => {
     const m = captureControl(mapAt(3), ID, ['a0', 'a1', 'a2'], 0, 7);

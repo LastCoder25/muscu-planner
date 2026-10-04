@@ -84,7 +84,8 @@ export const ISLAND_CONQUEST = {
  * - les nids APPARAISSENT sur la carte tant que l'île n'est pas pacifiée — ils ne pondent plus
  *   (`spawnNests`). Pas de durée : **un nid toutes les 3 à 5 sorties sur la carte** (tiré à
  *   chaque nid, `nestThreshold`)
- *   (chaque héros ou équipe envoyé compte, `ExpeditionMap.departures`) — qui joue beaucoup en
+ *   (chaque héros ou équipe envoyé compte À SON ARRIVÉE, `ExpeditionMap.departures` ; un voyage
+ *   rappelé par un demi-tour ne compte pas, `forgetDeparture`) — qui joue beaucoup en
  *   revoit souvent, qui ne sort pas n'en voit plus ; 6 nids nés au plus en même temps ;
  * - **un nid qui apparaît ATTAQUE** : il avance la reprise du lieu tenu le plus proche à
  *   l'armée part DU NID après une attente tirée au hasard (`strikeWaitMinMs`..`Max`), puis marche
@@ -263,7 +264,8 @@ export function nestSpot(
 /**
  * 🪺 LES APPARITIONS (`NEST`) : chaque sortie sur la carte depuis la dernière lue
  * (`archipel.nestFrom`) charge le compteur (`archipel.nestCharge`) ; à `nestThreshold`, un
- * nid apparaît À L'HEURE DE CETTE SORTIE et attaque le lieu tenu le plus proche
+ * nid apparaît À L'ARRIVÉE DE CETTE SORTIE (une sortie est datée de son arrivée, et un
+ * demi-tour la retire : `recordDeparture`) et attaque le lieu tenu le plus proche
  * (`nestStrike`) — tant que l'île n'est pas pacifiée et qu'il y a moins de `NEST.cap` nids nés
  * debout (au plafond, l'apparition est perdue). ⚠️ À la première lecture, les sorties passées
  * ne comptent pas (`nestFrom` part de maintenant). Rend la MÊME carte si rien ne change.

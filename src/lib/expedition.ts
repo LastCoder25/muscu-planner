@@ -891,14 +891,50 @@ export const ARCHIPEL_TRAVEL_LEVEL = 0;
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
 
-/** 🗺️ Les départs encore dans la fenêtre. */
-export function recentDepartures(map: Pick<ExpeditionMap, 'departures'>, now: number): number[] {
-  return (map.departures ?? []).filter((t) => t > now - DEPARTURE_WINDOW_MS && t <= now);
+/** 🗺️ Les départs gardés : ceux de la fenêtre, et ceux encore en route (datés de leur
+ *  ARRIVÉE, dans le futur). */
+function keptDepartures(map: Pick<ExpeditionMap, 'departures'>, now: number): number[] {
+  return (map.departures ?? []).filter((t) => t > now - DEPARTURE_WINDOW_MS);
 }
 
-/** 🗺️ Un départ de plus sur la carte (héros ou équipe), les vieux oubliés. */
-export function recordDeparture(map: ExpeditionMap, now: number): ExpeditionMap {
-  return { ...map, departures: [...recentDepartures(map, now), now].slice(-200) };
+/** 🗺️ Les départs encore dans la fenêtre, ARRIVÉS à destination. */
+export function recentDepartures(map: Pick<ExpeditionMap, 'departures'>, now: number): number[] {
+  return keptDepartures(map, now).filter((t) => t <= now);
+}
+
+/**
+ * 🗺️ Un départ de plus sur la carte (héros ou équipe), les vieux oubliés.
+ *
+ * ⚠️ Il est daté de l'ARRIVÉE du voyage (`at`), pas de l'envoi : il ne compte (nids,
+ * harcèlement) qu'une fois le voyage arrivé. Un voyage à qui l'on fait faire DEMI-TOUR —
+ * possible seulement avant l'arrivée (`recallBlocker`) — n'a donc jamais compté, et
+ * `forgetDeparture` le retire (demandé, 2026-10-04 : « les nids ne comptent pas les
+ * attaques concernées par un demi-tour »).
+ */
+export function recordDeparture(map: ExpeditionMap, now: number, at: number = now): ExpeditionMap {
+  return { ...map, departures: [...keptDepartures(map, now), at].slice(-200) };
+}
+
+/** ⚡ Un boost avance l'arrivée d'un voyage : son départ (daté de l'arrivée) suit, sinon un
+ *  demi-tour ne le retrouverait plus. Rend la MÊME carte s'il n'y était pas. */
+export function moveDeparture(map: ExpeditionMap, from: number, to: number): ExpeditionMap {
+  const list = map.departures ?? [];
+  const i = list.indexOf(from);
+  if (i < 0 || from === to) return map;
+  return { ...map, departures: list.map((t, k) => (k === i ? to : t)) };
+}
+
+/** 🔙 Le départ d'un voyage rappelé (daté de son arrivée prévue `at`) ne compte pas : il
+ *  est retiré, une seule fois. Rend la MÊME carte s'il n'y était pas. */
+export function forgetDeparture(map: ExpeditionMap, at: number): ExpeditionMap {
+  const list = map.departures ?? [];
+  const i = list.indexOf(at);
+  if (i < 0) return map;
+  const rest = [...list.slice(0, i), ...list.slice(i + 1)];
+  if (rest.length) return { ...map, departures: rest };
+  const { departures: _d, ...out } = map;
+  void _d;
+  return out;
 }
 
 /** 🐫 Une embuscade laissée par une faille qui a débordé : là où elle était, jusqu'à
@@ -2811,7 +2847,7 @@ export function advanceWorld(
     // s'il persiste).
     ...(ambushes.length ? { ambushes } : {}),
     // 🗺️ Les départs récents survivent (même règle : clé absente quand il n'y en a pas).
-    ...(recentDepartures(map, now).length ? { departures: recentDepartures(map, now) } : {}),
+    ...(keptDepartures(map, now).length ? { departures: keptDepartures(map, now) } : {}),
     // 🏝️ Le mode archipel survit au tick (clé absente hors du mode).
     ...(map.archipel ? { archipel: map.archipel } : {}),
     // ⛵ Ce que la carte PORTE sans le gérer (traversée, îles rangées, citadelles mises de
