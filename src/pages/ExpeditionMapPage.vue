@@ -272,18 +272,25 @@
             @keydown.space.prevent="baseOpen = true"
           >
             <MapTown :island="island?.id ?? null" />
-            <!-- ⚔️ Combien de champions attendent à la base : la ville se lit comme un lieu tenu. -->
-            <g v-if="baseChamps.length" class="town-count">
-              <rect
-                :x="TOWN.x + 5.4"
-                :y="TOWN.y - 12.6"
-                width="8.2"
-                height="4.4"
-                rx="2.2"
-                class="town-count-bg"
+            <!-- ⚫ QUI EST LÀ, en points sous la ville, comme la garnison d'un lieu fixe
+                 (demandé, 2026-10-04) : doré le héros, cyan un champion présent, « +N » au-delà
+                 de la rangée (`townDots`). -->
+            <g v-if="townRow.dots" class="town-dots">
+              <circle
+                v-for="(d, i) in townRow.dots"
+                :key="i"
+                :cx="TOWN.x + (i - (townRow.dots.length - 1) / 2) * TOWN_DOT_GAP"
+                :cy="TOWN.y + townDotsY"
+                :r="TOWN_DOT_R"
+                :class="'d-' + d"
               />
-              <text :x="TOWN.x + 9.5" :y="TOWN.y - 9.5" class="town-count-t">
-                ⚔️{{ baseChamps.length }}
+              <text
+                v-if="townRow.more"
+                :x="TOWN.x + ((townRow.dots.length + 1) / 2) * TOWN_DOT_GAP + 0.6"
+                :y="TOWN.y + townDotsY + 1"
+                class="town-more"
+              >
+                +{{ townRow.more }}
               </text>
             </g>
           </g>
@@ -1388,6 +1395,7 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
 import MapTown from '@/components/MapTown.vue';
+import { townDots } from '@/lib/townDots';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
@@ -4173,6 +4181,14 @@ async function quickSend() {
 const baseOpen = ref(false);
 /** Les champions À LA BASE : ceux qui peuvent partir (`freeSorted`, la règle de l'envoi). */
 const baseChamps = computed(() => freeSorted.value);
+/** ⚫ La rangée de points sous la ville : le héros s'il est là, puis les champions présents. */
+const townRow = computed(() =>
+  townDots(!!char.row && char.heroIsHome(char.row), baseChamps.value.length),
+);
+/** Sous l'enceinte de la base (rayon 12,5), ou sous le marqueur grossi du village du port. */
+const townDotsY = computed(() => (townIsVillage.value ? 10.2 : 14));
+const TOWN_DOT_R = 1;
+const TOWN_DOT_GAP = 2.7;
 const heroBaseStatus = computed(() => {
   if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const map = char.row?.expedition_map;
@@ -6203,16 +6219,27 @@ onUnmounted(() => {
 .town:focus-visible :deep(.town-wall) {
   stroke: var(--accent);
 }
-.town-count-bg {
-  fill: #15120e;
-  stroke: var(--d1);
+/* ⚫ Qui est à la base : même langage que la garnison d'un lieu fixe (`MapPoiLayer`). */
+.town-dots {
+  pointer-events: none;
+}
+.town-dots circle {
+  stroke: var(--bg);
   stroke-width: 0.4;
 }
-.town-count-t {
-  fill: #f3eee6;
-  font-size: 2.9px;
-  font-weight: 700;
-  text-anchor: middle;
+.town-dots .d-h {
+  fill: var(--accent); /* le héros, doré */
+}
+.town-dots .d-c {
+  fill: #5fd0ff; /* un champion, le cyan des garnisons */
+}
+.town-more {
+  fill: var(--text);
+  font-size: 2.8px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 0.6px;
 }
 /* ── Rangée des voyages : une tuile par voyageur, sur UNE ligne ── */
 /* ⚠️ DEUX COLONNES, plus une rangée qui défile (demandé par l'utilisateur). Le défilement
