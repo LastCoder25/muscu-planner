@@ -3411,9 +3411,11 @@ watch(focusTrip, (k) => {
  *  il fallait remonter à la main). Quand le DERNIER affichage se ferme, on remonte juste sous
  *  la carte : la rangée des bas de la carte en bas de l'écran (demandé).
  *  Rien si un autre affichage vient de s'ouvrir à la place. */
+/** Vrai le temps d'un tick pendant la remontée en haut (cf. `slideMap`) : on ne recale rien. */
+let goingTop = false;
 watch([focusTrip, selected], ([k, s], [k0, s0]) => {
   const closed = (k0 && !k) || (s0 && !s);
-  if (closed && !k && !s) void nextTick(revealTabs);
+  if (closed && !k && !s && !goingTop) void nextTick(revealTabs);
 });
 /** Le BAS de la carte tombe tout en bas de l'écran (précisé par l'utilisateur), les onglets
  *  juste en dessous, hors écran. `revealBlock` garde le haut de la carte visible s'il le faut. */
@@ -3594,6 +3596,13 @@ function slideMap() {
     }
     void nextTick(revealTiles);
   } else {
+    // ↑ referme aussi la partie dépliée sous la carte (demandé), sans recaler le bas de la
+    // carte ensuite (`goingTop`) : le recalage contrarierait la remontée.
+    goingTop = true;
+    mapPanel.value = null;
+    void nextTick(() => {
+      goingTop = false;
+    });
     scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
