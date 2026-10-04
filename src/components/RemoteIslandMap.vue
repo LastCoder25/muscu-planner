@@ -15,6 +15,8 @@
     <div class="rim-map">
       <svg :viewBox="`${view.x} ${view.y} ${view.size} ${view.size}`" class="rim-svg">
         <IslandTerrain :t="terr" :view="view" :fortress-name="island.fortress" />
+        <!-- 🏰 La base (île 1) ou 🏘️ le village du port (îles 2 à 5) : le même dessin que la carte active. -->
+        <MapTown :island="island.id" />
         <g
           v-for="p in points"
           :key="p.id"
@@ -95,6 +97,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
+import MapTown from '@/components/MapTown.vue';
 import type { Island } from '@/lib/archipelago';
 import type { RemotePoint } from '@/lib/crossing';
 import { mapViewOf, type ExpeditionMap } from '@/lib/expedition';

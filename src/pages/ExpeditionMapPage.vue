@@ -282,50 +282,20 @@
 
           <!-- Ville (centre) : la MÊME enceinte que l'écran Base, en miniature — terre
                battue, octogone, tourelles aux sommets, corps de garde au nord, porte au
-               sud et son chemin. On reconnaît sa base depuis la carte.
+               sud et son chemin. On reconnaît sa base depuis la carte. 🏘️ Sur les îles 2 à 5
+               c'est un VILLAGE DE PÊCHEURS (`MapTown`, signalé 2026-10-04).
                🏠 CLIQUABLE (2026-09-29, demandé) : comme un lieu fixe, elle montre qui s'y
                trouve (héros, champions, miliciens) et permet de les envoyer ailleurs. -->
           <g
             class="town"
             role="button"
             tabindex="0"
-            :aria-label="`Ta base — ${baseChamps.length} champion(s) présent(s)`"
+            :aria-label="`${townIsVillage ? 'Le village du port' : 'Ta base'} — ${baseChamps.length} champion(s) présent(s)`"
             @click="baseOpen = true"
             @keydown.enter.prevent="baseOpen = true"
             @keydown.space.prevent="baseOpen = true"
           >
-            <circle :cx="TOWN.x" :cy="TOWN.y" r="12.5" class="town-earth" />
-            <circle :cx="TOWN.x" :cy="TOWN.y" r="10.5" class="town-glow" />
-            <path :d="townRoad" class="town-road" />
-            <polygon :points="townWall" class="town-wall" />
-            <polygon :points="townYard" class="town-yard" />
-            <circle
-              v-for="(p, i) in townPts"
-              :key="'tt' + i"
-              :cx="p.x"
-              :cy="p.y"
-              r="1.15"
-              class="town-turret"
-            />
-            <!-- Corps de garde au nord, porte au sud : posés SUR le pan de mur (l'octogone
-                 est décalé d'un demi-pas, donc les milieux de pans tombent pile en haut et
-                 en bas) — mêmes repères que l'écran Base, en miniature. -->
-            <rect
-              :x="TOWN.x - 1.7"
-              :y="TOWN.y - TOWN_AP - 2.6"
-              width="3.4"
-              height="4.2"
-              rx="0.5"
-              class="town-keep"
-            />
-            <rect
-              :x="TOWN.x - 1.3"
-              :y="TOWN.y + TOWN_AP - 1.2"
-              width="2.6"
-              height="2.6"
-              rx="0.8"
-              class="town-gate"
-            />
+            <MapTown :island="island?.id ?? null" />
             <!-- ⚔️ Combien de champions attendent à la base : la ville se lit comme un lieu tenu. -->
             <g v-if="baseChamps.length" class="town-count">
               <rect
@@ -1431,6 +1401,7 @@ import {
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
+import MapTown from '@/components/MapTown.vue';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
@@ -1569,25 +1540,6 @@ const gameFx = useGameFx();
 const advXpFx = useAdvXpFx();
 
 const TOWN = EXPE.town;
-/** La ville en miniature = l'enceinte de la Base (octogone décalé d'un demi-pas : pans
- *  au nord et au sud, tourelles aux sommets). Rayon 6,4 : la ville tient sous le
- *  premier anneau de lieux (`distMin` 18). */
-const TOWN_R = 7.2;
-const townPts = Array.from({ length: 8 }, (_, i) => {
-  const a = (i / 8) * Math.PI * 2 - Math.PI / 2 + Math.PI / 8;
-  return { x: TOWN.x + Math.cos(a) * TOWN_R, y: TOWN.y + Math.sin(a) * TOWN_R };
-});
-const townWall = townPts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
-const townYard = townPts
-  .map(
-    (p) =>
-      `${(TOWN.x + (p.x - TOWN.x) * 0.72).toFixed(2)},${(TOWN.y + (p.y - TOWN.y) * 0.72).toFixed(2)}`,
-  )
-  .join(' ');
-/** Distance du centre au MILIEU d'un pan (et non au sommet) : c'est elle qui porte le
- *  corps de garde, la porte et le départ du chemin — exactement comme sur l'écran Base. */
-const TOWN_AP = TOWN_R * Math.cos(Math.PI / 8);
-const townRoad = `M${TOWN.x - 1.2} ${TOWN.y + TOWN_AP} L${TOWN.x - 2.2} ${TOWN.y + 14} L${TOWN.x + 2.2} ${TOWN.y + 14} L${TOWN.x + 1.2} ${TOWN.y + TOWN_AP} Z`;
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -1644,6 +1596,8 @@ const V = computed(() => mapViewOf(char.row?.expedition_map));
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 // 🏝️ En mode archipel, la carte a la taille de l'île : l'Avant-poste ne règle que la vitesse.
 const island = computed(() => activeIsland(char.row?.expedition_map));
+/** 🏘️ Sur les îles 2 à 5, le point de départ est un village de pêcheurs, pas la base. */
+const townIsVillage = computed(() => (island.value?.id ?? 1) >= 2);
 /** 🏝️ La conquête de l'île active (objectifs, forteresse, pacification). */
 const islandProgress = computed(() => islandConquest(char.row?.expedition_map));
 // 🏝️ Sur une île : toute sa terre ferme (`mapReach`, v1.28.0).
@@ -6016,24 +5970,6 @@ onUnmounted(() => {
 .compass .comp-needle {
   fill: var(--accent, #ffd23f);
 }
-.town-glow {
-  fill: color-mix(in srgb, var(--accent) 22%, transparent);
-  animation: town-pulse 2.4s ease-in-out infinite;
-}
-@keyframes town-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.75;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .town-glow {
-    animation: none;
-  }
-}
 .trail {
   stroke-width: 1.4;
   stroke-linecap: round;
@@ -6239,7 +6175,7 @@ onUnmounted(() => {
 .town:focus-visible {
   outline: none;
 }
-.town:focus-visible .town-wall {
+.town:focus-visible :deep(.town-wall) {
   stroke: var(--accent);
 }
 .town-count-bg {
@@ -6252,41 +6188,6 @@ onUnmounted(() => {
   font-size: 2.9px;
   font-weight: 700;
   text-anchor: middle;
-}
-.town-earth {
-  fill: #5a4730;
-  opacity: 0.9;
-}
-.town-road {
-  fill: #5c4a32;
-  stroke: #3f3220;
-  stroke-width: 0.3;
-}
-.town-wall {
-  fill: #9a8768;
-  stroke: #3a2f1f;
-  stroke-width: 0.7;
-  stroke-linejoin: round;
-}
-.town-yard {
-  fill: #4a3c28;
-  stroke: #3a2f1f;
-  stroke-width: 0.3;
-}
-.town-turret {
-  fill: #c2ae88;
-  stroke: #3a2f1f;
-  stroke-width: 0.35;
-}
-.town-keep {
-  fill: #c2ae88;
-  stroke: #3a2f1f;
-  stroke-width: 0.4;
-}
-.town-gate {
-  fill: #241c12;
-  stroke: #3a2f1f;
-  stroke-width: 0.3;
 }
 /* ── Rangée des voyages : une tuile par voyageur, sur UNE ligne ── */
 /* ⚠️ DEUX COLONNES, plus une rangée qui défile (demandé par l'utilisateur). Le défilement

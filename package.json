@@ -1,12 +1,12 @@
 {
   "name": "muscu-planner",
-  "version": "1.48.1",
+  "version": "1.48.2",
   "description": "Appli de suivi de musculation (Quasar + Supabase)",
   "productName": "Muscu Planner",
   "author": "Alban Martinez",
   "type": "module",
   "private": true,
-  "comment-scripts": "Scripts routés via 'node ...bin.js' plutôt que les shims .cmd de node_modules/.bin : la group policy AppLocker (poste Orange) bloque l'exécution de .cmd hors Program Files.",
+  "comment-scripts": "Scripts rout??s via 'node ...bin.js' plut??t que les shims .cmd de node_modules/.bin : la group policy AppLocker (poste Orange) bloque l'ex??cution de .cmd hors Program Files.",
   "scripts": {
     "lint": "node node_modules/prettier/bin/prettier.cjs --write \"**/*.{js,ts,vue,css,scss,html,md,json}\" --ignore-path .gitignore && node node_modules/eslint/bin/eslint.js --fix -c ./eslint.config.js \"./src*/**/*.{ts,js,cjs,mjs,vue}\"",
     "lint:check": "node node_modules/prettier/bin/prettier.cjs \"**/*.{js,ts,vue,css,scss,html,md,json}\" --ignore-path .gitignore && node node_modules/eslint/bin/eslint.js -c ./eslint.config.js \"./src*/**/*.{ts,js,cjs,mjs,vue}\"",
