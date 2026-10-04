@@ -555,6 +555,13 @@ describe('🧭 trajet et départ d’un groupe', () => {
     );
     expect(partyLegMin(p, esc, { hero: false, travelMult: 0.8, gearSpeed: 0 })).toBe(adv);
   });
+  it('personne (ni héros ni champion) : le trajet d’une équipe sans rôle, jamais 1 min', () => {
+    // La tuile « Base » sans champion libre annonçait « à 1 min » pour n’importe quel lieu.
+    const p = { ...poi(), distNorm: 0.9 };
+    const leg = partyLegMin(p, [], { hero: false, travelMult: 0.8, gearSpeed: 0 });
+    expect(leg).toBe(caravanLegMin(p, [], 0, 0.8));
+    expect(leg).toBeGreaterThan(60);
+  });
   it('startParty : le voyage seul — il REÇOIT l’issue, il ne la calcule plus', () => {
     // ⚠️ La dispatch camp/faille vit au seul chemin d’envoi (le store) : ce constructeur
     // ne choisit plus la résolution. On lui passe donc celle d’un camp.

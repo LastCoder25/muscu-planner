@@ -436,7 +436,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
         emo: '🏰',
         label: 'Base',
         n: freeStable.value.length,
-        legMin: legFrom(null, freeStable.value),
+        // 🧝 Le héros part de la base : son trajet compte dès qu'il peut se joindre au groupe.
+        legMin: legFrom(null, freeStable.value, !partyHeroBlock.value),
       },
       ...originOptions.value.map((o) => ({
         id: o.id,

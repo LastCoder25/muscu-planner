@@ -55,6 +55,9 @@ export function partyLegMin(
   // 🥖 Les rations : pour les champions, SOUS le plafond du rôle 🧭 (elles s'ajoutent à leur
   // vitesse) ; pour le héros, qui n'a pas de rôle, directement.
   const speed = supplyFx(opts.supplies).speed;
+  // ⚠️ Personne (ni héros ni champion) : le trajet d'une équipe sans rôle, jamais 1 min. Le
+  // départ « Base » sans champion libre affichait « à 1 min » pour n'importe quel lieu.
+  if (!opts.hero && !escort.length) return caravanLegMin(poi, [], speed, opts.travelMult);
   const hero = opts.hero
     ? Math.round(travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult * (1 - speed))
     : 0;
