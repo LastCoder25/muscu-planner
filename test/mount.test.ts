@@ -3028,7 +3028,7 @@ describe('🔀 FusionPanel', () => {
     expect(
       await mountIt(
         ControlPointsSheet,
-        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30), advs: ROW.adventurers },
+        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30, new Set()), advs: ROW.adventurers },
         ROW,
         undefined,
         '/',
@@ -3073,7 +3073,7 @@ describe('🔀 FusionPanel', () => {
     expect(
       await mountIt(
         ControlPointsSheet,
-        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30), advs: ROW.adventurers },
+        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30, new Set()), advs: ROW.adventurers },
         ROW,
         undefined,
         '/',
@@ -3119,7 +3119,7 @@ describe('🔀 FusionPanel', () => {
         ControlPointsSheet,
         {
           modelValue: true,
-          rows: controlRoster(map, [], 3600_000, 30),
+          rows: controlRoster(map, [], 3600_000, 30, new Set()),
           advs: ROW.adventurers,
           onOpen: (p: { id: string }) => opened.push(p.id),
         },
@@ -3155,7 +3155,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     const { createMap } = await import('@/lib/expedition');
     const id = controlIdOf('mine');
     const map = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), id, ['a1'], 0, 7);
-    return { id, map, rows: controlRoster(map, [], 3600_000, 30) };
+    return { id, map, rows: controlRoster(map, [], 3600_000, 30, new Set()) };
   };
   it('une place libre devient un bouton qui ENVOIE, sans ouvrir la gestion du lieu', async () => {
     const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');

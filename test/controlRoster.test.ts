@@ -28,23 +28,30 @@ const row = (rows: ReturnType<typeof controlRoster>, id: string) =>
 
 describe('🗂️ controlRoster', () => {
   it('une ligne par point, dans l’ordre des types', () => {
-    const rows = controlRoster(base(), [], 0, L);
+    const rows = controlRoster(base(), [], 0, L, new Set());
     expect(rows.map((r) => r.kind)).toEqual([...CONTROL.kinds]);
     expect(rows.every((r) => r.status === 'enemy')).toBe(true);
     // ⚠️ Même quand la carte les stocke dans un autre ordre (points ajoutés au fil des versions).
     const m = base();
-    const flipped = controlRoster({ ...m, pois: [...m.pois].reverse() }, [], 0, L);
+    const flipped = controlRoster({ ...m, pois: [...m.pois].reverse() }, [], 0, L, new Set());
     expect(flipped.map((r) => r.kind)).toEqual([...CONTROL.kinds]);
   });
 
   it('une équipe en marche marque le point « assaut », avec ses champions et son arrivée', () => {
-    const rows = controlRoster(base(), [{ poiId: MINE, midAt: 5 * H, ids: ['a', 'b'] }], 2 * H, L);
+    const rows = controlRoster(
+      base(),
+      [{ poiId: MINE, midAt: 5 * H, ids: ['a', 'b'] }],
+      2 * H,
+      L,
+      new Set(),
+    );
     const r = row(rows, MINE);
     expect(r.status).toBe('assault');
     expect(r.assault).toEqual({ ids: ['a', 'b'], inMs: 3 * H });
     // Arrivée passée : ce n'est plus une marche.
     expect(
-      row(controlRoster(base(), [{ poiId: MINE, midAt: H, ids: ['a'] }], 2 * H, L), MINE).assault,
+      row(controlRoster(base(), [{ poiId: MINE, midAt: H, ids: ['a'] }], 2 * H, L, new Set()), MINE)
+        .assault,
     ).toBeNull();
   });
 
@@ -52,28 +59,28 @@ describe('🗂️ controlRoster', () => {
     let m = captureControl(base(), MINE, ['a'], 0, 7);
     m = setAttack(m, MINE, 9e15);
     m = reinforceControl(m, MINE, ['b'], 4 * H, H);
-    const r = row(controlRoster(m, [], 2 * H, L), MINE);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
     expect(r.status).toBe('held');
     expect(r.garrison).toEqual(['a']);
     expect(r.reinforcing).toEqual([{ id: 'b', inMs: 2 * H }]);
     expect(r.seats).toBe(seatsOf('mine'));
     // Arrivé mais pas encore réglé par le tick : compté dans la garnison, plus en route.
-    const later = row(controlRoster(m, [], 5 * H, L), MINE);
+    const later = row(controlRoster(m, [], 5 * H, L, new Set()), MINE);
     expect(later.garrison).toEqual(['a', 'b']);
     expect(later.reinforcing).toEqual([]);
   });
 
   it('tenu sans personne = « empty », attaque proche = « imminent » (prioritaire)', () => {
     let m = setAttack(captureControl(base(), MINE, [], 0, 7), MINE, 9e15);
-    expect(row(controlRoster(m, [], H, L), MINE).status).toBe('empty');
+    expect(row(controlRoster(m, [], H, L, new Set()), MINE).status).toBe('empty');
     m = setAttack(m, MINE, H + CONTROL.imminentMs / 2);
-    expect(row(controlRoster(m, [], H, L), MINE).status).toBe('imminent');
+    expect(row(controlRoster(m, [], H, L, new Set()), MINE).status).toBe('imminent');
   });
 
   it('plus rien « à récolter » : la ligne n’appelle plus pour une réserve (versé directement)', () => {
     let m = captureControl(base(), MINE, ['a', 'b', 'c'], 0, 7);
     m = setAttack(m, MINE, 9e15);
-    const r = row(controlRoster(m, [], 20 * H, L), MINE);
+    const r = row(controlRoster(m, [], 20 * H, L, new Set()), MINE);
     expect('ready' in r).toBe(false);
     expect(r.progress!.pct).toBeNull();
   });
@@ -91,7 +98,7 @@ describe('🔎 les filtres de la liste', () => {
 
 describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
   it('ennemi : rien (on ne connaît pas sa garnison)', () => {
-    expect(garrisonDots(row(controlRoster(base(), [], 0, L), MINE))).toBe('');
+    expect(garrisonDots(row(controlRoster(base(), [], 0, L, new Set()), MINE))).toBe('');
   });
 
   it('tenu : champions, miliciens, renforts en route, puis places libres', () => {
@@ -99,20 +106,30 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     let m = captureControl(base(), MINE, ['a', mil], 0, 7);
     m = setAttack(m, MINE, 9e15);
     m = reinforceControl(m, MINE, ['b'], 4 * H, H);
-    const r = row(controlRoster(m, [], 2 * H, L), MINE);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
     const dots = garrisonDots(r);
     expect(dots.length).toBe(Math.max(r.seats, 3));
     expect(dots.startsWith('cmr')).toBe(true);
     expect(dots.slice(3)).toBe('f'.repeat(Math.max(0, r.seats - 3)));
   });
 
+  it('⚔️⏳ un champion réservé pour une attaque combinée est dessiné comme en expédition', () => {
+    let m = captureControl(base(), MINE, ['a', 'b'], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    const libre = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
+    expect(garrisonDots(libre).startsWith('cc')).toBe(true);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set(['b', 'zz'])), MINE);
+    expect(r.engaged).toEqual(['b']);
+    expect(garrisonDots(r).startsWith('cr')).toBe(true);
+    expect(garrisonDots(r).length).toBe(garrisonDots(libre).length);
+  });
   it('🏰 une forteresse (places illimitées) ne dessine que ses occupants — sans planter', () => {
     const mil = `${MILITIA_PREFIX}1`;
     let m = captureControl(base(), MINE, ['a', mil], 0, 7);
     m = setAttack(m, MINE, 9e15);
-    const held = { ...row(controlRoster(m, [], 2 * H, L), MINE), seats: Infinity };
+    const held = { ...row(controlRoster(m, [], 2 * H, L, new Set()), MINE), seats: Infinity };
     expect(garrisonDots(held)).toBe('cm');
-    const enemy = row(controlRoster(base(), [], 0, L), MINE);
+    const enemy = row(controlRoster(base(), [], 0, L, new Set()), MINE);
     const assault = { ...enemy, seats: Infinity, assault: { ids: ['a', 'b'] } } as typeof enemy;
     expect(garrisonDots(assault)).toBe('rr');
   });
@@ -121,7 +138,7 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     let m = captureControl(base(), MINE, ['a'], 0, 7);
     m = setAttack(m, MINE, 9e15);
     m = reinforceControl(m, MINE, ['b', 'c'], 4 * H, H, TOWER);
-    const dots = garrisonDots(row(controlRoster(m, [], 2 * H, L), MINE));
+    const dots = garrisonDots(row(controlRoster(m, [], 2 * H, L, new Set()), MINE));
     expect(dots.startsWith('crr')).toBe(true);
   });
 
@@ -135,14 +152,14 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
         p.id === MINE ? { ...p, control: { ...p.control!, away: ['x', 'y', 'z'] } } : p,
       ),
     };
-    const r = row(controlRoster(m, [], 2 * H, L), MINE);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
     expect(garrisonDots(r)).toBe('mmrrr' + 'f'.repeat(Math.max(0, r.seats - 5)));
   });
 
   it('ennemi ATTAQUÉ : nos champions en marche prennent leurs places, au plus celles du point', () => {
     const march = (ids: string[]) =>
       garrisonDots(
-        row(controlRoster(base(), [{ poiId: MINE, midAt: 5 * H, ids }], 2 * H, L), MINE),
+        row(controlRoster(base(), [{ poiId: MINE, midAt: 5 * H, ids }], 2 * H, L, new Set()), MINE),
       );
     const seats = seatsOf('mine');
     expect(march(['a', 'b'])).toBe('rr' + 'f'.repeat(Math.max(0, seats - 2)));
@@ -151,7 +168,10 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     // L'équipe déjà arrivée (assaut passé), on ne sait plus rien de la garnison ennemie.
     expect(
       garrisonDots(
-        row(controlRoster(base(), [{ poiId: MINE, midAt: H, ids: ['a'] }], 2 * H, L), MINE),
+        row(
+          controlRoster(base(), [{ poiId: MINE, midAt: H, ids: ['a'] }], 2 * H, L, new Set()),
+          MINE,
+        ),
       ),
     ).toBe('');
   });

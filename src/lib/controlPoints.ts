@@ -3335,6 +3335,9 @@ export interface ControlRosterRow {
   reinforcing: { id: string; inMs: number }[];
   /** ⚔️🏰 Partis en sortie, ils reviennent : leur place est gardée (`away`). */
   away: string[];
+  /** ⚔️⏳ Ceux de la garnison réservés pour une attaque combinée qui part d'ici : encore là,
+   *  mais engagés (dessinés comme en expédition). */
+  engaged: string[];
   assault: { ids: string[]; inMs: number } | null;
   /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
   progress: ControlProgress | null;
@@ -3344,6 +3347,9 @@ export function controlRoster(
   assaults: readonly { poiId: string; midAt: number; ids: readonly string[] }[],
   now: number,
   playerLevel: number,
+  /** ⚔️⏳ Les champions réservés par une attaque combinée en attente (`waitingFrom`).
+   *  ⚠️ REQUIS : oublier ce paramètre les dessinerait libres. */
+  engagedIds: ReadonlySet<string>,
 ): ControlRosterRow[] {
   if (!map) return [];
   const order = (k: ControlKind) => ALL_CONTROL_KINDS.indexOf(k);
@@ -3387,6 +3393,7 @@ export function controlRoster(
                 .map((r) => ({ id: r.id, inMs: r.at - now }))
             : [],
           away: held ? [...(c.away ?? [])] : [],
+          engaged: held ? c.garrison.filter((id) => engagedIds.has(id)) : [],
           assault,
           progress: held ? controlProgress(p, now, playerLevel) : null,
         };
@@ -3590,9 +3597,13 @@ export function garrisonDots(row: ControlRosterRow): string {
     const go = Math.min(row.assault.ids.length, row.seats);
     return 'r'.repeat(go) + free(go);
   }
-  const champs = row.garrison.filter((id) => !isMilitiaId(id)).length;
-  const mil = row.garrison.length - champs;
-  const enRoute = row.reinforcing.length + row.away.length;
+  // ⚔️⏳ Un champion réservé pour une attaque combinée est encore là, mais engagé : il se
+  // dessine comme en expédition (demandé : « les montrer comme occupés »).
+  const engaged = new Set(row.engaged);
+  const allChamps = row.garrison.filter((id) => !isMilitiaId(id)).length;
+  const mil = row.garrison.length - allChamps;
+  const champs = allChamps - row.garrison.filter((id) => engaged.has(id)).length;
+  const enRoute = row.reinforcing.length + row.away.length + engaged.size;
   const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute);
   return filled + free(filled.length);
 }
