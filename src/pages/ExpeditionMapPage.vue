@@ -380,15 +380,6 @@
 
       <!-- Zoom -->
       <div class="zoom-ctl">
-        <!-- ↕️ Descend jusqu'aux tuiles sous la carte, ou remonte en haut si on les voit. -->
-        <button
-          class="zoom-b slide-b"
-          :aria-label="slideDir === 'down' ? 'Descendre aux tuiles' : 'Remonter en haut'"
-          :title="slideDir === 'down' ? 'Descendre aux tuiles' : 'Remonter en haut'"
-          @click="slideMap"
-        >
-          {{ slideDir === 'down' ? '↓' : '↑' }}
-        </button>
         <div class="zoom-col">
           <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
           <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
@@ -1261,6 +1252,18 @@
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
     </div>
+
+    <!-- ↕️ FIXE EN BAS DE L'ÉCRAN (demandé) : ↓ ouvre le détail des expéditions et le cale en
+         bas, ↑ remonte en haut. Le sens suit la place des tuiles à l'écran (`mapSlide.ts`). -->
+    <button
+      type="button"
+      class="slide-fab"
+      :aria-label="slideDir === 'down' ? 'Voir les expéditions' : 'Remonter en haut'"
+      :title="slideDir === 'down' ? 'Voir les expéditions' : 'Remonter en haut'"
+      @click="slideMap"
+    >
+      <q-icon :name="slideDir === 'down' ? 'keyboard_arrow_down' : 'keyboard_arrow_up'" size="28px" />
+    </button>
   </div>
 </template>
 
@@ -5356,7 +5359,7 @@ onUnmounted(() => {
 /* Hébergée sous le haut de page de l'Aventure : pas de fond ni de hauteur propres. */
 .emap {
   color: var(--text);
-  padding-bottom: 24px;
+  padding-bottom: 72px; /* la place du bouton fixe ↕️ */
 }
 /* ⚔️🏰 Un champion en SORTIE : sa place l'attend. Contour pointillé à l'accent (la place est
    PRISE, pas bloquée) et moins estompé qu'une tuile indisponible : il fait partie du point. */
@@ -5727,11 +5730,25 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
 }
-/* ↕️ Le bouton de glissement : en accent, c'est un déplacement de page, pas un zoom. */
-.slide-b {
-  border-color: var(--accent);
+/* ↕️ Le bouton de glissement, fixe en bas à droite de l'écran : en accent, c'est un
+   déplacement de page, pas un zoom. Sous les fenêtres Quasar (z-index 6000). */
+.slide-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 50;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   color: var(--accent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
+
 /* Décor de carte */
 /* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne
    restent que le cadre, la boussole et la ville. */
