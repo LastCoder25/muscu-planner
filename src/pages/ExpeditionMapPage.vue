@@ -4645,6 +4645,9 @@ const marchingNote = computed(() => {
 const engagedTrip = computed(() => {
   const p = selected.value;
   if (!p) return null;
+  // 🏰 Un lieu qu’on TIENT n’est pas « déjà attaqué » (signalé : après une prise, le héros
+  // qui rentre faisait cacher toute la fiche — garnison, production, renforts).
+  if (liveControl.value?.owner === 'player') return null;
   const t = now.value;
   const back = (midAt: number, returnAt: number) =>
     (t >= midAt ? 'sur le retour' : 'en route') +
