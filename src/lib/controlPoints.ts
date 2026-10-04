@@ -746,7 +746,7 @@ function syncCitadels(
     const kept = out.filter((p) => !isCitadel(p) || p.control!.assault);
     const harass0 = mapHarass(map, now);
     const slow0 = (k: ControlKind) => attackSlow({ pois: kept, archipel: map.archipel }, k);
-    return gateAttacks(kept, now, harass0, slow0, islandPacified(map));
+    return gateAttacks(kept, now, harass0, slow0, islandPacified(map), true);
   }
   CITADEL.sites.forEach((site, i) => {
     const id = citadelIdOf(i);
@@ -833,6 +833,7 @@ function gateAttacks(
   harass: number,
   slowOf: (kind: ControlKind) => number,
   pacified = false,
+  capLate = false,
 ): Poi[] {
   let out = pois;
   // 🕊️ Île pacifiée : plus aucune attaque — on RETIRE celles qui étaient prévues.
@@ -852,6 +853,19 @@ function gateAttacks(
     const c = p.control;
     // 🏰 La forteresse prise n'est jamais reprise (décision de l'utilisateur, 2026-10-02).
     if (!c || c.owner !== 'player' || c.kind === 'citadel' || c.kind === 'fortress') return;
+    // 🏝️ Une attaque prévue sur l'ANCIEN rythme (plus loin que le maximum du nouveau) est
+    // retirée et reprogrammée : sinon elle tomberait des jours après ce que la règle dit.
+    // Le maximum n'est jamais dépassé par un nouveau tirage, donc rien ne boucle.
+    if (
+      capLate &&
+      c.attackAt !== undefined &&
+      c.attackAt > now + CONTROL.retakeMaxMs * slowOf(c.kind)
+    ) {
+      const attackAt = now + retakeDelayMs(p.id, now, harass, slowOf(c.kind));
+      if (out === pois) out = [...pois];
+      out[k] = { ...p, control: { ...c, attackAt } };
+      return;
+    }
     if (c.attackAt !== undefined) return;
     const id = citadelIdFor(pois, c.kind);
     const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
@@ -1376,31 +1390,34 @@ function stashCitadels(
  *  exception (2026-09-28) : `attackImminent`, qui prévient dans les `CONTROL.imminentMs`
  *  dernières heures, sans jamais donner l'heure. */
 /**
- * ⚔️ Combien de fois plus LENTES sont les reprises d'un point (multiplie `retakeDelayMs`) :
+ * 🏝️ LE RYTHME DES REPRISES SUR UNE ÎLE (décision de l'utilisateur, 2026-10-04) : ce sont la
+ * forteresse et les objectifs ennemis encore debout qui attaquent.
+ * - un LIEU FIXE pris est attaqué « de temps en temps » : ×1,5 le délai de base (1,5 à 4,5 j) ;
+ * - un OBJECTIF pris, l'ennemi tient à le récupérer : ×0,5 (12 h à 1,5 j).
+ * Le délai de base vient du harcèlement (`retakeDelayMs`, 1 à 3 j). Pacifiée, plus aucune.
+ * ⚠️ Remplace « chaque camp abattu les espace » (v1.12) : prendre les objectifs rendait l'île
+ * PLUS calme (×4 avec la forteresse seule), l'inverse de ce que l'ennemi ferait.
+ */
+export const ISLAND_ATTACK = { place: 1.5, objective: 0.5 } as const;
+
+/**
+ * ⚔️ Le facteur des reprises d'un point (multiplie `retakeDelayMs`) :
  * - hors archipel : 2 si la citadelle de son secteur est encore cachée (`hiddenSlow`), 1 sinon ;
- * - 🏝️ sur une île : ce sont les CAMPS DE L'ÎLE (objectifs et forteresse) qui attaquent, et
- *   chaque camp abattu les espace — tous debout ×1, puis (n+1)/(debout). Île 1 : ×1, ×1,5,
- *   ×3 (la forteresse seule). Pacifiée, plus aucune (`gateAttacks`).
+ * - 🏝️ sur une île : `ISLAND_ATTACK` selon que le point est un objectif ou un autre lieu fixe.
  */
 export function attackSlow(
   map: Pick<ExpeditionMap, 'pois' | 'archipel'>,
   kind: ControlKind,
 ): number {
-  const isl = activeIsland(map);
-  if (isl) {
-    const standing = map.pois.filter(
-      (p) =>
-        p.control?.owner === 'enemy' &&
-        (p.control.kind === 'objective' || p.control.kind === 'fortress'),
-    ).length;
-    return (isl.objectives + 1) / Math.max(1, standing);
-  }
+  if (activeIsland(map))
+    return kind === 'objective' ? ISLAND_ATTACK.objective : ISLAND_ATTACK.place;
   return attackerHidden(map, kind) ? CITADEL.hiddenSlow : 1;
 }
 export function retakeDelayMs(id: string, from: number, harass: number, slowBy: number): number {
   const r = mulberry32((seedOf(`${id}:atk:${from}`) ^ 0x2c1b3c6d) >>> 0 || 1)();
   const h = Math.min(1, Math.max(0, harass));
-  const slow = Math.max(1, slowBy);
+  // Un facteur sous 1 ACCÉLÈRE (objectif pris sur une île) ; plancher pour une valeur folle.
+  const slow = Math.max(0.1, slowBy);
   const { retakeMinMs: lo, retakeMaxMs: hi, retakeJitter: j } = CONTROL;
   const aim = hi - h * (hi - lo);
   return slow * Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * j)));

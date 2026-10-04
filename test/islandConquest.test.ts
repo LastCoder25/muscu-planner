@@ -5,6 +5,7 @@ import {
   CONTROL,
   controlKindsOf,
   attackSlow,
+  ISLAND_ATTACK,
   attackerHidden,
   captureControl,
   collectControl,
@@ -267,15 +268,62 @@ describe('🕊️ île pacifiée', () => {
 });
 
 describe('⛺ les camps de brigands attaquent et pillent', () => {
-  it('les reprises viennent des camps : chaque camp abattu les espace', () => {
+  // ⚔️ Décision de l'utilisateur (2026-10-04) : un lieu fixe pris est attaqué de temps en temps,
+  // un objectif pris l'est plus souvent (l'ennemi tient à le reprendre). Prendre des objectifs
+  // ne calme plus l'île (avant : ×4 avec la forteresse seule).
+  it('un objectif pris est repris plus souvent qu’un lieu fixe, quels que soient les camps abattus', () => {
     let m = island1();
-    expect(attackSlow(m, 'mine')).toBe(1);
+    expect(attackSlow(m, 'mine')).toBe(ISLAND_ATTACK.place);
+    expect(attackSlow(m, 'objective')).toBe(ISLAND_ATTACK.objective);
+    expect(ISLAND_ATTACK.objective).toBeLessThan(1);
+    expect(ISLAND_ATTACK.place).toBeGreaterThan(1);
     m = razeIslandTarget(m, objectiveIdOf(0), NOW);
-    expect(attackSlow(m, 'mine')).toBeCloseTo(1.5);
     m = razeIslandTarget(m, objectiveIdOf(1), NOW);
-    expect(attackSlow(m, 'mine')).toBe(3);
+    expect(attackSlow(m, 'mine')).toBe(ISLAND_ATTACK.place);
+    expect(attackSlow(m, 'objective')).toBe(ISLAND_ATTACK.objective);
     // Sur une île, aucune citadelle « cachée » ne ralentit quoi que ce soit.
     expect(attackerHidden(m, 'mine')).toBe(false);
+  });
+
+  it('la prise programme l’attaque dans la fenêtre de son type', () => {
+    const lo = CONTROL.retakeMinMs;
+    const hi = CONTROL.retakeMaxMs;
+    for (let seed = 1; seed <= 12; seed++) {
+      const m0 = island1(seed);
+      const mine = captureControl(m0, controlIdOf('mine'), ['a'], NOW, 7);
+      const dm = poi(mine, controlIdOf('mine'))!.control!.attackAt! - NOW;
+      expect(dm).toBeGreaterThanOrEqual(lo * ISLAND_ATTACK.place - 1);
+      expect(dm).toBeLessThanOrEqual(hi * ISLAND_ATTACK.place + 1);
+      const obj = captureControl(m0, objectiveIdOf(0), ['a'], NOW, 7);
+      const doj = poi(obj, objectiveIdOf(0))!.control!.attackAt! - NOW;
+      expect(doj).toBeGreaterThanOrEqual(lo * ISLAND_ATTACK.objective - 1);
+      expect(doj).toBeLessThanOrEqual(hi * ISLAND_ATTACK.objective + 1);
+    }
+  });
+
+  it('une attaque prévue sur l’ancien rythme est ramenée dans la fenêtre, une attaque à l’heure ne bouge pas', () => {
+    let m = captureControl(island1(), controlIdOf('mine'), ['a'], NOW, 7);
+    m = captureControl(m, objectiveIdOf(0), ['b'], NOW, 7);
+    const set = (id: string, at: number) => ({
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === id && p.control ? { ...p, control: { ...p.control, attackAt: at } } : p,
+      ),
+    });
+    m = set(controlIdOf('mine'), NOW + 10 * 24 * H);
+    m = set(objectiveIdOf(0), NOW + 8 * 24 * H);
+    const late = ensureControls(m, NOW, LV, ISLAND_OUTPOST_LEVEL);
+    expect(poi(late, controlIdOf('mine'))!.control!.attackAt! - NOW).toBeLessThanOrEqual(
+      CONTROL.retakeMaxMs * ISLAND_ATTACK.place,
+    );
+    expect(poi(late, objectiveIdOf(0))!.control!.attackAt! - NOW).toBeLessThanOrEqual(
+      CONTROL.retakeMaxMs * ISLAND_ATTACK.objective,
+    );
+    const onTime = set(controlIdOf('mine'), NOW + 40 * H);
+    expect(
+      poi(ensureControls(onTime, NOW, LV, ISLAND_OUTPOST_LEVEL), controlIdOf('mine'))!.control!
+        .attackAt,
+    ).toBe(NOW + 40 * H);
   });
 
   it('🏝️ sur une île, aucun siège venu de la mer', () => {
