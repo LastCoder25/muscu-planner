@@ -23,9 +23,16 @@ export interface ReinfSelection {
 export interface ReinfFree {
   champ: number;
   total: number;
+  /** 🛡️ Places ouvertes aux MILICIENS (absent = autant que `total`). Un objectif ou une
+   *  forteresse en refuse : 0, alors que ses places restent ouvertes aux champions. */
+  mil?: number;
 }
 
-export const emptyReinfSelection = (): ReinfSelection => ({ champs: [], militia: 0, transfers: [] });
+export const emptyReinfSelection = (): ReinfSelection => ({
+  champs: [],
+  militia: 0,
+  transfers: [],
+});
 
 const isMil = (id: string) => id.startsWith(MILITIA_PREFIX);
 
@@ -40,6 +47,7 @@ export function reinfSeats(sel: ReinfSelection): ReinfFree {
 export function reinfCanAdd(sel: ReinfSelection, kind: 'champ' | 'mil', free: ReinfFree): boolean {
   const used = reinfSeats(sel);
   if (used.total >= free.total) return false;
+  if (kind === 'mil' && free.mil !== undefined && used.total - used.champ >= free.mil) return false;
   return kind === 'mil' || used.champ < free.champ;
 }
 
@@ -58,7 +66,12 @@ export function setReinfMilitia(
   home: number,
   free: ReinfFree,
 ): ReinfSelection {
-  const room = free.total - (reinfSeats(sel).total - sel.militia);
+  const used = reinfSeats(sel);
+  const others = used.total - sel.militia;
+  const room = Math.min(
+    free.total - others,
+    free.mil === undefined ? Infinity : free.mil - (others - used.champ),
+  );
   return { ...sel, militia: Math.max(0, Math.min(Math.floor(n), home, room)) };
 }
 

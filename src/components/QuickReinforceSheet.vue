@@ -39,7 +39,7 @@
       </div>
       <!-- 🛡️ Les miliciens d'abord : c'est le renfort qu'on a le plus souvent sous la main, et
            il ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
-      <div v-if="milFree > 0 && milHome > 0" class="qr-mil">
+      <div v-if="milRoom > 0 && milHome > 0" class="qr-mil">
         <span class="qr-mil-emo"><MilitiaPortrait /></span>
         <span class="qr-mil-main">
           <span class="qr-mil-name">{{ MILITIA_NAME }}s</span>
@@ -186,6 +186,8 @@ const props = defineProps<{
   champFree: number;
   /** Places libres de la garnison entière (miliciens compris). */
   milFree: number;
+  /** 🛡️ Places ouvertes aux miliciens (0 dans un objectif ou une forteresse). */
+  milRoom: number;
   milHome: number;
   militiaMin: number;
   /** ⇄ Les autres points tenus et ceux qui peuvent en venir (avec leur trajet). */
@@ -224,7 +226,11 @@ const props = defineProps<{
 }>();
 /** « +12 », « −3 », « 0 » : un écart se lit avec son signe. */
 const sign = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
-const free = computed(() => ({ champ: props.champFree, total: props.milFree }));
+const free = computed(() => ({
+  champ: props.champFree,
+  total: props.milFree,
+  mil: props.milRoom,
+}));
 const canChamp = computed(() => reinfCanAdd(props.sel, 'champ', free.value));
 const canMil = computed(() => reinfCanAdd(props.sel, 'mil', free.value));
 const count = computed(() => reinfCount(props.sel));

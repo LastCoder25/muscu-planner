@@ -3241,6 +3241,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
           champs: ROW.adventurers,
           champFree: 4,
           milFree: 4,
+          milRoom: 4,
           milHome: 2,
           militiaMin: 45,
           sources: [
@@ -3325,6 +3326,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
           champs: ROW.adventurers,
           champFree: 4,
           milFree: 4,
+          milRoom: 4,
           milHome: 2,
           militiaMin: 45,
           sources: [],

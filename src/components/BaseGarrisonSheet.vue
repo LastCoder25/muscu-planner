@@ -112,7 +112,7 @@ import { computed, ref, watch } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Adventurer } from '@/lib/adventurers';
-import { REINFORCE_BLOCK_LABEL, baseSendBlocker, militiaFreeSeats } from '@/lib/controlPoints';
+import { REINFORCE_BLOCK_LABEL, baseSendBlocker, garrisonFreeSeats } from '@/lib/controlPoints';
 import type { ControlState } from '@/lib/expedition';
 import { formatDurationMin } from '@/lib/duration';
 
@@ -182,7 +182,7 @@ const rows = computed(() =>
       id: t.id,
       emo: t.emo,
       label: t.label,
-      free: militiaFreeSeats(t.control),
+      free: garrisonFreeSeats(t.control),
       min: props.legMin(t.id, sel.value, mil.value),
       why: why ? REINFORCE_BLOCK_LABEL[why] : null,
     };

@@ -396,6 +396,7 @@
       :champs="freeSorted"
       :champ-free="quickFree.champ"
       :mil-free="quickFree.total"
+      :mil-room="quickFree.mil"
       :mil-home="milHomeFree"
       :militia-min="quickMilitiaMin"
       :champ-min="quickChampMin"
@@ -1462,6 +1463,7 @@ import {
   CONTROL_LABEL,
   CONTROL_YIELD,
   controlFreeSeats,
+  garrisonFreeSeats,
   militiaFreeSeats,
   controlRoster,
   garrisonDots,
@@ -2376,7 +2378,7 @@ const unlimitedGarrison = computed(
 const garrisonSlots = computed(() =>
   unlimitedGarrison.value
     ? [{ i: 0, label: 'Place libre · sans limite' }]
-    : Array.from({ length: militiaFreeSeats(liveControl.value) }, (_, i) => ({
+    : Array.from({ length: garrisonFreeSeats(liveControl.value) }, (_, i) => ({
         i,
         label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
       })),
@@ -2710,7 +2712,7 @@ const transferTargets = computed(() => {
         id: p.id,
         emo: CONTROL_EMO[p.control!.kind],
         label: CONTROL_LABEL[p.control!.kind],
-        free: militiaFreeSeats(p.control),
+        free: garrisonFreeSeats(p.control),
         min: Math.max(champMin, milMin),
         why: why ? TRANSFER_BLOCK_LABEL[why] : null,
       };
@@ -3716,7 +3718,8 @@ const quickFree = computed(() => {
   const taken = quickId.value ? plannedSeatsTo(char.plannedList, quickId.value) : null;
   return {
     champ: Math.max(0, controlFreeSeats(quickPoi.value?.control) - (taken?.champ ?? 0)),
-    total: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
+    total: Math.max(0, garrisonFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
+    mil: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
   };
 });
 /** 🛡️ Les miliciens de la base qui ne sont pas réservés pour un départ programmé. */
