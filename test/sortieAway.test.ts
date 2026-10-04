@@ -56,7 +56,7 @@ describe('⚔️🏰 sortieLeaves : la place reste prise', () => {
   });
   it('la liste des places fortes montre le sortant, pas une place libre', () => {
     const m = sortieLeaves(world(['a', 'b']), MINE, ['a'], H, L);
-    const row = controlRoster(m, [], 2 * H, L).find((r) => r.poi.id === MINE)!;
+    const row = controlRoster(m, [], 2 * H, L, new Set()).find((r) => r.poi.id === MINE)!;
     expect(row.away).toEqual(['a']);
     expect(row.garrison).toEqual(['b']);
   });

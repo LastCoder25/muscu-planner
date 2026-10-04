@@ -718,6 +718,15 @@
                 <span class="slot-name">{{ slot.label }}</span>
               </button>
             </div>
+            <!-- ⚔️⏳ UNE ATTAQUE COMBINÉE PART D'ICI (signalé : « des troupes attendent leur départ
+               sur un lieu fixe mais je n'ai pas d'indication ») : combien, quand, vers quoi. -->
+            <div v-for="w in ctlAttackWaits" :key="'atk' + w.key" class="ctl-plan">
+              <span class="ctl-plan-main"
+                >⚔️ <b>{{ w.count }}</b> champion{{ w.count > 1 ? 's' : '' }} en attente ·
+                partent dans {{ w.departIn }} ({{ w.departAt }}) pour l’attaque sur
+                <b>{{ w.target }}</b></span
+              >
+            </div>
             <!-- ⏳ RETOURS PROGRAMMÉS (demandé : « quand je fais rappel depuis le lieu fixe, il
                faut que je puisse le programmer ») : ils restent en poste jusqu'au départ. -->
             <div v-for="m in ctlPlannedBack" :key="m.id" class="ctl-plan">
@@ -1401,7 +1410,12 @@ import {
 } from '@/lib/islandConquest';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
-import { attackWingVoyages, type CombinedAttack } from '@/lib/combinedAttack';
+import {
+  attackReservedIds,
+  attackWingVoyages,
+  waitingFrom,
+  type CombinedAttack,
+} from '@/lib/combinedAttack';
 import {
   attackBoostPlan,
   BOOST_BLOCK_LABEL,
@@ -2592,7 +2606,26 @@ const ctlReservedLabel = computed(() => {
     if (m.recall && m.toId === here) for (const id of m.recall) out.set(id, `⏳ retour à ${at}`);
     for (const t of m.transfers) if (t.fromId === here) out.set(t.id, `⏳ part à ${at}`);
   }
+  // ⚔️ Réservés pour une attaque combinée qui part d'ici (signalé : rien ne le disait).
+  for (const w of ctlAttackWaits.value)
+    for (const id of w.ids) out.set(id, `⚔️ part à ${w.departAt}`);
   return out;
+});
+/** ⚔️⏳ Les groupes d'attaque combinée qui attendent de partir de CE lieu fixe. */
+const ctlAttackWaits = computed(() => {
+  const here = livePoi.value?.id;
+  if (!here) return [];
+  return waitingFrom(char.attackList, here).map((w) => ({
+    key: w.attackId,
+    ids: w.members,
+    count: w.members.length,
+    target: poiLabel(w.poi),
+    departIn: formatDuration(Math.max(0, w.departAt - now.value)),
+    departAt: new Date(w.departAt).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  }));
 });
 function toggleRecall(id: string) {
   if (ctlReservedLabel.value.has(id)) return;
@@ -3861,6 +3894,7 @@ const ctlRoster = computed(() =>
     })),
     coarseNow.value,
     heroLevel.value,
+    attackReservedIds(char.attackList),
   ),
 );
 /** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */

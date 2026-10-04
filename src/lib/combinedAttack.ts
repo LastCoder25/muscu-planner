@@ -221,6 +221,51 @@ export function attackOutings(attacks: readonly CombinedAttack[]): Outing[] {
   return out;
 }
 
+/** ⏳ Un groupe d'attaque qui ATTEND son départ depuis un lieu. */
+export interface WaitingWing {
+  attackId: string;
+  /** La cible de l'attaque. */
+  poi: Poi;
+  departAt: number;
+  members: string[];
+  hero: boolean;
+}
+
+/**
+ * ⏳ Les groupes d'attaque combinée qui attendent de partir de `originId` (un point fixe, ou
+ * `null` pour la base), du départ le plus proche au plus lointain. ⚠️ Signalé : la fiche d'un
+ * lieu fixe ne disait rien de ses champions réservés pour une attaque — on les croyait libres.
+ */
+export function waitingFrom(
+  attacks: readonly CombinedAttack[] | null | undefined,
+  originId: string | null,
+): WaitingWing[] {
+  const out: WaitingWing[] = [];
+  for (const a of attacks ?? [])
+    for (const w of a.wings)
+      if (w.state === 'waiting' && w.originId === originId)
+        out.push({
+          attackId: a.id,
+          poi: a.poi,
+          departAt: w.departAt,
+          members: w.members,
+          hero: w.hero,
+        });
+  return out.sort((x, y) => x.departAt - y.departAt);
+}
+
+/** ⚔️⏳ Les champions de garnison RÉSERVÉS par une attaque combinée qui n'est pas encore partie
+ *  de leur lieu fixe : encore là, mais engagés (la carte les dessine comme en expédition). */
+export function attackReservedIds(
+  attacks: readonly CombinedAttack[] | null | undefined,
+): Set<string> {
+  const out = new Set<string>();
+  for (const a of attacks ?? [])
+    for (const w of a.wings)
+      if (w.state === 'waiting' && w.originId !== null) for (const id of w.members) out.add(id);
+  return out;
+}
+
 /** 🧝 Le héros est-il engagé dans une attaque combinée (en attente ou parti) ? */
 export function heroInAttack(attacks: readonly CombinedAttack[] | null | undefined): boolean {
   return (attacks ?? []).some((a) =>
