@@ -6134,6 +6134,13 @@ onUnmounted(() => {
   stroke: #b57bff;
   stroke-width: 0.8;
 }
+/* 🖱️ Les pions des troupes laissent passer le clic (signalé : une troupe qui RENTRE d'un
+   objectif part de sa position, son pion le recouvrait et l'objectif ne s'ouvrait plus). Une
+   troupe qu'on peut faire rebrousser chemin garde sa cible élargie (.recall-hit). */
+.van-mark,
+.hero {
+  pointer-events: none;
+}
 .recall-hit {
   fill: transparent;
   cursor: pointer;
