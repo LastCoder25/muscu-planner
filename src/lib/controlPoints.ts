@@ -2674,6 +2674,10 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
 /** 🛡️ Places libres pour des MILICIENS : ce qui reste de la garnison de 5, champions compris. */
 export function militiaFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
+  // 🛡️ PAS DE MILICIEN DANS LES OBJECTIFS, LA FORTERESSE NI LA CITADELLE (2026-10-04, décision
+  // de l'utilisateur : « seulement dans les lieux fixes de production et les bases »). Source
+  // unique : renforts, transferts, envoi depuis la base et milice des îles rangées la lisent.
+  if (RAZE_KINDS.has(c.kind)) return 0;
   return garrisonRoom(c);
 }
 
