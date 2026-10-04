@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '../src/lib/archipelago';
 import { controlKindsOf, controlSpot, ensureControls } from '../src/lib/controlPoints';
-import { ensureIslandConquest, objectiveSpot } from '../src/lib/islandConquest';
+import { ensureIslandConquest, NEST, nestLevel, objectiveSpot } from '../src/lib/islandConquest';
 import { islandTerrain } from '../src/lib/islandTerrain';
 import { DEFENSE_LINE_T, islandCenter, onIsland } from '../src/lib/islandShape';
 import { createMap, EXPE } from '../src/lib/expedition';
@@ -31,7 +31,7 @@ describe('🛡️ les points fixes forment une ligne VERTICALE entre le départ 
   }
 });
 
-describe('🎯 les objectifs sont au niveau max de l’île', () => {
+describe('🎯 les objectifs sont au niveau max de l’île (sauf les nids, au rang du joueur)', () => {
   for (const isl of ISLANDS) {
     it(`île ${isl.id}`, () => {
       // Un joueur bien sous le plafond de l'île : l'objectif ne suit pas son niveau.
@@ -43,7 +43,10 @@ describe('🎯 les objectifs sont au niveau max de l’île', () => {
       );
       const objs = m.pois.filter((q) => q.control?.kind === 'objective');
       expect(objs.length).toBe(isl.objectives);
-      for (const o of objs) expect(o.level).toBe(isl.maxLevel);
+      // 🪺 Île des nids (2026-10-04) : chacun à un rang autour du joueur (`nestLevel`).
+      const want = (i: number) =>
+        NEST.islands.has(isl.id) ? nestLevel(i, player, isl) : isl.maxLevel;
+      objs.forEach((o) => expect(o.level).toBe(want(Number(o.id.slice('isl_obj_'.length)))));
     });
   }
 });

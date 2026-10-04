@@ -426,6 +426,10 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   fortress: Infinity,
 };
 export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
+/** 🏰 Combien RESTERONT si l'assaut prend CE point : ses places, 0 pour un objectif qu'on
+ *  abat (`razes`, les nids). ⚠️ Lu par l'écran d'envoi ET le store : un nid ne garde personne. */
+export const holdSeats = (c: Pick<ControlState, 'kind' | 'razes'>): number =>
+  c.razes ? 0 : seatsOf(c.kind);
 /** 🏰 La garnison ENTIÈRE (champions et miliciens) d'un point : 5, sans limite pour la
  *  forteresse. */
 export const garrisonCap = (kind: ControlKind): number =>

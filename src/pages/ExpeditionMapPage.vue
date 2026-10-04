@@ -861,7 +861,9 @@
                 ? '🔒 Verrouillée : abats d’abord les objectifs de l’île.'
                 : liveControl.kind === 'fortress'
                   ? '🏰 Prise, elle se tient : toute l’équipe y reste, le héros aussi (garnison sans limite, jamais reprise). La traversée part de là.'
-                  : '⚔️ Attaque-le avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout le monde rentre après l’assaut. Abattu, il ne revient jamais.'
+                  : liveControl.razes
+                    ? '🪺 Attaque-le avec tes champions, le héros, ou le héros seul : abattu, il quitte la carte et tout le monde rentre (pas de garnison). D’autres nids peuvent encore naître.'
+                    : '⚔️ Attaque-le avec tes champions, le héros, ou le héros seul : pris, il se tient avec ceux qui y restent, et la forteresse viendra le reprendre en priorité.'
             }}
           </p>
           <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">

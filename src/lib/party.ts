@@ -284,6 +284,8 @@ export function heroCanStay(poi: Pick<Poi, 'id' | 'type' | 'control'> | null | u
   return (
     !!c &&
     c.owner === 'enemy' &&
+    // 🪺 Un nid s'abat : personne n'y reste, le héros non plus.
+    !c.razes &&
     (c.kind === 'fortress' ||
       (c.kind === 'objective' && poi!.id !== 'isl_endless') ||
       !RAZE_KINDS.has(c.kind))

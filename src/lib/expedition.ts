@@ -141,6 +141,10 @@ export interface ControlState {
   /** 🏝️ AVANT-POSTE de l'île (`islandConquest`) : posé sur la route base → forteresse ; les
    *  objectifs ne s'attaquent qu'une fois deux lieux fixes de l'île tenus. */
   outpost?: boolean;
+  /** 🪺 Un objectif qu'on ABAT sans jamais le tenir (les nids de l'île 2, décision de
+   *  l'utilisateur, 2026-10-04 : d'autres peuvent naître, une garnison n'y aurait aucun sens).
+   *  Pris, il quitte la carte ; personne n'y reste (`holdSeats` = 0). */
+  razes?: boolean;
   /** 🧝 Le héros y est POSTÉ (étape 6 bis : n'importe quel lieu tenu, la forteresse comprise) —
    *  il défend la place, n'est plus libre pour autre chose et se rappelle à la base. */
   hero?: boolean;

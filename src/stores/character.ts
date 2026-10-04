@@ -165,6 +165,7 @@ import {
   razeIslandTarget,
   takeFortress,
   takeObjective,
+  heldNests,
   regainIslandTarget,
   redirectIslandAttacks,
   ENDLESS_ID,
@@ -437,6 +438,7 @@ import {
   turnBackReinforcements,
   REINFORCE_BLOCK_LABEL,
   seatsOf,
+  holdSeats,
   campXpFor,
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
@@ -2399,7 +2401,8 @@ export const useCharacterStore = defineStore('character', () => {
     // 🗼 Un point d'un type RETIRÉ encore tenu (la tour de guet) : sa garnison et le héros
     // rentrent à pied d'abord ; il quitte la carte au tick suivant, une fois vide.
     if (cur.expedition_map) {
-      const old = retiredHeld(cur.expedition_map);
+      // 🪺 De même un nid tenu d'avant la règle « on l'abat » (`heldNests`).
+      const old = [...retiredHeld(cur.expedition_map), ...heldNests(cur.expedition_map)];
       if (old.length) {
         for (const p of old) {
           if (heroPostOf(row.value?.expedition_map)?.id === p.id)
@@ -4004,7 +4007,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 Assaut d'un point fixe : si on le prend, seuls le héros et les champions en trop
     // rentrent — à LEUR pas, souvent plus vif que celui de toute l'équipe. `returnAt` garde
     // le retour de la défaite jusqu'à l'arrivée (`shortenWonReturn`).
-    const seats = poi.type === 'control' && poi.control ? seatsOf(poi.control.kind) : 0;
+    const seats = poi.type === 'control' && poi.control ? holdSeats(poi.control) : 0;
     const stayers = new Set(seats ? assaultStayers(opts.escortIds, opts.stayIds, seats) : []);
     const back = escort.filter((a) => !stayers.has(a.id));
     // 🧝 Prise, le lieu garde le héros s'il y reste (la forteresse toujours) : il ne rentre pas.
@@ -4209,7 +4212,7 @@ export const useCharacterStore = defineStore('character', () => {
     stayIds: readonly string[] | undefined,
   ): Set<string> | null {
     if (poi.type !== 'control' || !poi.control) return null;
-    return new Set(assaultStayers(ids, stayIds, seatsOf(poi.control.kind)));
+    return new Set(assaultStayers(ids, stayIds, holdSeats(poi.control)));
   }
 
   /** ⚔️🧭 Le retour d'UN groupe d'une attaque combinée si le point est pris : ses membres qui

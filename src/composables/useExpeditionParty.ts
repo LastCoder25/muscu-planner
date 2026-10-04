@@ -31,7 +31,7 @@ import {
   winGain,
   type GainTeam,
 } from '@/lib/partyForecast';
-import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
+import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, holdSeats } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { plannedTransferIds } from '@/lib/plannedMoves';
 import {
@@ -820,7 +820,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** Places du point visé (0 hors point de contrôle). */
   const stayCap = computed(() => {
     const c = selected.value?.control;
-    return c && c.owner === 'enemy' ? seatsOf(c.kind) : 0;
+    return c && c.owner === 'enemy' ? holdSeats(c) : 0;
   });
   /** Ceux qui resteront : les choisis d'abord, complétés par l'ordre de l'équipe. */
   const stayIds = computed(() => {
