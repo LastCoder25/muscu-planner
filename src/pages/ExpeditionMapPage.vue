@@ -122,7 +122,7 @@
               class="trail"
               :class="[
                 hero.phase === 'return' ? 'done' : 'todo',
-                { 'trail-focus': focusTrip === 'hero' },
+                { 'trail-focus': traceKey === 'hero' },
               ]"
             />
             <line
@@ -133,7 +133,7 @@
               class="trail"
               :class="[
                 hero.phase === 'return' ? 'todo' : 'done',
-                { 'trail-focus': focusTrip === 'hero' },
+                { 'trail-focus': traceKey === 'hero' },
               ]"
             />
             <!-- Chevrons de direction : s'allument un à un du héros vers la cible
@@ -162,7 +162,7 @@
               :class="[
                 v.at.phase === 'return' ? 'done' : 'todo',
                 v.kind,
-                { 'trail-focus': v.tripKey === focusTrip },
+                { 'trail-focus': v.tripKey === traceKey },
               ]"
             />
             <line
@@ -174,7 +174,7 @@
               :class="[
                 v.at.phase === 'return' ? 'todo' : 'done',
                 v.kind,
-                { 'trail-focus': v.tripKey === focusTrip },
+                { 'trail-focus': v.tripKey === traceKey },
               ]"
             />
           </template>
@@ -196,7 +196,7 @@
           <!-- 🔴 Le lieu du voyage qu'on a touché sous la carte : un halo DERRIÈRE lui, pour voir
                duquel on parle. Posé aux coordonnées que porte le voyage — le lieu d'un convoi
                est retiré de la carte au départ, il doit se retrouver quand même. -->
-          <circle v-if="focusPoi" :cx="focusPoi.x" :cy="focusPoi.y" r="8" class="trip-focus-halo" />
+          <circle v-if="tracePoi" :cx="tracePoi.x" :cy="tracePoi.y" r="8" class="trip-focus-halo" />
 
           <!-- 🗺️ Les lieux (à prendre, cible du héros, cibles des équipes) : un composant à part
                pour ne pas se re-diffuser à chaque seconde (cf. `MapPoiLayer`). -->
@@ -3452,9 +3452,24 @@ function crewLabel(members: readonly string[]): string {
 }
 /** 🔴 Le voyage qu'on a touché : sa tuile et son lieu sur la carte portent un halo ;
  *  retoucher la même tuile les éteint. Un voyage qui se termine emporte son halo
- *  (`focusPoi` ne le retrouve plus). */
+ *  (`tracePoi` ne le retrouve plus). */
 const focusTrip = ref<string | null>(null);
-const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
+/** 🔴 Le tracé mis en avant sur la carte (et le halo de son lieu) s'éteint de lui-même au bout
+ *  de `TRACE_MS` (demandé) ; recentrer sur le voyage le rallume. Le voyage reste sélectionné
+ *  (son équipe sous la carte ne se referme pas). */
+const TRACE_MS = 5000;
+const traceKey = ref<string | null>(null);
+let traceTimer: ReturnType<typeof setTimeout> | undefined;
+function showTrace(key: string) {
+  traceKey.value = key;
+  clearTimeout(traceTimer);
+  traceTimer = setTimeout(() => (traceKey.value = null), TRACE_MS);
+}
+watch(focusTrip, (k) => {
+  if (!k) traceKey.value = null;
+});
+onUnmounted(() => clearTimeout(traceTimer));
+const tracePoi = computed(() => trips.value.find((t) => t.key === traceKey.value)?.poi ?? null);
 /** Un seul affichage ouvert à la fois (demandé) : toucher un voyage referme la fiche d'un lieu. */
 watch(focusTrip, (k) => {
   if (k) selected.value = null;
@@ -3480,6 +3495,7 @@ function revealTabs() {
 /** 🎯 Toucher une tuile centre la carte sur le trajet de sa troupe (départ → lieu, et la ville
  *  si elle rentre à la base) ; dézoome s'il ne tient pas, ne zoome jamais (`tripFrame`). */
 function frameTrip(key: string) {
+  showTrace(key);
   const t = trips.value.find((x) => x.key === key);
   if (!t) return;
   const pts = [t.poi, t.from ?? TOWN];
@@ -5388,10 +5404,22 @@ onUnmounted(() => {
    bouton grisé laisse sinon voir les tuiles qui défilent dessous. */
 .send-bar {
   position: sticky;
-  bottom: 0;
+  /* Au-dessus des boutons ronds fixés en bas de l'écran (48 px + 16 de marge). */
+  bottom: calc(68px + env(safe-area-inset-bottom));
   z-index: 3;
   padding: 8px 0 10px;
   background: linear-gradient(180deg, transparent, var(--bg) 30%);
+}
+/* Le fond continue sous la barre jusqu'au bas de l'écran : sinon la fiche défilait, visible,
+   entre le bouton d'envoi et les boutons ronds. */
+.send-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: calc(68px + env(safe-area-inset-bottom));
+  background: var(--bg);
 }
 /* Grisé mais OPAQUE : collant, un bouton à 40 % d'opacité laissait voir les tuiles dessous. */
 .send-bar .sh-send:disabled {
