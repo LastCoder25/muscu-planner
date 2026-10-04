@@ -237,7 +237,11 @@ const attacked = computed(() => toSet(props.attackedKey ?? ''));
 const FIXED_SCALE = 1.3;
 const CITADEL_SCALE = 1.55;
 const scaleOf = (p: Poi) =>
-  !p.control ? 1 : p.control.kind === 'citadel' ? CITADEL_SCALE : FIXED_SCALE;
+  !p.control
+    ? 1
+    : p.control.kind === 'citadel' || p.control.kind === 'fortress'
+      ? CITADEL_SCALE
+      : FIXED_SCALE;
 const fixedScale = (p: Poi) => {
   const k = scaleOf(p);
   return `translate(${p.x} ${p.y}) scale(${k}) translate(${-p.x} ${-p.y})`;

@@ -14,7 +14,7 @@
     </div>
     <div class="rim-map">
       <svg :viewBox="`${view.x} ${view.y} ${view.size} ${view.size}`" class="rim-svg">
-        <IslandTerrain :t="terr" :view="view" :fortress-name="island.fortress" />
+        <IslandTerrain :t="terr" :view="view" />
         <!-- 🏰 La base (île 1) ou 🏘️ le village du port (îles 2 à 5) : le même dessin que la carte active. -->
         <MapTown :island="island.id" />
         <g

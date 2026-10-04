@@ -303,7 +303,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   });
 
   // 🏝️ Le sol d'une île : la côte, le port et la forteresse portuaire nommée.
-  it('IslandTerrain : côte, port et forteresse', async () => {
+  it('IslandTerrain : côte et décor, sans port ni forteresse dessinés (ce sont des lieux fixes)', async () => {
     const { default: IslandTerrain } = await import('@/components/IslandTerrain.vue');
     const { islandTerrain } = await import('@/lib/islandTerrain');
     const { MAP_VIEW } = await import('@/lib/expedition');
@@ -311,7 +311,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(
         IslandTerrain,
-        { t: islandTerrain(2), view: MAP_VIEW, fortressName: 'La Tanière-port' },
+        { t: islandTerrain(2), view: MAP_VIEW },
         undefined,
         undefined,
         '/',
@@ -319,8 +319,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     expect(out).toContain('it-land');
-    expect(out).toContain('⚓ Port');
-    expect(out).toContain('La Tanière-port');
+    expect(out).not.toContain('⚓ Port');
+    expect(out).not.toContain('it-fort');
     expect(out).toContain('k-pine');
   });
 
@@ -896,11 +896,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Mine fortifiée');
     expect(out).toMatch(/class="rim-n"[^>]*>5</);
     // 🏰 L'île 1 est la capitale : sa carte rangée montre la base.
-    expect(out).toContain('town-wall');
+    expect(out).toContain('mt-wall');
   }, 30_000);
 
   // 🏘️ Signalé : « on a une base sur l'île 2 alors qu'on devait avoir un village portuaire ».
-  it('🏘️ MapTown : la base sur l’île 1 et hors archipel, un village de pêcheurs sur les îles 2 à 5', async () => {
+  it('🏘️ MapTown : la base sur l’île 1 et hors archipel, un gros lieu fixe pour le village du port des îles 2 à 5', async () => {
     const { default: MapTown } = await import('@/components/MapTown.vue');
     for (const [island, base] of [
       [null, true],
@@ -910,9 +910,44 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ] as const) {
       let out = '';
       expect(await mountIt(MapTown, { island }, ROW, undefined, '/', (h) => (out = h))).toBeNull();
-      expect(out.includes('town-wall'), `île ${island}`).toBe(base);
-      expect(out.includes('mt-house'), `île ${island}`).toBe(!base);
+      expect(out.includes('mt-wall'), `île ${island}`).toBe(base);
+      expect(out.includes('mt-place'), `île ${island}`).toBe(!base);
     }
+  }, 30_000);
+
+  // 🏰 Demandé : « juste un gros lieu fixe » pour la forteresse — à l'échelle d'une citadelle.
+  it('🏰 MapPoiLayer : la forteresse est un GROS lieu fixe, une mine un lieu fixe ordinaire', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    const ctl = (id: string, kind: string) => ({
+      id,
+      type: 'control',
+      x: 100,
+      y: 100,
+      level: 20,
+      control: { kind, owner: 'enemy', garrison: [] },
+    });
+    const scaleOf = async (kind: string) => {
+      let out = '';
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: [ctl('p', kind)],
+          selectedId: null,
+          dimmedKey: '',
+          veiledKey: '',
+          imminentKey: '',
+          target: null,
+          travelTargets: [],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      return out.match(/scale\(([\d.]+)\)/)?.[1];
+    };
+    expect(await scaleOf('fortress')).toBe('1.55');
+    expect(await scaleOf('mine')).toBe('1.3');
   }, 30_000);
 
   // ⛵ Demandé : la traversée du héros apparaît dans la rangée des voyages.

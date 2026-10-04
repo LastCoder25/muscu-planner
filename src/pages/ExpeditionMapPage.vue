@@ -71,12 +71,7 @@
         >
           <!-- Le SOL : mer, côte, prairie, reliefs — même langage que la Base (v0.749). -->
           <!-- 🏝️ En mode archipel : l'île, entourée de mer, avec son port et sa forteresse. -->
-          <IslandTerrain
-            v-if="islandTerr && island"
-            :t="islandTerr"
-            :view="V"
-            :fortress-name="island.fortress"
-          />
+          <IslandTerrain v-if="islandTerr && island" :t="islandTerr" :view="V" />
           <MapTerrain v-else :terrain="terrain" :view="{ min: V.x, size: V.size }" />
 
           <!-- 🌫️ BROUILLARD DE GUERRE (v0.1047) : l'Avant-poste révèle un disque autour de la
