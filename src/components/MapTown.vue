@@ -11,12 +11,49 @@
     <!-- 🏘️ Le village du port : pas de dessin (demandé, 2026-10-04 : « juste un gros lieu
          fixe »), le marqueur d'un lieu fixe tenu, en plus gros. -->
     <g v-if="village" :transform="`translate(${T.x} ${T.y}) scale(${PLACE_SCALE})`">
+      <!-- 👑 Le cadre de TA base, que nul autre lieu ne porte. -->
+      <g class="qg-frame mine">
+        <rect x="-7.6" y="-7.6" width="15.2" height="15.2" rx="2.1" class="qg-out" />
+        <rect
+          x="-6.199999999999999"
+          y="-6.199999999999999"
+          width="12.399999999999999"
+          height="12.399999999999999"
+          rx="1.5"
+          class="qg-in"
+        />
+        <rect
+          v-for="(c, i) in QG_CORNERS"
+          :key="'qc' + i"
+          :x="c[0] * 7.6 - 1"
+          :y="c[1] * 7.6 - 1"
+          width="2"
+          height="2"
+          class="qg-stud"
+        />
+      </g>
       <rect x="-5.2" y="-5.2" width="10.4" height="10.4" rx="2" class="town-wall mt-place" />
       <text x="0" y="1.6" class="mt-emo">🏘️</text>
       <line x1="5.2" y1="-5.2" x2="5.2" y2="-10.4" class="mt-mast" />
       <path d="M5.2,-10.4 l4.2,1.3 l-4.2,1.3 z" class="mt-flag" />
     </g>
     <template v-else>
+      <!-- 👑 Le cadre de TA base, que nul autre lieu ne porte. -->
+      <g :transform="`translate(${T.x} ${T.y})`">
+        <g class="qg-frame mine">
+          <rect x="-15.5" y="-15.5" width="31" height="31" rx="4.3" class="qg-out" />
+          <rect x="-14.1" y="-14.1" width="28.2" height="28.2" rx="3.1" class="qg-in" />
+          <rect
+            v-for="(c, i) in QG_CORNERS"
+            :key="'qc' + i"
+            :x="c[0] * 15.5 - 1"
+            :y="c[1] * 15.5 - 1"
+            width="2"
+            height="2"
+            class="qg-stud"
+          />
+        </g>
+      </g>
       <circle :cx="T.x" :cy="T.y" r="12.5" class="mt-earth" />
       <circle :cx="T.x" :cy="T.y" r="10.5" class="mt-glow" />
       <path :d="ROAD" class="mt-road" />
@@ -66,6 +103,13 @@ const village = computed(() => props.island !== null && props.island >= 2);
 
 /** Plus gros qu'un lieu fixe ordinaire (×1,3), comme une citadelle (`MapPoiLayer`). */
 const PLACE_SCALE = 1.55;
+/** Les coins du cadre de QG (unité : demi-côté). */
+const QG_CORNERS: [number, number][] = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
 </script>
 
 <style scoped lang="scss">
@@ -117,6 +161,26 @@ const PLACE_SCALE = 1.55;
   fill: #241c12;
   stroke: #3a2f1f;
   stroke-width: 0.3;
+}
+.qg-out {
+  fill: none;
+  stroke-width: 0.9;
+}
+.qg-in {
+  fill: none;
+  stroke-width: 0.45;
+  stroke-dasharray: 1.4 0.8;
+}
+.qg-frame.mine .qg-out,
+.qg-frame.mine .qg-in {
+  stroke: var(--accent, #ffd23f);
+}
+.qg-stud {
+  stroke: #15120e;
+  stroke-width: 0.3;
+}
+.qg-frame.mine .qg-stud {
+  fill: var(--accent, #ffd23f);
 }
 .mt-place {
   fill: color-mix(in srgb, #b57bff 24%, var(--surface, #211c16));

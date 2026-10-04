@@ -912,6 +912,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       expect(await mountIt(MapTown, { island }, ROW, undefined, '/', (h) => (out = h))).toBeNull();
       expect(out.includes('mt-wall'), `île ${island}`).toBe(base);
       expect(out.includes('mt-place'), `île ${island}`).toBe(!base);
+      // 👑 Demandé : ta base porte un cadre à part, base comme village.
+      expect(out, `île ${island}`).toContain('qg-frame mine');
     }
   }, 30_000);
 
@@ -944,10 +946,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         '/',
         (h) => (out = h),
       );
-      return out.match(/scale\(([\d.]+)\)/)?.[1];
+      return { scale: out.match(/scale\(([\d.]+)\)/)?.[1], frame: out.includes('qg-frame foe') };
     };
-    expect(await scaleOf('fortress')).toBe('1.55');
-    expect(await scaleOf('mine')).toBe('1.3');
+    // 🏰 Demandé : la forteresse adverse porte un cadre que nul autre lieu ne porte.
+    expect(await scaleOf('fortress')).toEqual({ scale: '1.55', frame: true });
+    expect(await scaleOf('mine')).toEqual({ scale: '1.3', frame: false });
+    expect((await scaleOf('citadel')).frame).toBe(false);
   }, 30_000);
 
   // ⛵ Demandé : la traversée du héros apparaît dans la rangée des voyages.

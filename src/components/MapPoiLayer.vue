@@ -39,6 +39,25 @@
            plus encore : on les repère sur la carte. Agrandi autour de son centre, garnison,
            cran et alerte compris. -->
       <g v-else-if="p.control" :transform="fixedScale(p)">
+        <!-- 🏰 La FORTERESSE adverse porte un cadre que nul autre lieu ne porte : double
+             liseré rouge et clous aux coins (demandé, 2026-10-04). Ta base a le même, en or. -->
+        <g
+          v-if="p.control.kind === 'fortress'"
+          class="qg-frame foe"
+          :transform="`translate(${p.x} ${p.y})`"
+        >
+          <rect x="-7.6" y="-7.6" width="15.2" height="15.2" rx="2.1" class="qg-out" />
+          <rect x="-6.2" y="-6.2" width="12.4" height="12.4" rx="1.5" class="qg-in" />
+          <rect
+            v-for="(c, i) in QG_CORNERS"
+            :key="'qc' + i"
+            :x="c[0] * 7.6 - 1"
+            :y="c[1] * 7.6 - 1"
+            width="2"
+            height="2"
+            class="qg-stud"
+          />
+        </g>
         <rect
           :x="p.x - 5.2"
           :y="p.y - 5.2"
@@ -235,6 +254,13 @@ const imminent = computed(() => toSet(props.imminentKey));
 const attacked = computed(() => toSet(props.attackedKey ?? ''));
 /** 🏰 Agrandissement d'un lieu fixe (citadelle encore plus) ; 1 pour un lieu ordinaire. */
 const FIXED_SCALE = 1.3;
+/** Les coins du cadre de la forteresse (unité : demi-côté). */
+const QG_CORNERS: [number, number][] = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
 const CITADEL_SCALE = 1.55;
 const scaleOf = (p: Poi) =>
   !p.control
@@ -309,6 +335,22 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 }
 .poi.sel .ctl-bg {
   stroke: var(--accent);
+}
+.qg-out {
+  fill: none;
+  stroke: var(--d4, #ff6a45);
+  stroke-width: 0.9;
+}
+.qg-in {
+  fill: none;
+  stroke: var(--d4, #ff6a45);
+  stroke-width: 0.45;
+  stroke-dasharray: 1.4 0.8;
+}
+.qg-stud {
+  fill: var(--d4, #ff6a45);
+  stroke: #15120e;
+  stroke-width: 0.3;
 }
 .ctl-mast {
   stroke: var(--text);
