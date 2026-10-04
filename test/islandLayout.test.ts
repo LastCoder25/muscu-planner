@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '../src/lib/archipelago';
-import { controlKindsOf, controlSpot } from '../src/lib/controlPoints';
+import { controlKindsOf, controlSpot, ensureControls } from '../src/lib/controlPoints';
 import { ensureIslandConquest, objectiveSpot } from '../src/lib/islandConquest';
 import { islandTerrain } from '../src/lib/islandTerrain';
 import { DEFENSE_LINE_T, islandCenter, onIsland } from '../src/lib/islandShape';
@@ -71,4 +71,47 @@ describe('🎯 les objectifs sont répartis sur toute l’île', () => {
       expect(Math.max(...off)).toBeGreaterThan(Math.PI / 2);
     });
   }
+});
+
+describe('🏳️ un lieu TENU rejoint aussi sa place (v1.49.3)', () => {
+  const isl = ISLANDS[1]!;
+  const lv = isl.maxLevel;
+  const base = () =>
+    ensureIslandConquest(
+      ensureControls(
+        createMap(7, 0, lv, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(isl.id)),
+        0,
+        lv,
+        ISLAND_OUTPOST_LEVEL,
+      ),
+      0,
+      lv,
+    );
+  // Un lieu fixe tenu, posé à une ancienne place.
+  const held = (m: ReturnType<typeof base>, id: string) => ({
+    ...m,
+    pois: m.pois.map((p) =>
+      p.id === id
+        ? { ...p, x: p.x - 20, y: p.y + 7, control: { ...p.control!, owner: 'player' as const } }
+        : p,
+    ),
+  });
+  it('tenu et libre : il va sur la ligne', () => {
+    const m = base();
+    const id = m.pois.find((p) => p.control && !p.id.startsWith('isl_'))!.id;
+    const out = ensureIslandConquest(held(m, id), 1, lv);
+    const p = out.pois.find((q) => q.id === id)!;
+    const want = controlSpot(out, p.control!.kind);
+    expect([p.x, p.y]).toEqual([want.x, want.y]);
+    expect(p.control!.owner).toBe('player');
+  });
+  it('une équipe en est partie : il garde sa place', () => {
+    const m = base();
+    const id = m.pois.find((p) => p.control && !p.id.startsWith('isl_'))!.id;
+    const h = held(m, id);
+    const before = h.pois.find((q) => q.id === id)!;
+    const out = ensureIslandConquest(h, 1, lv, new Set(), new Set([id]));
+    const p = out.pois.find((q) => q.id === id)!;
+    expect([p.x, p.y]).toEqual([before.x, before.y]);
+  });
 });

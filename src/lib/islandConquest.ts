@@ -557,6 +557,8 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** Les seules coordonnées d'une place (sans sa distance à la ville, recalculée par `withRelays`). */
+const xyOf = ({ x, y }: { x: number; y: number }) => ({ x, y });
 
 /**
  * 🏝️ Tient la carte à jour : objectifs et forteresse POSÉS s'ils manquent (retirés hors du
@@ -571,6 +573,9 @@ export function ensureIslandConquest(
   playerLevel: number,
   /** 🐫 Les convois BATTUS par un voyage avant leur arrivée (`convoyVanquished`). */
   vanquished: ReadonlySet<string> = new Set(),
+  /** ⚓ Les lieux d'où une équipe est partie (sortie, attaque combinée) : ils ne bougent pas
+   *  tant qu'elle n'est pas rentrée, sinon son trajet partirait d'un endroit vide. */
+  anchored: ReadonlySet<string> = new Set(),
 ): ExpeditionMap {
   // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🪦 De même les
   // cimetières qui se relèvent.
@@ -619,23 +624,24 @@ export function ensureIslandConquest(
     );
     changed = true;
   }
-  // 2 bis. 🏝️ LES POINTS FIXES ENCORE À L'ENNEMI se posent à leur place d'île (v1.28.0,
-  // « espace les lieux ») : à mi-chemin de la côte au lieu de serrés autour de la base. Ceux
-  // qu'on tient, qu'on attaque ou où des champions marchent ne bougent pas.
+  // 2 bis. 🏝️ LES POINTS FIXES se posent à leur place d'île — la ligne de défense (v1.49) —,
+  // ENNEMIS COMME TENUS (v1.49.3, signalé : « je n'ai pas les modifs » — les lieux tenus
+  // restaient à l'ancienne place). De même les objectifs QU'ON TIENT (ceux encore ennemis
+  // suivent à l'étape 2). Ne bougent pas : un lieu attaqué, un lieu où des champions marchent
+  // (renforts, retours) ou d'où une équipe est partie (`anchored`).
   if (isl)
     pois = pois.map((p) => {
       const c = p.control;
-      if (
-        !c ||
-        c.owner !== 'enemy' ||
-        c.assault ||
-        c.reinforcing?.length ||
-        c.returning?.length ||
-        isIslandTargetId(p.id) ||
-        !ALL_CONTROL_KINDS.includes(c.kind)
-      )
+      if (!c || c.assault || c.reinforcing?.length || c.returning?.length || anchored.has(p.id))
         return p;
-      const s = controlSpot(map, c.kind);
+      const heldObj =
+        c.owner === 'player' &&
+        c.kind === 'objective' &&
+        objectiveAngles(isl.objectives).some((_, i) => objectiveIdOf(i) === p.id);
+      if (!heldObj && (isIslandTargetId(p.id) || !ALL_CONTROL_KINDS.includes(c.kind))) return p;
+      const s = heldObj
+        ? xyOf(objectiveSpot(isl.id, Number(p.id.slice('isl_obj_'.length))))
+        : controlSpot(map, c.kind);
       if (p.x === s.x && p.y === s.y) return p;
       changed = true;
       return { ...p, ...s };

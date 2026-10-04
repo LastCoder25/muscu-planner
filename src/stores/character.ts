@@ -2391,6 +2391,15 @@ export const useCharacterStore = defineStore('character', () => {
       level,
       // 🐫 Un convoi battu avant son arrivée ne renforce pas la forteresse.
       convoyVanquished(partyList.value),
+      // ⚓ Un lieu d'où une équipe est partie garde sa place jusqu'à son retour.
+      new Set([
+        ...[...partyList.value, ...(cur.expedition ? [cur.expedition] : [])].flatMap((p) =>
+          p.homeId ? [p.homeId] : [],
+        ),
+        ...attackList.value.flatMap((a) =>
+          a.wings.flatMap((w) => (w.originId ? [w.originId] : [])),
+        ),
+      ]),
     );
     // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
     // détection de la Tour de guet (`fieldArmy.ts`).
@@ -5504,7 +5513,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) } : {}),
+      ...(h.runes
+        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+        : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
@@ -5560,7 +5571,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) } : {}),
+      ...(h.runes
+        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+        : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
       ...(h.gearSeals || h.champSeals
