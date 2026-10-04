@@ -22,6 +22,7 @@ import {
   controlFreeSeats,
   freeAway,
   holdAway,
+  garrisonFreeSeats,
   militiaFreeSeats,
   pruneAway,
   reinforceControl,
@@ -80,7 +81,11 @@ export function transferBlocker(
   const g = new Set(from.control!.garrison);
   if (new Set(ids).size !== ids.length || ids.some((id) => !g.has(id))) return 'notHere';
   const champs = ids.filter((id) => !isMilitiaId(id)).length;
-  if (champs > controlFreeSeats(to.control) || ids.length > militiaFreeSeats(to.control))
+  if (
+    champs > controlFreeSeats(to.control) ||
+    ids.length > garrisonFreeSeats(to.control) ||
+    ids.length - champs > militiaFreeSeats(to.control)
+  )
     return 'full';
   return null;
 }

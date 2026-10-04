@@ -2699,6 +2699,13 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
   return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), garrisonRoom(c)));
 }
+/** 🏰 Places libres dans la garnison, TOUT CONFONDU (champions et miliciens ; 0 si le point
+ *  n'est pas à nous). ⚠️ Ce n'est PAS  : un objectif ou une forteresse
+ *  refuse les miliciens mais a bien ses places, et l'écran comme les transferts les lisent ici. */
+export function garrisonFreeSeats(c: ControlState | undefined | null): number {
+  if (!c || c.owner !== 'player') return 0;
+  return garrisonRoom(c);
+}
 /** 🛡️ Places libres pour des MILICIENS : ce qui reste de la garnison de 5, champions compris. */
 export function militiaFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
@@ -2706,7 +2713,7 @@ export function militiaFreeSeats(c: ControlState | undefined | null): number {
   // de l'utilisateur : « seulement dans les lieux fixes de production et les bases »). Source
   // unique : renforts, transferts, envoi depuis la base et milice des îles rangées la lisent.
   if (RAZE_KINDS.has(c.kind)) return 0;
-  return garrisonRoom(c);
+  return garrisonFreeSeats(c);
 }
 
 /** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
@@ -2860,7 +2867,8 @@ export function recallReinforcements(
     !!origin?.control &&
     origin.control.owner === 'player' &&
     controlFreeSeats(origin.control) >= nChamp &&
-    militiaFreeSeats(origin.control) >= moving.length;
+    garrisonFreeSeats(origin.control) >= moving.length &&
+    militiaFreeSeats(origin.control) >= nMil;
   const toOrigin = room && target ? moving : [];
   const toOriginIds = new Set(toOrigin.map((r) => r.id));
   const turning = all.filter((r) => !toOriginIds.has(r.id));
@@ -2961,7 +2969,11 @@ export function recallReturns(
   if (list.some((r) => r.turnBack !== undefined)) return { block: 'turned' };
   if (c.owner !== 'player') return { block: 'notHeld' };
   const nMil = list.filter((r) => isMilitiaId(r.id)).length;
-  if (controlFreeSeats(c) < list.length - nMil || militiaFreeSeats(c) < list.length)
+  if (
+    controlFreeSeats(c) < list.length - nMil ||
+    garrisonFreeSeats(c) < list.length ||
+    militiaFreeSeats(c) < nMil
+  )
     return { block: 'full' };
   const town = EXPE.town;
   const back = list.map((r) => {
