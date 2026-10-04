@@ -3540,6 +3540,11 @@ function dimmed(p: Poi): boolean {
  *  restent en garnison à l'arrivée (`midAt`). */
 type MapPanel = 'trips' | 'ctl';
 const mapPanel = ref<MapPanel | null>(null);
+/** Refermer la partie Expéditions (ou passer aux Places fortes) désélectionne le voyage
+ *  touché : sinon son halo restait sur la carte sans sa tuile (signalé). */
+watch(mapPanel, (p) => {
+  if (p !== 'trips') focusTrip.value = null;
+});
 /** 📜 Ouvrir une tuile (Expéditions, Places fortes) cale la DERNIÈRE tuile de la partie
  *  dépliée en bas de l'écran (demandé : toutes les tuiles visibles, rien de vide dessous, le
  *  maximum de carte au-dessus). Si la partie est plus haute que l'écran, la rangée des onglets
