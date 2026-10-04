@@ -1263,8 +1263,17 @@ export function ensureControls(
   }
   // 🩹 Les points ENNEMIS posés avant la règle (rang au-dessus du joueur, troupe de 3,5) sont
   // re-tirés : sinon ils restaient imprenables. Idempotent — une fois soignés, ils passent.
-  const healed = map.pois.map((p) => {
-    const c = p.control;
+  // 🛡️ Sur une île, un lieu fixe qui n'est pas sur SA place y retourne, tenu ou non : la ligne
+  // de défense (2026-10-04) est arrivée après des lieux déjà posés, que la boucle ci-dessus ne
+  // touche jamais (signalé : un Ossuaire resté à 38 unités de sa place, collé aux Archives).
+  // Seule la position bouge — garnison, production, rang et attaque prévue restent.
+  const islandSpots = map.archipel ? islandControlSpots(map.archipel.island) : [];
+  const healed = map.pois.map((p0) => {
+    const c = p0.control;
+    let p = p0;
+    const spot = c && islandSpots.find((sp) => sp.kind === c.kind);
+    if (spot && (p.x !== Math.round(spot.x) || p.y !== Math.round(spot.y)))
+      p = { ...p, ...controlSpot(map, c.kind) };
     if (!c || c.owner !== 'enemy' || RAZE_KINDS.has(c.kind)) return p;
     // 🏝️ Sur une île, un point jamais pris suit sa distance au port (un point repris garde
     // le rang de ses assaillants).
