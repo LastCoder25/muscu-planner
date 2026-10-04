@@ -31,10 +31,11 @@ const OBJ = objectiveIdOf(0);
 
 describe('🏳️ un objectif pris se tient', () => {
   it('il reste sur la carte, à nous, avec sa garnison ; il compte comme pris', () => {
-    const m = takeObjective(island(1), OBJ, ['a', 'b', 'c', 'd'], NOW);
+    const m = takeObjective(island(1), OBJ, ['a', 'b', 'c', 'd', 'e', 'f'], NOW);
     const o = poi(m, OBJ)!;
     expect(o.control!.owner).toBe('player');
-    expect(o.control!.garrison).toEqual(['a', 'b', 'c'].slice(0, seatsOf('objective')));
+    expect(o.control!.garrison).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(seatsOf('objective')).toBe(5);
     expect(islandConquest(m)!.objectivesDown).toBe(1);
     expect(controlYieldCard(o, NOW + H, 20)).toBeNull();
     // Le tick de la carte le garde, à nous.

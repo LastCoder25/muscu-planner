@@ -71,8 +71,8 @@ const ROAD = `M${T.x - 1.2} ${T.y + AP} L${T.x - 2.2} ${T.y + 14} L${T.x + 2.2} 
 /** Le village de pêcheurs : sur les îles 2 à 5 seulement (l'île 1 est la capitale). */
 const village = computed(() => props.island !== null && props.island >= 2);
 
-/** Plus gros qu'un lieu fixe ordinaire (×1,3), comme une citadelle (`MapPoiLayer`). */
-const PLACE_SCALE = 1.55;
+/** Plus gros qu'un lieu fixe ordinaire (×1,15), comme une citadelle (`MapPoiLayer`). */
+const PLACE_SCALE = 1.35;
 </script>
 
 <style scoped lang="scss">
