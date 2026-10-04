@@ -1302,6 +1302,56 @@
       bientôt.
     </div>
 
+    <!-- ⚡🔙 LE VOYAGE TOUCHÉ, QUAND SON DÉTAIL N'EST PAS AFFICHÉ (signalé : depuis les tuiles
+         par-dessus la carte, toucher une expédition ferme le panneau pour montrer le tracé, et
+         les boosts n'étaient plus accessibles). Une barre en bas à gauche, à côté des boutons
+         ronds : accélérer, faire demi-tour, ou refermer. -->
+    <div v-if="tripBar" class="trip-bar" role="group" :aria-label="tripBar.title">
+      <button
+        v-if="tripBar.boost"
+        type="button"
+        class="tb-btn tb-boost"
+        aria-label="Accélérer ce voyage"
+        @click="boostAskOpen = true"
+      >
+        ⚡
+      </button>
+      <button
+        v-if="tripBar.recall"
+        type="button"
+        class="tb-btn"
+        aria-label="Faire demi-tour"
+        @click="recallTripByKey(tripBar.key)"
+      >
+        🔙
+      </button>
+      <button type="button" class="tb-btn tb-x" aria-label="Fermer" @click="focusTrip = null">
+        ✕
+      </button>
+    </div>
+    <q-dialog v-model="boostAskOpen">
+      <q-card class="boost-ask">
+        <div class="ba-title">⚡ Accélérer ce voyage</div>
+        <p v-if="tripBar?.boost?.block" class="ba-note">{{ tripBar.boost.block }}</p>
+        <div v-else-if="tripBar?.boost" class="ba-row">
+          <button
+            v-for="b in tripBar.boost.choices"
+            :key="b.id"
+            type="button"
+            class="ba-btn"
+            :class="{ lossy: b.lostMs > 0 }"
+            @click="((boostAskOpen = false), boostTrip(tripBar.key, b.id))"
+          >
+            <b>⚡ {{ b.minutes >= 60 ? b.minutes / 60 + ' h' : b.minutes + ' min' }}</b>
+            <span class="ba-n">×{{ b.count }}</span>
+            <small>−{{ formatDuration(b.gainMs)
+              }}{{ b.lostMs > 0 ? ` · ${formatDuration(b.lostMs)} perdues` : '' }}</small>
+          </button>
+        </div>
+        <q-btn flat label="Fermer" class="ba-close" @click="boostAskOpen = false" />
+      </q-card>
+    </q-dialog>
+
     <!-- 🧭🏰 À gauche du ↕️ : les tuiles des expéditions et des places fortes, par-dessus la
          carte (essai). La pastille reprend celle des tuiles sous la carte. -->
     <button
@@ -1348,7 +1398,12 @@ import {
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import { attackWingVoyages, type CombinedAttack } from '@/lib/combinedAttack';
-import { attackBoostPlan, boostChoices, voyageBoostPlan } from '@/lib/speedBoost';
+import {
+  attackBoostPlan,
+  BOOST_BLOCK_LABEL,
+  boostChoices,
+  voyageBoostPlan,
+} from '@/lib/speedBoost';
 import type { ActiveExpedition } from '@/lib/expedition';
 import {
   fogRevealPlan,
@@ -4137,6 +4192,29 @@ const focusBoosts = computed(() => {
     ),
   };
 });
+/** ⚡🔙 La barre du voyage touché (cf. le gabarit) : seulement quand son détail sous la carte
+ *  n'est pas affiché (panneau Expéditions replié) et que le panneau par-dessus est fermé. */
+const boostAskOpen = ref(false);
+const tripBar = computed(() => {
+  const key = focusTrip.value;
+  if (!key || overlay.value || mapPanel.value === 'trips') return null;
+  const t = trips.value.find((x) => x.key === key);
+  if (!t) return null;
+  const b = focusBoosts.value;
+  const boost =
+    b && b.key === key
+      ? 'block' in b.plan
+        ? { block: BOOST_BLOCK_LABEL[b.plan.block], choices: [] }
+        : b.plan.choices.length
+          ? { block: null, choices: b.plan.choices }
+          : null
+      : null;
+  const recall = recallableTrips.value.has(key);
+  return { key, title: t.title, boost, recall };
+});
+watch(tripBar, (b) => {
+  if (!b?.boost) boostAskOpen.value = false;
+});
 const boostBusy = ref(false);
 function boostTrip(key: string, id: BoostId) {
   const t = boostTarget(key);
@@ -6181,6 +6259,96 @@ onUnmounted(() => {
   place-items: center;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+/* ⚡🔙 La barre du voyage touché : en bas à gauche, à la hauteur des boutons ronds. */
+.trip-bar {
+  position: fixed;
+  left: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  padding: 0 4px;
+  border: 1.5px solid var(--accent);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.tb-btn {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+}
+.tb-boost {
+  background: var(--accent);
+  color: #15120e;
+}
+.tb-x {
+  color: var(--dim);
+  font-size: 15px;
+}
+.boost-ask {
+  width: min(92vw, 380px);
+  padding: 14px;
+}
+.ba-title {
+  font-weight: 800;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.ba-note {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 13px;
+}
+.ba-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 6px;
+}
+.ba-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 52px;
+  padding: 6px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.ba-btn small {
+  font-size: 11px;
+  color: var(--dim);
+}
+.ba-btn.lossy {
+  border-color: var(--d3);
+  border-style: dashed;
+}
+.ba-btn.lossy small {
+  color: var(--d3);
+}
+.ba-n {
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 10px;
+  color: var(--dim);
+}
+.ba-close {
+  display: block;
+  margin: 10px 0 0 auto;
 }
 
 /* Décor de carte */

@@ -112,7 +112,12 @@ const ECRANS = [
         clic: '.tile-fab[aria-label="Expéditions"]',
         attendu: '.map-overlay .trip',
       },
-      { nom: 'tuile-trace', clic: '.map-overlay .trip', attendu: '.trail-focus' },
+      // ⚡🔙 …et une barre en bas à gauche garde l'accès aux boosts et au demi-tour.
+      {
+        nom: 'tuile-trace',
+        clic: '.map-overlay .trip',
+        attendu: 'body:has(.trail-focus) .trip-bar',
+      },
       {
         nom: 'tuiles-forts',
         clic: '.tile-fab[aria-label="Places fortes"]',
