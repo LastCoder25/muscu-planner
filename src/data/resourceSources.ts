@@ -127,12 +127,12 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
   sealsChamp: {
     emoji: '🔱',
     name: 'Sceaux de champion',
-    use: 'Faire monter un champion au rang suivant (ascension). Un sceau ne sert qu’à son rang.',
+    use: 'Faire monter un champion au rang suivant (ascension). Il en faut 4 × le rang visé : 4 pour Argent, 8 pour Or, 12 pour Or noir…',
     sources: [
       {
         emoji: '🏛️',
         label: 'Ruines anciennes de la carte',
-        detail: 'gardées — 3 sceaux au rang du lieu, une ruine sur deux',
+        detail: 'gardées — 3 sceaux, une ruine sur deux',
       },
     ],
   },
@@ -156,7 +156,8 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
       {
         emoji: '🗺️',
         label: 'Lieux de la carte réussis avec un champion',
-        detail: 'une chance, plus forte sur un lieu au-dessus de ton rang, doublée sur une faille refermée',
+        detail:
+          'une chance, plus forte sur un lieu au-dessus de ton rang, doublée sur une faille refermée',
       },
       { emoji: '⬆️', label: 'Ascension d’un champion', detail: 'une rune garantie' },
       { emoji: '✨', label: 'Éveil d’un champion', detail: 'une rune par cran' },

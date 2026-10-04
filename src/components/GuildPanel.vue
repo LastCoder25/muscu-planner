@@ -551,7 +551,6 @@
             🔱 {{ detailAscent.have }}/{{ detailAscent.cost.seals }} sceau{{
               detailAscent.cost.seals > 1 ? 'x' : ''
             }}
-            {{ detailAscent.rank.name }}
           </span>
           <span class="da-c" :class="{ short: detailAscent.goldShort }">
             🪙 {{ detailAscent.cost.gold.toLocaleString('fr-FR') }}

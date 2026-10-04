@@ -17,7 +17,6 @@ import {
   advGearAscensionCost,
   ascensionCost,
   sealCount,
-  GEAR_SEAL_KEY,
   emptySeals,
 } from '@/lib/ascension';
 import { RANK_ORDER } from '@/lib/items';
@@ -194,7 +193,7 @@ describe('les sceaux d’objet de la carte (2026-09-27 : les ruines anciennes se
       (i) => ruinsSealKind({ id: i }) === 'gear',
     )!;
     const at = (L: number) => ruinsSeals({ id, level: 5 }, L);
-    expect(at(5)).toEqual({ kind: 'gear', rank: GEAR_SEAL_KEY, n: RUINS_SEALS.gearPerRank });
+    expect(at(5)).toEqual({ kind: 'gear', rank: 0, n: RUINS_SEALS.gearPerRank });
     expect(at(35).n).toBe(4 * RUINS_SEALS.gearPerRank); // Or noir
   });
 });

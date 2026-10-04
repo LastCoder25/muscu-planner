@@ -2486,7 +2486,7 @@ describe('📊 barre d’étoile au retour de mission', () => {
     // Un seul bouton : celui du champion prêt, jamais celui de Léa.
     expect(out.match(/class="aob-b"/g) ?? []).toHaveLength(1);
     expect(out).toContain('Ascension → ⚪');
-    expect(out).toContain('🔱 5/1');
+    expect(out).toContain('🔱 5/4');
   });
 
   it('AdvXpGainOverlay se monte et part de l’avancement AVANT', async () => {

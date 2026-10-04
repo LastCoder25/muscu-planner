@@ -20,9 +20,11 @@ const capOf = (rank: number) => (rank >= LAST ? 100 : rankStartLevel(rank + 1) -
 // peut être fractionnaire (0,5 = une tous les deux jours). ⚠️ Les mesures d'avant parlaient
 // de failles (1,5 sceau en moyenne) : à 3 sceaux par ruine, 0,5 ruine/jour vaut une faille
 // par jour d'avant, 1 ruine/jour deux failles.
+// ⚠️ SANS RANG depuis la v1.50 : tout sceau sert à toute ascension, d'où une RÉSERVE unique
+// (avant : un compte par rang, et seul le rang exact payait).
 function trioStuckShare(xpDay: number, ruinsPerDay: number, seed: number): number {
   const rng = mulberry32(seed);
-  const seals: number[] = Array(CHARACTER_RANKS.length).fill(0);
+  let seals = 0;
   const ranks = [0, 0, 0, 0];
   let xp = 0;
   let stuck = 0;
@@ -32,14 +34,19 @@ function trioStuckShare(xpDay: number, ruinsPerDay: number, seed: number): numbe
     const L = Math.min(100, computeLevel(xp).level);
     const r = characterRank(L).rankIndex;
     const visits = Math.floor(ruinsPerDay) + (rng() < ruinsPerDay % 1 ? 1 : 0);
-    for (let i = 0; i < visits; i++) seals[Math.floor(rng() * (r + 1))]! += RUINS_SEALS.champion;
+    // Le tirage du rang de la ruine est gardé : il n'a plus d'effet, mais le retirer décalerait
+    // le flux aléatoire et donc la mesure.
+    for (let i = 0; i < visits; i++) {
+      void Math.floor(rng() * (r + 1));
+      seals += RUINS_SEALS.champion;
+    }
     for (let pass = 0; pass < 3; pass++)
       for (let i = 0; i < ranks.length; i++) {
         if (L <= capOf(ranks[i]!) || ranks[i]! >= r) continue;
         const t = ranks[i]! + 1;
         const need = ascensionCost(t).seals;
-        if (seals[t]! >= need) {
-          seals[t]! -= need;
+        if (seals >= need) {
+          seals -= need;
           ranks[i] = t;
         }
       }
@@ -66,7 +73,7 @@ describe('⬆️ les sceaux arrivent à temps pour le trio de tête', () => {
     expect(mean((s) => trioStuckShare(1066, 0, s))).toBeGreaterThan(0.5);
   });
   it('…et un joueur très actif qui n’en prend qu’une tous les deux jours sent le frein', () => {
-    // Mesuré : 14 % à 1 + ⌊rang/4⌋ ; un coût de 1 fixe tombait à 1 % (formalité).
+    // Mesuré (v1.50, sans rang) : 12,7 % à 4 × rang ; 0 % à 3 × rang (formalité).
     expect(mean((s) => trioStuckShare(1066, 0.5, s))).toBeGreaterThan(0.05);
   });
 });

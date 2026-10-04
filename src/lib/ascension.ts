@@ -3,7 +3,7 @@
  * `docs/superpowers/specs/2026-09-21-ascension-eveil-objets-design.md`). Pur/testé.
  *
  * Le modèle : l'XP d'un champion s'arrête au ★5 d'un rang (`advAscensionCap`) ; passer au ★1
- * du rang suivant demande de l'OR et des SCEAUX DE CE RANG. Les sceaux de champion tombent du
+ * du rang suivant demande de l'OR et des SCEAUX (sans rang depuis la v1.50, le nombre suit le rang visé). Les sceaux de champion tombent du
  * GARDIEN d'une faille refermée, au rang de la faille — « laquelle je referme ? » gagne un
  * enjeu, et le sport reste le plafond (aucune faille n'est au-dessus du rang du joueur, et
  * l'ascension ne passe jamais le niveau du Panthéon).
@@ -21,36 +21,33 @@ import { GACHA } from './gacha';
 
 export type SealKind = SealDrop['kind'];
 
-/** Le stock de sceaux : par famille, par rang (index de `CHARACTER_RANKS`).
- *  ⚠️ Les sceaux d'OBJET n'ont PAS de rang (v0.1138, décision de l'utilisateur) : ils vivent
- *  tous sous la clé `GEAR_SEAL_KEY`, et c'est le NOMBRE demandé qui suit le rang visé. */
+/** Le stock de sceaux, par famille.
+ *  ⚠️ AUCUN SCEAU N'A PLUS DE RANG : ceux d'OBJET depuis la v0.1138, ceux de CHAMPION depuis
+ *  la v1.50 (décision de l'utilisateur : « sinon ça fait trop de ressources différentes »).
+ *  Tous vivent sous la clé `SEAL_KEY`, et c'est le NOMBRE demandé qui suit le rang visé.
+ *  La forme par rang du jsonb est conservée pour relire les stocks d'avant. */
 export type Seals = Record<SealKind, Partial<Record<number, number>>>;
 
 export const emptySeals = (): Seals => ({ champion: {}, gear: {} });
 
-/** La seule clé des sceaux d'objet (sans rang). */
-export const GEAR_SEAL_KEY = 0;
+/** La seule clé des sceaux (sans rang). ⚠️ `sealCount`, `addSeals` et `normalizeSeals` y
+ *  rangent tout : un sceau tombé avec un rang (stock d'avant, message pas encore encaissé,
+ *  lieu tenu qui en produit) rejoint la réserve commune. */
+const SEAL_KEY = 0;
 
-/** Où vit un sceau : son rang pour un champion, la clé unique pour un objet. ⚠️ Appliqué par
- *  `sealCount`, `addSeals` et `normalizeSeals` : un sceau d'objet tombé avant la v0.1138 (avec
- *  un rang, ou dans un message pas encore encaissé) rejoint la réserve commune. */
-function sealSlot(kind: SealKind, rank: number): number {
-  return kind === 'gear' ? GEAR_SEAL_KEY : rank;
-}
 
 const ASCENSION = {
   /** Or d'une ascension = ce que coûte un cran de BÂTIMENT au premier niveau du rang visé,
    *  divisé par ce facteur. ⚠️ Adossé au puits d'or du projet (`buildingUpgradeCost`) plutôt
    *  qu'à un nombre écrit : si l'économie des bâtiments bouge, l'ascension suit. */
   goldDiv: 4,
-  /** Sceaux de champion par ascension, selon le rang VISÉ : 1 + ⌊rang/4⌋ (1, 1, 1, 2…).
-   *  ⚠️ MESURÉ (v0.1017, 20 simulations × 2 ans) : à 1 + ⌊rang/2⌋, un joueur qui referme une
-   *  faille par jour avait son trio 5 niveaux ou plus en retard **26 à 37 %** des jours — et
-   *  un trio bloqué au ★5 du rang précédent ne gagne que **0 à 26 %** de ses embuscades
-   *  (contre 75-91 % à niveau) : ses convois s'effondraient. À ⌊rang/4⌋ : **6 à 14 %** à une
-   *  faille/jour, **0 à 2 %** à deux. Un coût de 1 fixe rendait l'ascension formelle (≤ 1 %). */
-  sealBase: 1,
-  sealRankDiv: 4,
+  /** Sceaux de champion par ascension = `sealPerRank` × rang VISÉ (Argent 4, Or 8, Or noir
+   *  12… Tout-puissant 36). ⚠️ MESURÉ (v1.50, 20 simulations × 2 ans, `ascensionRhythm`) :
+   *  sans rang, TOUS les sceaux servent à toute ascension, donc l'ancien barème (1 + ⌊rang/4⌋,
+   *  mais un sceau du rang exact) ne freinait plus rien (0 % de jours bloqués). Un joueur très
+   *  actif qui fait une ruine tous les deux jours : **×3 → 0 %**, **×4 → 12,7 %** (le chiffre
+   *  d'avant, 12,7 %), ×5 → 62 %, ×6 → 88 %. C'est une falaise : ne pas toucher sans re-mesurer. */
+  sealPerRank: 4,
   /** Récompense en mana : `pullCost × rang visé / manaRankDiv` (cf. `ascensionMana`). */
   manaRankDiv: 10,
 } as const;
@@ -68,7 +65,7 @@ export function normalizeSeals(raw: unknown): Seals {
       const n = typeof v === 'number' ? Math.floor(v) : 0;
       if (Number.isInteger(rank) && rank >= 0 && rank < CHARACTER_RANKS.length && n > 0) {
         // ⚠️ Les sceaux d'objet d'avant (un compte par rang) s'ADDITIONNENT : rien n'est perdu.
-        const slot = sealSlot(kind, rank);
+        const slot = SEAL_KEY;
         out[kind][slot] = (out[kind][slot] ?? 0) + n;
       }
     }
@@ -76,18 +73,23 @@ export function normalizeSeals(raw: unknown): Seals {
   return out;
 }
 
-export function sealCount(seals: Seals, kind: SealKind, rank: number): number {
-  return seals[kind][sealSlot(kind, rank)] ?? 0;
+/** Combien de sceaux de cette famille. ⚠️ ADDITIONNE toutes les entrées, quel que soit le
+ *  rang sous lequel elles sont rangées : un stock pas encore relu par `normalizeSeals` (une
+ *  ligne d'avant la v1.50) ne doit jamais lire 0. Le rang passé est ignoré (sans rang). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- le rang reste dans la signature
+export function sealCount(seals: Seals, kind: SealKind, _rank: number): number {
+  let n = 0;
+  for (const v of Object.values(seals[kind] ?? {})) if (typeof v === 'number' && v > 0) n += v;
+  return n;
 }
 
 /** Ajoute (ou retire, `n` négatif) des sceaux — PUR, rend un nouveau stock. Jamais sous 0. */
 export function addSeals(seals: Seals, kind: SealKind, rank: number, n: number): Seals {
   // Un compte ≤ 0 SUPPRIME l'entrée : c'est ce qui garantit « jamais sous zéro ».
-  const slot = sealSlot(kind, rank);
-  const v = sealCount(seals, kind, slot) + Math.round(n);
-  const fam = { ...seals[kind] };
-  if (v > 0) fam[slot] = v;
-  else delete fam[slot];
+  // ⚠️ Toute la famille est réécrite sous la clé unique : les entrées par rang d'avant fondent.
+  const v = sealCount(seals, kind, rank) + Math.round(n);
+  const fam: Partial<Record<number, number>> = {};
+  if (v > 0) fam[SEAL_KEY] = v;
   return { ...seals, [kind]: fam };
 }
 
@@ -96,7 +98,7 @@ export function ascensionCost(targetRank: number): { gold: number; seals: number
   const lvl = rankStartLevel(targetRank);
   return {
     gold: Math.round(buildingUpgradeCost(lvl) / ASCENSION.goldDiv),
-    seals: ASCENSION.sealBase + Math.floor(targetRank / ASCENSION.sealRankDiv),
+    seals: ASCENSION.sealPerRank * Math.max(1, Math.floor(targetRank)),
   };
 }
 
@@ -117,7 +119,7 @@ export const ASCENSION_BLOCK_LABEL: Record<AscensionBlock, string> = {
   top: 'Il est au sommet : plus aucun rang à ouvrir.',
   notReady: 'Il doit d’abord atteindre ★★★★★ dans son rang.',
   pantheon: 'Le Panthéon ne le laisse pas monter plus haut — améliore-le.',
-  seals: 'Il manque des sceaux de ce rang — explore des ruines anciennes de ce rang.',
+  seals: 'Il manque des sceaux de champion — explore des ruines anciennes sur la carte.',
   gold: 'Il manque de l’or.',
 };
 
@@ -180,21 +182,10 @@ export function advGearAscensionBlocker(
   return null;
 }
 
-/** 🔱 Ce que la barre de ressources dit d'une famille de sceaux : le TOTAL (la puce) et le
- *  détail PAR RANG (l'infobulle), du plus bas au plus haut. ⚠️ Un sceau ne sert qu'à SON rang :
- *  un total seul ne dirait pas si l'on peut monter tel champion, d'où le détail. */
-export function sealsSummary(seals: Seals, kind: SealKind): { total: number; detail: string } {
-  const parts: string[] = [];
-  let total = 0;
-  // ⚜️ Sans rang : le total seul dit tout.
-  if (kind === 'gear') return { total: sealCount(seals, 'gear', GEAR_SEAL_KEY), detail: '' };
-  for (let r = 0; r < CHARACTER_RANKS.length; r++) {
-    const n = sealCount(seals, kind, r);
-    if (n <= 0) continue;
-    total += n;
-    parts.push(`${CHARACTER_RANKS[r]!.name} ${n}`);
-  }
-  return { total, detail: parts.join(' · ') };
+/** 🔱⚜️ Ce que la barre de ressources dit d'une famille de sceaux : leur nombre. Sans rang,
+ *  le total seul dit tout. */
+export function sealsSummary(seals: Seals, kind: SealKind): { total: number } {
+  return { total: sealCount(seals, kind, SEAL_KEY) };
 }
 
 /** ⬆️ Combien d'ascensions sont PAYABLES tout de suite (champions + pièces) — ce qui allume

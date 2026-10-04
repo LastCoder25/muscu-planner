@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ASCENSION_BLOCK_LABEL,
   addSeals,
+  type Seals,
   ascensionBlocker,
   ascensionCost,
   emptySeals,
@@ -92,9 +93,11 @@ describe('le plafond d’ascension', () => {
 describe('les sceaux', () => {
   it('se relisent défensivement', () => {
     const s = normalizeSeals({ champion: { 1: 3, 2: -1, x: 4, 99: 2 }, gear: { 0: 2.7 }, foo: 1 });
-    expect(s).toEqual({ champion: { 1: 3 }, gear: { 0: 2 } });
-    // ⚜️ les sceaux d’objet d’avant (par rang) s’ADDITIONNENT en une seule réserve
+    expect(s).toEqual({ champion: { 0: 3 }, gear: { 0: 2 } });
+    // 🔱⚜️ les sceaux d’avant (par rang) s’ADDITIONNENT en une seule réserve, dans les deux
+    // familles (champion : v1.50) — rien n’est perdu
     expect(normalizeSeals({ gear: { 1: 2, 3: 4 } }).gear).toEqual({ 0: 6 });
+    expect(normalizeSeals({ champion: { 0: 13, 1: 16, 3: 8 } }).champion).toEqual({ 0: 37 });
     expect(normalizeSeals(null)).toEqual(emptySeals());
   });
 
@@ -105,6 +108,12 @@ describe('les sceaux', () => {
     expect(sealCount(s, 'champion', 2)).toBe(0);
     expect(s.champion[2]).toBeUndefined();
     expect(sealCount(s, 'gear', 2)).toBe(0);
+  });
+
+  it('un stock d’avant, encore rangé par rang, se lit en entier (v1.50)', () => {
+    const raw = { champion: { 0: 13, 1: 16, 3: 8 }, gear: {} } as Seals;
+    expect(sealCount(raw, 'champion', 2)).toBe(37);
+    expect(addSeals(raw, 'champion', 2, -8).champion).toEqual({ 0: 29 });
   });
 
   it('les deux familles ne se mélangent pas', () => {
@@ -119,9 +128,9 @@ describe('le coût', () => {
       expect(ascensionCost(r).gold).toBe(Math.round(buildingUpgradeCost(rankStartLevel(r)) / 4));
   });
 
-  it('les sceaux montent doucement avec le rang', () => {
+  it('les sceaux : 4 × le rang visé (Argent 4, Or 8… Tout-puissant 36)', () => {
     expect([1, 2, 3, 4, 5, 7, 8, 9].map((r) => ascensionCost(r).seals)).toEqual([
-      1, 1, 1, 2, 2, 2, 3, 3,
+      4, 8, 12, 16, 20, 28, 32, 36,
     ]);
   });
 });
@@ -148,9 +157,16 @@ describe('ce qui bloque', () => {
     expect(ascensionBlocker(pret(), { ...ctx, pantheonLevel: 11 })).toBeNull();
   });
 
-  it('les sceaux doivent être DU RANG visé', () => {
-    const wrong = addSeals(emptySeals(), 'champion', 2, 99);
-    expect(ascensionBlocker(pret(), { ...ctx, seals: wrong })).toBe('seals');
+  it('les sceaux de champion n’ont pas de rang, mais il en faut ASSEZ', () => {
+    // un sceau tombé avec un autre rang paie quand même (v1.50)
+    const other = addSeals(emptySeals(), 'champion', 2, 99);
+    expect(ascensionBlocker(pret(), { ...ctx, seals: other })).toBeNull();
+    const need = ascensionCost(1).seals;
+    const short = addSeals(emptySeals(), 'champion', 0, need - 1);
+    expect(ascensionBlocker(pret(), { ...ctx, seals: short })).toBe('seals');
+    const just = addSeals(emptySeals(), 'champion', 0, need);
+    expect(ascensionBlocker(pret(), { ...ctx, seals: just })).toBeNull();
+    // les deux familles restent distinctes
     const gear = addSeals(emptySeals(), 'gear', 1, 99);
     expect(ascensionBlocker(pret(), { ...ctx, seals: gear })).toBe('seals');
   });
@@ -179,15 +195,13 @@ describe('les sceaux de champion des ruines anciennes (2026-09-27 : plus des fai
 });
 
 describe('🔱 les sceaux à la barre de ressources', () => {
-  it('le total, et le détail par rang du plus bas au plus haut', () => {
+  it('le total, sans rang, par famille', () => {
     let s = addSeals(emptySeals(), 'champion', 2, 3);
     s = addSeals(s, 'champion', 0, 1);
     s = addSeals(s, 'gear', 1, 5);
-    const c = sealsSummary(s, 'champion');
-    expect(c.total).toBe(4);
-    expect(c.detail).toBe(`${CHARACTER_RANKS[0]!.name} 1 · ${CHARACTER_RANKS[2]!.name} 3`);
-    expect(sealsSummary(s, 'gear').total).toBe(5);
-    expect(sealsSummary(emptySeals(), 'gear')).toEqual({ total: 0, detail: '' });
+    expect(sealsSummary(s, 'champion')).toEqual({ total: 4 });
+    expect(sealsSummary(s, 'gear')).toEqual({ total: 5 });
+    expect(sealsSummary(emptySeals(), 'gear')).toEqual({ total: 0 });
   });
 });
 

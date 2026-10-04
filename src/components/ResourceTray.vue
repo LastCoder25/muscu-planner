@@ -103,7 +103,7 @@ const chips = computed<Chip[]>(() => {
       ico: '🔱',
       cls: 'seals',
       value: sc.total,
-      title: `Sceaux de champion — ascension d’un champion (ruines anciennes) : ${sc.detail || 'aucun pour l’instant'}`,
+      title: `Sceaux de champion : ${fr(sc.total)} — ascension d’un champion (ruines anciennes)`,
       main: false,
     },
     {
@@ -111,7 +111,7 @@ const chips = computed<Chip[]>(() => {
       ico: '⚜️',
       cls: 'seals seals-gear',
       value: sg.total,
-      title: `Sceaux d’objet — ascension d’un objet de champion (ruines anciennes) : ${sg.detail || 'aucun pour l’instant'}`,
+      title: `Sceaux d’objet : ${fr(sg.total)} — ascension d’un objet de champion (ruines anciennes)`,
       main: false,
     },
     {
