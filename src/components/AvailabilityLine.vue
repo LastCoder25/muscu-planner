@@ -39,34 +39,20 @@
         >/{{ r.total }}</span
       >
     </span>
-    <!-- 🛡️ Les miliciens DISPONIBLES sur l'île (à la base, prêts à partir) / tous ceux qui
-         existent sur l'île, comme les champions (v1.46.1, demandé : « voir les miliciens dispos
-         sur la nouvelle île »). Aucun dispo : le temps avant le prochain ; sinon le plafond. -->
-    <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.home }"
-      ><span class="av-ico"><MilitiaPortrait /></span><b>{{ mil.home }}</b
-      >/{{ mil.total
-      }}<span v-if="!mil.home && milNextMs" class="av-cap"
-        >·+1 dans {{ formatDuration(milNextMs) }}</span
-      ><span v-else class="av-cap">·max {{ mil.cap }}</span></span
-    >
     <span v-if="interactive" class="av-go">›</span>
   </component>
 </template>
 
 <script setup lang="ts">
-import { islandMilitiaOf } from '@/lib/controlPoints';
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
 import { advAtInfirmary, advAvailable, rankAvailability, type Adventurer } from '@/lib/adventurers';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
-import { militiaCount, nextMilitiaMs } from '@/lib/militia';
-import { buildingLevel } from '@/lib/buildings';
 import { heroAttackReturnAt } from '@/lib/combinedAttack';
 import { readyGarrisons } from '@/lib/controlRoutes';
 import { plannedTransferIds } from '@/lib/plannedMoves';
-import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{
   /** L'horloge de l'écran hôte (il en a déjà une, on ne double pas le tick). */
@@ -141,29 +127,6 @@ const rankRows = computed(() =>
   ),
 );
 
-/** 🛡️ Miliciens de l'île : à la base (dispos), postés (ou en route), total, plafond. */
-const barracks = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks'));
-const mil = computed(() =>
-  militiaCount(
-    char.row?.base?.militia,
-    char.row?.expedition_map,
-    barracks.value,
-    islandMilitiaOf(char.row?.expedition_map),
-  ),
-);
-/** ⏳ Le prochain milicien de la Caserne (0 si pleine ou absente) — la règle de production. */
-const milNextMs = computed(() => {
-  const s = char.row?.base?.militia;
-  if (!s) return 0;
-  return nextMilitiaMs(
-    s,
-    barracks.value,
-    mil.value.posted,
-    props.now,
-    islandMilitiaOf(char.row?.expedition_map),
-  );
-});
-
 /** ⛵ L'infobulle d'une traversée : vers quelle île, départ (s'il n'a pas eu lieu), arrivée. */
 const seaTitle = computed(() => {
   const c = char.row?.expedition_map?.crossing;
@@ -189,11 +152,6 @@ const title = computed(() => {
   if (d.value.champHurt) parts.push(`${d.value.champHurt} champion(s) à l'infirmerie`);
   if (d.value.champTotal)
     parts.push(`${d.value.champFree} champion(s) disponible(s) sur ${d.value.champTotal}`);
-  if (mil.value.total || mil.value.cap)
-    parts.push(
-      `${mil.value.home} milicien(s) disponible(s) sur l'île, ${mil.value.posted} posté(s) — ${mil.value.cap} au plus avec ta Caserne` +
-        (milNextMs.value ? `, le prochain dans ${formatDuration(milNextMs.value)}` : ''),
-    );
   return parts.join(' · ');
 });
 </script>
@@ -246,13 +204,6 @@ const title = computed(() => {
   color: var(--d4, #ff6a45);
 }
 .av-cell.none {
-  color: var(--dim);
-}
-/* Le plafond de la Caserne, en retrait : c'est un repère, pas un effectif. */
-.av-cap {
-  margin-left: 2px;
-  font-size: 11px;
-  font-weight: 600;
   color: var(--dim);
 }
 /* Par rang (demandé : « tout sur la même ligne et centré ») : héros, infirmerie, rangs et
