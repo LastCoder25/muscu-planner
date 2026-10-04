@@ -7,6 +7,7 @@ import {
   FORTRESS_ID,
   NEST,
   nestLevel,
+  nestThreshold,
   heldNests,
   takeObjective,
   nestSpot,
@@ -16,6 +17,7 @@ import {
   takeFortress,
 } from '@/lib/islandConquest';
 import { onIsland } from '@/lib/islandTerrain';
+import { FIELD_ARMY, syncFieldArmies } from '@/lib/fieldArmy';
 import { islandView } from '@/lib/islandShape';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
@@ -36,17 +38,32 @@ function sorties(m: ExpeditionMap, n: number, t0 = NOW + 1000): ExpeditionMap {
   return tick({ ...m, departures: [...(m.departures ?? []), ...dep] }, t0 + n * 1000);
 }
 
-describe('🪺 un nid apparaît toutes les N sorties sur la carte', () => {
-  it('jamais avant la N-ième sortie, puis un par paquet de N', () => {
+describe('🪺 un nid apparaît toutes les 3 à 5 sorties sur la carte', () => {
+  it('le seuil est tiré entre 3 et 5, et les trois valeurs sortent', () => {
+    const seen = new Set<number>();
+    for (let n = 0; n < 200; n++) {
+      const k = nestThreshold(5, n);
+      expect(k).toBeGreaterThanOrEqual(NEST.departuresMin);
+      expect(k).toBeLessThanOrEqual(NEST.departuresMax);
+      seen.add(k);
+    }
+    expect([...seen].sort()).toEqual([3, 4, 5]);
+  });
+  it('jamais avant le seuil, toujours dès qu’il est atteint', () => {
     const m = islandMap(2);
     expect(nests(m)).toHaveLength(3);
-    expect(nests(sorties(m, NEST.everyDepartures - 1))).toHaveLength(3);
-    expect(nests(sorties(m, NEST.everyDepartures))).toHaveLength(4);
-    expect(nests(sorties(m, 2 * NEST.everyDepartures + 1))).toHaveLength(5);
+    const k = nestThreshold(m.seed, 0);
+    expect(nests(sorties(m, k - 1))).toHaveLength(3);
+    expect(nests(sorties(m, k))).toHaveLength(4);
+    // Au moins un nid par paquet de 5, au plus un par paquet de 3.
+    const born = nests(sorties(m, 30)).length - 3;
+    expect(born).toBeGreaterThanOrEqual(30 / NEST.departuresMax);
+    expect(born).toBeLessThanOrEqual(30 / NEST.departuresMin);
   });
   it('le compteur se garde d’un tick à l’autre', () => {
     let m = islandMap(2);
-    m = sorties(m, NEST.everyDepartures - 1);
+    const k = nestThreshold(m.seed, 0);
+    m = sorties(m, k - 1);
     m = sorties(m, 1, NOW + DAY);
     expect(nests(m)).toHaveLength(4);
   });
@@ -62,13 +79,13 @@ describe('🪺 un nid apparaît toutes les N sorties sur la carte', () => {
     expect(nests(tick(m, NOW + 1000))).toHaveLength(3);
   });
   it('6 nids nés au plus ; la même carte au tick suivant', () => {
-    const m = sorties(islandMap(2), 40 * NEST.everyDepartures);
+    const m = sorties(islandMap(2), 40 * NEST.departuresMax);
     expect(nests(m)).toHaveLength(3 + NEST.cap);
     expect(tick(m, NOW + 999 * 1000)).toBe(m);
   });
   it('les nids naissent sur la terre, à 10 unités au moins des autres lieux fixes', () => {
     for (const seed of [1, 5, 9, 13]) {
-      const m = sorties(islandMap(2, seed), 40 * NEST.everyDepartures);
+      const m = sorties(islandMap(2, seed), 40 * NEST.departuresMax);
       const fixed = m.pois.filter((p) => p.control);
       for (const n of nests(m)) {
         expect(onIsland(2, n.x, n.y, 6), n.id).toBe(true);
@@ -79,12 +96,12 @@ describe('🪺 un nid apparaît toutes les N sorties sur la carte', () => {
     }
   });
   it('rien hors de l’île 2', () => {
-    const m = sorties(islandMap(1), 40 * NEST.everyDepartures);
+    const m = sorties(islandMap(1), 40 * NEST.departuresMax);
     expect(m.archipel!.nests ?? []).toEqual([]);
   });
 });
 
-describe('🪺 un nid qui apparaît attaque le lieu tenu le plus proche', () => {
+describe('🪺 un nid qui apparaît envoie son armée sur le lieu tenu le plus proche', () => {
   /** L'île 2 avec un lieu fixe tenu, attaqué dans 10 jours. */
   function heldMap(): { m: ExpeditionMap; id: string } {
     const m = islandMap(2);
@@ -107,12 +124,86 @@ describe('🪺 un nid qui apparaît attaque le lieu tenu le plus proche', () => 
     };
     return { m: held, id: p.id };
   }
-  it('sa reprise est avancée à la naissance du nid + strikeMs', () => {
+  /** Le nid né sur la k-ième sortie, et le point visé. */
+  function strike() {
     const { m, id } = heldMap();
     const t0 = NOW + 1000;
-    const after = sorties(m, NEST.everyDepartures, t0);
-    const born = t0 + (NEST.everyDepartures - 1) * 1000;
-    expect(after.pois.find((p) => p.id === id)!.control!.attackAt).toBe(born + NEST.strikeMs);
+    const k = nestThreshold(m.seed, 0);
+    const after = sorties(m, k, t0);
+    const born = t0 + (k - 1) * 1000;
+    const nest = after.archipel!.nests![0]!;
+    const p = after.pois.find((q) => q.id === id)!;
+    const march = (Math.hypot(p.x - nest.x, p.y - nest.y) / FIELD_ARMY.speedPerHour) * 3_600_000;
+    return { after, id, born, nest, p, march };
+  }
+  it('l’armée part du nid après une attente tirée au hasard, puis marche jusqu’au lieu', () => {
+    const { born, nest, p, march } = strike();
+    const at = p.control!.attackAt!;
+    expect(at).toBeGreaterThanOrEqual(born + NEST.strikeWaitMinMs + march - 1);
+    expect(at).toBeLessThanOrEqual(born + NEST.strikeWaitMaxMs + march + 1);
+    expect(p.control!.raidFrom).toEqual({ x: nest.x, y: nest.y, at });
+  });
+  it('l’attente change d’un nid à l’autre', () => {
+    const waits = new Set<number>();
+    for (const seed of [1, 5, 9, 13, 21]) {
+      const m = islandMap(2, seed);
+      const p = m.pois.find((q) => q.control && !q.id.startsWith('isl_'))!;
+      const held = {
+        ...m,
+        pois: m.pois.map((q) =>
+          q.id === p.id
+            ? {
+                ...q,
+                control: {
+                  ...q.control!,
+                  owner: 'player' as const,
+                  garrison: ['a'],
+                  attackAt: NOW + 10 * DAY,
+                },
+              }
+            : q,
+        ),
+      };
+      const after = sorties(held, NEST.departuresMax);
+      const nest = after.archipel!.nests![0]!;
+      const q = after.pois.find((x) => x.id === p.id)!;
+      const march = (Math.hypot(q.x - nest.x, q.y - nest.y) / FIELD_ARMY.speedPerHour) * 3_600_000;
+      waits.add(Math.round((q.control!.attackAt! - nest.at - march) / 60_000));
+    }
+    expect(waits.size).toBeGreaterThan(1);
+  });
+  it('on la voit venir DU NID dans le rayon de détection, interceptable', () => {
+    const { after, id, nest, p } = strike();
+    const at = p.control!.attackAt!;
+    const map = syncFieldArmies(after, {
+      raid: null,
+      detectR: 1000,
+      reach: 1000,
+      now: at - 60_000,
+      playerLevel: LV,
+    });
+    const army = map.pois.find((q) => q.type === 'warband' && q.army?.targetId === id)!;
+    expect(army).toBeTruthy();
+    expect(army.from).toEqual({ x: nest.x, y: nest.y });
+  });
+  it('l’attaque suivante, ordinaire, ne part plus du nid', () => {
+    const { after, id, nest } = strike();
+    const later = NOW + 20 * DAY;
+    const next: ExpeditionMap = {
+      ...after,
+      pois: after.pois.map((q) =>
+        q.id === id ? { ...q, control: { ...q.control!, attackAt: later } } : q,
+      ),
+    };
+    const map = syncFieldArmies(next, {
+      raid: null,
+      detectR: 1000,
+      reach: 1000,
+      now: later - 60_000,
+      playerLevel: LV,
+    });
+    const army = map.pois.find((q) => q.type === 'warband' && q.army?.targetId === id)!;
+    expect(army.from).not.toEqual({ x: nest.x, y: nest.y });
   });
   it('une attaque déjà plus proche n’est jamais retardée', () => {
     const { m, id } = heldMap();
@@ -122,15 +213,17 @@ describe('🪺 un nid qui apparaît attaque le lieu tenu le plus proche', () => 
         q.id === id ? { ...q, control: { ...q.control!, attackAt: NOW + 2000 } } : q,
       ),
     };
-    const after = sorties(soon, NEST.everyDepartures);
-    expect(after.pois.find((p) => p.id === id)!.control!.attackAt).toBe(NOW + 2000);
+    const after = sorties(soon, NEST.departuresMax);
+    const c = after.pois.find((p) => p.id === id)!.control!;
+    expect(c.attackAt).toBe(NOW + 2000);
+    expect(c.raidFrom).toBeUndefined();
   });
 });
 
 describe('🪺 seuls les nids d’origine et la forteresse comptent pour pacifier', () => {
   it('pacifiée malgré les nids nés : ils disparaissent et n’apparaissent plus', () => {
-    let m = sorties(islandMap(2), 3 * NEST.everyDepartures);
-    expect(nests(m)).toHaveLength(6);
+    let m = sorties(islandMap(2), 3 * NEST.departuresMax);
+    expect(nests(m).length).toBeGreaterThanOrEqual(6);
     expect(islandConquest(m)!.objectivesTotal).toBe(3);
     for (const id of ['isl_obj_0', 'isl_obj_1', 'isl_obj_2'])
       m = razeIslandTarget(m, id, NOW + DAY);
@@ -138,7 +231,7 @@ describe('🪺 seuls les nids d’origine et la forteresse comptent pour pacifie
     expect(islandPacified(m)).toBe(true);
     expect(nests(m)).toHaveLength(0);
     const born = m.archipel!.nests!.length;
-    m = sorties(m, 3 * NEST.everyDepartures, NOW + 2 * DAY);
+    m = sorties(m, 3 * NEST.departuresMax, NOW + 2 * DAY);
     expect(nests(m)).toHaveLength(0);
     // Plus aucune apparition, même invisible.
     expect(m.archipel!.nests!).toHaveLength(born);
