@@ -19,7 +19,7 @@
  */
 import { formatDuration } from './duration';
 import { activeIsland, islandPacified } from './archipelago';
-import { islandPoint, islandPort, islandPortSpan } from './islandShape';
+import { islandDefenseLine, islandPoint, islandPort, islandPortSpan } from './islandShape';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -1084,15 +1084,32 @@ function controlLevel(
   return Math.min(pl, riftLevelFor(rng, pl, [pl + 1], false, floorLevel));
 }
 
-/** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. Sur une île, à
- *  `CONTROL.islandFrac` de la terre utile à son angle (`islandPoint`). */
+/** 🛡️ Les places des points fixes de l'île `id`, dans l'ordre de ses types : la LIGNE DE
+ *  DÉFENSE entre le point de départ et la forteresse (`islandDefenseLine`, demandé le
+ *  2026-10-04 : ils étaient posés à un angle tiré autour du centre, sans rapport avec l'axe). */
+export function islandControlSpots(id: number): { kind: ControlKind; x: number; y: number }[] {
+  const kinds = ISLAND_KINDS[id] ?? [];
+  const line = islandDefenseLine(id, kinds.length);
+  return kinds.map((kind, i) => ({ kind, ...line[i]! }));
+}
+
+/** Où se pose un point : FIXE. Sur une île, sa place sur la ligne de défense ; un type que
+ *  l'île n'a pas (retiré mais encore tenu) garde l'ancienne règle, à `CONTROL.islandFrac` de
+ *  la terre utile à son angle. Ailleurs, dérivé de la graine de la carte et du type. */
 export function controlSpot(
   map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
   kind: ControlKind,
 ): Pick<Poi, 'x' | 'y' | 'distNorm'> {
   const id = map.archipel?.island;
-  if (id !== undefined)
+  if (id !== undefined) {
+    const s = islandControlSpots(id).find((c) => c.kind === kind);
+    if (s) {
+      const x = Math.round(s.x);
+      const y = Math.round(s.y);
+      return { x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
+    }
     return spotAt(map, CONTROL_QUARTER[kind], (ang) => islandPoint(id, ang, CONTROL.islandFrac));
+  }
   // Chaque point a son angle, en quarts de tour à partir de l'angle de la MINE (tiré comme
   // avant : une mine déjà posée ne bouge pas). ⚠️ UNE TABLE, pas l'index dans `kinds` : un
   // cinquième type divisait le tour en cinq, et le nouveau point tombait à 18° d'un point

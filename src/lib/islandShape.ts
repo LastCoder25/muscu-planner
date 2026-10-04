@@ -267,3 +267,87 @@ export function islandView(id: number, half: number): { x: number; y: number; si
   const c = islandCenter(id);
   return { x: c.x - half, y: c.y - half, size: 2 * half };
 }
+
+/** 🏰 La forteresse de l'île `id` : sur le cap, à `FORTRESS_INSET` de la côte. ⚠️ MÊME règle
+ *  que `islandTerrain` (qui la dessine) : le placement des lieux la lit ici sans importer le
+ *  décor. */
+export const FORTRESS_INSET = 9;
+export function islandFortressAt(id: number): { x: number; y: number } {
+  const c = islandCenter(id);
+  const t = islandShape(id).cape;
+  const r = islandRadiusAt(id, t) - FORTRESS_INSET;
+  return { x: c.x + Math.cos(t) * r, y: c.y + Math.sin(t) * r };
+}
+
+/** 🛡️ La LIGNE DE DÉFENSE (demandé : « les lieux fixes entre le village de départ et la
+ *  forteresse, comme une ligne de défense ») : à cette part du chemin départ → forteresse… */
+export const DEFENSE_LINE_T = 0.45;
+/** …et étalée en travers jusqu'à cette part de la terre de chaque côté. */
+export const DEFENSE_LINE_SPREAD = 0.75;
+
+/** Les `n` places de la ligne de défense de l'île `id`, en travers de l'axe départ (la ville)
+ *  → forteresse, régulièrement espacées d'un bord de la terre à l'autre. */
+export function islandDefenseLine(id: number, n: number): { x: number; y: number }[] {
+  if (n <= 0) return [];
+  const f = islandFortressAt(id);
+  const dx = f.x - TOWN;
+  const dy = f.y - TOWN;
+  const len = Math.hypot(dx, dy) || 1;
+  const mx = TOWN + dx * DEFENSE_LINE_T;
+  const my = TOWN + dy * DEFENSE_LINE_T;
+  // La perpendiculaire à l'axe.
+  const vx = -dy / len;
+  const vy = dx / len;
+  const reach = (sign: number) => {
+    let d = 0;
+    while (d < 200 && onIsland(id, mx + sign * vx * (d + 1), my + sign * vy * (d + 1), LAND_MARGIN))
+      d += 1;
+    return d;
+  };
+  if (n === 1) return [{ x: mx, y: my }];
+  const lo = -reach(-1) * DEFENSE_LINE_SPREAD;
+  const hi = reach(1) * DEFENSE_LINE_SPREAD;
+  return Array.from({ length: n }, (_, i) => {
+    const s = lo + ((hi - lo) * i) / (n - 1);
+    return { x: mx + vx * s, y: my + vy * s };
+  });
+}
+
+/** 🎯 Pas angulaire des places candidates d'`islandScatter`. */
+const SCATTER_STEP = Math.PI / 72;
+const scatterCache = new Map<string, { x: number; y: number }[]>();
+/**
+ * 🎯 `n` places DISPERSÉES sur l'île (demandé : « les objectifs répartis sur l'île pour
+ * attaquer de partout ») : à la part `frac` de la terre utile, chacune la plus éloignée possible
+ * de tout ce qui est déjà posé (`taken` : la ville, la forteresse, la ligne de défense) et des
+ * précédentes — un tirage glouton du plus grand écart. Déterministe, en cache.
+ */
+export function islandScatter(
+  id: number,
+  n: number,
+  frac: number,
+  taken: readonly { x: number; y: number }[],
+): { x: number; y: number }[] {
+  const key = `${id}:${n}:${frac}:${taken.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(';')}`;
+  const hit = scatterCache.get(key);
+  if (hit) return hit;
+  const cands: { x: number; y: number }[] = [];
+  for (let t = 0; t < Math.PI * 2; t += SCATTER_STEP) cands.push(islandPoint(id, t, frac));
+  const placed: { x: number; y: number }[] = [];
+  const others = [...taken];
+  for (let i = 0; i < n; i++) {
+    let best = cands[0]!;
+    let bestGap = -1;
+    for (const c of cands) {
+      const g = Math.min(...others.map((p) => Math.hypot(c.x - p.x, c.y - p.y)));
+      if (g > bestGap) {
+        bestGap = g;
+        best = c;
+      }
+    }
+    placed.push(best);
+    others.push(best);
+  }
+  scatterCache.set(key, placed);
+  return placed;
+}

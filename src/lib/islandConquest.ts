@@ -31,12 +31,13 @@ import {
   bankAt,
   controlSpot,
   fortMultOf,
+  islandControlSpots,
   mapHarass,
   retakeDelayMs,
   seatsOf,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
-import { islandPoint } from './islandShape';
+import { islandPoint, islandScatter } from './islandShape';
 import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -315,20 +316,21 @@ function fortressSideSpot(id: number, frac: number, off: number) {
   return islandSpot(id, islandTerrain(id).fortress.angle + off, frac);
 }
 
-/** 🏝️ La place de l'objectif `i` de l'île `id` : du côté de la forteresse, vers la côte. */
+/** 🏝️ La place de l'objectif `i` de l'île `id` : DISPERSÉS sur toute l'île (demandé le
+ *  2026-10-04 : « répartis sur l'île pour attaquer de partout » ; ils étaient tous groupés côté
+ *  forteresse). Chacun aussi loin que possible de la ville, de la forteresse, de la ligne de
+ *  défense des points fixes et des autres objectifs (`islandScatter`). */
 export function objectiveSpot(id: number, i: number): { x: number; y: number; d: number } {
   const isl = ISLANDS.find((x) => x.id === id);
-  const off = objectiveAngles(isl?.objectives ?? 0)[i] ?? 0;
-  // ⚠️ Pas collé à la forteresse : sur une île où le cap est étroit, l'objectif d'en face
-  // tombait à 9 unités d'elle. On le recule vers l'intérieur jusqu'à 14 unités.
-  const f = islandTerrain(id).fortress;
-  let frac = ISLAND_CONQUEST.objectiveFrac;
-  let s = fortressSideSpot(id, frac, off);
-  while (frac > 0.3 && Math.hypot(s.x - f.x, s.y - f.y) < 14) {
-    frac -= 0.04;
-    s = fortressSideSpot(id, frac, off);
-  }
-  return s;
+  const p =
+    islandScatter(id, Math.max(1, isl?.objectives ?? 0), ISLAND_CONQUEST.objectiveFrac, [
+      EXPE.town,
+      islandTerrain(id).fortress,
+      ...islandControlSpots(id),
+    ])[i] ?? islandPoint(id, 0, ISLAND_CONQUEST.objectiveFrac);
+  const x = Math.round(p.x);
+  const y = Math.round(p.y);
+  return { x, y, d: Math.hypot(x - EXPE.town.x, y - EXPE.town.y) };
 }
 
 /** 🕊️ Le SOCLE d'une île (règle 10) : ce qui produit sur toutes les îles. */
