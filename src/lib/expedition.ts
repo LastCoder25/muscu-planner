@@ -145,6 +145,9 @@ export interface ControlState {
    *  l'utilisateur, 2026-10-04 : d'autres peuvent naître, une garnison n'y aurait aucun sens).
    *  Pris, il quitte la carte ; personne n'y reste (`holdSeats` = 0). */
   razes?: boolean;
+  /** 🪺 D'où part l'armée de la reprise prévue à `at` (un nid qui vient d'apparaître) : la
+   *  carte la fait marcher de là (`syncFieldArmies`). Ignoré pour toute autre échéance. */
+  raidFrom?: { x: number; y: number; at: number };
   /** 🧝 Le héros y est POSTÉ (étape 6 bis : n'importe quel lieu tenu, la forteresse comprise) —
    *  il défend la place, n'est plus libre pour autre chose et se rappelle à la base. */
   hero?: boolean;

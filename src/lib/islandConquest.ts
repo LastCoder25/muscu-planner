@@ -38,6 +38,7 @@ import {
   seatsOf,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
+import { FIELD_ARMY } from './fieldArmy';
 import { islandPoint, islandScatter } from './islandShape';
 import { isMilitiaId } from './militia';
 import {
@@ -81,11 +82,14 @@ export const ISLAND_CONQUEST = {
  * 🪺 LES NIDS DE L'ÎLE 2 (décisions de l'utilisateur, 2026-10-04 ; remplacent les pontes du
  * 2026-10-02) :
  * - les nids APPARAISSENT sur la carte tant que l'île n'est pas pacifiée — ils ne pondent plus
- *   (`spawnNests`). Pas de durée : **un nid toutes les `everyDepartures` sorties sur la carte**
+ *   (`spawnNests`). Pas de durée : **un nid toutes les 3 à 5 sorties sur la carte** (tiré à
+ *   chaque nid, `nestThreshold`)
  *   (chaque héros ou équipe envoyé compte, `ExpeditionMap.departures`) — qui joue beaucoup en
  *   revoit souvent, qui ne sort pas n'en voit plus ; 6 nids nés au plus en même temps ;
  * - **un nid qui apparaît ATTAQUE** : il avance la reprise du lieu tenu le plus proche à
- *   `strikeMs` après sa naissance (la bataille devient imminente, de quoi envoyer un renfort) ;
+ *   l'armée part DU NID après une attente tirée au hasard (`strikeWaitMinMs`..`Max`), puis marche
+ *   jusqu'au lieu (`FIELD_ARMY.speedPerHour`) : on la voit arriver dans le rayon de la Tour et on
+ *   peut l'intercepter, comme toute reprise (`ControlState.raidFrom`, lu par `syncFieldArmies`) ;
  * - un nid pris est ABATTU, jamais tenu (`ControlState.razes`) ;
  * - leur RANG est autour de celui du joueur (`nestLevel`) — ils progressent avec lui ;
  * - seuls les 3 nids d'origine et la forteresse comptent pour pacifier : les nids nés ne
@@ -94,10 +98,12 @@ export const ISLAND_CONQUEST = {
  */
 export const NEST = {
   islands: new Set([2]) as ReadonlySet<number>,
-  /** Un nid apparaît toutes les `everyDepartures` sorties sur la carte. */
-  everyDepartures: 4,
+  /** Un nid apparaît toutes les N sorties sur la carte, N tiré entre ces bornes à chaque nid. */
+  departuresMin: 3,
+  departuresMax: 5,
   /** Le délai entre l'apparition d'un nid et son attaque sur le lieu tenu le plus proche. */
-  strikeMs: 2 * 3600_000,
+  strikeWaitMinMs: 3600_000,
+  strikeWaitMaxMs: 3 * 3600_000,
   /** L'écart de rang de chaque nid à celui du joueur, par index (le premier à son rang). */
   rankOffsets: [0, -1, 1] as readonly number[],
   cap: 6,
@@ -256,7 +262,7 @@ export function nestSpot(
 
 /**
  * 🪺 LES APPARITIONS (`NEST`) : chaque sortie sur la carte depuis la dernière lue
- * (`archipel.nestFrom`) charge le compteur (`archipel.nestCharge`) ; à `everyDepartures`, un
+ * (`archipel.nestFrom`) charge le compteur (`archipel.nestCharge`) ; à `nestThreshold`, un
  * nid apparaît À L'HEURE DE CETTE SORTIE et attaque le lieu tenu le plus proche
  * (`nestStrike`) — tant que l'île n'est pas pacifiée et qu'il y a moins de `NEST.cap` nids nés
  * debout (au plafond, l'apparition est perdue). ⚠️ À la première lecture, les sorties passées
@@ -279,13 +285,13 @@ export function spawnNests(map: ExpeditionMap, now: number): ExpeditionMap {
   let pois = map.pois;
   let charge = a.nestCharge ?? 0;
   for (const t of fresh) {
-    if (++charge < NEST.everyDepartures) continue;
+    if (++charge < nestThreshold(map.seed, nests.length)) continue;
     charge = 0;
     const standing = nests.filter((n) => !gone.has(objectiveIdOf(n.i))).length;
     const spot = standing < NEST.cap ? nestSpot({ pois }, isl.id, nests) : null;
     if (!spot) continue;
     nests.push({ i: isl.objectives + nests.length, at: t, ...spot });
-    pois = nestStrike(pois, spot, t);
+    pois = nestStrike(pois, spot, t, map.seed);
   }
   return {
     ...map,
@@ -294,9 +300,19 @@ export function spawnNests(map: ExpeditionMap, now: number): ExpeditionMap {
   };
 }
 
-/** 🪺 Le nid né à `at` attaque : la reprise du lieu tenu le plus proche (hors objectifs et
- *  forteresse) est avancée à `at + NEST.strikeMs`, jamais retardée. Rien si on ne tient rien. */
-function nestStrike(pois: Poi[], from: { x: number; y: number }, at: number): Poi[] {
+/** 🪺 Combien de sorties avant le nid d'après le `n`-ième : entre `departuresMin` et
+ *  `departuresMax`, tiré sur la carte et le rang du nid (déterministe). */
+export function nestThreshold(seed: number, n: number): number {
+  const r = mulberry32((seedOf(`${seed}:nestEvery:${n}`) ^ 0x2f6b3a91) >>> 0 || 1)();
+  const span = NEST.departuresMax - NEST.departuresMin + 1;
+  return NEST.departuresMin + Math.min(span - 1, Math.floor(r * span));
+}
+
+/** 🪺 Le nid né à `at` attaque le lieu tenu le plus proche (hors objectifs et forteresse) :
+ *  son armée se forme pendant une attente tirée au hasard, puis MARCHE depuis le nid
+ *  (`FIELD_ARMY.speedPerHour`). La reprise est avancée à son arrivée, jamais retardée ; le
+ *  point garde d'où elle part (`raidFrom`) pour qu'on la voie venir. Rien si on ne tient rien. */
+function nestStrike(pois: Poi[], from: { x: number; y: number }, at: number, seed: number): Poi[] {
   const held = pois.filter(
     (p) =>
       p.control?.owner === 'player' &&
@@ -309,10 +325,14 @@ function nestStrike(pois: Poi[], from: { x: number; y: number }, at: number): Po
       ? p
       : best,
   );
-  const strike = at + NEST.strikeMs;
+  const r = mulberry32((seedOf(`${seed}:nestStrike:${at}`) ^ 0x51c3e2d7) >>> 0 || 1)();
+  const wait = NEST.strikeWaitMinMs + r * (NEST.strikeWaitMaxMs - NEST.strikeWaitMinMs);
+  const march = (Math.hypot(t.x - from.x, t.y - from.y) / FIELD_ARMY.speedPerHour) * 3_600_000;
+  const strike = Math.round(at + wait + march);
   if ((t.control!.attackAt ?? Infinity) <= strike) return pois;
+  const raidFrom = { x: from.x, y: from.y, at: strike };
   return pois.map((p) =>
-    p.id === t.id ? { ...p, control: { ...p.control!, attackAt: strike } } : p,
+    p.id === t.id ? { ...p, control: { ...p.control!, attackAt: strike, raidFrom } } : p,
   );
 }
 
@@ -1143,7 +1163,7 @@ export function islandTargetLabel(
         (PILLAGE_ISLANDS.has(isl.id)
           ? ' · tant qu’il tient, ses brigands pillent la réserve non récoltée de ta base et attaquent tes lieux fixes'
           : NEST.islands.has(isl.id)
-            ? ` · ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tant que l’île n’est pas pacifiée, un nouveau nid apparaît toutes les ${NEST.everyDepartures} sorties sur la carte (6 au plus, à un rang autour du tien) et attaque aussitôt ton lieu tenu le plus proche`
+            ? ` · ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tant que l’île n’est pas pacifiée, un nouveau nid apparaît toutes les ${NEST.departuresMin} à ${NEST.departuresMax} sorties sur la carte (6 au plus, à un rang autour du tien) et son armée marche aussitôt sur ton lieu tenu le plus proche — intercepte-la`
             : CURSE.islands.has(isl.id)
               ? ' · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (en moyenne toutes les 72 h, plus souvent avec plusieurs sanctuaires debout)'
               : WARLORD.islands.has(isl.id)
