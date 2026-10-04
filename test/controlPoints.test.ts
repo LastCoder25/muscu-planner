@@ -334,7 +334,7 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     base: null,
     expedition: null,
     parties: [],
-    watchtowerLevel: 0,
+    watchtowerLevel: 0, fortSightMs: () => 0,
     activeDays7: 0,
     playerLevel: 30,
     plunder: null,

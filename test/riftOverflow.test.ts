@@ -193,7 +193,7 @@ describe('⚔️ l’armée d’une faille', () => {
 });
 
 describe('🕳️ le marquage est CONSOMMÉ au tirage', () => {
-  const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
+  const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 };
 
   it('l’armée détectée vient de la faille, et le marquage s’efface', () => {
     const b = markOverflow(readyBase(), [ov({ faction: 'betes' })]);

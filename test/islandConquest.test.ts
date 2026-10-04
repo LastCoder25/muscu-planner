@@ -347,7 +347,7 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
       ] as BaseState['defenses'],
       raid: rollRaid(7, 26, NOW + 4 * H, H, null, null),
     };
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, towerBoost: 0, levelBand: null };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0, towerBoost: 0, levelBand: null };
     expect(advanceBase(base, { ...ctx, pacified: false }, NOW).base.raid).not.toBe(null);
     const r = advanceBase(base, { ...ctx, pacified: true }, NOW);
     expect(r.base.raid).toBe(null);

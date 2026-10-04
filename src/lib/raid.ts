@@ -3242,6 +3242,13 @@ export function islandRaidBand(
   return { min: Math.min(max, rankStartLevel(r)), max };
 }
 
+/** 🎲 La graine du PROCHAIN siège : elle ne dépend que de l'échéance, donc on sait d'où viendra
+ *  l'armée avant de la tirer. ⚠️ SOURCE UNIQUE : le tick de base et la notification « armée
+ *  repérée » (`planPushes`) doivent parler du même siège. */
+export function raidSeedOf(b: Pick<BaseState, 'seed' | 'nextRaidAt'>): number {
+  return (b.seed + Math.floor(b.nextRaidAt / 60_000)) >>> 0 || 1;
+}
+
 export function advanceBase(
   base: BaseState,
   ctx: {
@@ -3257,6 +3264,10 @@ export function advanceBase(
     faction?: RaidFaction | null;
     /** 🏝️ La tranche de niveaux des armées sur l'île active (`islandRaidBand`), `null` hors archipel. */
     levelBand: RaidLevelBand | null;
+    /** 👁️ Le préavis que donnent les lieux fixes tenus sur le siège de cette graine
+     *  (`siegeSightLeadMs`, 0 sans fort sur sa route). ⚠️ REQUIS : l'oublier ferait retomber
+     *  en silence sur le seul préavis de la Tour. */
+    fortSightMs: (seed: number) => number;
   },
   now: number,
 ): BaseTickResult {
@@ -3327,10 +3338,17 @@ export function advanceBase(
     changed = true;
   }
 
-  // Détection : le raid se matérialise quand la Tour le voit venir.
-  const lead = baseLeadMs(scoutLevel(b.defenses), raidIntervalMs(ctx.activeDays7), ctx.towerBoost);
+  // Détection : le raid se matérialise quand la Tour le voit venir — ou plus tôt, quand sa route
+  // passe par le cercle d'un lieu fixe tenu (👁️ le plus long des deux préavis). La graine ne
+  // dépend que de l'échéance : on sait d'où viendra l'armée avant de la tirer.
+  const seed = raidSeedOf(b);
+  const lead = b.raid
+    ? 0
+    : Math.max(
+        baseLeadMs(scoutLevel(b.defenses), raidIntervalMs(ctx.activeDays7), ctx.towerBoost),
+        ctx.fortSightMs(seed),
+      );
   if (!b.raid && now >= b.nextRaidAt - lead) {
-    const seed = (b.seed + Math.floor(b.nextRaidAt / 60_000)) >>> 0 || 1;
     // 🕳️ Le débordement en attente est CONSOMMÉ ici : l'armée qui se met en marche est
     // celle de la faille, et le marquage s'efface. C'est ce qui garantit qu'il ne
     // s'applique qu'UNE fois — sans ça, chaque siège suivant serait renforcé à vie.

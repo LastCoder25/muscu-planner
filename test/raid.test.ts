@@ -777,7 +777,7 @@ describe('cycle de vie', () => {
   it('sans muraille, AUCUNE attaque — le système est opt-in', () => {
     const b = emptyBase(7, 0);
     expect(raidsEnabled(b, 7, 26)).toBe(false);
-    const r = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 10 * 24 * H);
+    const r = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 10 * 24 * H);
     expect(r.detected).toBeNull();
     expect(r.dueRaid).toBeNull();
   });
@@ -785,7 +785,7 @@ describe('cycle de vie', () => {
   it('un joueur inactif n’est pas attaqué, et ne trouve PAS d’arriéré au retour', () => {
     // Règle fondatrice : on ne perd jamais pour ne pas avoir ouvert l'app.
     let b = base(0);
-    const ctx = { playerLevel: 26, activeDays7: 0, globalXp: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 0, globalXp: 0, fortSightMs: () => 0 };
     for (let d = 1; d <= 21; d++) b = advanceBase(b, ctx, d * 24 * H).base;
     const back = advanceBase(b, { ...ctx, activeDays7: 5 }, 22 * 24 * H);
     expect(back.dueRaid).toBeNull(); // rien n'a pu s'accumuler
@@ -799,7 +799,7 @@ describe('cycle de vie', () => {
     expect(baseLeadMs(100, iv, 10)).toBe(Math.round(iv * RAID.scoutLeadIntervalCap));
     const b = base(0);
     b.nextRaidAt = 20 * H;
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, towerBoost: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0, towerBoost: 0 };
     const lead = scoutLeadMs(6, iv);
     const t = b.nextRaidAt - Math.round(lead * 1.25);
     expect(advanceBase(b, ctx, t).detected).toBeNull();
@@ -810,7 +810,7 @@ describe('cycle de vie', () => {
     const now = 0;
     let b = base(now);
     b.nextRaidAt = now + 10 * H;
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 };
     expect(advanceBase(b, ctx, now).detected).toBeNull(); // trop tôt
     const lead = scoutLeadMs(6, raidIntervalMs(ctx.activeDays7));
     const det = advanceBase(b, ctx, b.nextRaidAt - lead + 1);
@@ -823,7 +823,7 @@ describe('cycle de vie', () => {
   it('un seul siège en attente à la fois', () => {
     let b = base(0);
     b.nextRaidAt = 0;
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 };
     b = advanceBase(b, ctx, 0).base;
     const first = b.raid;
     for (let d = 1; d < 10; d++) b = advanceBase(b, ctx, d * 24 * H).base;
@@ -833,13 +833,13 @@ describe('cycle de vie', () => {
   it('la production gelée se dégèle par une SÉANCE, ou toute seule', () => {
     const b = base(0);
     b.freeze = { until: 10 * H, atXp: 500 };
-    const still = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500 }, H);
+    const still = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500, fortSightMs: () => 0 }, H);
     expect(still.base.freeze).not.toBeNull();
     // Une séance de sport (XP en hausse) lève le gel immédiatement…
-    const bySport = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 620 }, H);
+    const bySport = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 620, fortSightMs: () => 0 }, H);
     expect(bySport.base.freeze).toBeNull();
     // …et l'échéance le lève de toute façon : l'app ne réclame jamais d'entraînement.
-    const byTime = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500 }, 11 * H);
+    const byTime = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500, fortSightMs: () => 0 }, 11 * H);
     expect(byTime.base.freeze).toBeNull();
   });
 
@@ -852,7 +852,7 @@ describe('cycle de vie', () => {
       true,
     );
     expect(rep.held).toBe(true);
-    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
+    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 0);
     expect(damage).toEqual({ stockStolen: false, damaged: [], freeze: false });
     expect(nb.freeze).toBeNull();
     expect(nb.raid).toBeNull();
@@ -877,7 +877,7 @@ describe('cycle de vie', () => {
       b,
       raid,
       rep,
-      { activeDays7: 7, globalXp: 0 },
+      { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
       0,
     );
     // Exactement ceux du champ : une seule et même liste, pas deux lectures qui pourraient
@@ -911,7 +911,7 @@ describe('cycle de vie', () => {
     it('la convalescence a déjà couru pendant l’absence', () => {
       const at = 10 * H;
       const { b, raid, rep } = perdu(at);
-      const ctx = { activeDays7: 7, globalXp: 0 };
+      const ctx = { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 };
       // On découvre la bataille DEUX HEURES plus tard.
       const tard = applyRaidOutcome(b, raid, rep, ctx, at + 2 * H).base;
       // …et tout de suite.
@@ -925,7 +925,7 @@ describe('cycle de vie', () => {
       const at = 10 * H;
       const { b, raid, rep } = perdu(at);
       // Bien au-delà de la convalescence la plus longue.
-      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, at + 72 * H).base;
+      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, at + 72 * H).base;
       expect(nb.wound).toBeNull();
       expect(nb.field).toBeNull();
       expect(nb.freeze).toBeNull();
@@ -938,7 +938,7 @@ describe('cycle de vie', () => {
       const at = 10 * H;
       const { b, raid, rep } = perdu(at);
       const now = at + 72 * H;
-      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, now).base;
+      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, now).base;
       expect(nb.nextRaidAt).toBeGreaterThan(now);
     });
   });
@@ -972,7 +972,7 @@ describe('cycle de vie', () => {
       corpses: corpsesFrom(rollRaid(1, 26, 0, 0), { defeated: 2 } as never, 1),
       expiresAt: 5 * H,
     };
-    b = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 6 * H).base;
+    b = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 6 * H).base;
     expect(b.field).toBeNull();
   });
 
@@ -1315,7 +1315,7 @@ describe('blessure du héros', () => {
       held: false,
       heroHome: true,
     };
-    const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0 }, 0);
+    const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 0);
     expect(nb.wound).not.toBeNull();
     // Il part à l'INFIRMERIE : plus de donjon, de faille ni d'expédition le temps qu'il
     // se remette. (Un simple malus de dégâts avait été essayé : sans mordant, puisqu'on
@@ -1327,7 +1327,7 @@ describe('blessure du héros', () => {
     expect(heroAvailable(nb, nb.wound!.until + 1)).toBe(true);
     const healed = advanceBase(
       nb,
-      { playerLevel: 26, activeDays7: 7, globalXp: 0 },
+      { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
       nb.wound!.until,
     );
     expect(healed.base.wound).toBeNull();
@@ -1343,7 +1343,7 @@ describe('blessure du héros', () => {
       true,
     );
     expect(rep.held).toBe(true);
-    const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, 0);
+    const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 0);
     expect(nb.wound).toBeNull();
   });
 
@@ -1454,7 +1454,7 @@ describe('économie de la défense', () => {
     const fin = lance.defenses[0]!.repairUntil!;
     expect(isRepairing(lance.defenses[0], fin - 1)).toBe(true);
     expect(settleRepairs(lance, fin - 1)).toBe(lance); // même objet : rien à écrire
-    const ctx = { playerLevel: 30, activeDays7: 0, globalXp: 0 };
+    const ctx = { playerLevel: 30, activeDays7: 0, globalXp: 0, fortSightMs: () => 0 };
     const tick = advanceBase(lance, ctx, fin);
     expect(tick.changed).toBe(true);
     expect(tick.base.defenses[0]!.damaged).toBeFalsy();

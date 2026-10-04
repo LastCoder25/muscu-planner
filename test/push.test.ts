@@ -36,7 +36,7 @@ const ctx = (over: Partial<PushContext> = {}): PushContext => ({
   base: base(28),
   expedition: null,
   parties: [],
-  watchtowerLevel: 28,
+  watchtowerLevel: 28, fortSightMs: () => 0,
   activeDays7: 4,
   playerLevel: 28,
   plunder: null,

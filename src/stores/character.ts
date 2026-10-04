@@ -472,11 +472,14 @@ import { resolveHarvestParty } from '@/lib/harvestParty';
 import {
   applyFieldHitToBase,
   applyFieldHitToMap,
+  detectionCircles,
   detectRadius,
   islandDetectRadius,
   pendingFieldHits,
   resolveFieldArmy,
   retakeBattle,
+  siegeOrigin,
+  siegeSightLeadMs,
   syncFieldArmies,
 } from '@/lib/fieldArmy';
 import {
@@ -2389,6 +2392,25 @@ export const useCharacterStore = defineStore('character', () => {
       ),
     );
   }
+  /** 👁️ Le préavis que tes lieux fixes tenus donnent sur un siège, graine par graine
+   *  (`siegeSightLeadMs`) : la même carte, la même portée et le même point d'origine que
+   *  l'armée posée par `syncFieldArmies`, sinon elle n'apparaîtrait pas là où le fort l'a vue. */
+  function fortSightOf(cur: CharacterRow): (seed: number) => number {
+    const map = cur.expedition_map;
+    if (!map) return () => 0;
+    const reach = mapReach(map, mapOutpostLevel(map, buildingLevel(cur.buildings, 'outpost')));
+    const circles = detectionCircles(map, 0, reach);
+    if (circles.length < 2) return () => 0; // la base seule : pas de fort
+    const island = map.archipel?.island;
+    return (seed) =>
+      siegeSightLeadMs(
+        seed,
+        circles,
+        reach,
+        island,
+        map.archipel ? siegeOrigin({ seed }, map.pois) : undefined,
+      );
+  }
   /** ⚔️🗼 Les voyages dont l'issue est tirée (groupes, héros) : les chocs contre les armées en
    *  campagne s'y lisent (`pendingFieldHits`). */
   function fieldVoyages(cur: CharacterRow): { midAt: number; outcome: ExpeditionOutcome }[] {
@@ -3201,6 +3223,9 @@ export const useCharacterStore = defineStore('character', () => {
       {
         ...ctx,
         towerBoost: controlDetectBoost(cur.expedition_map, now),
+        // 👁️ Un siège dont la route passe par le cercle d'un de tes forts est repéré dès
+        // son entrée, si c'est plus tôt que le préavis de la Tour.
+        fortSightMs: fortSightOf(cur),
         // 🕊️ Île pacifiée : plus aucun siège. Sinon le point de départ de l'île (la base, ou
         // le village du port) se fait assiéger par les armées de ses points ennemis.
         pacified: islandPacified(cur.expedition_map),
@@ -6476,6 +6501,7 @@ export const useCharacterStore = defineStore('character', () => {
   return {
     swapControlMember,
     detectRadiusOf,
+    fortSightOf,
     transferControlGarrison,
     settleGearRefonte,
     claimWeeklyQuests,

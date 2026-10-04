@@ -5728,6 +5728,7 @@ async function syncPush(force = false) {
       parties: char.partyList.map((g) => ({ id: g.id, ...pushVoyage(g) })),
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       towerBoost: controlDetectBoost(char.row.expedition_map, now),
+      fortSightMs: char.fortSightOf(char.row),
       activeDays7: activeDays7.value,
       pacified: islandPacified(char.row.expedition_map),
       playerLevel: c.value.level.level,

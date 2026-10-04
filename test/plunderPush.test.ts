@@ -95,7 +95,7 @@ describe('🔔 la prochaine caravane pillée', () => {
       base: null,
       expedition: null,
       parties: [],
-      watchtowerLevel: 0,
+      watchtowerLevel: 0, fortSightMs: () => 0,
       activeDays7: 0,
       playerLevel: 30,
       controls: [],

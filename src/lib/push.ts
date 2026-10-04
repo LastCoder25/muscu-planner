@@ -12,7 +12,7 @@
 // faction ou l'effectif offrirait gratuitement ce qu'elle fait payer. Les messages sont
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
-import { baseLeadMs, raidIntervalMs, raidsEnabled, type BaseState } from './raid';
+import { baseLeadMs, raidIntervalMs, raidSeedOf, raidsEnabled, type BaseState } from './raid';
 import { reportIdOf, voyageReports, type ActiveExpedition } from './expedition';
 
 type PushKind =
@@ -74,6 +74,9 @@ export interface PushContext {
   watchtowerLevel: number;
   /** 🗼 Bonus de détection des Tours de guet tenues sur la carte (`controlDetectBoost`). */
   towerBoost: number;
+  /** 👁️ Le préavis des lieux fixes tenus sur le siège de cette graine (`siegeSightLeadMs`) :
+   *  la notification tombe quand l'armée apparaît sur la carte. ⚠️ REQUIS. */
+  fortSightMs: (seed: number) => number;
   /** Jours d'entraînement sur 7 — un siège n'arrive qu'à un joueur actif. */
   activeDays7: number;
   /** 🕊️ Île active pacifiée : aucun siège à annoncer. ⚠️ REQUIS. */
@@ -118,7 +121,12 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
   if (b && raidsEnabled(b, ctx.activeDays7, ctx.playerLevel, ctx.pacified)) {
     // ⚠️ Le préavis est une PART de l’intervalle : sans lui, on programmerait la
     // détection à une heure qui ne correspond à aucun rythme.
-    const lead = baseLeadMs(ctx.watchtowerLevel, raidIntervalMs(ctx.activeDays7), ctx.towerBoost);
+    // 👁️ Le plus long des deux préavis, comme le tick de base (un fort sur sa route la voit
+    // avant la Tour).
+    const lead = Math.max(
+      baseLeadMs(ctx.watchtowerLevel, raidIntervalMs(ctx.activeDays7), ctx.towerBoost),
+      ctx.fortSightMs(raidSeedOf(b)),
+    );
     const detecte = b.nextRaidAt - lead;
     // Le raid n'existe pas encore comme objet — il naît à la détection, quand l'app
     // tourne. On ne connaît donc QUE son heure, et c'est très bien : le message reste

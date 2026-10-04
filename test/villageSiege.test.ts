@@ -64,7 +64,7 @@ describe('🏝️ les sièges sur une île', () => {
     ] as BaseState['defenses'],
     nextRaidAt: NOW,
   });
-  const ctx = { playerLevel: 30, activeDays7: 7, globalXp: 0, towerBoost: 0, levelBand: null };
+  const ctx = { playerLevel: 30, activeDays7: 7, globalXp: 0, fortSightMs: () => 0, towerBoost: 0, levelBand: null };
 
   it('une île non pacifiée lance un siège, de la faction de l’île', () => {
     const r = advanceBase(ready(), { ...ctx, pacified: false, faction: 'mortsvivants' }, NOW);

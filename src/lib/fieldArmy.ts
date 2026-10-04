@@ -265,6 +265,65 @@ export function siegeOrigin(
   return { x: p.x, y: p.y };
 }
 
+/** 🏰 Où se trouve l'armée d'un siège quand il lui reste `dist` à marcher jusqu'à la ville :
+ *  sur sa ligne d'approche, du côté où elle frappera l'enceinte (`raidFirstSector`), ou sur la
+ *  ligne qui part de son point d'origine sur une île. ⚠️ SOURCE UNIQUE de cette ligne : l'armée
+ *  posée sur la carte ET le préavis des forts (`siegeSightLeadMs`) la lisent, sinon un fort
+ *  annoncerait une armée qui n'apparaît pas où il l'a vue. */
+function siegeApproach(
+  seed: number,
+  dist: number,
+  island: number | undefined,
+  origin: { x: number; y: number } | undefined,
+): { x: number; y: number } {
+  const sector = raidFirstSector(seed) / BATTLE.sectors;
+  // 🏝️ Îles 2 à 5 : le port est au bord de l'île, l'armée vient de l'intérieur (un demi-cercle
+  // tourné vers le centre de l'île), jamais de la mer.
+  const c = island === undefined ? null : islandCenter(island);
+  const inland =
+    c && (c.x !== EXPE.town.x || c.y !== EXPE.town.y)
+      ? Math.atan2(c.y - EXPE.town.y, c.x - EXPE.town.x)
+      : null;
+  const ang = inland === null ? sector * 2 * Math.PI : inland + (sector - 0.5) * Math.PI * 0.8;
+  return ashore(
+    (origin && entryPoint(origin, EXPE.town, dist)) || {
+      x: EXPE.town.x + Math.cos(ang) * dist,
+      y: EXPE.town.y + Math.sin(ang) * dist,
+    },
+    EXPE.town,
+    island,
+  );
+}
+
+/**
+ * 👁️ LE PRÉAVIS QUE DONNENT TES LIEUX FIXES sur le prochain siège (demandé, 2026-10-04 : « tout
+ * ce qui passe par un cercle de détection apparaît sur la carte ») : l'armée est repérée à sa
+ * PREMIÈRE entrée dans le cercle d'un lieu fixe tenu sur sa route vers la ville. Rend le temps
+ * (ms) qui sépare cette entrée de son arrivée, 0 si sa route ne croise aucun fort.
+ * Le cercle de la base n'y compte pas : son préavis est celui de la Tour de guet.
+ * ⚠️ Calculé AVANT que le siège ne soit tiré : il ne lit que la graine (d'où vient l'armée) —
+ * c'est ce qui permet au tick de base de le tirer plus tôt quand un fort le voit venir.
+ */
+export function siegeSightLeadMs(
+  seed: number,
+  circles: readonly DetectCircle[],
+  reach: number,
+  island?: number,
+  origin?: { x: number; y: number },
+): number {
+  const T = EXPE.town;
+  // Elle vient du bord de la carte révélée (comme l'armée posée, jamais plus loin).
+  const start = siegeApproach(seed, Math.max(1, reach - 1), island, origin);
+  const full = Math.hypot(start.x - T.x, start.y - T.y);
+  let best = 0;
+  for (const k of circles) {
+    if (k.id === 'base') continue;
+    const t = entryParam(start, T, k, k.r);
+    if (t !== null) best = Math.max(best, (1 - t) * full);
+  }
+  return (best / FIELD_ARMY.speedPerHour) * H;
+}
+
 /** 🏰 L'armée d'un SIÈGE sur la carte, ou `null` tant qu'on ne la voit pas. Elle part du bord
  *  du rayon de détection, du côté où elle frappera l'enceinte (`raidFirstSector`). */
 export function siegeArmyPoi(
@@ -283,23 +342,7 @@ export function siegeArmyPoi(
   const dist = Math.max(1, seenRadius(lead, reach));
   const spawnedAt = raid.arrivesAt - (dist / FIELD_ARMY.speedPerHour) * H;
   if (now < Math.max(spawnedAt, raid.detectedAt)) return null;
-  const sector = raidFirstSector(raid.seed) / BATTLE.sectors;
-  // 🏝️ Îles 2 à 5 : le port est au bord de l'île, l'armée vient de l'intérieur (un demi-cercle
-  // tourné vers le centre de l'île), jamais de la mer.
-  const c = island === undefined ? null : islandCenter(island);
-  const inland =
-    c && (c.x !== EXPE.town.x || c.y !== EXPE.town.y)
-      ? Math.atan2(c.y - EXPE.town.y, c.x - EXPE.town.x)
-      : null;
-  const ang = inland === null ? sector * 2 * Math.PI : inland + (sector - 0.5) * Math.PI * 0.8;
-  const from = ashore(
-    (origin && entryPoint(origin, EXPE.town, dist)) || {
-      x: EXPE.town.x + Math.cos(ang) * dist,
-      y: EXPE.town.y + Math.sin(ang) * dist,
-    },
-    EXPE.town,
-    island,
-  );
+  const from = siegeApproach(raid.seed, dist, island, origin);
   const size = Math.max(FIELD_ARMY.minSize, FIELD_ARMY.siegeSize * (1 - (raid.fieldCut ?? 0)));
   return marching(
     `army_${raid.id}`,
