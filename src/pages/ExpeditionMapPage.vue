@@ -14,6 +14,7 @@
       :map="viewed.map"
       :remote="viewed.remote"
       :reserve="viewed.reserve"
+      :champions="crossInfo.away[viewed.island.id] ?? 0"
       :busy="archBusy"
       @close="viewIsland = null"
       @militia="(e) => moveMilitia({ island: viewed!.island.id, ...e })"
@@ -275,28 +276,8 @@
             @keydown.enter.prevent="baseOpen = true"
             @keydown.space.prevent="baseOpen = true"
           >
-            <MapTown :island="island?.id ?? null" />
-            <!-- ⚫ QUI EST LÀ, en points sous la ville, comme la garnison d'un lieu fixe
-                 (demandé, 2026-10-04) : doré le héros, cyan un champion présent, « +N » au-delà
-                 de la rangée (`townDots`). -->
-            <g v-if="townRow.dots" class="town-dots">
-              <circle
-                v-for="(d, i) in townRow.dots"
-                :key="i"
-                :cx="TOWN.x + (i - (townRow.dots.length - 1) / 2) * TOWN_DOT_GAP"
-                :cy="TOWN.y + townDotsY"
-                :r="TOWN_DOT_R"
-                :class="'d-' + d"
-              />
-              <text
-                v-if="townRow.more"
-                :x="TOWN.x + ((townRow.dots.length + 1) / 2) * TOWN_DOT_GAP + 0.6"
-                :y="TOWN.y + townDotsY + 1"
-                class="town-more"
-              >
-                +{{ townRow.more }}
-              </text>
-            </g>
+            <!-- ⚫ Qui est là, en points sous la ville (`townDots`, dessinés par `MapTown`). -->
+            <MapTown :island="island?.id ?? null" :row="townRow" />
           </g>
 
           <!-- ⚔️ LES ARMÉES AU PREMIER PLAN (signalé : « les icônes des attaques passent sous les
@@ -4190,13 +4171,15 @@ const baseOpen = ref(false);
 /** Les champions À LA BASE : ceux qui peuvent partir (`freeSorted`, la règle de l'envoi). */
 const baseChamps = computed(() => freeSorted.value);
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, puis les champions présents. */
+/** ⚫ La rangée de points sous la ville : le héros s'il est là, les champions présents, puis
+ *  la milice en réserve de l'île (la garnison du village, signalé 2026-10-04). */
 const townRow = computed(() =>
-  townDots(!!char.row && char.heroIsHome(char.row), baseChamps.value.length),
+  townDots(
+    !!char.row && char.heroIsHome(char.row),
+    baseChamps.value.length,
+    char.row?.base?.militia?.home ?? 0,
+  ),
 );
-/** Sous l'enceinte de la base (rayon 12,5), ou sous le marqueur grossi du village du port. */
-const townDotsY = computed(() => (townIsVillage.value ? 10.2 : 14));
-const TOWN_DOT_R = 1;
-const TOWN_DOT_GAP = 2.7;
 const heroBaseStatus = computed(() => {
   if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const map = char.row?.expedition_map;
@@ -6231,28 +6214,6 @@ onUnmounted(() => {
 }
 .town:focus-visible :deep(.town-wall) {
   stroke: var(--accent);
-}
-/* ⚫ Qui est à la base : même langage que la garnison d'un lieu fixe (`MapPoiLayer`). */
-.town-dots {
-  pointer-events: none;
-}
-.town-dots circle {
-  stroke: var(--bg);
-  stroke-width: 0.4;
-}
-.town-dots .d-h {
-  fill: var(--accent); /* le héros, doré */
-}
-.town-dots .d-c {
-  fill: #5fd0ff; /* un champion, le cyan des garnisons */
-}
-.town-more {
-  fill: var(--text);
-  font-size: 2.8px;
-  font-weight: 800;
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 0.6px;
 }
 /* ── Rangée des voyages : une tuile par voyageur, sur UNE ligne ── */
 /* ⚠️ DEUX COLONNES, plus une rangée qui défile (demandé par l'utilisateur). Le défilement

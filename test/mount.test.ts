@@ -160,6 +160,27 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
 
   // 🏝️ Les cinq îles en sélecteur : l'active pleine, les verrouillées sous cadenas ; toucher
   // une île déplie sa fiche.
+  // ⚫ Signalé : « je ne vois pas les points de garnison sous la ville portuaire ». Le village
+  // (île 2+) comme la base (île 1) dessinent la rangée : héros, champions, miliciens.
+  it('MapTown : les points de qui est là, sous la base comme sous le village du port', async () => {
+    const { default: MapTown } = await import('@/components/MapTown.vue');
+    const { townDots } = await import('@/lib/townDots');
+    for (const island of [1, 2]) {
+      let html = '';
+      await mountIt(
+        MapTown,
+        { island, row: townDots(true, 1, 2) },
+        undefined,
+        undefined,
+        '/',
+        (h) => (html = h),
+      );
+      expect(html.match(/class="d-[hcm]"/g)?.join(' ')).toBe(
+        'class="d-h" class="d-c" class="d-m" class="d-m"',
+      );
+    }
+  });
+
   it("ArchipelPanel : les cinq îles, l'active marquée, la fiche au toucher", async () => {
     const { default: ArchipelPanel } = await import('@/components/ArchipelPanel.vue');
     const { islandById } = await import('@/lib/archipelago');

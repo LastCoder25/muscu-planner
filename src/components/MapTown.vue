@@ -40,6 +40,27 @@
       <rect :x="T.x - 1.7" :y="T.y - AP - 2.6" width="3.4" height="4.2" rx="0.5" class="mt-keep" />
       <rect :x="T.x - 1.3" :y="T.y + AP - 1.2" width="2.6" height="2.6" rx="0.8" class="mt-gate" />
     </template>
+    <!-- ⚫ QUI EST LÀ, en points sous la ville, comme la garnison d'un lieu fixe (`townDots`) :
+         doré le héros, cyan un champion, clair un milicien en réserve, « +N » au-delà. Ici et
+         non dans la page : la carte d'une île rangée dessine le même village. -->
+    <g v-if="row?.dots" class="mt-dots">
+      <circle
+        v-for="(d, i) in row.dots"
+        :key="i"
+        :cx="T.x + (i - (row.dots.length - 1) / 2) * DOT_GAP"
+        :cy="T.y + dotsY"
+        :r="DOT_R"
+        :class="'d-' + d"
+      />
+      <text
+        v-if="row.more"
+        :x="T.x + ((row.dots.length + 1) / 2) * DOT_GAP + 0.6"
+        :y="T.y + dotsY + 1"
+        class="mt-more"
+      >
+        +{{ row.more }}
+      </text>
+    </g>
   </g>
 </template>
 
@@ -47,10 +68,13 @@
 import { computed } from 'vue';
 import QgFrame from '@/components/QgFrame.vue';
 import { EXPE } from '@/lib/expedition';
+import type { TownDots } from '@/lib/townDots';
 
 const props = defineProps<{
   /** L'île affichée (`null` = carte ordinaire, hors archipel). */
   island: number | null;
+  /** ⚫ Qui est là, en points sous la ville (héros, champions, miliciens). */
+  row?: TownDots | null;
 }>();
 
 const T = EXPE.town;
@@ -73,9 +97,39 @@ const village = computed(() => props.island !== null && props.island >= 2);
 
 /** Plus gros qu'un lieu fixe ordinaire (×1,15), comme une citadelle (`MapPoiLayer`). */
 const PLACE_SCALE = 1.35;
+
+/** Sous l'enceinte de la base (rayon 12,5), ou sous le marqueur grossi du village du port. */
+const dotsY = computed(() => (village.value ? 10.2 : 14));
+const DOT_R = 1;
+const DOT_GAP = 2.7;
 </script>
 
 <style scoped lang="scss">
+/* ⚫ Même langage que la garnison d'un lieu fixe (`MapPoiLayer`). */
+.mt-dots {
+  pointer-events: none;
+}
+.mt-dots circle {
+  stroke: var(--bg);
+  stroke-width: 0.4;
+}
+.mt-dots .d-h {
+  fill: var(--accent);
+}
+.mt-dots .d-c {
+  fill: #5fd0ff;
+}
+.mt-dots .d-m {
+  fill: var(--text);
+}
+.mt-more {
+  fill: var(--text);
+  font-size: 2.8px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 0.6px;
+}
 .mt-earth {
   fill: #5a4730;
   opacity: 0.9;
