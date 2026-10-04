@@ -246,7 +246,8 @@ describe('🎰 LE ×10 — dix orbes bleues qui s’allument', () => {
       })),
       reduced: false,
     };
-    expect(lotSequenceMs(pire)).toBeLessThan(15_000);
+    // Relevé à 21 s en v1.49.8 (« beaucoup trop rapide ») : ce cas reste rare.
+    expect(lotSequenceMs(pire)).toBeLessThan(21_000);
   });
 
   it('⚠️ UN ×10 SANS OR NE SE « SAUTE » PAS : chaque orbe est scrutée, et ça dure', () => {
@@ -257,7 +258,8 @@ describe('🎰 LE ×10 — dix orbes bleues qui s’allument', () => {
     const tousB = plan(Array(10).fill('B') as PullGrade[]);
     // Sans aucun allumage, la scrutation reste : dix orbes, dix battements.
     // (sans la scrutation on retombait à ~3,8 s : « ça skip les boules internes »).
-    expect(lotSequenceMs(tousB)).toBeGreaterThanOrEqual(6_000);
+    // v1.49.8 : relevé à 10 s — à ~7 s le lot paraissait encore expédié.
+    expect(lotSequenceMs(tousB)).toBeGreaterThanOrEqual(10_000);
     // Un A allumé ajoute exactement son allumage (moins le retournement d'un B).
     const unA = plan(['A', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B']);
     expect(lotSequenceMs(unA) - lotSequenceMs(tousB)).toBe(lotIgniteMs(1) - INVOKE.lotFlipStagger);
@@ -317,12 +319,32 @@ describe('🎨 LES COULEURS DU CERCLE — B partout, A sur les médaillons, S su
     expect(sigilTints(null)).toEqual({ medals: 'B', beads: 'B', nodes: 'B', apex: false });
   });
   it('un tirage sans A ni S laisse le cercle entièrement B', () => {
-    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({ medals: 'B', beads: 'B', nodes: 'B', apex: false });
-    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({ medals: 'B', beads: 'B', nodes: 'B', apex: false });
+    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({
+      medals: 'B',
+      beads: 'B',
+      nodes: 'B',
+      apex: false,
+    });
+    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({
+      medals: 'B',
+      beads: 'B',
+      nodes: 'B',
+      apex: false,
+    });
   });
   it('un A colore les médaillons, un S les boules intérieures — indépendamment', () => {
-    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({ medals: 'A', beads: 'B', nodes: 'B', apex: false });
-    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({ medals: 'B', beads: 'S', nodes: 'B', apex: false });
+    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({
+      medals: 'A',
+      beads: 'B',
+      nodes: 'B',
+      apex: false,
+    });
+    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({
+      medals: 'B',
+      beads: 'S',
+      nodes: 'B',
+      apex: false,
+    });
     const both: PullGrade[] = ['B', 'A', 'B', 'B', 'S', 'B', 'B', 'B', 'B', 'B'];
     expect(sigilTints(lot(both))).toEqual({ medals: 'A', beads: 'S', nodes: 'B', apex: false });
   });
@@ -395,7 +417,10 @@ describe('🖤 ADAMANTIUM — la cérémonie la plus haute', () => {
   it('au ×10 aussi : chaque ADAMANTIUM part bleu et finit rouge', () => {
     for (let s = 1; s <= 200; s++) {
       const grades: PullGrade[] = ['B', 'X', 'S', 'A', 'B', 'B', 'B', 'X', 'B', 'B'];
-      const p = buildLotReveal(grades.map((g) => it0(g)), mulberry32(s));
+      const p = buildLotReveal(
+        grades.map((g) => it0(g)),
+        mulberry32(s),
+      );
       honest(p, grades);
       p.items.forEach((it, i) => {
         if (grades[i] === 'X') expect(it.path[0]).toBe(0);
@@ -404,7 +429,12 @@ describe('🖤 ADAMANTIUM — la cérémonie la plus haute', () => {
   });
   it('au ×10, l’ADAMANTIUM s’allume en DERNIER — c’est lui qu’on attend', () => {
     const grades: PullGrade[] = ['X', 'S', 'A', 'B'];
-    const order = igniteOrder(buildLotReveal(grades.map((g) => it0(g)), mulberry32(3)));
+    const order = igniteOrder(
+      buildLotReveal(
+        grades.map((g) => it0(g)),
+        mulberry32(3),
+      ),
+    );
     expect(order[order.length - 1]).toBe(0);
     expect(lotIgniteMs(3)).toBeGreaterThan(lotIgniteMs(2));
   });

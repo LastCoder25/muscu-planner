@@ -87,7 +87,7 @@
                   >
                   <span
                     class="ivk-front-l font-display"
-                    :class="{ word: GRADE_LABEL[c.grade].length > 1 }"
+                    :class="{ word: GRADE_LABEL[c.grade].length > 1, long: GRADE_LABEL[c.grade].length > 7 }"
                     >{{ GRADE_LABEL[c.grade] }}</span
                   >
                   <span class="ivk-front-n">{{ c.cell.name }}</span>
@@ -107,7 +107,10 @@
               <div
                 ref="gradeEl"
                 class="ivk-grade font-display"
-                :class="['g-' + rv.item.cell.grade, { long: GRADE_LABEL[rv.item.cell.grade].length > 7 }]"
+                :class="[
+                  'g-' + rv.item.cell.grade,
+                  { long: GRADE_LABEL[rv.item.cell.grade].length > 7 },
+                ]"
               >
                 {{ GRADE_LABEL[rv.item.cell.grade] }}
               </div>
@@ -1962,6 +1965,16 @@ onBeforeUnmount(() => {
 .ivk-card.flipped .ivk-card-in {
   transform: rotateY(180deg);
 }
+/* L’instant où la carte se retourne : un éclat de SA couleur, pour qu’on la voie tomber. */
+.ivk-card.flipped .ivk-front {
+  animation: ivk-front-flash 900ms ease-out;
+}
+@keyframes ivk-front-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 34px 10px var(--c);
+  }
+}
 .ivk-face {
   position: absolute;
   inset: 0;
@@ -2015,10 +2028,18 @@ onBeforeUnmount(() => {
     box-shadow: 0 0 22px 4px var(--c);
   }
 }
+/* 🎨 La RARETÉ se lit sur toute la carte (v1.49.8, demandé : « on ne voit pas les couleurs
+   des raretés qu’on tire ») : fond teinté, liseré épais, halo, et le nom sur un bandeau
+   plein — il n’était qu’un mot de 12 px posé sur l’illustration et un liseré de 2 px. */
 .ivk-front {
   transform: rotateY(180deg);
-  background: #120f0b;
-  border: 2px solid var(--c);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--c) 38%, #120f0b),
+    #120f0b 78%
+  );
+  border: 3px solid var(--c);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--c) 55%, transparent);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2042,19 +2063,27 @@ onBeforeUnmount(() => {
 }
 .ivk-front-l {
   position: absolute;
-  left: 3px;
-  top: 1px;
+  left: 0;
+  right: 0;
+  top: 0;
+  text-align: center;
+  padding: 1px 0;
   font-size: max(20px, calc(var(--cw, 70px) * 0.26));
   font-weight: 700;
-  color: var(--c);
-  text-shadow:
-    0 0 6px var(--c),
-    0 2px 0 #000;
+  color: #0d0b08;
+  background: var(--c);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--c) 60%, transparent);
   /* Un NOM de rareté (GOLD, MYTHRIL…) au lieu d'une lettre : il doit tenir dans la
      largeur de la carte, donc il suit sa largeur plutôt qu'un plancher de 20 px. */
   &.word {
     font-size: calc(var(--cw, 70px) * 0.14);
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  &.long {
+    font-size: calc(var(--cw, 70px) * 0.112);
+    letter-spacing: 0;
   }
 }
 .ivk-front-n {
@@ -2093,7 +2122,8 @@ onBeforeUnmount(() => {
   .ivk-o-swirl,
   .ivk-o-ring,
   .ivk-rays.on,
-  .ivk-card.hot .ivk-back {
+  .ivk-card.hot .ivk-back,
+  .ivk-card.flipped .ivk-front {
     animation: none;
   }
 }

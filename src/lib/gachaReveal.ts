@@ -79,25 +79,27 @@ export const INVOKE = {
    *  l'impression que ça skip les boules internes »).** Sans A ni S rien ne s'allumait : les
    *  orbes montaient et retombaient aussitôt (~3,8 s), et l'allumage — le cœur du suspense —
    *  n'existait pas. Désormais chaque orbe est SCRUTÉE à son tour (`lotScanMs`), qu'elle
-   *  s'allume ou non : on voit chacune avoir sa chance. */
+   *  s'allume ou non : on voit chacune avoir sa chance.
+   *  ⚠️ **RALENTI ENCORE (v1.49.8, demandé : « beaucoup trop rapide »)** : chaque B se retourne
+   *  à son tour (380 ms) au lieu d'une rafale, et chaque allumage se laisse voir. */
   lotLaunchStagger: 45,
-  lotApexMs: 700,
+  lotApexMs: 900,
   /** Scrutation : chaque orbe pulse à son tour, de gauche à droite. */
-  lotScanMs: 190,
+  lotScanMs: 260,
   /** Silence après la scrutation, avant le premier allumage (ou la chute). */
-  lotScanHoldMs: 450,
+  lotScanHoldMs: 600,
   /** Un allumage : hésitation, fissure, éclair, puis repos — plus long vers l'or. */
-  lotCrackPauseMs: 150,
-  lotCrackMs: 380,
-  lotFlashMsA: 180,
-  lotFlashMsS: 240,
-  lotRestMsA: 220,
-  lotRestMsS: 450,
+  lotCrackPauseMs: 220,
+  lotCrackMs: 480,
+  lotFlashMsA: 260,
+  lotFlashMsS: 320,
+  lotRestMsA: 450,
+  lotRestMsS: 700,
   /** 🖤 ADAMANTIUM : l'allumage le plus long — c'est lui qu'on attend. */
-  lotFlashMsX: 380,
-  lotRestMsX: 800,
-  lotLandMs: 650,
-  lotFlipStagger: 150,
+  lotFlashMsX: 450,
+  lotRestMsX: 1100,
+  lotLandMs: 1000,
+  lotFlipStagger: 380,
 } as const;
 
 /**
