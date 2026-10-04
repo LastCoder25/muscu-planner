@@ -4300,7 +4300,7 @@ function boostTrip(key: string, id: BoostId) {
   if (choice.lostMs > 0)
     $q.dialog({
       title: '⚡ Utiliser ce boost ?',
-      message: `L'étape finit dans ${formatDuration(choice.gainMs)} : le boost n'en rendra que ${formatDuration(choice.gainMs)}, ${formatDuration(choice.lostMs)} seront perdues.`,
+      message: `Le voyage finit dans ${formatDuration(choice.gainMs)} (retour compris) : le boost n'en rendra que ${formatDuration(choice.gainMs)}, ${formatDuration(choice.lostMs)} seront perdues.`,
       cancel: { label: 'Annuler', flat: true },
       ok: { label: 'Utiliser', color: 'primary', textColor: 'dark' },
     }).onOk(() => void run());

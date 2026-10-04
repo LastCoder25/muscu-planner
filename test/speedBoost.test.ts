@@ -18,7 +18,12 @@ import {
   SUPPLY_WEIGHT,
   supplyUselessWhy,
 } from '@/lib/supplies';
-import { planWings, wingDeparture, type CombinedAttack } from '@/lib/combinedAttack';
+import {
+  planWings,
+  wingDeparture,
+  wingReturnLegs,
+  type CombinedAttack,
+} from '@/lib/combinedAttack';
 import type { Poi } from '@/lib/expedition';
 
 const M = 60_000;
@@ -72,24 +77,56 @@ describe('⚡ voyage', () => {
   it('à l’aller, l’arrivée et le retour avancent du même gain', () => {
     const v = trip();
     const p = voyageBoostPlan(v, 10, 30 * M);
-    expect(p).toEqual({ phase: 'go', gainMs: 10 * M, lostMs: 0 });
+    expect(p).toEqual({ phase: 'go', gainMs: 10 * M, goMs: 10 * M, backMs: 0, lostMs: 0 });
     const b = boostVoyage(v, p as never);
     expect(b.midAt).toBe(50 * M);
     expect(b.returnAt).toBe(110 * M);
   });
-  it('minutes perdues : un boost plus long que l’étape n’en rend que le reste', () => {
-    const p = voyageBoostPlan(trip(), 60, 50 * M);
-    expect(p).toEqual({ phase: 'go', gainMs: 10 * M, lostMs: 50 * M });
+  it('ce que l’aller n’absorbe pas raccourcit le retour (« aller de 3 min, boost de 5 »)', () => {
+    const v = trip();
+    const p = voyageBoostPlan(v, 60, 50 * M);
+    expect(p).toEqual({ phase: 'go', gainMs: 60 * M, goMs: 10 * M, backMs: 50 * M, lostMs: 0 });
+    const b = boostVoyage(v, p as never);
+    expect(b.midAt).toBe(50 * M); // arrivée tout de suite
+    expect(b.returnAt).toBe(60 * M); // retour de 60 min réduit à 10
+  });
+  it('minutes perdues : seulement au-delà de l’aller ET du retour', () => {
+    const p = voyageBoostPlan(trip(), 90, 50 * M);
+    expect(p).toEqual({
+      phase: 'go',
+      gainMs: 70 * M,
+      goMs: 10 * M,
+      backMs: 60 * M,
+      lostMs: 20 * M,
+    });
+    const b = boostVoyage(trip(), p as never);
+    expect(b.returnAt).toBe(b.midAt); // jamais un retour plus court que zéro
+  });
+  it('les retours d’un assaut (recalculés à l’arrivée) gardent le raccourci', () => {
+    const v = { ...trip(), returnLegs: { won: 20, lost: 60 } };
+    const b = boostVoyage(v, voyageBoostPlan(v, 30, 50 * M) as never);
+    expect(b.returnLegs).toEqual({ won: 0, lost: 40 });
+  });
+  it('un groupe lié au retour plus court n’est raccourci que de son retour', () => {
+    const v = trip({ returnAt: 70 * M }); // retour de 10 min
+    const b = boostVoyage(v, { phase: 'go', goMs: 10 * M, backMs: 50 * M });
+    expect(b.returnAt).toBe(b.midAt);
   });
   it('la fouille sur place compte : l’aller finit à l’arrivée, pas au rapport', () => {
     const v = trip({ midAt: 60 * M, dwellMs: 10 * M });
-    expect(voyageBoostPlan(v, 30, 40 * M)).toEqual({ phase: 'go', gainMs: 10 * M, lostMs: 20 * M });
+    expect(voyageBoostPlan(v, 30, 40 * M)).toEqual({
+      phase: 'go',
+      gainMs: 30 * M,
+      goMs: 10 * M,
+      backMs: 20 * M,
+      lostMs: 0,
+    });
     expect(voyageBoostPlan(v, 30, 55 * M)).toBe('onSite');
   });
   it('au retour, seul le retour avance, jamais avant maintenant', () => {
     const v = trip();
     const p = voyageBoostPlan(v, 60, 100 * M);
-    expect(p).toEqual({ phase: 'back', gainMs: 20 * M, lostMs: 40 * M });
+    expect(p).toEqual({ phase: 'back', gainMs: 20 * M, goMs: 0, backMs: 20 * M, lostMs: 40 * M });
     const b = boostVoyage(v, p as never);
     expect(b.midAt).toBe(60 * M);
     expect(b.returnAt).toBe(100 * M);
@@ -121,8 +158,8 @@ describe('⚔️🧭 attaque combinée (option B)', () => {
     const a0 = attack(0);
     // Le groupe du fort part à 5 min ; boost de 10 min à t = 0.
     const p = attackBoostPlan(a0, 10, 0);
-    expect(p).toEqual({ phase: 'go', gainMs: 10 * M, lostMs: 0 });
-    const { attack: a, moved } = boostAttack(a0, 10 * M, 0);
+    expect(p).toEqual({ phase: 'go', gainMs: 10 * M, goMs: 10 * M, backMs: 0, lostMs: 0 });
+    const { attack: a, moved } = boostAttack(a0, p as never, 0);
     expect(a.arriveAt).toBe(50 * M);
     expect(a.wings[0]!.departAt).toBe(0);
     expect(a.wings[1]!.departAt).toBe(0); // partait à 5 min : part maintenant
@@ -134,7 +171,7 @@ describe('⚔️🧭 attaque combinée (option B)', () => {
     ]);
   });
   it('les réservations suivent : le groupe part encore au départ avancé', () => {
-    const { attack: a } = boostAttack(attack(0), 10 * M, 0);
+    const { attack: a } = boostAttack(attack(0), { goMs: 10 * M, backMs: 0 }, 0);
     const w = a.wings[0]!;
     const d = wingDeparture(w, {
       now: 0,
@@ -148,9 +185,22 @@ describe('⚔️🧭 attaque combinée (option B)', () => {
   it('un groupe dont l’heure de départ est passée ne part jamais PLUS TARD', () => {
     const a0 = attack(0);
     // Le fort devait partir à 5 min ; à 7 min le tick n'est pas encore passé.
-    const { attack: a } = boostAttack(a0, 1 * M, 7 * M);
+    const { attack: a } = boostAttack(a0, { goMs: 1 * M, backMs: 0 }, 7 * M);
     expect(a.wings[1]!.departAt).toBe(5 * M);
     expect(a.wings[1]!.returnAt).toBe(a0.wings[1]!.returnAt - 1 * M);
+  });
+  it('le reste d’un boost raccourcit le retour de chaque groupe, et le relaunch le garde', () => {
+    const a0 = attack(0);
+    const p = attackBoostPlan(a0, 70, 0);
+    expect(p).toEqual({ phase: 'go', gainMs: 70 * M, goMs: 60 * M, backMs: 10 * M, lostMs: 0 });
+    const { attack: a } = boostAttack(a0, p as never, 0);
+    expect(a.arriveAt).toBe(0);
+    for (const w of a.wings) {
+      expect(w.returnAt).toBe(a.midAt + (w.legMin - 10) * M);
+      expect(w.backCutMs).toBe(10 * M);
+    }
+    expect(wingReturnLegs(a.wings[0]!, 30)).toEqual({ won: 20, lost: 50 });
+    expect(wingReturnLegs({ legMin: 60 }, 30)).toEqual({ won: 30, lost: 60 });
   });
   it('une fois arrivée, plus rien à presser', () => {
     expect(attackBoostPlan(attack(0), 5, 60 * M)).toBe('onSite');
@@ -174,7 +224,7 @@ describe('⚡ choix proposés', () => {
     expect(r).toEqual({
       choices: [
         { id: 'boost5', count: 2, minutes: 5, gainMs: 5 * M, lostMs: 0 },
-        { id: 'boost60', count: 1, minutes: 60, gainMs: 10 * M, lostMs: 50 * M },
+        { id: 'boost60', count: 1, minutes: 60, gainMs: 60 * M, lostMs: 0 },
       ],
     });
     expect(boostChoices({ boost5: 1 }, (m) => voyageBoostPlan(v, m, 130 * M))).toEqual({

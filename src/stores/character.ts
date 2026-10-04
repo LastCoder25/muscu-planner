@@ -367,6 +367,7 @@ import {
   normalizeAttacks,
   planWings,
   wingDeparture,
+  wingReturnLegs,
   type CombinedAttack,
 } from '@/lib/combinedAttack';
 import {
@@ -4609,7 +4610,7 @@ export const useCharacterStore = defineStore('character', () => {
           ...(origin ? { origin: { x: origin.x, y: origin.y }, homeId: origin.id } : {}),
           ...(w === main ? {} : { wingOf: a.id }),
           crew,
-          ...(wonLeg !== null ? { returnLegs: { won: wonLeg, lost: w.legMin } } : {}),
+          ...(wonLeg !== null ? { returnLegs: wingReturnLegs(w, wonLeg) } : {}),
         };
         if (w === main && w.heroGone) expedition = trip;
         else parties = [...parties, { ...trip, id: `party_${a.id}_${w.originId ?? 'base'}` }];
@@ -6105,7 +6106,7 @@ export const useCharacterStore = defineStore('character', () => {
       if (!a) return 'ces groupes sont déjà tous partis';
       const plan = attackBoostPlan(a, min, now);
       if (typeof plan === 'string') return BOOST_BLOCK_LABEL[plan];
-      const { attack, moved } = boostAttack(a, plan.gainMs, now);
+      const { attack, moved } = boostAttack(a, plan, now);
       let advs = advList.value;
       for (const m of moved) advs = rescheduleReturners(advs, m.members, m.from, m.to);
       const amap = cur.expedition_map

@@ -3,13 +3,15 @@
  * minutes, 5 min, 10 min, 15 min, 30 min, 1 h »). Un consommable (`BOOST_MIN`, supplies.ts)
  * utilisé sur un voyage EN COURS : son ÉTAPE EN COURS finit plus tôt.
  *
- * - À l'ALLER, l'arrivée (et le rapport) avancent de X, le retour avec elle : la durée du
- *   retour ne change pas, seul l'aller est plus court.
+ * - À l'ALLER, l'arrivée (et le rapport) avancent de ce qui reste de l'aller au plus, le retour
+ *   avec elle ; ce que l'aller n'absorbe pas RACCOURCIT LE RETOUR (2026-10-04, signalé : « si
+ *   l'aller fait 3 min et que je veux accélérer de 5 min, il faut appliquer le reste sur le
+ *   retour »).
  * - Au RETOUR, seul le retour en ville avance.
  * - Sur place (fouille en cours), rien ne bouge : il n'y a pas de route à raccourcir.
  *
- * ⚠️ MINUTES PERDUES (décision de l'utilisateur) : un boost de 1 h sur une étape qui finit
- * dans 20 min n'en rend que 20. L'écran l'annonce AVANT de valider (`lostMs`).
+ * ⚠️ MINUTES PERDUES : seulement ce qui dépasse TOUT le trajet restant (aller + retour, ou retour
+ * seul). L'écran l'annonce AVANT de valider (`lostMs`).
  * ⚠️ PLUSIEURS BOOSTS AUTORISÉS sur un même voyage (décision de l'utilisateur).
  *
  * ⚔️🧭 ATTAQUE COMBINÉE (option B, décision de l'utilisateur) : le boost s'applique à TOUTE
@@ -35,6 +37,12 @@ export const BOOST_BLOCK_LABEL: Record<BoostBlock, string> = {
 
 export interface BoostPlan {
   phase: 'go' | 'back';
+  /** L'arrivée avance de tant (0 au retour). */
+  goMs: number;
+  /** Le RETOUR raccourcit de tant, en plus : le reste d'un boost que l'aller n'absorbe pas
+   *  (« si l'aller fait 3 min et que j'accélère de 5 min, le reste va sur le retour »), ou tout
+   *  le gain au retour. */
+  backMs: number;
   /** Ce que le voyage gagne vraiment. */
   gainMs: number;
   /** Les minutes du boost qui ne servent à rien (l'étape finit avant). */
@@ -49,25 +57,38 @@ export function voyageBoostPlan(v: Timed, minutes: number, now: number): BoostPl
   const arriveAt = v.midAt - Math.max(0, v.dwellMs ?? 0);
   if (now < arriveAt) {
     if (v.poi.type === 'warband') return 'intercept';
-    const gainMs = Math.min(boost, arriveAt - now);
-    return { phase: 'go', gainMs, lostMs: boost - gainMs };
+    const goMs = Math.min(boost, arriveAt - now);
+    const backMs = Math.min(boost - goMs, Math.max(0, v.returnAt - v.midAt));
+    return { phase: 'go', gainMs: goMs + backMs, goMs, backMs, lostMs: boost - goMs - backMs };
   }
   if (now < v.midAt) return 'onSite';
   if (now >= v.returnAt) return 'done';
-  const gainMs = Math.min(boost, v.returnAt - now);
-  return { phase: 'back', gainMs, lostMs: boost - gainMs };
+  const backMs = Math.min(boost, v.returnAt - now);
+  return { phase: 'back', gainMs: backMs, goMs: 0, backMs, lostMs: boost - backMs };
 }
 
 /** Le voyage accéléré selon `plan`. ⚠️ `sentAt` ne bouge pas : l'aller dure moins, le tracé
  *  va plus vite. Même référence si le gain est nul. */
-export function boostVoyage<T extends Pick<ActiveExpedition, 'midAt' | 'returnAt'>>(
-  v: T,
-  plan: Pick<BoostPlan, 'phase' | 'gainMs'>,
-): T {
-  const g = plan.gainMs;
-  if (g <= 0) return v;
-  if (plan.phase === 'back') return { ...v, returnAt: v.returnAt - g };
-  return { ...v, midAt: v.midAt - g, returnAt: v.returnAt - g };
+export function boostVoyage<
+  T extends Pick<ActiveExpedition, 'midAt' | 'returnAt'> & {
+    returnLegs?: { won: number; lost: number };
+  },
+>(v: T, plan: Pick<BoostPlan, 'phase' | 'goMs' | 'backMs'>): T {
+  // Le raccourci du retour est borné par CE retour (un groupe lié peut en avoir un plus court).
+  const go = plan.phase === 'go' ? Math.max(0, plan.goMs) : 0;
+  const back = Math.min(Math.max(0, plan.backMs), Math.max(0, v.returnAt - v.midAt));
+  if (go + back <= 0) return v;
+  const out = { ...v, midAt: v.midAt - go, returnAt: v.returnAt - go - back };
+  // ⚠️ Les retours d'un assaut sont RECALCULÉS à l'arrivée (`shortenWonReturn`) : sans les
+  // raccourcir aussi, le raccourci serait écrasé.
+  if (back > 0 && v.returnLegs) {
+    const cut = back / 60_000;
+    out.returnLegs = {
+      won: Math.max(0, v.returnLegs.won - cut),
+      lost: Math.max(0, v.returnLegs.lost - cut),
+    };
+  }
+  return out;
 }
 
 /** ⚔️🧭 Les groupes d'une MÊME attaque combinée déjà partie : même lieu, même graine, même
@@ -83,15 +104,21 @@ export function combinedSiblings<
 
 /** ⚔️🧭 Ce qu'un boost ferait sur une attaque combinée qui n'est pas encore toute partie. */
 export function attackBoostPlan(
-  a: Pick<CombinedAttack, 'poi' | 'arriveAt'>,
+  a: Pick<CombinedAttack, 'poi' | 'arriveAt' | 'midAt' | 'wings'>,
   minutes: number,
   now: number,
 ): BoostPlan | BoostBlock {
   const boost = Math.max(0, minutes) * 60_000;
   if (now >= a.arriveAt) return 'onSite';
   if (a.poi.type === 'warband') return 'intercept';
-  const gainMs = Math.min(boost, a.arriveAt - now);
-  return { phase: 'go', gainMs, lostMs: boost - gainMs };
+  const goMs = Math.min(boost, a.arriveAt - now);
+  // Le reste raccourcit les retours, jusqu'au plus long d'entre eux.
+  const longest = Math.max(
+    0,
+    ...a.wings.filter((w) => w.state !== 'dropped').map((w) => w.returnAt - a.midAt),
+  );
+  const backMs = Math.min(boost - goMs, longest);
+  return { phase: 'go', gainMs: goMs + backMs, goMs, backMs, lostMs: boost - goMs - backMs };
 }
 
 /**
@@ -101,14 +128,19 @@ export function attackBoostPlan(
  */
 export function boostAttack(
   a: CombinedAttack,
-  gainMs: number,
+  plan: Pick<BoostPlan, 'goMs' | 'backMs'>,
   now: number,
 ): { attack: CombinedAttack; moved: { members: string[]; from: number; to: number }[] } {
-  if (gainMs <= 0) return { attack: a, moved: [] };
+  const gainMs = Math.max(0, plan.goMs);
+  if (gainMs + Math.max(0, plan.backMs) <= 0) return { attack: a, moved: [] };
   const moved: { members: string[]; from: number; to: number }[] = [];
   const wings = a.wings.map((w) => {
     if (w.state === 'dropped') return w;
-    const returnAt = w.returnAt - gainMs;
+    // Le reste du boost raccourcit SON retour, au plus de sa durée ; noté (`backCutMs`) pour que
+    // le retour recalculé à son départ (`wingReturnLegs`) le garde.
+    const back = Math.min(Math.max(0, plan.backMs), Math.max(0, w.returnAt - a.midAt));
+    const returnAt = w.returnAt - gainMs - back;
+    const cut = back > 0 ? { backCutMs: (w.backCutMs ?? 0) + back } : {};
     moved.push({
       members: w.state === 'gone' ? (w.gone ?? []) : w.members,
       from: w.returnAt,
@@ -118,8 +150,13 @@ export function boostAttack(
       ? // ⚠️ Jamais PLUS TARD : un groupe dont l'heure est déjà passée (pas encore traité par
         // le tick) garde la sienne — la repousser à « maintenant » changerait l'instant où
         // l'on vérifie qui peut partir (blessures, bataille échue entre-temps).
-        { ...w, departAt: Math.min(w.departAt, Math.max(now, w.departAt - gainMs)), returnAt }
-      : { ...w, returnAt };
+        {
+          ...w,
+          departAt: Math.min(w.departAt, Math.max(now, w.departAt - gainMs)),
+          returnAt,
+          ...cut,
+        }
+      : { ...w, returnAt, ...cut };
   });
   return {
     attack: { ...a, arriveAt: a.arriveAt - gainMs, midAt: a.midAt - gainMs, wings },

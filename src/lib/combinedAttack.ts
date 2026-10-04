@@ -41,6 +41,18 @@ export interface AttackWing {
    *  0 si personne. Estimé à l'envoi (affichage), recalculé au lancement avec ceux qui
    *  sont vraiment partis. Absent hors assaut : le retour est `legMin`. */
   wonLegMin?: number;
+  /** ⚡ Ce que des boosts ont déjà retiré de son RETOUR (ms) : `wingReturnLegs` le garde. */
+  backCutMs?: number;
+}
+
+/** Les retours (pris / raté, minutes) d'un groupe dont l'assaut se joue, ce que les boosts en
+ *  ont déjà retiré compris — sinon le retour recalculé à l'arrivée effacerait le raccourci. */
+export function wingReturnLegs(
+  w: Pick<AttackWing, 'legMin' | 'backCutMs'>,
+  wonMin: number,
+): { won: number; lost: number } {
+  const cut = Math.max(0, w.backCutMs ?? 0) / 60_000;
+  return { won: Math.max(0, wonMin - cut), lost: Math.max(0, w.legMin - cut) };
 }
 
 export interface CombinedAttack {
@@ -351,7 +363,7 @@ export function attackWingVoyages(
           returnAt: w.returnAt,
           dwellMs: Math.max(0, a.midAt - a.arriveAt),
           ...(w.wonLegMin !== undefined
-            ? { returnLegs: { won: w.wonLegMin, lost: w.legMin } }
+            ? { returnLegs: wingReturnLegs(w, w.wonLegMin) }
             : {}),
           ...(home ? { origin: { x: home.x, y: home.y } } : {}),
         },
