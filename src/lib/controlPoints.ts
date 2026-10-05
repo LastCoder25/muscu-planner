@@ -3240,6 +3240,22 @@ export function settleReinforcements(
   return out;
 }
 
+/**
+ * 🏰 « Ramener » la sélection, est-ce RAPPELER TOUTE LA GARNISON (`recallControl`, qui laisse
+ * le lieu sans défense et renvoie à la base TOUS les champions postés) ? Seulement si la
+ * sélection couvre TOUT LE MONDE : ceux sur le lieu, ceux en route (`turning`), et personne
+ * en sortie (`away`, leur place les attend).
+ * ⚠️ Signalé (Archives) : ramener le seul milicien présent pendant que 4 champions étaient en
+ * route comptait comme « toute la garnison » (ceux en route étaient retranchés du total) — le
+ * rappel complet renvoyait alors aussi les champions à la base.
+ */
+export function recallIsWhole(
+  sel: { onPoint: number; turning: number },
+  occupants: { total: number; away: number },
+): boolean {
+  return sel.onPoint > 0 && occupants.away === 0 && sel.onPoint + sel.turning >= occupants.total;
+}
+
 /** 🏰 Ramène des champions (garnison OU renforts en route). L'or déjà produit reste en
  *  réserve. ⚠️ Le point RESTE À NOUS, même vidé (décision de l'utilisateur) : sans garnison
  *  il ne produit plus, et c'est la prochaine attaque ennemie, faute de défenseurs, qui le
