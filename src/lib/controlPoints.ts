@@ -1802,14 +1802,24 @@ export function defendersAtAttack(
   c: ControlState,
   attackAt: number | null,
   extra: readonly { id: string; at: number }[] = [],
-): { present: string[]; late: string[] } {
+): { present: string[]; late: string[]; hero: PostedHero | null; heroLate: boolean } {
   const present = [...c.garrison];
   const late: string[] = [];
   for (const r of [...(c.reinforcing ?? []), ...extra]) {
     if (attackAt === null || r.at <= attackAt) present.push(r.id);
     else late.push(r.id);
   }
-  return { present, late };
+  const hero = heroAtAttack(c, attackAt);
+  return { present, late, hero, heroLate: !hero && !!c.heroComing };
+}
+
+/** 🧝 Le héros qui DÉFENDRA le point : posté, ou en route et arrivé AU PLUS TARD à l'attaque
+ *  (la règle de `settleReinforcements`). ⚠️ Même lecture que la bataille du store : un héros
+ *  posté sans instantané (`heroUnit`) n'y combat pas, ni ici. */
+export function heroAtAttack(c: ControlState, attackAt: number | null): PostedHero | null {
+  if (c.hero) return c.heroUnit ?? null;
+  const h = c.heroComing;
+  return h && (attackAt === null || h.at <= attackAt) ? h.unit : null;
 }
 
 /** 🎯 La part des attaques que ces défenseurs repousseront — champions (avec compagnons et
@@ -1823,10 +1833,13 @@ export function controlDefenseHold(
   playerLevel: number,
   /** 🧱🏹 `fortifyMult`, REQUIS. */
   fort: number,
+  /** 🧝 Le héros qui défendra (`heroAtAttack`), REQUIS : oublié, l'écran annoncerait une
+   *  tenue sans lui alors que la bataille le compte. */
+  hero: PostedHero | null,
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
-  const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
+  const allies = [...partyAllies(champs, kit, hero), ...militiaUnits([...ids], playerLevel)];
   return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies, fort);
 }
 

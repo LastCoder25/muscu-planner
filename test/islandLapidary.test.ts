@@ -69,8 +69,10 @@ describe('💎 le lapidaire de l’île 3', () => {
     const champs = [0, 1, 2].map((k) => refChampionAdv(LV + 20, k));
     const ids = champs.map((c) => c.id);
     const asMine = { ...p, control: { ...p.control!, kind: 'mine' as const, garrison: ids } };
-    expect(controlAttackHold(m, asMine, ids, champs, { advGear: [] }, LV, 1)).toBeGreaterThan(0);
-    expect(controlAttackHold(m, p, ids, champs, { advGear: [] }, LV, 1)).toBe(0);
+    expect(controlAttackHold(m, asMine, ids, champs, { advGear: [] }, LV, 1, null)).toBeGreaterThan(
+      0,
+    );
+    expect(controlAttackHold(m, p, ids, champs, { advGear: [] }, LV, 1, null)).toBe(0);
   });
 
   it('le temps dépend de la couleur et du niveau', () => {

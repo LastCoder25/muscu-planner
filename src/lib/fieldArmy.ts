@@ -34,6 +34,7 @@ import {
   type FieldHit,
   type PartyResult,
   type Poi,
+  type PostedHero,
 } from './expedition';
 import {
   raidFirstSector,
@@ -823,10 +824,12 @@ export function controlAttackHold(
   playerLevel: number,
   /** 🧱🏹 `fortifyMult`, REQUIS. */
   fort: number,
+  /** 🧝 Le héros qui défendra (`heroAtAttack`), REQUIS — la bataille du store le compte. */
+  hero: PostedHero | null,
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
-  const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
+  const allies = [...partyAllies(champs, kit, hero), ...militiaUnits([...ids], playerLevel)];
   if (!allies.length || !defendsControl(p.control?.kind)) return 0;
   const { foe, force } = retakeBattle(map, p, allies, playerLevel, fort);
   return campWinPct(foe, force, allies, CONTROL.holdSamples);

@@ -2779,16 +2779,22 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const c = p?.control;
   if (!p || !c || c.owner !== 'player') return null;
   const at = knownAttackAt(p, coarseNow.value);
-  const { present, late } = defendersAtAttack(c, at, extra);
+  // 🧝 Le héros posté (ou en route, arrivé à temps) défend aussi : la règle de la bataille.
+  const { present, late, hero, heroLate } = defendersAtAttack(c, at, extra);
   const map = char.row?.expedition_map;
   const vsArmy =
     !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
   // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (la règle de la bataille).
   const fort = char.fortifyFor(heroLevel.value);
   const hold = vsArmy
-    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort)
-    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort);
-  return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
+    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort, hero)
+    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort, hero);
+  return {
+    pct: Math.round(hold * 100),
+    count: present.length + (hero ? 1 : 0),
+    late: late.length + (heroLate ? 1 : 0),
+    vsArmy,
+  };
 }
 const defenseNow = computed(() => defenseOf(livePoi.value));
 /** 🛡️ La tenue d'un point si `remove` n'y étaient plus et `extra` arrivaient — la règle de

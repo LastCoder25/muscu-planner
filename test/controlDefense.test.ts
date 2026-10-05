@@ -66,15 +66,15 @@ describe('controlDefenseHold', () => {
       [...partyAllies([advs[0]!], kit, null), ...militiaUnits(ids, L)],
       1,
     );
-    expect(controlDefenseHold(p, ids, advs, kit, L, 1)).toBe(want);
+    expect(controlDefenseHold(p, ids, advs, kit, L, 1, null)).toBe(want);
   });
   it('un renfort de plus ne fait jamais baisser la tenue, personne = 0', () => {
-    const one = controlDefenseHold(p, ['a0'], advs, kit, L, 1);
-    const two = controlDefenseHold(p, ['a0', 'a1'], advs, kit, L, 1);
+    const one = controlDefenseHold(p, ['a0'], advs, kit, L, 1, null);
+    const two = controlDefenseHold(p, ['a0', 'a1'], advs, kit, L, 1, null);
     expect(two).toBeGreaterThanOrEqual(one);
-    expect(controlDefenseHold(p, [], advs, kit, L, 1)).toBe(0);
-    expect(controlDefenseHold(p, ['a0', 'mil:1', 'mil:2'], advs, kit, L, 1)).toBeGreaterThanOrEqual(
-      one,
-    );
+    expect(controlDefenseHold(p, [], advs, kit, L, 1, null)).toBe(0);
+    expect(
+      controlDefenseHold(p, ['a0', 'mil:1', 'mil:2'], advs, kit, L, 1, null),
+    ).toBeGreaterThanOrEqual(one);
   });
 });

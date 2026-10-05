@@ -208,7 +208,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (!p?.control || originOptions.value.some((o) => o.id === p.id)) return originOptions.value;
     return [
       ...originOptions.value,
-      { id: p.id, poi: p, emo: CONTROL_EMO[p.control.kind], label: CONTROL_LABEL[p.control.kind], n: 0 },
+      {
+        id: p.id,
+        poi: p,
+        emo: CONTROL_EMO[p.control.kind],
+        label: CONTROL_LABEL[p.control.kind],
+        n: 0,
+      },
     ];
   });
   /** 🏰 D'où part l'équipe, DÉDUIT des champions choisis (et du héros, qui part de son poste
@@ -860,14 +866,16 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  ne se recalcule qu'au changement de lieu ou de garnison, pas à chaque tick. */
   const stayHold = computed(() => {
     const p = selected.value;
-    if (!p || !stayCap.value) return null;
+    // 🧝 Le héros qui reste défend avec eux (la bataille du store le compte, `heroUnit`).
+    const hero = heroStays.value ? heroForParty.value : null;
+    if (!p || (!stayCap.value && !hero)) return null;
     const ids = new Set(stayIds.value);
     const g = partyAdvs.value.filter((a) => ids.has(a.id));
-    return g.length
+    return g.length || hero
       ? Math.round(
           garrisonHold(
             heldAt(p),
-            partyAllies(g, roadCtx.value, null),
+            partyAllies(g, roadCtx.value, hero),
             char.fortifyFor(heroLevel.value),
           ) * 100,
         )
