@@ -584,7 +584,17 @@ export const VILLAGE = {
   shoreY: 104,
   /** La caméra, relevée : on garde la mer dans le dos sans qu'elle mange l'écran. */
   camCy: 50,
+  /** Rayon de la muraille du village. ⚠️ PLUS GRAND que celui de la base (72) : ses 8
+   *  balistes tiennent sur un demi-cercle au lieu d'un tour complet, et au rayon de la base
+   *  elles se marchaient dessus (signalé par l'utilisateur, 2026-10-05). */
+  wallR: 108,
 } as const;
+
+/** 🏘️ Un rayon du moteur (pensé pour la muraille de la base), reporté sur celle du
+ *  village : la marche et l'arrêt au pied du mur gardent la même distance au rempart. */
+export function villageRadius(r: number): number {
+  return r + VILLAGE.wallR - SIEGE_WALL_R;
+}
 
 /** 🏘️ Un angle du moteur (tour complet) REPLIÉ sur l'arc de la muraille du village. */
 export function villageAngle(a: number): number {
@@ -676,6 +686,63 @@ export function defenderSpot(angle: number, j: number, n: number, post: 'rampart
   const rowSize = Math.min(perRow, n - row * perRow);
   const lat = ((j % perRow) - (rowSize - 1) / 2) * 12;
   return along(angle, 20 - row * 11, lat);
+}
+
+/**
+ * 🏘️ OÙ SE TIENT un défenseur (champion ou milicien) au VILLAGE DU PORT.
+ *
+ * ⚠️ `defenderSpot` ne convient pas ici (signalé par l'utilisateur, 2026-10-05 : ils
+ * étaient « dans l'eau ») : sa cour s'organise autour du centre de la BASE, qui est ici
+ * sur le rivage, en rangs qui reculent vers la mer ; et ses tireurs s'écartent de la
+ * brèche d'un angle pensé pour un tour complet, qui déborde l'arc de la muraille.
+ *  • la cour : une grille centrée AU CŒUR du village, quelle que soit la brèche ;
+ *  • le rempart : des places sur l'arc, de part et d'autre de la brèche, sans jamais
+ *    dépasser ses extrémités.
+ * `breachAngle` est l'angle DESSINÉ (déjà replié par `villageAngle`).
+ */
+export function villageDefenderSpot(
+  breachAngle: number,
+  j: number,
+  n: number,
+  post: 'rampart' | 'yard',
+): Point {
+  if (post === 'rampart') {
+    const spots = villageRampartSpots(breachAngle);
+    const a = spots[j % spots.length]!;
+    const r = VILLAGE.wallR * 0.9;
+    return { x: 100 + Math.cos(a) * r, y: 100 + Math.sin(a) * r };
+  }
+  // Des rangs ÉQUILIBRÉS (6 → 3 + 3, pas 5 + 1) : la troupe reste un bloc centré.
+  const rows = Math.ceil(n / 5);
+  const perRow = Math.ceil(n / rows);
+  const gap = 14;
+  const row = Math.floor(j / perRow);
+  const rowSize = Math.min(perRow, n - row * perRow);
+  return {
+    x: 100 + ((j % perRow) - (rowSize - 1) / 2) * gap,
+    y: 100 - VILLAGE.wallR * 0.45 + (row - (rows - 1) / 2) * gap,
+  };
+}
+
+/** Les places du chemin de ronde du village, de la plus proche de la brèche à la plus
+ *  loin — hors de la plus grande trouée possible et hors des bouts de l'arc. */
+function villageRampartSpots(breachAngle: number): number[] {
+  const lo = villageVertexAngle(0) + 0.1;
+  const hi = villageVertexAngle(BATTLE.sectors) - 0.1;
+  const step = 15 / (VILLAGE.wallR * 0.9);
+  const clear = (breachGap(BATTLE.breachMaxWidth) * VILLAGE.span) / BATTLE.sectors / 2 + 0.1;
+  // ⚠️ Pas sur un sommet : la baliste y est déjà, le tireur la recouvrirait.
+  const vertexClear = 9 / (VILLAGE.wallR * 0.9);
+  const verts = Array.from({ length: BATTLE.sectors + 1 }, (_, i) => villageVertexAngle(i));
+  const out: number[] = [];
+  for (let a = lo; a <= hi; a += step / 2)
+    if (
+      Math.abs(a - breachAngle) > clear &&
+      verts.every((v) => Math.abs(a - v) > vertexClear) &&
+      (!out.length || a - out[out.length - 1]! >= step)
+    )
+      out.push(a);
+  return out.sort((a, b) => Math.abs(a - breachAngle) - Math.abs(b - breachAngle));
 }
 
 function along(angle: number, r: number, lat: number): Point {
