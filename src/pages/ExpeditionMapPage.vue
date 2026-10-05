@@ -45,7 +45,12 @@
 
     <!-- Carte -->
     <div v-show="!viewed" class="map-outer">
-      <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
+      <div
+        ref="scrollEl"
+        class="map-scroll"
+        :style="mapH ? { height: mapH + 'px' } : undefined"
+        @scroll="onScroll"
+      >
         <svg
           :viewBox="`${V.x} ${V.y} ${V.size} ${V.size}`"
           class="map"
@@ -2035,7 +2040,26 @@ const ZOOM_STEP = 200; // 1 cran de zoom (± via les boutons +/−)
  *  En dessous, un bandeau vide apparaissait sous la carte (demandé par l'utilisateur). */
 const minPx = computed(() => Math.max(MIN_PX, contW.value, contH.value));
 const clampPx = (px: number) => Math.max(minPx.value, Math.min(MAX_PX, px));
+/** 📏 Hauteur de la carte : du haut du cadre jusqu'au BAS de la zone visible (fenêtre, ou volet
+ *  du cockpit), mesurée — le `calc(100dvh − N)` du CSS ne tient que si tout ce qui est au-dessus
+ *  fait exactement N px (en-tête, ressources, îles). Lue comme si la page était tout en haut. */
+const mapH = ref(0);
+function fitMapHeight() {
+  const el = scrollEl.value;
+  if (!el) return;
+  const box = scrollContainerOf(el);
+  const isDoc = !box || box === document.documentElement || box === document.body;
+  const bottom = isDoc ? window.innerHeight : box.getBoundingClientRect().bottom;
+  const scrolled = isDoc ? window.scrollY : box.scrollTop;
+  const h = Math.floor(bottom - (el.getBoundingClientRect().top + scrolled));
+  // Une carte qui commence trop bas (une carte « Récompense du jour » ou le guide au-dessus) ne
+  // se tasse pas : on garde la hauteur du CSS, et on y descend en faisant défiler.
+  const visible = isDoc ? window.innerHeight : box.clientHeight;
+  const next = h >= visible * 0.55 ? h : 0;
+  if (Math.abs(next - mapH.value) > 1) mapH.value = next;
+}
 function measure() {
+  fitMapHeight();
   const el = scrollEl.value;
   if (!el) return;
   contW.value = el.clientWidth;
@@ -5170,6 +5194,9 @@ onMounted(async () => {
   await initialFit();
   liftFog(readFogSeen());
   window.addEventListener('resize', measure);
+  // Ce qui est AU-DESSUS de la carte (ressources, effectifs de l'Aventure) finit souvent de
+  // s'afficher après le montage : on recale sa hauteur une fois la page posée.
+  for (const ms of [250, 900]) setTimeout(fitMapHeight, ms);
   const el = scrollEl.value;
   // 📐 Le cadre peut n'avoir sa vraie taille qu'APRÈS le montage (l'onglet Carte pivote,
   // la page finit sa mise en page) : on re-mesure à chaque changement, et le cadrage de
@@ -6194,7 +6221,7 @@ onUnmounted(() => {
 .zoom-ctl {
   position: absolute;
   right: 8px;
-  bottom: calc(72px + env(safe-area-inset-bottom));
+  bottom: calc(84px + env(safe-area-inset-bottom));
   display: flex;
   align-items: flex-end;
   gap: 6px;
