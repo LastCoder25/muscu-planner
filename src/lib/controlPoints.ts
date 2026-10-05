@@ -69,6 +69,7 @@ import {
   type ControlState,
   type ExpeditionMap,
   type PostedHero,
+  controlWorkforce,
   type ExpeditionMessage,
   type Poi,
 } from './expedition';
@@ -268,7 +269,7 @@ const tierRef = (c: ControlState): number | undefined =>
 /** 🏅👥 La vitesse de charge d'un cran (1 = un cran par 24 h). Tenu : selon la garnison
  *  (0 sans personne) ; chez l'ennemi : la baisse, toujours 1. */
 export function tierRate(c: ControlState): number {
-  return c.owner === 'player' ? shareOf(c.garrison.length) : 1;
+  return c.owner === 'player' ? shareOf(controlWorkforce(c)) : 1;
 }
 
 /** 🏅👥 La durée d'un cran pour une garnison de `n` (champions ET miliciens) ; `null` : bloqué. */
@@ -1844,9 +1845,9 @@ const shareOf = (n: number) =>
 /** 🗼 La réduction de trajet et le bonus de détection d'une tour TENUE à `now` : selon son
  *  effectif (`garrisonShare`) ET son cran (`tierYieldMult`). */
 const towerCutOf = (c: ControlState, now: number): number =>
-  CONTROL.towerCut * shareOf(c.garrison.length) * tierYieldMult(controlTier(c, now));
+  CONTROL.towerCut * shareOf(controlWorkforce(c)) * tierYieldMult(controlTier(c, now));
 const towerDetectOf = (c: ControlState, now: number): number =>
-  CONTROL.towerDetect * shareOf(c.garrison.length) * tierYieldMult(controlTier(c, now));
+  CONTROL.towerDetect * shareOf(controlWorkforce(c)) * tierYieldMult(controlTier(c, now));
 
 /**
  * ⛏️ Le NIVEAU DE RÉCOMPENSE de la mine d'un lieu fixe, pour un héros de niveau `L` : continu,
@@ -1972,7 +1973,7 @@ function stockUnits(p: Poi, now: number, playerLevel: number): number {
   const c = p.control;
   if (!c || c.owner !== 'player' || c.collectedAt === undefined) return 0;
   const until = Math.min(now, c.attackAt ?? now);
-  const rate = unitsPerHour(p, c.garrison.length, playerLevel);
+  const rate = unitsPerHour(p, controlWorkforce(c), playerLevel);
   // 🏅 Chaque heure au cran QU'ELLE avait (`tierHours`).
   return (c.banked ?? 0) + rate * tierHours(c, c.collectedAt, until);
 }
@@ -2137,7 +2138,7 @@ export function hospiceHealMult(
   let m = 1;
   for (const p of map.pois)
     if (p.control?.kind === 'hospice' && p.control.owner === 'player')
-      m = Math.min(m, 1 / hospiceDivisor(p.control.garrison.length));
+      m = Math.min(m, 1 / hospiceDivisor(controlWorkforce(p.control)));
   return m;
 }
 
@@ -2151,7 +2152,7 @@ export function fortMultOf(pois: readonly Poi[], forId: string): number {
   let m = 1;
   for (const p of pois)
     if (p.id !== forId && p.control?.kind === 'fort' && p.control.owner === 'player')
-      m *= 1 - fortCutFor(p.control.garrison.length);
+      m *= 1 - fortCutFor(controlWorkforce(p.control));
   return m;
 }
 
@@ -2366,13 +2367,13 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   }
   if (c.kind === 'hospice') {
     return {
-      text: `🕯️ convalescence ÷${hospiceDivisor(c.garrison.length).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} sur l’île`,
+      text: `🕯️ convalescence ÷${hospiceDivisor(controlWorkforce(c)).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} sur l’île`,
       pct: null,
     };
   }
   if (c.kind === 'fort') {
     return {
-      text: `🛡️ −${Math.round(fortCutFor(c.garrison.length) * 100)} % sur les reprises voisines`,
+      text: `🛡️ −${Math.round(fortCutFor(controlWorkforce(c)) * 100)} % sur les reprises voisines`,
       pct: null,
     };
   }
@@ -2386,7 +2387,7 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   }
   // 🎓⛏️⛲ Versé directement (2026-09-29) : on dit le débit, il n'y a plus de jauge.
   // 🏅 Le débit AU CRAN D'AUJOURD'HUI.
-  const perH = unitsPerHour(p, c.garrison.length, playerLevel) * yieldTierMult(c, now);
+  const perH = unitsPerHour(p, controlWorkforce(c), playerLevel) * yieldTierMult(c, now);
   const per = (x: number) => Math.round(x).toLocaleString('fr-FR');
   if (isPerChampKind(c.kind)) return { text: `🎓 +${per(perH)} XP/h`, pct: null };
   if (c.kind === 'mine') return { text: `🪙 +${per(perH)}/h`, pct: null };
@@ -2490,7 +2491,8 @@ export function controlYieldCard(
   const c = p.control;
   // 🏰🏳️ La forteresse et les objectifs ne produisent rien : ils se tiennent.
   if (!c || c.owner !== 'player' || c.kind === 'fortress' || c.kind === 'objective') return null;
-  const n = c.garrison.length;
+  // 🧝 Le héros posté vaut 2 travailleurs — sauf au camp, où chacun n'apprend que pour lui.
+  const n = isPerChampKind(c.kind) ? c.garrison.length : controlWorkforce(c);
   const seats = seatsOf(c.kind);
   const [one, many] = WORKER[c.kind];
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
@@ -2778,7 +2780,7 @@ export function militiaFreeSeats(c: ControlState | undefined | null): number {
 
 /** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
  *  raison, le store refuse avec elle. */
-export type ReinforceBlock = 'notHeld' | 'empty' | 'full';
+export type ReinforceBlock = 'notHeld' | 'empty' | 'full' | 'heroHere' | 'heroNoSeat';
 export function reinforceBlocker(
   c: ControlState | undefined | null,
   count: number,
@@ -2794,6 +2796,8 @@ export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
   notHeld: 'ce point n’est pas à toi',
   empty: 'choisis au moins un champion',
   full: 'plus assez de places sur ce point',
+  heroHere: 'le héros y est déjà (ou en route)',
+  heroNoSeat: 'ce lieu n’a pas la place pour le héros',
 };
 
 /** 🏠 UN DÉPART DEPUIS LA BASE (2026-09-29, demandé : « la base cliquable pour voir les
@@ -2806,14 +2810,24 @@ export function baseSendBlocker(
   c: ControlState | undefined | null,
   champs: number,
   militia: number,
+  /** 🧝 Le héros part aussi (2026-10-05) : il prend 2 places de champion (`MILITIA.heroSeats`),
+   *  servies AVANT les champions — l'ordre des envois de la page. */
+  hero = false,
 ): ReinforceBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
-  if (champs <= 0 && militia <= 0) return 'empty';
-  if (champs > 0) {
-    const b = reinforceBlocker(c, champs);
+  if (champs <= 0 && militia <= 0 && !hero) return 'empty';
+  if (hero) {
+    const h = heroPostBlocker(c);
+    if (h === 'here') return 'heroHere';
+    if (h === 'noSeat') return 'heroNoSeat';
+    if (h) return h;
+  }
+  const seats = champs + (hero ? MILITIA.heroSeats : 0);
+  if (seats > 0) {
+    const b = reinforceBlocker(c, seats);
     if (b) return b;
   }
-  if (militia > 0 && militia > militiaFreeSeats(c) - Math.max(0, champs)) return 'full';
+  if (militia > 0 && militia > militiaFreeSeats(c) - Math.max(0, seats)) return 'full';
   return null;
 }
 
@@ -3440,7 +3454,7 @@ export function controlRoster(
             : 'enemy'
           : attackImminent(p, now)
             ? 'imminent'
-            : c.garrison.length
+            : controlWorkforce(c)
               ? 'held'
               : 'empty';
         return {

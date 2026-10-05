@@ -28,16 +28,23 @@
         >
       </p>
       <div class="bgs-pick">
-        <!-- 🦸 Le héros, PARMI les effectifs (demandé : il vivait dans un bandeau à part, au-
-             dessus). Il ne se choisit pas : il ne tient jamais un lieu fixe (règle des points
-             de contrôle, « SANS le héros ») et part depuis la fiche d'un lieu. -->
-        <div class="bgs-hero" :class="{ away: !heroHome }">
+        <!-- 🦸 Le héros, PARMI les effectifs. Disponible, il se choisit comme un champion
+             (2026-10-05, demandé : « envoyer le héros sur un lieu fixe depuis la base ») : il y
+             tient garnison et prend 2 places sur les 5. -->
+        <button
+          type="button"
+          class="bgs-hero"
+          :class="{ away: !heroHome, on: hero }"
+          :disabled="!heroHome"
+          :aria-pressed="hero"
+          @click="hero = !hero"
+        >
           <span class="bgs-hero-emo" aria-hidden="true">🦸</span>
           <span class="bgs-hero-main">
             <b>Héros</b>
-            <span class="bgs-dim">{{ heroStatus }}</span>
+            <span class="bgs-dim">{{ hero ? '✓ part en garnison · 2 places' : heroStatus }}</span>
           </span>
-        </div>
+        </button>
         <AdvPickTile
           v-for="a in champs"
           :key="a.id"
@@ -71,10 +78,11 @@
       </template>
 
       <!-- ⇄ Où les envoyer : un lieu tenu par tuile, grisé AVEC la raison. -->
-      <template v-if="sel.length || mil > 0">
+      <template v-if="sel.length || mil > 0 || hero">
         <p class="bgs-cap">
-          ⇄ <b>Envoyer en renfort</b>
-          {{ sel.length ? `${sel.length} champion${sel.length > 1 ? 's' : ''}` : ''
+          ⇄ <b>Envoyer en renfort</b> {{ hero ? 'le héros' : ''
+          }}{{ hero && (sel.length || mil) ? ', ' : ''
+          }}{{ sel.length ? `${sel.length} champion${sel.length > 1 ? 's' : ''}` : ''
           }}{{ sel.length && mil ? ' et ' : ''
           }}{{ mil ? `${mil} milicien${mil > 1 ? 's' : ''}` : '' }}
           vers :
@@ -87,7 +95,7 @@
             class="bgs-target"
             :disabled="!!t.why || busy"
             :title="t.why ?? ''"
-            @click="emit('send', t.id, [...sel], mil)"
+            @click="emit('send', t.id, [...sel], mil, hero)"
           >
             <span class="bgs-t-emo">{{ t.emo }}</span>
             <span class="bgs-t-main">
@@ -135,16 +143,18 @@ const props = defineProps<{
   /** Les lieux fixes TENUS. */
   targets: BaseSendTarget[];
   /** Le trajet (min) d'un départ de la base vers `id` avec cette sélection — la règle du store. */
-  legMin: (id: string, champIds: readonly string[], militia: number) => number;
+  legMin: (id: string, champIds: readonly string[], militia: number, hero: boolean) => number;
   busy: boolean;
 }>();
 const emit = defineEmits<{
   'update:modelValue': [v: boolean];
-  send: [id: string, champIds: string[], militia: number];
+  send: [id: string, champIds: string[], militia: number, hero: boolean];
 }>();
 
 const sel = ref<string[]>([]);
 const mil = ref(0);
+/** 🦸 Le héros part aussi. */
+const hero = ref(false);
 function close(v: boolean) {
   emit('update:modelValue', v);
 }
@@ -158,6 +168,7 @@ watch(
     if (!open) {
       sel.value = [];
       mil.value = 0;
+      hero.value = false;
     }
   },
 );
@@ -169,6 +180,12 @@ watch(
   },
 );
 watch(
+  () => props.heroHome,
+  (h) => {
+    if (!h) hero.value = false;
+  },
+);
+watch(
   () => props.milHome,
   (n) => {
     if (mil.value > n) mil.value = n;
@@ -177,13 +194,13 @@ watch(
 
 const rows = computed(() =>
   props.targets.map((t) => {
-    const why = baseSendBlocker(t.control, sel.value.length, mil.value);
+    const why = baseSendBlocker(t.control, sel.value.length, mil.value, hero.value);
     return {
       id: t.id,
       emo: t.emo,
       label: t.label,
       free: garrisonFreeSeats(t.control),
-      min: props.legMin(t.id, sel.value, mil.value),
+      min: props.legMin(t.id, sel.value, mil.value, hero.value),
       why: why ? REINFORCE_BLOCK_LABEL[why] : null,
     };
   }),
@@ -237,6 +254,20 @@ const rows = computed(() =>
   border-radius: 12px;
   border: 1.5px solid var(--d1);
   background: #1d1913;
+}
+.bgs-hero {
+  width: 100%;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.bgs-hero.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, #1d1913);
+}
+.bgs-hero:disabled {
+  cursor: default;
 }
 .bgs-hero.away {
   border-color: var(--line);

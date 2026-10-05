@@ -27,7 +27,7 @@
 import { offenseOf, survivalOf, type Combatant } from './combat';
 import { refEscortUnits } from './caravan';
 import type { SkirmishUnit } from './skirmish';
-import type { ExpeditionMap } from './expedition';
+import { HERO_GARRISON_SEATS, type ExpeditionMap } from './expedition';
 
 export const MILITIA = {
   /** Ce que vaut un milicien, en part d'UN champion de référence du niveau du joueur (offense
@@ -50,7 +50,7 @@ export const MILITIA = {
   /** 🧝 LE HÉROS EN GARNISON PREND 2 PLACES SUR LES 5 (2026-10-05, décision de l'utilisateur).
    *  Il compte comme deux champions : dans les places de champion du point (`seatsOf`) ET dans
    *  la garnison entière. Un lieu de moins de 2 places (le lapidaire) ne le garde donc pas. */
-  heroSeats: 2,
+  heroSeats: HERO_GARRISON_SEATS,
   /** 🏰 AU REMPART (2026-09-30, demandé : « les miliciens présents défendent aussi la base ») :
    *  ce que vaut un milicien de la base dans un siège, en part d'un CHAMPION DE RÉFÉRENCE au
    *  niveau du héros (lu par `militiaGuard`, `raid.ts` ; v0.1370, choix de l'utilisateur :

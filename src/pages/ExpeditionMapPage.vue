@@ -465,6 +465,8 @@
       :depart-label="quickDepartLabel"
       :planned="quickPlanned"
       :busy="ctlBusy"
+      :hero-offer="quickHeroOffer"
+      @hero="sendHeroTo(quickPoi?.id)"
       @close="quickId = null"
       @delay="(n: number) => (quickDelayMin = n)"
       @cancel="quickCancel"
@@ -2589,9 +2591,8 @@ const garrisonSlots = computed(() =>
 /** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
  *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
  *  ou un lieu sans 2 places). */
-const heroPostOffer = computed<{ why: string | null; min: number } | null>(() => {
-  const p = livePoi.value;
-  const c = liveControl.value;
+function heroOfferFor(p: Poi | null | undefined): { why: string | null; min: number } | null {
+  const c = p?.control;
   if (!p || !c || c.owner !== 'player') return null;
   const block = heroPostBlocker(c);
   if (block === 'noSeat' || block === 'here' || block === 'notHeld') return null;
@@ -2611,27 +2612,36 @@ const heroPostOffer = computed<{ why: string | null; min: number } | null>(() =>
         ? 'le héros est déjà en route ailleurs'
         : null;
   return { why, min };
-});
-async function sendHeroHere() {
+}
+const heroPostOffer = computed(() => heroOfferFor(livePoi.value));
+/** 🦸 Le héros dans le renfort rapide (case libre) : le même calcul que la fiche. */
+const quickHeroOffer = computed(() => heroOfferFor(quickPoi.value));
+/** 🦸 Le héros part tenir `id` : son instantané de combat part avec lui. Rend la raison d'un
+ *  refus, `null` s'il est parti (le store vérifie tout). */
+function heroToPost(uid: string, id: string): Promise<string | null> {
+  return char.sendHeroToPost(uid, id, Date.now(), {
+    name: char.row?.pseudo ?? 'Toi',
+    level: heroLevel.value,
+    combatant: fighter.value,
+  });
+}
+async function sendHeroTo(id: string | undefined) {
   const uid = auth.user?.id;
-  const p = livePoi.value;
-  if (!uid || !p || ctlBusy.value) return;
+  if (!uid || !id || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    const why = await char.sendHeroToPost(uid, p.id, Date.now(), {
-      name: char.row?.pseudo ?? 'Toi',
-      level: heroLevel.value,
-      combatant: fighter.value,
-    });
+    const why = await heroToPost(uid, id);
     $q.notify(
       why
         ? { type: 'warning', message: `Le héros ne part pas : ${why}.` }
         : { type: 'positive', message: '🦸 Ton héros part tenir le lieu.' },
     );
+    if (!why && quickId.value === id) quickId.value = null;
   } finally {
     ctlBusy.value = false;
   }
 }
+const sendHeroHere = () => sendHeroTo(livePoi.value?.id);
 /** 🏰 Rappelle le héros posté (ou en route) : il rentre à la base, à son pas. */
 async function recallHero() {
   const uid = auth.user?.id;
@@ -4014,7 +4024,9 @@ const reinforceable = computed(() =>
         (controlFreeSeats(r.poi.control) > 0 && freeSorted.value.length > 0) ||
         (militiaFreeSeats(r.poi.control) > 0 && milHome.value > 0) ||
         // ⇄ Ou quelqu'un d'un AUTRE point tenu (la règle du transfert, `transferBlocker`).
-        transferSourcesFor(char.row?.expedition_map, r.poi.id).length > 0,
+        transferSourcesFor(char.row?.expedition_map, r.poi.id).length > 0 ||
+        // 🦸 Ou le héros, s'il peut y aller (2 places).
+        heroOfferFor(r.poi)?.why === null,
     )
     .map((r) => r.poi.id),
 );
@@ -4550,9 +4562,15 @@ const baseTargets = computed(() =>
 /** Le trajet d'un départ de la base — les MÊMES règles que le store : les champions au pas
  *  d'une équipe sans le héros (`partyLegMin`), les miliciens à celui d'une équipe sans rôle ;
  *  on annonce le plus lent des deux. */
-function baseLegMin(id: string, champIds: readonly string[], militia: number): number {
+function baseLegMin(
+  id: string,
+  champIds: readonly string[],
+  militia: number,
+  hero = false,
+): number {
   const p = char.row?.expedition_map?.pois.find((q) => q.id === id);
   if (!p) return 0;
+  const heroMin = hero ? (heroOfferFor(p)?.min ?? 0) : 0;
   const escort = char.advList.filter((a) => champIds.includes(a.id));
   const champMin = escort.length
     ? partyLegMin(p, escort, {
@@ -4562,15 +4580,23 @@ function baseLegMin(id: string, champIds: readonly string[], militia: number): n
       })
     : 0;
   const milMin = militia > 0 ? caravanLegMin(p, [], 0, travelMult.value) : 0;
-  return Math.max(champMin, milMin);
+  return Math.max(champMin, milMin, heroMin);
 }
-async function sendFromBase(id: string, champIds: string[], militia: number) {
+async function sendFromBase(id: string, champIds: string[], militia: number, hero = false) {
   const uid = auth.user?.id;
   if (!uid || ctlBusy.value) return;
   const label = baseTargets.value.find((t) => t.id === id)?.label ?? 'ce lieu';
-  const min = baseLegMin(id, champIds, militia);
+  const min = baseLegMin(id, champIds, militia, hero);
   ctlBusy.value = true;
   try {
+    // 🦸 Le héros d'abord : ses 2 places sont celles que `baseSendBlocker` lui a comptées.
+    if (hero) {
+      const why = await heroToPost(uid, id);
+      if (why) {
+        $q.notify({ type: 'warning', message: `Le héros ne part pas : ${why}.` });
+        return;
+      }
+    }
     // Les champions d'abord : ils prennent leurs places réservées, les miliciens ce qui reste
     // (`baseSendBlocker`, la règle que l'écran a déjà appliquée).
     if (champIds.length) {

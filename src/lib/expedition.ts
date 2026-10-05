@@ -482,6 +482,18 @@ export interface CampSpec {
  *  encaissé par `expeClaim`. ⚠️ Absent des expéditions et rapports d'avant les camps de
  *  faction : tous les lecteurs le traitent comme optionnel. */
 /** 🧝 Le héros tel qu'il défend un lieu tenu : nom, niveau, combattant figé au départ. */
+/** 🧝 Les places qu'occupe le héros posté sur un lieu fixe : il vaut DEUX champions, pour la
+ *  garnison (2026-10-05) comme pour la production et l'effet du lieu (même jour, demandé :
+ *  « il vaut 2 champions aussi pour la production »). Lu par `MILITIA.heroSeats`. */
+export const HERO_GARRISON_SEATS = 2;
+/** 🧝 L'EFFECTIF qui fait tourner un lieu tenu : sa garnison (champions et miliciens) plus le
+ *  héros posté, qui compte pour `HERO_GARRISON_SEATS`. ⚠️ Pas le héros EN ROUTE : comme un
+ *  renfort, il ne produit qu'une fois arrivé. Source unique de la production, des effets
+ *  (tour, fortin, hospice, cartographe) et de la charge des crans. */
+export function controlWorkforce(c: Pick<ControlState, 'garrison' | 'hero'>): number {
+  return c.garrison.length + (c.hero ? HERO_GARRISON_SEATS : 0);
+}
+
 export interface PostedHero {
   name: string;
   level: number;
@@ -2303,7 +2315,7 @@ export function cartoPick(pois: readonly Poi[]): { favor: PoiType; chance: numbe
   if (!c || c.owner !== 'player' || !c.favor) return null;
   if (!(CARTO_TYPES as readonly PoiType[]).includes(c.favor)) return null;
   const t = EXPE.cartoChance;
-  const chance = t[Math.min(t.length - 1, c.garrison.length)] ?? 0;
+  const chance = t[Math.min(t.length - 1, controlWorkforce(c))] ?? 0;
   return chance > 0 ? { favor: c.favor, chance } : null;
 }
 

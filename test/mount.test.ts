@@ -158,6 +158,102 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Mine d’or');
   });
 
+  // 🦸 Le héros se choisit à la base et part avec l'envoi (2026-10-05, signalé : « je n'ai pas
+  // la possibilité d'envoyer le héros sur un lieu fixe »).
+  it('BaseGarrisonSheet : on choisit le héros et il part vers le lieu choisi', async () => {
+    const { default: BaseGarrisonSheet } = await import('@/components/BaseGarrisonSheet.vue');
+    const sent: unknown[][] = [];
+    let out = '';
+    const control = {
+      kind: 'mine',
+      owner: 'player',
+      garrison: ['x', 'y', 'z'],
+      retakes: 0,
+      faction: 'bandits',
+      size: 1,
+    };
+    expect(
+      await mountIt(
+        BaseGarrisonSheet,
+        {
+          modelValue: true,
+          champs: [],
+          away: 0,
+          milHome: 0,
+          heroHome: true,
+          heroStatus: '✅ à la base',
+          targets: [{ id: 'm1', emo: '⛏️', label: 'Mine d’or', control }],
+          legMin: () => 42,
+          busy: false,
+          onSend: (...a: unknown[]) => sent.push(a),
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        async (host) => {
+          host.querySelector<HTMLElement>('.bgs-hero')?.click();
+          await new Promise((r) => setTimeout(r, 0));
+          host.querySelector<HTMLElement>('.bgs-target')?.click();
+        },
+      ),
+    ).toBeNull();
+    expect(out).toContain('part en garnison');
+    expect(sent).toEqual([['m1', [], 0, true]]);
+  });
+
+  it('QuickReinforceSheet propose le héros avec son trajet, et l’envoie', async () => {
+    const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
+    let hero = 0;
+    let out = '';
+    const poi = {
+      id: 'm1',
+      type: 'control',
+      control: {
+        kind: 'mine',
+        owner: 'player',
+        garrison: [],
+        retakes: 0,
+        faction: 'bandits',
+        size: 1,
+      },
+    };
+    expect(
+      await mountIt(
+        QuickReinforceSheet,
+        {
+          poi,
+          champs: [],
+          champFree: 5,
+          milFree: 5,
+          milRoom: 5,
+          milHome: 0,
+          militiaMin: 45,
+          sources: [],
+          busy: false,
+          delayMin: 0,
+          maxDelayMin: 2880,
+          departLabel: null,
+          planned: [],
+          sel: { champs: [], militia: 0, transfers: [] },
+          champMin: {},
+          arrival: null,
+          selHold: null,
+          hold: null,
+          heroOffer: { why: null, min: 90 },
+          onHero: () => hero++,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector<HTMLElement>('.qr-hero-go')?.click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Ton héros · 2 places');
+    expect(hero).toBe(1);
+  });
+
   // 🏝️ Les cinq îles en sélecteur : l'active pleine, les verrouillées sous cadenas ; toucher
   // une île déplie sa fiche.
   // ⚫ Signalé : « je ne vois pas les points de garnison sous la ville portuaire ». Le village
@@ -3028,7 +3124,11 @@ describe('🔀 FusionPanel', () => {
     expect(
       await mountIt(
         ControlPointsSheet,
-        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30, new Set()), advs: ROW.adventurers },
+        {
+          modelValue: true,
+          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          advs: ROW.adventurers,
+        },
         ROW,
         undefined,
         '/',
@@ -3073,7 +3173,11 @@ describe('🔀 FusionPanel', () => {
     expect(
       await mountIt(
         ControlPointsSheet,
-        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30, new Set()), advs: ROW.adventurers },
+        {
+          modelValue: true,
+          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          advs: ROW.adventurers,
+        },
         ROW,
         undefined,
         '/',

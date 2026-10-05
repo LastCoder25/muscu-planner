@@ -37,6 +37,26 @@
           Annuler
         </button>
       </div>
+      <!-- 🦸 LE HÉROS (2026-10-05, demandé : « je n'ai pas la possibilité d'envoyer le héros sur
+           un lieu fixe qui a 2 places ») : il tient garnison et prend 2 places sur les 5. Il part
+           seul, tout de suite (pas de départ différé) ; grisé AVEC la raison. -->
+      <div v-if="heroOffer" class="qr-mil qr-hero">
+        <span class="qr-mil-emo" aria-hidden="true">🦸</span>
+        <span class="qr-mil-main">
+          <span class="qr-mil-name">Ton héros · 2 places</span>
+          <span class="qr-mil-sub">{{
+            heroOffer.why ?? `🧭 ${formatDurationMin(heroOffer.min)} · il défend à son arrivée`
+          }}</span>
+        </span>
+        <button
+          type="button"
+          class="qr-hero-go"
+          :disabled="busy || !!heroOffer.why"
+          @click="emit('hero')"
+        >
+          Envoyer
+        </button>
+      </div>
       <!-- 🛡️ Les miliciens d'abord : c'est le renfort qu'on a le plus souvent sous la main, et
            il ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
       <div v-if="milRoom > 0 && milHome > 0" class="qr-mil">
@@ -223,6 +243,8 @@ const props = defineProps<{
   arrival: { min: number; at: string } | null;
   /** ⏳ Les départs déjà programmés vers ce lieu. */
   planned: { id: string; count: number; departIn: string; departAt: string }[];
+  /** 🦸 Le héros peut-il venir : son trajet, ou la raison d'un refus ; `null` = pas proposé. */
+  heroOffer: { why: string | null; min: number } | null;
 }>();
 /** « +12 », « −3 », « 0 » : un écart se lit avec son signe. */
 const sign = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
@@ -241,6 +263,7 @@ const gainTitle = (on: boolean) =>
     : 'Ce qu’il ajouterait à la défense, en plus de ta sélection';
 const emit = defineEmits<{
   close: [];
+  hero: [];
   toggleChamp: [string];
   militia: [number];
   transfer: [string, string];
@@ -375,6 +398,25 @@ const emit = defineEmits<{
 .qr-none {
   color: var(--dim);
   font-size: 13px;
+}
+.qr-hero {
+  margin-bottom: 8px;
+}
+.qr-hero-go {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #15120e;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.qr-hero-go:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .qr-mil {
   display: flex;

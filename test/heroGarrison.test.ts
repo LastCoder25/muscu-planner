@@ -2,7 +2,11 @@
 // « permettre au héros d'être en garnison sur les lieux fixes. il prend 2 places sur les 5 »).
 import { describe, expect, it } from 'vitest';
 import {
+  baseSendBlocker,
   captureControl,
+  collectControl,
+  controlTravelMult,
+  tierRate,
   champSeatsWithHero,
   controlFreeSeats,
   controlIdOf,
@@ -16,7 +20,14 @@ import {
   sendHeroToControl,
   settleReinforcements,
 } from '@/lib/controlPoints';
-import { createMap, type ControlKind, type ExpeditionMap, type PostedHero } from '@/lib/expedition';
+import {
+  createMap,
+  controlWorkforce,
+  HERO_GARRISON_SEATS,
+  type ControlKind,
+  type ExpeditionMap,
+  type PostedHero,
+} from '@/lib/expedition';
 import { heroCanStay } from '@/lib/party';
 import { heroComing, heroHeldOnMap, takeObjective, turnBackComingHero } from '@/lib/islandConquest';
 import { MILITIA } from '@/lib/militia';
@@ -132,5 +143,69 @@ describe('🧝 envoyer le héros en garnison sur un lieu tenu', () => {
     const lost = loseControl(m, id, 30, H);
     expect(lost.heroReturnAt).toBe(2 * H);
     expect(heroComing(lost)).toBe(false);
+  });
+});
+
+describe('🧝 le héros posté vaut 2 champions pour la production', () => {
+  // ⚠️ Mesuré sur l'or RÉELLEMENT récolté, pas sur une formule recopiée.
+  const goldAfter = (m: ExpeditionMap) => collectControl(m, id, 8 * H, 30).gold;
+  it('héros + 1 champion produit comme 3 champions, plus qu’1 seul', () => {
+    const withHero = goldAfter(held(['a'], true));
+    expect(withHero).toBeGreaterThan(0);
+    expect(withHero).toBe(goldAfter(held(['a', 'b', 'c'])));
+    expect(withHero).toBeGreaterThan(goldAfter(held(['a'])));
+  });
+  it('le héros seul fait tourner le lieu comme 2 champions', () => {
+    expect(goldAfter(held([], true))).toBe(goldAfter(held(['a', 'b'])));
+  });
+  it('en route, il ne produit rien encore (comme un renfort)', () => {
+    const m = sendHeroToControl(held(['a']), id, 0, 100 * H, unit);
+    expect(goldAfter(m)).toBe(goldAfter(held(['a'])));
+  });
+  it('l’effectif compte le héros pour 2, la garnison seule sinon', () => {
+    expect(controlWorkforce({ garrison: ['a'], hero: true })).toBe(3);
+    expect(controlWorkforce({ garrison: ['a', 'mil:1'] })).toBe(2);
+    expect(HERO_GARRISON_SEATS).toBe(MILITIA.heroSeats);
+  });
+  it('la charge des crans suit aussi le héros', () => {
+    expect(tierRate(ctl(held(['a'], true)))).toBe(tierRate(ctl(held(['a', 'b', 'c']))));
+  });
+  it('🗼 une tour tenue par le héros raccourcit les trajets comme 2 champions', () => {
+    // La tour n'est plus posée d'office : on fait du point une tour.
+    const tower = (ids: string[], hero: boolean): ExpeditionMap => {
+      const m = held(ids, hero);
+      return {
+        ...m,
+        pois: m.pois.map((p) =>
+          p.id === id ? { ...p, control: { ...p.control!, kind: 'tower' as const } } : p,
+        ),
+      };
+    };
+    expect(controlTravelMult(tower([], true), H)).toBe(
+      controlTravelMult(tower(['a', 'b'], false), H),
+    );
+    expect(controlTravelMult(tower([], true), H)).toBeLessThan(1);
+  });
+});
+
+describe('🏠 envoyer le héros depuis la base (avec champions et miliciens)', () => {
+  it('le héros seul part sur un lieu qui a 2 places libres', () => {
+    expect(baseSendBlocker(ctl(held(['a', 'b', 'c'])), 0, 0, true)).toBeNull();
+  });
+  it('il compte pour 2 places, servies avant les champions puis les miliciens', () => {
+    const c = ctl(held(['a', 'b']));
+    expect(baseSendBlocker(c, 1, 0, true)).toBeNull(); // 2 + 2 + 1 = 5
+    expect(baseSendBlocker(c, 2, 0, true)).toBe('full');
+    expect(baseSendBlocker(c, 0, 1, true)).toBeNull();
+    expect(baseSendBlocker(c, 1, 1, true)).toBe('full');
+  });
+  it('refusé s’il y est déjà, ou au lapidaire', () => {
+    expect(baseSendBlocker(ctl(held(['a'], true)), 0, 0, true)).toBe('heroHere');
+    const lap = { ...ctl(held([])), kind: 'lapidary' as const };
+    expect(baseSendBlocker(lap, 0, 0, true)).toBe('heroNoSeat');
+  });
+  it('sans le héros, rien ne change', () => {
+    expect(baseSendBlocker(ctl(held(['a', 'b'])), 3, 0)).toBeNull();
+    expect(baseSendBlocker(ctl(held(['a', 'b'])), 0, 0)).toBe('empty');
   });
 });
