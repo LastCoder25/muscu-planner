@@ -48,7 +48,17 @@
       <span class="shadow" />
       <!-- ⚠️ Pas de 💀 à la mort : chez les morts-vivants c'est l'emoji d'une ESPÈCE, un
            mort se serait lu comme un vivant. Un corps tombé se couche et pâlit (cf. .dead). -->
-      <span class="emo">{{ f.emoji }}</span>
+      <!-- L'illustration de l'espèce (`speciesArt`), RETOURNÉE : les images regardent à gauche,
+           or ici les intrus entrent par la brèche (à gauche) et marchent vers la droite. -->
+      <img
+        v-if="f.art"
+        :src="f.art"
+        :alt="f.name"
+        class="art"
+        draggable="false"
+        @error="failedArt.add(f.name)"
+      />
+      <span v-else class="emo">{{ f.emoji }}</span>
     </div>
 
     <!-- Les défenseurs : en haut sur le chemin de ronde, ou en bas dans la cour. -->
@@ -109,7 +119,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import { speciesArt } from '@/data/monsterArt';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
@@ -161,6 +172,9 @@ function breachPoint(spot: YardPoint): YardPoint {
   return { x: YARD_SCENE.breachX, y: spot.y };
 }
 
+/** Espèces dont l'image n'a pas chargé : elles retombent sur leur emoji. */
+const failedArt = reactive(new Set<string>());
+
 // ── Qui est où ──
 const foes = computed(() =>
   [...props.state.inside].map(([i, k]) => {
@@ -169,6 +183,8 @@ const foes = computed(() =>
       i,
       spot: yardFoeSpot(k),
       emoji: b?.emoji ?? '👹',
+      name: b?.name ?? '',
+      art: b && !failedArt.has(b.name) ? speciesArt(b.name) : null,
       champion: !!b?.champion,
       dead: props.state.dead.has(i),
     };
@@ -592,6 +608,20 @@ onUnmounted(() => {
   font-size: 34px;
   line-height: 1;
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.6));
+}
+.foe .art {
+  display: block;
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  transform: scaleX(-1);
+  user-select: none;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.3)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
+}
+.foe.champ .art {
+  width: 60px;
+  height: 60px;
+  filter: drop-shadow(0 0 8px rgba(255, 106, 69, 0.8)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
 }
 .foe.champ .emo {
   font-size: 44px;

@@ -1685,6 +1685,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(out).toContain('yard-wrap');
     expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(entres.size);
+    // Les intrus montrent l'illustration de leur espèce, plus l'emoji (v1.49.9).
+    expect(out).toContain('src="/monsters/g_');
   }, 30_000);
 
   it('⚔️ WarbandStage peint la colonne corps par corps, avec ses illustrations', async () => {

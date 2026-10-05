@@ -236,7 +236,22 @@
         :style="{ transform: `translate(${bodyPos(b, i).x}px, ${bodyPos(b, i).y}px)` }"
       >
         <circle r="8" class="s-foe-bg" />
-        <text y="3.7" class="s-foe-emo">{{ dead.has(i) ? '💀' : b.emoji }}</text>
+        <!-- L'illustration de l'espèce (celle de son gardien à défaut, `speciesArt`), tournée
+             vers la ville : les images regardent à GAUCHE, on retourne celles qui arrivent par
+             l'ouest. L'emoji ne reste qu'en repli si l'image manque. -->
+        <image
+          v-if="foeArt(b.name)"
+          :href="foeArt(b.name)!"
+          x="-10"
+          y="-13"
+          width="20"
+          height="20"
+          class="s-foe-art"
+          :transform="bodyPos(b, i).x < 100 ? 'scale(-1,1)' : undefined"
+          preserveAspectRatio="xMidYMax meet"
+          @error="failedArt.add(b.name)"
+        />
+        <text v-else y="3.7" class="s-foe-emo">{{ dead.has(i) ? '💀' : b.emoji }}</text>
       </g>
 
       <!-- ── LES PROJECTILES ── -->
@@ -352,6 +367,7 @@ import { mulberry32 } from '@/lib/combat';
 import { yardOpenIndex } from '@/lib/yardScene';
 import type { Equipped } from '@/lib/items';
 import YardStage from '@/components/YardStage.vue';
+import { speciesArt } from '@/data/monsterArt';
 import {
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -564,6 +580,13 @@ const heroPvPct = computed(() => {
   return Math.max(0, Math.min(1, (state.value.defPv.get('hero') ?? h.maxPv) / h.maxPv));
 });
 const dead = computed(() => state.value.dead);
+
+/** Illustration d'une espèce assaillante, ou `null` (repli sur l'emoji). Le NOM qui a
+ *  échoué est retenu, pas un booléen : l'échec d'une espèce n'en prive pas les autres. */
+const failedArt = reactive(new Set<string>());
+function foeArt(name: string): string | null {
+  return failedArt.has(name) ? null : speciesArt(name);
+}
 const inside = computed(() => state.value.inside);
 const wounded = computed(() => state.value.wounded);
 const silenced = computed(() => state.value.silenced);
@@ -1259,6 +1282,15 @@ onUnmounted(clearTimers);
 }
 .s-foe.dead {
   opacity: 0.4;
+}
+.s-foe-art {
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.35)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+}
+.s-foe.champ .s-foe-art {
+  filter: drop-shadow(0 0 2px rgba(255, 106, 69, 0.9)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+}
+.s-foe.dead .s-foe-art {
+  filter: grayscale(1) brightness(0.6);
 }
 .s-foe.dead .s-foe-bg {
   fill: #14110c;

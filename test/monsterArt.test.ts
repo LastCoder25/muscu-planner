@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { MONSTER_ART, monsterArt } from '@/data/monsterArt';
+import { MONSTER_ART, monsterArt, speciesArt } from '@/data/monsterArt';
 import { MONSTERS } from '@/data/monsters';
 import { BOSSES } from '@/data/bosses';
 import { LABY_ROSTERS, LABY_GUARDIANS } from '@/data/labyrinthFoes';
@@ -56,5 +56,21 @@ describe('🐉 LES ILLUSTRATIONS D’ENNEMIS (v0.1006)', () => {
     expect(monsterArt(null)).toBeNull();
     expect(monsterArt('constructor')).toBeNull();
     expect(monsterArt('Dragon')).toBe(MONSTER_ART.Dragon);
+  });
+});
+
+describe('les armées ennemies ont leurs illustrations', () => {
+  it('chaque espèce de chaque faction a une image (siège, cour, interception, débordement)', () => {
+    const sans = (['bandits', 'betes', 'mortsvivants'] as const)
+      .flatMap((f) => factionRoster(f).map((u) => u.name))
+      .filter((n) => !speciesArt(n));
+    expect(sans, `espèces sans illustration : ${sans.join(', ')}`).toEqual([]);
+  });
+
+  it('⚠️ le siège et la cour dessinent l’illustration, pas seulement l’emoji', () => {
+    for (const sfc of ['SiegeStage.vue', 'YardStage.vue']) {
+      const src = readFileSync(`src/components/${sfc}`, 'utf8');
+      expect(src, sfc).toContain('speciesArt(');
+    }
   });
 });
