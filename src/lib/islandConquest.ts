@@ -35,7 +35,7 @@ import {
   islandControlSpots,
   mapHarass,
   retakeDelayMs,
-  seatsOf,
+  champSeatsWithHero,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
@@ -917,7 +917,8 @@ function heldObjective(
     control: {
       ...rest,
       owner: 'player',
-      garrison: [...new Set(garrison)].slice(0, seatsOf('objective')),
+      // 🧝 Le héros qui y reste prend 2 places sur les 5.
+      garrison: [...new Set(garrison)].slice(0, champSeatsWithHero({ kind: 'objective' }, !!hero)),
       since: at,
       collectedAt: at,
       assault: false,
@@ -1061,7 +1062,26 @@ export function heroHeldOnMap(
   map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt'> | null | undefined,
   now: number,
 ): boolean {
-  return heroPosted(map) || (map?.heroReturnAt ?? 0) > now;
+  return heroPosted(map) || heroComing(map) || (map?.heroReturnAt ?? 0) > now;
+}
+
+/** 🧝 Le héros est-il EN ROUTE pour rejoindre la garnison d'un lieu tenu ? */
+export function heroComing(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
+  return !!map?.pois.some((p) => p.control?.owner === 'player' && !!p.control.heroComing);
+}
+
+/** 🧝 Le héros en route vers un poste fait DEMI-TOUR : il rentre à la base en autant de temps
+ *  qu'il a déjà marché, et ses places se libèrent. Rend la même carte s'il n'est pas en route. */
+export function turnBackComingHero(map: ExpeditionMap, now: number): ExpeditionMap {
+  const p = map.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing);
+  if (!p) return map;
+  const { heroComing: c, ...rest } = p.control!;
+  const walked = Math.max(0, now - c!.from);
+  return {
+    ...map,
+    pois: map.pois.map((q) => (q.id === p.id ? { ...q, control: rest } : q)),
+    heroReturnAt: Math.max(map.heroReturnAt ?? 0, now + walked),
+  };
 }
 
 /** 🧝 Le héros quitte son poste (rappel, ou lieu perdu) : il rentre à la base en `legMin`

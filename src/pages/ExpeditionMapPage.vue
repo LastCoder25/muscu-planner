@@ -642,9 +642,10 @@
                 <span class="ctl-dim"> · sans limite</span>
               </template>
               <template v-else>
-                🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
+                🏰
+                <b>Garnison {{ controlCount + heroSeatsIn(liveControl) }}/{{ MILITIA.perPoint }}</b>
                 <span class="ctl-dim">
-                  · {{ controlMembers.length + controlAway.length }}/{{
+                  · {{ controlMembers.length + controlAway.length + heroSeatsIn(liveControl) }}/{{
                     seatsOf(liveControl.kind)
                   }}
                   champion{{ seatsOf(liveControl.kind) > 1 ? 's' : '' }}</span
@@ -654,11 +655,19 @@
             </p>
             <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
             <div class="car-pick">
-              <!-- 🏰 Le héros posté à la forteresse (2026-10-02). -->
-              <div v-if="liveControl.hero" class="mil-tile hero-tile">
+              <!-- 🏰 Le héros posté (ou en route) : il prend 2 places sur les 5 — sa tuile
+                 couvre donc deux cases de la grille (2026-10-05). -->
+              <div v-if="liveControl.hero || liveControl.heroComing" class="mil-tile hero-tile">
                 <span class="mil-emo">🦸</span>
                 <span class="mil-name">Ton héros</span>
-                <span class="mil-sub">posté ici</span>
+                <span class="mil-sub"
+                  >{{
+                    liveControl.heroComing
+                      ? `🧭 en route · ${formatDuration(Math.max(0, liveControl.heroComing.at - now))}`
+                      : 'posté ici'
+                  }}
+                  · 2 places</span
+                >
               </div>
               <AdvPickTile
                 v-for="m in controlMembers"
@@ -727,8 +736,8 @@
                sur un lieu fixe mais je n'ai pas d'indication ») : combien, quand, vers quoi. -->
             <div v-for="w in ctlAttackWaits" :key="'atk' + w.key" class="ctl-plan">
               <span class="ctl-plan-main"
-                >⚔️ <b>{{ w.count }}</b> champion{{ w.count > 1 ? 's' : '' }} en attente ·
-                partent dans {{ w.departIn }} ({{ w.departAt }}) pour l’attaque sur
+                >⚔️ <b>{{ w.count }}</b> champion{{ w.count > 1 ? 's' : '' }} en attente · partent
+                dans {{ w.departIn }} ({{ w.departAt }}) pour l’attaque sur
                 <b>{{ w.target }}</b></span
               >
             </div>
@@ -758,14 +767,32 @@
               :at="ctlRecallAt"
             />
             <button
-              v-if="liveControl.hero"
+              v-if="liveControl.hero || liveControl.heroComing"
               type="button"
               class="ctl-recall ctl-back"
               :disabled="ctlBusy"
               @click="recallHero"
             >
-              🦸 Rappeler le héros à la base
+              {{
+                liveControl.heroComing
+                  ? '🔙 Le héros fait demi-tour'
+                  : '🦸 Rappeler le héros à la base'
+              }}
             </button>
+            <!-- 🧝 LE HÉROS EN GARNISON (2026-10-05, demandé) : il prend 2 places sur les 5. -->
+            <template v-else-if="heroPostOffer">
+              <button
+                type="button"
+                class="ctl-recall"
+                :disabled="ctlBusy || !!heroPostOffer.why"
+                @click="sendHeroHere"
+              >
+                🦸 Envoyer le héros en garnison · 2 places
+              </button>
+              <p class="car-cap">
+                {{ heroPostOffer.why ?? `🧭 arrive dans ${formatDurationMin(heroPostOffer.min)}` }}
+              </p>
+            </template>
             <button
               v-if="ctlRecallSel.length"
               type="button"
@@ -1362,8 +1389,10 @@
           >
             <b>⚡ {{ b.minutes >= 60 ? b.minutes / 60 + ' h' : b.minutes + ' min' }}</b>
             <span class="ba-n">×{{ b.count }}</span>
-            <small>−{{ formatDuration(b.gainMs)
-              }}{{ b.lostMs > 0 ? ` · ${formatDuration(b.lostMs)} perdues` : '' }}</small>
+            <small
+              >−{{ formatDuration(b.gainMs)
+              }}{{ b.lostMs > 0 ? ` · ${formatDuration(b.lostMs)} perdues` : '' }}</small
+            >
           </button>
         </div>
         <q-btn flat label="Fermer" class="ba-close" @click="boostAskOpen = false" />
@@ -1610,6 +1639,9 @@ import {
   CONTROL_YIELD,
   controlFreeSeats,
   garrisonFreeSeats,
+  heroPostBlocker,
+  heroSeatsIn,
+  HERO_POST_BLOCK_LABEL,
   militiaFreeSeats,
   controlRoster,
   garrisonDots,
@@ -2554,7 +2586,53 @@ const garrisonSlots = computed(() =>
         label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
       })),
 );
-/** 🏰 Rappelle le héros posté à la forteresse : il rentre à la base, à son pas. */
+/** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
+ *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
+ *  ou un lieu sans 2 places). */
+const heroPostOffer = computed<{ why: string | null; min: number } | null>(() => {
+  const p = livePoi.value;
+  const c = liveControl.value;
+  if (!p || !c || c.owner !== 'player') return null;
+  const block = heroPostBlocker(c);
+  if (block === 'noSeat' || block === 'here' || block === 'notHeld') return null;
+  const legOf = (q: Poi) =>
+    partyLegMin(q, [], {
+      hero: true,
+      travelMult: travelMult.value,
+      gearSpeed: 0,
+    });
+  const post = heroPostOf(char.row?.expedition_map);
+  const min = post ? legFromSpot(p, post, legOf) : legOf(p);
+  const why = block
+    ? HERO_POST_BLOCK_LABEL[block]
+    : heroHealIn.value > 0
+      ? 'le héros est à l’infirmerie'
+      : char.heroEngaged
+        ? 'le héros est déjà en route ailleurs'
+        : null;
+  return { why, min };
+});
+async function sendHeroHere() {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.sendHeroToPost(uid, p.id, Date.now(), {
+      name: char.row?.pseudo ?? 'Toi',
+      level: heroLevel.value,
+      combatant: fighter.value,
+    });
+    $q.notify(
+      why
+        ? { type: 'warning', message: `Le héros ne part pas : ${why}.` }
+        : { type: 'positive', message: '🦸 Ton héros part tenir le lieu.' },
+    );
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+/** 🏰 Rappelle le héros posté (ou en route) : il rentre à la base, à son pas. */
 async function recallHero() {
   const uid = auth.user?.id;
   if (!uid || ctlBusy.value) return;
@@ -6048,6 +6126,8 @@ onUnmounted(() => {
   color: var(--d4);
 }
 .hero-tile {
+  /* 🧝 Le héros prend 2 places sur les 5 : sa tuile couvre deux cases. */
+  grid-column: span 2;
   cursor: default;
   border-style: solid;
   border-color: var(--accent);
