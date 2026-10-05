@@ -1278,7 +1278,22 @@
               ⏳ Chargement de ta progression…
             </p>
             <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
-            <div class="send-bar">
+            <div class="send-bar" :class="{ 'with-odds': sendOdds.length }">
+              <!-- 🎯 La réussite SUIT la composition (demandé) : elle vivait dans la fiche, en haut,
+                 et il fallait remonter après chaque champion coché. Mêmes valeurs que la fiche
+                 (`poiFacts`), jamais un second calcul. -->
+              <div v-if="sendOdds.length" class="send-odds" aria-live="polite">
+                <span
+                  v-for="o in sendOdds"
+                  :key="o.label + o.value"
+                  class="send-odd"
+                  :class="o.cls"
+                  :title="o.title"
+                >
+                  <span class="send-odd-lab">{{ o.icon }} {{ o.label }}</span>
+                  <b class="send-odd-val">{{ o.value }}</b>
+                </span>
+              </div>
               <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
                 {{ partySendLabel }}
               </button>
@@ -4911,6 +4926,14 @@ const poiFacts = computed<PoiFact[]>(() => {
   }
   return out;
 });
+/** 🎯 Ce que la barre d'envoi collante rappelle pendant qu'on coche les champions : les
+ *  pastilles de réussite de l'équipe (réussite, fermeture, gardes, route), lues dans
+ *  `poiFacts`. Rien tant que l'équipe est vide (la fiche dit déjà « compose ton équipe »). */
+const sendOdds = computed(() =>
+  partyTarget.value && partySize.value
+    ? poiFacts.value.filter((f) => f.go && (f.icon === '🎯' || f.icon === '🛣️'))
+    : [],
+);
 /** 💰 La QUANTITÉ ramenée si le lieu est pris, puis le bonus à part. Sans équipe composée on
  *  compte au pas du héros (on compare deux lieux avant de choisir qui part) ; le chiffre se
  *  recale sur l'équipe dès qu'elle est composée. Le niveau est celui que la récolte applique. */
@@ -5697,6 +5720,76 @@ onUnmounted(() => {
   top: 100%;
   height: calc(68px + env(safe-area-inset-bottom));
   background: var(--bg);
+}
+/* 🎯 La réussite à gauche du bouton : elle reste sous les yeux pendant qu'on défile. */
+.send-bar.with-odds {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.send-bar.with-odds .sh-send {
+  flex: 1;
+  min-width: 0;
+}
+.send-odds {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  flex: none;
+}
+.send-odd {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 64px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  line-height: 1.1;
+  animation: send-odd-pop 0.35s ease-out;
+}
+.send-odd-lab {
+  font-size: 10px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.send-odd-val {
+  font-family: 'Oswald', sans-serif;
+  font-size: 18px;
+}
+/* Deux pastilles (gardes + route) : on les tasse pour garder la barre à la hauteur du bouton. */
+.send-odds:has(.send-odd + .send-odd) .send-odd-val {
+  font-size: 14px;
+}
+.send-odd.wp-good {
+  border-color: color-mix(in srgb, var(--d1) 60%, var(--line));
+}
+.send-odd.wp-good .send-odd-val {
+  color: var(--d1);
+}
+.send-odd.wp-mid {
+  border-color: color-mix(in srgb, var(--d3) 60%, var(--line));
+}
+.send-odd.wp-mid .send-odd-val {
+  color: var(--d3);
+}
+.send-odd.wp-bad {
+  border-color: color-mix(in srgb, var(--d4) 60%, var(--line));
+}
+.send-odd.wp-bad .send-odd-val {
+  color: var(--d4);
+}
+@keyframes send-odd-pop {
+  from {
+    transform: scale(1.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .send-odd {
+    animation: none;
+  }
 }
 /* Grisé mais OPAQUE : collant, un bouton à 40 % d'opacité laissait voir les tuiles dessous. */
 .send-bar .sh-send:disabled {
