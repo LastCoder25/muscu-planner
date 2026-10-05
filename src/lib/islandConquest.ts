@@ -36,6 +36,7 @@ import {
   mapHarass,
   retakeDelayMs,
   champSeatsWithHero,
+  walkPoint,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
@@ -1081,6 +1082,24 @@ export function heroWalk(
   return null;
 }
 
+/** 🧭 LE TRAJET À PIED DU HÉROS, tel que la carte le dessine (signalé : « je n'ai pas le
+ *  tracé du déplacement du héros »). Vers un poste : un aller simple base → lieu (comme un
+ *  renfort). Vers la base : un retour simple depuis là où il est parti (`heroReturnFrom`) ;
+ *  un retour d'avant, sans point de départ, n'est pas dessiné. `null` s'il ne marche pas. */
+export function heroWalkVoyage(
+  map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt' | 'heroReturnFrom'> | null | undefined,
+  now: number,
+): { poi: Poi; sentAt: number; midAt: number; returnAt: number; back: boolean } | null {
+  const p = map?.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing);
+  const c = p?.control?.heroComing;
+  if (p && c && c.at > now) return { poi: p, sentAt: c.from, midAt: c.at, returnAt: c.at, back: false };
+  const at = map?.heroReturnAt;
+  const from = map?.heroReturnFrom;
+  if (at === undefined || at <= now || !from) return null;
+  const spot = { id: 'hero-walk', type: 'control', x: from.x, y: from.y } as unknown as Poi;
+  return { poi: spot, sentAt: from.at, midAt: from.at, returnAt: at, back: true };
+}
+
 /** 🧝 Le héros est-il EN ROUTE pour rejoindre la garnison d'un lieu tenu ? */
 export function heroComing(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
   return !!map?.pois.some((p) => p.control?.owner === 'player' && !!p.control.heroComing);
@@ -1097,6 +1116,7 @@ export function turnBackComingHero(map: ExpeditionMap, now: number): ExpeditionM
     ...map,
     pois: map.pois.map((q) => (q.id === p.id ? { ...q, control: rest } : q)),
     heroReturnAt: Math.max(map.heroReturnAt ?? 0, now + walked),
+    heroReturnFrom: walkPoint(p, c!, now),
   };
 }
 
@@ -1104,9 +1124,11 @@ export function turnBackComingHero(map: ExpeditionMap, now: number): ExpeditionM
  *  minutes depuis `now`. */
 export function recallPostedHero(map: ExpeditionMap, now: number, legMin: number): ExpeditionMap {
   if (!heroPosted(map)) return map;
+  const post = heroPostOf(map)!;
   return {
     ...unpostHero(map),
     heroReturnAt: now + Math.max(0, Math.round(legMin)) * 60_000,
+    heroReturnFrom: { x: post.x, y: post.y, at: now },
   };
 }
 

@@ -5941,6 +5941,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (back) {
       const m = { ...r.map };
       delete m.heroReturnAt;
+      delete m.heroReturnFrom;
       r = { ...r, map: m };
     }
     if (r.map === cur.expedition_map) return null;

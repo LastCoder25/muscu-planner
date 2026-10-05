@@ -1618,6 +1618,18 @@ export function sortieHomeLabel(n: number): string {
     : ' 🏠 1 champion en sortie rentre à la base.';
 }
 
+/** 🧭 Où en est le héros sur la ligne base → lieu, à l'instant `t` de sa marche vers un poste. */
+export function walkPoint(
+  p: Pick<Poi, 'x' | 'y'>,
+  c: { from: number; at: number },
+  t: number,
+): { x: number; y: number; at: number } {
+  const span = c.at - c.from;
+  const f = span > 0 ? Math.min(1, Math.max(0, (t - c.from) / span)) : 1;
+  const town = EXPE.town;
+  return { x: town.x + (p.x - town.x) * f, y: town.y + (p.y - town.y) * f, at: t };
+}
+
 /** 🏰 Perdu (reprise ennemie ou abandon) : le lieu redevient ennemi, troupe re-tirée. Repris
  *  par une attaque, il prend le rang et la bannière des assaillants (`won`) ; abandonné, un
  *  rang re-tiré. */
@@ -1631,10 +1643,14 @@ export function loseControl(
 ): ExpeditionMap {
   // 🧝 Le héros encore EN ROUTE vers ce point fait demi-tour : il rentre à la base en autant
   // de temps qu'il a déjà marché (le héros posté, lui, est rappelé par le store).
-  const coming = map.pois.find((p) => p.id === id)?.control?.heroComing;
+  const lostPoi = map.pois.find((p) => p.id === id);
+  const coming = lostPoi?.control?.heroComing;
   const back =
-    coming && coming.at > at
-      ? { heroReturnAt: Math.max(map.heroReturnAt ?? 0, at + Math.max(0, at - coming.from)) }
+    lostPoi && coming && coming.at > at
+      ? {
+          heroReturnAt: Math.max(map.heroReturnAt ?? 0, at + Math.max(0, at - coming.from)),
+          heroReturnFrom: walkPoint(lostPoi, coming, at),
+        }
       : {};
   const lost = withControl(map, id, (p) => {
     const retakes = p.control!.retakes + 1;

@@ -883,6 +883,9 @@ export interface ExpeditionMap {
   sailings?: Crossing[];
   /** 🏰 Le héros RAPPELÉ de la forteresse rentre à la base à cet instant (occupé d'ici là). */
   heroReturnAt?: number;
+  /** 🧭 D'OÙ et QUAND le héros est parti pour rentrer à pied (rappel, demi-tour, lieu perdu) :
+   *  sans ce point la carte ne savait pas dessiner son retour. Absent sur un retour d'avant. */
+  heroReturnFrom?: { x: number; y: number; at: number };
   /** 🛡️ La RÉSERVE DE MILICE d'une île RANGÉE (règle 5 : une réserve par île, produite par
    *  la Caserne sur place même en ton absence). ⚠️ Jamais sur la carte ACTIVE : la réserve de
    *  l'île où tu es vit dans `base.militia`. Échangée au débarquement (`landCrossing`). */
@@ -2876,6 +2879,7 @@ export function advanceWorld(
     ...(map.islands ? { islands: map.islands } : {}),
     ...(map.citadelStash ? { citadelStash: map.citadelStash } : {}),
     ...(map.heroReturnAt !== undefined ? { heroReturnAt: map.heroReturnAt } : {}),
+    ...(map.heroReturnFrom ? { heroReturnFrom: map.heroReturnFrom } : {}),
     ...(map.militia ? { militia: map.militia } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
     // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des

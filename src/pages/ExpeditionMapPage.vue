@@ -1455,6 +1455,7 @@
 import {
   FORTRESS_ID,
   heroPostOf,
+  heroWalkVoyage,
   islandConquest,
   islandTargetLabel,
   isIslandTargetId,
@@ -3370,6 +3371,23 @@ const returnsOnMap = computed(() =>
     turned: r.turnBack !== undefined,
   })),
 );
+/** 🧭 Le HÉROS À PIED (signalé : « je n'ai pas le tracé du déplacement du héros ») : vers un
+ *  lieu tenu où il va se poster (aller simple, comme un renfort), ou vers la base depuis là où
+ *  il est parti (rappel, demi-tour, lieu perdu). */
+const heroWalkOnMap = computed(() => {
+  const v = heroWalkVoyage(char.row?.expedition_map, now.value);
+  if (!v) return null;
+  return {
+    id: 'hw',
+    poi: v.poi,
+    back: v.back,
+    origin: undefined as { x: number; y: number } | undefined,
+    at: drawnAt(v),
+    pct: voyageProgress(v, now.value).overall * 100,
+    arriveAt: v.back ? v.returnAt : v.midAt,
+    arriveIn: (v.back ? v.returnAt : v.midAt) - now.value,
+  };
+});
 /** ⚔️🧭 Les groupes d'une attaque combinée en préparation : chez eux tant qu'ils attendent
  *  (⏳), puis en route — tous arrivent ensemble. */
 const attacksOnMap = computed(() =>
@@ -3445,6 +3463,21 @@ const travelersOnMap = computed(() => [
       ...(r.origin ? { homeName: 'Au point de départ' } : {}),
     } as RecallInfo,
   })),
+  // 🧝 Le héros à pied : dessiné comme lui (bleu). Son demi-tour se commande depuis le lieu.
+  ...(heroWalkOnMap.value
+    ? [
+        {
+          ...heroWalkOnMap.value,
+          tripKey: heroWalkOnMap.value.id,
+          emo: '🧝',
+          heroWing: true,
+          kind: 'party' as const,
+          recall: undefined as RecallTarget | undefined,
+          recallLabel: '',
+          recallInfo: null as RecallInfo | null,
+        },
+      ]
+    : []),
   // 🏠🔙 Un retour vers la base peut rebrousser chemin vers son point (`recallReturns`) —
   // sauf s'il est lui-même un demi-tour.
   ...returnsOnMap.value.map((r) => ({
@@ -3570,6 +3603,28 @@ const trips = computed(() => {
       members: r.members,
       haul: [],
       title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${who} · arrivée dans ${formatDuration(r.arriveIn)}`,
+    });
+  }
+  const w = heroWalkOnMap.value;
+  if (w) {
+    ends.set(w.id, w.arriveAt);
+    out.push({
+      key: w.id,
+      kind: 'van',
+      who: '🧝',
+      cat: 'reinf',
+      poi: w.poi,
+      time: `${w.back ? '↩ ' : ''}${formatDuration(Math.max(0, w.arriveIn))}`,
+      pct: w.pct,
+      back: w.back,
+      withHero: true,
+      from: w.back ? w.poi : null,
+      ...(w.back ? { toBase: true } : {}),
+      members: [],
+      haul: [],
+      title: w.back
+        ? `Ton héros rentre à pied · à la base dans ${formatDuration(Math.max(0, w.arriveIn))}`
+        : `Ton héros va se poster sur ${poiLabel(w.poi)} · arrivée dans ${formatDuration(Math.max(0, w.arriveIn))}`,
     });
   }
   for (const r of returnsOnMap.value) {
