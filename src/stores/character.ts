@@ -4457,9 +4457,11 @@ export const useCharacterStore = defineStore('character', () => {
     // Réservés : jusqu'à leur retour prévu. Ils restent chez eux jusqu'à leur départ.
     const returnOf = new Map(plan.wings.flatMap((w) => w.members.map((id) => [id, w.returnAt])));
     await persist(userId, {
-      // 🧝 Réservé pour l'attaque, le héros posté quitte son poste.
+      // 🧝 Réservé pour l'attaque, le héros posté GARDE son poste jusqu'au départ de son
+      // groupe (`attackTick`) : il défend le lieu pendant l'attente, comme les champions qui
+      // attendent chez eux. (Signalé : il quittait l'Ossuaire dès l'envoi.)
       expedition_map: recordDeparture(
-        hero ? unpostHero(targetTaken(map, poi)!) : targetTaken(map, poi)!,
+        targetTaken(map, poi)!,
         now,
         plan.midAt,
       ),
@@ -4525,6 +4527,8 @@ export const useCharacterStore = defineStore('character', () => {
           map = sortieLeaves(map, w.originId, d.members, w.departAt, a.playerLevel);
           advs = advs.map((x) => (went.has(x.id) ? { ...x, posted: undefined } : x));
         }
+        // 🧝 Le héros quitte son poste à SON départ, pas à l'envoi de l'attaque.
+        if (d.hero && map) map = unpostHero(map);
         const gone = d.members.length > 0 || d.hero;
         const wings = [...a.wings];
         wings[i] = gone
