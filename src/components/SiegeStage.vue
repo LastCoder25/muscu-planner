@@ -343,6 +343,8 @@ import {
   turnToward,
   VILLAGE,
   villageAngle,
+  villageDefenderSpot,
+  villageRadius,
   villageVertexAngle,
   yardAttackerSpot,
   type SiegeBeat,
@@ -379,18 +381,18 @@ const loot = computed(() => props.loot ?? []);
 const stage = computed(() => buildSiegeStage(props.report, turretCount(props.turretLevel)));
 const hasTurrets = computed(() => props.turretLevel > 0);
 
-// ── Géométrie : la MÊME que l'écran « Ma base » ──
-const WALL_R = SIEGE_WALL_R;
+/** 🏘️ Le village du port (îles 2 à 5) : la même bataille, repliée sur une muraille côté
+ *  terre, la mer dans le dos (`villageAngle`). Le rapport ne change pas d'une instance à
+ *  l'autre (`:key`), la géométrie se pose donc une fois. */
+const village = (props.report.island ?? 0) >= 2;
+// ── Géométrie : la MÊME que l'écran « Ma base » (muraille agrandie au village) ──
+const WALL_R = village ? VILLAGE.wallR : SIEGE_WALL_R;
 const EARTH_R = WALL_R + 15;
 const FIELD = SIEGE_STAGE.field;
 const TURRET_S = 1.35;
 /** Marge entre la fin du pivot et le lâcher (une image de transition CSS + du jeu). */
 const PIVOT_MARGIN_MS = 45;
 const decor = battlefieldDecor(EARTH_R);
-/** 🏘️ Le village du port (îles 2 à 5) : la même bataille, repliée sur une muraille côté
- *  terre, la mer dans le dos (`villageAngle`). Le rapport ne change pas d'une instance à
- *  l'autre (`:key`), la géométrie se pose donc une fois. */
-const village = (props.report.island ?? 0) >= 2;
 /** Un angle du moteur, tel qu'on le DESSINE (replié sur l'arc côté terre au village). */
 const geoA = (a: number): number => (village ? villageAngle(a) : a);
 const vertexAt = (a: number) => ({
@@ -448,15 +450,17 @@ const BOATS = [
   { x: 118, y: SHORE + 30, s: 1.15 },
   { x: 60, y: SHORE + 44, s: 0.9 },
 ];
-/** Les maisons, en éventail dans la cour (au nord du rivage, à l'abri du rempart). */
+/** Les maisons, en couronne contre le rempart et le long de la grève : le CŒUR de la
+ *  cour reste libre pour les défenseurs (`villageDefenderSpot`). */
 const HOUSES = [
-  { x: 74, y: 92 },
-  { x: 88, y: 84 },
-  { x: 112, y: 84 },
-  { x: 126, y: 92 },
-  { x: 100, y: 74 },
-  { x: 84, y: 64 },
-  { x: 116, y: 64 },
+  { x: 52, y: 90 },
+  { x: 70, y: 92 },
+  { x: 130, y: 92 },
+  { x: 148, y: 90 },
+  { x: 32, y: 72 },
+  { x: 168, y: 72 },
+  { x: 44, y: 52 },
+  { x: 156, y: 52 },
 ];
 
 // ── Déroulé ──
@@ -579,7 +583,7 @@ function bodyPos(b: SiegeBody, i: number): { x: number; y: number } {
   const e = entries.value.get(i);
   if (e) return yardAttackerSpot(e.angle, e.k);
   const tour = dead.value.get(i) ?? curRound.value;
-  const d = assaultRadius(b.dist, tour);
+  const d = village ? villageRadius(assaultRadius(b.dist, tour)) : assaultRadius(b.dist, tour);
   const a = geoA(bodyAngleAt(b, tour));
   return { x: 100 + Math.cos(a) * d, y: 100 + Math.sin(a) * d };
 }
@@ -594,8 +598,9 @@ const defenderLayout = computed(() => {
     ...stage.value.defenders.filter((d) => d.post === 'yard'),
     ...desc.map((id) => stage.value.defenders.find((d) => d.id === id)).filter((d) => !!d),
   ];
-  rampart.forEach((d, j) => out.set(d.id, defenderSpot(angle, j, rampart.length, 'rampart')));
-  yard.forEach((d, j) => out.set(d.id, defenderSpot(angle, j, yard.length, 'yard')));
+  const spot = village ? villageDefenderSpot : defenderSpot;
+  rampart.forEach((d, j) => out.set(d.id, spot(angle, j, rampart.length, 'rampart')));
+  yard.forEach((d, j) => out.set(d.id, spot(angle, j, yard.length, 'yard')));
   return out;
 });
 function defPos(id: string): { x: number; y: number } {
