@@ -3566,7 +3566,12 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** ⬆️ ASCENSION D'UNE PIÈCE : rang suivant contre de l'or et des sceaux d'objet de ce rang.
    *  Même règle que le bouton (`advGearAscensionBlocker`). `null` si c'est fait. */
-  async function ascendGear(userId: string, gearId: string): Promise<string | null> {
+  async function ascendGear(
+    userId: string,
+    gearId: string,
+    /** Ce que l'éclat dit sous la pièce (la Guilde y met le gain de puissance). */
+    note?: string,
+  ): Promise<string | null> {
     const cur = row.value;
     if (!cur) return 'Personnage introuvable.';
     const advs = cur.adventurers ?? [];
@@ -3588,6 +3593,16 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold - cost.gold,
       seals: addSeals(cur.seals, 'gear', next, -cost.seals),
       adv_gear: { ...(cur.adv_gear ?? {}), stock: stock.map((x) => (x.id === gearId ? up : x)) },
+    });
+    // Annoncée APRÈS l'écriture, ICI et non dans un écran : l'ascension se lance depuis la
+    // Guilde ET depuis le rapport de mission, et le rapport n'en jouait aucune.
+    useGameFx().celebrate({
+      kind: 'rankup',
+      emoji: g.emoji,
+      title: g.name,
+      ranks: { from: next - 1, to: next },
+      gear: { model: advGearModelOf(g) },
+      subtitle: note ?? 'Ses stats montent d’un rang.',
     });
     return null;
   }

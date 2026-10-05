@@ -1014,7 +1014,6 @@ import {
   realGearTexts,
 } from '@/lib/champDisplay';
 import CountUp from '@/components/CountUp.vue';
-import { useGameFx } from '@/composables/useGameFx';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
 import RankStarBadge from '@/components/RankStarBadge.vue';
@@ -1426,7 +1425,6 @@ function sellOneGear(g: AdvGear) {
 }
 
 const busy = ref(false);
-const gameFx = useGameFx();
 const now = ref(Date.now());
 // ⚠️ NETTOYÉE au démontage. Posée au niveau du setup et jamais arrêtée, elle continuait de
 // battre après la fermeture du panneau en retenant la ref ET le composant — exactement la
@@ -1748,23 +1746,17 @@ function confirmAscendGear() {
   const p = gearAscPreview.value;
   if (!p) return;
   void pair(async (uid) => {
-    const err = await char.ascendGear(uid, p.g.id);
+    // ⬆️ L'animation est jouée par le store (même scène depuis le rapport de mission) ;
+    // la Guilde n'y ajoute que le gain de puissance qu'elle sait chiffrer.
+    const err = await char.ascendGear(
+      uid,
+      p.g.id,
+      p.powGain > 0
+        ? `⚔️ ${fmtChampPow(p.powBefore, showK.value)} → ${fmtChampPow(p.powAfter, showK.value)} (+${fmtChampPow(p.powGain, showK.value)}) pour ${p.wearer}`
+        : undefined,
+    );
     if (err) throw new Error(err);
     ascGearId.value = null;
-    // Annoncé APRÈS l'écriture : une animation n'annonce jamais un gain qui n'a pas eu lieu.
-    // ⬆️ La MÊME scène que l'ascension d'un champion (carte qui se retourne, rang qui
-    // change de couleur), avec l'illustration de la pièce à la place du portrait.
-    gameFx.celebrate({
-      kind: 'rankup',
-      emoji: p.g.emoji,
-      title: p.g.name,
-      ranks: { from: CHARACTER_RANKS.indexOf(p.from), to: CHARACTER_RANKS.indexOf(p.to) },
-      gear: { model: advGearModelOf(p.g) },
-      subtitle:
-        p.powGain > 0
-          ? `⚔️ ${fmtChampPow(p.powBefore, showK.value)} → ${fmtChampPow(p.powAfter, showK.value)} (+${fmtChampPow(p.powGain, showK.value)}) pour ${p.wearer}`
-          : 'Ses stats montent d’un rang.',
-    });
   });
 }
 /** 🪬 La banque de runes du joueur (rappel en tête du vivier, compteur de la fiche). */
