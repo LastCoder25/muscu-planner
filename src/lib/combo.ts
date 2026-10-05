@@ -8,7 +8,7 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 // faites s'il a été commencé, comme pour les challenges »).
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
-import { COMBO_SLOTS, comboSlot, swapSlotsOf, variantFamilyKey } from '@/data/combo';
+import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -241,8 +241,9 @@ export function legMode(leg: ComboLeg): ComboCountMode {
 
 /** 📑 L'ORDRE D'AFFICHAGE DES EXOS D'UN DÉFI 360 : PAR GROUPE MUSCULAIRE (demandé par
  *  l'utilisateur), dans l'ordre des emplacements (`COMBO_SLOTS` : Poussée, Tirage, Squat,
- *  Charnière, Gainage, Bras, Épaules & mollets), puis ALPHABÉTIQUE dans chaque groupe.
- *  Un emplacement inconnu (360 ancien) passe en dernier.
+ *  Charnière, Gainage, Biceps, Triceps, Épaules & mollets), puis ALPHABÉTIQUE dans chaque
+ *  groupe. L'ancien « Bras » se range avec les bras, un emplacement inconnu en dernier
+ *  (`comboSlotRank`).
  *
  *  ⚠️ L'ORDRE EST STABLE : il ne dépend PAS de l'avancement. Avant la v0.903 les écrans
  *  triaient par avancement, donc la liste se réordonnait PENDANT la saisie et on perdait sa
@@ -259,13 +260,9 @@ export function legMode(leg: ComboLeg): ComboCountMode {
 export function legsByGroup<T extends { exercise_name: string; slot: string }>(
   legs: readonly T[],
 ): T[] {
-  const rank = (slot: string) => {
-    const i = COMBO_SLOTS.findIndex((s) => s.key === slot);
-    return i < 0 ? COMBO_SLOTS.length : i;
-  };
   return [...legs].sort(
     (a, b) =>
-      rank(a.slot) - rank(b.slot) ||
+      comboSlotRank(a.slot) - comboSlotRank(b.slot) ||
       a.exercise_name.localeCompare(b.exercise_name, 'fr', { numeric: true, sensitivity: 'base' }),
   );
 }
@@ -1100,6 +1097,8 @@ const VOLUME_MULT: Record<ComboVolume, number> = { light: 0.6, moderate: 1, inte
 // (on vise ~SETS_PER_EXO séries par exo → un gros volume = plus d'exos, jamais
 // 13 séries d'un seul mouvement).
 const VARIETY_CAP: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
+/** Groupes optionnels proposés à TOUS les niveaux (débutant compris). */
+const ALWAYS_ON = new Set(['biceps', 'triceps']);
 const SETS_PER_EXO = 5;
 
 /** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
@@ -1154,8 +1153,8 @@ const MUSCLE_SLOT: Record<string, string> = {
   fessiers: 'hinge',
   abdominaux: 'core',
   lombaires: 'core',
-  biceps: 'arms',
-  triceps: 'arms',
+  biceps: 'biceps',
+  triceps: 'triceps',
   épaules: 'shoulders',
   mollets: 'shoulders',
 };
@@ -1168,11 +1167,21 @@ const GOAL_SLOT_MULT: Record<ComboGoal, Record<string, number>> = {
     squat: 0.9,
     hinge: 1.15,
     core: 1.1,
-    arms: 1.2,
+    biceps: 1.2,
+    triceps: 1.2,
     shoulders: 1.15,
   },
   // Perf/fonctionnel : chaîne postérieure + gainage + composés ; moins d'isolation.
-  perf: { push: 1.0, pull: 1.1, squat: 1.1, hinge: 1.2, core: 1.2, arms: 0.8, shoulders: 0.95 },
+  perf: {
+    push: 1.0,
+    pull: 1.1,
+    squat: 1.1,
+    hinge: 1.2,
+    core: 1.2,
+    biceps: 0.8,
+    triceps: 0.8,
+    shoulders: 0.95,
+  },
   balanced: {},
 };
 // Groupes musculaires déjà sollicités par un sport (nom → muscle_primary).
@@ -1208,7 +1217,7 @@ export function comboEmphasis(
   sports?: SportPractice[] | null,
   priorityMuscles?: string[] | null,
 ): Record<string, number> {
-  const slots = ['push', 'pull', 'squat', 'hinge', 'core', 'arms', 'shoulders'];
+  const slots = COMBO_SLOTS.map((s) => s.key);
   const w: Record<string, number> = {};
   for (const s of slots) w[s] = GOAL_SLOT_MULT[goal][s] ?? 1;
   // Sports : réduit les emplacements déjà chargés (∝ fréquence × intensité).
@@ -1245,16 +1254,17 @@ export function suggestFullBodyPlan(
 ): ComboSlotPlan[] {
   const cap = VARIETY_CAP[variety];
   return slots.map((s) => {
-    // Le BRAS est TOUJOURS proposé (même en débutant) — les bras sont un groupe
+    // Les BRAS (biceps, triceps) sont TOUJOURS proposés (même en débutant) — un groupe
     // motivant qu'on ne veut pas laisser tomber en silence (ticket adbc5ff4). Les
     // autres accessoires (épaules/mollets) restent réservés à inter/avancé.
-    const active = s.essential || s.key === 'arms' || level !== 'debutant';
+    const active = s.essential || ALWAYS_ON.has(s.key) || level !== 'debutant';
     if (!active) return { slot: s.key, active: false, nExos: 0, weeklySets: 0, setsPerExo: 0 };
     const mult = emphasis?.[s.key] ?? 1;
     const weeklySets = Math.max(3, Math.round(comboWeeklySets(level, volume, s.essential) * mult));
-    // Nb d'exos = volume / ~5 séries, borné par le plafond de variété (accessoires : 1).
+    // Nb d'exos = volume / ~5 séries, borné par le plafond de variété — accessoires
+    // compris : c'est ce qui permet curl + curl marteau dans le même 360 (demandé).
     const wanted = Math.max(1, Math.round(weeklySets / SETS_PER_EXO));
-    const nExos = s.essential ? Math.min(cap, wanted) : 1;
+    const nExos = Math.min(cap, wanted);
     const setsPerExo = Math.max(1, Math.round(weeklySets / nExos));
     return { slot: s.key, active: true, nExos, weeklySets, setsPerExo };
   });

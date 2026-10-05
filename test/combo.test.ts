@@ -59,7 +59,10 @@ import {
   filterLegsByZone,
   legBarZone,
   NO_PACE,
+  comboWeeklySets,
+  transferSlotFor,
 } from '@/lib/combo';
+import { COMBO_SLOTS, comboSlot, comboSlotRank } from '@/data/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
   date,
@@ -369,7 +372,8 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
     { key: 'push', muscles: ['pectoraux'], essential: true },
     { key: 'pull', muscles: ['dos'], essential: true },
     { key: 'squat', muscles: ['quadriceps'], essential: true },
-    { key: 'arms', muscles: ['biceps', 'triceps'], essential: false },
+    { key: 'biceps', muscles: ['biceps'], essential: false },
+    { key: 'triceps', muscles: ['triceps'], essential: false },
     { key: 'shoulders', muscles: ['epaules'], essential: false },
   ];
   const bySlot = (plan: ReturnType<typeof suggestFullBodyPlan>, key: string) =>
@@ -406,17 +410,29 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
     for (const key of ['push', 'pull', 'squat']) expect(bySlot(plan, key).active).toBe(true);
   });
 
-  it('débutant : le BRAS est toujours proposé, les autres accessoires exclus', () => {
+  it('débutant : biceps ET triceps toujours proposés, les autres accessoires exclus', () => {
     const plan = suggestFullBodyPlan('debutant', 'moderate', 'high', SLOTS);
-    expect(bySlot(plan, 'arms').active).toBe(true); // bras TOUJOURS proposé (ticket adbc5ff4)
+    expect(bySlot(plan, 'biceps').active).toBe(true); // bras TOUJOURS proposés (ticket adbc5ff4)
+    expect(bySlot(plan, 'triceps').active).toBe(true);
     expect(bySlot(plan, 'shoulders').active).toBe(false); // autre accessoire exclu en débutant
     expect(bySlot(plan, 'push').active).toBe(true);
   });
 
-  it('accessoire = 1 exo même en haute variété ; essentiel > accessoire (volume)', () => {
-    const plan = suggestFullBodyPlan('avance', 'moderate', 'high', SLOTS);
-    expect(bySlot(plan, 'arms').nExos).toBe(1);
-    expect(bySlot(plan, 'push').weeklySets).toBeGreaterThan(bySlot(plan, 'arms').weeklySets);
+  it('un accessoire suit la variété (curl + curl marteau) ; essentiel > accessoire (volume)', () => {
+    const high = suggestFullBodyPlan('avance', 'moderate', 'high', SLOTS);
+    const low = suggestFullBodyPlan('avance', 'moderate', 'low', SLOTS);
+    expect(bySlot(high, 'biceps').nExos).toBe(2);
+    expect(bySlot(high, 'triceps').nExos).toBe(2);
+    expect(bySlot(low, 'biceps').nExos).toBe(1);
+    expect(bySlot(high, 'push').weeklySets).toBeGreaterThan(bySlot(high, 'biceps').weeklySets);
+  });
+
+  it('biceps et triceps ont chacun leur volume, du même ordre que les autres accessoires', () => {
+    const plan = suggestFullBodyPlan('intermediaire', 'moderate', 'med', SLOTS);
+    expect(bySlot(plan, 'biceps').weeklySets).toBe(
+      comboWeeklySets('intermediaire', 'moderate', false),
+    );
+    expect(bySlot(plan, 'triceps').weeklySets).toBe(bySlot(plan, 'biceps').weeklySets);
   });
 
   it('avancé > débutant (volume)', () => {
@@ -465,7 +481,8 @@ describe('comboEmphasis / objectiveToGoal (objectif + sports)', () => {
 
   it('sculpt : haut/bras boostés, squat allégé', () => {
     const e = comboEmphasis('sculpt');
-    expect(e.arms!).toBeGreaterThan(1);
+    expect(e.biceps!).toBeGreaterThan(1);
+    expect(e.triceps!).toBeGreaterThan(1);
     expect(e.push!).toBeGreaterThan(1);
     expect(e.squat!).toBeLessThan(1);
   });
@@ -474,13 +491,15 @@ describe('comboEmphasis / objectiveToGoal (objectif + sports)', () => {
     const e = comboEmphasis('perf');
     expect(e.hinge!).toBeGreaterThan(1);
     expect(e.core!).toBeGreaterThan(1);
-    expect(e.arms!).toBeLessThan(1);
+    expect(e.biceps!).toBeLessThan(1);
+    expect(e.triceps!).toBeLessThan(1);
   });
 
   it('balanced sans sport = tout neutre (1)', () => {
     const e = comboEmphasis('balanced');
-    for (const k of ['push', 'pull', 'squat', 'hinge', 'core', 'arms', 'shoulders'])
-      expect(e[k]!).toBe(1);
+    // Une clé par emplacement réel : un groupe ajouté sans poids passerait ici à undefined.
+    for (const k of COMBO_SLOTS.map((s) => s.key)) expect(e[k]!).toBe(1);
+    expect(e.arms).toBeUndefined();
   });
 
   it('sports d’endurance allègent les jambes (course = quads/ischios/mollets)', () => {
@@ -514,13 +533,13 @@ describe('comboEmphasis / objectiveToGoal (objectif + sports)', () => {
   it('emphasis appliqué au plan : sculpt donne plus de volume aux bras que perf', () => {
     const SLOTS: ComboSlotSpec[] = [
       { key: 'squat', muscles: ['quadriceps'], essential: true },
-      { key: 'arms', muscles: ['biceps', 'triceps'], essential: true },
+      { key: 'biceps', muscles: ['biceps'], essential: true },
     ];
     const bySlot = (plan: ReturnType<typeof suggestFullBodyPlan>, key: string) =>
       plan.find((p) => p.slot === key)!;
     const sculpt = suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS, comboEmphasis('sculpt'));
     const perf = suggestFullBodyPlan('avance', 'moderate', 'med', SLOTS, comboEmphasis('perf'));
-    expect(bySlot(sculpt, 'arms').weeklySets).toBeGreaterThan(bySlot(perf, 'arms').weeklySets);
+    expect(bySlot(sculpt, 'biceps').weeklySets).toBeGreaterThan(bySlot(perf, 'biceps').weeklySets);
     // Plancher : jamais moins de 3 séries.
     expect(bySlot(sculpt, 'squat').weeklySets).toBeGreaterThanOrEqual(3);
   });
@@ -1235,6 +1254,58 @@ describe('🗂️ l’ordre d’affichage des exos : PAR GROUPE, puis alphabéti
     const copie = [...src];
     expect(legsByGroup(src)).toHaveLength(2);
     expect(src).toEqual(copie);
+  });
+});
+
+describe('💪 biceps et triceps : deux groupes, et les anciens 360 « Bras » restent lisibles', () => {
+  const leg = (slot: string, muscle: string): ComboLeg => ({
+    slot,
+    exercise_id: 'ex_' + muscle,
+    exercise_name: muscle,
+    muscle_primary: muscle,
+    rep_weight: 1,
+    target: 4,
+  });
+
+  it('la création propose Biceps et Triceps, plus jamais « Bras »', () => {
+    const keys = COMBO_SLOTS.map((s) => s.key);
+    expect(keys).toContain('biceps');
+    expect(keys).toContain('triceps');
+    expect(keys).not.toContain('arms');
+    expect(comboSlot('biceps')?.muscles).toEqual(['biceps']);
+    expect(comboSlot('triceps')?.muscles).toEqual(['triceps']);
+  });
+
+  it('un ancien 360 « Bras » garde son libellé et ses deux muscles', () => {
+    expect(comboSlot('arms')?.label).toBe('Bras');
+    expect(comboSlot('arms')?.muscles).toEqual(['biceps', 'triceps']);
+  });
+
+  it('l’ancien « Bras » se range avec les bras, pas en fin de liste', () => {
+    expect(comboSlotRank('arms')).toBe(comboSlotRank('biceps'));
+    expect(comboSlotRank('arms')).toBeLessThan(comboSlotRank('shoulders'));
+    expect(comboSlotRank('zzz')).toBe(COMBO_SLOTS.length);
+    const noms = legsByGroup([leg('shoulders', 'épaules'), leg('arms', 'biceps')]).map(
+      (l) => l.exercise_name,
+    );
+    expect(noms).toEqual(['biceps', 'épaules']);
+  });
+
+  it('un muscle prioritaire ou un sport ne touche QUE son groupe de bras', () => {
+    const prio = comboEmphasis('balanced', null, ['biceps']);
+    expect(prio.biceps!).toBeGreaterThan(1);
+    expect(prio.triceps!).toBe(1);
+    const grimpe = comboEmphasis('balanced', [
+      { name: 'Escalade', sessions_per_week: 3, intensity: 'elevee' },
+    ]);
+    expect(grimpe.biceps!).toBeLessThan(1);
+    expect(grimpe.triceps!).toBe(1);
+  });
+
+  it('changer d’exo : un biceps ne bascule pas vers un triceps, l’ancien « Bras » oui', () => {
+    expect(transferSlotFor(leg('biceps', 'biceps'), 'biceps')).toBe('biceps');
+    expect(transferSlotFor(leg('biceps', 'biceps'), 'triceps')).toBeNull();
+    expect(transferSlotFor(leg('arms', 'biceps'), 'triceps')).toBe('arms');
   });
 });
 

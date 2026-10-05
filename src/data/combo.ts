@@ -52,13 +52,24 @@ export const COMBO_SLOTS: ComboSlot[] = [
     essential: true,
     hint: 'Abdos, gainage — planche, crunch.',
   },
+  // Biceps et triceps sont DEUX groupes (demandé : curl + curl marteau d'un côté, dips ou
+  // extension de l'autre). Fondus en un seul « Bras », ils partageaient un exo et un
+  // volume : choisir un curl interdisait tout travail direct des triceps.
   {
-    key: 'arms',
-    label: 'Bras',
+    key: 'biceps',
+    label: 'Biceps',
     emoji: '💪',
-    muscles: ['biceps', 'triceps'],
+    muscles: ['biceps'],
     essential: false,
-    hint: 'Isolation bras — curls, extensions.',
+    hint: 'Isolation biceps — curls, curl marteau.',
+  },
+  {
+    key: 'triceps',
+    label: 'Triceps',
+    emoji: '🦾',
+    muscles: ['triceps'],
+    essential: false,
+    hint: 'Isolation triceps — extensions, barre au front.',
   },
   {
     key: 'shoulders',
@@ -70,8 +81,30 @@ export const COMBO_SLOTS: ComboSlot[] = [
   },
 ];
 
+// Emplacements RETIRÉS, encore portés par les 360 créés avant : on les relit (libellé,
+// emoji, muscles, ordre) sans plus jamais les proposer à la création.
+const LEGACY_SLOTS: (ComboSlot & { after: string })[] = [
+  {
+    key: 'arms',
+    label: 'Bras',
+    emoji: '💪',
+    muscles: ['biceps', 'triceps'],
+    essential: false,
+    hint: 'Isolation bras — curls, extensions.',
+    after: 'biceps', // se range là où il vivait : avec les bras
+  },
+];
+
 export function comboSlot(key: string): ComboSlot | undefined {
-  return COMBO_SLOTS.find((s) => s.key === key);
+  return COMBO_SLOTS.find((s) => s.key === key) ?? LEGACY_SLOTS.find((s) => s.key === key);
+}
+
+/** Rang d'affichage d'un emplacement (ordre de `COMBO_SLOTS`) ; un emplacement retiré prend
+ *  le rang de celui qui le remplace, un inconnu passe en dernier. */
+export function comboSlotRank(key: string): number {
+  const at = (k: string) => COMBO_SLOTS.findIndex((s) => s.key === k);
+  const i = at(LEGACY_SLOTS.find((s) => s.key === key)?.after ?? key);
+  return i < 0 ? COMBO_SLOTS.length : i;
 }
 
 // Emplacements INTERCHANGEABLES quand on change d'exo en cours de Défi 360. Par défaut un

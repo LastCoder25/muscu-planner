@@ -692,7 +692,7 @@ function selectedExos(key: string): ExerciseRow[] {
 }
 // Fourchette conseillée d’un emplacement au récap. Les exos d’un emplacement partagent
 // l’objectif ; seule l’isolation relève son plancher → on prend le 1er exo, représentatif
-// (un emplacement 'arms' ne mélange pas composé et isolation).
+// (un emplacement de bras ne mélange pas composé et isolation).
 function slotRangeLabel(key: string): string {
   const e = selectedExos(key)[0];
   const time = e?.unit === 'time';
