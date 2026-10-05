@@ -367,6 +367,7 @@ import {
   attackSettled,
   combinedBlocker,
   heroInAttack,
+  attackWaitingIds,
   normalizeAttacks,
   planWings,
   wingDeparture,
@@ -3899,6 +3900,13 @@ export const useCharacterStore = defineStore('character', () => {
   const attackList = computed<CombinedAttack[]>(() => row.value?.attacks ?? []);
   /** ⏳ Les renforts programmés vers les lieux fixes (migr. 0098). */
   const plannedList = computed<PlannedMove[]>(() => row.value?.planned_moves ?? []);
+  /** ⏳ Les membres déjà PRIS : un départ programmé ou une attaque combinée les attend (ils
+   *  restent dans leur garnison jusqu'au départ). Ni transfert, ni échange, ni rappel. */
+  const reservedIds = computed(() => {
+    const ids = plannedTransferIds(plannedList.value);
+    for (const id of attackWaitingIds(attackList.value)) ids.add(id);
+    return ids;
+  });
   /** 🧝 Le héros est engagé ailleurs : en expédition, ou réservé pour une attaque combinée. */
   const heroEngaged = computed(
     () =>
@@ -6245,7 +6253,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !map) return 'la carte n’est pas chargée';
     const block = transferBlocker(map, fromId, toId, ids);
     if (block) return TRANSFER_BLOCK_LABEL[block];
-    const reserved = plannedTransferIds(plannedList.value);
+    const reserved = reservedIds.value;
     if (ids.some((x) => reserved.has(x))) return 'un membre est réservé pour un départ programmé';
     const from = map.pois.find((p) => p.id === fromId)!;
     const to = map.pois.find((p) => p.id === toId)!;
@@ -6319,6 +6327,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (sel.militia > (cur.base?.militia?.home ?? 0) - plannedMilitia(list))
       return 'pas assez de miliciens libres à la base';
     const reserved = plannedTransferIds(list);
+    for (const id of attackWaitingIds(attackList.value)) reserved.add(id);
     for (const t of sel.transfers) {
       if (reserved.has(t.id)) return 'un membre choisi est déjà réservé';
       const from = map.pois.find((p) => p.id === t.fromId);
@@ -6358,7 +6367,7 @@ export const useCharacterStore = defineStore('character', () => {
     const list = whole ? [...c.garrison] : [...ids];
     if (!list.length) return 'personne n’est choisi';
     if (list.some((x) => !c.garrison.includes(x))) return 'un membre choisi n’est plus sur le lieu';
-    const reserved = plannedTransferIds(plannedList.value);
+    const reserved = reservedIds.value;
     if (list.some((x) => reserved.has(x))) return 'un membre choisi est déjà programmé';
     await persist(userId, {
       planned_moves: [...plannedList.value, makePlannedRecall(pointId, list, whole, now, delayMs)],
@@ -6537,7 +6546,7 @@ export const useCharacterStore = defineStore('character', () => {
     const block = swapBlocker(map, pointId, outId, incoming, fromId);
     if (block) return SWAP_BLOCK_LABEL[block];
     // ⏳ Un membre attendu par un départ programmé ne s'échange pas (on annule d'abord).
-    const reserved = plannedTransferIds(plannedList.value);
+    const reserved = reservedIds.value;
     if (reserved.has(outId) || reserved.has(incoming)) return 'un membre choisi est déjà programmé';
     const byId = new Map(advList.value.map((a) => [a.id, a]));
     const outAdv = isMilitiaId(outId) ? null : byId.get(outId);
@@ -6667,6 +6676,7 @@ export const useCharacterStore = defineStore('character', () => {
     sendHeroToPost,
     reinforceControlPoint,
     plannedList,
+    reservedIds,
     scheduleReinforcement,
     cancelPlannedMove,
     scheduleRecall,

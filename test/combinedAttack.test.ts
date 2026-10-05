@@ -4,6 +4,7 @@ import {
   attackOutings,
   attackParticipants,
   attackSettled,
+  attackWaitingIds,
   attackWingVoyages,
   BASE_WING_ID,
   wingOriginId,
@@ -288,5 +289,19 @@ describe('normalizeAttacks', () => {
   it('écarte le malformé sans planter', () => {
     expect(normalizeAttacks(null)).toEqual([]);
     expect(normalizeAttacks([{ id: 'x' }, attack([{}])])).toHaveLength(1);
+  });
+});
+
+describe('attackWaitingIds — les membres qu’une attaque attend encore', () => {
+  it('rend les membres des groupes en attente, pas ceux déjà partis ni abandonnés', () => {
+    const ids = attackWaitingIds([
+      attack([
+        { originId: 'oss', members: ['a', 'b'] },
+        { members: ['c'], state: 'gone', gone: ['c'] },
+        { members: ['d'], state: 'dropped' },
+      ]),
+    ]);
+    expect([...ids].sort()).toEqual(['a', 'b']);
+    expect(attackWaitingIds(null).size).toBe(0);
   });
 });

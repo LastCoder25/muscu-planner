@@ -2693,7 +2693,7 @@ const ctlRecallAt = computed(() =>
  *  que faire demi-tour, tout de suite) et pas déjà programmés. */
 const ctlSchedulable = computed(() => {
   const here = new Set(liveControl.value?.garrison ?? []);
-  const reserved = plannedTransferIds(char.plannedList);
+  const reserved = char.reservedIds;
   return ctlRecallSel.value.filter((x) => here.has(x) && !reserved.has(x));
 });
 /** Il y a quelqu'un sur le lieu à ramener (le choix du moment n'a de sens qu'alors). */
@@ -2906,7 +2906,7 @@ const swapCandidates = computed(() => {
   // 🏰 Les autres points tenus : chaque membre arrivé.
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   // ⏳ Ceux qu'un départ programmé attend ne remplacent personne.
-  const reserved = plannedTransferIds(char.plannedList);
+  const reserved = char.reservedIds;
   for (const q of map.pois) {
     if (q.id === p.id || q.control?.owner !== 'player') continue;
     const label = CONTROL_LABEL[q.control.kind];
@@ -4105,8 +4105,11 @@ const reinforceable = computed(() =>
       (r) =>
         (controlFreeSeats(r.poi.control) > 0 && freeSorted.value.length > 0) ||
         (militiaFreeSeats(r.poi.control) > 0 && milHome.value > 0) ||
-        // ⇄ Ou quelqu'un d'un AUTRE point tenu (la règle du transfert, `transferBlocker`).
-        transferSourcesFor(char.row?.expedition_map, r.poi.id).length > 0 ||
+        // ⇄ Ou quelqu'un d'un AUTRE point tenu (la règle du transfert, `transferBlocker`),
+        // qu'aucun départ programmé ni aucune attaque combinée n'attend.
+        transferSourcesFor(char.row?.expedition_map, r.poi.id).some((src) =>
+          src.ids.some((id) => !char.reservedIds.has(id)),
+        ) ||
         // 🦸 Ou le héros, s'il peut y aller (2 places).
         heroOfferFor(r.poi)?.why === null,
     )
@@ -4258,7 +4261,7 @@ const quickSources = computed(() => {
   const map = char.row?.expedition_map;
   if (!to || !map) return [];
   const byId = new Map(char.advList.map((a) => [a.id, a]));
-  const reserved = plannedTransferIds(char.plannedList);
+  const reserved = char.reservedIds;
   return transferSourcesFor(map, to.id).flatMap((s) => {
     const from = map.pois.find((p) => p.id === s.fromId);
     if (!from?.control) return [];
