@@ -279,32 +279,56 @@ export function islandFortressAt(id: number): { x: number; y: number } {
   return { x: c.x + Math.cos(t) * r, y: c.y + Math.sin(t) * r };
 }
 
-/** 🛡️ La LIGNE DE DÉFENSE (demandé le 2026-10-04 : « une ligne verticale qui sépare la partie
- *  de l'île où le joueur accoste et la partie avec la forteresse ») : une ligne VERTICALE, à
- *  cette part du chemin départ → forteresse en x… */
+/** 🛡️ La LIGNE DE DÉFENSE (2026-10-04 : « une ligne qui sépare la partie de l'île où le joueur
+ *  accoste et la partie avec la forteresse » ; 2026-10-05 : « chaque lieu fixe à égale distance
+ *  du village portuaire et de la forteresse, donc en diagonale ») : la MÉDIATRICE du segment
+ *  départ → forteresse. Elle passe par son milieu (`DEFENSE_LINE_T`)… */
 export const DEFENSE_LINE_T = 0.5;
-/** …et étalée sur cette part de la hauteur de terre à cet x. */
+/** …et s'étale sur cette part de la terre le long de la médiatrice. */
 export const DEFENSE_LINE_SPREAD = 0.75;
+/** 〰️ Décalage le long de l'axe départ → forteresse (« pas totalement droit ») : alterné, en
+ *  unités de carte. Petit devant la longueur de l'axe : l'écart des distances reste ≤ 2× cela. */
+export const DEFENSE_LINE_WOBBLE = 3;
 
-/** Les `n` places de la ligne de défense de l'île `id` : à x constant, à mi-chemin du départ
- *  (la ville) et de la forteresse, régulièrement espacées du haut au bas de la terre. */
+/** Les `n` places de la ligne de défense de l'île `id` : sur la médiatrice du départ (la
+ *  ville) et de la forteresse — donc à peu près à égale distance des deux —, régulièrement
+ *  espacées d'une côte à l'autre, et légèrement décalées une sur deux pour ne pas tracer une
+ *  règle. */
 export function islandDefenseLine(id: number, n: number): { x: number; y: number }[] {
   if (n <= 0) return [];
   const f = islandFortressAt(id);
-  const x = TOWN + (f.x - TOWN) * DEFENSE_LINE_T;
-  // Le point de l'axe à cet x : sur la terre (l'île est tracée en rayons depuis son centre).
-  const y0 = TOWN + (f.y - TOWN) * DEFENSE_LINE_T;
+  const ax = f.x - TOWN;
+  const ay = f.y - TOWN;
+  const len = Math.hypot(ax, ay) || 1;
+  // u : le long de l'axe ; v : la médiatrice (perpendiculaire).
+  const ux = ax / len;
+  const uy = ay / len;
+  const vx = -uy;
+  const vy = ux;
+  const mx = TOWN + ax * DEFENSE_LINE_T;
+  const my = TOWN + ay * DEFENSE_LINE_T;
+  // Jusqu'où la terre s'étend de part et d'autre du milieu, le long de la médiatrice.
   const reach = (sign: number) => {
     let d = 0;
-    while (d < 200 && onIsland(id, x, y0 + sign * (d + 1), LAND_MARGIN)) d += 1;
+    while (d < 200 && onIsland(id, mx + sign * vx * (d + 1), my + sign * vy * (d + 1), LAND_MARGIN))
+      d += 1;
     return d;
   };
-  const top = y0 - reach(-1);
-  const bottom = y0 + reach(1);
-  const mid = (top + bottom) / 2;
-  if (n === 1) return [{ x, y: mid }];
-  const half = ((bottom - top) / 2) * DEFENSE_LINE_SPREAD;
-  return Array.from({ length: n }, (_, i) => ({ x, y: mid - half + (2 * half * i) / (n - 1) }));
+  const lo = -reach(-1);
+  const hi = reach(1);
+  const mid = (lo + hi) / 2;
+  const half = ((hi - lo) / 2) * DEFENSE_LINE_SPREAD;
+  const at = (t: number, w: number) => ({
+    x: mx + vx * t + ux * w,
+    y: my + vy * t + uy * w,
+  });
+  if (n === 1) return [at(mid, 0)];
+  return Array.from({ length: n }, (_, i) => {
+    const t = mid - half + (2 * half * i) / (n - 1);
+    // Une place sur deux vers le départ, l'autre vers la forteresse ; le sens dépend de l'île.
+    const w = (i % 2 === 0 ? 1 : -1) * (id % 2 === 0 ? 1 : -1) * DEFENSE_LINE_WOBBLE;
+    return at(t, w);
+  });
 }
 
 /** 🎯 Pas angulaire des places candidates d'`islandScatter`. */

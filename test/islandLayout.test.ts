@@ -3,29 +3,42 @@ import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '../src/lib/archipelag
 import { controlKindsOf, controlSpot, ensureControls } from '../src/lib/controlPoints';
 import { ensureIslandConquest, NEST, nestLevel, objectiveSpot } from '../src/lib/islandConquest';
 import { islandTerrain } from '../src/lib/islandTerrain';
-import { DEFENSE_LINE_T, islandCenter, onIsland } from '../src/lib/islandShape';
+import { DEFENSE_LINE_WOBBLE, islandCenter, onIsland } from '../src/lib/islandShape';
 import { createMap, EXPE } from '../src/lib/expedition';
 
 const T = EXPE.town;
 
-describe('🛡️ les points fixes forment une ligne VERTICALE entre le départ et la forteresse', () => {
+describe('🛡️ les points fixes sont à égale distance du départ et de la forteresse', () => {
   for (const isl of ISLANDS) {
     it(`île ${isl.id}`, () => {
       const f = islandTerrain(isl.id).fortress;
-      const xLine = T.x + (f.x - T.x) * DEFENSE_LINE_T;
+      const axis = Math.hypot(f.x - T.x, f.y - T.y);
       for (const seed of [1, 12345, 999]) {
         const map = { seed, archipel: { island: isl.id } } as never;
         const spots = controlKindsOf(map).map((k) => controlSpot(map, k));
         for (const s of spots) {
-          // Tous au même x (à l'arrondi près), à mi-chemin du départ et de la forteresse.
-          expect(Math.abs(s.x - xLine), `île ${isl.id}`).toBeLessThanOrEqual(1);
+          const dT = Math.hypot(s.x - T.x, s.y - T.y);
+          const dF = Math.hypot(s.x - f.x, s.y - f.y);
+          // « Environ » : l'écart vient du petit décalage (2 × DEFENSE_LINE_WOBBLE) et de l'arrondi.
+          expect(Math.abs(dT - dF), `île ${isl.id}`).toBeLessThanOrEqual(
+            2 * DEFENSE_LINE_WOBBLE + 2,
+          );
           expect(onIsland(isl.id, s.x, s.y, 1)).toBe(true);
+          // Ni sur le départ ni sur la forteresse : vers le milieu de l'axe.
+          expect(dT).toBeGreaterThan(axis * 0.3);
         }
-        // Le départ d'un côté de la ligne, la forteresse de l'autre.
-        expect(Math.sign(T.x - xLine)).not.toBe(Math.sign(f.x - xLine));
-        // Étalés du haut au bas, pas empilés.
+        // Étalés d'une côte à l'autre, pas empilés.
         for (let i = 1; i < spots.length; i++)
-          expect(Math.abs(spots[i]!.y - spots[i - 1]!.y)).toBeGreaterThan(14);
+          expect(
+            Math.hypot(spots[i]!.x - spots[i - 1]!.x, spots[i]!.y - spots[i - 1]!.y),
+          ).toBeGreaterThan(14);
+        // Pas une règle : les places ne sont pas toutes à la même distance du départ.
+        if (spots.length >= 3) {
+          const proj = spots.map(
+            (s) => ((s.x - T.x) * (f.x - T.x) + (s.y - T.y) * (f.y - T.y)) / axis,
+          );
+          expect(Math.max(...proj) - Math.min(...proj)).toBeGreaterThan(DEFENSE_LINE_WOBBLE);
+        }
       }
     });
   }
