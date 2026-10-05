@@ -10,6 +10,8 @@ import {
   champSeatsWithHero,
   controlFreeSeats,
   controlIdOf,
+  controlRoster,
+  garrisonDots,
   ensureControls,
   heroPostBlocker,
   heroSeatsIn,
@@ -207,5 +209,19 @@ describe('🏠 envoyer le héros depuis la base (avec champions et miliciens)', 
   it('sans le héros, rien ne change', () => {
     expect(baseSendBlocker(ctl(held(['a', 'b'])), 3, 0)).toBeNull();
     expect(baseSendBlocker(ctl(held(['a', 'b'])), 0, 0)).toBe('empty');
+  });
+});
+
+describe('⚫ les points sous le fort comptent le héros pour 2 places', () => {
+  const dotsAt = (m: ExpeditionMap, now: number) =>
+    garrisonDots(controlRoster(m, [], now, 30, new Set()).find((r) => r.poi.id === id)!);
+  it('posté : 2 points héros, et le total reste celui des places', () => {
+    const dots = dotsAt(held(['a'], true), 0);
+    expect(dots).toBe('hhc' + 'f'.repeat(MILITIA.perPoint - 3));
+    expect(dots).toHaveLength(MILITIA.perPoint);
+  });
+  it('en route : 2 points « en route »', () => {
+    const m = sendHeroToControl(held(['a']), id, 0, 2 * H, unit);
+    expect(dotsAt(m, H)).toBe('crr' + 'f'.repeat(MILITIA.perPoint - 3));
   });
 });
