@@ -1638,6 +1638,7 @@ import {
   CONTROL_LABEL,
   CONTROL_YIELD,
   controlFreeSeats,
+  recallIsWhole,
   garrisonFreeSeats,
   heroPostBlocker,
   heroSeatsIn,
@@ -3091,11 +3092,16 @@ async function releaseCtl() {
     return;
   }
   // 🔙 Ceux encore EN ROUTE font demi-tour (le store les fait rebrousser chemin, en autant de
-  // temps qu'ils ont marché) ; « tout rappeler » ne regarde que ceux déjà SUR le point.
+  // temps qu'ils ont marché). « Tout rappeler » seulement si la sélection couvre TOUT le monde
+  // (sur place, en route, en sortie, et le héros posté, qui ne se coche pas ici).
   const moving = ctlMoving.value;
   const turning = ids.filter((x) => moving.has(x));
   const onPoint = ids.filter((x) => !moving.has(x));
-  const wholeGarrison = onPoint.length > 0 && onPoint.length >= controlCount.value - moving.size;
+  const heroHere = liveControl.value?.hero || liveControl.value?.heroComing ? 1 : 0;
+  const wholeGarrison = recallIsWhole(
+    { onPoint: onPoint.length, turning: turning.length },
+    { total: controlCount.value + heroHere, away: controlAway.value.length },
+  );
   ctlBusy.value = true;
   try {
     if (turning.length) {
