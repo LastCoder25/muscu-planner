@@ -3,13 +3,18 @@ import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '../src/lib/archipelag
 import { controlKindsOf, controlSpot, ensureControls } from '../src/lib/controlPoints';
 import { ensureIslandConquest, NEST, nestLevel, objectiveSpot } from '../src/lib/islandConquest';
 import { islandTerrain } from '../src/lib/islandTerrain';
-import { DEFENSE_LINE_WOBBLE, islandCenter, onIsland } from '../src/lib/islandShape';
+import {
+  DEFENSE_LINE_SHAPE,
+  DEFENSE_LINE_WOBBLE,
+  islandCenter,
+  onIsland,
+} from '../src/lib/islandShape';
 import { createMap, EXPE } from '../src/lib/expedition';
 
 const T = EXPE.town;
 
 describe('🛡️ les points fixes sont à égale distance du départ et de la forteresse', () => {
-  for (const isl of ISLANDS) {
+  for (const isl of ISLANDS.filter((i) => !DEFENSE_LINE_SHAPE[i.id])) {
     it(`île ${isl.id}`, () => {
       const f = islandTerrain(isl.id).fortress;
       const axis = Math.hypot(f.x - T.x, f.y - T.y);
@@ -42,6 +47,44 @@ describe('🛡️ les points fixes sont à égale distance du départ et de la f
       }
     });
   }
+});
+
+describe('📐 île 2 : un trait de haut-gauche à bas-droite, entre le village et la forteresse', () => {
+  const f = islandTerrain(2).fortress;
+  const map = { seed: 1, archipel: { island: 2 } } as never;
+  const spots = controlKindsOf(map).map((k) => controlSpot(map, k));
+  // Côté de la droite (premier → dernier lieu) où tombe un point.
+  const side = (p: { x: number; y: number }) => {
+    const a = spots[0]!;
+    const b = spots[spots.length - 1]!;
+    return Math.sign((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
+  };
+  it('alignés, sur la terre', () => {
+    const a = spots[0]!;
+    const b = spots[spots.length - 1]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    for (const s of spots) {
+      const off = Math.abs((b.x - a.x) * (s.y - a.y) - (b.y - a.y) * (s.x - a.x)) / len;
+      expect(off).toBeLessThanOrEqual(1.5);
+      expect(onIsland(2, s.x, s.y, 1)).toBe(true);
+    }
+  });
+  it('en diagonale : de haut-gauche à bas-droite, ni verticale ni horizontale', () => {
+    const a = spots[0]!;
+    const b = spots[spots.length - 1]!;
+    expect(b.x).toBeGreaterThan(a.x);
+    expect(b.y).toBeGreaterThan(a.y);
+    const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+    expect(deg).toBeGreaterThan(35);
+    expect(deg).toBeLessThan(60);
+  });
+  it('le village d’un côté, la forteresse de l’autre ; le lieu du milieu à égale distance', () => {
+    expect(side(T)).not.toBe(side(f));
+    const m = spots[1]!;
+    expect(
+      Math.abs(Math.hypot(m.x - T.x, m.y - T.y) - Math.hypot(m.x - f.x, m.y - f.y)),
+    ).toBeLessThanOrEqual(8);
+  });
 });
 
 describe('🎯 les objectifs sont au niveau max de l’île (sauf les nids, au rang du joueur)', () => {

@@ -289,6 +289,18 @@ export const DEFENSE_LINE_SPREAD = 0.75;
 /** 〰️ Décalage le long de l'axe départ → forteresse (« pas totalement droit ») : alterné, en
  *  unités de carte. Petit devant la longueur de l'axe : l'écart des distances reste ≤ 2× cela. */
 export const DEFENSE_LINE_WOBBLE = 3;
+/** 📐 Réglages PAR ÎLE de la ligne (2026-10-05, île 2 : « les archives un peu plus haut et à
+ *  droite, le scriptorium un peu plus bas et à gauche, les trois alignés, la droite passant
+ *  entre la forteresse et le village ») : `tilt` fait pivoter la ligne autour de son milieu
+ *  (radians, sens horaire à l'écran si négatif), `wobble` remplace le décalage alterné,
+ *  `spread` la part de terre couverte. ⚠️ Pivotée, la ligne passe TOUJOURS entre le village
+ *  et la forteresse (le lieu du milieu reste à égale distance), mais ses extrémités ne le sont
+ *  plus. Sur l'île 2 la forteresse est presque à la hauteur du village : sans pivot, la ligne
+ *  restait quasi verticale. */
+export const DEFENSE_LINE_SHAPE: Record<number, { tilt: number; wobble: number; spread: number }> =
+  {
+    2: { tilt: -0.42, wobble: 0, spread: 0.6 },
+  };
 
 /** Les `n` places de la ligne de défense de l'île `id` : sur la médiatrice du départ (la
  *  ville) et de la forteresse — donc à peu près à égale distance des deux —, régulièrement
@@ -303,8 +315,10 @@ export function islandDefenseLine(id: number, n: number): { x: number; y: number
   // u : le long de l'axe ; v : la médiatrice (perpendiculaire).
   const ux = ax / len;
   const uy = ay / len;
-  const vx = -uy;
-  const vy = ux;
+  const shape = DEFENSE_LINE_SHAPE[id];
+  const tilt = shape?.tilt ?? 0;
+  const vx = -uy * Math.cos(tilt) - ux * Math.sin(tilt);
+  const vy = -uy * Math.sin(tilt) + ux * Math.cos(tilt);
   const mx = TOWN + ax * DEFENSE_LINE_T;
   const my = TOWN + ay * DEFENSE_LINE_T;
   // Jusqu'où la terre s'étend de part et d'autre du milieu, le long de la médiatrice.
@@ -317,7 +331,8 @@ export function islandDefenseLine(id: number, n: number): { x: number; y: number
   const lo = -reach(-1);
   const hi = reach(1);
   const mid = (lo + hi) / 2;
-  const half = ((hi - lo) / 2) * DEFENSE_LINE_SPREAD;
+  const half = ((hi - lo) / 2) * (shape?.spread ?? DEFENSE_LINE_SPREAD);
+  const wobble = shape?.wobble ?? DEFENSE_LINE_WOBBLE;
   const at = (t: number, w: number) => ({
     x: mx + vx * t + ux * w,
     y: my + vy * t + uy * w,
@@ -326,7 +341,7 @@ export function islandDefenseLine(id: number, n: number): { x: number; y: number
   return Array.from({ length: n }, (_, i) => {
     const t = mid - half + (2 * half * i) / (n - 1);
     // Une place sur deux vers le départ, l'autre vers la forteresse ; le sens dépend de l'île.
-    const w = (i % 2 === 0 ? 1 : -1) * (id % 2 === 0 ? 1 : -1) * DEFENSE_LINE_WOBBLE;
+    const w = (i % 2 === 0 ? 1 : -1) * (id % 2 === 0 ? 1 : -1) * wobble;
     return at(t, w);
   });
 }
