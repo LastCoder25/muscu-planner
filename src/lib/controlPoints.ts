@@ -1229,7 +1229,13 @@ const UNIT_LOOK: Record<
 
 /** 🗑️ Un point d'un type retiré est-il encore occupé (garnison, renforts, retours, héros) ? */
 function retiredOccupied(c: ControlState): boolean {
-  return c.garrison.length > 0 || !!c.reinforcing?.length || !!c.returning?.length || !!c.hero;
+  return (
+    c.garrison.length > 0 ||
+    !!c.reinforcing?.length ||
+    !!c.returning?.length ||
+    !!c.hero ||
+    !!c.heroComing
+  );
 }
 
 /** 🗑️ Les points TENUS d'un type retiré (la tour de guet) où il reste une garnison ou le
@@ -1241,7 +1247,7 @@ export function retiredHeld(map: ExpeditionMap): Poi[] {
       p.control?.owner === 'player' &&
       !RAZE_KINDS.has(p.control.kind) &&
       !kinds.includes(p.control.kind) &&
-      (p.control.garrison.length > 0 || !!p.control.hero),
+      (p.control.garrison.length > 0 || !!p.control.hero || !!p.control.heroComing),
   );
 }
 
@@ -1531,7 +1537,8 @@ export function captureControl(
     control: {
       ...p.control!,
       owner: 'player',
-      garrison: garrison.slice(0, seatsOf(p.control!.kind)),
+      // 🧝 Le héros qui reste prend 2 places sur les 5 (`champSeatsWithHero`).
+      garrison: garrison.slice(0, champSeatsWithHero(p.control!, !!hero)),
       ...(hero ? { hero: true, heroUnit: hero } : {}),
       since: at,
       collectedAt: at,
@@ -1621,7 +1628,14 @@ export function loseControl(
   at: number,
   won?: { level: number; faction: ControlState['faction'] },
 ): ExpeditionMap {
-  return withControl(map, id, (p) => {
+  // 🧝 Le héros encore EN ROUTE vers ce point fait demi-tour : il rentre à la base en autant
+  // de temps qu'il a déjà marché (le héros posté, lui, est rappelé par le store).
+  const coming = map.pois.find((p) => p.id === id)?.control?.heroComing;
+  const back =
+    coming && coming.at > at
+      ? { heroReturnAt: Math.max(map.heroReturnAt ?? 0, at + Math.max(0, at - coming.from)) }
+      : {};
+  const lost = withControl(map, id, (p) => {
     const retakes = p.control!.retakes + 1;
     const force = enemyForce(`${map.seed}:${id}`, retakes);
     const returning = [...(p.control!.returning ?? []), ...turnBackReinforcements(p.control!, at)];
@@ -1644,6 +1658,7 @@ export function loseControl(
       won?.level ?? controlLevel(`${map.seed}:${id}`, retakes, playerLevel, archipelFloor(map));
     return { ...p, level, control: next };
   });
+  return { ...lost, ...back };
 }
 
 /** 📜 Garde sur le lieu le rapport de sa dernière attaque (repoussée ou non), pour sa fiche.
@@ -2685,7 +2700,48 @@ export function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
 function occupants(c: ControlState): { champs: number; militia: number } {
   const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id), ...(c.away ?? [])];
   const militia = ids.filter(isMilitiaId).length;
-  return { champs: ids.length - militia, militia };
+  return { champs: ids.length - militia + heroSeatsIn(c), militia };
+}
+/** 🧝 Les places que le héros occupe sur un point : 2 (`MILITIA.heroSeats`) s'il y est posté
+ *  ou en route pour y être, 0 sinon. Il compte comme DEUX champions. */
+export function heroSeatsIn(c: ControlState | undefined | null): number {
+  return c && (c.hero || c.heroComing) ? MILITIA.heroSeats : 0;
+}
+/** 🧝 Combien de CHAMPIONS resteront si l'assaut prend ce point, le héros y restant ou non
+ *  (`holdSeats` : 0 pour un nid qu'on abat). Il en prend 2 sur les 5. */
+export function champSeatsWithHero(c: Pick<ControlState, 'kind' | 'razes'>, hero: boolean): number {
+  return Math.max(0, holdSeats(c) - (hero ? MILITIA.heroSeats : 0));
+}
+
+/** 🧝 Pourquoi le héros ne peut pas rejoindre la garnison d'un point tenu. SOURCE UNIQUE :
+ *  l'écran grise avec cette raison, le store refuse avec elle. */
+export type HeroPostBlock = 'notHeld' | 'here' | 'noSeat' | 'full';
+export const HERO_POST_BLOCK_LABEL: Record<HeroPostBlock, string> = {
+  notHeld: 'ce point n’est pas à toi',
+  here: 'le héros y est déjà (ou en route)',
+  noSeat: 'ce lieu n’a pas la place pour le héros',
+  full: 'il faut 2 places libres pour le héros',
+};
+export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlock | null {
+  if (!c || c.owner !== 'player') return 'notHeld';
+  if (c.hero || c.heroComing) return 'here';
+  if (seatsOf(c.kind) < MILITIA.heroSeats) return 'noSeat';
+  if (controlFreeSeats(c) < MILITIA.heroSeats) return 'full';
+  return null;
+}
+/** 🧝 Le héros part rejoindre la garnison d'un point tenu : ses places lui sont réservées
+ *  tout de suite, il devient défenseur à `at` (son arrivée). */
+export function sendHeroToControl(
+  map: ExpeditionMap,
+  id: string,
+  from: number,
+  at: number,
+  unit: PostedHero,
+): ExpeditionMap {
+  return withControl(map, id, (p) => ({
+    ...p,
+    control: { ...p.control!, heroComing: { at, from, unit } },
+  }));
 }
 /** 🏰 Les places de CHAMPION occupées d'un point : la garnison, les renforts en route et
  *  ceux partis en sortie qui y reviennent (`away`, leur place leur est gardée). */
@@ -3117,9 +3173,10 @@ export function settleReturns(
 
 /** 🏰 Une garnison coupée à ses places, dans l'ordre d'arrivée : 5 au plus en tout
  *  (`MILITIA.perPoint`), et les champions aux places du point (`seatsOf`). */
-function capGarrison(kind: ControlKind, ids: readonly string[]): string[] {
-  let champs = 0;
-  let total = 0;
+function capGarrison(kind: ControlKind, ids: readonly string[], heroSeats = 0): string[] {
+  // 🧝 Le héros posté occupe déjà 2 places de champion (et de garnison).
+  let champs = heroSeats;
+  let total = heroSeats;
   return ids.filter((id) => {
     if (total >= garrisonCap(kind)) return false;
     if (!isMilitiaId(id) && champs >= seatsOf(kind)) return false;
@@ -3140,10 +3197,11 @@ export function settleReinforcements(
   let out = map;
   for (const p0 of map.pois) {
     const c0 = p0.control;
-    if (c0?.owner !== 'player' || !c0.reinforcing?.length) continue;
+    if (c0?.owner !== 'player' || (!c0.reinforcing?.length && !c0.heroComing)) continue;
     const limit = Math.min(now, c0.attackAt ?? now);
-    const arrived = c0.reinforcing.filter((r) => r.at <= limit).sort((a, b) => a.at - b.at);
-    if (!arrived.length) continue;
+    const arrived = (c0.reinforcing ?? []).filter((r) => r.at <= limit).sort((a, b) => a.at - b.at);
+    const heroIn = c0.heroComing && c0.heroComing.at <= limit ? c0.heroComing : null;
+    if (!arrived.length && !heroIn) continue;
     let p = p0;
     for (const r of arrived) {
       const c = bankAt(p, r.at, playerLevel);
@@ -3151,10 +3209,16 @@ export function settleReinforcements(
         ...p,
         control: {
           ...c,
-          garrison: capGarrison(c.kind, [...c.garrison, r.id]),
+          garrison: capGarrison(c.kind, [...c.garrison, r.id], heroSeatsIn(c)),
           reinforcing: (c.reinforcing ?? []).filter((x) => x.id !== r.id),
         },
       };
+    }
+    // 🧝 Le héros arrivé devient défenseur : il prend sa place (déjà réservée).
+    if (heroIn) {
+      const { heroComing: _h, ...c } = bankAt(p, heroIn.at, playerLevel);
+      void _h;
+      p = { ...p, control: { ...c, hero: true, heroUnit: heroIn.unit } };
     }
     const done = p;
     out = withControl(out, p0.id, () => done);

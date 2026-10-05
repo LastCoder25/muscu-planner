@@ -47,6 +47,10 @@ export const MILITIA = {
    *  reste plafonnée à celle d'une garnison pleine (`CONTROL.garrisonShare`), et la tenue
    *  par `CONTROL.maxHold`. */
   perPoint: 5,
+  /** 🧝 LE HÉROS EN GARNISON PREND 2 PLACES SUR LES 5 (2026-10-05, décision de l'utilisateur).
+   *  Il compte comme deux champions : dans les places de champion du point (`seatsOf`) ET dans
+   *  la garnison entière. Un lieu de moins de 2 places (le lapidaire) ne le garde donc pas. */
+  heroSeats: 2,
   /** 🏰 AU REMPART (2026-09-30, demandé : « les miliciens présents défendent aussi la base ») :
    *  ce que vaut un milicien de la base dans un siège, en part d'un CHAMPION DE RÉFÉRENCE au
    *  niveau du héros (lu par `militiaGuard`, `raid.ts` ; v0.1370, choix de l'utilisateur :

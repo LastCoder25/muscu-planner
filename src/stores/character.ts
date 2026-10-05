@@ -126,6 +126,7 @@ import {
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
+  type PostedHero,
   restoreUnvanquished,
   supersedeLate,
   staysUnderAttack,
@@ -179,6 +180,8 @@ import {
   redirectIslandAttacks,
   ENDLESS_ID,
   heroPosted,
+  heroComing,
+  turnBackComingHero,
   heroPostOf,
   recallPostedHero,
   unpostHero,
@@ -449,6 +452,10 @@ import {
   REINFORCE_BLOCK_LABEL,
   seatsOf,
   holdSeats,
+  champSeatsWithHero,
+  heroPostBlocker,
+  HERO_POST_BLOCK_LABEL,
+  sendHeroToControl,
   campXpFor,
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
@@ -3164,7 +3171,7 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🏰 Le héros posté à la forteresse, ou rappelé et pas encore rentré (`heroReturnAt` est
    *  retiré par `settleHome` à son arrivée). */
   function heroOnMap(map: ExpeditionMap | null | undefined): boolean {
-    return heroPosted(map) || map?.heroReturnAt !== undefined;
+    return heroPosted(map) || heroComing(map) || map?.heroReturnAt !== undefined;
   }
 
   /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
@@ -3903,7 +3910,9 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ POSTÉ sur un lieu tenu, il n'est PAS en expédition (signalé : « considéré partout
       // ailleurs en expédition, je ne peux plus le bouger ») : il reste jouable (donjons,
       // équipement) et repart de son poste vers une autre cible (`unpostHero` à l'envoi).
-      row.value?.expedition_map?.heroReturnAt !== undefined,
+      row.value?.expedition_map?.heroReturnAt !== undefined ||
+      // 🧝 En route pour rejoindre la garnison d'un lieu tenu (`sendHeroToPost`).
+      heroComing(row.value?.expedition_map),
   );
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
@@ -4072,7 +4081,9 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 Assaut d'un point fixe : si on le prend, seuls le héros et les champions en trop
     // rentrent — à LEUR pas, souvent plus vif que celui de toute l'équipe. `returnAt` garde
     // le retour de la défaite jusqu'à l'arrivée (`shortenWonReturn`).
-    const seats = poi.type === 'control' && poi.control ? holdSeats(poi.control) : 0;
+    // 🧝 Le héros qui reste prend 2 places sur les 5 (`champSeatsWithHero`).
+    const seats =
+      poi.type === 'control' && poi.control ? champSeatsWithHero(poi.control, heroStays) : 0;
     const stayers = new Set(seats ? assaultStayers(opts.escortIds, opts.stayIds, seats) : []);
     const back = escort.filter((a) => !stayers.has(a.id));
     // 🧝 Prise, le lieu garde le héros s'il y reste (la forteresse toujours) : il ne rentre pas.
@@ -5754,11 +5765,49 @@ export const useCharacterStore = defineStore('character', () => {
     await writesSettled();
     const cur = row.value;
     const map = cur?.expedition_map;
+    if (cur && map && heroComing(map)) {
+      await persist(userId, { expedition_map: turnBackComingHero(map, now) });
+      return;
+    }
     const poi = heroPostOf(map);
     if (!cur || !map || !poi) return;
     await persist(userId, {
       expedition_map: recallPostedHero(map, now, heroHomeLegMin(cur, map, poi, now)),
     });
+  }
+
+  /** 🧝 ENVOIE LE HÉROS EN GARNISON sur un point tenu (2026-10-05, demandé : « permettre au
+   *  héros d'être en garnison sur les lieux fixes ; il prend 2 places sur les 5 »). Ses places
+   *  sont réservées tout de suite ; il marche (son pas, celui d'un rappel) et devient défenseur
+   *  à son arrivée (`settleReinforcements`). Posté ailleurs, il quitte ce poste et part de là.
+   *  `unit` = son instantané de combat, figé au départ (une reprise se résout hors de l'app).
+   *  Rend la RAISON d'un refus, `null` s'il est parti. */
+  async function sendHeroToPost(
+    userId: string,
+    id: string,
+    now: number,
+    unit: PostedHero,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    const map0 = cur?.expedition_map;
+    const poi = map0?.pois.find((p) => p.id === id);
+    if (!cur || !map0 || !poi) return 'la carte n’est pas chargée';
+    const block = heroPostBlocker(poi.control);
+    if (block) return HERO_POST_BLOCK_LABEL[block];
+    if (woundRemainingMs(cur.base, now) > 0) return 'le héros est à l’infirmerie';
+    const post = heroPostOf(map0);
+    // 🧝 Posté ailleurs, il en part directement ; sinon il doit être libre.
+    if (!post && !heroIsHome(cur)) return 'le héros est déjà en route ailleurs';
+    if (post && (cur.expedition || map0.heroReturnAt !== undefined))
+      return 'le héros est déjà en route ailleurs';
+    const legOf = (p: Poi) => heroHomeLegMin(cur, map0, p, now);
+    const leg = post ? legFromSpot(poi, post, legOf) : legOf(poi);
+    const map = post ? unpostHero(map0) : map0;
+    await persist(userId, {
+      expedition_map: sendHeroToControl(map, id, now, now + leg * 60_000, unit),
+    });
+    return null;
   }
 
   /** 💎 Le lapidaire tenu polit une autre compétence : ce qui a été poli est versé d'abord. */
@@ -6610,6 +6659,7 @@ export const useCharacterStore = defineStore('character', () => {
     chooseCartoFavor,
     chooseLapisSkill,
     recallHeroFromPost,
+    sendHeroToPost,
     reinforceControlPoint,
     plannedList,
     scheduleReinforcement,

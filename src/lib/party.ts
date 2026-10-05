@@ -286,6 +286,10 @@ export function heroCanStay(poi: Pick<Poi, 'id' | 'type' | 'control'> | null | u
     c.owner === 'enemy' &&
     // 🪺 Un nid s'abat : personne n'y reste, le héros non plus.
     !c.razes &&
+    // 🧝 Il prend 2 places (`MILITIA.heroSeats`) : jamais au lapidaire, qui n'en a qu'une.
+    // ⚠️ Recopié ici faute de pouvoir importer `controlPoints` (cycle via `camp`) — un test
+    // vérifie que c'est exactement « `seatsOf` < 2 ».
+    c.kind !== 'lapidary' &&
     (c.kind === 'fortress' ||
       (c.kind === 'objective' && poi!.id !== 'isl_endless') ||
       !RAZE_KINDS.has(c.kind))

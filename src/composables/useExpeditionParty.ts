@@ -31,7 +31,7 @@ import {
   winGain,
   type GainTeam,
 } from '@/lib/partyForecast';
-import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, holdSeats } from '@/lib/controlPoints';
+import { CONTROL_EMO, CONTROL_LABEL, champSeatsWithHero, garrisonHold } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { plannedTransferIds } from '@/lib/plannedMoves';
 import {
@@ -817,10 +817,18 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
   }
 
-  /** Places du point visé (0 hors point de contrôle). */
+  /** 🧝 Le héros reste-t-il ? La MÊME règle que le store (`heroStaysAt`). */
+  const heroStays = computed(
+    () =>
+      !combined.value &&
+      partyHeroOn.value &&
+      heroStaysAt(selected.value, partyAdvs.value.length, partyHeroStay.value),
+  );
+  /** Places de CHAMPION du point visé (0 hors point de contrôle). 🧝 Le héros qui y reste en
+   *  prend 2 sur les 5 (`champSeatsWithHero`, la MÊME règle que le store). */
   const stayCap = computed(() => {
     const c = selected.value?.control;
-    return c && c.owner === 'enemy' ? holdSeats(c) : 0;
+    return c && c.owner === 'enemy' ? champSeatsWithHero(c, heroStays.value) : 0;
   });
   /** Ceux qui resteront : les choisis d'abord, complétés par l'ordre de l'équipe. */
   const stayIds = computed(() => {
@@ -866,13 +874,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
       ]),
     );
   });
-  /** 🧝 Le héros reste-t-il ? La MÊME règle que le store (`heroStaysAt`). */
-  const heroStays = computed(
-    () =>
-      !combined.value &&
-      partyHeroOn.value &&
-      heroStaysAt(selected.value, partyAdvs.value.length, partyHeroStay.value),
-  );
   /** 🧝 Le choix ne se pose que sur un point ordinaire avec des champions : à la forteresse, ou
    *  seul, le héros reste d'office. */
   const heroStayChoice = computed(

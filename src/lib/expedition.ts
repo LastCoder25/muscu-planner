@@ -154,6 +154,11 @@ export interface ControlState {
   /** 🧝 Ce que vaut le héros posté au combat, FIGÉ à son départ (une reprise se résout
    *  hors de l'app, sans son équipement du moment). Absent : il ne combat pas (rapports d'avant). */
   heroUnit?: PostedHero;
+  /** 🧝 Le héros EN ROUTE pour rejoindre la garnison (2026-10-05, demandé : « permettre au
+   *  héros d'être en garnison sur les lieux fixes ») : parti à `from`, il arrive à `at` et
+   *  devient alors `hero` + `heroUnit` (`settleReinforcements`). Ses 2 places lui sont
+   *  RÉSERVÉES dès le départ, comme celles d'un renfort. */
+  heroComing?: { at: number; from: number; unit: PostedHero };
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;
