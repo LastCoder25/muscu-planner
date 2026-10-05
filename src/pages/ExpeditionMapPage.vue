@@ -257,7 +257,13 @@
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
               @click.stop="askRecall(v.recall, v.recallInfo)"
             />
-            <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="[v.kind, { 'hero-wing': isHeroWing(v) }]" />
+            <circle
+              :cx="v.at.x"
+              :cy="v.at.y"
+              r="3"
+              class="van-mark"
+              :class="[v.kind, { 'hero-wing': isHeroWing(v) }]"
+            />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
 
@@ -1465,6 +1471,8 @@ import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import {
   attackReservedIds,
   attackWingVoyages,
+  combinedColors,
+  combinedKey,
   waitingFrom,
   type CombinedAttack,
 } from '@/lib/combinedAttack';
@@ -3302,6 +3310,8 @@ const partiesOnMap = computed(() =>
       // 💀 Le lieu est terrassé dès le rapport : on le grise jusqu'au retour.
       down: voyageVanquished(g, now.value),
       failed: voyageFailure(g, now.value),
+      // 🎨 Un groupe d'attaque combinée : la clé de son attaque (couleur de sa tuile).
+      combo: g.crew ? combinedKey(g.poi.id, g.seed) : undefined,
     })),
 );
 /**
@@ -3388,6 +3398,11 @@ const heroWalkOnMap = computed(() => {
     arriveIn: (v.back ? v.returnAt : v.midAt) - now.value,
   };
 });
+/** 🎨 La clé (lieu + graine) d'une attaque combinée en préparation. */
+function comboOfAttack(id: string): string | undefined {
+  const a = char.attackList.find((x) => x.id === id);
+  return a ? combinedKey(a.poi.id, a.seed) : undefined;
+}
 /** ⚔️🧭 Les groupes d'une attaque combinée en préparation : chez eux tant qu'ils attendent
  *  (⏳), puis en route — tous arrivent ensemble. */
 const attacksOnMap = computed(() =>
@@ -3406,6 +3421,7 @@ const attacksOnMap = computed(() =>
       departIn: w.voyage.sentAt - now.value,
       arriveIn: w.voyage.midAt - (w.voyage.dwellMs ?? 0) - now.value,
       legs: tripLegs(w.voyage, now.value),
+      combo: comboOfAttack(w.attackId),
     })),
 );
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
@@ -3518,11 +3534,14 @@ watch(mapPois, (list) => {
 const trips = computed(() => {
   const out: MapTrip[] = [];
   const ends = new Map<string, number>();
+  // 🎨 Tuile → attaque combinée (lieu + graine) : une couleur par attaque.
+  const combos = new Map<string, string>();
   const a = active.value;
   const h = hero.value;
   if (a && h) {
     const back = h.phase === 'return';
     ends.set('hero', a.returnAt);
+    if (a.crew) combos.set('hero', combinedKey(a.poi.id, a.seed));
     out.push({
       key: 'hero',
       kind: 'hero',
@@ -3544,6 +3563,7 @@ const trips = computed(() => {
   for (const g of partiesOnMap.value) {
     const back = g.at.phase === 'return';
     ends.set('g' + g.id, g.returnAt);
+    if (g.combo) combos.set('g' + g.id, g.combo);
     out.push({
       key: 'g' + g.id,
       kind: 'van',
@@ -3564,6 +3584,7 @@ const trips = computed(() => {
   }
   for (const w of attacksOnMap.value) {
     ends.set(w.id, w.returnAt);
+    if (w.combo) combos.set(w.id, w.combo);
     out.push({
       key: w.id,
       kind: 'van',
@@ -3740,7 +3761,12 @@ const trips = computed(() => {
   }
   // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.
   // ⏱️ `endsAt` porte l'heure à la tuile : `TripsPanel` y mêle les armées ennemies.
-  for (const t of out) t.endsAt = ends.get(t.key) ?? 0;
+  const colors = combinedColors([...combos.values()]);
+  for (const t of out) {
+    t.endsAt = ends.get(t.key) ?? 0;
+    const c = combos.get(t.key);
+    if (c) t.combo = colors.get(c);
+  }
   return out.sort((x, y) => (x.endsAt ?? 0) - (y.endsAt ?? 0));
 });
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */

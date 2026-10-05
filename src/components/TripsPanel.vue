@@ -45,8 +45,10 @@
             pending: t.pending,
             failed: !!t.failed,
             sea: !!t.sea,
+            combo: !!t.combo,
           },
         ]"
+        :style="t.combo ? { '--combo': t.combo } : undefined"
         :title="t.title"
         :aria-pressed="focus === t.key"
         @click="emit('update:focus', focus === t.key ? null : t.key)"
@@ -245,6 +247,8 @@ export interface MapTrip {
   failed?: VoyageFailure | null;
   /** ⛵ Un voyage en MER d'une île à l'autre : `poi` n'est que le port d'ancrage. */
   sea?: { from: number; to: number };
+  /** 🎨 Groupe d'une attaque combinée : la couleur de SON attaque (contour de la tuile). */
+  combo?: string;
 }
 </script>
 
@@ -676,6 +680,15 @@ const crew = computed(() => {
 /* Au RETOUR la teinte change : on rentre, on ne va plus. */
 .trip.back {
   border-color: #7bc86c;
+}
+/* 🎨 Attaque combinée : chaque attaque a SA couleur, portée par tous ses groupes (en attente,
+   à l'aller comme au retour) — on voit d'un coup d'œil quelles tuiles vont ensemble. */
+.trip.combo {
+  border-color: var(--combo);
+  border-width: 2px;
+}
+.trip.combo .tr-bar {
+  background: var(--combo);
 }
 /* ⏳ Programmé, pas encore parti : contour en pointillés, comme un départ qui attend. */
 .trip.pending {

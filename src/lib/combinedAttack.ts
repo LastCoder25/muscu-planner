@@ -372,9 +372,7 @@ export function attackWingVoyages(
           midAt: a.midAt,
           returnAt: w.returnAt,
           dwellMs: Math.max(0, a.midAt - a.arriveAt),
-          ...(w.wonLegMin !== undefined
-            ? { returnLegs: wingReturnLegs(w, w.wonLegMin) }
-            : {}),
+          ...(w.wonLegMin !== undefined ? { returnLegs: wingReturnLegs(w, w.wonLegMin) } : {}),
           ...(home ? { origin: { x: home.x, y: home.y } } : {}),
         },
       });
@@ -400,6 +398,46 @@ export function toggleOriginGroup(
   for (const id of groupIds) {
     if (out.length >= max) break;
     if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * 🎨 UNE COULEUR PAR ATTAQUE COMBINÉE (demandé par l'utilisateur) : tous les groupes d'une
+ * même attaque portent le même contour dans la rangée des voyages, et deux attaques en cours
+ * ne partagent jamais la même tant que la palette suffit. Hors de l'accent (sélection), du
+ * rouge (attaques ennemies), du violet (voyages) et du vert (retours), déjà pris.
+ */
+export const COMBINED_COLORS = [
+  '#3ec6e0',
+  '#ff9d4d',
+  '#ff6fb5',
+  '#9be15d',
+  '#5b8cff',
+  '#2fd4a3',
+] as const;
+
+/** 🎨 La clé d'une attaque combinée : son lieu et sa graine, communs à tous ses groupes
+ *  (en attente comme partis — cf. `combinedSiblings`). */
+export const combinedKey = (poiId: string, seed: number) => `${poiId}:${seed}`;
+
+/**
+ * 🎨 Attribue une couleur à chaque attaque. La couleur PRÉFÉRÉE vient d'un hachage de la clé
+ * (une attaque garde sa couleur quand une autre se termine) ; en cas de collision, la
+ * suivante libre. Les clés sont traitées dans un ordre stable (tri) : le résultat ne dépend
+ * pas de l'ordre de la rangée.
+ */
+export function combinedColors(keys: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const used = new Set<number>();
+  const n = COMBINED_COLORS.length;
+  for (const k of [...new Set(keys)].sort()) {
+    let h = 0;
+    for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+    let idx = h % n;
+    for (let j = 0; j < n && used.has(idx); j++) idx = (idx + 1) % n;
+    used.add(idx);
+    out.set(k, COMBINED_COLORS[idx]!);
   }
   return out;
 }

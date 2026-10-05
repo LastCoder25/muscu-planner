@@ -1099,6 +1099,42 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toMatch(/Partira vers\s+l(&#39;|')île 2/);
   }, 30_000);
 
+  it('🎨 TripsPanel : un groupe d’attaque combinée porte la couleur de son attaque', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let out = '';
+    const base = {
+      kind: 'van',
+      who: '⚔️',
+      cat: 'raids',
+      poi: MAP_POIS[0],
+      from: null,
+      time: '1 h',
+      pct: 10,
+      back: false,
+      title: 'Attaque combinée',
+      withHero: false,
+      members: [],
+      haul: [],
+    };
+    const trips = [
+      { ...base, key: 'a1', combo: '#3ec6e0' },
+      { ...base, key: 'a2', combo: '#3ec6e0' },
+      { ...base, key: 'g1' },
+    ];
+    expect(
+      await mountIt(
+        TripsPanel,
+        { trips, focus: null, heroProfile: 'polyvalent' },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out.match(/--combo: ?#3ec6e0/g)?.length).toBe(2);
+    expect(out.match(/class="trip van[^"]*combo/g)?.length).toBe(2);
+  }, 30_000);
+
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     let out = '';
