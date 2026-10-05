@@ -37,6 +37,7 @@ import {
   retakeDelayMs,
   champSeatsWithHero,
   walkPoint,
+  heroPostBlocker,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
@@ -1098,6 +1099,34 @@ export function heroWalkVoyage(
   if (at === undefined || at <= now || !from) return null;
   const spot = { id: 'hero-walk', type: 'control', x: from.x, y: from.y } as unknown as Poi;
   return { poi: spot, sentAt: from.at, midAt: from.at, returnAt: at, back: true };
+}
+
+/** 🧝 LE HÉROS RENTRE D'UN VOYAGE PARTI DE SON POSTE (signalé : « il part de la base » alors
+ *  qu'il était à l'Ossuaire). Il reprend sa place si le lieu est toujours à nous et a encore
+ *  ses 2 places ; sinon il rentre à pied à la base depuis le lieu (`legMin` minutes). Rend la
+ *  même carte s'il est déjà posté ailleurs (resté sur un point qu'il a pris). */
+export function heroBackToPost(
+  map: ExpeditionMap,
+  homeId: string,
+  unit: PostedHero,
+  at: number,
+  legMin: number,
+): ExpeditionMap {
+  if (heroPosted(map) || heroComing(map)) return map;
+  const p = map.pois.find((q) => q.id === homeId);
+  if (!p) return map;
+  if (!heroPostBlocker(p.control))
+    return {
+      ...map,
+      pois: map.pois.map((q) =>
+        q.id === homeId ? { ...q, control: { ...q.control!, hero: true, heroUnit: unit } } : q,
+      ),
+    };
+  return {
+    ...map,
+    heroReturnAt: at + Math.max(0, Math.round(legMin)) * 60_000,
+    heroReturnFrom: { x: p.x, y: p.y, at },
+  };
 }
 
 /** 🧝 Le héros est-il EN ROUTE pour rejoindre la garnison d'un lieu tenu ? */

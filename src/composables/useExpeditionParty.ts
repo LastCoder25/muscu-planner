@@ -34,6 +34,7 @@ import {
 import { CONTROL_EMO, CONTROL_LABEL, champSeatsWithHero, garrisonHold } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { plannedTransferIds } from '@/lib/plannedMoves';
+import { heroPostOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
   byReach,
@@ -197,19 +198,33 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
    *  sort du groupe de lui-même — le store le refuserait de toute façon). */
   const partyAdvs = computed(() => partyPool.value.filter((a) => partyEscort.value.includes(a.id)));
-  /** 🏰 D'où part l'équipe, DÉDUIT des champions choisis (et du héros, qui part de la base).
-   *  UN seul point = une sortie (elle y revient) ; PLUSIEURS départs = une ATTAQUE COMBINÉE,
-   *  chaque groupe part à son heure pour que tous arrivent ensemble. Personne = la base. */
+  /** 🧝 D'où part le HÉROS : le lieu tenu où il est posté, sinon la base (signalé : il partait
+   *  de la base alors qu'il était à l'Ossuaire). */
+  const heroPost = computed(() => heroPostOf(char.row?.expedition_map) ?? null);
+  const heroOriginId = computed(() => heroPost.value?.id ?? 'base');
+  /** Les points de départ possibles, le poste du héros compris même sans champion prêt. */
+  const startOptions = computed(() => {
+    const p = heroPost.value;
+    if (!p?.control || originOptions.value.some((o) => o.id === p.id)) return originOptions.value;
+    return [
+      ...originOptions.value,
+      { id: p.id, poi: p, emo: CONTROL_EMO[p.control.kind], label: CONTROL_LABEL[p.control.kind], n: 0 },
+    ];
+  });
+  /** 🏰 D'où part l'équipe, DÉDUIT des champions choisis (et du héros, qui part de son poste
+   *  ou de la base). UN seul point = une sortie (elle y revient) ; PLUSIEURS départs = une
+   *  ATTAQUE COMBINÉE, chaque groupe part à son heure pour que tous arrivent ensemble.
+   *  Personne = la base. */
   const partyOrigins = computed(() => {
     const ids = new Set<string>();
-    if (partyHero.value && !partyHeroBlock.value) ids.add('base');
+    if (partyHero.value && !partyHeroBlock.value) ids.add(heroOriginId.value);
     for (const a of partyAdvs.value) ids.add(originOfAdv(a.id));
     return ids.size ? [...ids] : ['base'];
   });
   const baseOn = computed(() => partyOrigins.value.includes('base'));
   /** Les points de départ retenus (hors base). */
   const pointOrigins = computed(() =>
-    originOptions.value.filter((o) => partyOrigins.value.includes(o.id)),
+    startOptions.value.filter((o) => partyOrigins.value.includes(o.id)),
   );
   /** UN seul point, sans la base : une sortie ordinaire (`fromControlId`). */
   const originPoi = computed(() =>
@@ -469,7 +484,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const wingLegFns = computed(() =>
     partyOrigins.value.map((id) => {
       const members = partyAdvs.value.filter((a) => originOfAdv(a.id) === id);
-      const hero = id === 'base' && partyHeroOn.value;
+      const hero = id === heroOriginId.value && partyHeroOn.value;
       const origin = id === 'base' ? null : (pointOrigins.value.find((o) => o.id === id) ?? null);
       const legOf = (p: Poi) =>
         partyLegMin(p, members, {
@@ -498,7 +513,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (!target || !combined.value) return [];
     const rows = partyOrigins.value.map((id) => {
       const members = partyAdvs.value.filter((a) => originOfAdv(a.id) === id);
-      const hero = id === 'base' && partyHeroOn.value;
+      const hero = id === heroOriginId.value && partyHeroOn.value;
       const origin = id === 'base' ? null : (pointOrigins.value.find((o) => o.id === id) ?? null);
       const legOf = (p: Poi) =>
         partyLegMin(p, members, {
@@ -548,6 +563,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const b = combinedBlocker(
       selected.value,
       wingPlan.value.map((w) => ({ originId: wingOriginId(w.id), members: w.ids, hero: w.hero })),
+      heroPost.value?.id ?? null,
     );
     if (b) return COMBINED_BLOCK_LABEL[b];
     // ⚔️🗼 La MÊME garde que le store : tous doivent rejoindre l'armée avant qu'elle n'arrive.

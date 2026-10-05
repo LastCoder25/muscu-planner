@@ -183,6 +183,7 @@ import {
   heroComing,
   turnBackComingHero,
   heroPostOf,
+  heroBackToPost,
   recallPostedHero,
   unpostHero,
   boardFromFortress,
@@ -2866,14 +2867,39 @@ export const useCharacterStore = defineStore('character', () => {
       : null;
     // 🗺️ Un lieu que le héros n'a pas terrassé revient sur la carte (`restoreUnvanquished`).
     const map0 = ctl ? ctl.map : cur.expedition_map;
-    const map = restoreUnvanquished(map0, [exp, ...partyList.value], now);
+    const map1 = restoreUnvanquished(map0, [exp, ...partyList.value], now);
+    // 🏰 Parti d'un POSTE (`homeId`) : ses champions reprennent leur garnison comme une sortie
+    // (`sortiesHome`), et le héros sa place (`heroBackToPost`) — sinon il rentre à pied.
+    const advs0 =
+      ctl?.adventurers ?? (x?.patch as { adventurers?: Adventurer[] })?.adventurers;
+    const home = exp.homeId
+      ? sortiesHome(
+          cur,
+          [{ ...exp, id: 'hero' }],
+          { map: map1, adventurers: advs0 ?? advList.value },
+          false,
+        )
+      : null;
+    const map2 = home?.map ?? map1;
+    const homePoi = exp.homeId ? map2?.pois.find((p) => p.id === exp.homeId) : undefined;
+    const map =
+      exp.homeHero && exp.homeId && map2 && homePoi
+        ? heroBackToPost(
+            map2,
+            exp.homeId,
+            exp.homeHero,
+            exp.returnAt,
+            heroHomeLegMin(cur, map2, homePoi, exp.returnAt),
+          )
+        : map2;
+    const advsOut = home?.adventurers ?? ctl?.adventurers;
     await persist(userId, {
       ...(dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
         ? { messages: dw ? dw.tag(x.messages) : x.messages }
         : {}),
       ...(x?.patch ?? {}),
-      ...(ctl ? { adventurers: ctl.adventurers } : {}),
+      ...(advsOut ? { adventurers: advsOut } : {}),
       ...(ctl || map !== map0 ? { expedition_map: map } : {}),
       expedition: null,
     });
@@ -3973,10 +3999,16 @@ export const useCharacterStore = defineStore('character', () => {
       : null;
     if (opts.fromControlId) {
       if (!origin || !cur.expedition_map) return 'la carte n’est pas chargée';
-      if (hero) return 'le héros part de la base, pas d’un point fixe';
+      // 🧝 Le héros part de LÀ OÙ IL EST : d'un point seulement s'il y est posté.
+      const heroHere = heroPostOf(cur.expedition_map)?.id === origin.id;
+      if (hero && !heroHere) return 'le héros ne peut partir que du lieu où il est posté';
       const block = sortieBlocker(cur.expedition_map, origin.id, opts.escortIds);
-      if (block) return SORTIE_BLOCK_LABEL[block];
+      if (block && !(block === 'empty' && hero)) return SORTIE_BLOCK_LABEL[block];
     }
+    // 🧝 Posté sur un lieu tenu, il ne part pas de la base (signalé : il partait de la base
+    // alors qu'il était à l'Ossuaire) : l'envoi doit partir de son poste.
+    if (hero && !origin && heroPosted(cur.expedition_map))
+      return 'ton héros est posté sur un lieu : il part de là';
     const escort = opts.escortIds
       .map((id) => advList.value.find((a) => a.id === id))
       .filter(
@@ -4101,8 +4133,16 @@ export const useCharacterStore = defineStore('character', () => {
     const trip1 = seats
       ? { ...trip0, returnLegs: { won: Math.min(wonLeg, leg), lost: leg } }
       : trip0;
+    // 🧝 Parti de son poste, le héros y reprend sa place au retour (`heroBackToPost`).
     const trip = origin
-      ? { ...trip1, origin: { x: origin.x, y: origin.y }, homeId: origin.id }
+      ? {
+          ...trip1,
+          origin: { x: origin.x, y: origin.y },
+          homeId: origin.id,
+          ...(hero
+            ? { homeHero: { name: hero.name, level: hero.level, combatant: hero.combatant } }
+            : {}),
+        }
       : trip1;
     const busy = new Set(opts.escortIds);
     // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
@@ -4341,7 +4381,8 @@ export const useCharacterStore = defineStore('character', () => {
       members: w.escortIds,
       hero: !!w.hero,
     }));
-    const cblock = combinedBlocker(poi, shape);
+    const heroPostId = heroPostOf(cur.expedition_map)?.id ?? null;
+    const cblock = combinedBlocker(poi, shape, heroPostId);
     if (cblock) return COMBINED_BLOCK_LABEL[cblock];
     const map = cur.expedition_map;
     // Chaque groupe : ses champions, prêts à partir de CHEZ LUI.
@@ -4351,7 +4392,8 @@ export const useCharacterStore = defineStore('character', () => {
       if (w.originId) {
         if (!origin) return 'un point de départ n’existe plus';
         const b = sortieBlocker(map, w.originId, w.escortIds);
-        if (b) return SORTIE_BLOCK_LABEL[b];
+        // 🧝 Le groupe du héros posté peut partir sans champion : lui suffit.
+        if (b && !(b === 'empty' && w.hero)) return SORTIE_BLOCK_LABEL[b];
       }
       const escort = w.escortIds
         .map((id) => advList.value.find((a) => a.id === id))
@@ -4398,7 +4440,7 @@ export const useCharacterStore = defineStore('character', () => {
     // Le trajet de chaque groupe, à SON pas, depuis chez lui (Tour de guet comprise).
     const mult = travelTimeMult(cur.buildings) * controlTravelMult(map, now);
     const legs = groups.map((g) => {
-      const withHero = !!hero && g.originId === null;
+      const withHero = !!hero && g.originId === heroPostId;
       const legOf = (p: Poi) =>
         partyLegMin(p, g.escort, {
           hero: withHero,
@@ -4638,6 +4680,10 @@ export const useCharacterStore = defineStore('character', () => {
           seed: a.seed,
           outcome: withOrigins(outcome, fromOf),
           ...(origin ? { origin: { x: origin.x, y: origin.y }, homeId: origin.id } : {}),
+          // 🧝 Parti de son poste, le héros y reprend sa place au retour.
+          ...(origin && w.heroGone && hero
+            ? { homeHero: { name: hero.name, level: hero.level, combatant: hero.combatant } }
+            : {}),
           ...(w === main ? {} : { wingOf: a.id }),
           crew,
           ...(wonLeg !== null ? { returnLegs: wingReturnLegs(w, wonLeg) } : {}),

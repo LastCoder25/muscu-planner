@@ -130,18 +130,20 @@ export type CombinedBlock = 'fewWings' | 'twice' | 'heroFar' | 'emptyWing';
 export const COMBINED_BLOCK_LABEL: Record<CombinedBlock, string> = {
   fewWings: 'une attaque combinée part d’au moins deux endroits',
   twice: 'un même point de départ ou un même champion est choisi deux fois',
-  heroFar: 'le héros part de la base',
+  heroFar: 'le héros part de là où il est (la base, ou le lieu où il est posté)',
   emptyWing: 'chaque point de départ doit envoyer quelqu’un',
 };
 export function combinedBlocker(
   poi: Pick<Poi, 'type'>,
   wings: readonly { originId: string | null; members: readonly string[]; hero: boolean }[],
+  /** 🧝 Le lieu tenu où le héros est posté (`null` = à la base) : il part de LÀ. */
+  heroPostId: string | null,
 ): CombinedBlock | null {
   if (wings.length < MIN_WINGS) return 'fewWings';
   const origins = wings.map((w) => w.originId ?? '');
   const ids = wings.flatMap((w) => w.members);
   if (new Set(origins).size !== origins.length || new Set(ids).size !== ids.length) return 'twice';
-  if (wings.some((w) => w.hero && w.originId !== null)) return 'heroFar';
+  if (wings.some((w) => w.hero && w.originId !== heroPostId)) return 'heroFar';
   if (wings.some((w) => !w.members.length && !w.hero)) return 'emptyWing';
   return null;
 }
@@ -188,7 +190,9 @@ export function wingDeparture(
     const a = ctx.advs.find((x) => x.id === id);
     return !!a && g.has(id) && a.posted === wing.originId && fit(a);
   });
-  return { members, hero: false };
+  // 🧝 Le héros posté sur CE point part avec son groupe, s'il y est toujours.
+  const heroHere = !!c.hero;
+  return { members, hero: wing.hero && heroHere && !ctx.heroWoundedAt(t) };
 }
 
 /** Tous les groupes ont-ils statué (partis ou abandonnés) ? */

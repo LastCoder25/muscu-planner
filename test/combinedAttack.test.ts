@@ -73,23 +73,23 @@ describe('combinedBlocker', () => {
     hero,
   });
   it('au moins deux départs', () => {
-    expect(combinedBlocker(target, [w(null, ['a'])])).toBe('fewWings');
+    expect(combinedBlocker(target, [w(null, ['a'])], null)).toBe('fewWings');
   });
   it('une armée en marche ne se coordonne pas', () => {
     // ⚔️🧭 Depuis les armées en campagne, une cible en MARCHE se coordonne : la rencontre
     // commune se calcule (`meetAll`).
-    expect(combinedBlocker({ type: 'warband' }, [w(null, ['a']), w('p', ['b'])])).toBeNull();
+    expect(combinedBlocker({ type: 'warband' }, [w(null, ['a']), w('p', ['b'])], null)).toBeNull();
   });
   it('ni départ ni champion en double', () => {
-    expect(combinedBlocker(target, [w('p', ['a']), w('p', ['b'])])).toBe('twice');
-    expect(combinedBlocker(target, [w(null, ['a']), w('p', ['a'])])).toBe('twice');
+    expect(combinedBlocker(target, [w('p', ['a']), w('p', ['b'])], null)).toBe('twice');
+    expect(combinedBlocker(target, [w(null, ['a']), w('p', ['a'])], null)).toBe('twice');
   });
   it('le héros part de la base', () => {
-    expect(combinedBlocker(target, [w(null, ['a']), w('p', ['b'], true)])).toBe('heroFar');
+    expect(combinedBlocker(target, [w(null, ['a']), w('p', ['b'], true)], null)).toBe('heroFar');
   });
   it('chaque départ envoie quelqu’un', () => {
-    expect(combinedBlocker(target, [w(null, [], true), w('p', [])])).toBe('emptyWing');
-    expect(combinedBlocker(target, [w(null, [], true), w('p', ['b'])])).toBeNull();
+    expect(combinedBlocker(target, [w(null, [], true), w('p', [])], null)).toBe('emptyWing');
+    expect(combinedBlocker(target, [w(null, [], true), w('p', ['b'])], null)).toBeNull();
   });
   // 🐞 Signalé : « le bouton est grisé » sur une attaque combinée avec le héros. L'écran
   // nomme la base « base » dans son plan ; la règle attend `null`. `wingOriginId` est la
@@ -102,12 +102,13 @@ describe('combinedBlocker', () => {
       { id: 'pt1', ids: ['c1'], hero: false },
     ];
     const wings = plan.map((p) => w(wingOriginId(p.id), p.ids, p.hero));
-    expect(combinedBlocker(target, wings)).toBeNull();
+    expect(combinedBlocker(target, wings, null)).toBeNull();
     // Sans la traduction, c'était le défaut : le héros « partait » d'un point nommé « base ».
     expect(
       combinedBlocker(
         target,
         plan.map((p) => w(p.id, p.ids, p.hero)),
+        null,
       ),
     ).toBe('heroFar');
   });

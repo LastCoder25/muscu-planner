@@ -1064,6 +1064,9 @@ export interface ActiveExpedition {
    *  de la ville. `origin` sert au dessin (`travelPosition`), `homeId` au retour en garnison. */
   origin?: { x: number; y: number };
   homeId?: string;
+  /** 🧝 Le héros est parti de son POSTE (`homeId`) : à son retour il y reprend sa place
+   *  (`heroBackToPost`). Son instantané de défenseur, pris au départ. */
+  homeHero?: PostedHero;
   /** 🔙 Demi-tour sur une embuscade perdue à l'aller (cf. `Voyage.turnBack`). */
   turnBack?: number;
   /** 🔙 Demi-tour DEMANDÉ par le joueur en chemin (`recallVoyage`, party.ts) : le lieu
