@@ -1065,6 +1065,22 @@ export function heroHeldOnMap(
   return heroPosted(map) || heroComing(map) || (map?.heroReturnAt ?? 0) > now;
 }
 
+/** 🧭 Le héros MARCHE sur la carte : vers le lieu tenu où il va se poster (`to`), ou vers la
+ *  base après un rappel ou la perte de son lieu. Rend l'heure d'arrivée, `null` s'il ne
+ *  marche pas. ⚠️ Signalé : la ligne des disponibilités le disait « dispo » pendant ces
+ *  trajets (le store, lui, le comptait déjà engagé). */
+export function heroWalk(
+  map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt'> | null | undefined,
+  now: number,
+): { at: number; to: Poi | null } | null {
+  const p = map?.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing);
+  const c = p?.control?.heroComing;
+  if (p && c && c.at > now) return { at: c.at, to: p };
+  const back = map?.heroReturnAt;
+  if (back !== undefined && back > now) return { at: back, to: null };
+  return null;
+}
+
 /** 🧝 Le héros est-il EN ROUTE pour rejoindre la garnison d'un lieu tenu ? */
 export function heroComing(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
   return !!map?.pois.some((p) => p.control?.owner === 'player' && !!p.control.heroComing);

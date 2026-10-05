@@ -51,6 +51,7 @@ import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import { heroAttackReturnAt } from '@/lib/combinedAttack';
+import { heroWalk } from '@/lib/islandConquest';
 import { readyGarrisons } from '@/lib/controlRoutes';
 import { plannedTransferIds } from '@/lib/plannedMoves';
 
@@ -87,6 +88,9 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
   const attackBack = heroAttackReturnAt(char.attackList);
   if (attackBack !== null && attackBack > props.now)
     return { label: `⚔️ ${formatDuration(attackBack - props.now)}`, tone: 'away', healMs };
+  // 🧭 Il marche vers un lieu tenu où se poster, ou rentre à pied à la base.
+  const walk = heroWalk(char.row?.expedition_map, props.now);
+  if (walk) return { label: `🧭 ${formatDuration(walk.at - props.now)}`, tone: 'away', healMs };
   return { label: 'dispo', tone: 'ok', healMs };
 });
 
