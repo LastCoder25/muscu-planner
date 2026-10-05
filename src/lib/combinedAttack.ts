@@ -282,6 +282,16 @@ export function attackReservedIds(
   return out;
 }
 
+/** ⏳ Les champions qu'une attaque combinée ATTEND encore : ils restent dans la garnison de
+ *  leur point (ou à la base) jusqu'à leur départ, mais ils sont pris — on ne les transfère,
+ *  ne les échange ni ne les ramène, comme un membre d'un départ programmé. */
+export function attackWaitingIds(attacks: readonly CombinedAttack[] | null | undefined): Set<string> {
+  const ids = new Set<string>();
+  for (const a of attacks ?? [])
+    for (const w of a.wings) if (w.state === 'waiting') for (const id of w.members) ids.add(id);
+  return ids;
+}
+
 /** 🧝 Le héros est-il engagé dans une attaque combinée (en attente ou parti) ? */
 export function heroInAttack(attacks: readonly CombinedAttack[] | null | undefined): boolean {
   return (attacks ?? []).some((a) =>
