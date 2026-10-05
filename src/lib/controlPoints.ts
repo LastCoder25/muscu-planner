@@ -3681,6 +3681,23 @@ export function ascensionMessage(
  * libre. Rien pour un point ennemi sans assaut : on ne connaît pas sa garnison. Une CHAÎNE,
  * pour une prop à identité stable (la couche des lieux ne se re-dessine que si elle change).
  */
+/**
+ * 🧝 OÙ EST LE HÉROS, D'UN COUP D'ŒIL (demandé : « deux ronds reliés pour qu'on voie où est le
+ * héros »). Les places du héros (`h` posté, `g` en route) se dessinent comme UNE pastille
+ * de deux points reliés : on rend l'indice du premier point de chaque paire.
+ */
+export function heroDotLinks(dots: string): number[] {
+  const out: number[] = [];
+  for (let i = 0; i + 1 < dots.length; i++) {
+    const d = dots[i];
+    if ((d === 'h' || d === 'g') && dots[i + 1] === d) {
+      out.push(i);
+      i += MILITIA.heroSeats - 1;
+    }
+  }
+  return out;
+}
+
 export function garrisonDots(row: ControlRosterRow): string {
   // 🏰 La FORTERESSE n'a pas de limite de places (`seats` = Infinity) : on ne dessine que ce
   // qui l'occupe, jamais de place libre. ⚠️ Sans ça `'f'.repeat(Infinity)` levait une erreur
@@ -3703,8 +3720,9 @@ export function garrisonDots(row: ControlRosterRow): string {
   const enRoute = row.reinforcing.length + row.away.length + engaged.size;
   // 🧝 Le héros prend 2 places (`MILITIA.heroSeats`) : 2 points `h` en garnison, 2 points `r`
   // en route (signalé : « le héros prend 2 places mais je vois encore 5 boules »).
-  const hero = row.hero === 'posted' ? 'h'.repeat(MILITIA.heroSeats) : '';
-  const heroRoad = row.hero === 'coming' ? MILITIA.heroSeats : 0;
-  const filled = hero + 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute + heroRoad);
+  // `g` : le héros EN ROUTE (orange comme une troupe en marche, mais reconnaissable : ses 2
+  // points sont reliés, cf. `heroDotLinks`).
+  const hero = row.hero ? (row.hero === 'posted' ? 'h' : 'g').repeat(MILITIA.heroSeats) : '';
+  const filled = hero + 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute);
   return filled + free(filled.length);
 }

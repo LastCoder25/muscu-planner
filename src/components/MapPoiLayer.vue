@@ -68,8 +68,21 @@
         <g
           v-if="dots.get(p.id)"
           class="ctl-dots"
-          :class="{ empty: !/[hcmr]/.test(dots.get(p.id)!) }"
+          :class="{ empty: !/[hgcmr]/.test(dots.get(p.id)!) }"
         >
+          <!-- 🧝 Le héros prend 2 places : ses 2 points sont RELIÉS en une pastille (bleue
+               posté, orange en route), on le repère sans compter. -->
+          <rect
+            v-for="i in heroDotLinks(dots.get(p.id)!)"
+            :key="'l' + i"
+            class="hero-link"
+            :class="'d-' + dots.get(p.id)![i]"
+            :x="p.x + (i - (dots.get(p.id)!.length - 1) / 2) * DOT_GAP - DOT_R - 0.35"
+            :y="p.y + 7.2 - DOT_R - 0.35"
+            :width="DOT_GAP + 2 * DOT_R + 0.7"
+            :height="2 * DOT_R + 0.7"
+            :rx="DOT_R + 0.35"
+          />
           <circle
             v-for="(d, i) in dots.get(p.id)!"
             :key="i"
@@ -197,7 +210,7 @@ import { computed } from 'vue';
 import QgFrame from '@/components/QgFrame.vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
-import { CONTROL_EMO, HELD_COLOR, isHeldControl } from '@/lib/controlPoints';
+import { CONTROL_EMO, HELD_COLOR, heroDotLinks, isHeldControl } from '@/lib/controlPoints';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import { RIFT_MAP_ICON, riftMapBox } from '@/lib/riftPortal';
@@ -411,7 +424,16 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .ctl-dots .d-c {
   fill: #5fd0ff; /* cyan : lisible sur prairie et mer, distinct du violet du fort */
 }
-/* 🧝 Le héros : le bleu de son trajet, 2 points (il prend 2 places). */
+/* 🧝 Le héros : 2 points dans une pastille (il prend 2 places). Posté bleu soutenu, en route
+   orange (comme une troupe en marche) — la pastille dit « c'est lui ». */
+.ctl-dots .hero-link {
+  stroke: #fff;
+  stroke-width: 0.3;
+  fill-opacity: 0.55;
+}
+.ctl-dots .d-g {
+  fill: var(--d3, #ffb23f);
+}
 .ctl-dots .d-h {
   fill: #2f6bff;
 }

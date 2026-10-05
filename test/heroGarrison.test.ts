@@ -12,6 +12,7 @@ import {
   controlIdOf,
   controlRoster,
   garrisonDots,
+  heroDotLinks,
   ensureControls,
   heroPostBlocker,
   heroSeatsIn,
@@ -222,6 +223,16 @@ describe('⚫ les points sous le fort comptent le héros pour 2 places', () => {
   });
   it('en route : 2 points « en route »', () => {
     const m = sendHeroToControl(held(['a']), id, 0, 2 * H, unit);
-    expect(dotsAt(m, H)).toBe('crr' + 'f'.repeat(MILITIA.perPoint - 3));
+    expect(dotsAt(m, H)).toBe('ggc' + 'f'.repeat(MILITIA.perPoint - 3));
+  });
+});
+
+describe('🧝 heroDotLinks — les 2 places du héros reliées', () => {
+  it('une paire par héros, posté ou en route ; rien pour les champions', () => {
+    expect(heroDotLinks('hhcff')).toEqual([0]);
+    expect(heroDotLinks('ggcrr')).toEqual([0]);
+    expect(heroDotLinks('ccrrf')).toEqual([]);
+    expect(heroDotLinks('')).toEqual([]);
+    expect(heroDotLinks('hgc')).toEqual([]);
   });
 });
