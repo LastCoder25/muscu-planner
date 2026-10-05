@@ -3108,6 +3108,39 @@ describe('🔀 FusionPanel', () => {
     expect(open).toContain('2/3');
     expect(open).toMatch(/Bronze[\s\S]*Argent/);
   }, 30_000);
+  it('🧝 ControlPointsSheet : le héros en garnison occupe une case double (2 places)', async () => {
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    const { captureControl, controlIdOf, controlRoster, ensureControls } =
+      await import('@/lib/controlPoints');
+    const { createMap } = await import('@/lib/expedition');
+    const { refFighter } = await import('@/lib/proceduralContent');
+    const map = captureControl(
+      ensureControls(createMap(3, 0, 30, 1), 0, 30),
+      controlIdOf('mine'),
+      ['a1'],
+      0,
+      7,
+      { name: 'Toi', level: 30, combatant: refFighter(30) },
+    );
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        {
+          modelValue: true,
+          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          advs: ROW.adventurers,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out.match(/class="mini hero"/g)?.length).toBe(1);
+    // 5 places : héros (2) + 1 champion + 2 libres.
+    expect(out.match(/class="mini free"/g)?.length).toBe(2);
+  });
   it('🏰 ControlPointsSheet liste les points fixes, garnison comprise', async () => {
     const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
     const { captureControl, controlIdOf, controlRoster, ensureControls } =

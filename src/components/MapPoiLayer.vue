@@ -61,14 +61,14 @@
           :class="p.control.owner"
         />
         <!-- ⚫ SA GARNISON EN POINTS, sous le fort (demandé : « voir d'un coup d'œil ») : un
-             point par place — plein cyan un champion, plein clair un milicien, orange
+             point par place — plein bleu le héros (2 points), plein cyan un champion, plein clair un milicien, orange
              une troupe en route (renfort, transfert, sortie qui reviendra ou assaut : sa place est prise sans y être
              encore), vide une place libre (rouge si personne ne tient ni ne rejoint le
              point). -->
         <g
           v-if="dots.get(p.id)"
           class="ctl-dots"
-          :class="{ empty: !/[cmr]/.test(dots.get(p.id)!) }"
+          :class="{ empty: !/[hcmr]/.test(dots.get(p.id)!) }"
         >
           <circle
             v-for="(d, i) in dots.get(p.id)!"
@@ -410,6 +410,10 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 }
 .ctl-dots .d-c {
   fill: #5fd0ff; /* cyan : lisible sur prairie et mer, distinct du violet du fort */
+}
+/* 🧝 Le héros : le bleu de son trajet, 2 points (il prend 2 places). */
+.ctl-dots .d-h {
+  fill: #2f6bff;
 }
 .ctl-dots .d-m {
   fill: var(--text);

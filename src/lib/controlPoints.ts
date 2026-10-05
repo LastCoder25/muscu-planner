@@ -3433,6 +3433,8 @@ export interface ControlRosterRow {
    *  mais engagés (dessinés comme en expédition). */
   engaged: string[];
   assault: { ids: string[]; inMs: number } | null;
+  /** 🧝 Le héros sur ce point : `posted` (en garnison) ou `coming` (en route) — 2 places. */
+  hero: 'posted' | 'coming' | null;
   /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
   progress: ControlProgress | null;
 }
@@ -3489,6 +3491,7 @@ export function controlRoster(
           away: held ? [...(c.away ?? [])] : [],
           engaged: held ? c.garrison.filter((id) => engagedIds.has(id)) : [],
           assault,
+          hero: held && c.hero ? 'posted' : held && c.heroComing ? 'coming' : null,
           progress: held ? controlProgress(p, now, playerLevel) : null,
         };
       })
@@ -3698,6 +3701,10 @@ export function garrisonDots(row: ControlRosterRow): string {
   const mil = row.garrison.length - allChamps;
   const champs = allChamps - row.garrison.filter((id) => engaged.has(id)).length;
   const enRoute = row.reinforcing.length + row.away.length + engaged.size;
-  const filled = 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute);
+  // 🧝 Le héros prend 2 places (`MILITIA.heroSeats`) : 2 points `h` en garnison, 2 points `r`
+  // en route (signalé : « le héros prend 2 places mais je vois encore 5 boules »).
+  const hero = row.hero === 'posted' ? 'h'.repeat(MILITIA.heroSeats) : '';
+  const heroRoad = row.hero === 'coming' ? MILITIA.heroSeats : 0;
+  const filled = hero + 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute + heroRoad);
   return filled + free(filled.length);
 }

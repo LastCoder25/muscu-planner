@@ -101,6 +101,13 @@
                   advTitle(s.adv)?.emoji ?? '🧑'
                 }}</ChampionPortrait></span
               >
+              <span
+                v-else-if="s.kind === 'hero'"
+                class="mini hero"
+                :class="{ route: s.coming }"
+                :title="s.coming ? 'Le héros est en route (2 places)' : 'Le héros (2 places)'"
+                >{{ s.coming ? '🧭' : '🦸' }}</span
+              >
               <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME"
                 ><MilitiaPortrait
               /></span>
@@ -170,7 +177,7 @@ import {
   type ControlRosterRow,
   type ControlRosterStatus,
 } from '@/lib/controlPoints';
-import { MILITIA_NAME, isMilitiaId } from '@/lib/militia';
+import { MILITIA, MILITIA_NAME, isMilitiaId } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Poi } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
@@ -231,20 +238,25 @@ const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
 type Slot =
   | { kind: 'adv'; adv: Adventurer }
   | { kind: 'mil' }
+  | { kind: 'hero'; coming: boolean }
   | { kind: 'route' }
   | { kind: 'away'; adv: Adventurer }
   | { kind: 'free' };
 /** Les cases de la ligne : champions, miliciens, renforts en route, champions en sortie (leur
  *  place est gardée), puis places libres, jusqu'à `seats`. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
+  // 🧝 Le héros prend 2 places : UNE case double, en tête (signalé : « je vois encore 5 boules »).
+  const hero: Slot[] = r.hero ? [{ kind: 'hero', coming: r.hero === 'coming' }] : [];
   const filled: Slot[] = [
+    ...hero,
     ...advsOf(r.garrison).map((adv) => ({ kind: 'adv' as const, adv })),
     ...milOf(r.garrison).map(() => ({ kind: 'mil' as const })),
     ...r.reinforcing.map(() => ({ kind: 'route' as const })),
     ...advsOf(r.away).map((adv) => ({ kind: 'away' as const, adv })),
   ];
   // 🏰 Sans limite (la forteresse) : une seule case libre, qui dit qu'on peut en ajouter.
-  const free = Number.isFinite(r.seats) ? Math.max(0, r.seats - filled.length) : 1;
+  const used = filled.length + (hero.length ? MILITIA.heroSeats - 1 : 0);
+  const free = Number.isFinite(r.seats) ? Math.max(0, r.seats - used) : 1;
   return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
 };
 const rankOf = (r: ControlRosterRow) => poiRank(r.poi);
@@ -461,6 +473,11 @@ const isFull = (r: ControlRosterRow) =>
   width: 100%;
   height: 100%;
   border-radius: 0;
+}
+/* 🧝 Le héros vaut 2 places : une case de deux largeurs (2 × 28 + l'écart de 4). */
+.mini.hero {
+  flex-basis: 60px;
+  border-color: color-mix(in srgb, #2f6bff 80%, transparent);
 }
 .mini.free {
   font-family: Oswald, sans-serif;
