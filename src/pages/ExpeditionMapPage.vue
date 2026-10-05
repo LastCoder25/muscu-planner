@@ -167,7 +167,7 @@
               :class="[
                 v.at.phase === 'return' ? 'done' : 'todo',
                 v.kind,
-                { 'trail-focus': v.tripKey === traceKey },
+                { 'trail-focus': v.tripKey === traceKey, 'hero-wing': isHeroWing(v) },
               ]"
             />
             <line
@@ -179,7 +179,7 @@
               :class="[
                 v.at.phase === 'return' ? 'todo' : 'done',
                 v.kind,
-                { 'trail-focus': v.tripKey === traceKey },
+                { 'trail-focus': v.tripKey === traceKey, 'hero-wing': isHeroWing(v) },
               ]"
             />
           </template>
@@ -257,7 +257,7 @@
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
               @click.stop="askRecall(v.recall, v.recallInfo)"
             />
-            <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="v.kind" />
+            <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="[v.kind, { 'hero-wing': isHeroWing(v) }]" />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
 
@@ -3380,7 +3380,11 @@ const travelersOnMap = computed(() => [
   ...attacksOnMap.value.map((w) => ({
     ...w,
     tripKey: w.id,
-    emo: w.waiting ? '⏳' : '⚔️',
+    // 🧝 Le groupe qui porte le HÉROS se dessine comme lui (signalé : « le héros n'a plus
+    // ses trajets affichés » — dans une attaque combinée il n'est pas une expédition tant
+    // que tous les groupes ne sont pas partis, et passait pour une équipe violette).
+    emo: w.hero ? '🧝' : w.waiting ? '⏳' : '⚔️',
+    heroWing: w.hero,
     kind: 'party' as const,
     recall: undefined as RecallTarget | undefined,
     recallLabel: '',
@@ -3449,6 +3453,8 @@ const travelersOnMap = computed(() => [
   })),
 ]);
 const shownTravelers = travelersOnMap;
+/** 🧝 Le voyageur est-il le groupe du héros d'une attaque combinée ? */
+const isHeroWing = (v: object) => 'heroWing' in v && !!v.heroWing;
 const shownBands = bandsOnMap;
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte. ⚠️ APRÈS
 // `travelersOnMap` : le watch lit `mapPois` dès le setup, qui lit `travelersOnMap` (zone
@@ -6622,6 +6628,23 @@ onUnmounted(() => {
 .trail.van.party {
   stroke-width: 1.2;
   stroke-dasharray: 4 1.4 0.8 1.4;
+}
+/* 🧝 Le groupe du héros d'une attaque combinée : le trait plein bleu du héros. */
+.trail.van.party.hero-wing {
+  stroke-width: 1.4;
+  stroke-dasharray: none;
+}
+.trail.van.hero-wing.todo {
+  stroke: #4a9eff;
+  filter: drop-shadow(0 0 1px rgba(74, 158, 255, 0.6));
+}
+.trail.van.hero-wing.done {
+  stroke: var(--line);
+}
+.van-mark.party.hero-wing {
+  fill: var(--accent);
+  stroke: none;
+  filter: drop-shadow(0 0 2px var(--accent));
 }
 .van-mark.party {
   stroke-width: 1;
