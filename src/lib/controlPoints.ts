@@ -3383,7 +3383,7 @@ export function controlRoster(
           poi: p,
           kind: c.kind,
           status,
-          seats: seatsOf(c.kind),
+          seats: holdSeats(c),
           garrison: held
             ? [...c.garrison, ...(c.reinforcing ?? []).filter((r) => r.at <= now).map((r) => r.id)]
             : [],

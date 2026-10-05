@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, islandPacified, ISLAND_OUTPOST_LEVEL } from '@/lib/archipelago';
 import { createMap, routePerilous, type ExpeditionMap, type Poi } from '@/lib/expedition';
-import { ensureControls, holdSeats } from '@/lib/controlPoints';
+import { controlRoster, ensureControls, garrisonDots, holdSeats } from '@/lib/controlPoints';
 import { heroCanStay } from '@/lib/party';
 import {
   FORTRESS_ID,
@@ -290,6 +290,22 @@ describe('🪺 un nid pris est abattu, jamais tenu', () => {
     const taken = takeObjective(m, nest.id, ['a', 'b'], NOW + DAY);
     expect(taken.pois.some((p) => p.id === nest.id)).toBe(false);
     expect(tick(taken, NOW + DAY + 1).pois.some((p) => p.id === nest.id)).toBe(false);
+  });
+  it('aucun point de garnison sous un nid, même quand on l’attaque', () => {
+    const m = islandMap(2);
+    const all = nests(m);
+    const rows = controlRoster(
+      m,
+      all.map((n) => ({ poiId: n.id, midAt: NOW + DAY, ids: ['a', 'b', 'c'] })),
+      NOW,
+      LV,
+    ).filter((r) => r.kind === 'objective');
+    expect(rows).toHaveLength(all.length);
+    for (const r of rows) {
+      expect(r.status, r.poi.id).toBe('assault');
+      expect(r.seats, r.poi.id).toBe(0);
+      expect(garrisonDots(r), r.poi.id).toBe('');
+    }
   });
   it('ailleurs, un objectif pris se tient toujours', () => {
     const m = islandMap(1);
