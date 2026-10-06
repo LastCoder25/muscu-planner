@@ -5,7 +5,8 @@
     <span class="ccv-t"
       >🎁 <template v-if="!compact">Coffre de fin · niveau {{ chest.level }}</template></span
     >
-    <span v-for="p in pills" :key="p.emoji" class="ccv-pill">{{ p.emoji }} {{ fmt(p.n) }}</span>
+    <!-- ❓ Toucher une ressource dit ce que c'est (`HaulPills`, la bulle des rapports). -->
+    <HaulPills :pills="pills" variant="chip" floating />
     <div v-if="!compact && toOpen" class="ccv-note">À ouvrir dans ta boîte 📬 de l’Aventure</div>
   </div>
 </template>
@@ -13,6 +14,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { haulPills } from '@/lib/expedition';
+import HaulPills from '@/components/HaulPills.vue';
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { useCharacterStore } from '@/stores/character';
 
@@ -27,7 +29,6 @@ const toOpen = computed(
     char.row?.messages.some((m) => m.id === comboChestMessageId(props.comboId) && !m.claimed) ??
     false,
 );
-const fmt = (n: number) => n.toLocaleString('fr-FR');
 </script>
 
 <style scoped lang="scss">
@@ -45,15 +46,6 @@ const fmt = (n: number) => n.toLocaleString('fr-FR');
 .ccv-t {
   font-weight: 700;
   color: var(--text);
-}
-.ccv-pill {
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 2px 8px;
-  line-height: 1.5;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--text);
-  white-space: nowrap;
 }
 .ccv-note {
   flex-basis: 100%;
