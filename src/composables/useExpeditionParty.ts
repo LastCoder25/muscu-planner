@@ -246,6 +246,24 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** ⚔️🧭 Plusieurs départs : une attaque combinée. */
   const combined = computed(() => partyOrigins.value.length > 1);
+  /** 🐢 Attaque combinée « tous ensemble » : tout le monde part maintenant, les groupes plus
+   *  proches au pas du plus lointain ; le retour reste à leur pas. Sinon, chacun attend son
+   *  heure chez lui (il produit, il défend). Retenu par appareil. */
+  const TOGETHER_KEY = 'muscu:attack:together';
+  const wingsTogether = ref(false);
+  try {
+    wingsTogether.value = localStorage.getItem(TOGETHER_KEY) === '1';
+  } catch {
+    /* stockage indisponible : réglage par défaut */
+  }
+  function setWingsTogether(on: boolean) {
+    wingsTogether.value = on;
+    try {
+      localStorage.setItem(TOGETHER_KEY, on ? '1' : '0');
+    } catch {
+      /* stockage indisponible */
+    }
+  }
   /** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
    *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
    *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
@@ -683,7 +701,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
     });
     const longest = Math.max(1, meetMin.value, ...rows.map((r) => r.legMin));
     // Du groupe le plus proche au plus lointain, comme les tuiles de départ.
-    return byReach(rows.map((r) => ({ ...r, departInMin: longest - r.legMin })));
+    return byReach(
+      rows.map((r) => ({
+        ...r,
+        departInMin: wingsTogether.value ? 0 : longest - r.legMin,
+        // 🐢 Tous ensemble : l'aller s'étire jusqu'à l'arrivée commune.
+        outMin: wingsTogether.value ? longest : r.legMin,
+      })),
+    );
   });
   /** Pourquoi l'attaque combinée ne peut pas partir (hors règles d'une équipe). */
   const combinedBlock = computed(() => {
@@ -965,6 +990,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             now: Date.now(),
             supplies: activeSupplies.value,
             ...(stayCap.value ? { stayIds: stayIds.value } : {}),
+            together: wingsTogether.value,
           })
         : await char.sendParty(uid, poi, {
             hero: heroForParty.value,
@@ -1096,6 +1122,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyGain,
     combined,
     wingPlan,
+    wingsTogether,
+    setWingsTogether,
     combinedBlock,
     originOptions,
     partyGroups,

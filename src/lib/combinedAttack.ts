@@ -7,6 +7,9 @@
  *   suite ; chaque autre groupe part à « arrivée − son trajet ». Jusque-là il reste chez lui :
  *   la garnison d'un point continue de produire et de se défendre, les champions de la base
  *   (et le héros) la défendent en cas de siège.
+ * - **🐢 Ou tous maintenant** (option, demandée par l'utilisateur) : tout le monde part tout de
+ *   suite, les groupes plus proches marchent au pas du plus lointain (aller étiré jusqu'à
+ *   l'arrivée commune) ; le RETOUR reste à leur pas. Ils quittent leur poste dès le départ.
  * - **L'attente se paie** : un groupe qui se fait battre avant de partir ne vient pas.
  *   À l'heure de son départ, on ne garde que ceux qui PEUVENT partir (point encore tenu,
  *   toujours en garnison, pas à l'infirmerie ; héros pas blessé). Une reprise ou un siège
@@ -81,6 +84,10 @@ export function planWings(
   /** ⚔️🧭 Cible en MARCHE : la minute de rencontre commune (`meetAll`), qui peut dépasser le
    *  plus long trajet (il faut que l'armée soit venue jusque-là). */
   meetInMin = 0,
+  /** 🐢 « Tous ensemble » (demandé par l'utilisateur) : tout le monde part MAINTENANT et
+   *  les groupes plus proches marchent plus lentement pour arriver avec le plus lointain ;
+   *  le RETOUR reste à leur pas (`legMin`). Sans lui, chacun attend son heure chez lui. */
+  together = false,
 ): { arriveAt: number; midAt: number; wings: AttackWing[] } {
   const longest = Math.max(1, meetInMin, ...inputs.map((w) => w.legMin));
   const arriveAt = now + longest * 60_000;
@@ -93,7 +100,7 @@ export function planWings(
       members: [...w.members],
       hero: w.hero,
       legMin: w.legMin,
-      departAt: arriveAt - w.legMin * 60_000,
+      departAt: together ? now : arriveAt - w.legMin * 60_000,
       returnAt: midAt + w.legMin * 60_000,
       state: 'waiting' as const,
     })),
@@ -285,7 +292,9 @@ export function attackReservedIds(
 /** ⏳ Les champions qu'une attaque combinée ATTEND encore : ils restent dans la garnison de
  *  leur point (ou à la base) jusqu'à leur départ, mais ils sont pris — on ne les transfère,
  *  ne les échange ni ne les ramène, comme un membre d'un départ programmé. */
-export function attackWaitingIds(attacks: readonly CombinedAttack[] | null | undefined): Set<string> {
+export function attackWaitingIds(
+  attacks: readonly CombinedAttack[] | null | undefined,
+): Set<string> {
   const ids = new Set<string>();
   for (const a of attacks ?? [])
     for (const w of a.wings) if (w.state === 'waiting') for (const id of w.members) ids.add(id);

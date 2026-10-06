@@ -1046,6 +1046,38 @@
                   ⚔️ <b>Attaque combinée</b> · tous arrivent dans
                   <b>{{ formatDurationMin(Math.max(...wingPlan.map((w) => w.legMin))) }}</b>
                 </p>
+                <!-- 🐢 Deux façons d'arriver ensemble (demandé) : chacun attend son heure chez lui,
+                   ou tout le monde part MAINTENANT et les plus proches marchent au pas du plus
+                   lointain. Le retour reste à leur pas dans les deux cas. -->
+                <div class="wing-mode" role="radiogroup" aria-label="Départ des groupes">
+                  <button
+                    type="button"
+                    role="radio"
+                    class="wing-mode-b"
+                    :class="{ on: !wingsTogether }"
+                    :aria-checked="!wingsTogether"
+                    @click="setWingsTogether(false)"
+                  >
+                    ⏳ Chacun à son heure
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    class="wing-mode-b"
+                    :class="{ on: wingsTogether }"
+                    :aria-checked="wingsTogether"
+                    @click="setWingsTogether(true)"
+                  >
+                    🐢 Tous maintenant
+                  </button>
+                </div>
+                <p class="car-cap">
+                  {{
+                    wingsTogether
+                      ? 'Tous partent maintenant, les plus proches ralentis pour arriver ensemble : ils quittent leur poste dès le départ. Retour à leur pas.'
+                      : 'Les plus proches attendent chez eux (ils produisent, ils défendent) ; battus avant leur départ, ils ne viennent pas.'
+                  }}
+                </p>
                 <div v-for="w in wingPlan" :key="w.id" class="wing-row" :class="{ empty: !w.n }">
                   <span class="wing-emo">{{ w.emo }}</span>
                   <span class="wing-name">{{ w.label }}</span>
@@ -1054,7 +1086,9 @@
                     !w.n
                       ? 'personne'
                       : w.departInMin <= 0
-                        ? 'part maintenant'
+                        ? w.outMin > w.legMin
+                          ? `part maintenant · 🐢 aller ${formatDurationMin(w.outMin)}`
+                          : 'part maintenant'
                         : `part dans ${formatDurationMin(w.departInMin)}`
                   }}</span>
                   <span
@@ -5462,6 +5496,8 @@ const {
   heroStayChoice,
   combined,
   wingPlan,
+  wingsTogether,
+  setWingsTogether,
   combinedBlock,
   originOptions,
   partyGroups,
@@ -5695,6 +5731,30 @@ onUnmounted(() => {
 /* ⚔️🧭 Le plan d'une attaque combinée : une ligne par groupe. */
 .wing-plan {
   margin-top: 8px;
+}
+/* 🐢 Le choix du départ : deux tuiles côte à côte, cibles de 44 px. */
+.wing-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.wing-mode-b {
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wing-mode-b.on {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 }
 .wing-row {
   display: flex;

@@ -4393,6 +4393,8 @@ export const useCharacterStore = defineStore('character', () => {
       now: number;
       supplies?: SupplyId[];
       stayIds?: string[];
+      /** 🐢 Tous partent maintenant, les plus proches au pas du plus lointain (`planWings`). */
+      together?: boolean;
     },
   ): Promise<string | null> {
     await writesSettled();
@@ -4493,6 +4495,7 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       dwellMsFor(poi, all.length),
       meet.min,
+      !!opts.together,
     );
     // 🏰 Assaut d'un point fixe : le retour de chaque groupe si le point est pris (estimé ici
     // pour l'affichage, recalculé au lancement avec ceux qui sont vraiment partis).
