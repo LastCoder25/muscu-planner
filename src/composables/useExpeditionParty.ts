@@ -507,10 +507,10 @@ export function useExpeditionParty(ctx: PartyCtx) {
     return origin ? (p: Poi) => legFromSpot(p, origin, legOf) : legOf;
   }
   /** ⚔️⏱️ QUI ARRIVERA À TEMPS sur une armée en marche (demandé) — par membre, depuis SON lieu
-   *  de départ (`interceptReach`, la règle de l'envoi) : `ok` montré, `aid` grisé avec ce qui le
+   *  de départ (`interceptReach`, la règle de l'envoi) : `ok` montré, `aid` signalé avec ce qui le
    *  ferait arriver (🧭 un éclaireur parti du même lieu — sa compétence presse tout le groupe —,
-   *  🥖 des rations), `late` masqué. ⚠️ Pas les boosts ⚡ : ils ne servent jamais vers une
-   *  armée en marche (le point de rencontre est figé au départ, `voyageBoostPlan`).
+   *  🥖 des rations), `late` signalé (jamais masqué). Les boosts ⚡ ne figurent pas dans les aides :
+   *  ils s’utilisent EN ROUTE (`reMeet` recalcule alors la rencontre).
    *  Vide hors armée en marche. Horloge grossière : la rencontre bouge à la minute. */
   const interceptInfo = computed(() => {
     const out = new Map<string, ReturnType<typeof interceptReach>>();
@@ -567,24 +567,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
     return out;
   });
-  /** Trop tard même aidé : on ne le montre pas (sauf s'il est déjà coché, pour pouvoir le
-   *  retirer). */
-  const interceptHidden = (id: string) =>
-    interceptInfo.value.get(id)?.kind === 'late' &&
-    (id === 'hero' ? !partyHeroOn.value : !partyEscort.value.includes(id));
-  /** Combien sont masqués parce qu'ils arriveraient trop tard (le héros compris). */
-  const interceptLateCount = computed(
-    () =>
-      partyPool.value.filter((a) => interceptHidden(a.id)).length +
-      (interceptHidden('hero') ? 1 : 0),
-  );
-  /** Grisé : ce qui le ferait arriver à temps (`null` = rien à dire). Un membre déjà coché
-   *  n'est jamais grisé (on doit pouvoir le retirer) : c'est le bouton d'envoi qui dit « trop
-   *  tard ». */
-  const interceptAid = (id: string): string | null => {
+  /** ⚔️⏱️ CE QUI LE FERAIT ARRIVER À TEMPS, ou qu'il arriverait trop tard (`null` = à temps).
+   *  ⚠️ JAMAIS bloquant (2026-10-06, demandé : « on affiche tous les champions et héros ») : un
+   *  boost ⚡ utilisé en route peut le faire arriver à temps ; l'envoi demande confirmation. */
+  const interceptWarn = (id: string): string | null => {
     const r = interceptInfo.value.get(id);
-    const on = id === 'hero' ? partyHeroOn.value : partyEscort.value.includes(id);
-    return r?.kind === 'aid' && !on ? `⏱️ À temps ${r.label}` : null;
+    if (r?.kind === 'aid') return `⏱️ À temps ${r.label}`;
+    if (r?.kind === 'late') return '⏱️ Trop tard sans boost ⚡';
+    return null;
   };
   /** 🧭 Les lieux de départ (la base et les points tenus), du plus proche de la cible au plus
    *  loin (demandé). Le trajet est celui de TOUS les champions prêts du lieu. */
@@ -616,9 +606,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
         t.id === 'base'
           ? freeSorted.value
           : sortByGradeThenRank(readyByPoint.value.get(t.id) ?? []);
-      // ⚔️⏱️ Trop tard même aidé : masqué (demandé).
-      const advs = all.filter((a) => !interceptHidden(a.id));
-      return { ...t, advs, late: advs.length < all.length };
+      return { ...t, advs: all };
     });
   });
   /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
@@ -719,14 +707,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
       heroPost.value?.id ?? null,
     );
     if (b) return COMBINED_BLOCK_LABEL[b];
-    // ⚔️🗼 La MÊME garde que le store : tous doivent rejoindre l'armée avant qu'elle n'arrive.
-    const m = meetInfo.value;
-    if (
-      m &&
-      ((isWarbandPoi(selected.value) && !m.joined) ||
-        interceptTooLate(selected.value, coarseNow.value, m.min))
-    )
-      return 'trop tard : l’armée atteindra sa cible avant que tous la rejoignent';
     return null;
   });
   /** Trajet ALLER de l'équipe (minutes). Le retour vaut l'aller : c'est la règle du store
@@ -811,16 +791,40 @@ export function useExpeditionParty(ctx: PartyCtx) {
       { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
     );
   });
+  /** ⚔️⏱️ LE GROUPE N'ARRIVERA PAS À TEMPS sur l'armée en marche — la MÊME règle que le store
+   *  (`interceptTooLate` sur l'aller annoncé ; `meetAll` pour une attaque combinée). On peut
+   *  partir quand même après confirmation (2026-10-06, demandé) : un boost ⚡ en route peut
+   *  suffire, sinon l'équipe rentre sans combattre (`supersedeLate`). */
+  const partyLate = computed(() => {
+    const t = selected.value;
+    if (!t || !isWarbandPoi(t) || !partySize.value) return false;
+    if (combined.value) {
+      const m = meetInfo.value;
+      return !!m && (!m.joined || interceptTooLate(t, coarseNow.value, m.min));
+    }
+    return interceptTooLate(t, coarseNow.value, partyLeg.value);
+  });
+  /** ⚔️⏱️ Qui, dans la sélection, n'arriverait pas à temps : portrait et lieu de départ, pour la
+   *  fenêtre de confirmation. Si personne seul n'est en retard (le pas du groupe), tout le monde. */
+  const lateMembers = computed(() => {
+    if (!partyLate.value) return [];
+    const where = (oid: string) => {
+      const o = oid === 'base' ? null : startOptions.value.find((x) => x.id === oid);
+      return o ? `${o.emo} ${o.label}` : '🏰 Base';
+    };
+    const rows = [
+      ...(partyHeroOn.value ? [{ id: 'hero', adv: null, where: where(heroOriginId.value) }] : []),
+      ...partyAdvs.value.map((a) => ({ id: a.id, adv: a, where: where(originOfAdv(a.id)) })),
+    ];
+    const late = rows.filter((r) => (interceptInfo.value.get(r.id)?.kind ?? 'ok') !== 'ok');
+    return late.length ? late : rows;
+  });
+  /** La fenêtre « ils arriveront trop tard » est ouverte. */
+  const lateAsk = ref(false);
   /** Pourquoi le groupe ne peut pas partir — la MÊME règle que le store (`partySendBlocker`). */
   const partySendBlock = computed(() =>
     selected.value
-      ? // ⚔️⏱️ Une armée en marche qu'on n'interceptera pas avant son arrivée : la MÊME règle
-        // que le store (`interceptTooLate`), sur l'aller annoncé juste au-dessus.
-        !combined.value &&
-        partySize.value > 0 &&
-        interceptTooLate(selected.value, coarseNow.value, partyLeg.value)
-        ? ('tooLate' as const)
-        : partySendBlocker(
+      ? partySendBlocker(
             selected.value,
             partyAdvs.value.length,
             partyHeroOn.value,
@@ -942,10 +946,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
       .slice(0, partyMax.value)
       .map((a) => a.id),
   );
-  /** La liste à afficher hors groupes par lieu : sans ceux qui arriveraient trop tard. */
-  const partyPoolShown = computed(() =>
-    partyPoolSorted.value.filter((a) => !interceptHidden(a.id)),
-  );
   const partyAllOn = computed(
     () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
   );
@@ -958,16 +958,22 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (!partySize.value) return 'Choisis ton groupe';
     // ⚠️ Le bouton DIT le refus, il ne se contente pas d'être gris.
     if (partySendBlock.value === 'hopeless') return '💀 Perdu d’avance';
-    if (partySendBlock.value === 'tooLate') return '⏱️ Trop tard';
+    if (partyLate.value) return `⏱️ Envoyer quand même (${partySize.value})`;
     if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
     return selectedRift.value
       ? `🌀 Entrer dans la faille (${partySize.value})`
       : `⚔️ Attaquer le camp (${partySize.value})`;
   });
-  async function doSendParty() {
+  async function doSendParty(lateOk = false) {
     const uid = auth.user?.id;
     const poi = selected.value;
     if (!uid || !poi || !canSendPartyNow.value) return;
+    // ⚔️⏱️ Trop tard pour croiser l'armée : on prévient d'abord (fenêtre de confirmation).
+    if (partyLate.value && !lateOk) {
+      lateAsk.value = true;
+      return;
+    }
+    lateAsk.value = false;
     await settleDueSiege();
     // ⚠️ Retenu AVANT l’envoi : `selected` est remis à null au succès, donc le lire après
     // coup pour choisir le message dirait toujours « camp ».
@@ -991,6 +997,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             supplies: activeSupplies.value,
             ...(stayCap.value ? { stayIds: stayIds.value } : {}),
             together: wingsTogether.value,
+            ...(lateOk ? { lateOk: true } : {}),
           })
         : await char.sendParty(uid, poi, {
             hero: heroForParty.value,
@@ -1003,6 +1010,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             ...(stayCap.value ? { stayIds: stayIds.value } : {}),
             ...(originPoi.value ? { fromControlId: originPoi.value.id } : {}),
             ...(heroStays.value ? { heroStays: true } : {}),
+            ...(lateOk ? { lateOk: true } : {}),
           });
       if (!refused) selected.value = null;
       // 🛡️ La sortie est partie : ses places sont gardées, donc ouvertes aux miliciens. On les
@@ -1129,10 +1137,10 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyGroups,
     originPoi,
     partyPoolSorted,
-    partyPoolShown,
-    interceptHidden,
-    interceptAid,
-    interceptLateCount,
+    interceptWarn,
+    partyLate,
+    lateMembers,
+    lateAsk,
     stayCap,
     stayHold,
     stayHoldOf,

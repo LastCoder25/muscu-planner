@@ -14,6 +14,8 @@
     <span class="ph-main">
       <span class="ph-name">Ton héros</span>
       <span class="ph-sub">{{ block ?? sub }}</span>
+      <!-- ⏱️ Un avertissement qui ne bloque pas (trop tard pour croiser une armée sans boost). -->
+      <span v-if="warn && !block" class="ph-warn">{{ warn }}</span>
       <span
         v-if="gain != null && !block"
         class="ph-gain"
@@ -39,6 +41,8 @@ defineProps<{
   sub: string;
   /** Ce qu'il change à la réussite (null = pas de pronostic). */
   gain?: number | null;
+  /** ⏱️ Un avertissement NON bloquant. */
+  warn?: string | null;
 }>();
 const emit = defineEmits<{ toggle: [] }>();
 </script>
@@ -87,6 +91,11 @@ const emit = defineEmits<{ toggle: [] }>();
   font-size: 11.5px;
   color: var(--dim);
   line-height: 1.3;
+}
+.ph-warn {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--d3);
 }
 .ph-gain {
   font-size: 12px;

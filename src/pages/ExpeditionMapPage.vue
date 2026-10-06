@@ -451,6 +451,43 @@
       :busy="ctlBusy"
       @send="sendFromBase"
     />
+    <!-- ⚔️⏱️ ILS ARRIVERONT TROP TARD (2026-10-06, demandé : « on affiche tous les champions et
+         héros ; s'ils ne peuvent pas arriver à temps, une fenêtre de confirmation avec leurs
+         portraits et leur lieu de départ »). Partir reste possible : un boost ⚡ en route peut
+         suffire, sinon l'équipe rentre sans combattre. -->
+    <q-dialog v-model="lateAsk">
+      <div class="late-ask">
+        <p class="la-title">⏱️ Trop tard pour croiser l’armée</p>
+        <p class="la-text">
+          L’armée atteindra sa cible avant {{ lateMembers.length > 1 ? 'eux' : 'lui' }} :
+        </p>
+        <ul class="la-list">
+          <li v-for="m in lateMembers" :key="m.id" class="la-row">
+            <span class="la-emo"
+              ><ChampionPortrait v-if="m.adv" :champion-id="m.adv.championId">{{
+                advTitle(m.adv)?.emoji ?? '🧑'
+              }}</ChampionPortrait
+              ><template v-else>🧝</template></span
+            >
+            <span class="la-main">
+              <span class="la-name">{{ m.adv ? m.adv.name : 'Ton héros' }}</span>
+              <span class="la-where">part de {{ m.where }}</span>
+            </span>
+          </li>
+        </ul>
+        <p class="la-text">
+          Un boost ⚡ utilisé en route peut les faire arriver à temps<template v-if="boostStock">
+            (tu en as {{ boostStock }})</template
+          ><template v-else> (tu n’en as aucun)</template>. Sinon l’équipe rentrera sans combattre.
+        </p>
+        <div class="la-actions">
+          <button type="button" class="la-btn" @click="lateAsk = false">Annuler</button>
+          <button type="button" class="la-btn go" :disabled="!canSendPartyNow" @click="doSendParty(true)">
+            Envoyer quand même
+          </button>
+        </div>
+      </div>
+    </q-dialog>
     <!-- ➕ Renfort direct depuis une case libre de la liste (cf. `QuickReinforceSheet`). -->
     <QuickReinforceSheet
       :poi="quickPoi"
@@ -1234,11 +1271,10 @@
                   }}</span>
                 </button>
                 <HeroPickTile
-                  v-if="g.id === 'base' && !interceptHidden('hero')"
+                  v-if="g.id === 'base'"
                   :on="partyHeroOn"
-                  :block="
-                    partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : interceptAid('hero')
-                  "
+                  :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                  :warn="interceptWarn('hero')"
                   :sub="heroPostSub ?? 'part de la base · sans XP'"
                   :gain="partyGain.hero"
                   @toggle="partyHero = !partyHero"
@@ -1248,13 +1284,13 @@
                   :key="a.id"
                   :adv="a"
                   :on="partyEscort.includes(a.id)"
-                  :reason="interceptAid(a.id)"
+                  :warn="interceptWarn(a.id)"
                   :xp="partyXp[a.id]"
                   :gain="partyGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
                 <p v-if="!g.advs.length" class="pool-empty">
-                  {{ g.late ? '⏱️ Personne d’ici n’arriverait à temps.' : 'Personne de prêt ici.' }}
+                  Personne de prêt ici.
                 </p>
               </template>
               <template v-if="showBlocked">
@@ -1269,21 +1305,19 @@
             </div>
             <div v-else class="car-pick">
               <HeroPickTile
-                v-if="!interceptHidden('hero')"
                 :on="partyHeroOn"
-                :block="
-                  partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : interceptAid('hero')
-                "
+                :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                :warn="interceptWarn('hero')"
                 :sub="heroPostSub ?? 'sans XP'"
                 :gain="partyGain.hero"
                 @toggle="partyHero = !partyHero"
               />
               <AdvPickTile
-                v-for="a in partyPoolShown"
+                v-for="a in partyPoolSorted"
                 :key="a.id"
                 :adv="a"
                 :on="partyEscort.includes(a.id)"
-                :reason="interceptAid(a.id)"
+                :warn="interceptWarn(a.id)"
                 :xp="partyXp[a.id]"
                 :gain="partyGain[a.id]"
                 @toggle="togglePartyAdv(a.id)"
@@ -1305,11 +1339,11 @@
                niveau, un champion apprend beaucoup moins (mesuré v0.1102 : du simple au
                quadruple selon la destination). Affichée seulement s'il y a quelqu'un que ça
                concerne — sinon c'est du bruit. -->
-            <!-- ⚔️⏱️ Ceux qui arriveraient trop tard sur l'armée, même aidés, sont masqués (demandé) :
-               on le DIT, sinon des champions disparus se lisent comme des champions perdus. -->
-            <p v-if="interceptLateCount" class="car-xp-note">
-              ⏱️ {{ interceptLateCount }} masqué{{ interceptLateCount > 1 ? 's' : '' }} : trop loin
-              pour croiser l’armée avant qu’elle n’arrive.
+            <!-- ⚔️⏱️ Le groupe n'arrivera pas à temps sur l'armée : on peut partir quand même (un
+               boost ⚡ en route peut suffire) — l'envoi demande confirmation. -->
+            <p v-if="partyLate" class="car-xp-note late-note">
+              ⏱️ <b>Trop tard pour croiser l’armée</b> tel quel : un boost ⚡ utilisé en route peut
+              suffire, sinon l’équipe rentrera sans combattre.
             </p>
             <p v-if="partyLowXp" class="car-xp-note">
               📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
@@ -1446,7 +1480,7 @@
                   <b class="send-odd-val">{{ o.value }}</b>
                 </span>
               </div>
-              <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
+              <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty()">
                 {{ partySendLabel }}
               </button>
             </div>
@@ -1749,6 +1783,7 @@ import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { groupSwapRows, SWAP_BASE_KEY } from '@/lib/swapGroups';
 import {
   PLAN_MAX_DELAY_MS,
@@ -2890,6 +2925,10 @@ const ctlPlannedBack = computed(() =>
         minute: '2-digit',
       }),
     })),
+);
+/** ⚡ Les boosts de vitesse en stock (la fenêtre « trop tard » les rappelle). */
+const boostStock = computed(() =>
+  BOOST_IDS.reduce((n, id) => n + (char.row?.supplies?.[id] ?? 0), 0),
 );
 /** 🛡️ Les miliciens à la base (le renfort direct les propose). */
 const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
@@ -5558,10 +5597,10 @@ const {
   originOptions,
   partyGroups,
   partyPoolSorted,
-  partyPoolShown,
-  interceptHidden,
-  interceptAid,
-  interceptLateCount,
+  interceptWarn,
+  partyLate,
+  lateMembers,
+  lateAsk,
   partyHero,
   partyEscort,
   partyAdvs,
@@ -7445,5 +7484,89 @@ onUnmounted(() => {
   color: var(--dim);
   text-align: center;
   font-size: 13px;
+}
+
+.late-ask {
+  width: min(92vw, 400px);
+  padding: 16px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 14px;
+}
+.la-title {
+  margin: 0 0 6px;
+  font-family: Oswald, sans-serif;
+  font-size: 18px;
+  color: var(--d3);
+}
+.la-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+.la-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.la-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+.la-emo {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.la-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.la-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.la-where {
+  font-size: 12px;
+  color: var(--dim);
+}
+.la-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.la-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+.la-btn.go {
+  background: var(--d3);
+  border-color: var(--d3);
+  color: #15120e;
+}
+.late-note {
+  color: var(--d3);
 }
 </style>

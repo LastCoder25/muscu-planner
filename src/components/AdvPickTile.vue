@@ -66,6 +66,8 @@
       <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
          store, `advUnavailableReason`). -->
       <span v-if="reason" class="ca-why">{{ reason }}</span>
+      <!-- ⏱️ Un avertissement qui ne BLOQUE pas (ex. trop tard pour croiser une armée sans boost). -->
+      <span v-if="warn && !reason" class="ca-warn">{{ warn }}</span>
       <span v-else-if="badges.length" class="ca-skills">
         <span
           v-for="(b, i) in badges"
@@ -100,6 +102,8 @@ const props = defineProps<{
   adv: Adventurer;
   on: boolean;
   reason?: string | null;
+  /** ⏱️ Un avertissement NON bloquant (la tuile reste cochable). */
+  warn?: string | null;
   /** Ce qu'il gagnerait sur le lieu visé (absent = on ne vise rien, ex. la Guilde). */
   xp?: MissionXpPreview | null;
   /** 🎯 Ce qu'il apporte à la réussite sur le lieu visé, en points (`winGain`). */
@@ -309,6 +313,11 @@ const rar = computed(() => advGradeBadge(props.adv));
   font-size: 11px;
   color: var(--dim);
   opacity: 0.6;
+}
+.ca-warn {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--d3);
 }
 .ca-why {
   font-size: 11.5px;

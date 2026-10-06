@@ -3296,7 +3296,7 @@ export function underAttackKey(
 
 /** Un voyage vers un lieu, tel que `supersedeLate` le lit. */
 type LateVoyage = {
-  poi: Pick<Poi, 'id'>;
+  poi: Pick<Poi, 'id' | 'type' | 'expiresAt'>;
   midAt: number;
   reported?: boolean;
   turnBack?: number;
@@ -3304,8 +3304,10 @@ type LateVoyage = {
 };
 /** ⚔️ L'issue d'une équipe ARRIVÉE TROP TARD : le lieu était déjà tombé. Aucun combat, aucun
  *  butin, aucune XP, aucun blessé — elle rentre simplement. */
-export function lateOutcome(o: ExpeditionOutcome): ExpeditionOutcome {
-  const text = 'Arrivés trop tard : une autre équipe avait déjà terrassé le lieu.';
+export function lateOutcome(
+  o: ExpeditionOutcome,
+  text = 'Arrivés trop tard : une autre équipe avait déjà terrassé le lieu.',
+): ExpeditionOutcome {
   return {
     win: false,
     gold: 0,
@@ -3350,6 +3352,16 @@ export function supersedeLate<V extends LateVoyage>(voyages: readonly V[], now: 
   const out = voyages.map((v) => {
     if (v.reported || now < v.midAt || v.outcome.party?.late) return v;
     if (v.turnBack !== undefined || v.outcome.turnBack !== undefined) return v;
+    // ⚔️⏱️ Une ARMÉE EN MARCHE déjà arrivée à sa cible quand l'équipe la rejoint (2026-10-06,
+    // décision de l'utilisateur : on peut partir trop tard, après confirmation, en comptant sur
+    // un boost ⚡ en route) : rien à intercepter, l'équipe rentre sans combattre.
+    if (v.poi.type === 'warband' && v.midAt >= v.poi.expiresAt) {
+      changed = true;
+      return {
+        ...v,
+        outcome: lateOutcome(v.outcome, 'Arrivés trop tard : l’armée avait déjà frappé sa cible.'),
+      };
+    }
     const beaten = voyages.some(
       (u) => u !== v && u.poi.id === v.poi.id && u.midAt < v.midAt && voyageVanquished(u, now),
     );

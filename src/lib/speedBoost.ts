@@ -21,8 +21,11 @@
  * personne ne double personne. Une fois tous partis, les groupes sont des voyages liés
  * (`combinedSiblings`) : un boost à l'aller les avance tous ensemble.
  *
- * ⚠️ JAMAIS vers une armée EN MARCHE (`warband`) à l'aller : le point de rencontre est
- * calculé au départ sur la marche de l'armée ; arriver plus tôt ne la ferait pas être là.
+ * ⚔️ VERS UNE ARMÉE EN MARCHE (`warband`, 2026-10-06, décision de l'utilisateur : « des
+ * champions trop lents doivent pouvoir la rattraper grâce aux boosts ») : autorisé, et le point
+ * de rencontre est RECALCULÉ (`reMeet`, party.ts) — là où l'armée sera à la nouvelle heure
+ * d'arrivée. ⚠️ Pas une attaque combinée qui attend encore ses groupes (`attackBoostPlan`) :
+ * son heure de rencontre est commune et figée ; une fois tous partis, ses voyages se pressent.
  */
 import type { ActiveExpedition } from './expedition';
 import type { CombinedAttack } from './combinedAttack';
@@ -56,7 +59,6 @@ export function voyageBoostPlan(v: Timed, minutes: number, now: number): BoostPl
   const boost = Math.max(0, minutes) * 60_000;
   const arriveAt = v.midAt - Math.max(0, v.dwellMs ?? 0);
   if (now < arriveAt) {
-    if (v.poi.type === 'warband') return 'intercept';
     const goMs = Math.min(boost, arriveAt - now);
     const backMs = Math.min(boost - goMs, Math.max(0, v.returnAt - v.midAt));
     return { phase: 'go', gainMs: goMs + backMs, goMs, backMs, lostMs: boost - goMs - backMs };

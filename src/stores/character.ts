@@ -351,6 +351,7 @@ import {
   withoutWalkers,
   interceptLeg,
   interceptTooLate,
+  reMeet,
   meetAll,
   settleParties,
   startParty,
@@ -4004,6 +4005,10 @@ export const useCharacterStore = defineStore('character', () => {
       fromControlId?: string;
       /** 🧝 Le héros reste en garnison si le point est pris (étape 6 bis). */
       heroStays?: boolean;
+      /** ⚔️⏱️ Partir quand même vers une armée qu'on ne rejoindrait pas à temps (2026-10-06,
+       *  demandé : confirmé par le joueur, qui compte sur un boost ⚡ en route). Arrivée trop
+       *  tard : retour sans combattre (`supersedeLate`). */
+      lateOk?: boolean;
     },
   ): Promise<string | null> {
     // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
@@ -4098,7 +4103,7 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚔️🗼 On ne croise pas une armée qui sera arrivée avant nous : le choc tomberait après
     // l'attaque, il ne changerait rien. ⚠️ TOUTE bande en marche, pas seulement les armées de
     // campagne : une bande de faille arrivée aux murs a déjà renforcé le siège.
-    if (interceptTooLate(poi, now, leg)) return PARTY_SEND_BLOCK_LABEL.tooLate;
+    if (!opts.lateOk && interceptTooLate(poi, now, leg)) return PARTY_SEND_BLOCK_LABEL.tooLate;
     const withSupplies = partyOutcomeFor({
       poi,
       escort,
@@ -4394,6 +4399,10 @@ export const useCharacterStore = defineStore('character', () => {
       stayIds?: string[];
       /** 🐢 Tous partent maintenant, les plus proches au pas du plus lointain (`planWings`). */
       together?: boolean;
+      /** ⚔️⏱️ Partir quand même vers une armée qu'on ne rejoindrait pas à temps (2026-10-06,
+       *  demandé : confirmé par le joueur, qui compte sur un boost ⚡ en route). Arrivée trop
+       *  tard : retour sans combattre (`supersedeLate`). */
+      lateOk?: boolean;
     },
   ): Promise<string | null> {
     await writesSettled();
@@ -4481,7 +4490,10 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       legs.map((l) => l.at),
     );
-    if ((isWarbandPoi(poi) && !meet.joined) || interceptTooLate(poi, now, meet.min))
+    if (
+      !opts.lateOk &&
+      ((isWarbandPoi(poi) && !meet.joined) || interceptTooLate(poi, now, meet.min))
+    )
       return 'trop tard : l’armée atteindra sa cible avant que tous la rejoignent';
     const target = meet.poi;
     const plan = planWings(
@@ -6282,7 +6294,8 @@ export const useCharacterStore = defineStore('character', () => {
     let parties = partyList.value;
     let bmap = cur.expedition_map;
     for (const t of group) {
-      const nt = boostVoyage(t, plan);
+      // ⚔️ Vers une armée en marche : on la croise là où elle sera à la nouvelle heure (`reMeet`).
+      const nt = reMeet(boostVoyage(t, plan));
       advs = rescheduleReturners(advs, tripCrew(t), t.returnAt, nt.returnAt);
       // ⚡ Le départ (daté de l'arrivée) avance avec le voyage.
       if (bmap) bmap = moveDeparture(bmap, t.midAt, nt.midAt);

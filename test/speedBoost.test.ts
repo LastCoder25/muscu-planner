@@ -131,9 +131,9 @@ describe('⚡ voyage', () => {
     expect(b.midAt).toBe(60 * M);
     expect(b.returnAt).toBe(100 * M);
   });
-  it('un voyage fini ou une interception ne se pressent pas', () => {
+  it('un voyage fini ne se presse pas ; une interception, si (2026-10-06)', () => {
     expect(voyageBoostPlan(trip(), 5, 130 * M)).toBe('done');
-    expect(voyageBoostPlan(trip({ type: 'warband' }), 5, 10 * M)).toBe('intercept');
+    expect(voyageBoostPlan(trip({ type: 'warband' }), 5, 10 * M)).not.toBe('intercept');
   });
   it('plusieurs boosts s’enchaînent', () => {
     let v = trip();

@@ -139,6 +139,14 @@ export function meetAll(
  * il vaut déjà le trajet jusqu'aux murs, donc au-delà de l'arrivée de l'armée.
  * ⚠️ SOURCE UNIQUE : l'écran (bouton grisé et sa raison) et le store (refus) la lisent.
  */
+/** ⚡⚔️ Un voyage vers une armée en marche dont l'arrivée a avancé (boost) : on la croise là où
+ *  elle SERA à la nouvelle heure d'arrivée (`warbandAt`), pas au point prévu au départ. Rend
+ *  la MÊME référence hors armée en marche. */
+export function reMeet<V extends { poi: Poi; midAt: number; dwellMs?: number }>(v: V): V {
+  if (v.poi.type !== 'warband' || !v.poi.from) return v;
+  return { ...v, poi: warbandAt(v.poi, v.midAt - Math.max(0, v.dwellMs ?? 0)) };
+}
+
 export function interceptTooLate(
   poi: Pick<Poi, 'type' | 'expiresAt'>,
   now: number,
