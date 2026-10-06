@@ -31,9 +31,15 @@ import {
   winGain,
   type GainTeam,
 } from '@/lib/partyForecast';
-import { CONTROL_EMO, CONTROL_LABEL, champSeatsWithHero, garrisonHold } from '@/lib/controlPoints';
+import {
+  CONTROL_EMO,
+  CONTROL_LABEL,
+  champSeatsWithHero,
+  garrisonHold,
+  sortieCover,
+} from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import { plannedTransferIds } from '@/lib/plannedMoves';
+import { plannedMilitia, plannedTransferIds } from '@/lib/plannedMoves';
 import { heroPostOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
@@ -776,6 +782,33 @@ export function useExpeditionParty(ctx: PartyCtx) {
   function togglePartyGroup(ids: readonly string[]) {
     partyEscort.value = toggleOriginGroup(partyEscort.value, ids, partyMax.value);
   }
+  /** 🛡️⚔️ UNE SORTIE LAISSE SON POINT : on propose d'y envoyer autant de miliciens que de
+   *  champions qui partent (`sortieCover`), pour qu'il ne reste pas sans défense. Ils tiennent
+   *  les places gardées en intérim et rentrent à pied quand les champions reviennent.
+   *  Seulement pour une sortie simple : les groupes d'une attaque combinée partent plus tard,
+   *  leurs places ne s'ouvrent qu'à leur départ. `n` = 0 : aucun milicien libre à la base. */
+  const coverOn = ref(true);
+  const sortieCoverInfo = computed(() => {
+    const o = originPoi.value;
+    const c = o?.control;
+    if (!o || !c || combined.value) return null;
+    const leaving = partyAdvs.value.filter((a) => originOfAdv(a.id) === o.id).length;
+    if (!leaving) return null;
+    const home = Math.max(0, milHome.value - plannedMilitia(char.plannedList));
+    const n = sortieCover(c, leaving, home);
+    // Rien à proposer et rien à dire : un lieu sans milicien possible (objectif, forteresse).
+    if (!sortieCover(c, leaving, Infinity)) return null;
+    const stays = c.garrison.length - leaving + (c.hero ? 1 : 0);
+    return {
+      id: o.id,
+      n,
+      leaving,
+      label: CONTROL_LABEL[c.kind],
+      emo: CONTROL_EMO[c.kind],
+      /** Le lieu se vide-t-il entièrement (personne d'autre ne reste) ? */
+      empty: stays <= 0,
+    };
+  });
   /** État d'un lieu pour son titre : 'all' tout coché, 'some' en partie, 'none' rien. */
   function partyGroupState(ids: readonly string[]): 'all' | 'some' | 'none' {
     const n = ids.filter((id) => partyEscort.value.includes(id)).length;
@@ -815,6 +848,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const isRift = !!selectedRift.value;
     const isHarvest = !teamOnly.value;
     const isCombined = combined.value;
+    // 🛡️ Les miliciens proposés en relève du point que la sortie laisse (retenu AVANT l'envoi,
+    // comme le reste : la sélection est remise à zéro au succès).
+    const cover = coverOn.value && sortieCoverInfo.value?.n ? sortieCoverInfo.value : null;
     busyParty.value = true;
     try {
       const refused = combined.value
@@ -842,6 +878,18 @@ export function useExpeditionParty(ctx: PartyCtx) {
             ...(heroStays.value ? { heroStays: true } : {}),
           });
       if (!refused) selected.value = null;
+      // 🛡️ La sortie est partie : ses places sont gardées, donc ouvertes aux miliciens. On les
+      // envoie maintenant ; un refus (base vidée entre-temps) se dit, la sortie reste partie.
+      const coverWhy =
+        !refused && cover
+          ? await char.sendMilitiaToControl(uid, cover.id, cover.n, Date.now())
+          : null;
+      if (coverWhy) $q.notify({ type: 'warning', message: `Miliciens non envoyés : ${coverWhy}.` });
+      else if (!refused && cover)
+        $q.notify({
+          type: 'info',
+          message: `🛡️ ${cover.n} milicien${cover.n > 1 ? 's' : ''} en route vers ${cover.label}.`,
+        });
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
       $q.notify(
         refused
@@ -980,6 +1028,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyWonLeg,
     partyMin,
     partyRisk,
+    coverOn,
+    sortieCoverInfo,
     partySendBlock,
     canSendPartyNow,
     partyMax,

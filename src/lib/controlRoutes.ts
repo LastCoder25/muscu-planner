@@ -309,10 +309,17 @@ export function rejoinHome(
   if (!held(map, homeId) || !ids.length) return { map, back: [], out: [...ids] };
   // ⚔️🏰 Leur place leur était GARDÉE (`away`) : on la leur rend avant de compter les places
   // libres, sinon ils se la disputeraient avec eux-mêmes.
-  const m = freeAway(map, homeId, ids);
-  const back = ids.slice(0, controlFreeSeats(held(m, homeId)!.control));
-  const out = ids.slice(back.length);
-  return { map: back.length ? reinforceControl(m, homeId, back, at) : m, back, out };
+  // 🛡️⚔️ Ceux dont la place était gardée la REPRENNENT toujours, même si des miliciens la
+  // tiennent en intérim (`interimSeats`) : à leur arrivée, le dernier milicien rentre à pied à
+  // la base (`settleReinforcements`). Les autres ne prennent qu'une place vraiment libre.
+  const kept = new Set(held(map, homeId)!.control!.away ?? []);
+  const owed = ids.filter((id) => kept.has(id));
+  const rest = ids.filter((id) => !kept.has(id));
+  let m = freeAway(map, homeId, ids);
+  if (owed.length) m = reinforceControl(m, homeId, owed, at);
+  const more = rest.slice(0, controlFreeSeats(held(m, homeId)!.control));
+  if (more.length) m = reinforceControl(m, homeId, more, at);
+  return { map: m, back: [...owed, ...more], out: rest.slice(more.length) };
 }
 
 /**
