@@ -39,8 +39,8 @@ function sorties(m: ExpeditionMap, n: number, t0 = NOW + 1000): ExpeditionMap {
   return tick({ ...m, departures: [...(m.departures ?? []), ...dep] }, t0 + n * 1000);
 }
 
-describe('🪺 un nid apparaît toutes les 3 à 5 sorties sur la carte', () => {
-  it('le seuil est tiré entre 3 et 5, et les trois valeurs sortent', () => {
+describe('🪺 un nid apparaît toutes les 5 à 10 sorties sur la carte', () => {
+  it('le seuil est tiré entre 5 et 10, et toutes les valeurs sortent', () => {
     const seen = new Set<number>();
     for (let n = 0; n < 200; n++) {
       const k = nestThreshold(5, n);
@@ -48,7 +48,7 @@ describe('🪺 un nid apparaît toutes les 3 à 5 sorties sur la carte', () => {
       expect(k).toBeLessThanOrEqual(NEST.departuresMax);
       seen.add(k);
     }
-    expect([...seen].sort()).toEqual([3, 4, 5]);
+    expect([...seen].sort((a, b) => a - b)).toEqual([5, 6, 7, 8, 9, 10]);
   });
   it('jamais avant le seuil, toujours dès qu’il est atteint', () => {
     const m = islandMap(2);
