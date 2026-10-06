@@ -200,7 +200,7 @@ describe('🏠 envoyer le héros depuis la base (avec champions et miliciens)', 
     expect(baseSendBlocker(c, 1, 0, true)).toBeNull(); // 2 + 2 + 1 = 5
     expect(baseSendBlocker(c, 2, 0, true)).toBe('full');
     expect(baseSendBlocker(c, 0, 1, true)).toBeNull();
-    expect(baseSendBlocker(c, 1, 1, true)).toBe('full');
+    expect(baseSendBlocker(c, 1, 1, true)).toBeNull(); // 🛡️ v1.70 : le milicien en trop part quand même (demi-tour à l'arrivée)
   });
   it('refusé s’il y est déjà, ou au lapidaire', () => {
     expect(baseSendBlocker(ctl(held(['a'], true)), 0, 0, true)).toBe('heroHere');

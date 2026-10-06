@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { interceptLeg, interceptTooLate, meetAll } from '@/lib/party';
+import { interceptLeg, interceptReach, interceptTooLate, meetAll } from '@/lib/party';
 import { EXPE, travelOneWayMin, warbandAt, type Poi } from '@/lib/expedition';
 
 const T0 = 1_700_000_000_000;
@@ -100,5 +100,42 @@ describe('⚔️⏱️ interceptTooLate — on ne part pas croiser une armée d�
   it('un lieu IMMOBILE n’est jamais « trop tard », même s’il expire avant l’arrivée', () => {
     const camp: Poi = { ...band(), id: 'c1', type: 'camp', from: undefined };
     expect(interceptTooLate(camp, camp.expiresAt, 60)).toBe(false);
+  });
+});
+
+describe('⚔️⏱️ interceptReach — qui montrer dans la troupe qui intercepte', () => {
+  const slow = (p: Poi) => leg(p) * 50;
+  const now = T0 + 20 * H;
+  const b = warbandAt(band(), now);
+  it('à temps tel quel : montré normalement, sans regarder les aides', () => {
+    expect(interceptReach(b, now, leg, [{ label: 'x', legOf: slow }])).toEqual({ kind: 'ok' });
+  });
+  it('en retard, mais une aide le fait arriver : grisé, avec la PREMIÈRE aide qui suffit', () => {
+    const r = interceptReach(b, now, slow, [
+      { label: 'trop lente', legOf: slow },
+      { label: 'rations', legOf: leg },
+      { label: 'rations + éclaireur', legOf: leg },
+    ]);
+    expect(r).toEqual({ kind: 'aid', label: 'rations' });
+  });
+  it('aucune aide ne suffit : trop tard, on ne le montre pas', () => {
+    expect(interceptReach(b, now, slow, [{ label: 'trop lente', legOf: slow }])).toEqual({
+      kind: 'late',
+    });
+    expect(interceptReach(b, now, slow, [])).toEqual({ kind: 'late' });
+  });
+  it('la même règle que l’envoi : « late » ⟺ interceptTooLate sur l’aller d’interceptLeg', () => {
+    for (let h = 0; h < 24; h += 2) {
+      const t = T0 + h * H;
+      const bb = warbandAt(band(), t);
+      for (const f of [leg, slow, (p: Poi) => leg(p) * 3]) {
+        const tooLate = interceptTooLate(bb, t, interceptLeg(bb, t, f).legMin);
+        expect(interceptReach(bb, t, f, []).kind, 'h' + h).toBe(tooLate ? 'late' : 'ok');
+      }
+    }
+  });
+  it('une cible immobile : toujours « à temps »', () => {
+    const camp = { ...band(), type: 'camp' as const, from: undefined };
+    expect(interceptReach(camp, now, slow, [])).toEqual({ kind: 'ok' });
   });
 });

@@ -458,6 +458,7 @@
       :champ-free="quickFree.champ"
       :mil-free="quickFree.total"
       :mil-room="quickFree.mil"
+      :mil-anyway="quickFree.milAnyway"
       :mil-home="milHomeFree"
       :militia-min="quickMilitiaMin"
       :champ-min="quickChampMin"
@@ -742,6 +743,19 @@
               >
                 <span class="slot-plus">＋</span>
                 <span class="slot-name">{{ slot.label }}</span>
+              </button>
+              <!-- 🛡️ PLEIN, MAIS ON PRÉVOIT (demandé : « envoyer les miliciens avant que les
+                 champions ne partent ») : des miliciens partent quand même ; à l'arrivée, ils
+                 s'installent si une place s'est libérée, sinon ils font demi-tour. -->
+              <button
+                v-if="!garrisonSlots.length && !controlInterim && acceptsMilitia(liveControl)"
+                type="button"
+                class="slot-tile"
+                aria-label="Envoyer des miliciens à l’avance"
+                @click="openQuick"
+              >
+                <span class="slot-plus">🛡️</span>
+                <span class="slot-name">Miliciens à l’avance</span>
               </button>
             </div>
             <!-- ⚔️⏳ UNE ATTAQUE COMBINÉE PART D'ICI (signalé : « des troupes attendent leur départ
@@ -1157,9 +1171,11 @@
                   }}</span>
                 </button>
                 <HeroPickTile
-                  v-if="g.id === 'base'"
+                  v-if="g.id === 'base' && !interceptHidden('hero')"
                   :on="partyHeroOn"
-                  :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                  :block="
+                    partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : interceptAid('hero')
+                  "
                   :sub="heroPostSub ?? 'part de la base · sans XP'"
                   :gain="partyGain.hero"
                   @toggle="partyHero = !partyHero"
@@ -1169,11 +1185,14 @@
                   :key="a.id"
                   :adv="a"
                   :on="partyEscort.includes(a.id)"
+                  :reason="interceptAid(a.id)"
                   :xp="partyXp[a.id]"
                   :gain="partyGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
-                <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
+                <p v-if="!g.advs.length" class="pool-empty">
+                  {{ g.late ? '⏱️ Personne d’ici n’arriverait à temps.' : 'Personne de prêt ici.' }}
+                </p>
               </template>
               <template v-if="showBlocked">
                 <AdvPickTile
@@ -1187,17 +1206,21 @@
             </div>
             <div v-else class="car-pick">
               <HeroPickTile
+                v-if="!interceptHidden('hero')"
                 :on="partyHeroOn"
-                :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                :block="
+                  partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : interceptAid('hero')
+                "
                 :sub="heroPostSub ?? 'sans XP'"
                 :gain="partyGain.hero"
                 @toggle="partyHero = !partyHero"
               />
               <AdvPickTile
-                v-for="a in partyPoolSorted"
+                v-for="a in partyPoolShown"
                 :key="a.id"
                 :adv="a"
                 :on="partyEscort.includes(a.id)"
+                :reason="interceptAid(a.id)"
                 :xp="partyXp[a.id]"
                 :gain="partyGain[a.id]"
                 @toggle="togglePartyAdv(a.id)"
@@ -1219,6 +1242,12 @@
                niveau, un champion apprend beaucoup moins (mesuré v0.1102 : du simple au
                quadruple selon la destination). Affichée seulement s'il y a quelqu'un que ça
                concerne — sinon c'est du bruit. -->
+            <!-- ⚔️⏱️ Ceux qui arriveraient trop tard sur l'armée, même aidés, sont masqués (demandé) :
+               on le DIT, sinon des champions disparus se lisent comme des champions perdus. -->
+            <p v-if="interceptLateCount" class="car-xp-note">
+              ⏱️ {{ interceptLateCount }} masqué{{ interceptLateCount > 1 ? 's' : '' }} : trop loin
+              pour croiser l’armée avant qu’elle n’arrive.
+            </p>
             <p v-if="partyLowXp" class="car-xp-note">
               📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
             </p>
@@ -1672,6 +1701,7 @@ import {
   emptyReinfSelection,
   reinfCanAdd,
   reinfCount,
+  reinfMilitiaOver,
   setReinfMilitia,
   toggleReinfChamp,
   toggleReinfTransfer,
@@ -1720,6 +1750,7 @@ import {
   controlFreeSeats,
   recallIsWhole,
   garrisonFreeSeats,
+  acceptsMilitia,
   interimSeats,
   heroPostBlocker,
   heroSeatsIn,
@@ -4245,6 +4276,9 @@ const quickFree = computed(() => {
     champ: Math.max(0, controlFreeSeats(quickPoi.value?.control) - (taken?.champ ?? 0)),
     total: Math.max(0, garrisonFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
     mil: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
+    // 🛡️ Les miliciens de la base partent même si le lieu est plein : demi-tour à l'arrivée
+    // s'il l'est encore (prévoir une sortie : ils arrivent avant que les champions partent).
+    milAnyway: acceptsMilitia(quickPoi.value?.control),
   };
 });
 /** 🛡️ Les miliciens de la base qui ne sont pas réservés pour un départ programmé. */
@@ -4349,9 +4383,10 @@ const quickHold = computed(() => {
       const other = pctWith(toggleReinfTransfer(sel, src.fromId, m.id, free));
       trans[m.id] = on ? cur - other : other - cur;
     }
-  const mil = reinfCanAdd(sel, 'mil', free)
-    ? pctWith({ ...sel, militia: sel.militia + 1 }) - cur
-    : 0;
+  // 🛡️ Le gain d'un milicien de plus ne se compte que s'il trouve une place aujourd'hui : un
+  // milicien en surplus ne défend que si une place se libère d'ici son arrivée.
+  const nextMil = { ...sel, militia: sel.militia + 1 };
+  const mil = reinfMilitiaOver(nextMil, free) === 0 ? pctWith(nextMil) - cur : 0;
   return { pct: base.pct, vsArmy: base.vsArmy, mil, champ, trans };
 });
 /** La tenue AVEC toute la sélection. */
@@ -5431,6 +5466,10 @@ const {
   originOptions,
   partyGroups,
   partyPoolSorted,
+  partyPoolShown,
+  interceptHidden,
+  interceptAid,
+  interceptLateCount,
   partyHero,
   partyEscort,
   partyAdvs,

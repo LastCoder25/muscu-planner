@@ -2736,8 +2736,18 @@ export function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
 /** 🏰 Qui occupe un point, garnison ET renforts en route, séparés en champions et miliciens.
  *  Deux limites : la garnison ENTIÈRE ne dépasse pas `MILITIA.perPoint` (5), et les champions
  *  ne dépassent pas les places du point (`seatsOf` : 5, ou 3 au camp et à la forge). */
-function occupants(c: ControlState): { champs: number; militia: number } {
-  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id), ...(c.away ?? [])];
+function occupants(
+  c: ControlState,
+  /** 🛡️ Compter les miliciens EN ROUTE (oui par défaut). Pour les places de CHAMPION, non :
+   *  un milicien en route ne réserve rien — il peut partir vers un lieu plein et fait
+   *  demi-tour s'il n'y trouve pas de place (`settleReinforcements`). */
+  militiaEnRoute = true,
+): { champs: number; militia: number } {
+  const ids = [
+    ...c.garrison,
+    ...(c.reinforcing ?? []).map((r) => r.id).filter((id) => militiaEnRoute || !isMilitiaId(id)),
+    ...(c.away ?? []),
+  ];
   const militia = ids.filter(isMilitiaId).length;
   return { champs: ids.length - militia + heroSeatsIn(c), militia };
 }
@@ -2796,7 +2806,18 @@ function garrisonRoom(c: ControlState): number {
  *  garnison entière (0 si le point n'est pas à nous). */
 export function controlFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
-  return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), garrisonRoom(c)));
+  // ⚠️ Les miliciens en route ne prennent pas la place d'un champion : arrivé après eux, le
+  // champion déloge le dernier ; arrivés après lui, ils font demi-tour.
+  const o = occupants(c, false);
+  const room = Math.max(0, garrisonCap(c.kind) - o.champs - o.militia);
+  return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), room));
+}
+/** 🛡️ Ce lieu reçoit-il des miliciens ? Tenu par nous, et pas un objectif, la forteresse ni
+ *  la citadelle. ⚠️ Indépendant des places (2026-10-06, demandé : « envoyer des miliciens en
+ *  garnison même si le lieu est plein ») : on les envoie AVANT que des champions partent en
+ *  sortie ; à l'arrivée, ils s'installent s'il y a de la place, sinon ils font demi-tour. */
+export function acceptsMilitia(c: ControlState | undefined | null): boolean {
+  return !!c && c.owner === 'player' && !RAZE_KINDS.has(c.kind);
 }
 /** 🏰 Places libres dans la garnison, TOUT CONFONDU (champions et miliciens ; 0 si le point
  *  n'est pas à nous). ⚠️ Ce n'est PAS  : un objectif ou une forteresse
@@ -2848,7 +2869,7 @@ export function militiaFreeSeats(c: ControlState | undefined | null): number {
 
 /** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
  *  raison, le store refuse avec elle. */
-export type ReinforceBlock = 'notHeld' | 'empty' | 'full' | 'heroHere' | 'heroNoSeat';
+export type ReinforceBlock = 'notHeld' | 'empty' | 'full' | 'heroHere' | 'heroNoSeat' | 'noMilitia';
 export function reinforceBlocker(
   c: ControlState | undefined | null,
   count: number,
@@ -2857,7 +2878,10 @@ export function reinforceBlocker(
 ): ReinforceBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
   if (count <= 0) return 'empty';
-  if (count > (militia ? militiaFreeSeats(c) : controlFreeSeats(c))) return 'full';
+  // 🛡️ Des miliciens partent même vers un lieu plein : ils font demi-tour à l'arrivée s'il
+  // l'est encore (`acceptsMilitia`). Les champions, eux, ont besoin d'une place.
+  if (militia) return acceptsMilitia(c) ? null : 'noMilitia';
+  if (count > controlFreeSeats(c)) return 'full';
   return null;
 }
 export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
@@ -2866,6 +2890,7 @@ export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
   full: 'plus assez de places sur ce point',
   heroHere: 'le héros y est déjà (ou en route)',
   heroNoSeat: 'ce lieu n’a pas la place pour le héros',
+  noMilitia: 'ce lieu ne reçoit pas de miliciens',
 };
 
 /** 🏠 UN DÉPART DEPUIS LA BASE (2026-09-29, demandé : « la base cliquable pour voir les
@@ -2895,7 +2920,9 @@ export function baseSendBlocker(
     const b = reinforceBlocker(c, seats);
     if (b) return b;
   }
-  if (militia > 0 && militia > militiaFreeSeats(c) - Math.max(0, seats)) return 'full';
+  // 🛡️ Les miliciens ne prennent la place de personne : ils partent même si le lieu est plein
+  // et font demi-tour à l'arrivée s'il l'est encore (`settleReinforcements`).
+  if (militia > 0 && !acceptsMilitia(c)) return 'noMilitia';
   return null;
 }
 

@@ -147,6 +147,36 @@ export function interceptTooLate(
   return isWarbandPoi(poi) && now + legMin * 60_000 >= poi.expiresAt;
 }
 
+/** Une aide qui raccourcit le trajet d'un membre (des rations 🥖, un éclaireur 🧭 parti du
+ *  même lieu…) : `legOf` est son trajet AVEC cette aide. */
+export interface InterceptAid {
+  label: string;
+  legOf: (p: Poi) => number;
+}
+
+/** ⚔️⏱️ CE MEMBRE REJOINDRA-T-IL L'ARMÉE À TEMPS ? (demandé : « ne pas montrer les champions et
+ *  le héros qui arriveront trop tard ; les griser si un consommable de vitesse ou la compétence
+ *  d'un autre champion leur permet d'arriver à temps »).
+ *  - `ok` : il la croise avant qu'elle n'atteigne sa cible (et toute cible immobile : rien à
+ *    rattraper) ;
+ *  - `aid` : pas tel quel, mais avec cette aide — la PREMIÈRE de la liste qui suffit (l'appelant
+ *    les range de la moins coûteuse à la plus coûteuse) ;
+ *  - `late` : aucune aide n'y suffit.
+ *  ⚠️ La MÊME règle que l'envoi (`interceptLeg` puis `interceptTooLate`) : l'écran ne peut pas
+ *  écarter un membre que le store laisserait partir à temps, ni l'inverse. */
+export function interceptReach(
+  poi: Poi,
+  now: number,
+  legNow: (p: Poi) => number,
+  aids: readonly InterceptAid[],
+): { kind: 'ok' } | { kind: 'aid'; label: string } | { kind: 'late' } {
+  const inTime = (legOf: (p: Poi) => number) =>
+    !interceptTooLate(poi, now, interceptLeg(poi, now, legOf).legMin);
+  if (!isWarbandPoi(poi) || inTime(legNow)) return { kind: 'ok' };
+  const aid = aids.find((a) => inTime(a.legOf));
+  return aid ? { kind: 'aid', label: aid.label } : { kind: 'late' };
+}
+
 /** 🎒 Ce que ce voyage offre aux consommables (`supplyUselessWhy`). ⚠️ Vit ICI et non dans
  *  `supplies.ts` : il lit `poiForceOf`, et `expedition.ts` importe déjà `supplies.ts`. */
 export function supplyTarget(poi: Poi, hero: boolean, escort: number): SupplyTarget {

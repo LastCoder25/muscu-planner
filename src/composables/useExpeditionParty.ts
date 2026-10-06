@@ -20,6 +20,7 @@ import {
   heroCanStay,
   heroStaysAt,
   interceptLeg,
+  interceptReach,
   interceptTooLate,
   meetAll,
   supplyTarget,
@@ -56,6 +57,7 @@ import {
   missionXpPreview,
   missionXpSplit,
   partyAllies,
+  roleShare,
   SOLO_XP_MULT,
   type EscortKit,
   type MissionXpPreview,
@@ -468,15 +470,104 @@ export function useExpeditionParty(ctx: PartyCtx) {
   function legFrom(origin: Poi | null, members: Adventurer[], hero = false): number {
     const target = selected.value;
     if (!target) return 0;
+    return legFnFrom(origin, members, hero, activeSupplies.value)(target);
+  }
+  /** La règle de trajet d'un groupe donné, depuis son lieu de départ, avec ces consommables. */
+  function legFnFrom(
+    origin: Poi | null,
+    members: Adventurer[],
+    hero: boolean,
+    supplies: readonly SupplyId[],
+  ): (p: Poi) => number {
     const legOf = (p: Poi) =>
       partyLegMin(p, members, {
         hero,
         travelMult: travelMult.value,
         gearSpeed: advGearRoles(members, roadCtx.value.advGear).speed,
-        supplies: activeSupplies.value,
+        supplies,
       });
-    return origin ? legFromSpot(target, origin, legOf) : legOf(target);
+    return origin ? (p: Poi) => legFromSpot(p, origin, legOf) : legOf;
   }
+  /** ⚔️⏱️ QUI ARRIVERA À TEMPS sur une armée en marche (demandé) — par membre, depuis SON lieu
+   *  de départ (`interceptReach`, la règle de l'envoi) : `ok` montré, `aid` grisé avec ce qui le
+   *  ferait arriver (🧭 un éclaireur parti du même lieu — sa compétence presse tout le groupe —,
+   *  🥖 des rations), `late` masqué. ⚠️ Pas les boosts ⚡ : ils ne servent jamais vers une
+   *  armée en marche (le point de rencontre est figé au départ, `voyageBoostPlan`).
+   *  Vide hors armée en marche. Horloge grossière : la rencontre bouge à la minute. */
+  const interceptInfo = computed(() => {
+    const out = new Map<string, ReturnType<typeof interceptReach>>();
+    const target = selected.value;
+    if (!target || !isWarbandPoi(target)) return out;
+    const t = coarseNow.value;
+    const sup = activeSupplies.value;
+    const rations = !sup.includes('rations') && (char.row?.supplies?.rations ?? 0) > 0;
+    const withRations: readonly SupplyId[] = [...sup, 'rations'];
+    const fast = (a: Adventurer) =>
+      roleShare([a], 'speed') + advGearRoles([a], roadCtx.value.advGear).speed > 0;
+    const originPoiOf = (id: string) =>
+      id === 'base' ? null : (startOptions.value.find((o) => o.id === id)?.poi ?? null);
+    // 🧝 Le héros n'a pas de rôle : seules les rations le pressent.
+    if (!partyHeroBlock.value) {
+      const o = originPoiOf(heroOriginId.value);
+      const aids = rations
+        ? [{ label: '🥖 avec des rations', legOf: legFnFrom(o, [], true, withRations) }]
+        : [];
+      out.set('hero', interceptReach(target, t, legFnFrom(o, [], true, sup), aids));
+    }
+    for (const a of partyPool.value) {
+      const oid = originOfAdv(a.id);
+      const o = originPoiOf(oid);
+      // Ceux du même lieu déjà cochés marchent avec lui : leur 🧭 le presse déjà.
+      const mates = partyAdvs.value.filter((m) => m.id !== a.id && originOfAdv(m.id) === oid);
+      const team = [...mates, a];
+      const scouts = partyPool.value.filter(
+        (s) => s.id !== a.id && !mates.includes(s) && originOfAdv(s.id) === oid && fast(s),
+      );
+      const all = [...team, ...scouts];
+      // De la moins coûteuse à la plus coûteuse : un éclaireur ne se dépense pas, des rations si.
+      const aids = [
+        ...scouts.map((s) => ({
+          label: `🧭 avec ${s.name}`,
+          legOf: legFnFrom(o, [...team, s], false, sup),
+        })),
+        ...(scouts.length > 1
+          ? [{ label: '🧭 avec ses éclaireurs', legOf: legFnFrom(o, all, false, sup) }]
+          : []),
+        ...(rations
+          ? [{ label: '🥖 avec des rations', legOf: legFnFrom(o, team, false, withRations) }]
+          : []),
+        ...(scouts.length && rations
+          ? [
+              {
+                label: '🥖🧭 rations + éclaireurs',
+                legOf: legFnFrom(o, all, false, withRations),
+              },
+            ]
+          : []),
+      ];
+      out.set(a.id, interceptReach(target, t, legFnFrom(o, team, false, sup), aids));
+    }
+    return out;
+  });
+  /** Trop tard même aidé : on ne le montre pas (sauf s'il est déjà coché, pour pouvoir le
+   *  retirer). */
+  const interceptHidden = (id: string) =>
+    interceptInfo.value.get(id)?.kind === 'late' &&
+    (id === 'hero' ? !partyHeroOn.value : !partyEscort.value.includes(id));
+  /** Combien sont masqués parce qu'ils arriveraient trop tard (le héros compris). */
+  const interceptLateCount = computed(
+    () =>
+      partyPool.value.filter((a) => interceptHidden(a.id)).length +
+      (interceptHidden('hero') ? 1 : 0),
+  );
+  /** Grisé : ce qui le ferait arriver à temps (`null` = rien à dire). Un membre déjà coché
+   *  n'est jamais grisé (on doit pouvoir le retirer) : c'est le bouton d'envoi qui dit « trop
+   *  tard ». */
+  const interceptAid = (id: string): string | null => {
+    const r = interceptInfo.value.get(id);
+    const on = id === 'hero' ? partyHeroOn.value : partyEscort.value.includes(id);
+    return r?.kind === 'aid' && !on ? `⏱️ À temps ${r.label}` : null;
+  };
   /** 🧭 Les lieux de départ (la base et les points tenus), du plus proche de la cible au plus
    *  loin (demandé). Le trajet est celui de TOUS les champions prêts du lieu. */
   const originTiles = computed(() =>
@@ -502,13 +593,15 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  (demandé) — dès qu'un point fixe tenu a des champions prêts ; sinon la liste habituelle. */
   const partyGroups = computed(() => {
     if (!originOptions.value.length) return [];
-    return originTiles.value.map((t) => ({
-      ...t,
-      advs:
+    return originTiles.value.map((t) => {
+      const all =
         t.id === 'base'
           ? freeSorted.value
-          : sortByGradeThenRank(readyByPoint.value.get(t.id) ?? []),
-    }));
+          : sortByGradeThenRank(readyByPoint.value.get(t.id) ?? []);
+      // ⚔️⏱️ Trop tard même aidé : masqué (demandé).
+      const advs = all.filter((a) => !interceptHidden(a.id));
+      return { ...t, advs, late: advs.length < all.length };
+    });
   });
   /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
@@ -818,7 +911,15 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
   /** Ce que « tout le vivier » peut réellement prendre ici. */
   const partyAllIds = computed(() =>
-    partyPoolSorted.value.slice(0, partyMax.value).map((a) => a.id),
+    partyPoolSorted.value
+      // ⚔️⏱️ Seulement ceux qui arrivent à temps : un retardataire bloquerait l'envoi.
+      .filter((a) => (interceptInfo.value.get(a.id)?.kind ?? 'ok') === 'ok')
+      .slice(0, partyMax.value)
+      .map((a) => a.id),
+  );
+  /** La liste à afficher hors groupes par lieu : sans ceux qui arriveraient trop tard. */
+  const partyPoolShown = computed(() =>
+    partyPoolSorted.value.filter((a) => !interceptHidden(a.id)),
   );
   const partyAllOn = computed(
     () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
@@ -1000,6 +1101,10 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyGroups,
     originPoi,
     partyPoolSorted,
+    partyPoolShown,
+    interceptHidden,
+    interceptAid,
+    interceptLateCount,
     stayCap,
     stayHold,
     stayHoldOf,
