@@ -92,7 +92,9 @@
           <template v-else>{{ poiEmo(t.poi) }}</template>
         </span>
         <span class="tr-time">{{ t.time }}</span>
-        <span v-if="t.total" class="tr-legs" title="Retour en ville">🏠 {{ t.total }}</span>
+        <span v-if="t.total" class="tr-total" title="Temps total avant le retour en ville"
+          >🏠 {{ t.total }}</span
+        >
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
         <span v-if="t.failed" class="tr-fail">{{
           t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
@@ -812,6 +814,25 @@ const crew = computed(() => {
   white-space: nowrap;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+/* 🏠 Le temps TOTAL avant le retour, en bandeau encadré tout en BAS de la tuile (demandé), sur
+   toute la largeur : collé aux bords (marges négatives = le padding de la tuile), seul son côté
+   haut est tracé, dans la couleur de la tuile — comme les encarts de départ et d'objectif.
+   `order` le pousse en dernier quel que soit l'ordre du gabarit. */
+.tr-total {
+  order: 99;
+  flex: 0 0 calc(100% + 14px);
+  margin: 4px -7px -9px;
+  padding: 2px 4px 5px;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid;
+  border-color: inherit;
+  background: color-mix(in srgb, var(--surface-2, #2a241c) 70%, var(--surface));
 }
 .tc-legs {
   margin: 2px 0 6px;
