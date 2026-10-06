@@ -7,7 +7,9 @@ import {
   FORTRESS_ID,
   convoyBonus,
   convoyVanquished,
+  SORTIE_EVENTS,
   ensureIslandConquest,
+  sortieThreshold,
   warlordConvoys,
 } from '@/lib/islandConquest';
 import { resolveConvoy } from '@/lib/rift';
@@ -25,11 +27,19 @@ function islandMap(id = 4, L = LV): ExpeditionMap {
 const convoysOf = (m: ExpeditionMap) => m.pois.filter((p) => p.convoy);
 const fortressSize = (m: ExpeditionMap) => m.pois.find((p) => p.id === FORTRESS_ID)!.control!.size!;
 
+/** Les sorties qui font partir le premier convoi (une par heure) : leur dernier instant est
+ *  son départ. */
+function departuresFor(m: ExpeditionMap): number[] {
+  const k = sortieThreshold(m.seed, 'convoy', 0, 3, 3);
+  return Array.from({ length: k }, (_, i) => NOW + (i + 1) * H);
+}
+
 /** Fait partir le premier convoi : rend la carte et le convoi en route. */
 function firstConvoy(): { m: ExpeditionMap; c: Poi } {
   const m0 = islandMap();
-  const at = m0.archipel!.convoyAt!;
-  const m = warlordConvoys(m0, at);
+  const dep = departuresFor(m0);
+  const at = dep[dep.length - 1]!;
+  const m = warlordConvoys({ ...m0, departures: dep }, at);
   return { m, c: convoysOf(m)[0]! };
 }
 
@@ -37,10 +47,16 @@ describe('🐫 l’île 4 : les convois de ravitaillement', () => {
   it('un convoi part d’un camp vers la forteresse, et marche 8 h', () => {
     const m0 = islandMap();
     expect(convoysOf(m0)).toHaveLength(0);
-    const at = m0.archipel!.convoyAt!;
-    expect(at).toBeGreaterThan(NOW);
-    expect(at - NOW).toBeLessThanOrEqual((CONVOY.everyMs / 3) * (1 + CONVOY.jitter));
+    expect(m0.archipel!.convoyAt).toBeUndefined();
+    expect(m0.archipel!.sorties!.convoy).toEqual({ from: NOW, charge: 0, fired: 0 });
+    const dep = departuresFor(m0);
+    expect(dep.length).toBeGreaterThanOrEqual(SORTIE_EVENTS.convoy.min);
+    expect(dep.length).toBeLessThanOrEqual(SORTIE_EVENTS.convoy.max);
+    // Une sortie de moins : aucun convoi.
+    const short = warlordConvoys({ ...m0, departures: dep.slice(0, -1) }, NOW + 2 * 24 * H);
+    expect(convoysOf(short)).toHaveLength(0);
     const { m, c } = firstConvoy();
+    expect(c.spawnedAt).toBe(dep[dep.length - 1]);
     const camps = m.pois.filter((p) => p.control?.kind === 'objective');
     const f = m.pois.find((p) => p.id === FORTRESS_ID)!;
     expect(c.type).toBe('warband');
@@ -93,15 +109,32 @@ describe('🐫 l’île 4 : les convois de ravitaillement', () => {
   it('aucun convoi ailleurs qu’à l’île 4', () => {
     for (const id of [1, 2, 3, 5]) {
       const m = islandMap(id);
-      expect(m.archipel!.convoyAt).toBeUndefined();
-      expect(convoysOf(warlordConvoys(m, NOW + 10 * 24 * H))).toHaveLength(0);
+      expect(m.archipel!.sorties?.convoy).toBeUndefined();
+      const dep = Array.from({ length: 30 }, (_, i) => NOW + (i + 1) * H);
+      expect(convoysOf(warlordConvoys({ ...m, departures: dep }, NOW + 10 * 24 * H))).toHaveLength(
+        0,
+      );
     }
   });
 
   it('la même carte tant que rien n’est dû', () => {
     const { m, c } = firstConvoy();
-    const quiet = Math.min(m.archipel!.convoyAt!, c.expiresAt) - 1;
-    expect(warlordConvoys(m, quiet)).toBe(m);
+    expect(warlordConvoys(m, c.expiresAt - 1)).toBe(m);
+  });
+
+  it('qui ne sort pas ne voit partir aucun convoi', () => {
+    const m = islandMap();
+    expect(warlordConvoys(m, NOW + 30 * 24 * H)).toBe(m);
+  });
+
+  it('l’horloge d’avant la v1.66.0 (`convoyAt`) est effacée', () => {
+    const m0 = islandMap();
+    const m = warlordConvoys(
+      { ...m0, archipel: { ...m0.archipel!, convoyAt: NOW + H } },
+      NOW + 2 * H,
+    );
+    expect(m.archipel!.convoyAt).toBeUndefined();
+    expect(convoysOf(m)).toHaveLength(0);
   });
 });
 

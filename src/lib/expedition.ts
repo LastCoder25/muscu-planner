@@ -855,10 +855,13 @@ export interface ExpeditionMap {
     /** 🪦 Île 3 : quand chaque cimetière a été abattu (id → instant) — il se relève
      *  `RISE.riseMs` plus tard tant que la citadelle des morts tient. */
     razedAt?: Record<string, number>;
-    /** 🚩 Île 4 : la prochaine sortie de l'ARMÉE MOBILE du seigneur de guerre. */
+    /** 🔮 Île 5 : la prochaine INVASION combinée (horloge). LEGACY sur l'île 4 (v1.66.0 :
+     *  l'armée mobile part aux sorties, `sorties.warlord`), effacé au premier tick. */
     warAt?: number;
-    /** 🐫 Île 4 : la prochaine sortie d'un CONVOI de ravitaillement. */
+    /** 🐫 LEGACY (avant la v1.66.0) : la prochaine sortie d'un convoi, à l'horloge. */
     convoyAt?: number;
+    /** 🗺️ Les mouvements ennemis calés sur les sorties (`islandConquest.sortieFires`). */
+    sorties?: Partial<Record<'warlord' | 'convoy', SortieClock>>;
     /** 🐫 Les convois en route (id, arrivée à la forteresse). */
     convoys?: { id: string; at: number }[];
     /** 🐫 Les convois ARRIVÉS : chacun renforce la forteresse (`convoyBonus`). */
@@ -907,6 +910,11 @@ export interface Crossing {
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de
  *  niveau (`travelOneWayMin`) — sur une île, le temps ne dépend que de la distance. */
 export const ARCHIPEL_TRAVEL_LEVEL = 0;
+
+/** 🗺️ L'horloge d'un mouvement ennemi calé sur les sorties : la dernière sortie lue (`from`),
+ *  les sorties comptées depuis le dernier départ (`charge`), le nombre de départs (`fired`) et
+ *  l'instant du dernier (`last`, pour l'écart minimal). */
+export type SortieClock = { from: number; charge: number; fired: number; last?: number };
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;

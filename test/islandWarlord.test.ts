@@ -10,7 +10,10 @@ import {
   retiredHeld,
 } from '@/lib/controlPoints';
 import {
-  WARLORD,
+  SORTIE_EVENTS,
+  sortieFires,
+  sortieMinGapMs,
+  sortieThreshold,
   ensureIslandConquest,
   islandTargetLabel,
   razeIslandTarget,
@@ -47,7 +50,18 @@ function held(m: ExpeditionMap): ExpeditionMap {
 const attackOf = (m: ExpeditionMap, kind: string) =>
   m.pois.find((p) => p.control?.kind === kind)!.control!.attackAt!;
 
-describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
+/** Des sorties arrivées aux instants `at` (datées de leur arrivée, comme `recordDeparture`). */
+const withSorties = (m: ExpeditionMap, at: number[]): ExpeditionMap => ({
+  ...m,
+  departures: [...(m.departures ?? []), ...at],
+});
+/** Le seuil du `n`-ième départ de l'armée, à trois camps debout. */
+const warSeuil = (m: ExpeditionMap, n = 0) => sortieThreshold(m.seed, 'warlord', n, 3, 3);
+/** `k` sorties, une par heure après `from`. */
+const hourly = (k: number, from = NOW) => Array.from({ length: k }, (_, i) => from + (i + 1) * H);
+const FAR = NOW + 30 * DAY;
+
+describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre, aux sorties (v1.66.0)', () => {
   it('trois camps de guerre', () => {
     const o = islandMap().pois.filter((p) => p.control?.kind === 'objective');
     expect(o.map((p) => p.control!.name)).toEqual(Array(3).fill('Camp de guerre'));
@@ -56,31 +70,72 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
     const m = held(islandMap());
     expect(weakestHeld(m.pois, NOW, m.seed)!.control!.kind).toBe('fort');
   });
-  it('à son heure, avance l’attaque du moins défendu et seulement elle', () => {
-    let m = warlordRaids(held(islandMap()), NOW);
-    const at = m.archipel!.warAt!;
-    expect(at).toBeGreaterThan(NOW);
-    expect(at - NOW).toBeLessThanOrEqual((WARLORD.raidMs / 3) * (1 + WARLORD.jitter));
-    m = warlordRaids(m, at);
-    expect(attackOf(m, 'fort')).toBe(at);
-    expect(attackOf(m, 'cartographer')).toBe(NOW + 30 * DAY);
-    expect(m.archipel!.warAt!).toBeGreaterThan(at);
-    // Même carte tant qu’elle n’est pas due.
-    expect(warlordRaids(m, at + 1)).toBe(m);
-  });
-  it('plus de camps debout, plus de sorties ; tous abattus, plus aucune', () => {
-    let m = held(islandMap());
-    for (const id of ['isl_obj_0', 'isl_obj_1']) m = razeIslandTarget(m, id, NOW);
-    // Une sortie toute neuve (on retire l’échéance tirée à trois camps).
-    const fresh = { ...m, archipel: { ...m.archipel!, warAt: undefined } };
-    const one = warlordRaids(fresh, NOW).archipel!.warAt! - NOW;
-    expect(one).toBeGreaterThanOrEqual(WARLORD.raidMs * (1 - WARLORD.jitter) - 1);
-    m = razeIslandTarget(warlordRaids(m, NOW), 'isl_obj_2', NOW);
-    m = warlordRaids(m, NOW + 10 * DAY);
+  it('à la première lecture, l’horloge part de maintenant : les sorties passées ne comptent pas', () => {
+    const m = islandMap();
+    expect(m.archipel!.sorties!.warlord).toEqual({ from: NOW, charge: 0, fired: 0 });
     expect(m.archipel!.warAt).toBeUndefined();
-    expect(attackOf(m, 'fort')).toBe(NOW + 30 * DAY);
+    const before = withSorties(held(m), [NOW - 3 * H, NOW - 2 * H, NOW - H, NOW - 1, NOW]);
+    expect(warlordRaids(before, NOW + DAY).pois).toBe(before.pois);
   });
-  it('ne recule jamais une attaque déjà plus proche que la sortie', () => {
+  it('sort à l’arrivée de la N-ième sortie, puis attend et marche sur le moins défendu', () => {
+    const m0 = held(islandMap());
+    const k = warSeuil(m0);
+    expect(k).toBeGreaterThanOrEqual(SORTIE_EVENTS.warlord.min);
+    expect(k).toBeLessThanOrEqual(SORTIE_EVENTS.warlord.max);
+    const times = hourly(k);
+    // Une sortie de moins : rien ne bouge.
+    const short = warlordRaids(withSorties(m0, times.slice(0, -1)), NOW + DAY);
+    expect(attackOf(short, 'fort')).toBe(FAR);
+    expect(short.archipel!.sorties!.warlord!.charge).toBe(k - 1);
+    const m = warlordRaids(withSorties(m0, times), NOW + DAY);
+    const t = times[k - 1]!;
+    const fort = m.pois.find((p) => p.control?.kind === 'fort')!.control!;
+    expect(fort.attackAt!).toBeGreaterThan(t + H - 1);
+    expect(fort.attackAt!).toBeLessThan(t + DAY);
+    const camps = m.pois.filter((p) => p.control?.kind === 'objective');
+    expect(camps.some((c) => c.x === fort.raidFrom!.x && c.y === fort.raidFrom!.y)).toBe(true);
+    expect(attackOf(m, 'cartographer')).toBe(FAR);
+    expect(m.archipel!.sorties!.warlord).toEqual({ from: t, charge: 0, fired: 1, last: t });
+  });
+  it('qui ne sort pas ne voit rien venir, même des jours plus tard', () => {
+    const m = held(islandMap());
+    expect(warlordRaids(m, NOW + 30 * DAY)).toBe(m);
+  });
+  it('jamais plus souvent que l’ancienne horloge (12 h à trois camps), même en sortant sans cesse', () => {
+    const m = held(islandMap());
+    const many = Array.from({ length: 200 }, (_, i) => NOW + (i + 1) * 10 * 60_000);
+    const { times } = sortieFires(
+      { seed: m.seed, departures: many },
+      { from: NOW, charge: 0, fired: 0 },
+      'warlord',
+      NOW + 40 * H,
+      3,
+      3,
+    );
+    expect(times.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < times.length; i++)
+      expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(SORTIE_EVENTS.warlord.minGapMs);
+  });
+  it('moins de camps debout : trois fois plus de sorties et d’écart avec un seul', () => {
+    const m = islandMap();
+    for (let n = 0; n < 20; n++)
+      expect(sortieThreshold(m.seed, 'warlord', n, 1, 3)).toBe(warSeuil(m, n) * 3);
+    expect(sortieMinGapMs('warlord', 1, 3)).toBe(3 * SORTIE_EVENTS.warlord.minGapMs);
+  });
+  it('tous les camps abattus : plus aucune sortie, l’horloge est effacée', () => {
+    let m = held(islandMap());
+    for (const id of ['isl_obj_0', 'isl_obj_1', 'isl_obj_2']) m = razeIslandTarget(m, id, NOW);
+    m = warlordRaids(withSorties(m, hourly(20)), NOW + DAY);
+    expect(m.archipel!.sorties?.warlord).toBeUndefined();
+    expect(attackOf(m, 'fort')).toBe(FAR);
+  });
+  it('l’horloge d’avant la v1.66.0 (`warAt`) est effacée sur l’île 4', () => {
+    const m0 = held(islandMap());
+    const m = warlordRaids({ ...m0, archipel: { ...m0.archipel!, warAt: NOW + H } }, NOW + 2 * H);
+    expect(m.archipel!.warAt).toBeUndefined();
+    expect(attackOf(m, 'fort')).toBe(FAR);
+  });
+  it('ne recule jamais une attaque déjà plus proche que son arrivée', () => {
     const m0 = held(islandMap());
     const soon = NOW + H;
     const m1 = {
@@ -88,24 +143,59 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre', () => {
       pois: m0.pois.map((p) =>
         p.control?.kind === 'fort' ? { ...p, control: { ...p.control, attackAt: soon } } : p,
       ),
-      archipel: { ...m0.archipel!, warAt: NOW + 12 * H },
     };
-    const m = warlordRaids(m1, NOW + 12 * H);
+    const k = warSeuil(m1);
+    const quick = Array.from({ length: k }, (_, i) => NOW + (i + 1) * 60_000);
+    const m = warlordRaids(withSorties(m1, quick), NOW + DAY);
     expect(attackOf(m, 'fort')).toBe(soon);
-    expect(attackOf(m, 'cartographer')).toBe(NOW + 12 * H);
+    expect(attackOf(m, 'cartographer')).toBe(FAR);
   });
   it('branchée sur le tick de la carte', () => {
     const m0 = held(islandMap());
-    const at = m0.archipel!.warAt!;
-    const m = ensureIslandConquest(m0, at, LV);
-    expect(attackOf(m, 'fort')).toBe(at);
+    const m = ensureIslandConquest(withSorties(m0, hourly(warSeuil(m0))), NOW + DAY, LV);
+    expect(attackOf(m, 'fort')).toBeLessThan(FAR);
   });
   it('les autres îles n’ont pas d’armée mobile', () => {
-    const m = warlordRaids(held(islandMap(3, 50)), NOW + 10 * DAY);
+    const m = warlordRaids(withSorties(held(islandMap(3, 50)), hourly(30)), NOW + 10 * DAY);
+    expect(m.archipel!.sorties?.warlord).toBeUndefined();
     expect(m.archipel!.warAt).toBeUndefined();
   });
   it('la fiche le dit', () => {
-    expect(islandTargetLabel(islandMap(), 'isl_obj_0')!.detail).toContain('MOINS défendu');
+    const d = islandTargetLabel(islandMap(), 'isl_obj_0')!.detail;
+    expect(d).toContain('MOINS défendu');
+    expect(d).toContain('sorties');
+  });
+  it('📏 rythme mesuré : jamais plus qu’avant, et nettement moins pour qui sort peu', () => {
+    // Trois camps debout, 14 jours de sorties régulières, 6 cartes.
+    const rate = (kind: 'warlord' | 'convoy', perDay: number) => {
+      let total = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const dep = Array.from(
+          { length: 14 * perDay },
+          (_, i) => NOW + Math.round(((i + 0.5) * DAY) / perDay),
+        );
+        total += sortieFires(
+          { seed, departures: dep },
+          { from: NOW, charge: 0, fired: 0 },
+          kind,
+          NOW + 14 * DAY,
+          3,
+          3,
+        ).times.length;
+      }
+      return total / 6 / 14;
+    };
+    // Ancienne horloge à trois camps : armée 36 h / 3 = 2 par jour, convoi 24 h / 3 = 3 par jour.
+    const war = [3, 10, 30].map((d) => rate('warlord', d));
+    const conv = [3, 10, 30].map((d) => rate('convoy', d));
+    expect(war[0]).toBeGreaterThan(0.5);
+    expect(war[0]).toBeLessThan(1);
+    expect(conv[0]).toBeGreaterThan(0.8);
+    expect(conv[0]).toBeLessThan(1.5);
+    for (const r of war) expect(r).toBeLessThanOrEqual(2);
+    for (const r of conv) expect(r).toBeLessThanOrEqual(3);
+    expect(war[0]).toBeLessThan(war[1]!);
+    expect(conv[0]).toBeLessThan(conv[1]!);
   });
 });
 
