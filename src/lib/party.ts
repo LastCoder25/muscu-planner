@@ -464,6 +464,24 @@ export function tripCrew(v: Pick<ActiveExpedition, 'crew' | 'outcome'>): string[
   return v.crew ?? v.outcome.party?.escort ?? [];
 }
 
+/**
+ * Les champions encore à bord d'UN voyage : son groupe (`tripCrew`), sans ceux qui ont été
+ * postés ou qui rentrent par un autre chemin (leur `busyUntil` n'est plus son retour).
+ * ⚠️ Signalé (« mes champions de l'ossuaire sont où ? ») : le store reconnaissait les membres
+ * à leur SEULE heure de retour, dans TOUTE l'escorte du rapport. Deux groupes d'une attaque
+ * combinée qui rentrent à la même seconde se confondaient : le premier traité ramenait chez
+ * lui les champions de l'autre (ceux de l'ossuaire partaient à pied du scriptorium).
+ */
+export function voyageMemberIds(
+  v: Pick<ActiveExpedition, 'crew' | 'outcome' | 'returnAt'>,
+  roster: readonly Pick<Adventurer, 'id' | 'posted' | 'busyUntil'>[],
+): string[] {
+  return tripCrew(v).filter((id) => {
+    const a = roster.find((x) => x.id === id);
+    return !!a && !a.posted && (a.busyUntil ?? 0) === v.returnAt;
+  });
+}
+
 /** 🦸 Le héros voyage-t-il avec CE groupe ? ⚠️ Signalé : « deux retours d'attaque combinée,
  *  le héros dans les deux ». Le rapport d'une attaque combinée est partagé : il dit que le
  *  héros a combattu, pas avec QUEL groupe il rentre. Le groupe du héros vit dans
@@ -718,6 +736,7 @@ export function withoutWalkers(
   return {
     ...p,
     baseSplit: true,
+    ...(p.crew ? { crew: p.crew.filter((id) => !out.has(id)) } : {}),
     ...(party ? { outcome: { ...p.outcome, party: { ...party, escort } } } : {}),
   };
 }

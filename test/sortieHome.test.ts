@@ -1,7 +1,13 @@
 // 🏥 Les blessés d'une sortie (point fixe, attaque combinée comprise) rentrent à la BASE, et
 // une sortie dont le point est perdu aussi (2026-09-29, décision de l'utilisateur).
 import { describe, expect, it } from 'vitest';
-import { baseWalkers, walkToBase, withoutWalkers, type ActiveParty } from '@/lib/party';
+import {
+  baseWalkers,
+  voyageMemberIds,
+  walkToBase,
+  withoutWalkers,
+  type ActiveParty,
+} from '@/lib/party';
 import { EXPE, travelPosition, type ExpeditionOutcome, type Poi } from '@/lib/expedition';
 
 const site: Poi = {
@@ -114,5 +120,30 @@ describe('🏥 le voyage d’origine sans eux (`withoutWalkers`)', () => {
   });
   it('disparaît s’il ne reste personne', () => {
     expect(withoutWalkers(p, ['a', 'b', 'c'], 0)).toBeNull();
+  });
+});
+
+describe('🏰 deux groupes qui rentrent à la même seconde (signalé : « mes champions de l’ossuaire sont où ? »)', () => {
+  // Attaque combinée : le rapport est PARTAGÉ (escorte a, b, c), chaque groupe a son équipe.
+  const back = 120 * 60_000;
+  const roster = ['a', 'b', 'c'].map((id) => ({ id, busyUntil: back }));
+  const scripto = { ...sortie(outcome([])), homeId: 'ctl_scriptorium', crew: ['a'] };
+  const ossu = { ...sortie(outcome([])), id: 'g2', homeId: 'ctl_ossuary', crew: ['b', 'c'] };
+  it('chaque groupe ne ramène que SON équipe, jamais celle de l’autre', () => {
+    expect(voyageMemberIds(scripto, roster)).toEqual(['a']);
+    expect(voyageMemberIds(ossu, roster)).toEqual(['b', 'c']);
+  });
+  it('un voyage sans groupe propre garde l’escorte du rapport', () => {
+    expect(voyageMemberIds(sortie(outcome([])), roster)).toEqual(['a', 'b', 'c']);
+  });
+  it('ni un posté, ni un champion reparti par un autre chemin', () => {
+    const r = [
+      { id: 'b', busyUntil: back, posted: 'ctl_ossuary' },
+      { id: 'c', busyUntil: back + 1 },
+    ];
+    expect(voyageMemberIds(ossu, r)).toEqual([]);
+  });
+  it('un champion qui quitte le groupe à pied quitte aussi son équipe', () => {
+    expect(withoutWalkers(ossu, ['b'], 1)?.crew).toEqual(['c']);
   });
 });

@@ -344,6 +344,7 @@ import {
   partyLegMin,
   assaultStayers,
   tripCrew,
+  voyageMemberIds,
   shortenWonReturn,
   rescheduleReturners,
   baseWalkers,
@@ -5039,13 +5040,9 @@ export const useCharacterStore = defineStore('character', () => {
     return { list: out, advs: roster, changed };
   }
 
-  /** Les champions d'UN voyage : ceux dont le retour est le sien (l'escorte d'un groupe
-   *  d'attaque combinée liste tous les groupes), ni postés entre-temps. */
+  /** Les champions d'UN voyage : son groupe, ni postés ni partis par un autre chemin. */
   function voyageMembers(p: ActiveParty, roster: readonly Adventurer[]): string[] {
-    return (p.outcome.party?.escort ?? []).filter((id) => {
-      const a = roster.find((x) => x.id === id);
-      return !!a && !a.posted && (a.busyUntil ?? 0) === p.returnAt;
-    });
+    return voyageMemberIds(p, roster);
   }
 
   /** Le trajet lieu de mission → ville de ces champions, à leur pas (la règle d'un groupe). */
@@ -5124,9 +5121,9 @@ export const useCharacterStore = defineStore('character', () => {
       if (!p.homeId || !map || !p.outcome.party) continue;
       const party = p.outcome.party;
       const sick = new Set([...party.hurt, ...(party.lightHurt ?? [])]);
-      const mine = advs.filter(
-        (a) => party.escort.includes(a.id) && !a.posted && (a.busyUntil ?? 0) === p.returnAt,
-      );
+      // ⚠️ Le groupe de CE voyage (`voyageMemberIds`), jamais toute l'escorte du rapport.
+      const ids = new Set(voyageMemberIds(p, advs));
+      const mine = advs.filter((a) => ids.has(a.id));
       if (!mine.length) continue;
       any = true;
       // ⚔️🏰 Les blessés (partis à la base) rendent tout de suite la place qu'on leur gardait ;
