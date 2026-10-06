@@ -836,6 +836,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // Personne ne tient le point : les places libres le disent en rouge.
     expect(await render('c1:fff')).toMatch(/ctl-dots[^"]*empty/);
     expect(await render('')).not.toContain('ctl-dots');
+    // ⚫⚫ Deux rangées : les miliciens sous les champions (un autre `cy`).
+    const two = await render('c1:crff/mm');
+    const cys = [...two.matchAll(/<circle[^>]*cy="([\d.]+)"/g)].map((x) => x[1]);
+    expect(cys.length).toBe(6);
+    expect(new Set(cys).size).toBe(2);
+    const milCy = [...two.matchAll(/<circle[^>]*cy="([\d.]+)"[^>]*class="d-m"/g)].map((x) => x[1]);
+    expect(Number(milCy[0])).toBeGreaterThan(Number(cys[0]));
   }, 30_000);
 
   it('🗂️ PoiCard : la fiche d’un lieu — nom, rang, infos, trajet/réussite, sceau', async () => {

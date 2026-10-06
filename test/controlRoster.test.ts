@@ -10,6 +10,7 @@ import {
   seatsOf,
   controlFilterOf,
   garrisonDots,
+  garrisonDotRows,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 import { MILITIA_PREFIX } from '@/lib/militia';
@@ -174,5 +175,35 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
         ),
       ),
     ).toBe('');
+  });
+});
+
+describe('⚫⚫ garrisonDotRows — champions en haut, miliciens en dessous', () => {
+  it('tenu : la même garnison que garrisonDots, répartie sur deux rangées', () => {
+    const mil = `${MILITIA_PREFIX}1`;
+    let m = captureControl(base(), MINE, ['a', mil], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    m = reinforceControl(m, MINE, ['b', `${MILITIA_PREFIX}2`], 4 * H, H);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
+    const [top, bottom] = garrisonDotRows(r);
+    expect(top.startsWith('cr')).toBe(true);
+    expect(top).not.toMatch(/m/);
+    expect(bottom).toBe('mr');
+    expect(top.length + bottom.length).toBe(garrisonDots(r).length);
+    const sorted = (s: string) => [...s].sort().join('');
+    expect(sorted(top + bottom)).toBe(sorted(garrisonDots(r)));
+  });
+
+  it('sans milicien : la seconde rangée est vide', () => {
+    let m = captureControl(base(), MINE, ['a'], 0, 7);
+    m = setAttack(m, MINE, 9e15);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
+    expect(garrisonDotRows(r)[1]).toBe('');
+  });
+
+  it('ennemi : tout sur la première rangée', () => {
+    const enemy = row(controlRoster(base(), [], 0, L, new Set()), MINE);
+    const assault = { ...enemy, seats: Infinity, assault: { ids: ['a', 'b'] } } as typeof enemy;
+    expect(garrisonDotRows(assault)).toEqual(['rr', '']);
   });
 });

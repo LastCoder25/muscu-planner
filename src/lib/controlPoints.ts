@@ -3893,3 +3893,27 @@ export function garrisonDots(row: ControlRosterRow): string {
   const filled = hero + 'c'.repeat(champs) + 'm'.repeat(mil) + 'r'.repeat(enRoute);
   return filled + free(filled.length);
 }
+
+/**
+ * ⚫⚫ LA GARNISON EN DEUX RANGÉES (demandé, 2026-10-06 : « la première pour le héros et les
+ * champions, la seconde pour les miliciens »). Mêmes lettres et MÊME COMPTE de points que
+ * `garrisonDots` — un point par place — seulement répartis : en haut le héros, les champions,
+ * ceux en route vers le point (renfort, sortie, réservés pour une attaque combinée) et les
+ * places LIBRES (elles sont partagées, un champion peut toutes les prendre) ; en dessous les
+ * miliciens, présents puis en route. Une rangée vide n'est pas rendue (`''`).
+ */
+export function garrisonDotRows(row: ControlRosterRow): [string, string] {
+  if (row.poi.control?.owner !== 'player') return [garrisonDots(row), ''];
+  const engaged = new Set(row.engaged);
+  const champsHere = row.garrison.filter((id) => !isMilitiaId(id) && !engaged.has(id)).length;
+  const mil = row.garrison.filter(isMilitiaId).length;
+  const milComing = row.reinforcing.filter((r) => isMilitiaId(r.id)).length;
+  const champComing = row.reinforcing.length - milComing + row.away.length + engaged.size;
+  const hero = row.hero ? (row.hero === 'posted' ? 'h' : 'g').repeat(MILITIA.heroSeats) : '';
+  const top = hero + 'c'.repeat(champsHere) + 'r'.repeat(champComing);
+  const bottom = 'm'.repeat(mil) + 'r'.repeat(milComing);
+  const free = Number.isFinite(row.seats)
+    ? 'f'.repeat(Math.max(0, row.seats - top.length - bottom.length))
+    : '';
+  return [top + free, bottom];
+}

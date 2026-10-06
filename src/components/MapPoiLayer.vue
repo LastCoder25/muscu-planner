@@ -64,40 +64,44 @@
              point par place — plein bleu le héros (2 points), plein cyan un champion, plein clair un milicien, orange
              une troupe en route (renfort, transfert, sortie qui reviendra ou assaut : sa place est prise sans y être
              encore), vide une place libre (rouge si personne ne tient ni ne rejoint le
-             point). -->
+             point).
+             ⚫⚫ DEUX RANGÉES (demandé) : en haut le héros, les champions et les places libres,
+             en dessous les miliciens (`garrisonDotRows`). Une rangée vide n'est pas dessinée. -->
         <g
           v-if="dots.get(p.id)"
           class="ctl-dots"
-          :class="{ empty: !/[hgcmr]/.test(dots.get(p.id)!) }"
+          :class="{ empty: !dots.get(p.id)!.some((l) => /[hgcmr]/.test(l)) }"
         >
-          <!-- 🧝 Le héros prend 2 places : ses 2 points sont RELIÉS en une pastille (bleue
-               posté, orange en route), on le repère sans compter. -->
-          <rect
-            v-for="i in heroDotLinks(dots.get(p.id)!)"
-            :key="'l' + i"
-            class="hero-link"
-            :class="'d-' + dots.get(p.id)![i]"
-            :x="p.x + (i - (dots.get(p.id)!.length - 1) / 2) * DOT_GAP - DOT_R - 0.35"
-            :y="p.y + 7.2 - DOT_R - 0.35"
-            :width="DOT_GAP + 2 * DOT_R + 0.7"
-            :height="2 * DOT_R + 0.7"
-            :rx="DOT_R + 0.35"
-          />
-          <circle
-            v-for="(d, i) in dots.get(p.id)!"
-            :key="i"
-            :cx="p.x + (i - (dots.get(p.id)!.length - 1) / 2) * DOT_GAP"
-            :cy="p.y + 7.2"
-            :r="DOT_R"
-            :class="'d-' + d"
-          />
+          <template v-for="(line, ri) in dots.get(p.id)!" :key="ri">
+            <!-- 🧝 Le héros prend 2 places : ses 2 points sont RELIÉS en une pastille (bleue
+                 posté, orange en route), on le repère sans compter. -->
+            <rect
+              v-for="i in heroDotLinks(line)"
+              :key="'l' + i"
+              class="hero-link"
+              :class="'d-' + line[i]"
+              :x="p.x + (i - (line.length - 1) / 2) * DOT_GAP - DOT_R - 0.35"
+              :y="p.y + 7.2 + ri * DOT_ROW - DOT_R - 0.35"
+              :width="DOT_GAP + 2 * DOT_R + 0.7"
+              :height="2 * DOT_R + 0.7"
+              :rx="DOT_R + 0.35"
+            />
+            <circle
+              v-for="(d, i) in line"
+              :key="i"
+              :cx="p.x + (i - (line.length - 1) / 2) * DOT_GAP"
+              :cy="p.y + 7.2 + ri * DOT_ROW"
+              :r="DOT_R"
+              :class="'d-' + d"
+            />
+          </template>
         </g>
         <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. La citadelle, elle,
              montre son PALIER (« P3 »). -->
         <text
           v-if="tiers.get(p.id)"
           :x="p.x"
-          :y="p.y + (dots.get(p.id) ? 11.6 : 9)"
+          :y="p.y + (dots.get(p.id) ? 11.6 + dotExtra(p.id) : 9)"
           class="ctl-tier"
           :class="p.control.owner"
         >
@@ -235,7 +239,7 @@ const props = defineProps<{
   attackedKey?: string;
   /** 🏅 Les crans des points fixes, « id:cran » joints par « | » (seuls les crans > 0). */
   tierKey?: string;
-  /** ⚫ La garnison des points tenus, « id:lettres » joints par « | » (`garrisonDots`). */
+  /** ⚫ La garnison des points tenus, « id:champions/miliciens » joints par « | » (`garrisonDotRows`). */
   garrisonKey?: string;
   /** La cible du héros en voyage. */
   target: Poi | null;
@@ -270,7 +274,9 @@ const attackDotDy = (p: Poi) => {
   // 🌀 Une faille : juste sous le bas de l'ovale (le bas de sa boîte est vide, mesuré au banc).
   if (isRiftPoi(p)) return RIFT_MAP_ICON.h - RIFT_MAP_ICON.dy;
   if (!p.control) return 6.6;
-  const below = tiers.value.get(p.id) ? 13.2 : dots.value.get(p.id) ? 9.2 : 7.2;
+  const below =
+    (tiers.value.get(p.id) ? 13.2 : dots.value.get(p.id) ? 9.2 : 7.2) +
+    (dots.value.get(p.id) ? dotExtra(p.id) : 0);
   return below * scaleOf(p);
 };
 const tiers = computed(
@@ -287,13 +293,22 @@ const dots = computed(
     new Map(
       (props.garrisonKey ? props.garrisonKey.split('|') : []).map((s) => {
         const i = s.lastIndexOf(':');
-        return [s.slice(0, i), s.slice(i + 1)] as const;
+        // ⚫⚫ « héros+champions/miliciens » : une rangée vide n'est pas dessinée.
+        const lines = s
+          .slice(i + 1)
+          .split('/')
+          .filter(Boolean);
+        return [s.slice(0, i), lines] as const;
       }),
     ),
 );
 /** ⚫ Taille et écart des points de garnison (unités de carte) : 5 places tiennent sous le fort. */
 const DOT_R = 0.85;
 const DOT_GAP = 2.3;
+/** ⚫⚫ Écart vertical entre la rangée des champions et celle des miliciens. */
+const DOT_ROW = 2.3;
+/** Hauteur ajoutée par les rangées au-delà de la première (cran et point d'attaque descendent). */
+const dotExtra = (id: string) => Math.max(0, (dots.value.get(id)?.length ?? 1) - 1) * DOT_ROW;
 /** 🏅 Le rang de chaque lieu, une fois par changement de carte (sinon une bisection par
  *  lecture, quatre lectures par lieu). Repli sur le calcul direct pour une cible de voyage,
  *  qui n'est plus sur la carte. */

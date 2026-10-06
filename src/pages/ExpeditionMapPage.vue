@@ -1884,7 +1884,7 @@ import {
   HERO_POST_BLOCK_LABEL,
   militiaFreeSeats,
   controlRoster,
-  garrisonDots,
+  garrisonDotRows,
   controlTravelMult,
   controlYieldCard,
   controlTier,
@@ -2753,13 +2753,13 @@ const tierKey = computed(() =>
     .filter((s) => !s.endsWith(':0'))
     .join('|'),
 );
-/** ⚫ La garnison de chaque point tenu, en points sous le fort (`garrisonDots`), « id:lettres »
+/** ⚫ La garnison de chaque point tenu, en points sous le fort (`garrisonDotRows`, deux rangées), « id:haut/bas »
  *  joints par « | » — une chaîne, pour ne re-dessiner les lieux que si elle change. Lue sur
  *  la MÊME liste que « Places fortes » : les deux ne peuvent pas se contredire. */
 const garrisonKey = computed(() =>
   ctlRoster.value
-    .map((r) => `${r.poi.id}:${garrisonDots(r)}`)
-    .filter((s) => !s.endsWith(':'))
+    .map((r) => `${r.poi.id}:${garrisonDotRows(r).join('/')}`)
+    .filter((s) => !s.endsWith(':/'))
     .join('|'),
 );
 /** 🌫️ La citadelle du secteur du point sélectionné est encore cachée : elle l'attaque quand
