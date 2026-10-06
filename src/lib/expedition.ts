@@ -3531,8 +3531,9 @@ export function tripTimeLabel(
   if (pos.phase === 'done') return { time: 'rentré', total: null, untilHome: 'rentré en ville' };
   const total = formatDuration(pos.remainTotalMs);
   const home = `retour en ville dans ${total}`;
-  // Sur le retour, la prochaine étape EST le retour : pas de second chiffre.
-  if (pos.phase === 'return') return { time: `↩ ${total}`, total: null, untilHome: home };
+  // Sur le retour, la prochaine étape EST le retour : le temps vit dans le bandeau du bas
+  // (demandé), sans chiffre en tête qui le répéterait.
+  if (pos.phase === 'return') return { time: '', total, untilHome: home };
   const step = formatDuration(pos.remainToObjectiveMs);
   // 🔍 Sur place, en train de fouiller : on le DIT, sinon l'équipe semble arrêtée.
   if (pos.searching)

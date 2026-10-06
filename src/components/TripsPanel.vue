@@ -91,9 +91,18 @@
           </span>
           <template v-else>{{ poiEmo(t.poi) }}</template>
         </span>
-        <span class="tr-time">{{ t.time }}</span>
-        <span v-if="t.total" class="tr-total" title="Temps total avant le retour en ville"
-          >🏠 {{ t.total }}</span
+        <span v-if="t.time" class="tr-time">{{ t.time }}</span>
+        <span
+          v-if="t.total"
+          class="tr-total"
+          :title="
+            t.totalIcon === '📍'
+              ? 'Arrivée'
+              : t.totalIcon === '⚓'
+                ? 'Arrivée au port'
+                : 'Temps total avant le retour'
+          "
+          >{{ t.totalIcon ?? '🏠' }} {{ t.total }}</span
         >
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
         <span v-if="t.failed" class="tr-fail">{{
@@ -103,7 +112,10 @@
           <!-- ⏱️ La prochaine étape est EN TÊTE (`tr-time`) : l'aller n'est redit que pour un
                départ programmé, dont la tête décompte le départ. -->
           <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
-          <span class="tr-legs">{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span>
+          <!-- Sur le retour, le bandeau du bas DIT déjà ce temps : pas de seconde ligne. -->
+          <span v-if="t.legs.go || t.sea || !t.back || !t.total" class="tr-legs"
+            >{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span
+          >
         </template>
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
       </button>
@@ -249,6 +261,8 @@ export interface MapTrip {
   /** 🏠 Temps total avant le retour en ville, quand il diffère de la prochaine étape
    *  (`tripTimeLabel`). */
   total?: string | null;
+  /** Icône du bandeau du bas : 🏠 retour à la base (défaut), 📍 arrivée sur un lieu, ⚓ port. */
+  totalIcon?: string;
   /** 🧭🛡️🗡️ Expédition, renfort ou attaque du joueur (les filtres de la rangée). */
   cat: TripCategory;
   /** ⏳ Programmé, pas encore parti (filtre « Programmés »). */

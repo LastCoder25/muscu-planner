@@ -19,14 +19,15 @@ describe('tripTimeLabel — ce que dit une tuile de voyage', () => {
   it('le chiffre en tête est celui qui RANGE les tuiles (`nextStepAt`)', () => {
     for (const now of [0.1 * H, 0.5 * H, 0.9 * H, 1.5 * H, 2.5 * H]) {
       const l = tripTimeLabel(travelPosition(voyage, now));
-      expect(l.time.endsWith(formatDuration(nextStepAt(voyage, now) - now))).toBe(true);
+      const shown = l.time || l.total || '';
+      expect(shown.endsWith(formatDuration(nextStepAt(voyage, now) - now))).toBe(true);
     }
   });
 
-  it('au retour : la prochaine étape EST le retour, sans second chiffre', () => {
+  it('au retour : le temps de retour vit dans le bandeau, sans chiffre en tête', () => {
     const l = tripTimeLabel(travelPosition(voyage, 2 * H));
-    expect(l.time).toBe(`↩ ${formatDuration(H)}`);
-    expect(l.total).toBeNull();
+    expect(l.time).toBe('');
+    expect(l.total).toBe(formatDuration(H));
     expect(l.untilHome).toContain(formatDuration(H));
   });
 
