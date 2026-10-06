@@ -380,6 +380,7 @@ import {
   wingReturnLegs,
   type CombinedAttack,
 } from '@/lib/combinedAttack';
+import { recallAttack, recallCombinedGroup } from '@/lib/combinedRecall';
 import {
   addSupplies,
   normalizeSupplies,
@@ -6162,9 +6163,58 @@ export const useCharacterStore = defineStore('character', () => {
       });
       return null;
     }
+    if (target.kind === 'attack') {
+      // ⚔️🧭 Attaque en préparation : ceux qui attendent restent chez eux, les partis rentrent.
+      const a = attackList.value.find((x) => x.id === target.id);
+      if (!a) return 'cette attaque est déjà lancée ou terminée';
+      const r = recallAttack(a, cur.expedition_map, now);
+      if (r === 'arrived') return `Demi-tour impossible : ${RECALL_BLOCK_LABEL.arrived}.`;
+      if (r.heroTrip && cur.expedition) return 'le héros est déjà en route ailleurs';
+      let advs = advList.value;
+      for (const x of r.release)
+        advs = advs.map((q) =>
+          x.ids.includes(q.id) && q.busyUntil === x.from ? { ...q, busyUntil: undefined } : q,
+        );
+      for (const m of r.moved) advs = rescheduleReturners(advs, m.ids, m.from, m.to);
+      const back0 = targetBack(cur.expedition_map, a.poi, now);
+      const map = back0 ? forgetDeparture(back0, a.midAt) : back0;
+      const refund = Object.fromEntries(a.supplies.map((id) => [id, 1]));
+      await persist(userId, {
+        attacks: attackList.value.filter((x) => x.id !== a.id),
+        ...(r.trips.length ? { parties: [...partyList.value, ...r.trips] } : {}),
+        ...(r.heroTrip ? { expedition: r.heroTrip } : {}),
+        ...(r.refund && a.supplies.length ? { supplies: addSupplies(cur.supplies, refund) } : {}),
+        ...(map !== cur.expedition_map ? { expedition_map: map } : {}),
+        ...(advs !== advList.value ? { adventurers: advs } : {}),
+      });
+      return null;
+    }
     const v =
       target.kind === 'hero' ? cur.expedition : partyList.value.find((p) => p.id === target.id);
     if (!v) return 'ce voyage est déjà terminé';
+    if (v.crew || v.wingOf) {
+      // ⚔️🧭 Attaque combinée lancée : TOUS ses voyages font demi-tour ensemble.
+      const all: ActiveExpedition[] = [
+        ...(cur.expedition ? [cur.expedition] : []),
+        ...partyList.value,
+      ];
+      const pairs = recallCombinedGroup<ActiveExpedition>(v, all, now);
+      if (typeof pairs === 'string') return `Demi-tour impossible : ${RECALL_BLOCK_LABEL[pairs]}.`;
+      const swap = new Map(pairs);
+      let advs = advList.value;
+      for (const [old, back] of pairs)
+        advs = rescheduleReturners(advs, tripCrew(old), old.returnAt, back.returnAt);
+      const back0 = targetBack(cur.expedition_map, v.poi, now);
+      const map = back0 ? forgetDeparture(back0, v.midAt) : back0;
+      const expedition = cur.expedition ? (swap.get(cur.expedition) ?? cur.expedition) : null;
+      await persist(userId, {
+        ...(expedition !== cur.expedition ? { expedition } : {}),
+        parties: partyList.value.map((p) => (swap.get(p) as ActiveParty | undefined) ?? p),
+        ...(map !== cur.expedition_map ? { expedition_map: map } : {}),
+        ...(advs !== advList.value ? { adventurers: advs } : {}),
+      });
+      return null;
+    }
     const block = recallBlocker(v, now);
     if (block) return `Demi-tour impossible : ${RECALL_BLOCK_LABEL[block]}.`;
     const back = recallVoyage(v, now)!;

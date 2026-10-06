@@ -482,7 +482,12 @@
         </p>
         <div class="la-actions">
           <button type="button" class="la-btn" @click="lateAsk = false">Annuler</button>
-          <button type="button" class="la-btn go" :disabled="!canSendPartyNow" @click="doSendParty(true)">
+          <button
+            type="button"
+            class="la-btn go"
+            :disabled="!canSendPartyNow"
+            @click="doSendParty(true)"
+          >
             Envoyer quand même
           </button>
         </div>
@@ -1289,9 +1294,7 @@
                   :gain="partyGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
-                <p v-if="!g.advs.length" class="pool-empty">
-                  Personne de prêt ici.
-                </p>
+                <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
               </template>
               <template v-if="showBlocked">
                 <AdvPickTile
@@ -1660,6 +1663,7 @@ import {
   attackBoostPlan,
   BOOST_BLOCK_LABEL,
   boostChoices,
+  combinedSiblings,
   voyageBoostPlan,
 } from '@/lib/speedBoost';
 import type { ActiveExpedition } from '@/lib/expedition';
@@ -2237,7 +2241,10 @@ const heroEnd = computed(() => {
   return a ? voyageDrawnEnd(a, now.value) : TOWN;
 });
 /** 🔙 Le héros encore en chemin vers son lieu peut rebrousser chemin. */
-const heroRecallable = computed(() => !!active.value && !recallBlocker(active.value, now.value));
+// ⚔️🧭 Le héros d'une attaque combinée lancée : toute l'attaque fait demi-tour avec lui.
+const heroRecallable = computed(
+  () => !!active.value && !recallBlocker(active.value, now.value, { group: true }),
+);
 /** Le bout du tracé d'un voyageur : le lieu, ou le point de demi-tour. */
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
@@ -3520,7 +3527,10 @@ const partiesOnMap = computed(() =>
     .map((g) => ({
       id: g.id,
       poi: g.poi,
-      recallable: !recallBlocker(g, now.value),
+      // ⚔️🧭 Un groupe d'attaque combinée : toute l'attaque fait demi-tour avec lui.
+      recallable: !recallBlocker(g, now.value, { group: true }),
+      combined: !!(g.crew || g.wingOf),
+      trip: g,
       // 🔙 La fenêtre COMPLÈTE d'avant un demi-tour, pour la feuille de rappel seulement.
       // ⚠️ Rangée à part : étalée ici, elle écrasait `returnAt` et une équipe rappelée se
       // triait sur son ANCIEN retour au lieu de passer en tête des voyages (v1.8.19).
@@ -3639,7 +3649,10 @@ const attacksOnMap = computed(() =>
     .filter((w) => now.value < w.voyage.returnAt)
     .map((w) => ({
       id: 'a' + w.key,
+      attackId: w.attackId,
       poi: w.voyage.poi,
+      sentAt: w.voyage.sentAt,
+      arriveAt: w.voyage.midAt - (w.voyage.dwellMs ?? 0),
       returnAt: w.voyage.returnAt,
       members: w.members,
       hero: w.hero,
@@ -3653,6 +3666,44 @@ const attacksOnMap = computed(() =>
       combo: comboOfAttack(w.attackId),
     })),
 );
+/** 🔙⚔️🧭 Une attaque combinée fait demi-tour EN ENTIER (`combinedRecall.ts`) : la feuille
+ *  la nomme ainsi et liste tous ses groupes, chacun rentrant chez lui. */
+const COMBINED_RECALL_LABEL = 'L’attaque combinée';
+type RecallCrew = { members: string[]; hero: boolean };
+/** Tous ceux d'une attaque en préparation : ceux qui attendent et ceux qui sont partis. */
+function attackCrew(id: string): RecallCrew {
+  const a = char.attackList.find((x) => x.id === id);
+  const wings = (a?.wings ?? []).filter((w) => w.state !== 'dropped');
+  return {
+    members: wings.flatMap((w) => (w.state === 'gone' ? (w.gone ?? []) : w.members)),
+    hero: wings.some((w) => (w.state === 'gone' ? !!w.heroGone : w.hero)),
+  };
+}
+/** Tous ceux d'une attaque lancée, quel que soit le voyage touché (héros ou équipe). */
+function launchedCrew(v: ActiveExpedition): RecallCrew {
+  const all: ActiveExpedition[] = [...(active.value ? [active.value] : []), ...char.partyList];
+  const group = [v, ...combinedSiblings(v, all)];
+  return {
+    members: group.flatMap((g) => tripCrew(g)),
+    hero: !!active.value && group.includes(active.value),
+  };
+}
+function combinedRecallInfo(
+  poi: Poi,
+  crew: RecallCrew,
+  win: { sentAt: number; arriveAt: number; returnAt?: number },
+): RecallInfo {
+  return {
+    kind: 'party',
+    label: COMBINED_RECALL_LABEL,
+    emo: '⚔️',
+    poi,
+    hero: crew.hero,
+    members: crew.members,
+    homeName: 'Chacun chez lui',
+    ...win,
+  };
+}
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
   ...attacksOnMap.value.map((w) => ({
@@ -3664,9 +3715,14 @@ const travelersOnMap = computed(() => [
     emo: w.hero ? '🧝' : w.waiting ? '⏳' : '⚔️',
     heroWing: w.hero,
     kind: 'party' as const,
-    recall: undefined as RecallTarget | undefined,
-    recallLabel: '',
-    recallInfo: null as RecallInfo | null,
+    // 🔙 Toute l'attaque fait demi-tour, tant que le rendez-vous n'est pas atteint.
+    recall: now.value < w.arriveAt ? { kind: 'attack' as const, id: w.attackId } : undefined,
+    recallLabel: COMBINED_RECALL_LABEL,
+    recallInfo: combinedRecallInfo(w.poi, attackCrew(w.attackId), {
+      sentAt: w.sentAt,
+      arriveAt: w.arriveAt,
+      returnAt: w.returnAt,
+    }),
   })),
   ...partiesOnMap.value.map((g) => ({
     ...g,
@@ -3674,16 +3730,20 @@ const travelersOnMap = computed(() => [
     emo: '⚔️',
     kind: 'party' as const,
     recall: g.recallable ? { kind: 'party' as const, id: g.id } : undefined,
-    recallLabel: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
-    recallInfo: {
-      kind: 'party',
-      label: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
-      emo: '⚔️',
-      poi: g.poi,
-      hero: g.hero,
-      members: g.members,
-      ...g.win,
-    } as RecallInfo,
+    recallLabel: g.combined
+      ? COMBINED_RECALL_LABEL
+      : `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
+    recallInfo: g.combined
+      ? combinedRecallInfo(g.poi, launchedCrew(g.trip), g.win)
+      : ({
+          kind: 'party',
+          label: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
+          emo: '⚔️',
+          poi: g.poi,
+          hero: g.hero,
+          members: g.members,
+          ...g.win,
+        } as RecallInfo),
   })),
   // 🔙 Seuls les renforts partis de la base peuvent rebrousser chemin (un transfert devrait
   // rentrer sur son point d'origine, `recallReinforcements`).
@@ -4588,6 +4648,7 @@ interface RecallInfo extends RecallAsk {
 }
 const heroRecallInfo = computed<RecallInfo | null>(() => {
   const a = active.value;
+  if (a && (a.crew || a.wingOf)) return combinedRecallInfo(a.poi, launchedCrew(a), recallWindow(a));
   return a
     ? {
         kind: 'hero',
@@ -4630,9 +4691,7 @@ function tripRecall(key: string) {
     return heroRecallable.value
       ? { target: { kind: 'hero' } as RecallTarget, info: heroRecallInfo.value }
       : null;
-  const v = travelersOnMap.value.find(
-    (x) => x.recall && (x.kind === 'party' ? 'g' + x.id === key : x.id === key),
-  );
+  const v = travelersOnMap.value.find((x) => x.recall && x.tripKey === key);
   return v ? { target: v.recall!, info: v.recallInfo } : null;
 }
 const recallableTrips = computed(

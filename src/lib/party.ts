@@ -509,8 +509,9 @@ export function rescheduleReturners(
  * Refusé (`recallBlocker`) :
  * - `arrived` : l'équipe est sur place (ou le rapport est tombé) — trop tard ;
  * - `turned` : elle rebrousse déjà chemin (embuscade perdue à l'aller, ou déjà rappelée) ;
- * - `combined` : un groupe d'une attaque combinée — les autres groupes marchent au même
- *   rendez-vous, le rappeler seul changerait l'issue commune tirée au départ.
+ * - `combined` : un groupe d'une attaque combinée rappelé SEUL — les autres marchent au même
+ *   rendez-vous. L'attaque entière fait demi-tour ensemble (`combinedRecall.ts`, demandé :
+ *   « ça renvoie toutes les troupes de l'attaque combinée chez elles »), avec `group: true`.
  */
 export type RecallBlock = 'arrived' | 'turned' | 'combined';
 
@@ -519,6 +520,9 @@ export type RecallBlock = 'arrived' | 'turned' | 'combined';
 export type RecallTarget =
   | { kind: 'hero' }
   | { kind: 'party'; id: string }
+  /** ⚔️🧭 Une attaque combinée pas encore toute partie (`recallAttack`). Une attaque déjà
+   *  lancée se rappelle par n'importe lequel de ses voyages (`hero` / `party`). */
+  | { kind: 'attack'; id: string }
   | { kind: 'reinf'; pointId: string; ids: readonly string[] }
   /** 🏠🔙 Un retour vers la base d'un point fixe qui y retourne (`recallReturns`). */
   | { kind: 'return'; pointId: string; ids: readonly string[] };
@@ -540,8 +544,12 @@ type Recallable = Pick<
  * (`turnBack`, `midAt` = l'instant où elle frappe) : tant qu'on n'y est pas, l'équipe marche
  * encore vers le lieu et peut rebrousser chemin — la refuser trahissait l'issue.
  */
-export function recallBlocker(v: Recallable, now: number): RecallBlock | null {
-  if (v.wingOf || v.crew) return 'combined';
+export function recallBlocker(
+  v: Recallable,
+  now: number,
+  opts: { group?: boolean } = {},
+): RecallBlock | null {
+  if (!opts.group && (v.wingOf || v.crew)) return 'combined';
   if (v.recalled) return 'turned';
   if (v.reported || now >= v.midAt - Math.max(0, v.dwellMs ?? 0))
     return v.turnBack !== undefined ? 'turned' : 'arrived';
@@ -566,8 +574,12 @@ export function recallWindow(v: Recallable & { returnAt: number }): {
 
 /** Le voyage rappelé à `now`, ou `null` s'il ne peut pas l'être. ⚠️ Le retour dure le
  *  chemin déjà fait (un départ différé compte à partir de `sentAt`). */
-export function recallVoyage<T extends ActiveExpedition>(v: T, now: number): T | null {
-  if (recallBlocker(v, now)) return null;
+export function recallVoyage<T extends ActiveExpedition>(
+  v: T,
+  now: number,
+  opts: { group?: boolean } = {},
+): T | null {
+  if (recallBlocker(v, now, opts)) return null;
   const arriveAt = v.midAt - Math.max(0, v.dwellMs ?? 0);
   const done = Math.max(0, now - v.sentAt);
   // Un demi-tour forcé à venir raccourcissait déjà l'aller : la part faite se rapporte au
