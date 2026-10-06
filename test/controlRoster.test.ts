@@ -188,29 +188,37 @@ describe('⚫⚫ garrisonDotRows — champions en haut, miliciens en dessous', (
     const [top, bottom] = garrisonDotRows(r);
     expect(top.startsWith('cr')).toBe(true);
     expect(top).not.toMatch(/m/);
-    expect(bottom).toBe('mn');
-    expect(top.length + bottom.length).toBe(garrisonDots(r).length);
-    const sorted = (s: string) => [...s].sort().join('');
-    expect(sorted((top + bottom).replace(/n/g, 'r'))).toBe(sorted(garrisonDots(r)));
+    expect(bottom).toBe('mnfff');
+    // Les occupants sont ceux de garrisonDots (n = milicien en route, r chez lui).
+    const who = (s: string) =>
+      [...s.replace(/n/g, 'r')]
+        .filter((c) => c !== 'f')
+        .sort()
+        .join('');
+    expect(who(top + bottom)).toBe(who(garrisonDots(r)));
   });
 
-  it('⚫ les places vides se partagent entre les deux lignes (moitié en haut)', () => {
+  it('⚫ deux lignes de 5 : les cases vides en noir', () => {
     let m = captureControl(base(), MINE, ['a'], 0, 7);
     m = setAttack(m, MINE, 9e15);
     const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
-    const [top, bottom] = garrisonDotRows(r);
-    // 5 places, 1 champion : 4 vides, 2 en haut, 2 en bas.
-    expect(top).toBe('cff');
-    expect(bottom).toBe('ff');
-    expect(top.length + bottom.length).toBe(garrisonDots(r).length);
+    expect(garrisonDotRows(r)).toEqual(['cffff', 'fffff']);
+    // Lieu plein (3 miliciens, 2 champions en sortie) : chaque ligne garde sa longueur.
+    const full = { ...r, garrison: ['mil:1', 'mil:2', 'mil:3'], away: ['x', 'y'] };
+    expect(garrisonDotRows(full)).toEqual(['rrfff', 'mmmff']);
   });
 
-  it('⚫ jamais plus de places vides en haut que ce qu’un champion peut prendre', () => {
+  it('⚫ la ligne du haut suit les places de champion du lieu', () => {
     const m = setAttack(captureControl(base(), MINE, ['a'], 0, 7), MINE, 9e15);
-    const r = { ...row(controlRoster(m, [], 2 * H, L, new Set()), MINE), seats: 1 };
-    const [top, bottom] = garrisonDotRows(r);
-    expect(top).toBe('c');
-    expect(bottom).toBe('ffff');
+    const r = { ...row(controlRoster(m, [], 2 * H, L, new Set()), MINE), seats: 3 };
+    expect(garrisonDotRows(r)).toEqual(['cff', 'fffff']);
+  });
+
+  it('⚫ pas de ligne de miliciens là où ils n’entrent pas (lapidaire, objectif)', () => {
+    const m = setAttack(captureControl(base(), MINE, ['a'], 0, 7), MINE, 9e15);
+    const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
+    expect(garrisonDotRows({ ...r, kind: 'lapidary', seats: 1 })).toEqual(['c', '']);
+    expect(garrisonDotRows({ ...r, kind: 'objective', seats: 5 })).toEqual(['cffff', '']);
   });
 
   it('ennemi : tout sur la première rangée', () => {
