@@ -123,6 +123,13 @@ const ECRANS = [
         clic: '.tile-fab[aria-label="Places fortes"]',
         attendu: '.map-overlay .cps-tile',
       },
+      // 🏠 Le rond tout à gauche mène à la base de l'île 1 (l'onglet Base de l'Aventure).
+      // ⚠️ En DERNIER : il quitte la carte.
+      {
+        nom: 'vers-base',
+        clic: '.tile-fab[aria-label="Ma base (île 1)"]',
+        attendu: '.base-page',
+      },
     ],
   },
   // 🌀 L'accueil du Labyrinthe en tuiles (v0.1305). ⚠️ On ne LANCE pas de palier : ça
