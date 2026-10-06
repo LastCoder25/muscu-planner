@@ -2359,6 +2359,19 @@ export function advAtInfirmary(adv: Adventurer, now: number): boolean {
 export function advWalkingHurt(adv: Adventurer, now: number): boolean {
   return (adv.busyUntil ?? 0) > now && (adv.hurtUntil ?? 0) > (adv.busyUntil ?? 0);
 }
+/** 🏥 Ce trajet RENTRE À L'INFIRMERIE : au moins un de ses membres rentre blessé
+ *  (`advWalkingHurt` — délogé d'un lieu fixe, attaque ratée). Montré sur son marqueur de la
+ *  carte (demandé). Les miliciens et les ids inconnus ne comptent pas. */
+export function crewHeadsToInfirmary(
+  members: readonly string[],
+  roster: readonly Adventurer[],
+  now: number,
+): boolean {
+  return members.some((id) => {
+    const a = roster.find((x) => x.id === id);
+    return !!a && advWalkingHurt(a, now);
+  });
+}
 
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
   // ⛵ Resté sur une autre île de l'archipel (`crossing.ts`) : ni envoi, ni défense ici.

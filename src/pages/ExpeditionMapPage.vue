@@ -265,6 +265,12 @@
               :class="[v.kind, { 'hero-wing': isHeroWing(v) }]"
             />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
+            <!-- 🏥 Il rentre à l'infirmerie (demandé : le voir d'un coup d'œil sur la carte). -->
+            <g v-if="v.infirmary" class="infirm-badge">
+              <title>Rentre à l’infirmerie</title>
+              <circle :cx="v.at.x + 3" :cy="v.at.y - 3" r="2.3" />
+              <text :x="v.at.x + 3" :y="v.at.y - 2.05">🏥</text>
+            </g>
           </g>
 
           <g v-if="active && hero" :class="{ recallable: heroRecallable }">
@@ -280,6 +286,11 @@
             />
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
+            <g v-if="heroInfirmary" class="infirm-badge">
+              <title>Rentre à l’infirmerie</title>
+              <circle :cx="hero.x + 3.3" :cy="hero.y - 3.3" r="2.3" />
+              <text :x="hero.x + 3.3" :y="hero.y - 2.35">🏥</text>
+            </g>
           </g>
 
           <!-- Ville (centre) : la MÊME enceinte que l'écran Base, en miniature — terre
@@ -1850,6 +1861,7 @@ import {
   ADV_UNAVAILABLE_LABEL,
   advAvailable,
   advTitle,
+  crewHeadsToInfirmary,
   engageCap,
   sortByGradeThenRank,
   type Adventurer,
@@ -2263,6 +2275,10 @@ function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
 const heroTargetDown = computed(() => !!active.value && voyageVanquished(active.value, now.value));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
+);
+/** 🏥 Un champion du héros rentre blessé : son trajet finit à l'infirmerie. */
+const heroInfirmary = computed(
+  () => !!active.value && crewHeadsToInfirmary(tripCrew(active.value), char.advList, now.value),
 );
 
 // Chevrons de direction le long du segment RESTANT (héros → cible du moment :
@@ -3733,106 +3749,112 @@ function combinedRecallInfo(
   };
 }
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
-const travelersOnMap = computed(() => [
-  ...attacksOnMap.value.map((w) => ({
-    ...w,
-    tripKey: w.id,
-    // 🧝 Le groupe qui porte le HÉROS se dessine comme lui (signalé : « le héros n'a plus
-    // ses trajets affichés » — dans une attaque combinée il n'est pas une expédition tant
-    // que tous les groupes ne sont pas partis, et passait pour une équipe violette).
-    emo: w.hero ? '🧝' : w.waiting ? '⏳' : '⚔️',
-    heroWing: w.hero,
-    kind: 'party' as const,
-    // 🔙 Toute l'attaque fait demi-tour, tant que le rendez-vous n'est pas atteint.
-    recall: now.value < w.arriveAt ? { kind: 'attack' as const, id: w.attackId } : undefined,
-    recallLabel: COMBINED_RECALL_LABEL,
-    recallInfo: combinedRecallInfo(w.poi, attackCrew(w.attackId), {
-      sentAt: w.sentAt,
-      arriveAt: w.arriveAt,
-      returnAt: w.returnAt,
-    }),
-  })),
-  ...partiesOnMap.value.map((g) => ({
-    ...g,
-    tripKey: 'g' + g.id,
-    emo: '⚔️',
-    kind: 'party' as const,
-    recall: g.recallable ? { kind: 'party' as const, id: g.id } : undefined,
-    recallLabel: g.combined
-      ? COMBINED_RECALL_LABEL
-      : `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
-    recallInfo: g.combined
-      ? combinedRecallInfo(g.poi, launchedCrew(g.trip), g.win)
-      : ({
-          kind: 'party',
-          label: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
-          emo: '⚔️',
-          poi: g.poi,
-          hero: g.hero,
-          members: g.members,
-          ...g.win,
-        } as RecallInfo),
-  })),
-  // 🔙 Seuls les renforts partis de la base peuvent rebrousser chemin (un transfert devrait
-  // rentrer sur son point d'origine, `recallReinforcements`).
-  ...reinforcementsOnMap.value.map((r) => ({
-    ...r,
-    tripKey: r.id,
-    emo: '🛡️',
-    kind: 'reinf' as const,
-    recall: r.recallable
-      ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members }
-      : undefined,
-    recallLabel: `Les renforts (${r.members.length})`,
-    recallInfo: {
-      kind: 'reinf',
-      label: `Les renforts (${r.members.length})`,
+const travelersOnMap = computed(() =>
+  [
+    ...attacksOnMap.value.map((w) => ({
+      ...w,
+      tripKey: w.id,
+      // 🧝 Le groupe qui porte le HÉROS se dessine comme lui (signalé : « le héros n'a plus
+      // ses trajets affichés » — dans une attaque combinée il n'est pas une expédition tant
+      // que tous les groupes ne sont pas partis, et passait pour une équipe violette).
+      emo: w.hero ? '🧝' : w.waiting ? '⏳' : '⚔️',
+      heroWing: w.hero,
+      kind: 'party' as const,
+      // 🔙 Toute l'attaque fait demi-tour, tant que le rendez-vous n'est pas atteint.
+      recall: now.value < w.arriveAt ? { kind: 'attack' as const, id: w.attackId } : undefined,
+      recallLabel: COMBINED_RECALL_LABEL,
+      recallInfo: combinedRecallInfo(w.poi, attackCrew(w.attackId), {
+        sentAt: w.sentAt,
+        arriveAt: w.arriveAt,
+        returnAt: w.returnAt,
+      }),
+    })),
+    ...partiesOnMap.value.map((g) => ({
+      ...g,
+      tripKey: 'g' + g.id,
+      emo: '⚔️',
+      kind: 'party' as const,
+      recall: g.recallable ? { kind: 'party' as const, id: g.id } : undefined,
+      recallLabel: g.combined
+        ? COMBINED_RECALL_LABEL
+        : `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
+      recallInfo: g.combined
+        ? combinedRecallInfo(g.poi, launchedCrew(g.trip), g.win)
+        : ({
+            kind: 'party',
+            label: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
+            emo: '⚔️',
+            poi: g.poi,
+            hero: g.hero,
+            members: g.members,
+            ...g.win,
+          } as RecallInfo),
+    })),
+    // 🔙 Seuls les renforts partis de la base peuvent rebrousser chemin (un transfert devrait
+    // rentrer sur son point d'origine, `recallReinforcements`).
+    ...reinforcementsOnMap.value.map((r) => ({
+      ...r,
+      tripKey: r.id,
       emo: '🛡️',
-      poi: r.poi,
-      hero: false,
-      members: r.members,
-      sentAt: r.sentAt,
-      arriveAt: r.arriveAt,
-      ...(r.origin ? { homeName: 'Au point de départ' } : {}),
-    } as RecallInfo,
-  })),
-  // 🧝 Le héros à pied : dessiné comme lui (bleu). Son demi-tour se commande depuis le lieu.
-  ...(heroWalkOnMap.value
-    ? [
-        {
-          ...heroWalkOnMap.value,
-          tripKey: heroWalkOnMap.value.id,
-          emo: '🧝',
-          heroWing: true,
-          kind: 'party' as const,
-          recall: undefined as RecallTarget | undefined,
-          recallLabel: '',
-          recallInfo: null as RecallInfo | null,
-        },
-      ]
-    : []),
-  // 🏠🔙 Un retour vers la base peut rebrousser chemin vers son point (`recallReturns`) —
-  // sauf s'il est lui-même un demi-tour.
-  ...returnsOnMap.value.map((r) => ({
-    ...r,
-    tripKey: r.id,
-    emo: '🏠',
-    kind: 'reinf' as const,
-    recall: r.turned ? undefined : { kind: 'return' as const, pointId: r.poi.id, ids: r.members },
-    recallLabel: `Le retour (${crewLabel(r.members)})`,
-    recallInfo: {
-      kind: 'return',
-      label: `Le retour (${crewLabel(r.members)})`,
+      kind: 'reinf' as const,
+      recall: r.recallable
+        ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members }
+        : undefined,
+      recallLabel: `Les renforts (${r.members.length})`,
+      recallInfo: {
+        kind: 'reinf',
+        label: `Les renforts (${r.members.length})`,
+        emo: '🛡️',
+        poi: r.poi,
+        hero: false,
+        members: r.members,
+        sentAt: r.sentAt,
+        arriveAt: r.arriveAt,
+        ...(r.origin ? { homeName: 'Au point de départ' } : {}),
+      } as RecallInfo,
+    })),
+    // 🧝 Le héros à pied : dessiné comme lui (bleu). Son demi-tour se commande depuis le lieu.
+    ...(heroWalkOnMap.value
+      ? [
+          {
+            ...heroWalkOnMap.value,
+            tripKey: heroWalkOnMap.value.id,
+            emo: '🧝',
+            heroWing: true,
+            kind: 'party' as const,
+            recall: undefined as RecallTarget | undefined,
+            recallLabel: '',
+            recallInfo: null as RecallInfo | null,
+          },
+        ]
+      : []),
+    // 🏠🔙 Un retour vers la base peut rebrousser chemin vers son point (`recallReturns`) —
+    // sauf s'il est lui-même un demi-tour.
+    ...returnsOnMap.value.map((r) => ({
+      ...r,
+      tripKey: r.id,
       emo: '🏠',
-      poi: r.poi,
-      hero: false,
-      members: r.members,
-      sentAt: r.sentAt,
-      arriveAt: r.returnAt,
-      homeName: `De retour sur ${poiLabel(r.poi)}`,
-    } as RecallInfo,
+      kind: 'reinf' as const,
+      recall: r.turned ? undefined : { kind: 'return' as const, pointId: r.poi.id, ids: r.members },
+      recallLabel: `Le retour (${crewLabel(r.members)})`,
+      recallInfo: {
+        kind: 'return',
+        label: `Le retour (${crewLabel(r.members)})`,
+        emo: '🏠',
+        poi: r.poi,
+        hero: false,
+        members: r.members,
+        sentAt: r.sentAt,
+        arriveAt: r.returnAt,
+        homeName: `De retour sur ${poiLabel(r.poi)}`,
+      } as RecallInfo,
+    })),
+  ].map((v) => ({
+    ...v,
+    // 🏥 Rentre à l'infirmerie (un membre rentre blessé) : pastille sur son marqueur.
+    infirmary: 'members' in v && crewHeadsToInfirmary(v.members, char.advList, now.value),
   })),
-]);
+);
 const shownTravelers = travelersOnMap;
 /** 🧝 Le voyageur est-il le groupe du héros d'une attaque combinée ? */
 const isHeroWing = (v: object) => 'heroWing' in v && !!v.heroWing;
@@ -7356,6 +7378,19 @@ onUnmounted(() => {
   font-size: 3px;
   text-anchor: middle;
   pointer-events: none;
+}
+/* 🏥 Pastille « rentre à l'infirmerie », en haut à droite du marqueur. */
+.infirm-badge {
+  pointer-events: none;
+}
+.infirm-badge circle {
+  fill: #fff;
+  stroke: #d32f2f;
+  stroke-width: 0.4;
+}
+.infirm-badge text {
+  font-size: 2.7px;
+  text-anchor: middle;
 }
 
 /* Chevrons de direction : s'allument un à un (délai croissant héros→cible) puis
