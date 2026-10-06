@@ -571,6 +571,13 @@ export interface PartyResult {
     /** La vie de chaque monstre affronté (cf. `RiftRun.foeTrail`). Absent d'un rapport
      *  d'avant la v0.1216 : la barre de l'adversaire ne montre alors que sa chute. */
     foeTrail?: { maxPv: number; pv: number }[];
+    /** ⚔️ Monstres déjà morts à l'entrée (incursions ratées d'avant) : le rejeu reprend à
+     *  partir d'eux. Absent = faille intacte. */
+    start?: number;
+    /** ⚔️ Monstres morts APRÈS ce groupe et 💠 part du mana fixe versée — inscrits sur la
+     *  faille à l'arrivée du rapport (`markRiftWounds`). Absents des rapports d'avant. */
+    slainTotal?: number;
+    paid?: number;
     /** Le duel contre le gardien (`bossReplaySteps`). Absent si la porte ne s'est pas
      *  ouverte, ou d'un rapport d'avant la v0.998 : la scène retombe alors sur un seul coup. */
     boss?: RiftBossReplay;
@@ -796,6 +803,12 @@ export interface Poi {
    *  appelants la posent sur une COPIE au moment d'estimer ou de résoudre
    *  (`withRiftCut`, rift.ts). Absente = bande intacte. */
   riftCut?: number;
+  /** ⚔️🕳️ Faille : monstres déjà abattus par des incursions ratées (les premiers, ceux de
+   *  l'entrée). Ils ne reviennent pas (`riftSlainOf`, rift.ts). Absent = intacte. */
+  riftSlain?: number;
+  /** 💠 Faille : part de son mana fixe déjà versée par des incursions ratées (0..1). La
+   *  fermeture ne paie que le reste. Absent = rien versé. */
+  riftPaid?: number;
   /** 🏰 Point de contrôle uniquement : son état (`controlPoints.ts`). */
   control?: ControlState;
   setId?: string; // 'lair' uniquement : set ciblé
@@ -3174,8 +3187,36 @@ type RestoreVoyage = {
   midAt: number;
   returnAt: number;
   turnBack?: number;
-  outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
+  outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack' | 'party'>;
 };
+
+/**
+ * ⚔️🕳️ Une incursion RATÉE entame la faille (v1.65.9) : à l'arrivée du rapport, la faille
+ * prend le compte de ses morts et la part de mana déjà versée. ⚠️ Toujours le MAXIMUM, jamais
+ * une addition : la fonction est rejouée à chaque tick tant que le groupe n'est pas rentré,
+ * et deux groupes partis ensemble ont été calculés sur le même état de départ.
+ */
+export function markRiftWounds(
+  map: ExpeditionMap,
+  voyages: readonly RestoreVoyage[],
+  now: number,
+): ExpeditionMap {
+  let pois = map.pois;
+  for (const v of voyages) {
+    const r = v.outcome.party?.rift;
+    if (!r || r.slainTotal === undefined || now < v.midAt || v.outcome.win) continue;
+    if (v.turnBack !== undefined || v.outcome.turnBack !== undefined) continue;
+    const i = pois.findIndex((p) => p.id === v.poi.id && isRiftPoi(p));
+    if (i < 0) continue;
+    const p = pois[i]!;
+    const slain = Math.max(p.riftSlain ?? 0, r.slainTotal);
+    const paid = Math.max(p.riftPaid ?? 0, r.paid ?? 0);
+    if (slain === (p.riftSlain ?? 0) && paid === (p.riftPaid ?? 0)) continue;
+    if (pois === map.pois) pois = [...pois];
+    pois[i] = { ...p, riftSlain: slain, riftPaid: paid };
+  }
+  return pois === map.pois ? map : { ...map, pois };
+}
 /** Un lieu que `targetTaken` retire de la carte au départ (donc qu'on peut lui rendre). */
 function leavesMapOnDeparture(p: Poi): boolean {
   return !(isFieldArmyPoi(p) || p.type === 'control' || p.type === 'arena');
@@ -3296,6 +3337,7 @@ export function restoreUnvanquished(
   now: number,
 ): ExpeditionMap | null {
   if (!map) return map;
+  map = markRiftWounds(map, voyages, now);
   // ⚔️ Un lieu resté sur la carte pendant l'assaut (`staysUnderAttack`) la quitte dès le
   // rapport d'une VICTOIRE.
   const fallen = new Set(
@@ -4164,6 +4206,32 @@ export function expeditionTerrain(seed: number): Terrain {
     patches.push({ cx: +f1(cx), cy: +f1(cy), rx: +f1(5 + dec() * 8), ry: +f1(2.5 + dec() * 3.5) });
   }
   return { features, rivers, tufts, patches };
+}
+
+/**
+ * 🧝 LE HÉROS SEUL, POSTÉ SUR UN LIEU TENU, PART DE SON POSTE ET Y REVIENT (signalé : « le
+ * temps de trajet du héros est calculé depuis la base et pas depuis là où il est en
+ * garnison » — l'envoi en équipe partait déjà du poste, v1.65.3, pas l'expédition solo).
+ * Même règle qu'une équipe : `origin` (dessin), `homeId` + `homeHero` (il reprend sa place au
+ * retour, `heroBackToPost`). `oneWayMin` = trajet depuis le poste, calculé par l'appelant
+ * (`legFromSpot`) ; le retour garde le multiplicateur de la route (`returnMult`).
+ */
+export function expeditionFromPost(
+  trip: ActiveExpedition,
+  post: Poi,
+  oneWayMin: number,
+  homeHero: PostedHero,
+): ActiveExpedition {
+  const out = Math.max(1, Math.round(oneWayMin)) * 60_000;
+  const back = Math.round(out * (trip.outcome.returnMult || 1));
+  return {
+    ...trip,
+    midAt: trip.sentAt + out,
+    returnAt: trip.sentAt + out + back,
+    origin: { x: post.x, y: post.y },
+    homeId: post.id,
+    homeHero,
+  };
 }
 
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. `travelMult`

@@ -1695,7 +1695,8 @@ import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
 import {
   RIFT,
-  riftClearMana,
+  riftClearManaLeft,
+  riftSlainOf,
   riftOverflowAt,
   riftPopulation,
   riftSpecOf,
@@ -2421,13 +2422,17 @@ const selectedRift = computed(() => {
   const p = selected.value;
   if (!p || !isRiftPoi(p)) return null;
   // Son RANG s'affiche à côté du nom, comme pour tout lieu (`selectedRank`).
+  const pop = riftPopulation(p, now.value);
+  // ⚔️ Les morts d'incursions ratées ne reviennent pas (`riftSlainOf`).
+  const slain = riftSlainOf(p, pop);
   return {
     faction: riftSpecOf(p).faction,
-    foes: riftPopulation(p, now.value),
+    foes: pop - slain,
+    slain,
     maxFoes: RIFT.maxFoes,
     overflowIn: riftOverflowAt(p) - now.value,
     /** Ce que la REFERMER rapporte, gardien compris — annoncé avant d’entrer. */
-    clearMana: riftClearMana(p),
+    clearMana: riftClearManaLeft(p),
   };
 });
 /** ⚔️🕳️ Ce lieu s’attaque-t-il en GROUPE ? Un camp ou une faille. ⚠️ UNE seule définition,
@@ -5190,8 +5195,13 @@ const travelMult = computed(
     travelTimeMult(char.row?.buildings ?? []) *
     controlTravelMult(char.row?.expedition_map, now.value),
 );
-const roundTripMin = (p: Poi) =>
-  Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
+/** Aller-retour du héros seul. 🧝 Posté sur un lieu tenu, il part de son poste et y revient
+ *  (même règle que le store, `expeditionFromPost` + `legFromSpot`). */
+const roundTripMin = (p: Poi) => {
+  const legOf = (q: Poi) => travelOneWayMin(poiTravelLevel(q), q.distNorm) * travelMult.value;
+  const post = heroPostOf(char.row?.expedition_map);
+  return Math.round((post ? legFromSpot(p, post, legOf) : legOf(p)) * 2);
+};
 /** Ce qu’un lieu rapporte, en quelques mots, sur la ligne sous son nom (le détail chiffré
  *  vit dans les pastilles : filon, bourses, mana si refermée…).
  *  ⚠️ `Record<PoiType, …>` et non une chaîne de `if` avec un cas par défaut : c’est ce
@@ -5244,7 +5254,7 @@ const poiSub = computed(() => {
     rift?.faction ?? band?.faction ?? selectedCamp.value?.faction ?? selectedGuard.value?.faction;
   const force = selectedForce.value;
   const count = rift
-    ? `${rift.foes}/${rift.maxFoes}`
+    ? `${rift.foes}/${rift.maxFoes}${rift.slain ? ` · ⚔️ ${rift.slain} déjà tués` : ''}`
     : band
       ? String(band.size)
       : force
