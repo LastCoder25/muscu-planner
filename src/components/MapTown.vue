@@ -42,20 +42,23 @@
     </template>
     <!-- ⚫ QUI EST LÀ, en points sous la ville, comme la garnison d'un lieu fixe (`townDots`) :
          doré le héros, cyan un champion, clair un milicien en réserve, « +N » au-delà. Ici et
-         non dans la page : la carte d'une île rangée dessine le même village. -->
-    <g v-if="row?.dots" class="mt-dots">
-      <circle
-        v-for="(d, i) in row.dots"
-        :key="i"
-        :cx="T.x + (i - (row.dots.length - 1) / 2) * DOT_GAP"
-        :cy="T.y + dotsY"
-        :r="DOT_R"
-        :class="'d-' + d"
-      />
+         non dans la page : la carte d'une île rangée dessine le même village.
+         ⚫⚫ En lignes de 5 : champions d'abord, miliciens sur leurs lignes (`townDots`). -->
+    <g v-if="row?.rows.length" class="mt-dots">
+      <template v-for="(line, ri) in row.rows" :key="ri">
+        <circle
+          v-for="(d, i) in line"
+          :key="i"
+          :cx="T.x + (i - (line.length - 1) / 2) * DOT_GAP"
+          :cy="T.y + dotsY + ri * DOT_GAP"
+          :r="DOT_R"
+          :class="'d-' + d"
+        />
+      </template>
       <text
         v-if="row.more"
-        :x="T.x + ((row.dots.length + 1) / 2) * DOT_GAP + 0.6"
-        :y="T.y + dotsY + 1"
+        :x="T.x + ((row.rows[row.rows.length - 1]!.length + 1) / 2) * DOT_GAP + 0.6"
+        :y="T.y + dotsY + (row.rows.length - 1) * DOT_GAP + 1"
         class="mt-more"
       >
         +{{ row.more }}

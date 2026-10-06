@@ -70,7 +70,7 @@
         <g
           v-if="dots.get(p.id)"
           class="ctl-dots"
-          :class="{ empty: !dots.get(p.id)!.some((l) => /[hgcmr]/.test(l)) }"
+          :class="{ empty: !dots.get(p.id)!.some((l) => /[hgcmnr]/.test(l)) }"
         >
           <template v-for="(line, ri) in dots.get(p.id)!" :key="ri">
             <!-- 🧝 Le héros prend 2 places : ses 2 points sont RELIÉS en une pastille (bleue
@@ -460,8 +460,12 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .ctl-dots .d-r {
   fill: var(--d3, #ffb23f);
 }
+/* 🚶 Miliciens en route : vert clair, à part de l'orange des champions en route (demandé). */
+.ctl-dots .d-n {
+  fill: var(--d2, #c6d24a);
+}
 .ctl-dots .d-f {
-  fill: color-mix(in srgb, var(--bg) 70%, transparent);
+  fill: #000; /* ⚫ une place vide : une boule noire (demandé) */
   stroke: var(--dim);
   stroke-width: 0.35;
 }

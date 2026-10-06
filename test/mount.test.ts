@@ -837,12 +837,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await render('c1:fff')).toMatch(/ctl-dots[^"]*empty/);
     expect(await render('')).not.toContain('ctl-dots');
     // ⚫⚫ Deux rangées : les miliciens sous les champions (un autre `cy`).
-    const two = await render('c1:crff/mm');
+    const two = await render('c1:crff/mn');
     const cys = [...two.matchAll(/<circle[^>]*cy="([\d.]+)"/g)].map((x) => x[1]);
     expect(cys.length).toBe(6);
     expect(new Set(cys).size).toBe(2);
     const milCy = [...two.matchAll(/<circle[^>]*cy="([\d.]+)"[^>]*class="d-m"/g)].map((x) => x[1]);
     expect(Number(milCy[0])).toBeGreaterThan(Number(cys[0]));
+    // 🚶 Champion et milicien en route : deux couleurs (r orange, n vert).
+    expect(two).toContain('class="d-r"');
+    expect(two).toContain('class="d-n"');
   }, 30_000);
 
   it('🗂️ PoiCard : la fiche d’un lieu — nom, rang, infos, trajet/réussite, sceau', async () => {
