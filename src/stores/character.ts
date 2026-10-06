@@ -109,6 +109,7 @@ import {
   campSpecOf,
   depositMessages,
   MESSAGES_CAP,
+  controlAttackReportId,
   isClaimable,
   isAutoClaimable,
   messageTitle,
@@ -5380,7 +5381,7 @@ export const useCharacterStore = defineStore('character', () => {
             supplies: addSupplies(o?.supplies ?? {}, h.supplies),
           },
         } as ActiveExpedition),
-        id: `ctl_${p.id}_${at}`,
+        id: controlAttackReportId(p.id, at),
         title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
         text:
           (held

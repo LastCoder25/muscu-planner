@@ -1256,8 +1256,8 @@
               </p>
               <p v-else-if="selectedWarband?.convoy" class="sh-note">
                 Arrivé, il renforce la forteresse d’un champion de référence (4 au plus). Même
-                repoussé, tu gardes la part de ce que tu as abattu. En cas de défaite, tout le groupe
-                part à l’infirmerie.
+                repoussé, tu gardes la part de ce que tu as abattu. En cas de défaite, tout le
+                groupe part à l’infirmerie.
               </p>
               <p v-else-if="selectedWarband" class="sh-note">
                 {{
@@ -3971,10 +3971,19 @@ watch(
       if (Date.now() - reportWaitFrom < REPORT_WAIT_MS) return;
     }
     reportWaitFrom = 0;
-    const m =
-      exact ??
-      msgs.find((x) => isClaimable(x, Date.now())) ??
-      [...msgs].sort((a, b) => b.resolvedAt - a.resolvedAt)[0];
+    // ⚠️ Un rapport NOMMÉ introuvable n'est jamais remplacé par un autre : ouvrir « le plus
+    // récent » faisait croire que la notification menait au mauvais rapport (relevé le
+    // 2026-10-06). On le dit, et l'on n'ouvre rien.
+    const m = wanted
+      ? exact
+      : (msgs.find((x) => isClaimable(x, Date.now())) ??
+        [...msgs].sort((a, b) => b.resolvedAt - a.resolvedAt)[0]);
+    if (wanted && !exact)
+      $q.notify({
+        message:
+          'Ce rapport n’est plus dans ta boîte 📬 (elle garde les plus récents), ou la bataille n’a pas eu lieu.',
+        timeout: 4000,
+      });
     if (m) {
       lastOutcome.value = m;
       collectOpen.value = true;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { planPushes, livePushKeys, pushVoyage, type PushContext } from '@/lib/push';
-import { buildMessage } from '@/lib/expedition';
+import { buildMessage, controlAttackReportId } from '@/lib/expedition';
 import { __stampFrom } from '@/composables/useAppUpdate';
 import {
   FACTION_EMOJI,
@@ -36,7 +36,8 @@ const ctx = (over: Partial<PushContext> = {}): PushContext => ({
   base: base(28),
   expedition: null,
   parties: [],
-  watchtowerLevel: 28, fortSightMs: () => 0,
+  watchtowerLevel: 28,
+  fortSightMs: () => 0,
   activeDays7: 4,
   playerLevel: 28,
   plunder: null,
@@ -45,6 +46,18 @@ const ctx = (over: Partial<PushContext> = {}): PushContext => ({
 });
 
 describe('notifications push — ce qu’on programme', () => {
+  it('🏰 « attaque en cours » mène au rapport de CETTE reprise', () => {
+    const p = planPushes(
+      ctx({ controls: [{ id: 'ctl_mine', attackAt: NOW + 3 * H, label: 'Mine' }] }),
+      NOW,
+    ).find((x) => x.kind === 'control_attack')!;
+    expect(p.url).toBe(
+      '/expedition-map?report=' +
+        encodeURIComponent(controlAttackReportId('ctl_mine', NOW + 3 * H)),
+    );
+    expect(controlAttackReportId('ctl_mine', 5)).toBe('ctl_ctl_mine_5');
+  });
+
   it('annonce le siège À LA DÉTECTION, pas à l’impact', () => {
     // C'est tout ce que la Tour de guet achète : du temps de réaction. Une alerte
     // envoyée à l'arrivée de l'armée ne servirait à rien.
@@ -142,7 +155,12 @@ describe('notifications push — ce qu’on programme', () => {
     expect(hero.url).toBe(`/expedition-map?report=${pv.reportId}`);
     // Deux groupes = deux rapports distincts, deux destinations distinctes.
     const two = planPushes(
-      ctx({ parties: [{ id: 'a', ...voy(NOW + H, 'msg_a') }, { id: 'b', ...voy(NOW + H, 'msg_b') }] }),
+      ctx({
+        parties: [
+          { id: 'a', ...voy(NOW + H, 'msg_a') },
+          { id: 'b', ...voy(NOW + H, 'msg_b') },
+        ],
+      }),
       NOW,
     ).filter((p) => p.kind === 'party_home');
     expect(new Set(two.map((p) => p.url)).size).toBe(2);

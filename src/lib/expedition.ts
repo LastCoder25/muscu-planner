@@ -1212,7 +1212,23 @@ export function isAutoClaimable(m: ExpeditionMessage, now: number): boolean {
  *  finalement ») — la v0.1127 l'avait descendue à 3 et la v0.1128 supprimait les messages vus à
  *  la fermeture. PLUS tout rapport dont la récompense n'a pas été prise, jamais supprimé
  *  (`keepMessages`). */
-export const MESSAGES_CAP = 30;
+export const MESSAGES_CAP = 40;
+
+/** 🗒️ Les NOTES de production (récoltes de lieux fixes pendant l'absence, renforts
+ *  programmés) : déjà créditées, rien à rejouer. ⚠️ Elles comptent À PART (`NOTES_CAP`) :
+ *  mesuré le 2026-10-06 sur le compte réel, elles occupaient 9 places sur 30 et chassaient en
+ *  ~1,5 jour les rapports de combat vers lesquels pointaient les notifications — le tap sur
+ *  « ton groupe est rentré » ouvrait alors un AUTRE rapport. */
+export const NOTES_CAP = 6;
+export function isMessageNote(m: Pick<ExpeditionMessage, 'id'>): boolean {
+  return /^(ctlloot_|ctlgold_|planned_)/.test(m.id);
+}
+
+/** 🔔 L'id du rapport qu'une REPRISE de point fixe déposera (`controlTick`) : connu dès
+ *  qu'on connaît l'heure de l'attaque, donc la notification peut mener à CE rapport. */
+export function controlAttackReportId(pointId: string, attackAt: number): string {
+  return `ctl_${pointId}_${attackAt}`;
+}
 
 /** Taille la boîte 📬 SANS jamais jeter un butin à récupérer. ⚠️ Un `slice` brut pouvait
  *  pousser dehors un rapport non encaissé — et avec lui l'XP d'un groupe entier.
@@ -1220,8 +1236,17 @@ export const MESSAGES_CAP = 30;
  *  ancien), PLUS tout message plus ancien encore `claimed === false`. Ordre conservé.
  *  ⚠️ Un butin en attente ne chasse donc JAMAIS un message récent : la boîte garde ce
  *  qu'elle montrait, elle ne fait que sauver ce qu'elle aurait perdu. */
-export function keepMessages(list: ExpeditionMessage[], cap: number): ExpeditionMessage[] {
-  return list.filter((m, i) => i < cap || m.claimed === false);
+export function keepMessages(
+  list: ExpeditionMessage[],
+  cap: number,
+  notesCap = NOTES_CAP,
+): ExpeditionMessage[] {
+  let reports = 0;
+  let notes = 0;
+  return list.filter((m) => {
+    const fits = isMessageNote(m) ? notes++ < notesCap : reports++ < cap;
+    return fits || m.claimed === false;
+  });
 }
 
 /**

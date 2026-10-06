@@ -576,6 +576,31 @@ describe('📬 le rapport de groupe et la boîte', () => {
     expect(keepMessages(list, 10)).toEqual(list);
   });
 
+  it('🗒️ les notes de production ne chassent pas les rapports (notifications → bon rapport)', () => {
+    // Relevé le 2026-10-06 : 9 notes sur 30 places chassaient en ~1,5 jour les rapports
+    // vers lesquels pointaient les notifications.
+    const list = [
+      base('ctlloot_a', true),
+      base('ctlgold_b', true),
+      base('planned_c', true),
+      base('r1', true),
+      base('ctlloot_d', true),
+      base('r2', true),
+      base('r3', true),
+    ];
+    // 2 rapports, 2 notes : les rapports gardés sont les 2 plus récents, peu importe les notes.
+    expect(keepMessages(list, 2, 2).map((m) => m.id)).toEqual([
+      'ctlloot_a',
+      'ctlgold_b',
+      'r1',
+      'r2',
+    ]);
+    // Une note en trop non encaissée reste, comme un rapport.
+    expect(
+      keepMessages([base('ctlloot_x', true), base('ctlgold_y', false)], 5, 1).map((m) => m.id),
+    ).toEqual(['ctlloot_x', 'ctlgold_y']);
+  });
+
   describe('⚠️ depositMessages — le double encaissement (revue finale des camps)', () => {
     it('un rapport DÉJÀ encaissé n’est jamais remplacé par sa version « à encaisser »', () => {
       // Le défaut : `expeSettle` remplaçait le rapport par `buildMessage(...)` (claimed: false),
@@ -626,8 +651,8 @@ describe('📬 le rapport de groupe et la boîte', () => {
       // Déjà à la bonne taille : la MÊME référence (le store n'écrit pas à vide).
       expect(depositMessages(out, [], 3)).toBe(out);
     });
-    it('📬 la boîte garde l’historique : les 30 derniers rapports (v0.1287)', () => {
-      expect(MESSAGES_CAP).toBe(30);
+    it('📬 la boîte garde l’historique : les 40 derniers rapports, notes à part (v1.68.2)', () => {
+      expect(MESSAGES_CAP).toBe(40);
     });
     it('📬 fermer la boîte ne supprime plus rien (v0.1287) — l’historique reste', () => {
       // Demandé : « on garde l'historique des rapports de combat finalement ».

@@ -13,7 +13,12 @@
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
 import { baseLeadMs, raidIntervalMs, raidSeedOf, raidsEnabled, type BaseState } from './raid';
-import { reportIdOf, voyageReports, type ActiveExpedition } from './expedition';
+import {
+  controlAttackReportId,
+  reportIdOf,
+  voyageReports,
+  type ActiveExpedition,
+} from './expedition';
 
 type PushKind =
   | 'siege'
@@ -197,7 +202,9 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       sendAt: c.attackAt,
       title: `🏰 Attaque en cours : ${c.label}`,
       body: 'Ta garnison se bat pour la tenir — viens voir le rapport.',
-      url: '/expedition-map',
+      // ⚠️ CE rapport (`ctl_<point>_<attaque>`), pas la carte nue : « viens voir le
+      // rapport » ne menait à aucun rapport (relevé le 2026-10-06).
+      url: reportUrl(controlAttackReportId(c.id, c.attackAt)),
     });
   }
 
