@@ -84,7 +84,7 @@ export const ISLAND_CONQUEST = {
  * 🪺 LES NIDS DE L'ÎLE 2 (décisions de l'utilisateur, 2026-10-04 ; remplacent les pontes du
  * 2026-10-02) :
  * - les nids APPARAISSENT sur la carte tant que l'île n'est pas pacifiée — ils ne pondent plus
- *   (`spawnNests`). Pas de durée : **un nid toutes les 3 à 5 sorties sur la carte** (tiré à
+ *   (`spawnNests`). Pas de durée : **un nid toutes les 5 à 10 sorties sur la carte** (tiré à
  *   chaque nid, `nestThreshold`)
  *   (chaque héros ou équipe envoyé compte À SON ARRIVÉE, `ExpeditionMap.departures` ; un voyage
  *   rappelé par un demi-tour ne compte pas, `forgetDeparture`) — qui joue beaucoup en
@@ -102,8 +102,8 @@ export const ISLAND_CONQUEST = {
 export const NEST = {
   islands: new Set([2]) as ReadonlySet<number>,
   /** Un nid apparaît toutes les N sorties sur la carte, N tiré entre ces bornes à chaque nid. */
-  departuresMin: 3,
-  departuresMax: 5,
+  departuresMin: 5,
+  departuresMax: 10,
   /** Le délai entre l'apparition d'un nid et son attaque sur le lieu tenu le plus proche. */
   strikeWaitMinMs: 3600_000,
   strikeWaitMaxMs: 3 * 3600_000,
