@@ -116,6 +116,9 @@ import {
   advanceWorld,
   riftOverflows,
   startExpedition,
+  expeditionFromPost,
+  poiTravelLevel,
+  travelOneWayMin,
   buildMessage,
   poiDifficultyLevel,
   riftMaturityAt,
@@ -2758,14 +2761,26 @@ export const useCharacterStore = defineStore('character', () => {
       throw new Error('Construis un Avant-poste d’expédition pour envoyer des héros.');
     // ⚠️ Plus de coût d'envoi (v0.1069, décision de l'utilisateur).
     // Réduction de trajet selon le niveau de l'avant-poste.
-    const started = startExpedition(
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now);
+    const fromTown = startExpedition(
       hero,
       poi,
       now,
       (now ^ (poi.level * 2654435761)) >>> 0 || 1,
-      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
+      mult,
       level,
     );
+    // 🧝 Posté sur un lieu tenu, il part de son poste et y revient (`expeditionFromPost`) —
+    // la règle de trajet d'une sortie (`legFromSpot`), comme l'envoi en équipe.
+    const post = heroPostOf(cur.expedition_map);
+    const started = post
+      ? expeditionFromPost(
+          fromTown,
+          post,
+          legFromSpot(poi, post, (p) => travelOneWayMin(poiTravelLevel(p), p.distNorm) * mult),
+          { name: cur.pseudo, level, combatant: hero },
+        )
+      : fromTown;
     // 🎒 Un consommable peut tomber de TOUT voyage (« tout partout »), tiré sur sa graine.
     const exp = {
       ...started,
@@ -2871,8 +2886,7 @@ export const useCharacterStore = defineStore('character', () => {
     const map1 = restoreUnvanquished(map0, [exp, ...partyList.value], now);
     // 🏰 Parti d'un POSTE (`homeId`) : ses champions reprennent leur garnison comme une sortie
     // (`sortiesHome`), et le héros sa place (`heroBackToPost`) — sinon il rentre à pied.
-    const advs0 =
-      ctl?.adventurers ?? (x?.patch as { adventurers?: Adventurer[] })?.adventurers;
+    const advs0 = ctl?.adventurers ?? (x?.patch as { adventurers?: Adventurer[] })?.adventurers;
     const home = exp.homeId
       ? sortiesHome(
           cur,
@@ -4510,11 +4524,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 🧝 Réservé pour l'attaque, le héros posté GARDE son poste jusqu'au départ de son
       // groupe (`attackTick`) : il défend le lieu pendant l'attente, comme les champions qui
       // attendent chez eux. (Signalé : il quittait l'Ossuaire dès l'envoi.)
-      expedition_map: recordDeparture(
-        targetTaken(map, poi)!,
-        now,
-        plan.midAt,
-      ),
+      expedition_map: recordDeparture(targetTaken(map, poi)!, now, plan.midAt),
       attacks: [...attackList.value, attack],
       ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>

@@ -4158,6 +4158,32 @@ export function expeditionTerrain(seed: number): Terrain {
   return { features, rivers, tufts, patches };
 }
 
+/**
+ * 🧝 LE HÉROS SEUL, POSTÉ SUR UN LIEU TENU, PART DE SON POSTE ET Y REVIENT (signalé : « le
+ * temps de trajet du héros est calculé depuis la base et pas depuis là où il est en
+ * garnison » — l'envoi en équipe partait déjà du poste, v1.65.3, pas l'expédition solo).
+ * Même règle qu'une équipe : `origin` (dessin), `homeId` + `homeHero` (il reprend sa place au
+ * retour, `heroBackToPost`). `oneWayMin` = trajet depuis le poste, calculé par l'appelant
+ * (`legFromSpot`) ; le retour garde le multiplicateur de la route (`returnMult`).
+ */
+export function expeditionFromPost(
+  trip: ActiveExpedition,
+  post: Poi,
+  oneWayMin: number,
+  homeHero: PostedHero,
+): ActiveExpedition {
+  const out = Math.max(1, Math.round(oneWayMin)) * 60_000;
+  const back = Math.round(out * (trip.outcome.returnMult || 1));
+  return {
+    ...trip,
+    midAt: trip.sentAt + out,
+    returnAt: trip.sentAt + out + back,
+    origin: { x: post.x, y: post.y },
+    homeId: post.id,
+    homeHero,
+  };
+}
+
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. `travelMult`
  *  (< 1 = plus rapide) applique la réduction de trajet de l'avant-poste. */
 export function startExpedition(

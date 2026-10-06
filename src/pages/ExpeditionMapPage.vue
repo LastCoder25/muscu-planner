@@ -5190,8 +5190,13 @@ const travelMult = computed(
     travelTimeMult(char.row?.buildings ?? []) *
     controlTravelMult(char.row?.expedition_map, now.value),
 );
-const roundTripMin = (p: Poi) =>
-  Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
+/** Aller-retour du héros seul. 🧝 Posté sur un lieu tenu, il part de son poste et y revient
+ *  (même règle que le store, `expeditionFromPost` + `legFromSpot`). */
+const roundTripMin = (p: Poi) => {
+  const legOf = (q: Poi) => travelOneWayMin(poiTravelLevel(q), q.distNorm) * travelMult.value;
+  const post = heroPostOf(char.row?.expedition_map);
+  return Math.round((post ? legFromSpot(p, post, legOf) : legOf(p)) * 2);
+};
 /** Ce qu’un lieu rapporte, en quelques mots, sur la ligne sous son nom (le détail chiffré
  *  vit dans les pastilles : filon, bourses, mana si refermée…).
  *  ⚠️ `Record<PoiType, …>` et non une chaîne de `if` avec un cas par défaut : c’est ce
