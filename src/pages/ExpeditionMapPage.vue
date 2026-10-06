@@ -1802,8 +1802,8 @@ import {
 } from '@/lib/plannedMoves';
 import { poiTripCategory } from '@/lib/tripFilter';
 import {
-  blockPageSwipe,
-  inMapSwipeZone,
+  lockPageScroll,
+  mapScrollLocked,
   mapSlideDirection,
   scrollContainerOf,
   type MapSlide,
@@ -4355,25 +4355,15 @@ function slideMap() {
     scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
-/** 👆 Sous la carte, seulement par les flèches (`blockPageSwipe`). */
-let unblockSwipe: (() => void) | null = null;
 onMounted(() => {
   window.addEventListener('scroll', updateSlideDir, { capture: true, passive: true });
   window.addEventListener('resize', updateSlideDir, { passive: true });
   updateSlideDir();
-  // 👆 Seulement quand le doigt part de la carte : les fenêtres ouvertes dessous défilent.
-  const el = scrollEl.value;
-  const pageEl = el?.closest('.emap');
-  if (el && pageEl)
-    unblockSwipe = blockPageSwipe(el, (t) =>
-      tabsEl.value ? inMapSwipeZone(t, pageEl, tabsEl.value) : false,
-    );
 });
 onUnmounted(() => {
   window.removeEventListener('scroll', updateSlideDir, { capture: true });
   window.removeEventListener('resize', updateSlideDir);
   if (slideRaf) cancelAnimationFrame(slideRaf);
-  unblockSwipe?.();
 });
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
@@ -4983,6 +4973,29 @@ async function quickSend() {
 const baseOpen = ref(false);
 /** Les champions À LA BASE : ceux qui peuvent partir (`freeSorted`, la règle de l'envoi). */
 const baseChamps = computed(() => freeSorted.value);
+
+// 🔒 SUR LA CARTE, L'ÉCRAN NE GLISSE PAS (cf. `mapScrollLocked`) : on n'en descend que par les
+// flèches ; une fenêtre ouverte depuis la carte (fiche d'un lieu…) déverrouille la page.
+const mapLocked = computed(() =>
+  mapScrollLocked({
+    viewed: !!viewed.value,
+    panel: mapPanel.value !== null,
+    selected: !!selected.value,
+    focusTrip: focusTrip.value !== null,
+    baseOpen: baseOpen.value,
+    quick: quickId.value !== null,
+    // 📏 `fitMapHeight` : 0 = la carte commence trop bas pour tenir à l'écran.
+    fits: mapH.value > 0,
+  }),
+);
+let unlockScroll: (() => void) | null = null;
+function applyScrollLock(on: boolean) {
+  unlockScroll?.();
+  unlockScroll = on && tabsEl.value ? lockPageScroll(tabsEl.value) : null;
+}
+watch(mapLocked, applyScrollLock, { flush: 'post' });
+onMounted(() => applyScrollLock(mapLocked.value));
+onUnmounted(() => applyScrollLock(false));
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, puis les champions présents. */
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, les champions présents, puis
  *  la milice en réserve de l'île (la garnison du village, signalé 2026-10-04). */

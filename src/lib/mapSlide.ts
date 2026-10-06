@@ -24,98 +24,45 @@ export function mapSlideDirection(
 export function scrollContainerOf(el: HTMLElement | null): HTMLElement | null {
   for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
     const oy = getComputedStyle(p).overflowY;
+    if (p.dataset.scrollLock) return p;
     if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
   }
   return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
 }
 
-/** Un bloc sur le chemin du doigt : où il en est de son défilement vertical. */
-export interface ScrollBoxY {
-  scrollTop: number;
-  scrollHeight: number;
-  clientHeight: number;
-  /** Le bloc défile en hauteur (`overflow-y: auto | scroll`). */
-  scrollsY: boolean;
+/** 🔒 La page de la carte est-elle VERROUILLÉE (demandé : « quand j'arrive sur la carte, je ne
+ *  peux pas glisser l'écran ; je n'ai accès au dessous que par la flèche. Par contre, quand je
+ *  touche un lieu, la fenêtre pour choisir les troupes doit pouvoir défiler ») ? Oui sur la
+ *  carte seule ; non dès qu'une fenêtre s'ouvre depuis elle (fiche d'un lieu, équipe d'un
+ *  voyage, base, renfort, partie dépliée sous la carte) ou qu'une autre île la remplace.
+ *  Non plus quand la carte ne tient pas à l'écran (`fits` : une récompense du jour ou le guide
+ *  au-dessus la poussent en bas) : on y descend alors au doigt. */
+export function mapScrollLocked(s: {
+  viewed: boolean;
+  panel: boolean;
+  selected: boolean;
+  focusTrip: boolean;
+  baseOpen: boolean;
+  quick: boolean;
+  fits: boolean;
+}): boolean {
+  if (!s.fits) return false;
+  return !(s.viewed || s.panel || s.selected || s.focusTrip || s.baseOpen || s.quick);
 }
 
-/** 👆 Un glissé vertical de `dy` px (doigt vers le bas = positif) fait-il défiler un bloc
- *  INTÉRIEUR à la page (la carte, une liste) ? Sinon, c'est la page qui défilerait. */
-export function innerCanScrollY(boxes: readonly ScrollBoxY[], dy: number): boolean {
-  return boxes.some(
-    (b) =>
-      b.scrollsY && (dy > 0 ? b.scrollTop > 0 : b.scrollTop + b.clientHeight < b.scrollHeight - 1),
-  );
-}
-
-/** 👆 Le doigt est-il posé SUR LA CARTE (demandé : « que ça ne bloque que quand je suis sur la
- *  carte ; sur les fenêtres qui s'ouvrent depuis la carte je peux glisser la page ») ? Oui pour
- *  tout ce qui, dans `page`, vient avant la rangée d'onglets `tabs` ou en fait partie : la
- *  carte, ce qui est au-dessus, les onglets. Non pour ce qui s'ouvre dessous (fiche du lieu,
- *  voyages…), pour une fenêtre hors de la page (dialogue), et quand les onglets sont cachés
- *  (la vue d'une autre île remplace la carte). */
-export function inMapSwipeZone(target: Node, page: Element, tabs: HTMLElement): boolean {
-  if (!page.contains(target) || getComputedStyle(tabs).display === 'none') return false;
-  return (
-    tabs.contains(target) ||
-    !!(tabs.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_PRECEDING)
-  );
-}
-
-/** 👆 SOUS LA CARTE, PAS AU DOIGT (demandé : « on ne peut pas défiler avec le doigt, seules
- *  les flèches y mènent ») : annule tout glissé vertical qui ferait défiler la page — ou le
- *  volet du cockpit — autour de `root`, quand il part d'un endroit où `blocks` le dit
- *  (`inMapSwipeZone`). La carte, les listes et les rangées de tuiles défilent toujours ; les
- *  flèches font défiler par le code (`scrollTo`), que rien n'arrête. Le choix se fait au
- *  premier mouvement du geste, puis tient jusqu'au lever du doigt. Rend le nettoyage. */
-export function blockPageSwipe(
-  root: HTMLElement,
-  blocks: (target: Node) => boolean = () => true,
-): () => void {
-  let start: { x: number; y: number } | null = null;
-  let block: boolean | null = null;
-  const onStart = (e: TouchEvent) => {
-    const t = e.touches[0];
-    start = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null;
-    block = null;
-  };
-  const onMove = (e: TouchEvent) => {
-    const t = e.touches[0];
-    if (!start || !t || e.touches.length > 1) return;
-    const dx = t.clientX - start.x;
-    const dy = t.clientY - start.y;
-    if (block === null) {
-      if (Math.abs(dy) < 4 || Math.abs(dx) > Math.abs(dy)) return;
-      if (!blocks(e.target as Node)) {
-        block = false;
-        return;
-      }
-      const page = scrollContainerOf(root);
-      const boxes: ScrollBoxY[] = [];
-      for (let p = e.target as HTMLElement | null; p && p !== page; p = p.parentElement) {
-        const oy = getComputedStyle(p).overflowY;
-        boxes.push({
-          scrollTop: p.scrollTop,
-          scrollHeight: p.scrollHeight,
-          clientHeight: p.clientHeight,
-          scrollsY: oy === 'auto' || oy === 'scroll',
-        });
-      }
-      block = !innerCanScrollY(boxes, dy);
-    }
-    if (block && e.cancelable) e.preventDefault();
-  };
-  const onEnd = () => {
-    start = null;
-    block = null;
-  };
-  document.addEventListener('touchstart', onStart, { passive: true });
-  document.addEventListener('touchmove', onMove, { passive: false });
-  document.addEventListener('touchend', onEnd, { passive: true });
-  document.addEventListener('touchcancel', onEnd, { passive: true });
+/** 🔒 Coupe le défilement du conteneur qui fait défiler `el` (la page, ou le volet du
+ *  cockpit) : plus aucun glissé au doigt ne le bouge, mais le code le fait toujours défiler
+ *  (les flèches, `scrollTo`). ⚠️ Pas d'écouteur `touchmove` : sur la vraie carte, Chrome les
+ *  rend non annulables (fil principal chargé) ; le verrou CSS, lui, tient. Rend le
+ *  déverrouillage. */
+export function lockPageScroll(el: HTMLElement): () => void {
+  const box = scrollContainerOf(el);
+  if (!box) return () => {};
+  const prev = box.style.overflowY;
+  box.style.overflowY = 'hidden';
+  box.dataset.scrollLock = '1';
   return () => {
-    document.removeEventListener('touchstart', onStart);
-    document.removeEventListener('touchmove', onMove);
-    document.removeEventListener('touchend', onEnd);
-    document.removeEventListener('touchcancel', onEnd);
+    box.style.overflowY = prev;
+    delete box.dataset.scrollLock;
   };
 }
