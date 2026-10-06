@@ -1801,7 +1801,12 @@ import {
   plannedTransferIds,
 } from '@/lib/plannedMoves';
 import { poiTripCategory } from '@/lib/tripFilter';
-import { mapSlideDirection, scrollContainerOf, type MapSlide } from '@/lib/mapSlide';
+import {
+  blockPageSwipe,
+  mapSlideDirection,
+  scrollContainerOf,
+  type MapSlide,
+} from '@/lib/mapSlide';
 import { revealBlock } from '@/lib/reveal';
 import {
   emptyReinfSelection,
@@ -4349,15 +4354,19 @@ function slideMap() {
     scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
+/** 👆 Sous la carte, seulement par les flèches (`blockPageSwipe`). */
+let unblockSwipe: (() => void) | null = null;
 onMounted(() => {
   window.addEventListener('scroll', updateSlideDir, { capture: true, passive: true });
   window.addEventListener('resize', updateSlideDir, { passive: true });
   updateSlideDir();
+  if (scrollEl.value) unblockSwipe = blockPageSwipe(scrollEl.value);
 });
 onUnmounted(() => {
   window.removeEventListener('scroll', updateSlideDir, { capture: true });
   window.removeEventListener('resize', updateSlideDir);
   if (slideRaf) cancelAnimationFrame(slideRaf);
+  unblockSwipe?.();
 });
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
