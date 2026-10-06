@@ -37,10 +37,10 @@ describe('🏠 départ depuis la base', () => {
     expect(baseSendBlocker(c, champs, left)).toBeNull();
     // ⚠️ Chaque groupe tiendrait SEUL : c'est ensemble qu'ils débordent.
     expect(baseSendBlocker(c, 0, left + 1)).toBeNull();
-    expect(baseSendBlocker(c, champs, left + 1)).toBe('full');
+    expect(baseSendBlocker(c, champs, left + 1)).toBeNull(); // 🛡️ v1.70 : les miliciens partent même vers un lieu plein (demi-tour à l'arrivée)
   });
   it('des miliciens seuls, sans champion', () => {
     expect(baseSendBlocker(held(), 0, MILITIA.perPoint)).toBeNull();
-    expect(baseSendBlocker(held(), 0, MILITIA.perPoint + 1)).toBe('full');
+    expect(baseSendBlocker(held(), 0, MILITIA.perPoint + 1)).toBeNull(); // 🛡️ v1.70 : demi-tour à l'arrivée s'il est encore plein
   });
 });

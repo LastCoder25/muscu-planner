@@ -46,7 +46,7 @@ describe('🏰 la forteresse prise se tient', () => {
     // 🛡️ Pas de milicien dans la forteresse : elle se tient avec des champions.
     expect(militiaFreeSeats(c)).toBe(0);
     expect(reinforceBlocker(c, 40)).toBeNull();
-    expect(reinforceBlocker(c, 1, true)).toBe('full');
+    expect(reinforceBlocker(c, 1, true)).toBe('noMilitia');
   });
   it('sans le héros, il n’est pas posté', () => {
     const m = takeFortress(island1(), TEAM, false, NOW);

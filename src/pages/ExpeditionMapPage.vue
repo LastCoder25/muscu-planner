@@ -458,6 +458,7 @@
       :champ-free="quickFree.champ"
       :mil-free="quickFree.total"
       :mil-room="quickFree.mil"
+      :mil-anyway="quickFree.milAnyway"
       :mil-home="milHomeFree"
       :militia-min="quickMilitiaMin"
       :champ-min="quickChampMin"
@@ -742,6 +743,19 @@
               >
                 <span class="slot-plus">＋</span>
                 <span class="slot-name">{{ slot.label }}</span>
+              </button>
+              <!-- 🛡️ PLEIN, MAIS ON PRÉVOIT (demandé : « envoyer les miliciens avant que les
+                 champions ne partent ») : des miliciens partent quand même ; à l'arrivée, ils
+                 s'installent si une place s'est libérée, sinon ils font demi-tour. -->
+              <button
+                v-if="!garrisonSlots.length && !controlInterim && acceptsMilitia(liveControl)"
+                type="button"
+                class="slot-tile"
+                aria-label="Envoyer des miliciens à l’avance"
+                @click="openQuick"
+              >
+                <span class="slot-plus">🛡️</span>
+                <span class="slot-name">Miliciens à l’avance</span>
               </button>
             </div>
             <!-- ⚔️⏳ UNE ATTAQUE COMBINÉE PART D'ICI (signalé : « des troupes attendent leur départ
@@ -1687,6 +1701,7 @@ import {
   emptyReinfSelection,
   reinfCanAdd,
   reinfCount,
+  reinfMilitiaOver,
   setReinfMilitia,
   toggleReinfChamp,
   toggleReinfTransfer,
@@ -1735,6 +1750,7 @@ import {
   controlFreeSeats,
   recallIsWhole,
   garrisonFreeSeats,
+  acceptsMilitia,
   interimSeats,
   heroPostBlocker,
   heroSeatsIn,
@@ -4251,6 +4267,9 @@ const quickFree = computed(() => {
     champ: Math.max(0, controlFreeSeats(quickPoi.value?.control) - (taken?.champ ?? 0)),
     total: Math.max(0, garrisonFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
     mil: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
+    // 🛡️ Les miliciens de la base partent même si le lieu est plein : demi-tour à l'arrivée
+    // s'il l'est encore (prévoir une sortie : ils arrivent avant que les champions partent).
+    milAnyway: acceptsMilitia(quickPoi.value?.control),
   };
 });
 /** 🛡️ Les miliciens de la base qui ne sont pas réservés pour un départ programmé. */
@@ -4355,9 +4374,10 @@ const quickHold = computed(() => {
       const other = pctWith(toggleReinfTransfer(sel, src.fromId, m.id, free));
       trans[m.id] = on ? cur - other : other - cur;
     }
-  const mil = reinfCanAdd(sel, 'mil', free)
-    ? pctWith({ ...sel, militia: sel.militia + 1 }) - cur
-    : 0;
+  // 🛡️ Le gain d'un milicien de plus ne se compte que s'il trouve une place aujourd'hui : un
+  // milicien en surplus ne défend que si une place se libère d'ici son arrivée.
+  const nextMil = { ...sel, militia: sel.militia + 1 };
+  const mil = reinfMilitiaOver(nextMil, free) === 0 ? pctWith(nextMil) - cur : 0;
   return { pct: base.pct, vsArmy: base.vsArmy, mil, champ, trans };
 });
 /** La tenue AVEC toute la sélection. */

@@ -59,15 +59,21 @@
       </div>
       <!-- 🛡️ Les miliciens d'abord : c'est le renfort qu'on a le plus souvent sous la main, et
            il ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
-      <div v-if="milRoom > 0 && milHome > 0" class="qr-mil">
+      <div v-if="(milRoom > 0 || milAnyway) && milHome > 0" class="qr-mil">
         <span class="qr-mil-emo"><MilitiaPortrait /></span>
         <span class="qr-mil-main">
           <span class="qr-mil-name">{{ MILITIA_NAME }}s</span>
           <span class="qr-mil-sub"
             >{{ milHome }} à la base · 🧭 {{ formatDurationMin(militiaMin)
-            }}<template v-if="hold && canMil">
+            }}<template v-if="hold && canMil && !nextOver">
               · 🎯 {{ sign(hold.mil) }} % le suivant</template
             ></span
+          >
+          <!-- 🛡️ PARTIR VERS UN LIEU PLEIN (demandé : « prévoir qu'on va envoyer les champions
+               en attaque ») : ceux en trop s'installent si une place se libère d'ici leur
+               arrivée, sinon ils font demi-tour. -->
+          <span v-if="milOver > 0" class="qr-mil-over"
+            >🔄 {{ milOver }} en trop : demi-tour si toujours plein à l’arrivée</span
           >
         </span>
         <span class="qr-step">
@@ -85,7 +91,7 @@
             type="button"
             class="qr-step-b"
             aria-label="Un milicien de plus"
-            :disabled="busy || !canMil || sel.militia >= milHome"
+            :disabled="busy || !canBaseMil || sel.militia >= milHome"
             @click="emit('militia', sel.militia + 1)"
           >
             ＋
@@ -197,7 +203,12 @@ import type { Poi } from '@/lib/expedition';
 import { MILITIA_NAME } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { formatDurationMin } from '@/lib/duration';
-import { reinfCanAdd, reinfCount, type ReinfSelection } from '@/lib/reinforceSelection';
+import {
+  reinfCanAdd,
+  reinfCount,
+  reinfMilitiaOver,
+  type ReinfSelection,
+} from '@/lib/reinforceSelection';
 
 const props = defineProps<{
   poi: Poi | null;
@@ -208,6 +219,9 @@ const props = defineProps<{
   milFree: number;
   /** 🛡️ Places ouvertes aux miliciens (0 dans un objectif ou une forteresse). */
   milRoom: number;
+  /** 🛡️ Les miliciens de la base partent même si le lieu est plein (demi-tour à l'arrivée
+   *  s'il l'est encore). Faux là où aucun milicien ne va. */
+  milAnyway: boolean;
   milHome: number;
   militiaMin: number;
   /** ⇄ Les autres points tenus et ceux qui peuvent en venir (avec leur trajet). */
@@ -252,9 +266,19 @@ const free = computed(() => ({
   champ: props.champFree,
   total: props.milFree,
   mil: props.milRoom,
+  milAnyway: props.milAnyway,
 }));
 const canChamp = computed(() => reinfCanAdd(props.sel, 'champ', free.value));
 const canMil = computed(() => reinfCanAdd(props.sel, 'mil', free.value));
+/** 🛡️ Un milicien de la base de plus : toujours possible là où des miliciens vont (dans la
+ *  limite de la base), sinon seulement s'il reste une place. */
+const canBaseMil = computed(() => props.milAnyway || canMil.value);
+/** 🛡️ Ceux de la sélection qui partent au-delà des places libres d'aujourd'hui. */
+const milOver = computed(() => reinfMilitiaOver(props.sel, free.value));
+/** Le milicien suivant partirait-il au-delà des places ? (son gain ne se promet pas.) */
+const nextOver = computed(
+  () => reinfMilitiaOver({ ...props.sel, militia: props.sel.militia + 1 }, free.value) > 0,
+);
 const count = computed(() => reinfCount(props.sel));
 const picked = (id: string) => props.sel.transfers.some((t) => t.id === id);
 const gainTitle = (on: boolean) =>
@@ -450,6 +474,11 @@ const emit = defineEmits<{
 .qr-mil-sub {
   color: var(--dim);
   font-size: 12px;
+}
+.qr-mil-over {
+  color: var(--d3);
+  font-size: 11.5px;
+  line-height: 1.3;
 }
 .qr-mil-main {
   flex: 1;

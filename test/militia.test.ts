@@ -47,7 +47,7 @@ describe('une garnison de 5 au plus, champions et miliciens compris', () => {
     for (const kind of ['objective', 'fortress', 'citadel'] as const) {
       const p = point(30, kind as 'mine');
       expect(militiaFreeSeats(p.control)).toBe(0);
-      expect(reinforceBlocker(p.control, 1, true)).toBe('full');
+      expect(reinforceBlocker(p.control, 1, true)).toBe('noMilitia');
     }
     expect(militiaFreeSeats(point(30).control)).toBe(MILITIA.perPoint);
   });
@@ -57,7 +57,7 @@ describe('une garnison de 5 au plus, champions et miliciens compris', () => {
     p.control!.reinforcing = [{ id: 'mil:2', at: 1 }];
     expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 4);
     expect(reinforceBlocker(p.control, 1, true)).toBeNull();
-    expect(reinforceBlocker(p.control, 2, true)).toBe('full');
+    expect(reinforceBlocker(p.control, 2, true)).toBeNull(); // 🛡️ v1.70 : au-delà des places, ils partent quand même (demi-tour à l'arrivée)
   });
   it('un champion n’a pas de place quand la garnison est pleine, même sous sa limite', () => {
     const p = point(30);

@@ -104,6 +104,9 @@
                 t.why ??
                 `🧭 ${formatDurationMin(t.min)} · ${Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
               }}</span>
+              <span v-if="!t.why && t.over > 0 && Number.isFinite(t.free)" class="bgs-t-over"
+                >🔄 {{ t.over }} en trop : demi-tour si toujours plein à l’arrivée</span
+              >
             </span>
           </button>
         </div>
@@ -121,6 +124,7 @@ import AdvPickTile from '@/components/AdvPickTile.vue';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Adventurer } from '@/lib/adventurers';
 import { REINFORCE_BLOCK_LABEL, baseSendBlocker, garrisonFreeSeats } from '@/lib/controlPoints';
+import { MILITIA } from '@/lib/militia';
 import type { ControlState } from '@/lib/expedition';
 import { formatDurationMin } from '@/lib/duration';
 
@@ -200,6 +204,16 @@ const rows = computed(() =>
       emo: t.emo,
       label: t.label,
       free: garrisonFreeSeats(t.control),
+      // 🛡️ Les miliciens partent même vers un lieu plein : ceux au-delà des places libres
+      // s'installent si une place se libère d'ici l'arrivée, sinon ils font demi-tour.
+      over: Math.max(
+        0,
+        mil.value -
+          Math.max(
+            0,
+            garrisonFreeSeats(t.control) - sel.value.length - (hero.value ? MILITIA.heroSeats : 0),
+          ),
+      ),
       min: props.legMin(t.id, sel.value, mil.value, hero.value),
       why: why ? REINFORCE_BLOCK_LABEL[why] : null,
     };
@@ -378,6 +392,11 @@ const rows = computed(() =>
   font-size: 13px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.bgs-t-over {
+  font-size: 11px;
+  color: var(--d3);
+  line-height: 1.3;
 }
 .bgs-t-sub {
   font-size: 11px;

@@ -439,6 +439,7 @@ import {
   reinforceBlocker,
   controlFreeSeats,
   garrisonFreeSeats,
+  acceptsMilitia,
   militiaFreeSeats,
   reinforceControl,
   releaseFromControl,
@@ -6378,7 +6379,12 @@ export const useCharacterStore = defineStore('character', () => {
     const list = plannedList.value;
     // Les places : ce qui est déjà programmé vers ce lieu les occupe aussi.
     const taken = plannedSeatsTo(list, toId);
-    const seats = reinfSeats(sel);
+    // 🛡️ Les miliciens de la BASE partent même vers un lieu plein (ils feront demi-tour à
+    // l'arrivée s'il l'est encore) : ils ne comptent pas dans les places, seulement dans
+    // « ce lieu reçoit-il des miliciens ? ».
+    if (sel.militia > 0 && !acceptsMilitia(to.control)) return 'ce lieu ne reçoit pas de miliciens';
+    const all = reinfSeats(sel);
+    const seats = { ...all, total: all.total - sel.militia };
     if (
       seats.champ > controlFreeSeats(to.control) - taken.champ ||
       seats.total > garrisonFreeSeats(to.control) - taken.total ||

@@ -43,7 +43,7 @@ describe('🎯 un objectif pris garde ses places de champion', () => {
     expect(controlFreeSeats(c)).toBe(4);
     expect(militiaFreeSeats(c)).toBe(0);
     expect(reinforceBlocker(c, 4)).toBeNull();
-    expect(reinforceBlocker(c, 1, true)).toBe('full');
+    expect(reinforceBlocker(c, 1, true)).toBe('noMilitia');
   });
 
   it('on y transfère un champion d’un autre lieu, jamais un milicien', () => {
@@ -62,7 +62,7 @@ describe('🎯 un objectif pris garde ses places de champion', () => {
     const { m, obj } = setup();
     const c = ctl(m, obj);
     expect(baseSendBlocker(c, 3, 0)).toBeNull();
-    expect(baseSendBlocker(c, 1, 1)).toBe('full');
+    expect(baseSendBlocker(c, 1, 1)).toBe('noMilitia');
   });
 
   it('le renfort groupé accepte les champions et refuse les miliciens', () => {
