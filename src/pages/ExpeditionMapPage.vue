@@ -1664,6 +1664,7 @@ import {
   islandConquest,
   islandTargetLabel,
   isIslandTargetId,
+  nestZones,
 } from '@/lib/islandConquest';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
@@ -1787,7 +1788,7 @@ import { townDots } from '@/lib/townDots';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
-import { activeIsland, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
+import { activeIsland, islandPacified, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
 import {
   CROSSING_BLOCK_LABEL,
   islandChampions,
@@ -2511,11 +2512,16 @@ const detectCircles = computed(() => {
   if (!m) return [];
   return detectionCircles(m, char.detectRadiusOf(char.row?.base, m), reveal.value);
 });
-const ambushHalos = computed(() =>
-  (char.row?.expedition_map?.ambushes ?? [])
+// 🪺 Et les zones des NIDS (île 2) : mêmes routes dangereuses, même auréole rouge — la règle
+// vit dans `nestZones`, celle qui pose `nestPeril` sur les lieux.
+const ambushHalos = computed(() => {
+  const map = char.row?.expedition_map;
+  const rift = (map?.ambushes ?? [])
     .filter((a) => a.until > coarseNow.value)
-    .map((a) => ({ id: a.id, x: a.x, y: a.y, radius: EXPE.irradMax })),
-);
+    .map((a) => ({ id: a.id, x: a.x, y: a.y, radius: EXPE.irradMax }));
+  const nests = map ? nestZones(map.pois, map.archipel?.island ?? null, islandPacified(map)) : [];
+  return [...rift, ...nests];
+});
 /** Temps restant de l'embuscade qui harcèle le lieu sélectionné (la plus longue). */
 const selectedAmbushLeft = computed(() => {
   const p = selected.value;

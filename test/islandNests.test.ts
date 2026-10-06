@@ -11,6 +11,7 @@ import {
   heldNests,
   takeObjective,
   nestSpot,
+  nestZones,
   ensureIslandConquest,
   islandConquest,
   razeIslandTarget,
@@ -259,6 +260,21 @@ describe('🪺 routes dangereuses autour des nids', () => {
   it('rien sur l’île 1', () => {
     const m = tick(islandMap(1), NOW + 3600_000);
     expect(m.pois.some((p) => p.nestPeril)).toBe(false);
+  });
+  it('les zones dessinées sur la carte couvrent EXACTEMENT les lieux marqués dangereux', () => {
+    for (const seed of [1, 5, 9]) {
+      const m = tick(tick(islandMap(2, seed), NOW + 3600_000), NOW + 3 * DAY);
+      const zones = nestZones(m.pois, 2, islandPacified(m));
+      expect(zones.length).toBeGreaterThan(0);
+      expect(zones.map((z) => z.id).sort()).toEqual(nests(m).map((n) => n.id).sort());
+      for (const p of m.pois) {
+        if (p.id.startsWith('isl_')) continue;
+        const inside = zones.some((z) => Math.hypot(p.x - z.x, p.y - z.y) <= z.radius);
+        expect(!!p.nestPeril, p.id).toBe(inside);
+      }
+    }
+    expect(nestZones(islandMap(1).pois, 1, false)).toEqual([]);
+    expect(nestZones(islandMap(2).pois, 2, true)).toEqual([]);
   });
 });
 
