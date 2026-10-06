@@ -3511,31 +3511,29 @@ export function mapTravelPoint(
 }
 
 /**
- * Ce qu'une tuile de voyage affiche : le temps TOTAL restant avant le retour en ville,
- * aller compris (demandé par l'utilisateur : « mets juste le temps total avant le
- * retour »). C'est lui qui décide de la disponibilité des champions ; l'étape en cours
- * (arrivée sur le lieu) ne vit plus que dans l'info-bulle (`untilHome`).
+ * Ce qu'une tuile de voyage affiche. EN PREMIER (v1.78.0, demandé : « en premier, le délai de
+ * la prochaine étape ») : le délai de la PROCHAINE ÉTAPE (`time`) — l'arrivée sur le lieu
+ * (→), la fin de la fouille (🔍) ou le retour en ville (↩). C'est aussi l'heure qui RANGE les
+ * tuiles (`nextStepAt`, même `midAt` puis `returnAt`) : le chiffre en tête dit pourquoi une
+ * tuile passe devant une autre. Le temps TOTAL avant le retour en ville (`total`, demandé
+ * avant : il décide de la disponibilité des champions) suit, tant qu'il diffère de l'étape.
  */
 export function tripTimeLabel(
   pos: Pick<
     ReturnType<typeof travelPosition>,
     'phase' | 'remainToObjectiveMs' | 'remainTotalMs' | 'searching'
   >,
-): { time: string; untilHome: string } {
-  if (pos.phase === 'done') return { time: 'rentré', untilHome: 'rentré en ville' };
+): { time: string; total: string | null; untilHome: string } {
+  if (pos.phase === 'done') return { time: 'rentré', total: null, untilHome: 'rentré en ville' };
   const total = formatDuration(pos.remainTotalMs);
   const home = `retour en ville dans ${total}`;
-  if (pos.phase === 'return') return { time: total, untilHome: home };
+  // Sur le retour, la prochaine étape EST le retour : pas de second chiffre.
+  if (pos.phase === 'return') return { time: `↩ ${total}`, total: null, untilHome: home };
+  const step = formatDuration(pos.remainToObjectiveMs);
   // 🔍 Sur place, en train de fouiller : on le DIT, sinon l'équipe semble arrêtée.
   if (pos.searching)
-    return {
-      time: `🔍 ${total}`,
-      untilHome: `fouille encore ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
-    };
-  return {
-    time: total,
-    untilHome: `arrivée dans ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
-  };
+    return { time: `🔍 ${step}`, total, untilHome: `fouille encore ${step} · ${home}` };
+  return { time: `→ ${step}`, total, untilHome: `arrivée dans ${step} · ${home}` };
 }
 
 /**

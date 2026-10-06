@@ -3867,6 +3867,7 @@ const trips = computed(() => {
       cat: poiTripCategory(a.poi.type),
       poi: a.poi,
       time: tripTimeLabel(h).time,
+      total: tripTimeLabel(h).total,
       pct: heroProg.value.overall * 100,
       back,
       withHero: true,
@@ -3889,6 +3890,7 @@ const trips = computed(() => {
       cat: poiTripCategory(g.poi.type),
       poi: g.poi,
       time: tripTimeLabel(g.at).time,
+      total: tripTimeLabel(g.at).total,
       pct: g.prog.overall * 100,
       back,
       withHero: g.hero,
@@ -3912,7 +3914,7 @@ const trips = computed(() => {
       poi: w.poi,
       time: w.waiting
         ? `⏳ ${formatDuration(w.departIn)}`
-        : formatDuration(Math.max(0, w.arriveIn)),
+        : `→ ${formatDuration(Math.max(0, w.arriveIn))}`,
       pct: w.prog.overall * 100,
       back: false,
       withHero: w.hero,

@@ -92,12 +92,15 @@
           <template v-else>{{ poiEmo(t.poi) }}</template>
         </span>
         <span class="tr-time">{{ t.time }}</span>
+        <span v-if="t.total" class="tr-legs" title="Retour en ville">🏠 {{ t.total }}</span>
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
         <span v-if="t.failed" class="tr-fail">{{
           t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
         }}</span>
         <template v-if="t.legs">
-          <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
+          <!-- ⏱️ La prochaine étape est EN TÊTE (`tr-time`) : l'aller n'est redit que pour un
+               départ programmé, dont la tête décompte le départ. -->
+          <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
           <span class="tr-legs">{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span>
         </template>
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
@@ -241,6 +244,9 @@ export interface MapTrip {
   legs?: { go: string | null; back: string; detail: string } | null;
   /** ⏱️ L'heure (ms) de la prochaine étape du voyage (`nextStepAt`) — l'ordre de la rangée. */
   endsAt?: number;
+  /** 🏠 Temps total avant le retour en ville, quand il diffère de la prochaine étape
+   *  (`tripTimeLabel`). */
+  total?: string | null;
   /** 🧭🛡️🗡️ Expédition, renfort ou attaque du joueur (les filtres de la rangée). */
   cat: TripCategory;
   /** ⏳ Programmé, pas encore parti (filtre « Programmés »). */

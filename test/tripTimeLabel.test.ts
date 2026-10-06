@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { travelPosition, tripTimeLabel, type Poi } from '@/lib/expedition';
+import { nextStepAt, travelPosition, tripTimeLabel, type Poi } from '@/lib/expedition';
 import { formatDuration } from '@/lib/duration';
 
 const H = 3_600_000;
@@ -8,21 +8,31 @@ const poi = { id: 'p', type: 'mine', x: 120, y: 80, level: 5 } as unknown as Poi
 const voyage = { poi, sentAt: 0, midAt: H, returnAt: 3 * H };
 
 describe('tripTimeLabel — ce que dit une tuile de voyage', () => {
-  it('à l’aller : le temps TOTAL jusqu’au retour en ville, aller + retour compris', () => {
+  it('à l’aller : EN TÊTE le délai de la prochaine étape (l’arrivée), puis le total', () => {
     const l = tripTimeLabel(travelPosition(voyage, 0.25 * H));
-    expect(l.time).toBe(formatDuration(2.75 * H));
-    // L'info-bulle garde l'arrivée sur le lieu.
+    expect(l.time).toBe(`→ ${formatDuration(0.75 * H)}`);
+    expect(l.total).toBe(formatDuration(2.75 * H));
     expect(l.untilHome).toContain(formatDuration(0.75 * H));
     expect(l.untilHome).toContain(formatDuration(2.75 * H));
   });
 
-  it('au retour : le temps jusqu’à la VILLE', () => {
+  it('le chiffre en tête est celui qui RANGE les tuiles (`nextStepAt`)', () => {
+    for (const now of [0.1 * H, 0.5 * H, 0.9 * H, 1.5 * H, 2.5 * H]) {
+      const l = tripTimeLabel(travelPosition(voyage, now));
+      expect(l.time.endsWith(formatDuration(nextStepAt(voyage, now) - now))).toBe(true);
+    }
+  });
+
+  it('au retour : la prochaine étape EST le retour, sans second chiffre', () => {
     const l = tripTimeLabel(travelPosition(voyage, 2 * H));
-    expect(l.time).toBe(formatDuration(H));
+    expect(l.time).toBe(`↩ ${formatDuration(H)}`);
+    expect(l.total).toBeNull();
     expect(l.untilHome).toContain(formatDuration(H));
   });
 
   it('rentré', () => {
-    expect(tripTimeLabel(travelPosition(voyage, 4 * H)).time).toBe('rentré');
+    const l = tripTimeLabel(travelPosition(voyage, 4 * H));
+    expect(l.time).toBe('rentré');
+    expect(l.total).toBeNull();
   });
 });
