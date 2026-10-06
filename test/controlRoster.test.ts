@@ -188,17 +188,29 @@ describe('⚫⚫ garrisonDotRows — champions en haut, miliciens en dessous', (
     const [top, bottom] = garrisonDotRows(r);
     expect(top.startsWith('cr')).toBe(true);
     expect(top).not.toMatch(/m/);
-    expect(bottom).toBe('mr');
+    expect(bottom).toBe('mn');
     expect(top.length + bottom.length).toBe(garrisonDots(r).length);
     const sorted = (s: string) => [...s].sort().join('');
-    expect(sorted(top + bottom)).toBe(sorted(garrisonDots(r)));
+    expect(sorted((top + bottom).replace(/n/g, 'r'))).toBe(sorted(garrisonDots(r)));
   });
 
-  it('sans milicien : la seconde rangée est vide', () => {
+  it('⚫ les places vides se partagent entre les deux lignes (moitié en haut)', () => {
     let m = captureControl(base(), MINE, ['a'], 0, 7);
     m = setAttack(m, MINE, 9e15);
     const r = row(controlRoster(m, [], 2 * H, L, new Set()), MINE);
-    expect(garrisonDotRows(r)[1]).toBe('');
+    const [top, bottom] = garrisonDotRows(r);
+    // 5 places, 1 champion : 4 vides, 2 en haut, 2 en bas.
+    expect(top).toBe('cff');
+    expect(bottom).toBe('ff');
+    expect(top.length + bottom.length).toBe(garrisonDots(r).length);
+  });
+
+  it('⚫ jamais plus de places vides en haut que ce qu’un champion peut prendre', () => {
+    const m = setAttack(captureControl(base(), MINE, ['a'], 0, 7), MINE, 9e15);
+    const r = { ...row(controlRoster(m, [], 2 * H, L, new Set()), MINE), seats: 1 };
+    const [top, bottom] = garrisonDotRows(r);
+    expect(top).toBe('c');
+    expect(bottom).toBe('ffff');
   });
 
   it('ennemi : tout sur la première rangée', () => {

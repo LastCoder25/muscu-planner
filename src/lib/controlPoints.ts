@@ -3900,7 +3900,8 @@ export function garrisonDots(row: ControlRosterRow): string {
  * `garrisonDots` — un point par place — seulement répartis : en haut le héros, les champions,
  * ceux en route vers le point (renfort, sortie, réservés pour une attaque combinée) et les
  * places LIBRES (elles sont partagées, un champion peut toutes les prendre) ; en dessous les
- * miliciens, présents puis en route. Une rangée vide n'est pas rendue (`''`).
+ * miliciens, présents puis en route (lettre `n` : une couleur à eux, distincte des champions
+ * en route, demandé 2026-10-06). Une rangée vide n'est pas rendue (`''`).
  */
 export function garrisonDotRows(row: ControlRosterRow): [string, string] {
   if (row.poi.control?.owner !== 'player') return [garrisonDots(row), ''];
@@ -3911,9 +3912,18 @@ export function garrisonDotRows(row: ControlRosterRow): [string, string] {
   const champComing = row.reinforcing.length - milComing + row.away.length + engaged.size;
   const hero = row.hero ? (row.hero === 'posted' ? 'h' : 'g').repeat(MILITIA.heroSeats) : '';
   const top = hero + 'c'.repeat(champsHere) + 'r'.repeat(champComing);
-  const bottom = 'm'.repeat(mil) + 'r'.repeat(milComing);
-  const free = Number.isFinite(row.seats)
-    ? 'f'.repeat(Math.max(0, row.seats - top.length - bottom.length))
-    : '';
-  return [top + free, bottom];
+  // 🚶 Les miliciens en route ont leur lettre (`n`) : une autre couleur que les champions en route.
+  const bottom = 'm'.repeat(mil) + 'n'.repeat(milComing);
+  // ⚫ LES PLACES VIDES SUR LES DEUX LIGNES (demandé, 2026-10-06 : « deux lignes de boules
+  // avec des boules noires pour les places vides ») : la garnison entière compte `garrisonCap`
+  // places (5) ; la ligne du haut montre celles qu'un champion peut encore prendre
+  // (`row.seats`), celle du bas le reste, ouvert aux miliciens — sauf là où ils n'entrent pas
+  // (objectifs, forteresse : `RAZE_KINDS`). Le total ne bouge pas : une place = un point.
+  const cap = RAZE_KINDS.has(row.kind) ? row.seats : Math.max(garrisonCap(row.kind), row.seats);
+  if (!Number.isFinite(cap)) return [top, bottom];
+  const free = Math.max(0, cap - top.length - bottom.length);
+  // Les places vides se partagent (moitié en haut, arrondi au-dessus) : les deux lignes se
+  // voient même sous un lieu vide. Jamais plus en haut que ce qu'un champion peut prendre.
+  const topFree = Math.min(Math.ceil(free / 2), Math.max(0, row.seats - top.length));
+  return [top + 'f'.repeat(topFree), bottom + 'f'.repeat(free - topFree)];
 }
