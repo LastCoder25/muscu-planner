@@ -1,22 +1,28 @@
+// 🏰 La garnison de la base en lignes de 5 sous la ville.
 import { describe, expect, it } from 'vitest';
-import { townDots, TOWN_DOTS_MAX } from '@/lib/townDots';
+import { TOWN_ROW_SIZE, TOWN_ROWS_MAX, townDots } from '@/lib/townDots';
 
-describe('townDots', () => {
+describe('townDots — lignes de 5', () => {
   it('le héros en tête, puis un point par champion présent', () => {
-    expect(townDots(true, 3)).toEqual({ dots: 'hccc', more: 0 });
-    expect(townDots(false, 2)).toEqual({ dots: 'cc', more: 0 });
+    expect(townDots(true, 3)).toEqual({ rows: ['hccc'], more: 0 });
+    expect(townDots(false, 2)).toEqual({ rows: ['cc'], more: 0 });
   });
-  it('les miliciens en réserve suivent les champions', () => {
-    expect(townDots(true, 1, 2)).toEqual({ dots: 'hcmm', more: 0 });
-    expect(townDots(false, 0, 3)).toEqual({ dots: 'mmm', more: 0 });
+  it('les miliciens en réserve ont leurs propres lignes, sous les champions', () => {
+    expect(townDots(true, 1, 2)).toEqual({ rows: ['hc', 'mm'], more: 0 });
+    expect(townDots(false, 0, 3)).toEqual({ rows: ['mmm'], more: 0 });
+    expect(townDots(true, 6, 3)).toEqual({ rows: ['hcccc', 'cc', 'mmm'], more: 0 });
   });
-  it('personne : aucun point', () => {
-    expect(townDots(false, 0)).toEqual({ dots: '', more: 0 });
+  it('jamais plus de 5 points par ligne', () => {
+    expect(townDots(true, 13, 11).rows.every((r) => r.length <= TOWN_ROW_SIZE)).toBe(true);
   });
-  it('au-delà du plafond, le reste est compté à part, le héros jamais coupé', () => {
-    const r = townDots(true, 20);
-    expect(r.dots.length).toBe(TOWN_DOTS_MAX);
-    expect(r.dots[0]).toBe('h');
-    expect(r.more).toBe(21 - TOWN_DOTS_MAX);
+  it('personne : aucune ligne', () => {
+    expect(townDots(false, 0)).toEqual({ rows: [], more: 0 });
+  });
+  it('au-delà des lignes permises, le reste est compté à part, le héros jamais coupé', () => {
+    const r = townDots(true, 30);
+    expect(r.rows.length).toBe(TOWN_ROWS_MAX);
+    expect(r.rows[0]![0]).toBe('h');
+    expect(r.more).toBe(31 - TOWN_ROWS_MAX * TOWN_ROW_SIZE);
+    expect(townDots(false, 12, 9, 3)).toEqual({ rows: ['ccccc', 'ccccc', 'cc'], more: 9 });
   });
 });

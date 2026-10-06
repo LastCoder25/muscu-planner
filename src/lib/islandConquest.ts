@@ -358,15 +358,24 @@ function nestPerilIds(
   pacified: boolean,
 ): Set<string> {
   const out = new Set<string>();
-  if (islandId === null || !NEST.islands.has(islandId) || pacified) return out;
-  const nests = pois.filter((p) => p.control?.kind === 'objective' && p.control.owner === 'enemy');
+  const zones = nestZones(pois, islandId, pacified);
   for (const p of pois)
-    if (
-      !isIslandTargetId(p.id) &&
-      nests.some((n) => Math.hypot(p.x - n.x, p.y - n.y) <= NEST.radius)
-    )
+    if (!isIslandTargetId(p.id) && zones.some((z) => Math.hypot(p.x - z.x, p.y - z.y) <= z.radius))
       out.add(p.id);
   return out;
+}
+
+/** 🪺 Les zones d'embuscade des nids debout (centre + portée) : la carte les dessine en rouge,
+ *  `nestPerilIds` en déduit les routes dangereuses — une seule règle pour les deux. */
+export function nestZones(
+  pois: readonly Poi[],
+  islandId: number | null,
+  pacified: boolean,
+): { id: string; x: number; y: number; radius: number }[] {
+  if (islandId === null || !NEST.islands.has(islandId) || pacified) return [];
+  return pois
+    .filter((p) => p.control?.kind === 'objective' && p.control.owner === 'enemy')
+    .map((n) => ({ id: n.id, x: n.x, y: n.y, radius: NEST.radius }));
 }
 
 /** 🏝️ Les lieux fixes TENUS par le joueur sur la carte (ils ouvrent les objectifs ;

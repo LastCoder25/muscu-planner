@@ -11,6 +11,7 @@ import {
   heldNests,
   takeObjective,
   nestSpot,
+  nestZones,
   ensureIslandConquest,
   islandConquest,
   razeIslandTarget,
@@ -259,6 +260,60 @@ describe('🪺 routes dangereuses autour des nids', () => {
   it('rien sur l’île 1', () => {
     const m = tick(islandMap(1), NOW + 3600_000);
     expect(m.pois.some((p) => p.nestPeril)).toBe(false);
+  });
+  it('les zones dessinées sur la carte couvrent EXACTEMENT les lieux marqués dangereux', () => {
+    for (const seed of [1, 5, 9]) {
+      const m = tick(tick(islandMap(2, seed), NOW + 3600_000), NOW + 3 * DAY);
+      const zones = nestZones(m.pois, 2, islandPacified(m));
+      expect(zones.length).toBeGreaterThan(0);
+      expect(zones.map((z) => z.id).sort()).toEqual(nests(m).map((n) => n.id).sort());
+      for (const p of m.pois) {
+        if (p.id.startsWith('isl_')) continue;
+        const inside = zones.some((z) => Math.hypot(p.x - z.x, p.y - z.y) <= z.radius);
+        expect(!!p.nestPeril, p.id).toBe(inside);
+      }
+    }
+    expect(nestZones(islandMap(1).pois, 1, false)).toEqual([]);
+    expect(nestZones(islandMap(2).pois, 2, true)).toEqual([]);
+  });
+  it('un nid PRIS (chemin du jeu) : sa zone disparaît aussitôt, et son effet au tick suivant', () => {
+    for (const seed of [1, 5, 9]) {
+      let m = tick(tick(islandMap(2, seed), NOW + 3600_000), NOW + 3 * DAY);
+      const zone = (x: ExpeditionMap) => nestZones(x.pois, 2, islandPacified(x));
+      const inside = (x: ExpeditionMap, p: Poi) =>
+        zone(x).some((z) => Math.hypot(p.x - z.x, p.y - z.y) <= z.radius);
+      // Un nid dont la zone couvre au moins un lieu que les autres nids ne couvrent pas.
+      const target = nests(m).find((n) =>
+        m.pois.some(
+          (p) =>
+            !p.id.startsWith('isl_') &&
+            Math.hypot(p.x - n.x, p.y - n.y) <= NEST.radius &&
+            nests(m).every((o) => o.id === n.id || Math.hypot(p.x - o.x, p.y - o.y) > NEST.radius),
+        ),
+      );
+      expect(target, `graine ${seed}`).toBeDefined();
+      const freed = m.pois.filter(
+        (p) =>
+          !p.id.startsWith('isl_') &&
+          Math.hypot(p.x - target!.x, p.y - target!.y) <= NEST.radius &&
+          !nests(m).some((o) => o.id !== target!.id && Math.hypot(p.x - o.x, p.y - o.y) <= NEST.radius),
+      );
+      expect(freed.every((p) => p.nestPeril)).toBe(true);
+      m = takeObjective(m, target!.id, ['a'], NOW + 4 * DAY);
+      // La zone (dessin) suit la carte : plus de disque dès la prise.
+      expect(zone(m).some((z) => z.id === target!.id)).toBe(false);
+      // L'effet (route dangereuse) tombe au tick suivant de la carte.
+      m = tick(m, NOW + 4 * DAY);
+      for (const p of freed) {
+        const now = m.pois.find((q) => q.id === p.id);
+        if (!now) continue; // lieu expiré entre-temps
+        expect(!!now.nestPeril, now.id).toBe(false);
+        expect(routePerilous(now), now.id).toBe(!!now.perilous || !!now.riftPeril);
+      }
+      // Les autres lieux gardent un effet si et seulement s'ils restent dans une zone.
+      for (const p of m.pois)
+        if (!p.id.startsWith('isl_')) expect(!!p.nestPeril, p.id).toBe(inside(m, p));
+    }
   });
 });
 
