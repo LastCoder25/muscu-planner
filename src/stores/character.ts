@@ -5071,13 +5071,14 @@ export const useCharacterStore = defineStore('character', () => {
       );
       if (!mine.length) continue;
       any = true;
-      // ⚔️🏰 Tous rendent la place qu'on leur gardait : ceux qui la reprennent (`rejoinHome`)
-      // comme ceux qui partent à la base (blessés).
+      // ⚔️🏰 Les blessés (partis à la base) rendent tout de suite la place qu'on leur gardait ;
+      // les autres la reprennent dans `rejoinHome`, qui doit encore la VOIR gardée : c'est ce
+      // qui leur permet de déloger un milicien en intérim (`interimSeats`).
       const r = rejoinHome(
         freeAway(
           map,
           p.homeId,
-          mine.map((a) => a.id),
+          mine.filter((a) => sick.has(a.id)).map((a) => a.id),
         ),
         p.homeId,
         mine.filter((a) => !sick.has(a.id)).map((a) => a.id),
@@ -5238,7 +5239,15 @@ export const useCharacterStore = defineStore('character', () => {
     }
     // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
     // combattent avec elle, les autres non).
-    const settled0 = settleReinforcements(cur.expedition_map, now, playerLevel);
+    // 🛡️ Un milicien délogé par un champion qui reprend sa place rentre à pied : le trajet de
+    // `sendMilitiaToControl`, à l'envers.
+    const milMult = travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now);
+    const settled0 = settleReinforcements(
+      cur.expedition_map,
+      now,
+      playerLevel,
+      (p) => caravanLegMin(p, [], 0, milMult) * 60_000,
+    );
     // ⚔️🗼 Les chocs en rase campagne contre les armées de REPRISE, AVANT les reprises : une
     // armée amputée arrive amputée, une armée battue n'arrive pas (la reprise est repoussée).
     let settled = settled0;

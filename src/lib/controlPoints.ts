@@ -30,7 +30,7 @@ import {
   advXpToNext,
   type Adventurer,
 } from './adventurers';
-import { catchUpMult, partyAllies, type EscortKit } from './caravan';
+import { caravanLegMin, catchUpMult, partyAllies, type EscortKit } from './caravan';
 import {
   advGearAtRankCap,
   advGearNextRank,
@@ -2803,7 +2803,38 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
  *  refuse les miliciens mais a bien ses places, et l'écran comme les transferts les lisent ici. */
 export function garrisonFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
-  return garrisonRoom(c);
+  return garrisonRoom(c) + interimSeats(c);
+}
+/**
+ * 🛡️⚔️ LES PLACES GARDÉES QU'UN MILICIEN PEUT TENIR (2026-10-06, demandé : « défendre des
+ * lieux fixes vides avec ses miliciens même si les champions en poste sont en attaque à
+ * l'extérieur »). Une place gardée à un champion en sortie (`away`) reste FERMÉE aux autres
+ * champions (`controlFreeSeats` la compte toujours), mais un milicien peut l'occuper en
+ * intérim : il défend et produit pendant la sortie. Au retour du champion, il lui rend la
+ * place et rentre à pied à la base (`settleReinforcements`). Jamais dans un objectif, la
+ * forteresse ni la citadelle (pas de milicien là-bas). 0 si le point n'est pas à nous.
+ */
+export function interimSeats(c: ControlState | undefined | null): number {
+  if (!c || c.owner !== 'player' || RAZE_KINDS.has(c.kind)) return 0;
+  const away = c.away?.length ?? 0;
+  if (!away) return 0;
+  const o = occupants(c);
+  const open = Math.max(0, garrisonCap(c.kind) - (o.champs - away) - o.militia);
+  return Math.max(0, open - garrisonRoom(c));
+}
+/**
+ * 🛡️⚔️ COMBIEN DE MILICIENS PROPOSER au départ d'une sortie (2026-10-06, demandé : « propose
+ * de compenser avec des miliciens ») : un par champion qui quitte le point, dans la limite des
+ * miliciens disponibles à la base. Leurs places deviennent gardées, donc ouvertes aux
+ * miliciens (`interimSeats`). 0 là où aucun milicien ne va (objectif, forteresse, citadelle).
+ */
+export function sortieCover(
+  c: ControlState | undefined | null,
+  leaving: number,
+  militiaHome: number,
+): number {
+  if (!c || c.owner !== 'player' || RAZE_KINDS.has(c.kind)) return 0;
+  return Math.max(0, Math.min(leaving, militiaHome));
 }
 /** 🛡️ Places libres pour des MILICIENS : ce qui reste de la garnison de 5, champions compris. */
 export function militiaFreeSeats(c: ControlState | undefined | null): number {
@@ -3244,6 +3275,10 @@ export function settleReinforcements(
   map: ExpeditionMap,
   now: number,
   playerLevel: number,
+  /** 🛡️ Le trajet à pied d'un milicien de ce point jusqu'à la base (ms), pour ceux qu'un
+   *  champion déloge. Le store passe le vrai (Avant-poste, tour de guet) ; sans lui, le trajet
+   *  d'une équipe sans rôle ni accélération. */
+  militiaLegMs: (p: Poi) => number = (p) => caravanLegMin(p, [], 0, 1) * 60_000,
 ): ExpeditionMap {
   let out = map;
   for (const p0 of map.pois) {
@@ -3256,12 +3291,40 @@ export function settleReinforcements(
     let p = p0;
     for (const r of arrived) {
       const c = bankAt(p, r.at, playerLevel);
+      const hs = heroSeatsIn(c);
+      const garrison = [...c.garrison];
+      const bumped: string[] = [];
+      // 🛡️⚔️ UN CHAMPION QUI REPREND SA PLACE GARDÉE déloge le milicien qui la tenait en
+      // intérim (`interimSeats`) : le dernier arrivé, qui rentre à pied à la base. Seulement si
+      // c'est la garnison de 5 qui est pleine — pas les places de champion du lieu (déloger un
+      // milicien ne lui en rendrait aucune).
+      if (!isMilitiaId(r.id)) {
+        const champsIn = () => garrison.filter((x) => !isMilitiaId(x)).length + hs;
+        while (champsIn() < seatsOf(c.kind) && garrison.length + hs >= garrisonCap(c.kind)) {
+          const i = garrison.map(isMilitiaId).lastIndexOf(true);
+          if (i < 0) break;
+          bumped.push(...garrison.splice(i, 1));
+        }
+      }
+      const next = capGarrison(c.kind, [...garrison, r.id], hs);
+      // Un milicien qui arrive sans place (un champion l'a reprise avant lui) rentre aussi à
+      // pied : il ne disparaît jamais.
+      if (isMilitiaId(r.id) && !next.includes(r.id)) bumped.push(r.id);
+      const leg = militiaLegMs(p);
       p = {
         ...p,
         control: {
           ...c,
-          garrison: capGarrison(c.kind, [...c.garrison, r.id], heroSeatsIn(c)),
+          garrison: next,
           reinforcing: (c.reinforcing ?? []).filter((x) => x.id !== r.id),
+          ...(bumped.length
+            ? {
+                returning: [
+                  ...(c.returning ?? []),
+                  ...bumped.map((id) => ({ id, from: r.at, at: r.at + leg })),
+                ],
+              }
+            : {}),
         },
       };
     }

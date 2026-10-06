@@ -695,12 +695,16 @@
                  dit au lieu de laisser croire la place libre. Pas sélectionnables : ils ne sont
                  pas là. -->
               <AdvPickTile
-                v-for="m in controlAway"
+                v-for="(m, i) in controlAway"
                 :key="'away' + m.adv.id"
                 class="away-tile"
                 :adv="m.adv"
                 :on="false"
-                :reason="`⚔️ en sortie · revient ${m.backIn > 0 ? 'dans ' + formatDuration(m.backIn) : 'bientôt'}`"
+                :reason="
+                  `⚔️ en sortie · revient ${m.backIn > 0 ? 'dans ' + formatDuration(m.backIn) : 'bientôt'}` +
+                  (i < controlInterim ? ' · 🛡️ un milicien peut tenir sa place' : '')
+                "
+                @toggle="i < controlInterim && openQuick()"
               />
               <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
               <button
@@ -1268,6 +1272,39 @@
             <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
               ✅ Une armée arrive, mais ils seront rentrés avant elle.
             </p>
+            <!-- 🛡️⚔️ UNE SORTIE LAISSE SON POINT (demandé : « propose de compenser avec des
+               miliciens ») : des miliciens de la base tiennent les places gardées pendant la
+               sortie et rentrent à pied quand les champions reviennent. -->
+            <button
+              v-if="sortieCoverInfo && sortieCoverInfo.n"
+              type="button"
+              class="sh-cover"
+              :class="{ on: coverOn }"
+              :aria-pressed="coverOn"
+              @click="coverOn = !coverOn"
+            >
+              <span class="sh-cover-box">{{ coverOn ? '✓' : '' }}</span>
+              <span class="sh-cover-txt">
+                <b
+                  >🛡️ Envoyer {{ sortieCoverInfo.n }} milicien{{
+                    sortieCoverInfo.n > 1 ? 's' : ''
+                  }}
+                  à {{ sortieCoverInfo.emo }} {{ sortieCoverInfo.label }}</b
+                >
+                <span
+                  >{{
+                    sortieCoverInfo.empty
+                      ? 'Sinon le lieu reste sans défenseur'
+                      : 'Pour garder sa défense'
+                  }}
+                  pendant la sortie · ils rentreront à pied au retour des champions</span
+                >
+              </span>
+            </button>
+            <p v-else-if="sortieCoverInfo && sortieCoverInfo.empty" class="sh-risk">
+              ⚠️ {{ sortieCoverInfo.emo }} {{ sortieCoverInfo.label }} restera sans défenseur
+              pendant la sortie, et aucun milicien n’est libre à la base.
+            </p>
             <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
             <!-- 💀 ON DIT POURQUOI, ET LA PARADE : un bouton qui se grise en silence se lit
@@ -1666,6 +1703,7 @@ import {
   controlFreeSeats,
   recallIsWhole,
   garrisonFreeSeats,
+  interimSeats,
   heroPostBlocker,
   heroSeatsIn,
   HERO_POST_BLOCK_LABEL,
@@ -2604,6 +2642,9 @@ const controlCount = computed(
   () => controlMembers.value.length + controlAway.value.length + controlMilitia.value.length,
 );
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
+/** 🛡️⚔️ Les places gardées (sortie) qu'un milicien peut tenir en intérim : elles sont DITES
+ *  sur la tuile du sortant, pas comptées une seconde fois dans les cases vides. */
+const controlInterim = computed(() => interimSeats(liveControl.value));
 /** ➕ Les cases vides de la garnison de 5 : les premières prennent un champion, les
  *  suivantes (au-delà des places de champion du lieu) seulement un milicien. */
 /** 🏰 La forteresse prise : garnison sans limite. */
@@ -2613,10 +2654,13 @@ const unlimitedGarrison = computed(
 const garrisonSlots = computed(() =>
   unlimitedGarrison.value
     ? [{ i: 0, label: 'Place libre · sans limite' }]
-    : Array.from({ length: garrisonFreeSeats(liveControl.value) }, (_, i) => ({
-        i,
-        label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
-      })),
+    : Array.from(
+        { length: garrisonFreeSeats(liveControl.value) - controlInterim.value },
+        (_, i) => ({
+          i,
+          label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
+        }),
+      ),
 );
 /** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
  *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
@@ -5380,6 +5424,8 @@ const {
   partyWonLeg,
   partyMin,
   partyRisk,
+  coverOn,
+  sortieCoverInfo,
   partySendBlock,
   canSendPartyNow,
   partyMax,
@@ -7103,6 +7149,53 @@ onUnmounted(() => {
 }
 /* Et quand le voyage se termine AVANT l’assaut, on le DIT : le silence, à la place
    d’une alerte attendue, ressemble à un oubli. Vert « gain » de la charte. */
+/* 🛡️⚔️ La relève de miliciens proposée au départ d'une sortie : une tuile cochable. */
+.sh-cover {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.sh-cover.on {
+  border-color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 10%, var(--surface));
+}
+.sh-cover-box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid var(--dim);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--bg);
+}
+.sh-cover.on .sh-cover-box {
+  border-color: var(--d1);
+  background: var(--d1);
+}
+.sh-cover-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.sh-cover-txt span {
+  color: var(--dim);
+  font-size: 11.5px;
+}
 .sh-ok {
   font-size: 12px;
   color: var(--d1);
