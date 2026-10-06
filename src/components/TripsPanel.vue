@@ -11,19 +11,20 @@
   <!-- ⏱️ VOYAGES ET ATTAQUES MÊLÉS, DANS L'ORDRE D'ARRIVÉE (demandé) : ce qui tombe le plus
        tôt passe en tête, qu'il s'agisse d'un retour ou d'une frappe ennemie (`tiles`). -->
   <!-- 🧭⚔️ FILTRE (demandé) : voyages et armées ennemies partagent la rangée ; on choisit ce
-       qu'on regarde. Une catégorie vide est grisée, et un filtre qui se vide retombe sur
-       « Tout » (`effectiveTripFilter`). -->
+       qu'on regarde. Les catégories se COMBINENT (v1.76.0) : chacune s'ajoute ou se retire
+       d'un toucher, « Tout » remet tout (ou retire tout s'il est déjà allumé) —
+       `TripSelection`, `shownTripCats`. -->
   <div v-if="tiles.length" ref="topEl" class="tr-filter" role="group" aria-label="Filtrer">
     <button
       v-for="o in filterOpts"
       :key="o.id"
       type="button"
       class="trf"
-      :class="[`trf-${o.id}`, { on: shown === o.id }]"
-      :aria-pressed="shown === o.id"
+      :class="[`trf-${o.id}`, { on: o.on }]"
+      :aria-pressed="o.on"
       :title="o.label"
       :aria-label="o.id === 'all' ? o.label : `${o.label} (${o.n})`"
-      @click="filter = o.id"
+      @click="pick(o.id)"
     >
       <template v-if="o.id === 'all'">{{ o.label }}</template>
       <template v-else
@@ -31,6 +32,9 @@
       >
     </button>
   </div>
+  <p v-if="tiles.length && !shownTiles.length" class="tr-none">
+    Aucune catégorie choisie — touche « Tout » ou une catégorie.
+  </p>
   <div v-if="tiles.length" ref="tilesEl" class="trips">
     <template v-for="{ key, trip: t, attack: r } in shownTiles" :key="key">
       <button
@@ -254,7 +258,15 @@ export interface MapTrip {
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { effectiveTripFilter, type TripFilter } from '@/lib/tripFilter';
+import {
+  ALL_TRIPS,
+  shownTripCats,
+  toggleAllTrips,
+  toggleTripCat,
+  type TripCat,
+  type TripFilter,
+  type TripSelection,
+} from '@/lib/tripFilter';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -313,39 +325,53 @@ const tiles = computed(() => {
   ];
   return list.sort((x, y) => x.at - y.at);
 });
-/** 🧭⚔️ Le filtre (cf. `effectiveTripFilter`). Un voyage programmé ne compte QUE dans
+/** 🧭⚔️ Le filtre (cf. `TripSelection`). Un voyage programmé ne compte QUE dans
  *  « Programmés » ; en route, il compte dans sa catégorie (`MapTrip.cat`). */
-const filter = ref<TripFilter>('all');
-const catOf = (t: MapTrip): Exclude<TripFilter, 'all' | 'attacks'> =>
+const selection = ref<TripSelection>(ALL_TRIPS);
+const catOf = (t: MapTrip): Exclude<TripCat, 'attacks'> =>
   t.pending ? 'planned' : (t.cat ?? 'trips');
 const counts = computed(() => {
   const n = { trips: 0, reinf: 0, raids: 0, planned: 0, attacks: props.attacks?.length ?? 0 };
   for (const t of props.trips) n[catOf(t)]++;
   return n;
 });
-const shown = computed(() => effectiveTripFilter(filter.value, counts.value));
+const CAT_ORDER: readonly TripCat[] = ['trips', 'raids', 'reinf', 'planned', 'attacks'];
+const present = computed(() => CAT_ORDER.filter((c) => counts.value[c] > 0));
+const shown = computed(() => shownTripCats(selection.value, present.value));
+function pick(id: TripFilter) {
+  selection.value =
+    id === 'all'
+      ? toggleAllTrips(selection.value, present.value)
+      : toggleTripCat(selection.value, id);
+}
 /** Les catégories VIDES ne sont pas proposées (six pastilles dont trois grisées encombraient
  *  la rangée). Une seule ligne (demandé) : l'icône seule (sauf « Tout »), le nom en
- *  infobulle et en aria-label. */
-const filterOpts = computed<{ id: TripFilter; icon: string; label: string; n: number }[]>(() =>
-  (
-    [
-      { id: 'all', icon: '', label: 'Tout', n: tiles.value.length },
-      { id: 'trips', icon: '🧭', label: 'Expéditions', n: counts.value.trips },
-      { id: 'raids', icon: '🗡️', label: 'Mes attaques', n: counts.value.raids },
-      { id: 'reinf', icon: '🛡️', label: 'Renforts', n: counts.value.reinf },
-      { id: 'planned', icon: '⏳', label: 'Programmés', n: counts.value.planned },
-      { id: 'attacks', icon: '⚔️', label: 'Ennemis', n: counts.value.attacks },
-    ] as const
-  ).filter((o) => o.id === 'all' || o.n > 0),
-);
+ *  infobulle et en aria-label. Une pastille est allumée quand sa catégorie est AFFICHÉE
+ *  (y compris par le repli de `shownTripCats`). */
+const filterOpts = computed<
+  { id: TripFilter; icon: string; label: string; n: number; on: boolean }[]
+>(() => {
+  const opts = [
+    { id: 'all', icon: '', label: 'Tout', n: tiles.value.length },
+    { id: 'trips', icon: '🧭', label: 'Expéditions', n: counts.value.trips },
+    { id: 'raids', icon: '🗡️', label: 'Mes attaques', n: counts.value.raids },
+    { id: 'reinf', icon: '🛡️', label: 'Renforts', n: counts.value.reinf },
+    { id: 'planned', icon: '⏳', label: 'Programmés', n: counts.value.planned },
+    { id: 'attacks', icon: '⚔️', label: 'Ennemis', n: counts.value.attacks },
+  ] as const;
+  return opts
+    .filter((o) => o.id === 'all' || o.n > 0)
+    .map((o) => ({
+      ...o,
+      on:
+        o.id === 'all'
+          ? present.value.length > 0 && present.value.every((c) => shown.value.has(c))
+          : shown.value.has(o.id),
+    }));
+});
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
-    shown.value === 'all'
-      ? true
-      : shown.value === 'attacks'
-        ? !!x.attack
-        : !!x.trip && catOf(x.trip) === shown.value,
+    x.attack ? shown.value.has('attacks') : !!x.trip && shown.value.has(catOf(x.trip)),
   ),
 );
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
@@ -428,8 +454,8 @@ function facesOf(t: MapTrip) {
  *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est
  *  compté à part plutôt que de faire tomber l'écran. */
 const crew = computed(() => {
-  const t = shown.value === 'attacks' ? undefined : props.trips.find((x) => x.key === props.focus);
-  if (!t) return null;
+  const t = props.trips.find((x) => x.key === props.focus);
+  if (!t || !shown.value.has(catOf(t))) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
   // 🛡️ Les miliciens sont anonymes, hors du vivier : comptés à part (sans ça ils passaient
@@ -459,6 +485,11 @@ const crew = computed(() => {
 /* TROIS tuiles par ligne (demandé par l'utilisateur). Une ligne incomplète s'ALIGNE À
    GAUCHE (v1.8.2, demandé : « aligne les tuiles à gauche et pas au centre ») — elle était
    centrée depuis la v0.756. Même règle pour les filtres au-dessus. */
+.tr-none {
+  margin: 0 2px 8px;
+  color: var(--dim);
+  font-size: 12px;
+}
 .tr-filter {
   display: flex;
   justify-content: flex-start;
