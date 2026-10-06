@@ -48,6 +48,7 @@
             focus: focus === t.key,
             pending: t.pending,
             failed: !!t.failed,
+            'has-total': !!t.total,
             sea: !!t.sea,
             combo: !!t.combo,
           },
@@ -57,14 +58,22 @@
         :aria-pressed="focus === t.key"
         @click="emit('update:focus', focus === t.key ? null : t.key)"
       >
-        <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, miroir de l'objectif :
-           la base 🏰, ou le point fixe d'où elle est partie. -->
-        <span v-if="t.sea" class="tr-from" :title="`Île ${t.sea.from}`"
-          >🏝️<sub>{{ t.sea.from }}</sub></span
-        >
-        <span v-else class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
-          t.from ? poiEmo(t.from) : '🏰'
-        }}</span>
+        <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, et OÙ ELLE VA en
+           haut-droit. Sur le retour, les deux s'inversent (`tripEnds`). -->
+        <span :class="'tr-from'" :title="endTitle(tripEnds(t).left)">
+          <template v-if="tripEnds(t).left.kind === 'isle'"
+            >🏝️<sub>{{ (tripEnds(t).left as { n: number }).n }}</sub></template
+          >
+          <template v-else-if="tripEnds(t).left.kind === 'base'">🏰</template>
+          <span v-else-if="isRiftPoi(endPoi(tripEnds(t).left))" class="tr-rift">
+            <RiftPortal
+              :color="poiRank(endPoi(tripEnds(t).left)).color"
+              :seed="seedOf(endPoi(tripEnds(t).left).id)"
+              still
+            />
+          </span>
+          <template v-else>{{ poiEmo(endPoi(tripEnds(t).left)) }}</template>
+        </span>
         <span class="tr-who">{{ t.who }}</span>
         <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
            expéditions) : leurs portraits sous l'icône, sur une ligne centrée. Champions et
@@ -78,18 +87,19 @@
             >+{{ t.members.length - facesMax(t) }}</span
           >
         </span>
-        <span
-          class="tr-poi"
-          :title="t.sea ? `Île ${t.sea.to}` : t.toBase ? 'La base' : poiLabel(t.poi)"
-        >
-          <template v-if="t.sea"
-            >🏝️<sub>{{ t.sea.to }}</sub></template
+        <span :class="'tr-poi'" :title="endTitle(tripEnds(t).right)">
+          <template v-if="tripEnds(t).right.kind === 'isle'"
+            >🏝️<sub>{{ (tripEnds(t).right as { n: number }).n }}</sub></template
           >
-          <template v-else-if="t.toBase">🏰</template>
-          <span v-else-if="isRiftPoi(t.poi)" class="tr-rift">
-            <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
+          <template v-else-if="tripEnds(t).right.kind === 'base'">🏰</template>
+          <span v-else-if="isRiftPoi(endPoi(tripEnds(t).right))" class="tr-rift">
+            <RiftPortal
+              :color="poiRank(endPoi(tripEnds(t).right)).color"
+              :seed="seedOf(endPoi(tripEnds(t).right).id)"
+              still
+            />
           </span>
-          <template v-else>{{ poiEmo(t.poi) }}</template>
+          <template v-else>{{ poiEmo(endPoi(tripEnds(t).right)) }}</template>
         </span>
         <span v-if="t.time" class="tr-time">{{ t.time }}</span>
         <span
@@ -295,6 +305,7 @@ import AventureAvatar from '@/components/AventureAvatar.vue';
 import { useCharacterStore } from '@/stores/character';
 import { isRiftPoi, poiEmo, poiLabel } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
+import { tripEnds, type TripEnd } from '@/lib/tripEnds';
 import { seedOf } from '@/lib/combat';
 import type { CharacterProfile } from '@/lib/character';
 import type { Adventurer } from '@/lib/adventurers';
@@ -308,6 +319,14 @@ import { revealBlock } from '@/lib/reveal';
 import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { BOOST_BLOCK_LABEL, type BoostBlock, type BoostChoice } from '@/lib/speedBoost';
 import type { BoostId } from '@/lib/supplies';
+
+/** Le lieu d'un encart (appelé seulement quand il en porte un). */
+function endPoi(e: TripEnd): Poi {
+  return (e as { poi: Poi }).poi;
+}
+function endTitle(e: TripEnd): string {
+  return e.kind === 'isle' ? `Île ${e.n}` : e.kind === 'base' ? 'La base' : poiLabel(e.poi);
+}
 
 const props = defineProps<{
   trips: MapTrip[];
@@ -833,12 +852,22 @@ const crew = computed(() => {
    toute la largeur : collé aux bords (marges négatives = le padding de la tuile), seul son côté
    haut est tracé, dans la couleur de la tuile — comme les encarts de départ et d'objectif.
    `order` le pousse en dernier quel que soit l'ordre du gabarit. */
+/* ⚠️ POSÉ en bas (absolu), à hauteur FIXE : dans le flux il suivait le contenu de la tuile,
+   donc il ne tombait pas au même endroit selon qu'elle affiche un temps en tête, un échec ou
+   rien (signalé). La tuile lui réserve sa place (`.has-total`). */
 .tr-total {
-  order: 99;
-  flex: 0 0 calc(100% + 14px);
-  margin: 4px -7px -9px;
-  padding: 2px 4px 5px;
-  text-align: center;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px 3px; /* 3 px : la barre d'avancement passe dessous */
+  box-sizing: border-box;
+  pointer-events: none;
   white-space: nowrap;
   font-size: 11px;
   font-weight: 700;
@@ -847,6 +876,9 @@ const crew = computed(() => {
   border-top: 1px solid;
   border-color: inherit;
   background: color-mix(in srgb, var(--surface-2, #2a241c) 70%, var(--surface));
+}
+.trip.has-total {
+  padding-bottom: 27px;
 }
 .tc-legs {
   margin: 2px 0 6px;
