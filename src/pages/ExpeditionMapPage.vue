@@ -541,6 +541,30 @@
           <span class="ctl-last-t">{{ lastAttack.title }}</span>
           <span class="ctl-dim">· {{ lastAttackWhen }} · voir le rapport ›</span>
         </button>
+        <!-- 🛡️⚔️ UN LIEU ENNEMI : des miliciens peuvent partir À L'AVANCE (demandé), même si une
+             attaque y marche déjà — c'est tout l'intérêt. Pris à leur arrivée, ils occupent les
+             places libres ; sinon ils font demi-tour vers la base (`settleReinforcements`). -->
+        <div v-if="enemyMilitia" class="ctl-panel">
+          <p v-if="enemyMilitia.enRoute" class="ctl-line">
+            🛡️ <b>{{ enemyMilitia.enRoute }}</b> milicien{{
+              enemyMilitia.enRoute > 1 ? 's' : ''
+            }}
+            en route · arrivée dans {{ formatDuration(enemyMilitia.inMs) }}
+            <span class="ctl-dim">· demi-tour si le lieu est encore ennemi</span>
+          </p>
+          <button
+            type="button"
+            class="slot-tile enemy-mil"
+            aria-label="Envoyer des miliciens à l’avance"
+            :disabled="!milHomeFree"
+            @click="openQuick"
+          >
+            <span class="slot-plus">🛡️</span>
+            <span class="slot-name">{{
+              milHomeFree ? 'Miliciens à l’avance' : 'Aucun milicien à la base'
+            }}</span>
+          </button>
+        </div>
         <!-- ⚔️ Déjà attaqué : plus rien à envoyer, la fiche s'arrête à ce qu'il rapporte. -->
         <template v-if="!engagedTrip">
           <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
@@ -1790,6 +1814,7 @@ import {
   recallIsWhole,
   garrisonFreeSeats,
   acceptsMilitia,
+  militiaMayHead,
   interimSeats,
   heroPostBlocker,
   heroSeatsIn,
@@ -2612,6 +2637,16 @@ const selectedWarband = computed(() => {
 const liveControl = computed(() => {
   const id = selected.value?.id;
   return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
+});
+/** 🛡️⚔️ Un lieu ENNEMI où des miliciens peuvent marcher à l'avance, et ceux déjà en route. */
+const enemyMilitia = computed(() => {
+  const c = liveControl.value;
+  if (!c || c.owner === 'player' || !militiaMayHead(c)) return null;
+  const coming = (c.reinforcing ?? []).filter((r) => isMilitiaId(r.id) && r.at > now.value);
+  return {
+    enRoute: coming.length,
+    inMs: coming.length ? Math.min(...coming.map((r) => r.at)) - now.value : 0,
+  };
 });
 /** 🏅 Le cran du point sélectionné (ancienneté) — ou, pour la citadelle, son palier et sa
  *  trêve : titre et détail, à la minute. */
@@ -4330,7 +4365,7 @@ const quickFree = computed(() => {
     mil: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
     // 🛡️ Les miliciens de la base partent même si le lieu est plein : demi-tour à l'arrivée
     // s'il l'est encore (prévoir une sortie : ils arrivent avant que les champions partent).
-    milAnyway: acceptsMilitia(quickPoi.value?.control),
+    milAnyway: militiaMayHead(quickPoi.value?.control),
   };
 });
 /** 🛡️ Les miliciens de la base qui ne sont pas réservés pour un départ programmé. */
@@ -6394,6 +6429,15 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 /* 🛡️ Un milicien dans la garnison : une tuile anonyme, sélectionnable pour le ramener. */
+/* 🛡️⚔️ Miliciens à l’avance vers un lieu ennemi : une tuile pleine largeur. */
+.slot-tile.enemy-mil {
+  width: 100%;
+  margin-top: 6px;
+}
+.slot-tile.enemy-mil:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .slot-tile {
   display: flex;
   flex-direction: column;

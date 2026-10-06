@@ -2819,6 +2819,14 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
 export function acceptsMilitia(c: ControlState | undefined | null): boolean {
   return !!c && c.owner === 'player' && !RAZE_KINDS.has(c.kind);
 }
+/** 🛡️⚔️ Des miliciens peuvent-ils MARCHER vers ce lieu ? Comme `acceptsMilitia`, mais aussi
+ *  vers un lieu ENNEMI (2026-10-06, demandé : « pré-envoyer une garnison si une attaque
+ *  arrivera entre-temps »). À l'arrivée (`settleReinforcements`) : pris entre-temps, ils
+ *  occupent les places libres ; toujours ennemi (ou pris APRÈS leur arrivée), demi-tour vers
+ *  la base. Jamais vers un objectif, la forteresse ni la citadelle. */
+export function militiaMayHead(c: ControlState | undefined | null): boolean {
+  return !!c && !RAZE_KINDS.has(c.kind);
+}
 /** 🏰 Places libres dans la garnison, TOUT CONFONDU (champions et miliciens ; 0 si le point
  *  n'est pas à nous). ⚠️ Ce n'est PAS  : un objectif ou une forteresse
  *  refuse les miliciens mais a bien ses places, et l'écran comme les transferts les lisent ici. */
@@ -2876,11 +2884,15 @@ export function reinforceBlocker(
   /** Des miliciens (leurs places à eux), sinon des champions. */
   militia = false,
 ): ReinforceBlock | null {
+  // 🛡️ Des miliciens partent même vers un lieu plein ou ENNEMI : ils font demi-tour à
+  // l'arrivée si le lieu n'a pas de place pour eux (`militiaMayHead`). Les champions, eux,
+  // ont besoin d'un lieu tenu et d'une place.
+  if (militia && c) {
+    if (count <= 0) return 'empty';
+    return militiaMayHead(c) ? null : 'noMilitia';
+  }
   if (!c || c.owner !== 'player') return 'notHeld';
   if (count <= 0) return 'empty';
-  // 🛡️ Des miliciens partent même vers un lieu plein : ils font demi-tour à l'arrivée s'il
-  // l'est encore (`acceptsMilitia`). Les champions, eux, ont besoin d'une place.
-  if (militia) return acceptsMilitia(c) ? null : 'noMilitia';
   if (count > controlFreeSeats(c)) return 'full';
   return null;
 }
@@ -2977,7 +2989,8 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
   const out = new Map<string, ReinforcementTrip>();
   for (const p of map?.pois ?? []) {
     const c = p.control;
-    if (c?.owner !== 'player') continue;
+    // 🛡️⚔️ Aussi vers un lieu ENNEMI : des miliciens envoyés à l'avance (`militiaMayHead`).
+    if (!c) continue;
     for (const r of c.reinforcing ?? []) {
       if (r.from === undefined || now >= r.at) continue;
       const key = `${p.id}@${r.from}>${r.at}${r.via ? '<' + r.via : ''}`;
@@ -3310,14 +3323,41 @@ export function settleReinforcements(
   let out = map;
   for (const p0 of map.pois) {
     const c0 = p0.control;
-    if (c0?.owner !== 'player' || (!c0.reinforcing?.length && !c0.heroComing)) continue;
+    if (!c0 || (!c0.reinforcing?.length && !c0.heroComing)) continue;
+    // 🛡️⚔️ UN LIEU TOUJOURS ENNEMI : les miliciens arrivés font demi-tour vers la base.
+    // ⚠️ Pas tant qu'un assaut y marche : son issue (tirée, pas encore réglée) décide s'ils
+    // trouvent le lieu à nous. Le retour part de LEUR arrivée, donc attendre ne décale rien.
+    if (c0.owner !== 'player') {
+      if (c0.assault) continue;
+      const back = (c0.reinforcing ?? []).filter((r) => r.at <= now);
+      if (!back.length) continue;
+      const leg = militiaLegMs(p0);
+      const gone = new Set(back.map((r) => r.id));
+      const rest = (c0.reinforcing ?? []).filter((r) => !gone.has(r.id));
+      const c: ControlState = {
+        ...c0,
+        returning: [
+          ...(c0.returning ?? []),
+          ...back.map((r) => ({ id: r.id, from: r.at, at: r.at + leg })),
+        ],
+      };
+      if (rest.length) c.reinforcing = rest;
+      else delete c.reinforcing;
+      out = withControl(out, p0.id, (p) => ({ ...p, control: c }));
+      continue;
+    }
     const limit = Math.min(now, c0.attackAt ?? now);
     const arrived = (c0.reinforcing ?? []).filter((r) => r.at <= limit).sort((a, b) => a.at - b.at);
     const heroIn = c0.heroComing && c0.heroComing.at <= limit ? c0.heroComing : null;
     if (!arrived.length && !heroIn) continue;
     let p = p0;
     for (const r of arrived) {
-      const c = bankAt(p, r.at, playerLevel);
+      // 🛡️⚔️ Arrivé AVANT la prise (le tick passe après les deux) : le lieu était encore
+      // ennemi, il fait demi-tour comme s'il l'avait trouvé tel quel — et la réserve n'est pas
+      // arrêtée à un instant d'avant la prise.
+      const since = p.control!.since;
+      const early = isMilitiaId(r.id) && since !== undefined && r.at < since;
+      const c = early ? p.control! : bankAt(p, r.at, playerLevel);
       const hs = heroSeatsIn(c);
       const garrison = [...c.garrison];
       const bumped: string[] = [];
@@ -3333,7 +3373,7 @@ export function settleReinforcements(
           bumped.push(...garrison.splice(i, 1));
         }
       }
-      const next = capGarrison(c.kind, [...garrison, r.id], hs);
+      const next = early ? garrison : capGarrison(c.kind, [...garrison, r.id], hs);
       // Un milicien qui arrive sans place (un champion l'a reprise avant lui) rentre aussi à
       // pied : il ne disparaît jamais.
       if (isMilitiaId(r.id) && !next.includes(r.id)) bumped.push(r.id);

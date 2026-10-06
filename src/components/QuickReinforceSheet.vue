@@ -16,7 +16,14 @@
         >
         <button type="button" class="qr-x" aria-label="Fermer" @click="emit('close')">✕</button>
       </div>
-      <p class="qr-sub">
+      <!-- 🛡️⚔️ UN LIEU ENNEMI (demandé : « pré-envoyer une garnison de miliciens ») : seuls des
+           miliciens y marchent. Pris d'ici leur arrivée, ils occupent les places libres ;
+           toujours ennemi, ils font demi-tour vers la base. -->
+      <p v-if="poi.control.owner !== 'player'" class="qr-sub">
+        Lieu <b>ennemi</b> · envoie des miliciens à l’avance : si ton attaque l’a pris à leur
+        arrivée, ils prennent les places libres ; sinon ils font demi-tour vers la base.
+      </p>
+      <p v-else class="qr-sub">
         {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion · {{ milFree }} au total ·
         coche tes renforts, puis envoie-les ou programme leur départ
       </p>
@@ -109,7 +116,7 @@
         </div>
         <p v-else class="qr-none">Aucun champion disponible pour l’instant.</p>
       </template>
-      <p v-else class="qr-none">
+      <p v-else-if="poi.control.owner === 'player'" class="qr-none">
         Plus de place de champion ici : seuls des miliciens peuvent encore la compléter.
       </p>
       <!-- ⇄ DEPUIS UN AUTRE LIEU (demandé : « faire venir un champion ou milicien d'un autre
