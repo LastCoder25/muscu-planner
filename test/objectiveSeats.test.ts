@@ -55,7 +55,7 @@ describe('🎯 un objectif pris garde ses places de champion', () => {
         p.id === mine ? { ...p, control: { ...p.control!, garrison: ['b', 'mil:1'] } } : p,
       ),
     };
-    expect(transferBlocker(withMil, mine, obj, ['mil:1'])).toBe('full');
+    expect(transferBlocker(withMil, mine, obj, ['mil:1'])).toBe('noMilitia');
   });
 
   it('depuis la base : les champions partent, les miliciens sont refusés', () => {

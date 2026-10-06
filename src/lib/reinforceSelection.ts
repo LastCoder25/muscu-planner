@@ -29,7 +29,8 @@ export interface ReinfFree {
   /** 🛡️ Les miliciens de la BASE partent même si le lieu est plein (2026-10-06, demandé) : ils
    *  ne prennent la place de personne dans la sélection, bornés seulement par ceux présents à
    *  la base. À l'arrivée, ils s'installent s'il y a de la place, sinon ils font demi-tour.
-   *  Les miliciens venus d'un AUTRE lieu (transferts) restent bornés par les places. */
+   *  Les miliciens venus d'un AUTRE lieu (transferts) aussi (2026-10-06, demandé : « depuis la
+   *  garnison du lieu aussi ») : seuls les champions restent bornés par les places. */
   milAnyway?: boolean;
 }
 
@@ -50,9 +51,11 @@ export function reinfSeats(sel: ReinfSelection): ReinfFree {
 
 /** Peut-on ajouter un champion (`'champ'`) ou un milicien (`'mil'`) de plus ? */
 export function reinfCanAdd(sel: ReinfSelection, kind: 'champ' | 'mil', free: ReinfFree): boolean {
+  // 🛡️ `milAnyway` : un milicien (base ou transfert) part toujours, il ne prend la place de
+  // personne dans la sélection — demi-tour à l'arrivée s'il n'y a pas de place.
+  if (kind === 'mil' && free.milAnyway) return true;
   const all = reinfSeats(sel);
-  // 🛡️ `milAnyway` : les miliciens de la base ne prennent aucune place dans la sélection.
-  const used = free.milAnyway ? { ...all, total: all.total - sel.militia } : all;
+  const used = free.milAnyway ? { ...all, total: all.champ } : all;
   if (used.total >= free.total) return false;
   if (kind === 'mil' && free.mil !== undefined && used.total - used.champ >= free.mil) return false;
   return kind === 'mil' || used.champ < free.champ;
@@ -60,22 +63,23 @@ export function reinfCanAdd(sel: ReinfSelection, kind: 'champ' | 'mil', free: Re
 
 export const reinfCount = (sel: ReinfSelection) => reinfSeats(sel).total;
 
-/** Les places que les miliciens de la BASE peuvent prendre aujourd'hui, une fois servis les
- *  champions et les transferts de la sélection. */
+/** Les miliciens de la sélection, base et transferts compris. */
+const militiaOf = (sel: ReinfSelection) =>
+  sel.militia + sel.transfers.filter((t) => isMil(t.id)).length;
+
+/** Les places que les miliciens de la sélection (base et transferts) peuvent prendre
+ *  aujourd'hui, une fois servis les champions. */
 function militiaRoom(sel: ReinfSelection, free: ReinfFree): number {
-  const used = reinfSeats(sel);
-  const others = used.total - sel.militia;
-  return Math.min(
-    free.total - others,
-    free.mil === undefined ? Infinity : free.mil - (others - used.champ),
-  );
+  const champs = reinfSeats(sel).champ;
+  return Math.min(free.total - champs, free.mil === undefined ? Infinity : free.mil);
 }
 
-/** 🛡️ Combien de miliciens de la base partent AU-DELÀ des places libres d'aujourd'hui : ils ne
+/** 🛡️ Combien de miliciens (base et transferts) partent AU-DELÀ des places libres d’aujourd’hui :
+ *  ils ne
  *  s'installeront que si des places se libèrent d'ici leur arrivée (une sortie qui part),
  *  sinon ils font demi-tour. */
 export function reinfMilitiaOver(sel: ReinfSelection, free: ReinfFree): number {
-  return Math.max(0, sel.militia - Math.max(0, militiaRoom(sel, free)));
+  return Math.max(0, militiaOf(sel) - Math.max(0, militiaRoom(sel, free)));
 }
 
 /** Coche ou décoche un champion de la base — jamais au-delà des places. */
@@ -92,7 +96,7 @@ export function setReinfMilitia(
   home: number,
   free: ReinfFree,
 ): ReinfSelection {
-  const room = free.milAnyway ? Infinity : militiaRoom(sel, free);
+  const room = free.milAnyway ? Infinity : militiaRoom(sel, free) - (militiaOf(sel) - sel.militia);
   return { ...sel, militia: Math.max(0, Math.min(Math.floor(n), home, room)) };
 }
 

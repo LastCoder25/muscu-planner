@@ -441,7 +441,6 @@ import {
   controlFreeSeats,
   garrisonFreeSeats,
   acceptsMilitia,
-  militiaFreeSeats,
   reinforceControl,
   releaseFromControl,
   sortieLeaves,
@@ -6383,16 +6382,15 @@ export const useCharacterStore = defineStore('character', () => {
     const list = plannedList.value;
     // Les places : ce qui est déjà programmé vers ce lieu les occupe aussi.
     const taken = plannedSeatsTo(list, toId);
-    // 🛡️ Les miliciens de la BASE partent même vers un lieu plein (ils feront demi-tour à
-    // l'arrivée s'il l'est encore) : ils ne comptent pas dans les places, seulement dans
-    // « ce lieu reçoit-il des miliciens ? ».
-    if (sel.militia > 0 && !acceptsMilitia(to.control)) return 'ce lieu ne reçoit pas de miliciens';
-    const all = reinfSeats(sel);
-    const seats = { ...all, total: all.total - sel.militia };
+    // 🛡️ Les miliciens (de la base comme d'un autre lieu) partent même vers un lieu plein (ils
+    // feront demi-tour à l'arrivée s'il l'est encore) : ils ne comptent pas dans les places,
+    // seulement dans « ce lieu reçoit-il des miliciens ? ».
+    const seats = reinfSeats(sel);
+    if (seats.total > seats.champ && !acceptsMilitia(to.control))
+      return 'ce lieu ne reçoit pas de miliciens';
     if (
       seats.champ > controlFreeSeats(to.control) - taken.champ ||
-      seats.total > garrisonFreeSeats(to.control) - taken.total ||
-      seats.total - seats.champ > Math.max(0, militiaFreeSeats(to.control) - taken.total)
+      seats.champ > garrisonFreeSeats(to.control) - taken.total
     )
       return 'plus assez de places sur ce lieu';
     const champs = sel.champs.map((id) => advList.value.find((a) => a.id === id));

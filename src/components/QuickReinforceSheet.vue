@@ -69,12 +69,6 @@
               · 🎯 {{ sign(hold.mil) }} % le suivant</template
             ></span
           >
-          <!-- 🛡️ PARTIR VERS UN LIEU PLEIN (demandé : « prévoir qu'on va envoyer les champions
-               en attaque ») : ceux en trop s'installent si une place se libère d'ici leur
-               arrivée, sinon ils font demi-tour. -->
-          <span v-if="milOver > 0" class="qr-mil-over"
-            >🔄 {{ milOver }} en trop : demi-tour si toujours plein à l’arrivée</span
-          >
         </span>
         <span class="qr-step">
           <button
@@ -157,6 +151,14 @@
       </template>
       <!-- 🚀 L'ENVOI : la tenue AVEC la sélection, puis un seul bouton pour tout faire partir. -->
       <div v-if="count > 0" class="qr-send">
+        <!-- 🛡️ PARTIR VERS UN LIEU PLEIN (demandé : « prévoir qu'on va envoyer les champions en
+             attaque », depuis la base comme depuis un autre lieu) : les miliciens en trop
+             s'installent si une place se libère d'ici leur arrivée, sinon ils font demi-tour
+             vers la base. -->
+        <p v-if="milOver > 0" class="qr-mil-over">
+          🔄 {{ milOver }} milicien{{ milOver > 1 ? 's' : '' }} en trop : demi-tour vers la base si
+          toujours plein à l’arrivée
+        </p>
         <p v-if="hold && selHold" class="qr-with">
           🛡️ Avec ces renforts<template v-if="delayMin > 0"> (départ différé)</template> :
           <b>{{ selHold.pct }} %</b>
@@ -476,9 +478,10 @@ const emit = defineEmits<{
   font-size: 12px;
 }
 .qr-mil-over {
+  margin: 0 0 8px;
   color: var(--d3);
-  font-size: 11.5px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.35;
 }
 .qr-mil-main {
   flex: 1;

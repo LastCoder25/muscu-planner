@@ -909,6 +909,11 @@
                       t.why ??
                       `🧭 ${formatDurationMin(t.min)} · ${Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
                     }}</span>
+                    <!-- 🛡️ Des miliciens vers un lieu plein (demandé) : ils partent quand même,
+                         et font demi-tour vers la base si c'est encore plein à l'arrivée. -->
+                    <span v-if="!t.why && t.over > 0" class="xfer-over"
+                      >🔄 {{ t.over }} en trop : demi-tour si plein</span
+                    >
                   </span>
                 </button>
               </div>
@@ -3132,6 +3137,7 @@ const transferTargets = computed(() => {
   if (!map || !from || !ids.length || from.control?.owner !== 'player') return [];
   const champs = char.advList.filter((a) => ids.includes(a.id));
   const hasMil = ids.some((id) => isMilitiaId(id));
+  const milCount = ids.filter((id) => isMilitiaId(id)).length;
   return map.pois
     .filter((p) => p.id !== from.id && p.control?.owner === 'player')
     .map((p) => {
@@ -3153,6 +3159,18 @@ const transferTargets = computed(() => {
         emo: CONTROL_EMO[p.control!.kind],
         label: CONTROL_LABEL[p.control!.kind],
         free: garrisonFreeSeats(p.control),
+        // Les miliciens sans place aujourd'hui (une fois servis les champions de la sélection).
+        over: Math.max(
+          0,
+          milCount -
+            Math.max(
+              0,
+              Math.min(
+                militiaFreeSeats(p.control),
+                garrisonFreeSeats(p.control) - (ids.length - milCount),
+              ),
+            ),
+        ),
         min: Math.max(champMin, milMin),
         why: why ? TRANSFER_BLOCK_LABEL[why] : null,
       };
@@ -4414,7 +4432,10 @@ const quickHold = computed(() => {
     for (const m of src.members) {
       const on = sel.transfers.some((t) => t.id === m.id);
       if (!on && !reinfCanAdd(sel, isMilitiaId(m.id) ? 'mil' : 'champ', free)) continue;
-      const other = pctWith(toggleReinfTransfer(sel, src.fromId, m.id, free));
+      const next = toggleReinfTransfer(sel, src.fromId, m.id, free);
+      // 🛡️ Un milicien en surplus n'ajoute rien aujourd'hui (même règle que ceux de la base).
+      if (!on && isMilitiaId(m.id) && reinfMilitiaOver(next, free) > 0) continue;
+      const other = pctWith(next);
       trans[m.id] = on ? cur - other : other - cur;
     }
   // 🛡️ Le gain d'un milicien de plus ne se compte que s'il trouve une place aujourd'hui : un
@@ -5852,6 +5873,12 @@ onUnmounted(() => {
 .xfer-sub {
   font-size: 11px;
   color: var(--dim);
+  line-height: 1.3;
+}
+.xfer-over {
+  display: block;
+  font-size: 11px;
+  color: var(--d3);
   line-height: 1.3;
 }
 .party-top {

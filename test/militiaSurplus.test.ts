@@ -16,6 +16,7 @@ import {
   settleReinforcements,
   sortieLeaves,
 } from '@/lib/controlPoints';
+import { transferBlocker, transferGarrison } from '@/lib/controlRoutes';
 import { createMap, type ControlState, type ExpeditionMap } from '@/lib/expedition';
 import {
   emptyReinfSelection,
@@ -23,6 +24,7 @@ import {
   reinfMilitiaOver,
   setReinfMilitia,
   toggleReinfChamp,
+  toggleReinfTransfer,
 } from '@/lib/reinforceSelection';
 
 const H = 3600_000;
@@ -108,5 +110,55 @@ describe('➕ le renfort rapide : les miliciens de la base au-delà des places',
     s = toggleReinfChamp(s, 'a', free);
     expect(reinfMilitiaOver(s, free)).toBe(4);
     expect(reinfMilitiaOver(setReinfMilitia(emptyReinfSelection(), 2, 6, free), free)).toBe(0);
+  });
+});
+
+// ⇄ Depuis la garnison d'un AUTRE lieu (2026-10-06, demandé : « depuis la garnison du lieu en
+// question aussi ») : même règle que depuis la base.
+describe('⇄ transférer des miliciens vers un lieu plein', () => {
+  const CAMP = controlIdOf('training');
+  const two = (mine: string[], camp: string[]) => captureControl(world(mine), CAMP, camp, 0, 7);
+  const campOf = (m: ExpeditionMap) => m.pois.find((p) => p.id === CAMP)!.control!;
+  const campFull = () => Array.from({ length: seatsOf('training') }, (_, i) => `c${i}`);
+  it('des miliciens partent vers un lieu plein, pas des champions', () => {
+    const m = two(['a', 'mil:1', 'mil:2'], campFull());
+    expect(transferBlocker(m, MINE, CAMP, ['mil:1', 'mil:2'])).toBeNull();
+    expect(transferBlocker(m, MINE, CAMP, ['a'])).toBe('full');
+    expect(transferBlocker(m, MINE, CAMP, ['a', 'mil:1'])).toBe('full');
+  });
+  it('les miliciens transférés font demi-tour vers la base si c’est encore plein', () => {
+    let m = two(['a', 'mil:1'], campFull());
+    m = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === CAMP
+          ? { ...p, control: { ...p.control!, garrison: [...campFull(), 'mil:7', 'mil:8'] } }
+          : p,
+      ),
+    };
+    m = transferGarrison(m, {
+      fromId: MINE,
+      toId: CAMP,
+      now: 0,
+      playerLevel: L,
+      champs: { ids: [], at: 0 },
+      militia: { ids: ['mil:1'], at: H },
+    });
+    expect(ctl(m).garrison).toEqual(['a']);
+    m = settle(m, H);
+    expect(campOf(m).garrison).not.toContain('mil:1');
+    expect(campOf(m).returning).toEqual([{ id: 'mil:1', from: H, at: H + LEG }]);
+  });
+  it('le renfort rapide les laisse partir et les compte en trop', () => {
+    const free = { champ: 0, total: 0, mil: 0, milAnyway: true };
+    const s = toggleReinfTransfer(emptyReinfSelection(), MINE, 'mil:1', free);
+    expect(s.transfers).toEqual([{ fromId: MINE, id: 'mil:1' }]);
+    expect(reinfMilitiaOver(s, free)).toBe(1);
+    expect(toggleReinfTransfer(emptyReinfSelection(), MINE, 'a', free).transfers).toEqual([]);
+  });
+  it('sans `milAnyway`, un milicien transféré prend une place aux miliciens de la base', () => {
+    const free = { champ: 2, total: 2, mil: 2 };
+    const s = toggleReinfTransfer(emptyReinfSelection(), MINE, 'mil:1', free);
+    expect(setReinfMilitia(s, 5, 6, free).militia).toBe(1);
   });
 });

@@ -23,7 +23,7 @@ import {
   freeAway,
   holdAway,
   garrisonFreeSeats,
-  militiaFreeSeats,
+  acceptsMilitia,
   pruneAway,
   reinforceControl,
   releaseFromControl,
@@ -57,13 +57,14 @@ const held = (map: ExpeditionMap, id: string) => {
 
 /** 🏰 Pourquoi un transfert ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
  *  raison, le store refuse avec elle. */
-export type TransferBlock = 'same' | 'notHeld' | 'empty' | 'notHere' | 'full';
+export type TransferBlock = 'same' | 'notHeld' | 'empty' | 'notHere' | 'full' | 'noMilitia';
 export const TRANSFER_BLOCK_LABEL: Record<TransferBlock, string> = {
   same: 'c’est déjà ce point',
   notHeld: 'les deux points doivent être à toi',
   empty: 'choisis au moins un membre de la garnison',
   notHere: 'seuls les membres arrivés sur le point peuvent repartir',
   full: 'plus assez de places sur le point d’arrivée',
+  noMilitia: 'ce lieu ne reçoit pas de miliciens',
 };
 export function transferBlocker(
   map: ExpeditionMap,
@@ -81,12 +82,13 @@ export function transferBlocker(
   const g = new Set(from.control!.garrison);
   if (new Set(ids).size !== ids.length || ids.some((id) => !g.has(id))) return 'notHere';
   const champs = ids.filter((id) => !isMilitiaId(id)).length;
-  if (
-    champs > controlFreeSeats(to.control) ||
-    ids.length > garrisonFreeSeats(to.control) ||
-    ids.length - champs > militiaFreeSeats(to.control)
-  )
+  // 🛡️ Les MILICIENS partent même si le lieu est plein (2026-10-06, demandé : « depuis la
+  // garnison du lieu aussi »), comme depuis la base : à l'arrivée ils s'installent s'il y a de
+  // la place, sinon ils font demi-tour vers la base (`settleReinforcements`). Les champions,
+  // eux, restent bornés par les places.
+  if (champs > controlFreeSeats(to.control) || champs > garrisonFreeSeats(to.control))
     return 'full';
+  if (ids.length > champs && !acceptsMilitia(to.control)) return 'noMilitia';
   return null;
 }
 
