@@ -262,21 +262,32 @@ describe('🪺 routes dangereuses autour des nids', () => {
   });
 });
 
-describe('🪺 le rang des nids suit le joueur', () => {
+// 🪺 Demandé (2026-10-06) : « les nids qui apparaissent sur l'île 2 : un niveau qui varie du
+// minimum de la carte au maximum de la carte ».
+describe('🪺 le niveau des nids couvre toute l’île', () => {
   const isl = { minLevel: 21, maxLevel: 40 };
-  it('le même rang, un en dessous, un au-dessus, bornés à l’île', () => {
-    expect([0, 1, 2].map((i) => nestLevel(i, 30, isl))).toEqual([30, 21, 40]);
-    expect([0, 1, 2].map((i) => nestLevel(i, 21, isl))).toEqual([21, 21, 31]);
-    expect([0, 1, 2].map((i) => nestLevel(i, 40, isl))).toEqual([40, 30, 40]);
+  it('tiré entre le minimum et le maximum de l’île, sur toute la plage', () => {
+    const all = Array.from({ length: 400 }, (_, i) => nestLevel(i, 7, isl));
+    expect(Math.min(...all)).toBe(21);
+    expect(Math.max(...all)).toBe(40);
+    // Chaque niveau de la plage sort (pas de tirage collé à un bout).
+    expect(new Set(all).size).toBe(20);
   });
-  it('sur la carte, les nids montent avec le joueur', () => {
+  it('déterministe : le même nid garde son niveau, une autre carte en tire d’autres', () => {
+    expect(nestLevel(4, 7, isl)).toBe(nestLevel(4, 7, isl));
+    const a = Array.from({ length: 12 }, (_, i) => nestLevel(i, 7, isl));
+    const b = Array.from({ length: 12 }, (_, i) => nestLevel(i, 8, isl));
+    expect(a).not.toEqual(b);
+  });
+  it('sur la carte, le niveau du joueur n’y change rien', () => {
     const lv = (m: ExpeditionMap) =>
       nests(m)
         .map((p) => p.level)
         .sort((a, b) => a - b);
     const m21 = ensureIslandConquest(islandMap(2), NOW, 21);
-    expect(lv(m21)).toEqual([21, 21, 31]);
-    expect(lv(ensureIslandConquest(m21, NOW, 35))).toEqual([25, 35, 40]);
+    for (const l of lv(m21)) expect(l).toBeGreaterThanOrEqual(21);
+    for (const l of lv(m21)) expect(l).toBeLessThanOrEqual(40);
+    expect(lv(ensureIslandConquest(m21, NOW, 35))).toEqual(lv(m21));
   });
 });
 
