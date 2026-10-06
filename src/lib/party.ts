@@ -42,6 +42,7 @@ import {
   warbandAt,
   citadelRestingUntil,
   RAZE_KINDS,
+  HERO_GARRISON_SEATS,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
@@ -335,14 +336,19 @@ export function heroCanStay(poi: Pick<Poi, 'id' | 'type' | 'control'> | null | u
 }
 
 /** 🧝 Le héros reste-t-il ? À la forteresse toujours (elle le garde pour la traversée) ; seul,
- *  sans champion, toujours (il faut quelqu'un pour tenir) ; sinon, selon le choix à l'envoi. */
+ *  sans champion, toujours (il faut quelqu'un pour tenir) ; sinon, selon le choix à l'envoi.
+ *  SANS CHOIX (demandé le 2026-10-06 : « le héros reste aussi en garnison, s'il y a de la place
+ *  pour lui ») : il reste s'il garde ses `HERO_GARRISON_SEATS` places une fois les
+ *  `champStayers` champions installés sur les `seats` du lieu — il n'en prend aucune à eux. */
 export function heroStaysAt(
   poi: Pick<Poi, 'id' | 'type' | 'control'> | null | undefined,
-  escortCount: number,
-  chosen: boolean,
+  champStayers: number,
+  chosen: boolean | undefined,
+  seats: number,
 ): boolean {
   if (!heroCanStay(poi)) return false;
-  return poi!.control!.kind === 'fortress' || escortCount <= 0 || chosen;
+  if (poi!.control!.kind === 'fortress' || champStayers <= 0) return true;
+  return chosen ?? seats - champStayers >= HERO_GARRISON_SEATS;
 }
 
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {

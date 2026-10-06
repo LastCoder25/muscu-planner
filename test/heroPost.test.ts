@@ -42,11 +42,25 @@ describe('🧝 le héros tient garnison partout', () => {
   });
   it('il reste : au choix avec des champions, d’office seul ou à la forteresse', () => {
     const p = mine(map());
-    expect(heroStaysAt(p, 2, false)).toBe(false);
-    expect(heroStaysAt(p, 2, true)).toBe(true);
-    expect(heroStaysAt(p, 0, false)).toBe(true);
+    expect(heroStaysAt(p, 2, false, 5)).toBe(false);
+    expect(heroStaysAt(p, 4, true, 5)).toBe(true);
+    expect(heroStaysAt(p, 0, false, 5)).toBe(true);
     const f = { ...p, control: { ...p.control!, kind: 'fortress' as const } };
-    expect(heroStaysAt(f, 3, false)).toBe(true);
+    expect(heroStaysAt(f, 3, false, 99)).toBe(true);
+  });
+  // 🧝 Demandé (2026-10-06) : « les champions qui ont attaqué restent en garnison ; le héros
+  // aussi, s'il y a de la place pour lui ». Sans choix explicite, il reste s'il garde ses 2
+  // places APRÈS les champions — il ne leur en prend aucune.
+  it('sans choix : il reste s’il a encore sa place après les champions', () => {
+    const p = mine(map()); // 5 places
+    expect(heroStaysAt(p, 3, undefined, 5)).toBe(true);
+    expect(heroStaysAt(p, 4, undefined, 5)).toBe(false);
+    expect(heroStaysAt(p, 1, undefined, 3)).toBe(true);
+    expect(heroStaysAt(p, 2, undefined, 3)).toBe(false);
+    // Ce qu'on abat ne le garde jamais.
+    expect(
+      heroStaysAt({ ...p, control: { ...p.control!, kind: 'citadel' } }, 1, undefined, 5),
+    ).toBe(false);
   });
   it('seul, le héros peut prendre un point (il y reste)', () => {
     const p = mine(map());

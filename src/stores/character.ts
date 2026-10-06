@@ -4119,7 +4119,16 @@ export const useCharacterStore = defineStore('character', () => {
     if (!withSupplies) return PARTY_SEND_BLOCK_LABEL.notTarget;
     // 🧝 Le héros reste-t-il en garnison si le point est pris ? Son instantané de combat part
     // avec le rapport : c'est lui qui défendra le lieu, hors de l'app.
-    const heroStays = !!hero && heroStaysAt(poi, escort.length, !!opts.heroStays);
+    // Sans choix explicite (`heroStays` absent), il reste s'il a sa place après les champions.
+    const allSeats = poi.type === 'control' && poi.control ? holdSeats(poi.control) : 0;
+    const heroStays =
+      !!hero &&
+      heroStaysAt(
+        poi,
+        assaultStayers(opts.escortIds, opts.stayIds, allSeats).length,
+        opts.heroStays,
+        allSeats,
+      );
     const outcome =
       heroStays && withSupplies.party
         ? {
@@ -4516,10 +4525,16 @@ export const useCharacterStore = defineStore('character', () => {
       all.map((a) => a.id),
       opts.stayIds,
     );
+    // 🧝 Le héros qui aura sa place après les champions reste (`attackTick`) : il ne rentre pas.
+    const heroStayEst =
+      !!stay &&
+      poi.control?.kind !== 'fortress' &&
+      heroStaysAt(poi, stay.size, undefined, holdSeats(poi.control!));
     if (stay)
       plan.wings.forEach((w, i) => {
         const g = groups[i]!;
-        w.wonLegMin = wingWonLeg(cur, poi, g.origin, g.escort, w.hero, stay, supplies, w.legMin);
+        const h = w.hero && !heroStayEst;
+        w.wonLegMin = wingWonLeg(cur, poi, g.origin, g.escort, h, stay, supplies, w.legMin);
       });
     const seed = ((now ^ (poi.level * 2654435761)) & ~1) >>> 0 || 2;
     const attack: CombinedAttack = {
@@ -4662,7 +4677,7 @@ export const useCharacterStore = defineStore('character', () => {
       const names = miss.ids
         .map((id) => advList.value.find((x) => x.id === id)?.name ?? '?')
         .concat(miss.hero ? ['ton héros'] : []);
-      const outcome =
+      const outcome1 =
         names.length && outcome0.party
           ? {
               ...outcome0,
@@ -4675,6 +4690,26 @@ export const useCharacterStore = defineStore('character', () => {
               },
             }
           : outcome0;
+      const stay = assaultStayOf(a.poi, who.ids, a.stayIds);
+      // 🧝 Le héros reste aussi en garnison s'il a sa place après les champions (demandé le
+      // 2026-10-06, même règle qu'une équipe : `heroStaysAt`). La forteresse le garde déjà.
+      const heroStay =
+        !!who.hero &&
+        !!hero &&
+        !!stay &&
+        a.poi.control?.kind !== 'fortress' &&
+        heroStaysAt(a.poi, stay.size, undefined, holdSeats(a.poi.control!));
+      const outcome =
+        heroStay && outcome1.party
+          ? {
+              ...outcome1,
+              party: {
+                ...outcome1.party,
+                heroStays: true,
+                heroUnit: { name: hero.name, level: hero.level, combatant: hero.combatant },
+              },
+            }
+          : outcome1;
       out.launched++;
       const goneWings = a.wings.filter((w) => w.state === 'gone');
       // 🧭 Chaque groupe a SON départ : le rapport le dit pour chacun de ses champions.
@@ -4688,7 +4723,6 @@ export const useCharacterStore = defineStore('character', () => {
         goneWings.find((w) => w.heroGone) ??
         goneWings.find((w) => w.originId === null) ??
         goneWings[0]!;
-      const stay = assaultStayOf(a.poi, who.ids, a.stayIds);
       for (const w of goneWings) {
         const origin = w.originId ? map?.pois.find((p) => p.id === w.originId) : null;
         const crew = w.gone ?? [];
@@ -4698,7 +4732,8 @@ export const useCharacterStore = defineStore('character', () => {
               a.poi,
               origin ?? null,
               escort.filter((x) => crew.includes(x.id)),
-              !!w.heroGone,
+              // 🧝 Resté en garnison, le héros ne rentre pas.
+              !!w.heroGone && !heroStay,
               stay,
               a.supplies,
               w.legMin,

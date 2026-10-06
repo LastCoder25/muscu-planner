@@ -36,6 +36,7 @@ import {
   CONTROL_EMO,
   CONTROL_LABEL,
   champSeatsWithHero,
+  holdSeats,
   garrisonHold,
   sortieCover,
 } from '@/lib/controlPoints';
@@ -135,13 +136,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyEscort = ref<string[]>([]);
   /** 🏰 Qui reste en garnison sur un point de contrôle (le choix le plus récent d'abord). */
   const partyStay = ref<string[]>([]);
-  /** 🧝 Le héros reste-t-il en garnison si le point est pris (étape 6 bis) ? */
-  const partyHeroStay = ref(false);
+  /** 🧝 Le héros reste-t-il en garnison si le point est pris (étape 6 bis) ? `undefined` = pas
+   *  de choix : il reste s'il a sa place après les champions (`heroStaysAt`). */
+  const partyHeroStay = ref<boolean | undefined>(undefined);
   watch(selected, () => {
     partyHero.value = false;
     partyEscort.value = [];
     partyStay.value = [];
-    partyHeroStay.value = false;
+    partyHeroStay.value = undefined;
   });
   /** ⚠️ Une CHAÎNE (point → ids prêts) recalculée au tick, qui ne réveille les listes que si
    *  quelqu'un change d'état — même principe que `freeKey` de la page. « Prêt à sortir » est
@@ -825,15 +827,15 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partySendBlock = computed(() =>
     selected.value
       ? partySendBlocker(
-            selected.value,
-            partyAdvs.value.length,
-            partyHeroOn.value,
-            cap.value,
-            // 💀 Le 🎯 % déjà affiché : un départ perdu d'avance est refusé (sauf contre une
-            // armée qu'on peut affaiblir) — le MÊME nombre que le store.
-            partyGuardWin.value,
-            coarseNow.value,
-          )
+          selected.value,
+          partyAdvs.value.length,
+          partyHeroOn.value,
+          cap.value,
+          // 💀 Le 🎯 % déjà affiché : un départ perdu d'avance est refusé (sauf contre une
+          // armée qu'on peut affaiblir) — le MÊME nombre que le store.
+          partyGuardWin.value,
+          coarseNow.value,
+        )
       : null,
   );
   const canSendPartyNow = computed(
@@ -1009,7 +1011,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
             supplies: activeSupplies.value,
             ...(stayCap.value ? { stayIds: stayIds.value } : {}),
             ...(originPoi.value ? { fromControlId: originPoi.value.id } : {}),
-            ...(heroStays.value ? { heroStays: true } : {}),
+            // 🧝 La décision AFFICHÉE (choix ou place libre) : le store ne la redevine pas.
+            ...(partyHeroOn.value ? { heroStays: heroStays.value } : {}),
             ...(lateOk ? { lateOk: true } : {}),
           });
       if (!refused) selected.value = null;
@@ -1045,13 +1048,17 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
   }
 
-  /** 🧝 Le héros reste-t-il ? La MÊME règle que le store (`heroStaysAt`). */
-  const heroStays = computed(
-    () =>
-      !combined.value &&
-      partyHeroOn.value &&
-      heroStaysAt(selected.value, partyAdvs.value.length, partyHeroStay.value),
-  );
+  /** 🧝 Le héros reste-t-il ? La MÊME règle que le store (`heroStaysAt`) : sans choix, il
+   *  reste s'il a sa place après les champions qui restent (les choisis, sinon l'équipe). */
+  const heroStays = computed(() => {
+    if (combined.value || !partyHeroOn.value) return false;
+    const c = selected.value?.control;
+    const seats = c && c.owner === 'enemy' ? holdSeats(c) : 0;
+    const ids = partyAdvs.value.map((a) => a.id);
+    const picked = partyStay.value.filter((id) => ids.includes(id));
+    const champs = Math.min((picked.length ? picked : ids).length, seats);
+    return heroStaysAt(selected.value, champs, partyHeroStay.value, seats);
+  });
   /** Places de CHAMPION du point visé (0 hors point de contrôle). 🧝 Le héros qui y reste en
    *  prend 2 sur les 5 (`champSeatsWithHero`, la MÊME règle que le store). */
   const stayCap = computed(() => {

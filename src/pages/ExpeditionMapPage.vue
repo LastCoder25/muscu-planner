@@ -1223,12 +1223,14 @@
               v-if="heroStayChoice"
               type="button"
               class="stay-chip hero-stay"
-              :class="{ on: partyHeroStay }"
-              :aria-pressed="partyHeroStay"
-              @click="partyHeroStay = !partyHeroStay"
+              :class="{ on: heroStays }"
+              :aria-pressed="heroStays"
+              @click="partyHeroStay = !heroStays"
             >
-              {{ partyHeroStay ? '🏰' : '↩' }} Le héros
-              {{ partyHeroStay ? 'reste en garnison' : 'rentre après la prise' }}
+              <!-- 🧝 Par défaut il reste s'il a sa place après les champions ; toucher force
+                   l'autre choix (rester en prenant leurs places, ou rentrer). -->
+              {{ heroStays ? '🏰' : '↩' }} Le héros
+              {{ heroStays ? 'reste en garnison' : 'rentre après la prise' }}
             </button>
             <p v-else-if="heroStays && !partyAdvs.length" class="car-cap">
               🧝 Seul, le héros reste tenir le lieu s’il le prend.
