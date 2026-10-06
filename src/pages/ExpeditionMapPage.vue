@@ -5014,6 +5014,15 @@ const poiFacts = computed<PoiFact[]>(() => {
             },
       );
   }
+  // 🏰👥 La forteresse ennemie : la réussite si TOUS les champions et le héros s'y mettaient.
+  if (fortressAllWin.value !== null)
+    out.push({
+      icon: '👥',
+      label: 'Tous réunis',
+      value: `${fortressAllWin.value} %`,
+      title: 'Chance de la prendre avec tous tes champions et ton héros',
+      cls: winClass(fortressAllWin.value),
+    });
   return out;
 });
 /** 🎯 Ce que la barre d'envoi collante rappelle pendant qu'on coche les champions : les
@@ -5354,6 +5363,7 @@ const {
   toggleSupply,
   partyRoad,
   partyWin,
+  fortressAllWin,
   partyGuardWin,
   partyRoute,
   partyLeg,

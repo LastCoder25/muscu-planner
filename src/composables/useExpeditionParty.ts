@@ -341,6 +341,29 @@ export function useExpeditionParty(ctx: PartyCtx) {
     );
     return w === null ? null : Math.round(w * 100);
   });
+  /** 🏰👥 LA FORTERESSE ENNEMIE, TOUT LE MONDE RÉUNI (demandé) : le 🎯 % si le joueur
+   *  rassemblait TOUS ses champions (occupés, postés ou blessés compris) et son héros — un
+   *  repère « est-elle à ma portée ? », pas une équipe qu'on peut envoyer telle quelle. Même
+   *  dispatch que l'équipe (`partyWinChance`), sans consommables. `null` hors forteresse
+   *  ennemie. */
+  const fortressAllWin = computed(() => {
+    const p = aimed.value;
+    if (!p || p.control?.kind !== 'fortress' || p.control.owner === 'player') return null;
+    const hero: PartyHero = {
+      name: char.row?.pseudo ?? 'Toi',
+      level: heroLevel.value,
+      combatant: fighter.value,
+    };
+    const w = partyWinChance(
+      p,
+      char.advList,
+      { ...roadCtx.value, supplies: [] },
+      hero,
+      coarseNow.value,
+      FORECAST_SAMPLES,
+    );
+    return w === null ? null : Math.round(w * 100);
+  });
   /** 🎯➕ CE QUE CHAQUE MEMBRE APPORTE à la réussite, en points (`winGain`), par rapport à
    *  l'équipe COCHÉE : un champion non coché s'y ajoute, un coché en est retiré. Clé `hero`
    *  pour le héros.
@@ -950,6 +973,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     toggleSupply,
     partyRoad,
     partyWin,
+    fortressAllWin,
     partyGuardWin,
     partyRoute,
     partyLeg,
