@@ -99,9 +99,9 @@ describe('🎯 les objectifs sont au niveau max de l’île (sauf les nids, au r
       );
       const objs = m.pois.filter((q) => q.control?.kind === 'objective');
       expect(objs.length).toBe(isl.objectives);
-      // 🪺 Île des nids (2026-10-04) : chacun à un rang autour du joueur (`nestLevel`).
+      // 🪺 Île des nids (2026-10-06) : chacun tiré entre le min et le max de l'île (`nestLevel`).
       const want = (i: number) =>
-        NEST.islands.has(isl.id) ? nestLevel(i, player, isl) : isl.maxLevel;
+        NEST.islands.has(isl.id) ? nestLevel(i, m.seed, isl) : isl.maxLevel;
       objs.forEach((o) => expect(o.level).toBe(want(Number(o.id.slice('isl_obj_'.length)))));
     });
   }

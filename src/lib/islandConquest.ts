@@ -24,7 +24,6 @@
 import { activeIsland, islandPacified, ISLANDS, type Island } from './archipelago';
 import { buildingType, collectable, type BuildResource, type Building } from './buildings';
 import { mulberry32, seedOf } from './combat';
-import { rankStartLevel } from './characterRank';
 import {
   ALL_CONTROL_KINDS,
   CONTROL,
@@ -95,7 +94,7 @@ export const ISLAND_CONQUEST = {
  *   jusqu'au lieu (`FIELD_ARMY.speedPerHour`) : on la voit arriver dans le rayon de la Tour et on
  *   peut l'intercepter, comme toute reprise (`ControlState.raidFrom`, lu par `syncFieldArmies`) ;
  * - un nid pris est ABATTU, jamais tenu (`ControlState.razes`) ;
- * - leur RANG est autour de celui du joueur (`nestLevel`) — ils progressent avec lui ;
+ * - leur NIVEAU est tiré entre le minimum et le maximum de l'île (`nestLevel`) ;
  * - seuls les 3 nids d'origine et la forteresse comptent pour pacifier : les nids nés ne
  *   bloquent jamais la pacification, qui les fait disparaître et arrête les apparitions ;
  * - les lieux à portée d'un nid ont des routes dangereuses (embuscades doublées).
@@ -108,8 +107,6 @@ export const NEST = {
   /** Le délai entre l'apparition d'un nid et son attaque sur le lieu tenu le plus proche. */
   strikeWaitMinMs: 3600_000,
   strikeWaitMaxMs: 3 * 3600_000,
-  /** L'écart de rang de chaque nid à celui du joueur, par index (le premier à son rang). */
-  rankOffsets: [0, -1, 1] as readonly number[],
   cap: 6,
   /** Portée des embuscades autour d'un nid (unités de carte). */
   radius: 25,
@@ -117,20 +114,19 @@ export const NEST = {
   size: 3,
 } as const;
 
-/** Un rang de prestige = 10 niveaux (dérivé de l'échelle, jamais écrit). */
-const LEVELS_PER_RANK = rankStartLevel(1) - 1;
-
 type NestBirth = NonNullable<NonNullable<ExpeditionMap['archipel']>['nests']>[number];
 
-/** 🪺 Le niveau du nid d'index `i` : celui du joueur décalé de `NEST.rankOffsets` rangs, borné
- *  à l'île. Il suit le joueur : un nid né quand il était Argent devient Or avec lui. */
+/** 🪺 Le niveau du nid d'index `i` (demandé le 2026-10-06 : « un niveau qui varie du minimum
+ *  de la carte au maximum de la carte ») : tiré entre le min et le max de l'île, sur la carte
+ *  et l'index du nid — déterministe, il ne bouge plus une fois né, et ne suit pas le joueur. */
 export function nestLevel(
   i: number,
-  playerLevel: number,
+  seed: number,
   isl: Pick<Island, 'minLevel' | 'maxLevel'>,
 ): number {
-  const off = NEST.rankOffsets[i % NEST.rankOffsets.length]!;
-  return Math.max(isl.minLevel, Math.min(isl.maxLevel, playerLevel + off * LEVELS_PER_RANK));
+  const r = mulberry32((seedOf(`${seed}:nestLevel:${i}`) ^ 0x6a09e667) >>> 0 || 1)();
+  const span = isl.maxLevel - isl.minLevel + 1;
+  return isl.minLevel + Math.min(span - 1, Math.floor(r * span));
 }
 
 /** 🪺 Un nid que le joueur TIENT : un reliquat d'avant la règle « on l'abat ». */
@@ -576,7 +572,7 @@ function enemyTarget(
 }
 
 /** Les objectifs et la forteresse ATTENDUS sur la carte (ceux pas encore abattus). */
-function expectedTargets(map: ExpeditionMap, isl: Island, now: number, playerLevel: number): Poi[] {
+function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
   const gone = destroyedOf(map);
   const terrain = islandTerrain(isl.id);
   const f = terrain.fortress;
@@ -586,9 +582,9 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number, playerLev
   const lv = isl.maxLevel;
   // 🏝️ Les objectifs ne s'attaquent qu'une fois deux lieux fixes tenus.
   const objLocked = heldPoints(map).length < OBJECTIVES_AFTER_HELD;
-  // 🪺 Île des nids : chacun à un rang autour du joueur, et il s'abat (`ControlState.razes`).
+  // 🪺 Île des nids : chacun à un niveau tiré sur l'île (`nestLevel`), et il s'abat (`ControlState.razes`).
   const nesting = NEST.islands.has(isl.id);
-  const objLv = (i: number) => (nesting ? nestLevel(i, playerLevel, isl) : lv);
+  const objLv = (i: number) => (nesting ? nestLevel(i, map.seed, isl) : lv);
   const razesOn = nesting ? { razes: true as const } : {};
   objectiveAngles(isl.objectives).forEach((_, i) => {
     const id = objectiveIdOf(i);
@@ -690,7 +686,7 @@ export function ensureIslandConquest(
   // cimetières qui se relèvent.
   const map = raiseDead(spawnNests(map0, now), now);
   const isl = activeIsland(map);
-  const want = isl ? expectedTargets(map, isl, now, playerLevel) : [];
+  const want = isl ? expectedTargets(map, isl, now) : [];
   const wantIds = new Set(want.map((p) => p.id));
   let pois = map.pois;
   let changed = map !== map0;
