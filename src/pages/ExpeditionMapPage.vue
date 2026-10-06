@@ -1803,6 +1803,7 @@ import {
 import { poiTripCategory } from '@/lib/tripFilter';
 import {
   blockPageSwipe,
+  inMapSwipeZone,
   mapSlideDirection,
   scrollContainerOf,
   type MapSlide,
@@ -4360,7 +4361,13 @@ onMounted(() => {
   window.addEventListener('scroll', updateSlideDir, { capture: true, passive: true });
   window.addEventListener('resize', updateSlideDir, { passive: true });
   updateSlideDir();
-  if (scrollEl.value) unblockSwipe = blockPageSwipe(scrollEl.value);
+  // 👆 Seulement quand le doigt part de la carte : les fenêtres ouvertes dessous défilent.
+  const el = scrollEl.value;
+  const pageEl = el?.closest('.emap');
+  if (el && pageEl)
+    unblockSwipe = blockPageSwipe(el, (t) =>
+      tabsEl.value ? inMapSwipeZone(t, pageEl, tabsEl.value) : false,
+    );
 });
 onUnmounted(() => {
   window.removeEventListener('scroll', updateSlideDir, { capture: true });

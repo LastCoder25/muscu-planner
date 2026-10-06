@@ -47,13 +47,30 @@ export function innerCanScrollY(boxes: readonly ScrollBoxY[], dy: number): boole
   );
 }
 
+/** 👆 Le doigt est-il posé SUR LA CARTE (demandé : « que ça ne bloque que quand je suis sur la
+ *  carte ; sur les fenêtres qui s'ouvrent depuis la carte je peux glisser la page ») ? Oui pour
+ *  tout ce qui, dans `page`, vient avant la rangée d'onglets `tabs` ou en fait partie : la
+ *  carte, ce qui est au-dessus, les onglets. Non pour ce qui s'ouvre dessous (fiche du lieu,
+ *  voyages…), pour une fenêtre hors de la page (dialogue), et quand les onglets sont cachés
+ *  (la vue d'une autre île remplace la carte). */
+export function inMapSwipeZone(target: Node, page: Element, tabs: HTMLElement): boolean {
+  if (!page.contains(target) || getComputedStyle(tabs).display === 'none') return false;
+  return (
+    tabs.contains(target) ||
+    !!(tabs.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_PRECEDING)
+  );
+}
+
 /** 👆 SOUS LA CARTE, PAS AU DOIGT (demandé : « on ne peut pas défiler avec le doigt, seules
  *  les flèches y mènent ») : annule tout glissé vertical qui ferait défiler la page — ou le
- *  volet du cockpit — autour de `root`. La carte, les listes et les rangées de tuiles défilent
- *  toujours ; les flèches font défiler par le code (`scrollTo`), que rien n'arrête. Le choix
- *  se fait au premier mouvement du geste, puis tient jusqu'au lever du doigt. Rend le
- *  nettoyage. */
-export function blockPageSwipe(root: HTMLElement): () => void {
+ *  volet du cockpit — autour de `root`, quand il part d'un endroit où `blocks` le dit
+ *  (`inMapSwipeZone`). La carte, les listes et les rangées de tuiles défilent toujours ; les
+ *  flèches font défiler par le code (`scrollTo`), que rien n'arrête. Le choix se fait au
+ *  premier mouvement du geste, puis tient jusqu'au lever du doigt. Rend le nettoyage. */
+export function blockPageSwipe(
+  root: HTMLElement,
+  blocks: (target: Node) => boolean = () => true,
+): () => void {
   let start: { x: number; y: number } | null = null;
   let block: boolean | null = null;
   const onStart = (e: TouchEvent) => {
@@ -68,6 +85,10 @@ export function blockPageSwipe(root: HTMLElement): () => void {
     const dy = t.clientY - start.y;
     if (block === null) {
       if (Math.abs(dy) < 4 || Math.abs(dx) > Math.abs(dy)) return;
+      if (!blocks(e.target as Node)) {
+        block = false;
+        return;
+      }
       const page = scrollContainerOf(root);
       const boxes: ScrollBoxY[] = [];
       for (let p = e.target as HTMLElement | null; p && p !== page; p = p.parentElement) {
