@@ -347,6 +347,7 @@ import {
   shortenWonReturn,
   rescheduleReturners,
   baseWalkers,
+  medkitHeal,
   walkToBase,
   withoutWalkers,
   interceptLeg,
@@ -4311,15 +4312,16 @@ export const useCharacterStore = defineStore('character', () => {
                   })
                 : null;
     if (!outcome) return null;
-    // 🩹 La trousse agit à l'ENCAISSEMENT (la convalescence part du retour) : elle voyage donc
-    // dans le rapport. 🎒 Et un consommable peut tomber de tout voyage.
-    const healMult = supplyFx(supplies).healMult;
+    // 🩹 La trousse agit sur l'ISSUE, tirée ici : plus de blessé, donc ni infirmerie ni retour
+    // forcé à la base (`medkitHeal`). 🎒 Et un consommable peut tomber de tout voyage.
+    const medkit = supplyFx(supplies).medkit;
     // 🏰 L'assaut d'un point de contrôle se reconnaît au rapport (`controlId`) : c'est ce
     // qui fera poster la garnison à l'arrivée.
+    const fought = outcome.party && medkit ? medkitHeal(outcome.party) : outcome.party;
     const party =
-      outcome.party && poi.type === 'control'
+      fought && poi.type === 'control'
         ? {
-            ...outcome.party,
+            ...fought,
             controlId: poi.id,
             ...(opts.stayIds && poi.control
               ? {
@@ -4329,7 +4331,7 @@ export const useCharacterStore = defineStore('character', () => {
                 }
               : {}),
           }
-        : outcome.party;
+        : fought;
     // 🔮 Une rune de LIEU : seulement sur un lieu RÉUSSI, et seulement avec un champion (elles
     // servent aux champions). Tirée au départ sur son propre générateur, comme tout le voyage.
     // ⚠️ La maturité d'une faille se lit à l'ARRIVÉE : c'est là que le groupe y entre.
@@ -4346,7 +4348,6 @@ export const useCharacterStore = defineStore('character', () => {
       ...outcome,
       ...(placeRunes ? { runes: runeCount(outcome.runes) + placeRunes } : {}),
       ...(party ? { party } : {}),
-      ...(party && healMult < 1 ? { party: { ...party, healMult } } : {}),
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };

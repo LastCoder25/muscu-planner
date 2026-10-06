@@ -182,8 +182,6 @@ export const SUPPLY = {
   scout: 0.25,
   /** 🧺 cargaison en plus (plafond partagé avec le rôle 🐫). */
   haul: 0.2,
-  /** 🩹 durée de convalescence après une défaite. */
-  healMult: 0.5,
   /** 🔥 force (PV et dégâts) des défenseurs d'un camp ou des gardes d'un lieu de récolte. */
   guardMult: 0.9,
   /** 🧪 PV du groupe en plus. */
@@ -234,7 +232,7 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
   trousse: {
     emoji: '🩹',
     name: 'Trousse de soins',
-    what: 'Convalescence divisée par deux en cas de défaite',
+    what: 'Protège des blessures : en cas de défaite, on rentre soigné à son point de départ',
     voyage: true,
   },
   fumigene: {
@@ -357,7 +355,8 @@ export interface SupplyFx {
   speed: number;
   scout: number;
   haul: number;
-  healMult: number;
+  /** 🩹 La trousse : aucune blessure, une sortie rentre à son point de départ. */
+  medkit: boolean;
   guardMult: number;
   pv: number;
   dmg: number;
@@ -372,7 +371,7 @@ export function supplyFx(ids: readonly SupplyId[] | undefined): SupplyFx {
     speed: on.has('rations') ? SUPPLY.speed : 0,
     scout: on.has('carte') ? SUPPLY.scout : 0,
     haul: on.has('bats') ? SUPPLY.haul : 0,
-    healMult: on.has('trousse') ? SUPPLY.healMult : 1,
+    medkit: on.has('trousse'),
     guardMult: on.has('fumigene') ? SUPPLY.guardMult : 1,
     pv: on.has('potion') ? SUPPLY.pv : 0,
     dmg: on.has('pierre') ? SUPPLY.dmg : 0,

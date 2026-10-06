@@ -553,8 +553,12 @@ export interface PartyResult {
   /** 🩹 Blessés LÉGERS d'une victoire serrée (convalescence courte, `LIGHT_HURT`). Absent
    *  des rapports d'avant et des missions sans combat de groupe (failles, interceptions). */
   lightHurt?: string[];
-  /** 🩹 Trousse de soins emportée : multiplicateur de convalescence (< 1). Absent = aucune. */
+  /** 🩹 LEGACY (avant v1.80.2) : la trousse divisait la convalescence. Plus jamais écrit,
+   *  encore lu à l'encaissement des rapports d'avant. */
   healMult?: number;
+  /** 🩹 Ceux que la trousse de soins a remis sur pied : ils auraient été blessés. Absent =
+   *  pas de trousse, ou personne à soigner. */
+  healed?: string[];
   journal: string[];
   /**
    * 🕳️ Ce qu'il faut pour REJOUER une incursion de faille (`riftStage.ts`) — et rien de

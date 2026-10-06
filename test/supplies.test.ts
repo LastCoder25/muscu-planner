@@ -29,6 +29,8 @@ import { incursionWinPct, resolveIncursion, simulateIncursion } from '@/lib/rift
 import { fuseUnits } from '@/lib/skirmish';
 import { partyWinChance } from '@/lib/partyForecast';
 import {
+  baseWalkers,
+  medkitHeal,
   partyClaimRoster,
   partyFightSeed,
   partyLegMin,
@@ -319,19 +321,20 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     expect(withCor.gold).toBeGreaterThan(lost.gold);
   });
 
-  it('🩹 la trousse divise la convalescence', () => {
-    const escort = team(1, 20);
+  it('🩹 la trousse protège des blessures : personne à l’infirmerie, une sortie rentre à son point', () => {
+    const escort = team(2, 20);
     const party: PartyResult = {
       hero: false,
       faction: 'bandits',
-      escort: ['a0'],
+      escort: ['a0', 'a1'],
       win: false,
       foes: 3,
       slain: 0,
       kills: {},
       heroKills: 0,
-      xp: { a0: 0 },
+      xp: { a0: 0, a1: 0 },
       hurt: ['a0'],
+      lightHurt: ['a1'],
       journal: [],
     };
     const ctx = {
@@ -342,11 +345,25 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
       xpGranted: false,
       healMult: 1,
     };
-    const full = partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil!;
-    const half = partyClaimRoster({ ...party, healMult: SUPPLY.healMult }, escort, ctx)
-      .adventurers[0]!.hurtUntil!;
-    expect(full - ctx.backAt).toBe(caravanHurtMs(escort, 0));
-    expect(half - ctx.backAt).toBe(caravanHurtMs(escort, 0) * SUPPLY.healMult);
+    // Sans trousse : le blessé part à l'infirmerie, et sur une sortie il rentre à la base.
+    expect(partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil).toBeGreaterThan(ctx.backAt);
+    const sortie = { homeId: 'ctl_mine', outcome: { party } } as Parameters<typeof baseWalkers>[0];
+    expect(baseWalkers(sortie, ['a0', 'a1'], true)).toEqual(['a0', 'a1']);
+    // Avec : plus aucun blessé (grave ni léger), donc ni infirmerie ni retour forcé à la base.
+    const healed = medkitHeal(party);
+    expect(healed.hurt).toEqual([]);
+    expect(healed.lightHurt).toBeUndefined();
+    expect(healed.healed).toEqual(['a0', 'a1']);
+    for (const a of partyClaimRoster(healed, escort, ctx).adventurers) expect(a.hurtUntil).toBeUndefined();
+    const sortieHealed = { homeId: 'ctl_mine', outcome: { party: healed } } as Parameters<typeof baseWalkers>[0];
+    expect(baseWalkers(sortieHealed, ['a0', 'a1'], true)).toEqual([]);
+    // ⚠️ Un point PERDU renvoie quand même tout le monde à la base.
+    expect(baseWalkers(sortieHealed, ['a0', 'a1'], false)).toEqual(['a0', 'a1']);
+    // Rien à soigner : le même objet, sans marque.
+    const clean = { ...party, hurt: [], lightHurt: [] };
+    expect(medkitHeal(clean)).toBe(clean);
+    expect(supplyFx(['trousse']).medkit).toBe(true);
+    expect(supplyFx([]).medkit).toBe(false);
   });
 
   it('🥖 les rations raccourcissent le trajet — sous le plafond du rôle 🧭 pour les champions', () => {

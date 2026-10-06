@@ -608,6 +608,33 @@ export function recallVoyage<T extends ActiveExpedition>(
 }
 
 /**
+ * 🩹 LA TROUSSE DE SOINS (v1.80.2, décision de l'utilisateur : « elle protège des blessures ;
+ * si les champions perdent l'attaque ou l'embuscade, ils ne rentrent pas à la base mais
+ * retournent sur leur lieu de départ, soignés »). Appliquée À L'ISSUE, au départ (l'issue est
+ * tirée là) : plus aucun blessé, grave ou léger — donc personne à l'infirmerie à
+ * l'encaissement (`partyClaimRoster`) et personne qui quitte une sortie pour la base
+ * (`baseWalkers` ne rapatrie que les blessés) : chacun reprend le chemin de son point de
+ * départ. ⚠️ Un point PERDU entre-temps renvoie quand même tout le monde à la base : on ne
+ * marche pas vers un lieu qui n'est plus à nous. Rend le MÊME objet quand il n'y a rien à
+ * soigner (le rapport ne porte alors pas de `healed`).
+ */
+export function medkitHeal(party: PartyResult): PartyResult {
+  const healed = [...new Set([...party.hurt, ...(party.lightHurt ?? [])])];
+  if (!healed.length) return party;
+  const out: PartyResult = {
+    ...party,
+    hurt: [],
+    healed,
+    journal: [
+      ...party.journal,
+      '🩹 La trousse de soins remet tout le monde sur pied : retour au point de départ.',
+    ],
+  };
+  delete out.lightHurt;
+  return out;
+}
+
+/**
  * 🏥 QUI RENTRE À LA BASE au lieu de reprendre son poste (2026-09-29, décision de
  * l'utilisateur : « rapatrier les blessés à la base quel que soit le point de départ »).
  * Sur une SORTIE d'un point fixe (`homeId`, attaque combinée comprise) : les BLESSÉS
