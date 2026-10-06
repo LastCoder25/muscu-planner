@@ -3300,7 +3300,12 @@ export const useCharacterStore = defineStore('character', () => {
     // Idempotents (`fieldHits`) : rejoués à chaque tick, appliqués une fois.
     const r0 = t.base.raid;
     if (r0) {
-      for (const { hit, at } of pendingFieldHits(fieldVoyages(cur), 'siege', r0.id)) {
+      for (const { hit, at } of pendingFieldHits(
+        fieldVoyages(cur),
+        'siege',
+        r0.id,
+        cur.messages ?? [],
+      )) {
         if (at > now) continue;
         const a = applyFieldHitToBase(t.base, hit, at, at + raidIntervalMs(ctx.activeDays7));
         if (a.effect) {
@@ -5305,7 +5310,12 @@ export const useCharacterStore = defineStore('character', () => {
     let settled = settled0;
     for (const p of settled0.pois) {
       if (p.control?.owner !== 'player' || p.control.attackAt === undefined) continue;
-      for (const { hit, at } of pendingFieldHits(fieldVoyages(cur), 'retake', p.id)) {
+      for (const { hit, at } of pendingFieldHits(
+        fieldVoyages(cur),
+        'retake',
+        p.id,
+        cur.messages ?? [],
+      )) {
         if (at > now) continue;
         settled = applyFieldHitToMap(
           settled,

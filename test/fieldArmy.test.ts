@@ -310,8 +310,41 @@ describe('📬 pendingFieldHits', () => {
       { midAt: 2, outcome: o('r', 0.1) },
       { midAt: 1, outcome: o('autre', 0.5) },
     ];
-    expect(pendingFieldHits(v, 'siege', 'r').map((x) => x.at)).toEqual([2, 5]);
-    expect(pendingFieldHits(v, 'retake', 'r')).toEqual([]);
+    expect(pendingFieldHits(v, 'siege', 'r', []).map((x) => x.at)).toEqual([2, 5]);
+    expect(pendingFieldHits(v, 'retake', 'r', [])).toEqual([]);
+  });
+
+  it('un groupe déjà RENTRÉ : le choc se lit sur son rapport (signalé : l’armée battue attaquait encore)', () => {
+    const hit = { kind: 'retake' as const, targetId: 'ctl', at: 50, part: 1, hitId: 'h1' };
+    // Plus aucun voyage en cours : seul le rapport de la boîte porte la victoire.
+    const got = pendingFieldHits([], 'retake', 'ctl', [
+      { resolvedAt: 7, party: { fieldHit: hit } as never },
+      { resolvedAt: 3 },
+    ]);
+    expect(got).toEqual([{ hit, at: 7 }]);
+    // Encore en route ET déjà dans la boîte : rendu UNE fois.
+    const both = pendingFieldHits(
+      [{ midAt: 7, outcome: { party: { fieldHit: hit } } as never }],
+      'retake',
+      'ctl',
+      [{ resolvedAt: 7, party: { fieldHit: hit } as never }],
+    );
+    expect(both).toHaveLength(1);
+  });
+
+  it('appliqué à la carte, le choc lu sur le rapport repousse la reprise', () => {
+    const hit = { kind: 'retake' as const, targetId: 'ctl', at: 50, part: 1, hitId: 'h1' };
+    const map = {
+      pois: [{ id: 'ctl', type: 'control', control: { owner: 'player', attackAt: 50 } }],
+    } as never;
+    const [{ at }] = pendingFieldHits([], 'retake', 'ctl', [
+      { resolvedAt: 7, party: { fieldHit: hit } as never },
+    ]);
+    const r = applyFieldHitToMap(map, hit, at, 999);
+    expect(r.effect).toBe('routed');
+    expect((r.map as { pois: { control: { attackAt: number } }[] }).pois[0]!.control.attackAt).toBe(
+      999,
+    );
   });
 });
 

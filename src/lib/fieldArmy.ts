@@ -712,19 +712,30 @@ export function applyFieldHitToMap(
   };
 }
 
-/** Les chocs EN ROUTE contre une armée donnée (voyages dont l'issue est tirée), avec l'heure
- *  du choc — de quoi les appliquer AVANT que l'armée n'arrive, quel que soit l'ordre des
- *  ticks. */
+/** Les chocs contre une armée donnée, avec l'heure du choc — de quoi les appliquer AVANT que
+ *  l'armée n'arrive, quel que soit l'ordre des ticks. Lus sur les voyages dont l'issue est
+ *  tirée (en route) ET sur les rapports de la boîte 📬 (`reports`, REQUIS).
+ *  ⚠️ Les voyages seuls ne suffisaient pas (signalé : « je l'ai battue, mais elle est toujours
+ *  sur la carte et elle attaque toujours ») : une armée proche se bat et le groupe rentre en
+ *  quelques minutes ; rentré, son voyage quitte la liste, et si aucun tick n'avait écrit le
+ *  choc entre-temps, la victoire était perdue — alors que le rapport, lui, le porte encore.
+ *  Les deux sources se recouvrent : un même choc (`hitId`) n'est rendu qu'une fois, et son
+ *  application est idempotente de toute façon. */
 export function pendingFieldHits(
   voyages: readonly { midAt: number; outcome: ExpeditionOutcome }[],
   kind: FieldArmyTag['kind'],
   targetId: string,
+  reports: readonly { resolvedAt: number; party?: PartyResult }[],
 ): { hit: FieldHit; at: number }[] {
   const out: { hit: FieldHit; at: number }[] = [];
-  for (const v of voyages) {
-    const h = v.outcome.party?.fieldHit;
-    if (h && h.kind === kind && h.targetId === targetId) out.push({ hit: h, at: v.midAt });
-  }
+  const seen = new Set<string>();
+  const add = (h: FieldHit | undefined, at: number) => {
+    if (!h || h.kind !== kind || h.targetId !== targetId || seen.has(h.hitId)) return;
+    seen.add(h.hitId);
+    out.push({ hit: h, at });
+  };
+  for (const v of voyages) add(v.outcome.party?.fieldHit, v.midAt);
+  for (const m of reports) add(m.party?.fieldHit, m.resolvedAt);
   return out.sort((a, b) => a.at - b.at);
 }
 
