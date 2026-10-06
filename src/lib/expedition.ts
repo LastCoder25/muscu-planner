@@ -3099,6 +3099,15 @@ export function shownVoyage<
   return out;
 }
 
+/** ⏱️ L'heure de la PROCHAINE ÉTAPE d'un voyage (demandé : « ordonne les tuiles par délai de
+ *  la prochaine étape ») : son départ s'il attend, sa résolution sur place (`midAt`) à
+ *  l'aller, puis son retour. Un demi-tour forcé à venir ne se voit pas (`shownVoyage`). */
+export function nextStepAt(voyage: Voyage, now: number): number {
+  const v = shownVoyage(voyage, now);
+  if (now < v.sentAt) return v.sentAt;
+  return now < v.midAt ? v.midAt : v.returnAt;
+}
+
 /** 🐺 Le duel d'une tanière (cf. `PartyResult.den`). */
 export interface DenBattle {
   name: string;

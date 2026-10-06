@@ -1734,6 +1734,7 @@ import {
   warbandAt,
   tripTimeLabel,
   tripLegs,
+  nextStepAt,
   voyageProgress,
   underAttackKey,
   voyageTargetShown,
@@ -3674,6 +3675,7 @@ const attacksOnMap = computed(() =>
       sentAt: w.voyage.sentAt,
       arriveAt: w.voyage.midAt - (w.voyage.dwellMs ?? 0),
       returnAt: w.voyage.returnAt,
+      nextAt: nextStepAt(w.voyage, now.value),
       members: w.members,
       hero: w.hero,
       waiting: w.waiting && now.value < w.voyage.sentAt,
@@ -3837,9 +3839,10 @@ watch(mapPois, (list) => {
   if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
     selected.value = null;
 });
-/** Tout ce qui voyage, du retour le plus tôt au plus tard (demandé). Une seule liste, sinon la
- *  rangée se lirait comme plusieurs rangées collées. `ends` = la fin du trajet de la tuile :
- *  le retour en ville, ou l'arrivée pour un renfort (aller simple, il reste sur le point). */
+/** Tout ce qui voyage, de la PROCHAINE ÉTAPE la plus tôt à la plus tard (demandé). Une seule
+ *  liste, sinon la rangée se lirait comme plusieurs rangées collées. `ends` = la prochaine
+ *  étape de la tuile (`nextStepAt`) : le départ s'il attend, la résolution sur place à
+ *  l'aller, puis le retour ; l'arrivée pour un renfort (aller simple, il reste sur le point). */
 const trips = computed(() => {
   const out: MapTrip[] = [];
   const ends = new Map<string, number>();
@@ -3849,7 +3852,7 @@ const trips = computed(() => {
   const h = hero.value;
   if (a && h) {
     const back = h.phase === 'return';
-    ends.set('hero', a.returnAt);
+    ends.set('hero', nextStepAt(a, now.value));
     if (a.crew) combos.set('hero', combinedKey(a.poi.id, a.seed));
     out.push({
       key: 'hero',
@@ -3871,7 +3874,7 @@ const trips = computed(() => {
   }
   for (const g of partiesOnMap.value) {
     const back = g.at.phase === 'return';
-    ends.set('g' + g.id, g.returnAt);
+    ends.set('g' + g.id, nextStepAt(g.trip, now.value));
     if (g.combo) combos.set('g' + g.id, g.combo);
     out.push({
       key: 'g' + g.id,
@@ -3892,7 +3895,7 @@ const trips = computed(() => {
     });
   }
   for (const w of attacksOnMap.value) {
-    ends.set(w.id, w.returnAt);
+    ends.set(w.id, w.nextAt);
     if (w.combo) combos.set(w.id, w.combo);
     out.push({
       key: w.id,

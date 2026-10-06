@@ -239,7 +239,7 @@ export interface MapTrip {
   toBase?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
   legs?: { go: string | null; back: string; detail: string } | null;
-  /** ⏱️ L'heure (ms) où se termine ce que la tuile décompte — l'ordre d'arrivée. */
+  /** ⏱️ L'heure (ms) de la prochaine étape du voyage (`nextStepAt`) — l'ordre de la rangée. */
   endsAt?: number;
   /** 🧭🛡️🗡️ Expédition, renfort ou attaque du joueur (les filtres de la rangée). */
   cat: TripCategory;
@@ -310,8 +310,8 @@ const emit = defineEmits<{
   cancelPlan: [id: string];
 }>();
 
-/** ⏱️ Une seule rangée, dans l'ordre d'arrivée : la fin d'un voyage (`endsAt`, ce que sa
- *  tuile décompte) et l'heure de frappe d'une armée se comparent sur la même horloge. Tri
+/** ⏱️ Une seule rangée, dans l'ordre d'arrivée : la prochaine étape d'un voyage (`endsAt` :
+ *  résolution à l'aller, puis retour) et l'heure de frappe d'une armée se comparent sur la même horloge. Tri
  *  STABLE : à égalité, les voyages d'abord, dans l'ordre reçu. Un voyage sans heure connue
  *  reste en tête, dans l'ordre reçu (il n'a rien à comparer). */
 const tiles = computed(() => {
