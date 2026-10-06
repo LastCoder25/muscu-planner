@@ -1016,16 +1016,15 @@
                garnison y fournit les champions, et ils y reviennent. ⚔️🧭 PLUSIEURS départs
                cochés = une ATTAQUE COMBINÉE : chaque groupe part à son heure pour arriver
                ensemble (le plan s'affiche dessous). -->
-            <div v-if="originOptions.length" class="origin-pick">
-              <p class="car-cap">
-                🧭 Choisis tes champions dans chaque lieu, du plus proche au plus loin · plusieurs
-                lieux = une attaque combinée
-              </p>
+            <div v-if="originOptions.length && combined && partySize" class="origin-pick">
               <!-- ⚔️🧭 LE PLAN : qui part d'où, et QUAND, pour que tous arrivent ensemble. Un groupe
                  qui attend reste chez lui (il produit, il défend) — s'il est battu avant de
                  partir, il ne vient pas. -->
               <div v-if="combined && partySize" class="wing-plan">
-                <p class="car-cap">
+                <p
+                  class="car-cap"
+                  title="Un groupe battu avant son départ (siège, reprise de son point) ne vient pas."
+                >
                   ⚔️ <b>Attaque combinée</b> · tous arrivent dans
                   <b>{{ formatDurationMin(Math.max(...wingPlan.map((w) => w.legMin))) }}</b>
                 </p>
@@ -1051,14 +1050,26 @@
                     >↩ {{ controlReturnValue(w.legMin, w.wonMin) }}</span
                   >
                 </div>
-                <p class="car-cap">
-                  Un groupe battu avant son départ (siège, reprise de son point) ne vient pas.
-                </p>
               </div>
             </div>
             <!-- 🧝 Le héros n'est plus ici : il est une tuile PARMI les effectifs, dans le groupe
                de la base (demandé, `HeroPickTile`). Reste « tout le vivier ». -->
+            <!-- 📐 Le compte, le partage d'XP et « tout le vivier » sur UNE ligne (demandé : moins
+               de place perdue avant les tuiles). -->
             <div class="party-top">
+              <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
+                 ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
+              <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
+                 coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
+              <p
+                class="car-cap party-count"
+                title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
+              >
+                👥
+                <b>{{ partyAdvs.length }}{{ Number.isFinite(partyMax) ? '/' + partyMax : '' }}</b>
+                · XP <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b>
+                <span v-if="!partyHeroOn"> · 🧭 seuls, +25 %</span>
+              </p>
               <button
                 v-if="char.advList.length"
                 class="car-auto"
@@ -1068,19 +1079,6 @@
                 {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
               </button>
             </div>
-            <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
-               ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
-            <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
-               coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
-            <p
-              class="car-cap"
-              title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
-            >
-              👥
-              <b>{{ partyAdvs.length }}{{ Number.isFinite(partyMax) ? '/' + partyMax : '' }}</b>
-              champions · XP partagée <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
-              <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
-            </p>
             <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
             <!-- 🧝 Le héros peut tenir garnison partout (étape 6 bis) : il défend le lieu, ne
                rentre pas, et se rappelle depuis la fiche du lieu. -->
@@ -1246,7 +1244,26 @@
             <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
             <details class="sh-rules">
               <summary>ⓘ Règles de cette expédition</summary>
-              <p v-if="selectedCamp" class="sh-note">
+              <!-- ⚔️ Le détail d'une bande en marche, sorti de sa fiche (une ligne y suffit). -->
+              <p v-if="selectedWarband?.army" class="sh-note">
+                La battre entièrement annule l’attaque. Même vaincus, tes champions rentrent avec le
+                butin des ennemis abattus ; les tombés passent par l’infirmerie. Trop forte pour une
+                seule équipe : attaque-la en combiné depuis la base et tes points fixes.
+              </p>
+              <p v-else-if="selectedWarband?.convoy" class="sh-note">
+                Arrivé, il renforce la forteresse d’un champion de référence (4 au plus). Même
+                repoussé, tu gardes la part de ce que tu as abattu. En cas de défaite, tout le groupe
+                part à l’infirmerie.
+              </p>
+              <p v-else-if="selectedWarband" class="sh-note">
+                {{
+                  selectedWarband.utile
+                    ? 'La disperser retire 30 à 40 points de tenue à l’armée du prochain siège ; le 💠 n’est qu’un lot de consolation.'
+                    : 'Leur armée est déjà annoncée à tes portes et garde la force que la Tour de guet a montrée.'
+                }}
+                En cas de défaite, tout le groupe part à l’infirmerie.
+              </p>
+              <p v-else-if="selectedCamp" class="sh-note">
                 Sans le héros : de l’or (et des pierres chez les morts-vivants). En cas de défaite,
                 les champions tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
               </p>
@@ -5685,9 +5702,15 @@ onUnmounted(() => {
 }
 .party-top {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
   margin-bottom: 6px;
+}
+.party-top .party-count {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
 }
 .car-auto {
   flex: none;

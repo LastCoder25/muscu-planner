@@ -98,36 +98,21 @@
           🧿 Poser un sceau de brèche — 24 h de répit ({{ sealStock }} en stock)
         </button>
       </template>
-      <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne est une PERTE ÉVITÉE, et on DIT quand ça
-         n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
-      <template v-if="warband?.army">
-        <p class="pc-note">
-          ⚔️ Elle marche sur <b>{{ warband.target }}</b
-          >. Chaque ennemi abattu <b>n'arrivera pas</b> ; la battre entièrement
-          <b>annule l'attaque</b>. Même vaincus, tes champions rentrent avec le butin des ennemis
-          abattus — les tombés passent par l'infirmerie. Elle est trop forte pour une seule équipe :
-          attaque-la en combiné depuis la base et tes points fixes.
-        </p>
-      </template>
-      <template v-else-if="warband?.convoy">
-        <p class="pc-note">
-          🐫 Ce convoi ravitaille la <b>forteresse</b> : arrivé, il la renforce d'un champion de
-          référence (4 au plus). Le rompre l'arrête et rapporte sa <b>cargaison</b> ; même repoussé,
-          tu gardes la part de ce que tu as abattu. En cas de défaite, tout le groupe part à
-          l'infirmerie.
-        </p>
-      </template>
-      <template v-else-if="warband">
-        <p v-if="warband.utile" class="pc-note">
-          ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
-          tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part à
-          l'infirmerie.
-        </p>
-        <p v-else class="pc-note warn">
-          ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et garde
-          la force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du 💠.
-        </p>
-      </template>
+      <!-- ⚔️ BANDE EN MARCHE : UNE ligne, l'enjeu (demandé : « bcp de texte qui gêne la sélection
+         des champions »). Le détail (butin, infirmerie, combiné) vit dans « ⓘ Règles » de l'envoi.
+         ⚠️ « Trop tard » reste visible : il change la décision. -->
+      <p v-if="warband?.army" class="pc-note">
+        ⚔️ Marche sur <b>{{ warband.target }}</b> · chaque abattu <b>n'arrivera pas</b>
+      </p>
+      <p v-else-if="warband?.convoy" class="pc-note">
+        🐫 Ravitaille la <b>forteresse</b> · rompu, il rapporte sa <b>cargaison</b>
+      </p>
+      <p v-else-if="warband?.utile" class="pc-note">
+        ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège
+      </p>
+      <p v-else-if="warband" class="pc-note warn">
+        ⚠️ <b>Trop tard pour le renfort</b> : elle ne rapporte plus que du 💠
+      </p>
     </template>
   </div>
 </template>
