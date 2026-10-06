@@ -168,6 +168,27 @@ export interface RiftLike {
   id: string;
   level: number;
   spawnedAt: number;
+  /** ⚔️ Monstres déjà abattus par des incursions ratées (cf. `Poi.riftSlain`). */
+  riftSlain?: number;
+  /** 💠 Part du mana fixe déjà versée par des incursions ratées (cf. `Poi.riftPaid`). */
+  riftPaid?: number;
+}
+
+/**
+ * ⚔️ CE QU'ON A TUÉ RESTE MORT (v1.65.9, décision de l'utilisateur). Une incursion ratée
+ * entame la faille : ses monstres abattus — les PREMIERS, ceux de l'entrée — ne reviennent
+ * pas, et le mana qu'ils ont rendu est décompté du total de la faille.
+ *
+ * ⚠️ SANS ÇA, PERDRE EN BOUCLE ÉTAIT UNE MINE : chaque échec repayait les mêmes monstres,
+ * jusqu'à 67 % d'une fermeture à chaque fois, pendant 7 jours. Désormais tout ce qu'une
+ * faille peut rendre, échecs compris, est plafonné à ce que rend sa fermeture
+ * (`riftClearMana`), et insister finit par la refermer.
+ *
+ * ⚠️ La faille CONTINUE D'ENGENDRER : ses nouveaux monstres sont les plus profonds (la
+ * profondeur est absolue, `riftDepth`), donc on reprend là où le dernier groupe est tombé.
+ */
+export function riftSlainOf(rift: Pick<RiftLike, 'riftSlain'>, population: number): number {
+  return Math.max(0, Math.min(population, Math.floor(rift.riftSlain ?? 0)));
 }
 
 /**
@@ -436,9 +457,13 @@ export function riftRamp(depth: number): number {
 export interface RiftRun {
   /** La porte franchie ET le boss abattu : la faille est fermée. */
   cleared: boolean;
-  /** Monstres abattus (hors boss) — c'est eux qui paient le mana, même en cas d'échec. */
+  /** Monstres abattus PAR CETTE INCURSION (hors boss) — c'est eux qui paient le mana, même
+   *  en cas d'échec. */
   killed: number;
+  /** Effectif TOTAL de la faille à l'entrée, morts d'avant compris. */
   population: number;
+  /** Monstres déjà morts à l'entrée (incursions ratées d'avant) : les `start` premiers. */
+  start: number;
   bossDown: boolean;
   finalPv: number;
   journal: string[];
@@ -705,6 +730,7 @@ export function simulateIncursion(
   bossMult = 1,
 ): RiftRun {
   const population = riftPopulation(rift, now);
+  const start = riftSlainOf(rift, population);
   const faction = riftSpecOf(rift).faction;
   const maxPv = party.pv;
   let pv = maxPv;
@@ -723,7 +749,7 @@ export function simulateIncursion(
     journal.push(SECOND_WIND_LINE);
   };
 
-  for (let i = 0; i < population; i++) {
+  for (let i = start; i < population; i++) {
     const foe = weakened(riftFoe(rift.level, faction, i, false), foeMult);
     const rs = (seed * 131 + i * 7919) >>> 0 || 1;
     const res = simulateCombat(riftFighter(fighter, pv), foe, {
@@ -746,6 +772,7 @@ export function simulateIncursion(
         cleared: false,
         killed,
         population,
+        start,
         bossDown: false,
         finalPv: 0,
         journal,
@@ -783,6 +810,7 @@ export function simulateIncursion(
     cleared: res.win,
     killed,
     population,
+    start,
     bossDown: res.win,
     finalPv: res.win ? Math.max(0, pv) : 0,
     journal,
@@ -792,15 +820,42 @@ export function simulateIncursion(
   };
 }
 
-/** Le mana d'une incursion : les monstres abattus, + le boss SI la faille est fermée. */
-export function incursionMana(run: RiftRun, level: number): number {
-  // Refermée : le mana fixe de la faille, gardien compris.
-  if (run.cleared) return riftClearMana({ level });
-  // Ratée : la PART de ce mana fixe qu'on a abattue (sans la prime du gardien). ⚠️ Une part,
-  // pas un compte de monstres : payée au monstre, une faille mûre (plus peuplée) rapporterait
-  // plus en échouant qu'une jeune en réussissant — l'attente reviendrait par la bande.
-  const part = run.population > 0 ? Math.min(1, run.killed / run.population) : 0;
-  return riftMana(RIFT.manaFoesPaid * part, level);
+/** 💠 Ce que la refermer rapporte ENCORE : le mana fixe, gardien compris, moins ce que des
+ *  incursions ratées en ont déjà tiré (`riftPaid`). Annoncé sur la fiche avant d'entrer. */
+export function riftClearManaLeft(rift: Pick<RiftLike, 'level' | 'riftPaid'>): number {
+  const paid = Math.min(1, Math.max(0, rift.riftPaid ?? 0));
+  const already = Math.round(riftMana(RIFT.manaFoesPaid, rift.level) * paid);
+  return Math.max(0, riftClearMana(rift) - already);
+}
+
+/**
+ * Part du mana fixe de la faille désormais acquise (0..1) : la part de ses monstres morts,
+ * jamais en recul (une faille qui engendre ne reprend pas ce qu'elle a déjà donné), 1 si
+ * elle est refermée. C'est ce qu'on inscrit sur la faille (`Poi.riftPaid`).
+ */
+export function incursionPaidShare(run: RiftRun, paidBefore: number): number {
+  if (run.cleared) return 1;
+  const dead = run.start + run.killed;
+  const share = run.population > 0 ? Math.min(1, dead / run.population) : 0;
+  return Math.max(Math.max(0, paidBefore), share);
+}
+
+/**
+ * Le mana d'une incursion : ce qu'elle ajoute à la part déjà versée, + le gardien SI la
+ * faille est refermée.
+ *
+ * ⚠️ Une PART, pas un compte de monstres : payée au monstre, une faille mûre (plus peuplée)
+ * rapporterait plus en échouant qu'une jeune en réussissant — l'attente reviendrait par la
+ * bande. ⚠️ Et une part DÉDUITE de ce que la faille a déjà rendu (`riftPaid`) : la somme de
+ * tout ce qu'une faille rend, échecs compris, ne dépasse jamais `riftClearMana`.
+ */
+export function incursionMana(run: RiftRun, level: number, paidBefore = 0): number {
+  const paid = Math.min(1, Math.max(0, paidBefore));
+  // Refermée : le reste du mana fixe, gardien compris.
+  if (run.cleared) return riftClearManaLeft({ level, riftPaid: paid });
+  // Ratée : la part de ce mana fixe abattue depuis la dernière fois (sans le gardien).
+  const foes = riftMana(RIFT.manaFoesPaid, level);
+  return Math.max(0, Math.round(foes * incursionPaidShare(run, paid)) - Math.round(foes * paid));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -842,7 +897,8 @@ export function incursionBodies(rift: RiftLike, now: number): SkirmishUnit[] {
   const population = riftPopulation(rift, now);
   const faction = riftSpecOf(rift).faction;
   const bodies: SkirmishUnit[] = [];
-  for (let i = 0; i <= population; i++) {
+  // ⚠️ Les morts d'avant ne sont plus là : ni XP à repayer, ni place dans `foeTrail`.
+  for (let i = riftSlainOf(rift, population); i <= population; i++) {
     const isBoss = i === population;
     const f = riftFoe(rift.level, faction, i, isBoss);
     bodies.push({
@@ -945,14 +1001,16 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
   // des ruines anciennes (`ruinsSeals`).
   // 🔮 🕳️ Scelleur de failles : une faille REFERMÉE rend plus de mana (le meilleur porteur).
   const mana = Math.round(
-    incursionMana(run, poi.level) * (run.cleared ? 1 + teamRuneValue(escort, 'riftSealer') : 1),
+    incursionMana(run, poi.level, poi.riftPaid ?? 0) *
+      (run.cleared ? 1 + teamRuneValue(escort, 'riftSealer') : 1),
   );
   const party: PartyResult = {
     hero: !!hero,
     faction: riftSpecOf(poi).faction,
     escort: escort.map((a) => a.id),
     win: run.cleared,
-    foes: run.population,
+    // Ce que CE groupe a affronté : les morts d'avant n'y sont plus.
+    foes: run.population - run.start,
     slain: run.killed,
     kills: {},
     heroKills: 0,
@@ -967,10 +1025,15 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
       pvTrail: run.pvTrail,
       foeTrail: run.foeTrail,
       ...(run.boss ? { boss: run.boss } : {}),
+      // ⚔️ L'état de la faille APRÈS ce groupe, inscrit sur elle à l'arrivée du rapport
+      // (`markRiftWounds`) : ce qu'on a tué reste mort, ce qu'elle a rendu est décompté.
+      ...(run.start ? { start: run.start } : {}),
+      slainTotal: run.start + run.killed,
+      paid: incursionPaidShare(run, poi.riftPaid ?? 0),
     },
   };
 
-  const tag = `${run.killed}/${run.population} abattus · +${mana} 💠`;
+  const tag = `${run.killed}/${run.population - run.start} abattus · +${mana} 💠`;
   return {
     win: run.cleared,
     gold: 0,

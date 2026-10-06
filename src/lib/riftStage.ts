@@ -128,6 +128,9 @@ export interface RiftStageInput {
   faction: RaidFaction;
   /** Monstres présents à l'entrée, gardien NON compris. */
   population: number;
+  /** Monstres déjà morts avant ce groupe (incursions ratées d'avant) : on rejoue à partir
+   *  du suivant, avec sa vraie identité. Absent = faille intacte. */
+  start?: number;
   /** Monstres abattus — le gardien n'en fait jamais partie. */
   killed: number;
   /** La faille a été refermée : le gardien est tombé. */
@@ -181,6 +184,7 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
     level: party.rift.level,
     faction: party.faction,
     population: party.foes,
+    ...(party.rift.start ? { start: party.rift.start } : {}),
     killed: party.slain,
     cleared: party.win,
     maxPv: party.rift.maxPv,
@@ -237,9 +241,12 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
   const cleared = doorOpens && input.cleared;
 
   const foes: RiftStageFoe[] = [];
+  // ⚠️ `k` compte les monstres AFFRONTÉS ; leur identité et leur profondeur se lisent au rang
+  // absolu dans la faille (`start + k`), comme dans le combat.
+  const start = Math.max(0, Math.round(input.start ?? 0));
   for (let k = 0; k < pop; k++) {
-    const depth = riftDepth(k);
-    const id = riftFoeIdentity(input.faction, k, false);
+    const depth = riftDepth(start + k);
+    const id = riftFoeIdentity(input.faction, start + k, false);
     foes.push({
       name: id.name,
       emoji: id.emoji,
@@ -254,7 +261,7 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
   }
   // Le gardien est TOUJOURS sur le terrain, même si le groupe n'est jamais arrivé jusqu'à
   // lui : c'est lui qu'on vient chercher, et le voir au fond dit ce qui restait à faire.
-  const bossId = riftFoeIdentity(input.faction, pop, true);
+  const bossId = riftFoeIdentity(input.faction, start + pop, true);
   foes.push({
     name: bossId.name,
     emoji: bossId.emoji,
