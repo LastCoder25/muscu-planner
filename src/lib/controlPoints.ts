@@ -20,6 +20,8 @@
 import { formatDuration } from './duration';
 import { activeIsland, islandPacified } from './archipelago';
 import { islandDefenseLine, islandPoint, islandPort, islandPortSpan } from './islandShape';
+import { enemyWaitMs, freshSortieClock, sortieFires } from './sortieClock';
+import type { SortieClock } from './expedition';
 import { mulberry32, seedOf } from './combat';
 import {
   advAscensionCap,
@@ -63,7 +65,6 @@ import {
   distNormAt,
   mineVeinGold,
   revealRadius,
-  recentDepartures,
   riftLevelFor,
   type ControlKind,
   type ControlState,
@@ -116,17 +117,13 @@ export const CONTROL = {
   /** 🏝️ Sur une île : cette part de la terre utile à leur angle (v1.28.0, « espace les
    *  lieux ») — à mi-chemin entre la ville et la côte, au lieu de serrés autour de la base. */
   islandFrac: 0.42,
-  /** Délai avant une reprise ennemie : entre 1 et 3 jours (décision de l'utilisateur), et
-   *  d'autant plus COURT que le joueur est actif (v0.1239, demandé : « plus souvent s'il joue
-   *  beaucoup »). La mesure est celle des sièges de la base (`activeDays7`) : 7 jours actifs
-   *  sur 7 → autour d'1 jour, aucun → autour de 3. */
-  retakeMinMs: 24 * 3600_000,
+  /** Le délai CALME d'une reprise (v1.67.0) : 3 jours, moins jusqu'à `retakeJitter`, après la
+   *  prise ou la défense — tenir un lieu n'est jamais gratuit, même sans sortir. Ce sont tes
+   *  SORTIES qui la rapprochent (`sortieRetakes`, `SORTIE_EVENTS.retake` : toutes les 2 à 4
+   *  sorties, jamais à moins d'un jour d'écart), comme le harcèlement le faisait à l'horloge
+   *  (« plus la carte est utilisée, plus elle harcèle », décision du 2026-09-30). */
   retakeMaxMs: 72 * 3600_000,
-  /** 🗺️ « La carte est une mine de ressources : plus le joueur l'utilise, plus elle le
-   *  harcèle » (décision de l'utilisateur, 2026-09-30). Harcèlement plein à ce nombre de
-   *  départs sur 7 jours (3 par jour) ; aucun départ → le rythme le plus calme. */
-  harassRefDepartures: 21,
-  /** Écart aléatoire autour du délai visé (± cette part), toujours borné à [min, max]. */
+  /** Part retirée au plus du délai calme, tirée à chaque attaque. */
   retakeJitter: 0.25,
   /** Force de la troupe ennemie, en champions de référence : tirée à chaque attaque.
    *  ⚠️ MESURÉE (`controlPoints.test`, niveau 30, 600 combats) : une garnison de 1, 2 ou 3
@@ -569,14 +566,6 @@ export const CITADEL = {
   /** 🌫️ Une citadelle CACHÉE attaque aussi les points de son secteur, mais 2× moins souvent :
    *  on ne peut pas encore l'abattre pour s'offrir une trêve. */
   hiddenSlow: 2,
-  /** ⚔️ Les raids d'une citadelle DÉCOUVERTE, sur n'importe quel lieu tenu : tous les 4 jours
-   *  quand on n'utilise pas la carte, chaque jour quand on l'utilise à fond (± 25 %). Plusieurs
-   *  citadelles découvertes = plusieurs raids, qui peuvent tomber en même temps. */
-  raidMaxMs: 96 * 3600_000,
-  raidMinMs: 24 * 3600_000,
-  /** Au plus ce nombre de raids rattrapés d'un coup après une absence (un lieu ne porte de
-   *  toute façon qu'une attaque à la fois). */
-  raidCatchUp: 8,
   /** 😡 Colère : +5 % d'armée par jour sans l'abattre, au plus 10 jours (+50 %). */
   ragePerDay: 0.05,
   rageMaxDays: 10,
@@ -601,12 +590,6 @@ export const isCitadelId = (id: string): boolean => CITADEL_IDS.includes(id);
 /** 🏯 Une citadelle découverte (donc visible et attaquable). */
 export const isCitadelFound = (p: Pick<Poi, 'control'> | null | undefined): boolean =>
   isCitadel(p) && p!.control!.discoveredAt !== undefined;
-
-/** 🗺️ Le harcèlement de la carte, de 0 (on n'y va jamais) à 1 (3 départs par jour sur la
- *  semaine) : il règle le rythme des reprises ET des raids de citadelle. */
-export function mapHarass(map: Pick<ExpeditionMap, 'departures'>, now: number): number {
-  return Math.min(1, recentDepartures(map, now).length / CONTROL.harassRefDepartures);
-}
 
 /** 🏯 Le niveau d'Avant-poste qui fait découvrir la citadelle `i`. */
 export function citadelRevealLevel(i: number): number {
@@ -749,9 +732,9 @@ function syncCitadels(
   // Celles d'une carte qui bascule s'en vont (sauf pendant un assaut : l'équipe y marche).
   if (map.archipel) {
     const kept = out.filter((p) => !isCitadel(p) || p.control!.assault);
-    const harass0 = mapHarass(map, now);
     const slow0 = (k: ControlKind) => attackSlow({ pois: kept, archipel: map.archipel }, k);
-    return gateAttacks(kept, now, harass0, slow0, islandPacified(map), true);
+    if (islandPacified(map)) return gateAttacks(kept, now, slow0, true, true);
+    return sortieRetakes(map, gateAttacks(kept, now, slow0, false, true), now, slow0);
   }
   CITADEL.sites.forEach((site, i) => {
     const id = citadelIdOf(i);
@@ -806,11 +789,11 @@ function syncCitadels(
       control: { ...c, size, ...(found !== undefined ? { discoveredAt: found } : {}) },
     };
   });
-  const harass = mapHarass(map, now);
   // 🕊️ Île pacifiée : ni reprise, ni raid.
   const slowOf = (k: ControlKind) => attackSlow({ pois: out, archipel: map.archipel }, k);
-  if (islandPacified(map)) return gateAttacks(stampAnger(out), now, harass, slowOf, true);
-  return citadelRaids(gateAttacks(stampAnger(out), now, harass, slowOf), now, harass);
+  if (islandPacified(map)) return gateAttacks(stampAnger(out), now, slowOf, true);
+  const gated = sortieRetakes(map, gateAttacks(stampAnger(out), now, slowOf), now, slowOf);
+  return citadelRaids(map, gated, now);
 }
 
 /** 🌫️ La citadelle du secteur de ce point est-elle encore CACHÉE ? Elle l'attaque quand même,
@@ -831,11 +814,10 @@ export function attackerHidden(
 
 /** ⚔️ Tout point tenu a une attaque prévue. Celui qui n'en a pas (la règle « une citadelle
  *  cachée n'attaque pas », v0.1388, est abandonnée le 2026-09-30) en reçoit une à partir de
- *  maintenant, au rythme du harcèlement (jamais pendant une trêve). N'écrit que ce qui change. */
+ *  maintenant, au rythme calme (jamais pendant une trêve). N'écrit que ce qui change. */
 function gateAttacks(
   pois: Poi[],
   now: number,
-  harass: number,
   slowOf: (kind: ControlKind) => number,
   pacified = false,
   capLate = false,
@@ -866,7 +848,7 @@ function gateAttacks(
       c.attackAt !== undefined &&
       c.attackAt > now + CONTROL.retakeMaxMs * slowOf(c.kind)
     ) {
-      const attackAt = now + retakeDelayMs(p.id, now, harass, slowOf(c.kind));
+      const attackAt = now + retakeCalmMs(p.id, now, slowOf(c.kind));
       if (out === pois) out = [...pois];
       out[k] = { ...p, control: { ...c, attackAt } };
       return;
@@ -874,63 +856,91 @@ function gateAttacks(
     if (c.attackAt !== undefined) return;
     const id = citadelIdFor(pois, c.kind);
     const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
-    const attackAt = Math.max(now + retakeDelayMs(p.id, now, harass, slowOf(c.kind)), truce);
+    const attackAt = Math.max(now + retakeCalmMs(p.id, now, slowOf(c.kind)), truce);
     if (out === pois) out = [...pois];
     out[k] = { ...p, control: { ...c, attackAt } };
   });
   return out;
 }
 
-/** ⚔️ Le délai jusqu'au prochain raid d'une citadelle découverte. */
-export function raidDelayMs(id: string, from: number, harass: number): number {
-  const r = mulberry32((seedOf(`${id}:raid:${from}`) ^ 0x5ad1c3e7) >>> 0 || 1)();
-  const h = Math.min(1, Math.max(0, harass));
-  const { raidMinMs: lo, raidMaxMs: hi } = CITADEL;
-  const aim = hi - h * (hi - lo);
-  return Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * CONTROL.retakeJitter)));
+/**
+ * ⚔️ LES RETAKES RAPPROCHÉES PAR TES SORTIES (v1.67.0, `SORTIE_EVENTS.retake`) : chaque lieu tenu
+ * a son horloge (`ControlState.sorties`) ; toutes les 2 à 4 sorties (× son facteur
+ * `attackSlow`), une armée sort, attend 1 à 3 h, et sa reprise est avancée à cet instant —
+ * jamais pendant une trêve, jamais une attaque déjà plus proche, jamais deux à moins d'un jour
+ * (× le facteur) : le rythme le plus soutenu de l'ancien harcèlement. N'écrit que ce qui change.
+ */
+function sortieRetakes(
+  map: Pick<ExpeditionMap, 'departures' | 'seed'>,
+  pois: Poi[],
+  now: number,
+  slowOf: (kind: ControlKind) => number,
+): Poi[] {
+  let out = pois;
+  pois.forEach((p, k) => {
+    const c = p.control;
+    if (!c || c.owner !== 'player' || c.attackAt === undefined) return;
+    if (c.kind === 'citadel' || c.kind === 'fortress') return;
+    const old = c.sorties ?? freshSortieClock(now, c.since);
+    const slow = slowOf(c.kind);
+    const { times, clock } = sortieFires(map, old, 'retake', now, slow, p.id);
+    let attackAt = c.attackAt;
+    const truce = truceUntilFor({ pois: out } as ExpeditionMap, c.kind);
+    for (const t of times)
+      attackAt = Math.min(attackAt, Math.round(Math.max(t + enemyWaitMs(p.id, t), truce)));
+    if (clock === c.sorties && attackAt === c.attackAt) return;
+    if (out === pois) out = [...pois];
+    out[k] = { ...p, control: { ...c, attackAt, sorties: clock } };
+  });
+  return out;
 }
 
-/** ⚔️ LES RAIDS : chaque citadelle DÉCOUVERTE frappe, à son rythme, un lieu tenu tiré au
- *  hasard n'importe où sur la carte — elle avance son attaque prévue (un lieu ne porte
- *  qu'une attaque à la fois). Pendant sa trêve elle ne raide pas, et un lieu couvert par la
- *  trêve de SA citadelle n'est pas visé (la trêve promet des jours sans reprise).
- *  N'écrit que ce qui change. */
-export function citadelRaids(pois: Poi[], now: number, harass: number): Poi[] {
+/** 🗺️ L'horloge de sorties d'un point qui vient d'être pris ou défendu à `at` : la charge
+ *  repart de zéro et l'écart minimal se compte depuis `at`. */
+function restClock(clock: SortieClock | undefined, at: number): SortieClock {
+  return { ...(clock ?? freshSortieClock(at)), charge: 0, last: at };
+}
+
+/** ⚔️ LES RAIDS : chaque citadelle DÉCOUVERTE frappe, toutes les `SORTIE_EVENTS.raid` sorties
+ *  (v1.67.0, son horloge `sorties` ; avant : 1 à 4 jours selon le harcèlement), un lieu tenu
+ *  tiré au hasard n'importe où sur la carte : après 1 à 3 h d'attente, elle avance son attaque
+ *  prévue (un lieu ne porte qu'une attaque à la fois). Pendant sa trêve elle ne raide pas, et
+ *  un lieu couvert par la trêve de SA citadelle n'est pas visé (la trêve promet des jours sans
+ *  reprise). `raidAt` : l'horloge d'avant, retirée. N'écrit que ce qui change. */
+export function citadelRaids(
+  map: Pick<ExpeditionMap, 'departures' | 'seed'>,
+  pois: Poi[],
+  now: number,
+): Poi[] {
   let out = pois;
   CITADEL_IDS.forEach((cid) => {
     const k = out.findIndex((p) => p.id === cid);
     const cit = k < 0 ? null : out[k]!;
     if (!cit || !isCitadelFound(cit)) return;
-    const cc = cit.control!;
+    const { raidAt: _r, ...cc } = cit.control!;
+    void _r;
     const truce = cc.truceUntil ?? 0;
-    let raidAt = cc.raidAt ?? Math.max(now, truce) + raidDelayMs(cid, now, harass);
-    let n = 0;
-    while (raidAt <= now && n < CITADEL.raidCatchUp) {
-      n++;
-      if (raidAt >= truce) {
-        const targets = out.filter(
-          (p) =>
-            p.control?.owner === 'player' &&
-            p.control.kind !== 'citadel' &&
-            p.control.attackAt !== undefined &&
-            p.control.attackAt > raidAt &&
-            truceUntilFor({ pois: out } as ExpeditionMap, p.control.kind) <= raidAt,
-        );
-        if (targets.length) {
-          const r = mulberry32((seedOf(`${cid}:target:${raidAt}`) ^ 0x1f83d9ab) >>> 0 || 1)();
-          const t = targets[Math.floor(r * targets.length)]!;
-          const at = raidAt;
-          out = out.map((p) =>
-            p.id === t.id ? { ...p, control: { ...p.control!, attackAt: at } } : p,
-          );
-        }
-      }
-      raidAt = Math.max(raidAt, truce) + raidDelayMs(cid, raidAt, harass);
+    const { times, clock } = sortieFires(map, cc.sorties, 'raid', now, 1, cid);
+    for (const t of times) {
+      if (t < truce) continue;
+      const at = Math.round(t + enemyWaitMs(cid, t));
+      const targets = out.filter(
+        (p) =>
+          p.control?.owner === 'player' &&
+          p.control.kind !== 'citadel' &&
+          p.control.attackAt !== undefined &&
+          p.control.attackAt > at &&
+          truceUntilFor({ pois: out } as ExpeditionMap, p.control.kind) <= at,
+      );
+      if (!targets.length) continue;
+      const r = mulberry32((seedOf(`${cid}:target:${t}`) ^ 0x1f83d9ab) >>> 0 || 1)();
+      const tg = targets[Math.floor(r * targets.length)]!;
+      out = out.map((p) =>
+        p.id === tg.id ? { ...p, control: { ...p.control!, attackAt: at } } : p,
+      );
     }
-    // Rattrapage borné : on repart de maintenant.
-    if (raidAt <= now) raidAt = now + raidDelayMs(cid, now, harass);
-    if (raidAt === cc.raidAt) return;
-    out = out.map((p) => (p.id === cid ? { ...p, control: { ...p.control!, raidAt } } : p));
+    if (_r === undefined && clock === cc.sorties) return;
+    out = out.map((p) => (p.id === cid ? { ...p, control: { ...cc, sorties: clock } } : p));
   });
   return out;
 }
@@ -1392,10 +1402,9 @@ function stashCitadels(
   return { pois: [...pois, ...back], stash: undefined };
 }
 
-/** Délai avant la prochaine attaque (graine : le lieu et l'instant) : visé entre 3 jours (on
- *  n'utilise pas la carte) et 1 jour (harcèlement plein, `mapHarass`), ± `retakeJitter`,
- *  borné à [1 j, 3 j] — le DOUBLE si la citadelle du secteur est cachée (`hiddenSlow`).
- *  ⚠️ `harass` et `hidden` sont REQUIS.
+/** Délai CALME avant la prochaine attaque (graine : le lieu et l'instant) : 3 jours, moins
+ *  jusqu'à `retakeJitter`, × `slowBy` (`attackSlow` : citadelle cachée, lieu d'île…). Les
+ *  sorties la rapprochent ensuite (`sortieRetakes`).
  *  ⚠️ L'instant n'est JAMAIS annoncé au joueur (décision de l'utilisateur) : ni sur la fiche
  *  du point, ni par une notification de préavis — seule l'attaque elle-même se dit. Seule
  *  exception (2026-09-28) : `attackImminent`, qui prévient dans les `CONTROL.imminentMs`
@@ -1424,14 +1433,11 @@ export function attackSlow(
     return kind === 'objective' ? ISLAND_ATTACK.objective : ISLAND_ATTACK.place;
   return attackerHidden(map, kind) ? CITADEL.hiddenSlow : 1;
 }
-export function retakeDelayMs(id: string, from: number, harass: number, slowBy: number): number {
+export function retakeCalmMs(id: string, from: number, slowBy: number): number {
   const r = mulberry32((seedOf(`${id}:atk:${from}`) ^ 0x2c1b3c6d) >>> 0 || 1)();
-  const h = Math.min(1, Math.max(0, harass));
   // Un facteur sous 1 ACCÉLÈRE (objectif pris sur une île) ; plancher pour une valeur folle.
   const slow = Math.max(0.1, slowBy);
-  const { retakeMinMs: lo, retakeMaxMs: hi, retakeJitter: j } = CONTROL;
-  const aim = hi - h * (hi - lo);
-  return slow * Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * j)));
+  return Math.round(slow * CONTROL.retakeMaxMs * (1 - r * CONTROL.retakeJitter));
 }
 
 /** Remplace un point dans la carte. */
@@ -1548,9 +1554,10 @@ export function captureControl(
       attackAt: islandPacified(map)
         ? undefined
         : Math.max(
-            at + retakeDelayMs(id, at, mapHarass(map, at), attackSlow(map, p.control!.kind)),
+            at + retakeCalmMs(id, at, attackSlow(map, p.control!.kind)),
             truceUntilFor(map, p.control!.kind),
           ),
+      sorties: restClock(p.control!.sorties, at),
       activity: activeDays7,
       assault: false,
       // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
@@ -1707,9 +1714,10 @@ export function holdControl(
       attackAt: islandPacified(map)
         ? undefined
         : Math.max(
-            at + retakeDelayMs(id, at, mapHarass(map, at), attackSlow(map, p.control!.kind)),
+            at + retakeCalmMs(id, at, attackSlow(map, p.control!.kind)),
             truceUntilFor(map, p.control!.kind),
           ),
+      sorties: restClock(p.control!.sorties, at),
       activity: activeDays7,
     },
   }));

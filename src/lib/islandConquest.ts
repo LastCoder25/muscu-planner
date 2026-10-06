@@ -33,14 +33,14 @@ import {
   controlSpot,
   fortMultOf,
   islandControlSpots,
-  mapHarass,
-  retakeDelayMs,
+  retakeCalmMs,
   champSeatsWithHero,
   walkPoint,
   heroPostBlocker,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
+import { enemyWaitMs, sortieFires, SORTIE_EVENTS, type SortieKind } from './sortieClock';
 import { islandPoint, islandScatter } from './islandShape';
 import { isMilitiaId } from './militia';
 import {
@@ -1011,7 +1011,7 @@ export function redirectIslandAttacks(map: ExpeditionMap, now: number): Expediti
     const target = objectives.reduce((best, o) =>
       Math.hypot(o.x - p.x, o.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y) ? o : best,
     );
-    const next = at + retakeDelayMs(p.id, at, mapHarass(map, at), attackSlow(map, c.kind));
+    const next = at + retakeCalmMs(p.id, at, attackSlow(map, c.kind));
     pois = pois.map((q) => {
       if (q.id === p.id) return { ...q, control: { ...q.control!, attackAt: next } };
       if (q.id === target.id) {
@@ -1270,7 +1270,7 @@ export function islandTargetLabel(
           : NEST.islands.has(isl.id)
             ? ` · ses bêtes embusquent les routes autour et attaquent tes lieux fixes ; tant que l’île n’est pas pacifiée, un nouveau nid apparaît toutes les ${NEST.departuresMin} à ${NEST.departuresMax} sorties sur la carte (6 au plus, à un rang autour du tien) et son armée marche aussitôt sur ton lieu tenu le plus proche — intercepte-la`
             : CURSE.islands.has(isl.id)
-              ? ' · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (en moyenne toutes les 72 h, plus souvent avec plusieurs sanctuaires debout)'
+              ? ` · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (toutes les ${SORTIE_EVENTS.invasion.min} à ${SORTIE_EVENTS.invasion.max} sorties sur la carte avec trois sanctuaires debout, plus rarement avec moins)`
               : WARLORD.islands.has(isl.id)
                 ? ` · tant qu’il tient, son armée mobile marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties sur la carte avec trois camps debout, plus rarement avec moins) et ses convois de ravitaillement marchent sur la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties ; chacun arrivé la renforce : intercepte-les)`
                 : ' · tant qu’il tient, il attaque tes lieux fixes') +
@@ -1306,88 +1306,6 @@ export const BRIGANDS = { pillageMs: 36 * 3600_000, jitter: 0.25 } as const;
 const PILLAGE_ISLANDS: ReadonlySet<number> = new Set([1]);
 
 /**
- * 🗺️ LES MOUVEMENTS ENNEMIS CALÉS SUR TES SORTIES (v1.66.0 ; décision de l'utilisateur :
- * « caler les événements d'attaque ou autres mouvements ennemis sur le nombre d'expéditions,
- * comme les nids, avec un nombre un peu aléatoire »). Le patron de `spawnNests` :
- * - chaque sortie sur la carte, comptée À SON ARRIVÉE (`map.departures` ; un demi-tour est
- *   retiré, `forgetDeparture`), charge le compteur de l'événement ; au seuil, tiré entre `min`
- *   et `max`, l'événement part à l'arrivée de CETTE sortie. Qui ne sort pas ne voit plus rien
- *   venir : on ne punit pas l'absence (règle 1 des sièges) ;
- * - le seuil est donné pour `ref` ennemis debout (les objectifs de l'île) : moins il en reste,
- *   plus il faut de sorties (en proportion) — abattre les camps les espace toujours ;
- * - ⚠️ PLAFOND : jamais deux départs à moins de `minGapMs` (× `ref` / debout). C'est le rythme
- *   MOYEN de l'ancienne horloge : un joueur très actif n'en voit jamais plus qu'avant, le
- *   compteur ne fait que ralentir celui qui sort peu. La charge attend la sortie suivante ;
- * - les sorties d'avant la première lecture ne comptent pas (l'horloge part de maintenant).
- */
-export const SORTIE_EVENTS = {
-  warlord: { min: 3, max: 5, minGapMs: 12 * 3600_000 },
-  convoy: { min: 2, max: 4, minGapMs: 8 * 3600_000 },
-} as const;
-export type SortieKind = keyof typeof SORTIE_EVENTS;
-
-/** Combien de sorties avant le `n`-ième événement `kind`, à `standing` ennemis debout sur `ref`. */
-export function sortieThreshold(
-  seed: number,
-  kind: SortieKind,
-  n: number,
-  standing: number,
-  ref: number,
-): number {
-  const c = SORTIE_EVENTS[kind];
-  const r = mulberry32((seedOf(`${seed}:sortie:${kind}:${n}`) ^ 0x4b1d7a3f) >>> 0 || 1)();
-  const span = c.max - c.min + 1;
-  const drawn = c.min + Math.min(span - 1, Math.floor(r * span));
-  return Math.max(1, Math.round((drawn * ref) / Math.max(1, standing)));
-}
-
-/** L'écart minimal entre deux départs de `kind`, à `standing` ennemis debout sur `ref`. */
-export function sortieMinGapMs(kind: SortieKind, standing: number, ref: number): number {
-  return (SORTIE_EVENTS[kind].minGapMs * ref) / Math.max(1, standing);
-}
-
-/**
- * 🗺️ Les instants où `kind` part entre la dernière sortie lue et `now`, et l'horloge à garder.
- * Sans horloge (première lecture) : aucune, et l'horloge part de `now`. Rend la MÊME horloge
- * quand aucune sortie n'est arrivée.
- */
-export function sortieFires(
-  map: Pick<ExpeditionMap, 'departures' | 'seed'>,
-  clock: SortieClock | undefined,
-  kind: SortieKind,
-  now: number,
-  standing: number,
-  ref: number,
-): { times: number[]; clock: SortieClock } {
-  if (!clock) return { times: [], clock: { from: now, charge: 0, fired: 0 } };
-  const fresh = (map.departures ?? [])
-    .filter((t) => t > clock.from && t <= now)
-    .sort((x, y) => x - y);
-  if (!fresh.length) return { times: [], clock };
-  const gap = sortieMinGapMs(kind, standing, ref);
-  let { charge, fired, last } = clock;
-  const times: number[] = [];
-  for (const t of fresh) {
-    charge++;
-    if (charge < sortieThreshold(map.seed, kind, fired, standing, ref)) continue;
-    if (last !== undefined && t < last + gap) continue;
-    times.push(t);
-    charge = 0;
-    fired++;
-    last = t;
-  }
-  return {
-    times,
-    clock: {
-      from: fresh[fresh.length - 1]!,
-      charge,
-      fired,
-      ...(last !== undefined ? { last } : {}),
-    },
-  };
-}
-
-/**
  * 🚩 L'ARMÉE MOBILE DU SEIGNEUR DE GUERRE (île 4, roadmap : « armée mobile qui vise le moins
  * défendu ») : tant qu'un camp de guerre tient, une armée sort toutes les `SORTIE_EVENTS.warlord`
  * sorties sur la carte (v1.66.0, plus d'horloge) et marche, depuis le camp le plus proche, sur
@@ -1399,13 +1317,6 @@ export function sortieFires(
 const WARLORD = {
   islands: new Set([4]) as ReadonlySet<number>,
 } as const;
-
-/** Le délai jusqu'à la prochaine invasion (île 5), à `standing` sanctuaires debout. ⚠️ Même
- *  graine qu'avant la v1.66.0 (`war`) : les invasions de l'île 5 ne bougent pas. */
-function invasionDelayMs(seed: number, from: number, standing: number): number {
-  const r = mulberry32((seedOf(`${seed}:war:${from}`) ^ 0x3b9ac9ff) >>> 0 || 1)();
-  return (INVASION.raidMs / Math.max(1, standing)) * (1 + (r * 2 - 1) * INVASION.jitter);
-}
 
 /** 🚩 Le lieu tenu le MOINS défendu à `at` (dont l'attaque prévue vient après), `null` si aucun. */
 export function weakestHeld(pois: readonly Poi[], at: number, seed: number): Poi | null {
@@ -1430,17 +1341,14 @@ function heldBefore(pois: readonly Poi[], at: number): Poi[] {
 
 /**
  * 🔮 LES INVASIONS COMBINÉES DE L'ÎLE 5 (roadmap : « invasions combinées ») : tant qu'un
- * sanctuaire maudit tient, une invasion sort en moyenne toutes les `raidMs` / sanctuaires
- * debout et frappe TOUS les lieux tenus à la fois (elle avance leurs attaques prévues au même
+ * sanctuaire maudit tient, une invasion sort au fil de tes sorties (plus rarement avec moins de
+ * sanctuaires debout) et frappe TOUS les lieux tenus à la fois (elle avance leurs attaques prévues au même
  * instant). Plus rare que l'armée de l'île 4, mais tout tombe en même temps : il faut des
- * garnisons partout. Elle garde son HORLOGE (`warAt`) : seule l'île 4 est passée aux sorties
- * (v1.66.0, à éprouver avant d'étendre).
+ * garnisons partout. Aux SORTIES depuis la v1.67.0 (`SORTIE_EVENTS.invasion` : 6 à 10 sorties,
+ * jamais deux à moins de 24 h avec trois sanctuaires debout) : elle attend 1 à 3 h puis frappe.
  */
 export const INVASION = {
   islands: new Set([5]) as ReadonlySet<number>,
-  raidMs: 72 * 3600_000,
-  jitter: 0.25,
-  catchUp: 8,
 } as const;
 
 /**
@@ -1473,28 +1381,47 @@ export function corruptRifts(map: ExpeditionMap, pois: Poi[]): Poi[] {
 }
 
 /**
- * 🚩 Avance l'armée mobile (île 4, aux sorties) et les invasions (île 5, à l'horloge) jusqu'à
- * `now`. Ailleurs, efface leur état. Rend la MÊME carte si rien ne change.
+ * 🚩 Avance l'armée mobile (île 4) et les invasions (île 5) jusqu'à `now`, aux sorties sur la
+ * carte. Ailleurs, efface leur état. `warAt` : l'horloge d'avant (v1.66.0 / v1.67.0), retirée.
+ * Rend la MÊME carte si rien ne change.
  */
 export function warlordRaids(map: ExpeditionMap, now: number): ExpeditionMap {
   const isl = activeIsland(map);
   if (!map.archipel) return map;
-  if (isl && INVASION.islands.has(isl.id)) return invasionRaids(map, now);
   const camps = standingCamps(map);
-  const active = !!isl && WARLORD.islands.has(isl.id) && !islandPacified(map) && camps > 0;
-  // `warAt` : l'horloge d'avant la v1.66.0 sur l'île 4, ou celle d'une île 5 quittée.
-  const { warAt: _w, ...a } = map.archipel;
+  const kind: 'warlord' | 'invasion' | null = !isl
+    ? null
+    : WARLORD.islands.has(isl.id)
+      ? 'warlord'
+      : INVASION.islands.has(isl.id)
+        ? 'invasion'
+        : null;
+  const live = kind && !islandPacified(map) && camps > 0 ? kind : null;
+  const { warAt: _w, ...a0 } = map.archipel;
   void _w;
-  const old = map.archipel.sorties?.warlord;
-  if (!active) {
-    if (_w === undefined && !old) return map;
-    return { ...map, archipel: withSortie(a, 'warlord', undefined) };
-  }
-  const { times, clock } = sortieFires(map, old, 'warlord', now, camps, isl.objectives);
+  let a = a0;
+  for (const k of ['warlord', 'invasion'] as const)
+    if (k !== live && a.sorties?.[k]) a = withSortie(a, k, undefined);
+  if (!live || !isl) return _w === undefined && a === a0 ? map : { ...map, archipel: a };
+  const old = a.sorties?.[live];
+  const { times, clock } = sortieFires(map, old, live, now, isl.objectives / camps);
   let pois = map.pois;
-  for (const t of times) pois = warlordStrike(pois, t, map.seed);
-  if (_w === undefined && clock === old && pois === map.pois) return map;
-  return { ...map, pois, archipel: withSortie(a, 'warlord', clock) };
+  for (const t of times)
+    pois =
+      live === 'warlord' ? warlordStrike(pois, t, map.seed) : invasionStrike(pois, t, map.seed);
+  if (_w === undefined && a === a0 && clock === old && pois === map.pois) return map;
+  return { ...map, pois, archipel: withSortie(a, live, clock) };
+}
+
+/** 🔮 L'invasion sortie à `at` : après une attente tirée, elle avance d'un coup l'attaque de
+ *  TOUS les lieux tenus (jamais une attaque déjà plus proche). */
+function invasionStrike(pois: Poi[], at: number, seed: number): Poi[] {
+  const when = Math.round(at + enemyWaitMs(`${seed}:invasion`, at));
+  const hit = new Set(heldBefore(pois, when).map((p) => p.id));
+  if (!hit.size) return pois;
+  return pois.map((p) =>
+    hit.has(p.id) ? { ...p, control: { ...p.control!, attackAt: when } } : p,
+  );
 }
 
 /** L'archipel avec l'horloge de sorties `kind` posée (ou retirée si `undefined`). */
@@ -1524,34 +1451,6 @@ function warlordStrike(pois: Poi[], at: number, seed: number): Poi[] {
   );
   const r = mulberry32((seedOf(`${seed}:warStrike:${at}`) ^ 0x6a09e667) >>> 0 || 1)();
   return marchOn(pois, target, from, at, r);
-}
-
-/** 🔮 Les invasions combinées de l'île 5 : à l'horloge (`warAt`), elles avancent à leur
- *  instant l'attaque de TOUS les lieux tenus. Inchangées par la v1.66.0. */
-function invasionRaids(map: ExpeditionMap, now: number): ExpeditionMap {
-  const a = map.archipel!;
-  const camps = standingCamps(map);
-  if (islandPacified(map) || camps === 0) {
-    if (a.warAt === undefined) return map;
-    const { warAt: _w, ...rest } = a;
-    void _w;
-    return { ...map, archipel: rest };
-  }
-  let pois = map.pois;
-  let at = a.warAt ?? now + invasionDelayMs(map.seed, now, camps);
-  for (let n = 0; at <= now && n < INVASION.catchUp; n++) {
-    const hit = new Set(heldBefore(pois, at).map((p) => p.id));
-    if (hit.size) {
-      const when = at;
-      pois = pois.map((p) =>
-        hit.has(p.id) ? { ...p, control: { ...p.control!, attackAt: when } } : p,
-      );
-    }
-    at += invasionDelayMs(map.seed, at, camps);
-  }
-  if (at <= now) at = now + invasionDelayMs(map.seed, now, camps);
-  if (at === a.warAt && pois === map.pois) return map;
-  return { ...map, pois, archipel: { ...a, warAt: at } };
 }
 
 /**
@@ -1629,7 +1528,7 @@ export function warlordConvoys(
     if (stale.size) pois = pois.filter((p) => !stale.has(p.id));
     convoys = [];
   } else {
-    const fired = sortieFires(map, old, 'convoy', now, camps.length, isl.objectives);
+    const fired = sortieFires(map, old, 'convoy', now, isl.objectives / camps.length);
     clock = fired.clock;
     for (const at of fired.times) {
       const r = mulberry32((seedOf(`${map.seed}:convoyCamp:${at}`) ^ 0x1b873593) >>> 0 || 1)();

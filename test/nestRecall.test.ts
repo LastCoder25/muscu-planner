@@ -10,7 +10,7 @@ import {
   type ExpeditionMap,
   type Poi,
 } from '@/lib/expedition';
-import { ensureControls, mapHarass } from '@/lib/controlPoints';
+import { ensureControls } from '@/lib/controlPoints';
 import { ensureIslandConquest, nestThreshold } from '@/lib/islandConquest';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
@@ -75,10 +75,9 @@ describe('🪺🔙 un voyage rappelé ne fait pas apparaître de nid', () => {
     expect(moveDeparture(m, NOW, NOW + H)).toBe(m);
   });
 
-  it('le harcèlement ne compte pas une sortie encore en route', () => {
+  it('une sortie encore en route ne compte pas', () => {
     const m = recordDeparture(islandMap(), NOW, NOW + H);
     expect(recentDepartures(m, NOW)).toHaveLength(0);
-    expect(mapHarass(m, NOW)).toBe(0);
     expect(recentDepartures(m, NOW + H)).toHaveLength(1);
   });
 });

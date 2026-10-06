@@ -421,9 +421,8 @@ import {
   dueRetakes,
   retiredHeld,
   hospiceHealMult,
-  retakeDelayMs,
+  retakeCalmMs,
   withLastAttack,
-  mapHarass,
   attackSlow,
   ensureControls,
   holdControl,
@@ -5251,7 +5250,7 @@ export const useCharacterStore = defineStore('character', () => {
           settled,
           hit,
           at,
-          at + retakeDelayMs(p.id, at, mapHarass(settled, at), attackSlow(settled, p.control.kind)),
+          at + retakeCalmMs(p.id, at, attackSlow(settled, p.control.kind)),
         ).map;
       }
     }

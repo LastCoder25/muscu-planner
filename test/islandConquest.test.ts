@@ -286,7 +286,7 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
   });
 
   it('la prise programme l’attaque dans la fenêtre de son type', () => {
-    const lo = CONTROL.retakeMinMs;
+    const lo = CONTROL.retakeMaxMs * (1 - CONTROL.retakeJitter);
     const hi = CONTROL.retakeMaxMs;
     for (let seed = 1; seed <= 12; seed++) {
       const m0 = island1(seed);
@@ -347,7 +347,14 @@ describe('⛺ les camps de brigands attaquent et pillent', () => {
       ] as BaseState['defenses'],
       raid: rollRaid(7, 26, NOW + 4 * H, H, null, null),
     };
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0, towerBoost: 0, levelBand: null };
+    const ctx = {
+      playerLevel: 26,
+      activeDays7: 7,
+      globalXp: 0,
+      fortSightMs: () => 0,
+      towerBoost: 0,
+      levelBand: null,
+    };
     expect(advanceBase(base, { ...ctx, pacified: false }, NOW).base.raid).not.toBe(null);
     const r = advanceBase(base, { ...ctx, pacified: true }, NOW);
     expect(r.base.raid).toBe(null);

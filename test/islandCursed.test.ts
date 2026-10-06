@@ -17,6 +17,7 @@ import {
   razeIslandTarget,
   warlordRaids,
 } from '@/lib/islandConquest';
+import { SORTIE_EVENTS, sortieThreshold } from '@/lib/sortieClock';
 import { harvestOver } from './helpers/controlHarvest';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
@@ -93,29 +94,51 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
     const t4 = ensureIslandConquest({ ...four, pois: [...four.pois, rift(four)] }, NOW, 70);
     expect(t4.pois.find((p) => p.id === 'rift_test')!.corrupt).toBeUndefined();
   });
-  it('les invasions combinées frappent TOUS les lieux tenus à la fois', () => {
-    let m = warlordRaids(held(islandMap()), NOW);
-    const at = m.archipel!.warAt!;
-    expect(at - NOW).toBeGreaterThanOrEqual((INVASION.raidMs / 3) * 0.75 - 1);
-    expect(at - NOW).toBeLessThanOrEqual((INVASION.raidMs / 3) * 1.25);
-    m = warlordRaids(m, at);
+  it('les invasions combinées (aux sorties, v1.67.0) frappent TOUS les lieux tenus à la fois', () => {
+    expect(INVASION.islands.has(5)).toBe(true);
+    // L'ancienne horloge part ; la nouvelle démarre à la première lecture.
+    const legacy = held(islandMap());
+    let m = warlordRaids({ ...legacy, archipel: { ...legacy.archipel!, warAt: NOW + H } }, NOW);
+    expect(m.archipel!.warAt).toBeUndefined();
+    expect(m.archipel!.sorties?.invasion).toEqual({ from: NOW, charge: 0, fired: 0 });
+    const before = attacks(m);
+    const k = sortieThreshold(m.seed, 'invasion', 0, 1);
+    expect(k).toBeGreaterThanOrEqual(SORTIE_EVENTS.invasion.min);
+    expect(k).toBeLessThanOrEqual(SORTIE_EVENTS.invasion.max);
+    const dep = Array.from({ length: k }, (_, i) => NOW + (i + 1) * H);
+    const t = dep[k - 1]!;
+    // Une sortie de moins : rien.
+    expect(attacks(warlordRaids({ ...m, departures: dep.slice(0, -1) }, t))).toEqual(before);
+    m = warlordRaids({ ...m, departures: dep }, t);
+    const at = attacks(m)[0]!;
+    expect(at).toBeGreaterThanOrEqual(t + H);
+    expect(at).toBeLessThanOrEqual(t + 3 * H);
     expect(attacks(m)).toEqual(attacks(m).map(() => at));
+  });
+  it('qui ne sort pas ne voit aucune invasion', () => {
+    const m0 = warlordRaids(held(islandMap()), NOW);
+    const m = warlordRaids(m0, NOW + 30 * DAY);
+    expect(m).toBe(m0);
   });
   it('ne recule jamais une attaque déjà plus proche', () => {
     const m0 = held(islandMap());
     const soon = NOW + H;
+    const started = warlordRaids(m0, NOW);
+    const k = sortieThreshold(started.seed, 'invasion', 0, 1);
+    const dep = Array.from({ length: k }, (_, i) => NOW + (i + 1) * 60_000);
+    const t = dep[k - 1]!;
     const m1 = {
-      ...m0,
-      archipel: { ...m0.archipel!, warAt: NOW + 12 * H },
-      pois: m0.pois.map((p) =>
+      ...started,
+      departures: dep,
+      pois: started.pois.map((p) =>
         p.control?.kind === 'altar' ? { ...p, control: { ...p.control, attackAt: soon } } : p,
       ),
     };
-    const m = warlordRaids(m1, NOW + 12 * H);
+    const m = warlordRaids(m1, t);
     expect(m.pois.find((p) => p.control?.kind === 'altar')!.control!.attackAt).toBe(soon);
-    expect(m.pois.find((p) => p.control?.kind === 'distillery')!.control!.attackAt).toBe(
-      NOW + 12 * H,
-    );
+    const d = m.pois.find((p) => p.control?.kind === 'distillery')!.control!.attackAt!;
+    expect(d).toBeGreaterThanOrEqual(t + H);
+    expect(d).toBeLessThanOrEqual(t + 3 * H);
   });
   it('la fiche le dit', () => {
     const d = islandTargetLabel(islandMap(), 'isl_obj_0')!.detail;

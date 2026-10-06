@@ -10,16 +10,13 @@ import {
   retiredHeld,
 } from '@/lib/controlPoints';
 import {
-  SORTIE_EVENTS,
-  sortieFires,
-  sortieMinGapMs,
-  sortieThreshold,
   ensureIslandConquest,
   islandTargetLabel,
   razeIslandTarget,
   warlordRaids,
   weakestHeld,
 } from '@/lib/islandConquest';
+import { SORTIE_EVENTS, sortieFires, sortieMinGapMs, sortieThreshold } from '@/lib/sortieClock';
 import { characterRank } from '@/lib/characterRank';
 import { bossSummonCost } from '@/data/bosses';
 import { harvestOver } from './helpers/controlHarvest';
@@ -56,7 +53,7 @@ const withSorties = (m: ExpeditionMap, at: number[]): ExpeditionMap => ({
   departures: [...(m.departures ?? []), ...at],
 });
 /** Le seuil du `n`-ième départ de l'armée, à trois camps debout. */
-const warSeuil = (m: ExpeditionMap, n = 0) => sortieThreshold(m.seed, 'warlord', n, 3, 3);
+const warSeuil = (m: ExpeditionMap, n = 0) => sortieThreshold(m.seed, 'warlord', n, 1);
 /** `k` sorties, une par heure après `from`. */
 const hourly = (k: number, from = NOW) => Array.from({ length: k }, (_, i) => from + (i + 1) * H);
 const FAR = NOW + 30 * DAY;
@@ -109,8 +106,7 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre, aux sorties
       { from: NOW, charge: 0, fired: 0 },
       'warlord',
       NOW + 40 * H,
-      3,
-      3,
+      1,
     );
     expect(times.length).toBeGreaterThanOrEqual(2);
     for (let i = 1; i < times.length; i++)
@@ -119,8 +115,8 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre, aux sorties
   it('moins de camps debout : trois fois plus de sorties et d’écart avec un seul', () => {
     const m = islandMap();
     for (let n = 0; n < 20; n++)
-      expect(sortieThreshold(m.seed, 'warlord', n, 1, 3)).toBe(warSeuil(m, n) * 3);
-    expect(sortieMinGapMs('warlord', 1, 3)).toBe(3 * SORTIE_EVENTS.warlord.minGapMs);
+      expect(sortieThreshold(m.seed, 'warlord', n, 3)).toBe(warSeuil(m, n) * 3);
+    expect(sortieMinGapMs('warlord', 3)).toBe(3 * SORTIE_EVENTS.warlord.minGapMs);
   });
   it('tous les camps abattus : plus aucune sortie, l’horloge est effacée', () => {
     let m = held(islandMap());
@@ -179,8 +175,7 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre, aux sorties
           { from: NOW, charge: 0, fired: 0 },
           kind,
           NOW + 14 * DAY,
-          3,
-          3,
+          1,
         ).times.length;
       }
       return total / 6 / 14;

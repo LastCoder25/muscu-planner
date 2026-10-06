@@ -181,9 +181,12 @@ export interface ControlState {
   palier?: number;
   palierAt?: number;
   truceUntil?: number;
-  /** 🏯 Citadelle DÉCOUVERTE : l'instant de son prochain raid sur un lieu tenu, n'importe où
-   *  sur la carte (`citadelRaids`). */
+  /** 🏯 LEGACY (avant la v1.67.0) : l'heure du prochain raid d'une citadelle, à l'horloge.
+   *  Les raids partent désormais aux sorties (`sorties`) ; effacé au premier tick. */
   raidAt?: number;
+  /** 🗺️ L'horloge de SORTIES du point (`sortieClock`) : sur un lieu tenu, celle qui RAPPROCHE
+   *  sa reprise ; sur une citadelle découverte, celle de ses raids. */
+  sorties?: SortieClock;
   /** 🏯 Citadelle : l'instant où l'Avant-poste l'a DÉCOUVERTE (jamais repris). Avant, elle
    *  reste cachée, ne s'attaque pas et ne s'énerve pas. */
   discoveredAt?: number;
@@ -193,7 +196,8 @@ export interface ControlState {
   /** 😡 Jours actifs sur 7 du joueur quand la prochaine attaque a été programmée : la colère
    *  monte d'autant moins vite qu'il s'entraîne peu. Absent (points d'avant) : 7. */
   activity?: number;
-  /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
+  /** Prochaine attaque ennemie : au rythme calme (2 à 3 jours après la prise ou la défense,
+   *  `retakeCalmMs`), RAPPROCHÉE par tes sorties (`sortieRetakes`, v1.67.0). */
   attackAt?: number;
   /** 🏝️ Nom et emoji PROPRES (objectif secondaire : « Camp de brigands » sur l'île 1, « Nid »
    *  sur l'île 2…) : ils l'emportent sur ceux du type. */
@@ -868,13 +872,13 @@ export interface ExpeditionMap {
     /** 🪦 Île 3 : quand chaque cimetière a été abattu (id → instant) — il se relève
      *  `RISE.riseMs` plus tard tant que la citadelle des morts tient. */
     razedAt?: Record<string, number>;
-    /** 🔮 Île 5 : la prochaine INVASION combinée (horloge). LEGACY sur l'île 4 (v1.66.0 :
-     *  l'armée mobile part aux sorties, `sorties.warlord`), effacé au premier tick. */
+    /** LEGACY (îles 4 et 5, avant les v1.66.0 / v1.67.0) : la prochaine sortie de l'armée ou de
+     *  l'invasion, à l'horloge. Elles partent aux sorties (`sorties`) ; effacé au premier tick. */
     warAt?: number;
     /** 🐫 LEGACY (avant la v1.66.0) : la prochaine sortie d'un convoi, à l'horloge. */
     convoyAt?: number;
-    /** 🗺️ Les mouvements ennemis calés sur les sorties (`islandConquest.sortieFires`). */
-    sorties?: Partial<Record<'warlord' | 'convoy', SortieClock>>;
+    /** 🗺️ Les mouvements ennemis calés sur les sorties (`sortieClock.sortieFires`). */
+    sorties?: Partial<Record<'warlord' | 'convoy' | 'invasion', SortieClock>>;
     /** 🐫 Les convois en route (id, arrivée à la forteresse). */
     convoys?: { id: string; at: number }[];
     /** 🐫 Les convois ARRIVÉS : chacun renforce la forteresse (`convoyBonus`). */

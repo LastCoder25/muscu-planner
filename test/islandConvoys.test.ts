@@ -7,11 +7,10 @@ import {
   FORTRESS_ID,
   convoyBonus,
   convoyVanquished,
-  SORTIE_EVENTS,
   ensureIslandConquest,
-  sortieThreshold,
   warlordConvoys,
 } from '@/lib/islandConquest';
+import { SORTIE_EVENTS, sortieThreshold } from '@/lib/sortieClock';
 import { resolveConvoy } from '@/lib/rift';
 import { refAdventurer } from '@/lib/caravan';
 import type { Adventurer } from '@/lib/adventurers';
@@ -30,7 +29,7 @@ const fortressSize = (m: ExpeditionMap) => m.pois.find((p) => p.id === FORTRESS_
 /** Les sorties qui font partir le premier convoi (une par heure) : leur dernier instant est
  *  son départ. */
 function departuresFor(m: ExpeditionMap): number[] {
-  const k = sortieThreshold(m.seed, 'convoy', 0, 3, 3);
+  const k = sortieThreshold(m.seed, 'convoy', 0, 1);
   return Array.from({ length: k }, (_, i) => NOW + (i + 1) * H);
 }
 

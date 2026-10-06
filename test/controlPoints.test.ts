@@ -13,8 +13,7 @@ import {
   loseControl,
   withLastAttack,
   markAssault,
-  retakeDelayMs,
-  mapHarass,
+  retakeCalmMs,
   CITADEL,
   retakeForce,
   controlTravelMult,
@@ -47,6 +46,7 @@ import { CONTROL_WARN_MS, planPushes } from '@/lib/push';
 import { fuseUnits } from '@/lib/skirmish';
 import { campFoe } from '@/lib/camp';
 import { simulateCombat } from '@/lib/combat';
+import { SORTIE_EVENTS, sortieThreshold } from '@/lib/sortieClock';
 
 const H = 3600_000;
 const D = 24 * H;
@@ -147,46 +147,84 @@ describe('🏰 les quatre points', () => {
 
 describe('🏰 prise, production, reprise', () => {
   const taken = () => captureControl(mapAt(3), ID, ['a0', 'a1', 'a2', 'a3', 'a4', 'a5'], 0, 7);
-  it('pris : la garnison (5 au plus à la mine) y reste, une attaque est tirée entre 1 et 3 jours', () => {
+  it('pris : la garnison (5 au plus à la mine) y reste, une attaque est tirée au rythme calme', () => {
     const p = ctl(taken());
     expect(p.control!.owner).toBe('player');
     expect(p.control!.garrison).toEqual(['a0', 'a1', 'a2', 'a3', 'a4']);
-    expect(p.control!.attackAt).toBeGreaterThanOrEqual(CONTROL.retakeMinMs);
+    const calmLo = CONTROL.retakeMaxMs * (1 - CONTROL.retakeJitter);
+    expect(p.control!.attackAt).toBeGreaterThanOrEqual(calmLo);
     expect(p.control!.attackAt).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
+    // Son horloge de sorties part de la prise.
+    expect(p.control!.sorties).toEqual({ from: 0, charge: 0, fired: 0, last: 0 });
   });
-  it('les délais restent entre 1 et 3 jours, plus courts si le joueur utilise la carte', () => {
-    const at = (h: number, hidden = false) =>
+  it('le délai calme : de 2 j 6 h à 3 j, tiré (jamais un rendez-vous fixe), × le facteur du point', () => {
+    const at = (hidden = false) =>
       Array.from({ length: 300 }, (_, i) =>
-        retakeDelayMs(ID, i * 977, h, hidden ? CITADEL.hiddenSlow : 1),
+        retakeCalmMs(ID, i * 977, hidden ? CITADEL.hiddenSlow : 1),
       );
-    const mean = (d: number[]) => d.reduce((x, y) => x + y, 0) / d.length;
-    for (const h of [0, 0.5, 1]) {
-      const d = at(h);
-      expect(Math.min(...d)).toBeGreaterThanOrEqual(CONTROL.retakeMinMs);
-      expect(Math.max(...d)).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
-    }
-    // Harcèlement plein : autour d'un jour ; carte délaissée : autour de trois.
-    expect(mean(at(1))).toBeLessThan(30 * H);
-    expect(mean(at(0))).toBeGreaterThan(60 * H);
-    expect(mean(at(1))).toBeLessThan(mean(at(0.5)));
-    expect(mean(at(0.5))).toBeLessThan(mean(at(0)));
+    const d = at();
+    expect(Math.min(...d)).toBeGreaterThanOrEqual(CONTROL.retakeMaxMs * (1 - CONTROL.retakeJitter));
+    expect(Math.max(...d)).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
+    expect(new Set(d.map((x) => Math.round(x / H))).size).toBeGreaterThan(5);
     // 🌫️ Citadelle cachée : exactement le double.
-    expect(at(1, true)).toEqual(at(1).map((x) => x * CITADEL.hiddenSlow));
-    // Et ce n'est pas un rendez-vous fixe : le tirage varie.
-    expect(new Set(at(1).map((x) => Math.round(x / H))).size).toBeGreaterThan(5);
+    at(true).forEach((x, i) =>
+      expect(Math.abs(x - d[i]! * CITADEL.hiddenSlow)).toBeLessThanOrEqual(2),
+    );
   });
-  it('🗺️ le harcèlement suit les départs des 7 derniers jours', () => {
-    const m = mapAt(3);
-    expect(mapHarass(m, 10 * D)).toBe(0);
+  it('🗺️ tes sorties rapprochent la reprise (v1.67.0) : à la N-ième, l’armée sort et attend 1 à 3 h', () => {
+    const m = taken();
+    const calm = ctl(m).control!.attackAt!;
+    const k = sortieThreshold(m.seed, 'retake', 0, 1, ID);
+    expect(k).toBeGreaterThanOrEqual(SORTIE_EVENTS.retake.min);
+    expect(k).toBeLessThanOrEqual(SORTIE_EVENTS.retake.max);
+    const dep = Array.from({ length: k }, (_, i) => D + (i + 1) * H);
+    const t = dep[k - 1]!;
+    // Une sortie de moins : la charge monte, rien ne part.
+    const short = ensureControls({ ...m, departures: dep.slice(0, -1) }, t, 30, 100);
+    expect(ctl(short).control!.sorties).toMatchObject({ charge: k - 1, fired: 0 });
+    void calm;
+    const x = ensureControls({ ...m, departures: dep }, t, 30, 100);
+    const a = ctl(x).control!.attackAt!;
+    // (un raid de citadelle peut tomber plus tôt encore : jamais plus tard)
+    expect(a).toBeLessThanOrEqual(t + 3 * H);
+    expect(ctl(x).control!.sorties).toMatchObject({ charge: 0, fired: 1, last: t });
+    // Sans citadelle découverte, l'attente seule décide : 1 à 3 h.
+    const own = ctl(x).control!.attackAt!;
+    if (own > t) expect(own).toBeGreaterThanOrEqual(t + H);
+  });
+  it('🗺️ jamais à moins d’un jour de la prise, ni plus d’une fois par jour', () => {
+    const m = taken();
+    const calm = ctl(m).control!.attackAt!;
+    // Vingt sorties dans les 20 premières heures : trop tôt, la reprise reste calme.
+    void calm;
+    const early = Array.from({ length: 20 }, (_, i) => (i + 1) * H - 1);
+    expect(
+      ctl(ensureControls({ ...m, departures: early }, 20 * H, 30, 100)).control!.sorties!.fired,
+    ).toBe(0);
+    // Sortir sans cesse : au plus un rapprochement par jour.
     let x = m;
-    for (let i = 0; i < 7; i++) x = recordDeparture(x, 10 * D + i * H);
-    expect(mapHarass(x, 10 * D + 8 * H)).toBeCloseTo(7 / CONTROL.harassRefDepartures, 9);
-    for (let i = 0; i < 40; i++) x = recordDeparture(x, 10 * D + (10 + i) * H);
-    expect(mapHarass(x, 12 * D)).toBe(1);
-    // Au-delà de 7 jours, les départs s'oublient.
-    expect(mapHarass(x, 30 * D)).toBe(0);
-    // Et ils survivent à l'avancée du monde — y compris ceux encore EN ROUTE (datés de
-    // leur arrivée, dans le futur), qui ne comptent qu'à l'arrivée.
+    const fires: number[] = [];
+    for (let t = H; t < 3 * D; t += H) {
+      x = ensureControls({ ...x, departures: [...(x.departures ?? []), t] }, t, 30, 100);
+      const last = ctl(x).control!.sorties?.last;
+      if (last !== undefined && last > 0 && !fires.includes(last)) fires.push(last);
+      if (ctl(x).control!.attackAt! <= t) break;
+    }
+    for (let i = 1; i < fires.length; i++)
+      expect(fires[i]! - fires[i - 1]!).toBeGreaterThanOrEqual(SORTIE_EVENTS.retake.minGapMs);
+  });
+  it('🗺️ qui ne sort pas garde la reprise calme', () => {
+    const m = taken();
+    const calm = ctl(m).control!.attackAt;
+    const x = ensureControls(m, 2 * D, 30, 100);
+    expect(ctl(x).control!.attackAt).toBe(calm);
+    expect(ctl(x).control!.sorties!.fired).toBe(0);
+  });
+  it('🗺️ les départs survivent à l’avancée du monde, et ne comptent qu’à l’arrivée', () => {
+    let x = mapAt(3);
+    for (let i = 0; i < 80; i++) x = recordDeparture(x, 10 * D + i * H);
+    // Au-delà de 7 jours, les départs s'oublient ; ceux encore EN ROUTE (datés de leur
+    // arrivée, dans le futur) sont gardés.
     const kept = advanceWorld(x, 12 * D, 30, 3).departures ?? [];
     expect(kept.length).toBe(x.departures!.filter((t) => t > 12 * D - 7 * D).length);
     expect(kept.some((t) => t > 12 * D)).toBe(true);
@@ -231,8 +269,12 @@ describe('🏰 prise, production, reprise', () => {
     const at = ctl(m).control!.attackAt!;
     expect(dueRetakes(m, at - 1)).toHaveLength(0);
     expect(dueRetakes(m, at)).toHaveLength(1);
-    const again = ctl(holdControl(m, ID, at, 7)).control!.attackAt!;
-    expect(again).toBeGreaterThanOrEqual(at + CONTROL.retakeMinMs);
+    const held = ctl(holdControl(m, ID, at, 7)).control!;
+    expect(held.attackAt!).toBeGreaterThanOrEqual(
+      at + CONTROL.retakeMaxMs * (1 - CONTROL.retakeJitter),
+    );
+    // La charge repart de zéro, et l'écart minimal se compte depuis la défense.
+    expect(held.sorties).toMatchObject({ charge: 0, last: at });
     expect(heldControls(holdControl(m, ID, at, 7))).toHaveLength(1);
   });
   it('perdu : le lieu redevient ennemi, sa troupe et son compteur changent', () => {
@@ -336,7 +378,8 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     base: null,
     expedition: null,
     parties: [],
-    watchtowerLevel: 0, fortSightMs: () => 0,
+    watchtowerLevel: 0,
+    fortSightMs: () => 0,
     activeDays7: 0,
     playerLevel: 30,
     plunder: null,
