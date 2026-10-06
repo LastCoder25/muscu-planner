@@ -26,7 +26,15 @@
           card.win ? '✓' : '✗'
         }}</span>
       </div>
-      <span class="sum">{{ summary }}</span>
+      <!-- 💰 Les gains de la ligne repliée sont des PASTILLES (demandé : « toucher l'icône du
+           consommable montre son détail ») : un toucher ouvre la bulle FLOTTANTE de `HaulPills`
+           sans ouvrir le rapport (`@click.stop` dans le composant). -->
+      <span class="sum">
+        <HaulPills v-if="card.gains.length" :pills="card.gains" sign="+" floating />
+        <template v-if="summaryTail"
+          >{{ card.gains.length ? ' · ' : '' }}{{ summaryTail }}</template
+        >
+      </span>
       <button
         v-if="state === 'claim'"
         type="button"
@@ -186,20 +194,17 @@ const replayLabel = computed(() => {
 const empty = computed(
   () => !props.card.gains.length && !props.card.loot.length && !props.card.legacyItem,
 );
-/** La ligne unique d'un rapport encaissé : ses gains, puis l'XP. */
-const summary = computed(() => {
-  const parts = props.card.gains.map((g) => `${g.emoji} +${fmt(g.n)}`);
+/** La ligne unique d'un rapport replié : ses gains (pastilles touchables, cf. le gabarit),
+ *  puis les objets et l'XP ; le verdict si rien n'est rapporté. */
+const summaryTail = computed(() => {
+  const parts: string[] = [];
   if (props.card.loot.length) parts.push(`🎁 ×${props.card.loot.length + props.card.lootMore}`);
   if (props.card.totalXp) parts.push(`+${props.card.totalXp} XP`);
-  return parts.join(' · ') || props.card.verdict;
+  return parts.join(' · ') || (props.card.gains.length ? '' : props.card.verdict);
 });
 
 const main = computed(() => missionMain(props.card));
 const detail = computed(() => missionDetail(props.card));
-
-function fmt(n: number): string {
-  return Math.round(n).toLocaleString('fr-FR');
-}
 </script>
 
 <style scoped lang="scss">

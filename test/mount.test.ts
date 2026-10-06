@@ -1861,6 +1861,41 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     expect(tip).toContain('🪙 Or');
     expect(tip).toContain('Construire et améliorer les bâtiments');
+    // 🎒 Replié (la boîte 📬) : l'icône d'un consommable se touche aussi (demandé), la bulle
+    // dit ce qu'il fait, et le rapport RESTE replié.
+    const { SUPPLIES } = await import('@/lib/supplies');
+    const supplyCard = messageCard(
+      {
+        id: 'm2',
+        poiType: 'fallen',
+        level: 26,
+        win: true,
+        text: 'fouille',
+        gold: 0,
+        energy: 0,
+        key: 0,
+        supplies: { rations: 1 },
+        resolvedAt: Date.now() - 3_600_000,
+        read: true,
+      } as never,
+      ROW.adventurers,
+    );
+    let foldedTip = '';
+    expect(
+      await mountIt(
+        MissionReportCard,
+        { card: supplyCard, state: 'done', now: Date.now(), folded: true },
+        undefined,
+        undefined,
+        '/',
+        (h) => (foldedTip = h),
+        (host) => host.querySelector<HTMLElement>('.mrc.folded .hp')?.click(),
+      ),
+    ).toBeNull();
+    expect(foldedTip).toContain('mrc folded');
+    expect(foldedTip).toContain('hp-tip hp-pop');
+    expect(foldedTip).toContain(SUPPLIES.rations.name);
+    expect(foldedTip).toContain(SUPPLIES.rations.what);
     // Un CAMP : pas de rejeu, le verbe d'un camp, le bouton d'encaissement.
     const camp = await render(msg(base), 'claim');
     expect(camp).not.toContain('class="replay"');

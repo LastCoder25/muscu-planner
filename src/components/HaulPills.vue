@@ -20,8 +20,24 @@
     @click.stop="open = open === g.emoji ? null : g.emoji"
   >
     {{ g.emoji }} {{ sign }}{{ fmt(g.n) }}
+    <!-- 🪟 FLOTTANTE (la ligne repliée d'un rapport, dans la boîte 📬) : la bulle sort de la
+         ligne et de la fenêtre qui défile — ancrée dedans, elle y était rognée (vu au banc). -->
+    <q-menu
+      v-if="floating"
+      :model-value="open === g.emoji"
+      no-parent-event
+      anchor="bottom middle"
+      self="top middle"
+      :offset="[0, 6]"
+      @update:model-value="(v: boolean) => !v && open === g.emoji && (open = null)"
+    >
+      <span class="hp-tip hp-pop" role="tooltip">
+        <b>{{ g.emoji }} {{ nameOf(g) }}</b>
+        <span v-if="useOf(g)">{{ useOf(g) }}</span>
+      </span>
+    </q-menu>
   </button>
-  <span v-if="tip" class="hp-tip" role="tooltip">
+  <span v-if="tip && !floating" class="hp-tip" role="tooltip">
     <b>{{ tip.emoji }} {{ nameOf(tip) }}</b>
     <span v-if="useOf(tip)">{{ useOf(tip) }}</span>
   </span>
@@ -42,8 +58,11 @@ const props = withDefaults(
     sign?: string;
     /** \`plain\` : du texte en ligne (rapport) ; \`chip\` : une pastille bordée (voyage). */
     variant?: 'plain' | 'chip';
+    /** La bulle FLOTTE au-dessus de tout (`q-menu`) : la ligne repliée d'un rapport vit dans
+     *  une fenêtre qui défile et qui rognait la bulle ancrée. */
+    floating?: boolean;
   }>(),
-  { sign: '', variant: 'plain' },
+  { sign: '', variant: 'plain', floating: false },
 );
 
 /** À quoi sert une ressource : le consommable le dit lui-même, les devises du plateau
@@ -110,5 +129,14 @@ onBeforeUnmount(() => window.removeEventListener('click', close));
   padding: 8px 10px;
   font-size: 12.5px;
   line-height: 1.3;
+  /* ⚠️ La bulle vit DANS la ligne de l'appelant : elle n'en hérite ni le `nowrap` ni
+     l'alignement (la ligne repliée d'un rapport est alignée à droite, sur une ligne — vu au
+     banc, le texte du consommable y était coupé). */
+  white-space: normal;
+  text-align: left;
+}
+.hp-tip.hp-pop {
+  position: static;
+  max-width: min(240px, calc(100vw - 48px));
 }
 </style>
