@@ -2928,6 +2928,33 @@ describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () 
     expect(out).toContain('Ruines d’un héros tombé');
   }, 30_000);
 
+  it('🩹 un consommable gagné se touche : la bulle dit à quoi il sert', async () => {
+    const { default: HaulPills } = await import('@/components/HaulPills.vue');
+    const { SUPPLIES } = await import('@/lib/supplies');
+    const pill = {
+      emoji: SUPPLIES.trousse.emoji,
+      n: 2,
+      name: SUPPLIES.trousse.name,
+      what: SUPPLIES.trousse.what,
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        HaulPills,
+        { pills: [pill], variant: 'chip', named: true },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector('button')!.click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Trousse de soins');
+    expect(out).toContain('×2');
+    expect(out).toContain('role="tooltip"');
+    expect(out).toContain(SUPPLIES.trousse.what);
+  }, 30_000);
+
   it('🎯 la séance générée du Défi 360 se monte (anneaux d’XP branchés au setup)', async () => {
     // Éprouve le SETUP : useProgress et useXpFx instanciés, imports résolus. L'animation
     // elle-même se joue après l'enregistrement des séries — hors de portée d'un montage.

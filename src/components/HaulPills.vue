@@ -19,7 +19,10 @@
     :aria-label="`${nameOf(g)} : ${sign}${fmt(g.n)}`"
     @click.stop="open = open === g.emoji ? null : g.emoji"
   >
-    {{ g.emoji }} {{ sign }}{{ fmt(g.n) }}
+    <template v-if="named"
+      >{{ g.emoji }} {{ nameOf(g) }} <i>×{{ fmt(g.n) }}</i></template
+    >
+    <template v-else>{{ g.emoji }} {{ sign }}{{ fmt(g.n) }}</template>
     <!-- 🪟 FLOTTANTE (la ligne repliée d'un rapport, dans la boîte 📬) : la bulle sort de la
          ligne et de la fenêtre qui défile — ancrée dedans, elle y était rognée (vu au banc). -->
     <q-menu
@@ -61,8 +64,11 @@ const props = withDefaults(
     /** La bulle FLOTTE au-dessus de tout (`q-menu`) : la ligne repliée d'un rapport vit dans
      *  une fenêtre qui défile et qui rognait la bulle ancrée. */
     floating?: boolean;
+    /** Le NOM en clair dans la pastille (« 🩹 Trousse de soins ×2 ») : l'écran de fin de la
+     *  fouille d'un héros tombé liste ses trouvailles par leur nom. */
+    named?: boolean;
   }>(),
-  { sign: '', variant: 'plain', floating: false },
+  { sign: '', variant: 'plain', floating: false, named: false },
 );
 
 /** À quoi sert une ressource : le consommable le dit lui-même, les devises du plateau
@@ -90,6 +96,10 @@ onBeforeUnmount(() => window.removeEventListener('click', close));
   font: inherit;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
+}
+.hp i {
+  font-style: normal;
+  opacity: 0.8;
 }
 .hp.plain {
   padding: 2px 4px;

@@ -203,9 +203,8 @@
         </div>
         <div class="end-sub">Ce que le héros tombé avait laissé derrière lui.</div>
         <div class="end-list">
-          <span v-for="(f, i) in grouped" :key="i" class="end-pill"
-            ><b>{{ f.emoji }}</b> {{ f.name }} <i>×{{ f.n }}</i></span
-          >
+          <!-- ❓ Toucher une trouvaille dit à quoi elle sert (`HaulPills`, la bulle des rapports). -->
+          <HaulPills :pills="grouped" variant="chip" named floating />
         </div>
         <q-btn
           unelevated
@@ -233,6 +232,7 @@ import type { RiftCastMember } from '@/lib/riftStage';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from '@/lib/supplies';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import HaulPills from '@/components/HaulPills.vue';
 
 const props = defineProps<{
   supplies: SupplyStock;
@@ -262,10 +262,11 @@ const finds = computed(() => {
   return list;
 });
 const grouped = computed(() => {
-  const out: { emoji: string; name: string; n: number }[] = [];
+  const out: { emoji: string; name: string; what: string; n: number }[] = [];
   for (const id of SUPPLY_IDS) {
     const n = props.supplies[id] ?? 0;
-    if (n > 0) out.push({ emoji: SUPPLIES[id].emoji, name: SUPPLIES[id].name, n });
+    if (n > 0)
+      out.push({ emoji: SUPPLIES[id].emoji, name: SUPPLIES[id].name, what: SUPPLIES[id].what, n });
   }
   return out;
 });
@@ -715,20 +716,6 @@ onBeforeUnmount(clearAll);
   justify-content: center;
   gap: 6px;
   margin-bottom: 16px;
-}
-.end-pill {
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: rgba(255, 210, 63, 0.12);
-  border: 1px solid rgba(255, 210, 63, 0.45);
-  font-size: 13px;
-  b {
-    font-weight: 400;
-  }
-  i {
-    font-style: normal;
-    opacity: 0.8;
-  }
 }
 .end-cta {
   min-height: 44px;
