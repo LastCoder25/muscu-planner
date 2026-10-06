@@ -598,12 +598,12 @@
             type="button"
             class="slot-tile enemy-mil"
             aria-label="Envoyer des miliciens à l’avance"
-            :disabled="!milHomeFree"
+            :disabled="!enemyMilitia.canSend"
             @click="openQuick"
           >
             <span class="slot-plus">🛡️</span>
             <span class="slot-name">{{
-              milHomeFree ? 'Miliciens à l’avance' : 'Aucun milicien à la base'
+              enemyMilitia.canSend ? 'Miliciens à l’avance' : 'Aucun milicien disponible'
             }}</span>
           </button>
         </div>
@@ -973,11 +973,14 @@
                     <span class="xfer-name">{{ t.label }}</span>
                     <span class="xfer-sub">{{
                       t.why ??
-                      `🧭 ${formatDurationMin(t.min)} · ${Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
+                      `🧭 ${formatDurationMin(t.min)} · ${t.enemy ? 'ennemi' : Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
                     }}</span>
                     <!-- 🛡️ Des miliciens vers un lieu plein (demandé) : ils partent quand même,
                          et font demi-tour vers la base si c'est encore plein à l'arrivée. -->
-                    <span v-if="!t.why && t.over > 0" class="xfer-over"
+                    <span v-if="!t.why && t.enemy" class="xfer-over"
+                      >⚔️ demi-tour vers la base s’il est encore ennemi</span
+                    >
+                    <span v-else-if="!t.why && t.over > 0" class="xfer-over"
                       >🔄 {{ t.over }} en trop : demi-tour si plein</span
                     >
                   </span>
@@ -2685,9 +2688,18 @@ const enemyMilitia = computed(() => {
   const c = liveControl.value;
   if (!c || c.owner === 'player' || !militiaMayHead(c)) return null;
   const coming = (c.reinforcing ?? []).filter((r) => isMilitiaId(r.id) && r.at > now.value);
+  const reserved = char.reservedIds;
   return {
     enRoute: coming.length,
     inMs: coming.length ? Math.min(...coming.map((r) => r.at)) - now.value : 0,
+    // 🛡️ De la base, OU de la garnison d'un autre lieu tenu (`transferSourcesFor`, la règle
+    // du store) — signalé : seuls ceux de la base pouvaient partir.
+    canSend:
+      milHomeFree.value > 0 ||
+      (!!livePoi.value &&
+        transferSourcesFor(char.row?.expedition_map, livePoi.value.id).some((s) =>
+          s.ids.some((id) => !reserved.has(id)),
+        )),
   };
 });
 /** 🏅 Le cran du point sélectionné (ancienneté) — ou, pour la citadelle, son palier et sa
@@ -3219,43 +3231,51 @@ const transferTargets = computed(() => {
   const champs = char.advList.filter((a) => ids.includes(a.id));
   const hasMil = ids.some((id) => isMilitiaId(id));
   const milCount = ids.filter((id) => isMilitiaId(id)).length;
-  return map.pois
-    .filter((p) => p.id !== from.id && p.control?.owner === 'player')
-    .map((p) => {
-      const why = transferBlocker(map, from.id, p.id, ids);
-      const champMin = champs.length
-        ? legFromSpot(p, from, (q) =>
-            partyLegMin(q, champs, {
-              hero: false,
-              travelMult: travelMult.value,
-              gearSpeed: advGearRoles(champs, char.advGearStock).speed,
-            }),
-          )
-        : 0;
-      const milMin = hasMil
-        ? legFromSpot(p, from, (q) => caravanLegMin(q, [], 0, travelMult.value))
-        : 0;
-      return {
-        id: p.id,
-        emo: CONTROL_EMO[p.control!.kind],
-        label: CONTROL_LABEL[p.control!.kind],
-        free: garrisonFreeSeats(p.control),
-        // Les miliciens sans place aujourd'hui (une fois servis les champions de la sélection).
-        over: Math.max(
-          0,
-          milCount -
-            Math.max(
-              0,
-              Math.min(
-                militiaFreeSeats(p.control),
-                garrisonFreeSeats(p.control) - (ids.length - milCount),
+  return (
+    map.pois
+      // 🛡️⚔️ Des miliciens seuls partent aussi vers un lieu ENNEMI (à l'avance d'une attaque).
+      .filter(
+        (p) =>
+          p.id !== from.id &&
+          (p.control?.owner === 'player' || (!champs.length && militiaMayHead(p.control))),
+      )
+      .map((p) => {
+        const why = transferBlocker(map, from.id, p.id, ids);
+        const champMin = champs.length
+          ? legFromSpot(p, from, (q) =>
+              partyLegMin(q, champs, {
+                hero: false,
+                travelMult: travelMult.value,
+                gearSpeed: advGearRoles(champs, char.advGearStock).speed,
+              }),
+            )
+          : 0;
+        const milMin = hasMil
+          ? legFromSpot(p, from, (q) => caravanLegMin(q, [], 0, travelMult.value))
+          : 0;
+        return {
+          id: p.id,
+          emo: CONTROL_EMO[p.control!.kind],
+          label: CONTROL_LABEL[p.control!.kind],
+          enemy: p.control!.owner !== 'player',
+          free: garrisonFreeSeats(p.control),
+          // Les miliciens sans place aujourd'hui (une fois servis les champions de la sélection).
+          over: Math.max(
+            0,
+            milCount -
+              Math.max(
+                0,
+                Math.min(
+                  militiaFreeSeats(p.control),
+                  garrisonFreeSeats(p.control) - (ids.length - milCount),
+                ),
               ),
-            ),
-        ),
-        min: Math.max(champMin, milMin),
-        why: why ? TRANSFER_BLOCK_LABEL[why] : null,
-      };
-    });
+          ),
+          min: Math.max(champMin, milMin),
+          why: why ? TRANSFER_BLOCK_LABEL[why] : null,
+        };
+      })
+  );
 });
 async function transferCtl(toId: string) {
   const uid = auth.user?.id;

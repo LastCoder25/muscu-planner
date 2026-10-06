@@ -77,7 +77,9 @@ describe('🧭 trajet depuis un point fixe', () => {
 
 describe('⇄ transfert entre deux points', () => {
   it('refusé si l’un des deux points n’est pas à toi, ou si c’est le même', () => {
-    expect(transferBlocker(world(['a']), MINE, CAMP, ['a'])).toBe('notHeld');
+    // Un champion ne part pas vers un lieu ennemi ; on ne part pas d'un lieu ennemi.
+    expect(transferBlocker(world(['a']), MINE, CAMP, ['a'])).toBe('enemy');
+    expect(transferBlocker(world([], ['b']), MINE, CAMP, ['b'])).toBe('notHeld');
     expect(transferBlocker(world(['a'], ['b']), MINE, MINE, ['a'])).toBe('same');
     expect(transferBlocker(world(['a'], ['b']), MINE, CAMP, [])).toBe('empty');
   });
@@ -193,5 +195,42 @@ describe('⇄ transferSourcesFor : qui peut venir d’un autre point (2026-09-29
     const m = world([], ['b']);
     expect(transferSourcesFor(m, MINE)).toEqual([]);
     expect(transferSourcesFor(null, MINE)).toEqual([]);
+  });
+});
+
+describe('🛡️⚔️ des miliciens d’un autre point vers un lieu ennemi', () => {
+  // Signalé : « je n'ai pas pu faire venir les miliciens depuis le scriptorium, j'ai dû les
+  // envoyer depuis la base ». Ils marchent à l'avance d'un point comme de la base.
+  it('des miliciens d’un point tenu partent vers un lieu ennemi, pas un champion', () => {
+    const m = world(['mil:1', 'a']);
+    expect(transferBlocker(m, MINE, CAMP, ['mil:1'])).toBeNull();
+    expect(transferBlocker(m, MINE, CAMP, ['mil:1', 'a'])).toBe('enemy');
+    expect(transferSourcesFor(m, CAMP)).toEqual([{ fromId: MINE, ids: ['mil:1'] }]);
+  });
+  it('jamais vers un objectif, la forteresse ni la citadelle', () => {
+    const m = world(['mil:1']);
+    const raze = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === CAMP ? { ...p, control: { ...p.control!, kind: 'fortress' as const } } : p,
+      ),
+    };
+    expect(transferBlocker(raze, MINE, CAMP, ['mil:1'])).toBe('notHeld');
+  });
+  it('ils marchent vers le lieu ennemi, puis font demi-tour s’il l’est encore', () => {
+    const m = transferGarrison(world(['mil:1', 'a']), {
+      fromId: MINE,
+      toId: CAMP,
+      now: H,
+      playerLevel: L,
+      champs: { ids: [], at: H },
+      militia: { ids: ['mil:1'], at: 3 * H },
+    });
+    expect(pt(m, MINE).control!.garrison).toEqual(['a']);
+    expect(pt(m, CAMP).control!.reinforcing).toEqual([
+      { id: 'mil:1', at: 3 * H, from: H, via: MINE },
+    ]);
+    const back = settleReinforcements(m, 4 * H, L, () => 2 * H);
+    expect(pt(back, CAMP).control!.returning?.map((r) => r.id)).toEqual(['mil:1']);
   });
 });
