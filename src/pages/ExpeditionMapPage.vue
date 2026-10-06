@@ -1157,9 +1157,11 @@
                   }}</span>
                 </button>
                 <HeroPickTile
-                  v-if="g.id === 'base'"
+                  v-if="g.id === 'base' && !interceptHidden('hero')"
                   :on="partyHeroOn"
-                  :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                  :block="
+                    partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : interceptAid('hero')
+                  "
                   :sub="heroPostSub ?? 'part de la base · sans XP'"
                   :gain="partyGain.hero"
                   @toggle="partyHero = !partyHero"
@@ -1169,11 +1171,14 @@
                   :key="a.id"
                   :adv="a"
                   :on="partyEscort.includes(a.id)"
+                  :reason="interceptAid(a.id)"
                   :xp="partyXp[a.id]"
                   :gain="partyGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
-                <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
+                <p v-if="!g.advs.length" class="pool-empty">
+                  {{ g.late ? '⏱️ Personne d’ici n’arriverait à temps.' : 'Personne de prêt ici.' }}
+                </p>
               </template>
               <template v-if="showBlocked">
                 <AdvPickTile
@@ -1187,17 +1192,21 @@
             </div>
             <div v-else class="car-pick">
               <HeroPickTile
+                v-if="!interceptHidden('hero')"
                 :on="partyHeroOn"
-                :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                :block="
+                  partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : interceptAid('hero')
+                "
                 :sub="heroPostSub ?? 'sans XP'"
                 :gain="partyGain.hero"
                 @toggle="partyHero = !partyHero"
               />
               <AdvPickTile
-                v-for="a in partyPoolSorted"
+                v-for="a in partyPoolShown"
                 :key="a.id"
                 :adv="a"
                 :on="partyEscort.includes(a.id)"
+                :reason="interceptAid(a.id)"
                 :xp="partyXp[a.id]"
                 :gain="partyGain[a.id]"
                 @toggle="togglePartyAdv(a.id)"
@@ -1219,6 +1228,12 @@
                niveau, un champion apprend beaucoup moins (mesuré v0.1102 : du simple au
                quadruple selon la destination). Affichée seulement s'il y a quelqu'un que ça
                concerne — sinon c'est du bruit. -->
+            <!-- ⚔️⏱️ Ceux qui arriveraient trop tard sur l'armée, même aidés, sont masqués (demandé) :
+               on le DIT, sinon des champions disparus se lisent comme des champions perdus. -->
+            <p v-if="interceptLateCount" class="car-xp-note">
+              ⏱️ {{ interceptLateCount }} masqué{{ interceptLateCount > 1 ? 's' : '' }} : trop loin
+              pour croiser l’armée avant qu’elle n’arrive.
+            </p>
             <p v-if="partyLowXp" class="car-xp-note">
               📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
             </p>
@@ -1256,8 +1271,8 @@
               </p>
               <p v-else-if="selectedWarband?.convoy" class="sh-note">
                 Arrivé, il renforce la forteresse d’un champion de référence (4 au plus). Même
-                repoussé, tu gardes la part de ce que tu as abattu. En cas de défaite, tout le groupe
-                part à l’infirmerie.
+                repoussé, tu gardes la part de ce que tu as abattu. En cas de défaite, tout le
+                groupe part à l’infirmerie.
               </p>
               <p v-else-if="selectedWarband" class="sh-note">
                 {{
@@ -5422,6 +5437,10 @@ const {
   originOptions,
   partyGroups,
   partyPoolSorted,
+  partyPoolShown,
+  interceptHidden,
+  interceptAid,
+  interceptLateCount,
   partyHero,
   partyEscort,
   partyAdvs,
