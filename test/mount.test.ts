@@ -1259,7 +1259,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       undefined,
       '/',
       (h) => (onlyReinf = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trf-reinf')?.click(),
+      (host) => {
+        // 🧩 « Tout » allumé le vide, puis on AJOUTE les renforts seuls.
+        host.querySelector<HTMLElement>('.trf.trf-all')?.click();
+        host.querySelector<HTMLElement>('.trf.trf-reinf')?.click();
+      },
     );
     expect(onlyReinf).toContain('RENFORT');
     expect(onlyReinf).not.toContain('→ 1 h 20');
@@ -3732,11 +3736,12 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     // dont le padding décentrait « Expéditions » dans sa pastille (signalé).
     expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
     expect(out).not.toContain('trf-trips');
-    expect(out).toMatch(/class="trf trf-attacks"/);
+    expect(out).toMatch(/class="trf trf-attacks on"/);
     expect(out).toMatch(/class="trf trf-all on"/);
     expect(out).toContain('trip attack soon');
     expect(out).toContain('🛡️ 82 %');
-    // Filtrer sur les expéditions (vides) retombe sur « Tout » : la rangée ne se vide pas.
+    // 🧩 Les filtres se combinent : depuis « Tout », toucher une catégorie la RETIRE ; la
+    // rangée vidée par le joueur le DIT au lieu de paraître sans voyage.
     let fil = '';
     await mountIt(
       TripsPanel,
@@ -3747,8 +3752,10 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       (h) => (fil = h),
       (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
     );
-    expect(fil).toMatch(/class="trf trf-attacks on"/);
-    expect(fil).toContain('trip attack');
+    expect(fil).toMatch(/class="trf trf-attacks"/);
+    expect(fil).not.toMatch(/class="trf trf-all on"/);
+    expect(fil).toContain('tr-none');
+    expect(fil).not.toContain('trip attack');
     // Avec un voyage ET une armée, chaque filtre masque l'autre catégorie.
     const trip = {
       key: 'g1',
@@ -3772,7 +3779,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (onlyAtk = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-trips')?.click(),
     );
     expect(onlyAtk).toContain('trip attack');
     expect(onlyAtk).not.toContain('→ 1 h 20');
@@ -3784,10 +3791,28 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (onlyTrips = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trf-trips')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
     );
     expect(onlyTrips).toContain('→ 1 h 20');
     expect(onlyTrips).not.toContain('trip attack');
+    // Vidé par « Tout », puis les deux catégories rajoutées une à une : les deux reviennent.
+    let combo = '';
+    await mountIt(
+      TripsPanel,
+      both,
+      ROW,
+      undefined,
+      '/',
+      (h) => (combo = h),
+      (host) => {
+        host.querySelector<HTMLElement>('.trf.trf-all')?.click();
+        host.querySelector<HTMLElement>('.trf.trf-trips')?.click();
+        host.querySelector<HTMLElement>('.trf.trf-attacks')?.click();
+      },
+    );
+    expect(combo).toContain('→ 1 h 20');
+    expect(combo).toContain('trip attack');
+    expect(combo).toMatch(/class="trf trf-all on"/);
   }, 30_000);
 });
 
