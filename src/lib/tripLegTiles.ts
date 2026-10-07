@@ -90,20 +90,30 @@ export function tripLegTiles(t: LegSource): LegTile[] {
 export type LegSelection = ReadonlySet<TripLeg>;
 export const ALL_LEGS: LegSelection = new Set<TripLeg>(['go', 'back']);
 
-/** Toucher une étape l'ajoute ou la retire. 🎯 Les deux affichées : le premier toucher ISOLE
- *  l'étape touchée (même règle que les catégories, `toggleTripCat`). */
+/** Les deux étapes présentes sont-elles affichées (= aucun filtre d'étape) ? */
+const allLegsOn = (sel: LegSelection, present: readonly TripLeg[]): boolean =>
+  present.every((l) => sel.has(l));
+
+/** 🎯 Toucher une étape (v1.82.5, demandé) : les deux affichées → elle seule ; déjà allumée →
+ *  on l'éteint, et sans étape choisie le filtre disparaît (les deux reviennent : c'est un
+ *  filtre qui s'AJOUTE aux catégories, jamais une rangée vide). */
 export function toggleLeg(
   sel: LegSelection,
   leg: TripLeg,
   present: readonly TripLeg[],
 ): LegSelection {
-  if (present.length > 1 && present.includes(leg) && present.every((l) => sel.has(l)))
+  if (present.length > 1 && present.includes(leg) && allLegsOn(sel, present))
     return new Set([leg]);
   const next = new Set(sel);
   if (next.has(leg)) next.delete(leg);
   else next.add(leg);
-  return next;
+  return present.some((l) => next.has(l)) ? next : new Set(present);
 }
+
+/** La pastille d'une étape est ALLUMÉE seulement quand elle filtre : les deux affichées,
+ *  aucune ne l'est (sinon toucher une pastille allumée l'isolerait au lieu de l'éteindre). */
+export const legPillOn = (sel: LegSelection, leg: TripLeg, present: readonly TripLeg[]): boolean =>
+  !allLegsOn(sel, present) && sel.has(leg);
 
 /** ⚠️ Une étape choisie qui n'a plus rien (le dernier aller est arrivé) retombe sur les deux,
  *  au lieu d'une rangée vide qui se lirait comme « aucun voyage » (même règle que les

@@ -31,6 +31,23 @@
         >{{ o.icon }} <b>{{ o.n }}</b></template
       >
     </button>
+    <!-- 🚶↩️ ALLER / RETOUR dans une pastille À PART, d'une autre couleur (v1.82.5, demandé) :
+         ce filtre s'applique PAR-DESSUS les catégories, il n'en est pas une. -->
+    <span v-if="legOpts.length" class="trf-legs" role="group" aria-label="Étape">
+      <button
+        v-for="o in legOpts"
+        :key="o.id"
+        type="button"
+        class="trl"
+        :class="{ on: o.on }"
+        :aria-pressed="o.on"
+        :title="o.label"
+        :aria-label="`${o.label} (${o.n})`"
+        @click="pick(o.id)"
+      >
+        {{ o.icon }} <b>{{ o.n }}</b>
+      </button>
+    </span>
   </div>
   <p v-if="tiles.length && !shownTiles.length" class="tr-none">
     Aucune catégorie choisie — touche « Tout » ou une catégorie.
@@ -303,12 +320,13 @@ import {
   tripFiltersKey,
   toggleAllTrips,
   toggleTripCat,
+  tripCatPillOn,
   type TripCat,
   type TripFilter,
   type TripSelection,
 } from '@/lib/tripFilter';
 import {
-  ALL_LEGS,
+  legPillOn,
   shownLegs,
   toggleLeg,
   tripLegTiles,
@@ -449,20 +467,19 @@ function pick(id: TripFilter | TripLeg) {
     return;
   }
   if (id === 'all') {
-    const next = toggleAllTrips(selection.value, present.value);
-    // Remettre tout remet aussi les deux étapes ; vider ne touche qu'aux catégories.
-    if (next.mode === 'except') legSel.value = ALL_LEGS;
-    selection.value = next;
+    // « Tout » ne touche qu'aux catégories : le filtre d'étape vit dans sa propre pastille.
+    selection.value = toggleAllTrips(selection.value, present.value);
     return;
   }
   selection.value = toggleTripCat(selection.value, id, present.value);
 }
 /** Les catégories VIDES ne sont pas proposées (six pastilles dont trois grisées encombraient
  *  la rangée). Une seule ligne (demandé) : l'icône seule (sauf « Tout »), le nom en
- *  infobulle et en aria-label. Une pastille est allumée quand sa catégorie est AFFICHÉE
- *  (y compris par le repli de `shownTripCats`). */
+ *  infobulle et en aria-label. 🎯 Une pastille est allumée quand elle FILTRE
+ *  (`tripCatPillOn`) : sous « Tout », seul « Tout » l'est — toucher une pastille allumée
+ *  l'éteint toujours, elle n'isole jamais (v1.82.5, signalé). */
 const filterOpts = computed<
-  { id: TripFilter | TripLeg; icon: string; label: string; n: number; on: boolean }[]
+  { id: TripFilter; icon: string; label: string; n: number; on: boolean }[]
 >(() => {
   const opts = [
     { id: 'all', icon: '', label: 'Tout', n: tiles.value.length },
@@ -472,29 +489,28 @@ const filterOpts = computed<
     { id: 'planned', icon: '⏳', label: 'Programmés', n: counts.value.planned },
     { id: 'attacks', icon: '⚔️', label: 'Ennemis', n: counts.value.attacks },
   ] as const;
-  const cats = opts
+  return opts
     .filter((o) => o.id === 'all' || o.n > 0)
     .map((o) => ({
       ...o,
       on:
         o.id === 'all'
-          ? present.value.length > 0 &&
-            present.value.every((c) => shown.value.has(c)) &&
-            (presentLegs.value.length < 2 || presentLegs.value.every((l) => legsShown.value.has(l)))
-          : shown.value.has(o.id),
+          ? present.value.length > 0 && present.value.every((c) => shown.value.has(c))
+          : tripCatPillOn(selection.value, o.id, present.value),
     }));
-  // 🚶↩️ Les deux étapes, proposées seulement s'il y a les deux à séparer.
-  if (presentLegs.value.length < 2) return cats;
-  return [
-    ...cats,
-    ...(
-      [
-        { id: 'go', icon: '→', label: 'Aller', n: legCounts.value.go },
-        { id: 'back', icon: '↩', label: 'Retour', n: legCounts.value.back },
-      ] as const
-    ).map((o) => ({ ...o, on: legsShown.value.has(o.id) })),
-  ];
 });
+/** 🚶↩️ Les deux étapes, dans leur pastille à part — proposées seulement s'il y a les deux à
+ *  séparer. Allumée = elle filtre (`legPillOn`). */
+const legOpts = computed(() =>
+  presentLegs.value.length < 2
+    ? []
+    : (
+        [
+          { id: 'go', icon: '→', label: 'Aller', n: legCounts.value.go },
+          { id: 'back', icon: '↩', label: 'Retour', n: legCounts.value.back },
+        ] as const
+      ).map((o) => ({ ...o, on: legPillOn(legSel.value, o.id, presentLegs.value) })),
+);
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
     x.attack
@@ -671,6 +687,46 @@ const crew = computed(() => {
   &:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+}
+/* 🚶↩️ Aller / Retour : UNE pastille à deux moitiés, en bleu (la couleur du trajet de la
+   carte), pour qu'on ne la lise pas comme une catégorie de plus. */
+.trf-legs {
+  --leg: #6cb8ff;
+  display: inline-flex;
+  flex: none;
+  margin-left: 4px;
+  border: 1px solid color-mix(in srgb, var(--leg) 55%, var(--line));
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--leg) 8%, var(--surface));
+}
+.trl {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 34px;
+  min-width: 44px;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  color: var(--leg);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  b {
+    color: var(--dim);
+  }
+  & + & {
+    border-left: 1px solid color-mix(in srgb, var(--leg) 40%, var(--line));
+  }
+  &.on {
+    background: color-mix(in srgb, var(--leg) 30%, var(--surface));
+    color: var(--text);
+    b {
+      color: var(--leg);
+    }
   }
 }
 .trips {

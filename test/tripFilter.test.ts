@@ -6,6 +6,8 @@ import {
   shownTripCats,
   toggleAllTrips,
   toggleTripCat,
+  tripCatOn,
+  tripCatPillOn,
   type TripCat,
   type TripSelection,
 } from '@/lib/tripFilter';
@@ -31,8 +33,20 @@ describe('filtre combinable des voyages', () => {
     const plein: TripSelection = { mode: 'only', cats: [...PRESENT] };
     expect(shown(toggleTripCat(plein, 'reinf', PRESENT))).toEqual(['reinf']);
   });
-  it('une seule catégorie présente : rien à isoler, le toucher la retire', () => {
-    expect(shown(toggleTripCat(ALL_TRIPS, 'trips', ['trips']), ['trips'])).toEqual([]);
+  it('éteindre la DERNIÈRE catégorie allumée retire le filtre : tout revient', () => {
+    const seul = toggleTripCat(ALL_TRIPS, 'raids', PRESENT);
+    expect(toggleTripCat(seul, 'raids', PRESENT)).toEqual(ALL_TRIPS);
+    // Une seule catégorie présente : rien à isoler ni à éteindre, tout reste affiché.
+    expect(shown(toggleTripCat(ALL_TRIPS, 'trips', ['trips']), ['trips'])).toEqual(['trips']);
+  });
+  it('une pastille n’est allumée QUE quand elle filtre : sous « Tout », aucune', () => {
+    for (const c of PRESENT) expect(tripCatPillOn(ALL_TRIPS, c, PRESENT)).toBe(false);
+    const seul = toggleTripCat(ALL_TRIPS, 'raids', PRESENT);
+    expect(PRESENT.filter((c) => tripCatPillOn(seul, c, PRESENT))).toEqual(['raids']);
+    // Toucher une pastille ALLUMÉE l’éteint toujours (signalé : elle isolait).
+    const deux = toggleTripCat(seul, 'trips', PRESENT);
+    for (const c of PRESENT.filter((x) => tripCatPillOn(deux, x, PRESENT)))
+      expect(tripCatOn(toggleTripCat(deux, c, PRESENT), c)).toBe(false);
   });
   it('« Tout » allumé le retire entièrement ; on AJOUTE ensuite ce qu’on veut', () => {
     const vide = toggleAllTrips(ALL_TRIPS, PRESENT);

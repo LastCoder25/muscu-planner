@@ -3969,12 +3969,14 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     // dont le padding décentrait « Expéditions » dans sa pastille (signalé).
     expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
     expect(out).not.toContain('trf-trips');
-    expect(out).toMatch(/class="trf trf-attacks on"/);
+    // 🎯 Sous « Tout », seule « Tout » est allumée (v1.82.5) : une catégorie allumée se lirait
+    // comme un filtre, et la toucher doit l'éteindre, jamais l'isoler.
+    expect(out).toMatch(/class="trf trf-attacks"/);
     expect(out).toMatch(/class="trf trf-all on"/);
     expect(out).toContain('trip attack soon');
     expect(out).toContain('🛡️ 82 %');
-    // 🧩 Les filtres se combinent : depuis « Tout », toucher une catégorie la RETIRE ; la
-    // rangée vidée par le joueur le DIT au lieu de paraître sans voyage.
+    // 🧩 « Tout » allumé, touché, vide la rangée ; vidée par le joueur, elle le DIT au lieu
+    // de paraître sans voyage.
     let fil = '';
     await mountIt(
       TripsPanel,
@@ -3983,7 +3985,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (fil = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-all')?.click(),
     );
     expect(fil).toMatch(/class="trf trf-attacks"/);
     expect(fil).not.toMatch(/class="trf trf-all on"/);
@@ -4060,6 +4062,22 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(combo).toContain('→ 1 h 20');
     expect(combo).toContain('trip attack');
     expect(combo).toMatch(/class="trf trf-all on"/);
+    // 🚶↩️ Aller / Retour : une pastille À PART (`trf-legs`), pas deux catégories de plus ;
+    // éteintes tant qu'elles ne filtrent pas, l'étape touchée s'allume seule.
+    const legged = { ...trip, legs: { go: '1 h 20', back: '1 h 30', detail: '' } };
+    let legs = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [legged], focus: null, heroProfile: 'polyvalent', attacks: [] },
+      ROW,
+      undefined,
+      '/',
+      (h) => (legs = h),
+      (host) => host.querySelector<HTMLElement>('.trf-legs .trl')?.click(),
+    );
+    expect(legs).toContain('class="trf-legs"');
+    expect(legs).not.toMatch(/class="trf trf-(go|back)/);
+    expect(legs.match(/class="trl on"/g)?.length).toBe(1);
   }, 30_000);
 });
 

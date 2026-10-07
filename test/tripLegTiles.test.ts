@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_LEGS, shownLegs, toggleLeg, tripLegTiles, type LegSource } from '@/lib/tripLegTiles';
+import { ALL_LEGS, legPillOn, shownLegs, toggleLeg, tripLegTiles, type LegSource } from '@/lib/tripLegTiles';
 
 const trip = (o: Partial<LegSource> = {}): LegSource => ({
   key: 'g1',
@@ -42,11 +42,14 @@ describe('🚶↩️ une tuile par étape', () => {
 });
 
 describe('🔎 filtre des étapes', () => {
-  it('les deux affichées : toucher ISOLE, puis ajoute ou retire', () => {
-    const a = toggleLeg(ALL_LEGS, 'go', ['go', 'back']);
+  it('les deux affichées : toucher ISOLE ; retoucher l’étape allumée retire le filtre', () => {
+    const both = ['go', 'back'] as const;
+    expect([...both].filter((l) => legPillOn(ALL_LEGS, l, both))).toEqual([]);
+    const a = toggleLeg(ALL_LEGS, 'go', both);
     expect([...a]).toEqual(['go']);
-    expect([...toggleLeg(a, 'back', ['go', 'back'])].sort()).toEqual(['back', 'go']);
-    expect([...toggleLeg(a, 'go', ['go', 'back'])]).toEqual([]);
+    expect([...both].filter((l) => legPillOn(a, l, both))).toEqual(['go']);
+    expect([...toggleLeg(a, 'go', both)].sort()).toEqual(['back', 'go']);
+    expect([...toggleLeg(a, 'back', both)].sort()).toEqual(['back', 'go']);
   });
   it('une étape choisie qui se vide retombe sur tout, une rangée vidée reste vide', () => {
     expect([...shownLegs(new Set(['go']), ['back'])]).toEqual(['back']);

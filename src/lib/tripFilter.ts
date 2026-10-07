@@ -80,8 +80,23 @@ export function toggleTripCat(
   if (present.length > 1 && present.includes(cat) && allTripsOn(sel, present))
     return { mode: 'only', cats: [cat] };
   const has = sel.cats.includes(cat);
-  return { mode: sel.mode, cats: has ? sel.cats.filter((c) => c !== cat) : [...sel.cats, cat] };
+  const next: TripSelection = {
+    mode: sel.mode,
+    cats: has ? sel.cats.filter((c) => c !== cat) : [...sel.cats, cat],
+  };
+  // 🎯 Éteindre la DERNIÈRE catégorie allumée (v1.82.5, demandé : « un filtre déjà actif, le
+  // toucher le désactive ») retire le filtre : tout revient, pas une rangée vide.
+  return present.length > 0 && !present.some((c) => tripCatOn(next, c)) ? ALL_TRIPS : next;
 }
+
+/** La pastille d'une catégorie est ALLUMÉE seulement quand elle FILTRE : sous « Tout », c'est
+ *  « Tout » qui est allumé, et les catégories non — sinon toucher une pastille allumée
+ *  l'isolerait au lieu de l'éteindre (signalé). */
+export const tripCatPillOn = (
+  sel: TripSelection,
+  cat: TripCat,
+  present: readonly TripCat[],
+): boolean => !allTripsOn(sel, present) && tripCatOn(sel, cat);
 
 /** « Tout » est allumé quand toutes les catégories PRÉSENTES le sont. */
 export const allTripsOn = (sel: TripSelection, present: readonly TripCat[]): boolean =>
