@@ -3932,7 +3932,10 @@ const trips = computed(() => {
       homeAt: a.returnAt,
       back,
       withHero: true,
-      from: null,
+      // 🧝 Parti de son POSTE (`origin`) : il y revient, comme le tracé de la carte. `null`
+      // affichait « → La base » au retour, ce qui annonçait une défaite (seul un héros blessé
+      // rentre à la base) avant même que le combat n'ait eu lieu.
+      from: tripOriginPoi(pois.value, a.origin),
       members: tripCrew(a),
       haul: expeHaul(a.outcome),
       legs: tripLegs(a, now.value),
