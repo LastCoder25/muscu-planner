@@ -113,11 +113,16 @@ export const NEST = {
   cap: 6,
   /** Portée des embuscades autour d'un nid (unités de carte). */
   radius: 25,
+  /** 🪺 Où un nid peut naître : la grille (angles autour du centre de l'île × parts de la
+   *  terre utile), hors des abords du village (distance au point de départ), et l'écart
+   *  minimal avec les autres lieux. */
+  angles: 36,
+  fracs: [0.35, 0.55, 0.75, 0.92],
+  villageClear: 25,
+  minGap: 10,
   /** La troupe d'un nid né en route. */
   size: 3,
 } as const;
-
-type NestBirth = NonNullable<NonNullable<ExpeditionMap['archipel']>['nests']>[number];
 
 /** 🪺 Le niveau du nid d'index `i` (demandé le 2026-10-06 : « un niveau qui varie du minimum
  *  de la carte au maximum de la carte ») : tiré entre le min et le max de l'île, sur la carte
@@ -232,35 +237,36 @@ function objectiveIds(isl: Pick<Island, 'objectives'>): string[] {
   return Array.from({ length: isl.objectives }, (_, i) => objectiveIdOf(i));
 }
 
-/** 🪺 La place d'un nid qui naît : sur l'anneau des objectifs ou un peu plus loin, du côté de
- *  la forteresse, la plus DÉGAGÉE des autres lieux (et sur la terre). `null` si aucune. */
+/** 🪺 La place d'un nid qui naît, PARTOUT sur l'île (demandé le 2026-10-07 : ils ne
+ *  naissaient que côté forteresse, toujours aux mêmes places et dans le même ordre, et plus du
+ *  tout après le 26ᵉ). Tirée au hasard (graine de la carte + numéro du nid) parmi les places de
+ *  la grille (`NEST.angles` × `NEST.fracs`, sur la terre : `islandPoint` suit la côte) qui
+ *  sont hors des abords du village (`NEST.villageClear`) et à `NEST.minGap` des lieux fixes,
+ *  de la forteresse et des nids DEBOUT (un nid abattu libère sa place). `null` si aucune. */
 export function nestSpot(
   map: Pick<ExpeditionMap, 'pois'>,
   islandId: number,
-  nests: readonly NestBirth[],
+  standing: readonly { x: number; y: number }[],
+  seed = 0,
+  n = 0,
 ): { x: number; y: number; d: number } | null {
-  const isl = ISLANDS.find((i) => i.id === islandId);
   const f = islandTerrain(islandId).fortress;
-  const at = (frac: number, off: number) => fortressSideSpot(islandId, frac, off);
   const others: { x: number; y: number }[] = [
     ...map.pois.filter((p) => p.control),
-    ...objectiveAngles(isl?.objectives ?? 0).map((_, i) => objectiveSpot(islandId, i)),
-    ...nests,
+    ...standing,
     { x: f.x, y: f.y },
   ];
-  let best: ReturnType<typeof at> | null = null;
-  let bestGap = 9.999;
-  for (const frac of [0.62, 0.78, 0.9])
-    for (let k = -8; k <= 8; k++) {
-      const s = at(frac, k * 0.3);
-      // ⚠️ Toujours sur la terre : `islandPoint` suit la côte, moins une marge.
-      const g = Math.min(99, ...others.map((p) => Math.hypot(s.x - p.x, s.y - p.y)));
-      if (g > bestGap) {
-        bestGap = g;
-        best = s;
-      }
+  const ok: { x: number; y: number; d: number }[] = [];
+  for (const frac of NEST.fracs)
+    for (let k = 0; k < NEST.angles; k++) {
+      const s = islandSpot(islandId, (k / NEST.angles) * Math.PI * 2, frac);
+      if (s.d < NEST.villageClear) continue;
+      if (others.some((p) => Math.hypot(s.x - p.x, s.y - p.y) < NEST.minGap)) continue;
+      ok.push(s);
     }
-  return best;
+  if (!ok.length) return null;
+  const r = mulberry32((seedOf(`${seed}:nestSpot:${n}`) ^ 0x3c6ef372) >>> 0 || 1)();
+  return ok[Math.min(ok.length - 1, Math.floor(r * ok.length))]!;
 }
 
 /**
@@ -291,8 +297,9 @@ export function spawnNests(map: ExpeditionMap, now: number): ExpeditionMap {
   for (const t of fresh) {
     if (++charge < nestThreshold(map.seed, nests.length)) continue;
     charge = 0;
-    const standing = nests.filter((n) => !gone.has(objectiveIdOf(n.i))).length;
-    const spot = standing < NEST.cap ? nestSpot({ pois }, isl.id, nests) : null;
+    const up = nests.filter((n) => !gone.has(objectiveIdOf(n.i)));
+    const spot =
+      up.length < NEST.cap ? nestSpot({ pois }, isl.id, up, map.seed, nests.length) : null;
     if (!spot) continue;
     nests.push({ i: isl.objectives + nests.length, at: t, ...spot });
     pois = nestStrike(pois, spot, t, map.seed);
@@ -419,12 +426,6 @@ function islandSpot(id: number, a: number, frac: number): { x: number; y: number
   const y = Math.round(p.y);
   // `d` = distance à la VILLE (le trajet) ; l'angle `a`, lui, est vu du centre de l'île.
   return { x, y, d: Math.hypot(x - EXPE.town.x, y - EXPE.town.y) };
-}
-
-/** 🏝️ Un lieu fixe du côté de la forteresse : à l'écart d'angle `off` de l'axe base →
- *  forteresse, à la part `frac` de la terre utile (objectifs, avant-postes, nids). */
-function fortressSideSpot(id: number, frac: number, off: number) {
-  return islandSpot(id, islandTerrain(id).fortress.angle + off, frac);
 }
 
 /** 🏝️ La place de l'objectif `i` de l'île `id` : DISPERSÉS sur toute l'île (demandé le
