@@ -1292,7 +1292,7 @@
                   }}</span>
                 </button>
                 <HeroPickTile
-                  v-if="g.id === 'base'"
+                  v-if="g.id === heroOriginId"
                   :on="partyHeroOn"
                   :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
                   :warn="interceptWarn('hero')"
@@ -1310,7 +1310,9 @@
                   :gain="partyGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
-                <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
+                <p v-if="!g.advs.length && g.id !== heroOriginId" class="pool-empty">
+                  Personne de prêt ici.
+                </p>
               </template>
               <template v-if="showBlocked">
                 <AdvPickTile
@@ -5762,6 +5764,7 @@ const {
   setWingsTogether,
   combinedBlock,
   originOptions,
+  heroOriginId,
   partyGroups,
   partyPoolSorted,
   interceptWarn,

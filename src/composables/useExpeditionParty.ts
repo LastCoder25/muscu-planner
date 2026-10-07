@@ -587,22 +587,34 @@ export function useExpeditionParty(ctx: PartyCtx) {
         emo: '🏰',
         label: 'Base',
         n: freeStable.value.length,
-        // 🧝 Le héros part de la base : son trajet compte dès qu'il peut se joindre au groupe.
-        legMin: legFrom(null, freeStable.value, !partyHeroBlock.value),
+        // 🧝 Le trajet du héros compte sur SON lieu de départ (la base, ou son poste), dès
+        // qu'il peut se joindre au groupe.
+        legMin: legFrom(
+          null,
+          freeStable.value,
+          heroOriginId.value === 'base' && !partyHeroBlock.value,
+        ),
       },
-      ...originOptions.value.map((o) => ({
+      // 🧝 Le poste du héros a sa rangée même sans champion prêt (`startOptions`) — signalé :
+      // le héros était montré à la base alors qu'il était à l'Ossuaire.
+      ...startOptions.value.map((o) => ({
         id: o.id,
         emo: o.emo,
         label: o.label,
         n: o.n,
-        legMin: legFrom(o.poi, readyByPoint.value.get(o.id) ?? []),
+        legMin: legFrom(
+          o.poi,
+          readyByPoint.value.get(o.id) ?? [],
+          heroOriginId.value === o.id && !partyHeroBlock.value,
+        ),
       })),
     ]),
   );
   /** 🧭 Les champions PAR LIEU de départ, du lieu le plus proche de la cible au plus loin
-   *  (demandé) — dès qu'un point fixe tenu a des champions prêts ; sinon la liste habituelle. */
+   *  (demandé) — dès qu'un point fixe tenu a des champions prêts, ou que le héros y est
+   *  posté ; sinon la liste habituelle. */
   const partyGroups = computed(() => {
-    if (!originOptions.value.length) return [];
+    if (!startOptions.value.length) return [];
     return originTiles.value.map((t) => {
       const all =
         t.id === 'base'
@@ -1141,6 +1153,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     setWingsTogether,
     combinedBlock,
     originOptions,
+    heroOriginId,
     partyGroups,
     originPoi,
     partyPoolSorted,
