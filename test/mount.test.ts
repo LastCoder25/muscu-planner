@@ -40,7 +40,17 @@ async function mountIt(
   /** Un geste avant la lecture du HTML (déplier une ligne, par exemple) : ce qui ne se rend
    *  qu'après un clic resterait sinon invisible au test. */
   act?: (host: HTMLElement) => void | Promise<void>,
+  /** 💾 Garder le stockage de l'appareil du montage précédent (filtres mémorisés). Par
+   *  défaut on le VIDE : un écran qui mémorise un choix le ferait fuir d'un test à l'autre. */
+  keepStorage = false,
 ) {
+  if (!keepStorage) {
+    try {
+      localStorage.clear();
+    } catch {
+      /* pas de stockage : rien à vider */
+    }
+  }
   const pinia = createPinia();
   setActivePinia(pinia);
   if (row !== undefined) {
@@ -3924,6 +3934,20 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(fil).not.toMatch(/class="trf trf-all on"/);
     expect(fil).toContain('tr-none');
     expect(fil).not.toContain('trip attack');
+    // 💾 Le choix survit à la fermeture : remonté sans geste, « Ennemis » reste retiré.
+    let again = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [], focus: null, heroProfile: 'polyvalent', attacks: [atk] },
+      undefined,
+      undefined,
+      '/',
+      (h) => (again = h),
+      undefined,
+      true,
+    );
+    expect(again).toMatch(/class="trf trf-attacks"/);
+    expect(again).toContain('tr-none');
     // Avec un voyage ET une armée, chaque filtre masque l'autre catégorie.
     const trip = {
       key: 'g1',

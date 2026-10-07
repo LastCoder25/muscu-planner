@@ -297,8 +297,10 @@ export interface MapTrip {
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import {
-  ALL_TRIPS,
+  parseTripFilters,
+  serializeTripFilters,
   shownTripCats,
+  tripFiltersKey,
   toggleAllTrips,
   toggleTripCat,
   type TripCat,
@@ -318,6 +320,7 @@ import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { useCharacterStore } from '@/stores/character';
+import { useAuthStore } from '@/stores/auth';
 import { isRiftPoi, poiEmo, poiLabel } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { tripEnds, type TripEnd } from '@/lib/tripEnds';
@@ -400,7 +403,19 @@ const tiles = computed(() => {
 });
 /** 🧭⚔️ Le filtre (cf. `TripSelection`). Un voyage programmé ne compte QUE dans
  *  « Programmés » ; en route, il compte dans sa catégorie (`MapTrip.cat`). */
-const selection = ref<TripSelection>(ALL_TRIPS);
+/** 💾 Les filtres sont relus au montage et réécrits à chaque changement, par compte
+ *  (`tripFiltersKey`) — d'une ouverture à l'autre (demandé). Stockage indisponible : on
+ *  garde « tout », sans rien bloquer. */
+const auth = useAuthStore();
+function readSavedFilters() {
+  try {
+    return parseTripFilters(localStorage.getItem(tripFiltersKey(auth.user?.id)));
+  } catch {
+    return parseTripFilters(null);
+  }
+}
+const saved = readSavedFilters();
+const selection = ref<TripSelection>(saved.sel);
 const catOf = (t: MapTrip): Exclude<TripCat, 'attacks'> =>
   t.pending ? 'planned' : (t.cat ?? 'trips');
 const counts = computed(() => {
@@ -413,7 +428,14 @@ const present = computed(() => CAT_ORDER.filter((c) => counts.value[c] > 0));
 const shown = computed(() => shownTripCats(selection.value, present.value));
 /** 🚶↩️ Filtre des ÉTAPES (demandé), en plus des catégories : il ne touche que les voyages,
  *  les armées ennemies n'ont pas d'étape. */
-const legSel = ref<LegSelection>(ALL_LEGS);
+const legSel = ref<LegSelection>(new Set<TripLeg>(saved.legs));
+watch([selection, legSel], ([sel, legs]) => {
+  try {
+    localStorage.setItem(tripFiltersKey(auth.user?.id), serializeTripFilters(sel, legs));
+  } catch {
+    /* stockage indisponible : le filtre vaut pour cette ouverture seulement */
+  }
+});
 const legCounts = computed(() => {
   const n: Record<TripLeg, number> = { go: 0, back: 0 };
   for (const x of tiles.value) if (x.leg) n[x.leg.leg]++;

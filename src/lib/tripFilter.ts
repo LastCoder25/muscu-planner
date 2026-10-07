@@ -91,3 +91,39 @@ export function shownTripCats(sel: TripSelection, present: readonly TripCat[]): 
   if (on.length === 0 && sel.mode === 'only' && sel.cats.length > 0) return new Set(present);
   return new Set(on);
 }
+
+/** 💾 FILTRES MÉMORISÉS (demandé : « garde en mémoire pour chaque joueur les filtres
+ *  d'expédition qu'il active ou non, d'une ouverture à l'autre »). Catégories et étapes
+ *  (aller / retour) sont écrites ensemble, par compte, dans le stockage de l'appareil — une
+ *  commodité d'affichage, pas un état de jeu. ⚠️ La relecture est DÉFENSIVE : une valeur
+ *  illisible ou d'une ancienne version retombe sur « tout afficher », jamais sur une rangée
+ *  vide qui se lirait comme « aucun voyage ». */
+export const TRIP_CATS: readonly TripCat[] = ['trips', 'reinf', 'raids', 'planned', 'attacks'];
+const LEGS = ['go', 'back'] as const;
+export interface SavedTripFilters {
+  sel: TripSelection;
+  legs: ('go' | 'back')[];
+}
+export const tripFiltersKey = (uid: string | null | undefined): string =>
+  `muscu:trips:filter:${uid ?? 'anon'}`;
+export function serializeTripFilters(sel: TripSelection, legs: Iterable<'go' | 'back'>): string {
+  return JSON.stringify({ sel: { mode: sel.mode, cats: [...sel.cats] }, legs: [...legs] });
+}
+export function parseTripFilters(raw: string | null | undefined): SavedTripFilters {
+  const fallback: SavedTripFilters = { sel: ALL_TRIPS, legs: [...LEGS] };
+  if (!raw) return fallback;
+  try {
+    const v = JSON.parse(raw) as { sel?: { mode?: unknown; cats?: unknown }; legs?: unknown };
+    const mode = v.sel?.mode;
+    if (mode !== 'except' && mode !== 'only') return fallback;
+    const cats = Array.isArray(v.sel?.cats)
+      ? TRIP_CATS.filter((c) => (v.sel!.cats as unknown[]).includes(c))
+      : [];
+    const legs = Array.isArray(v.legs)
+      ? LEGS.filter((l) => (v.legs as unknown[]).includes(l))
+      : [...LEGS];
+    return { sel: { mode, cats }, legs };
+  } catch {
+    return fallback;
+  }
+}
