@@ -479,6 +479,7 @@ import {
   SWAP_MILITIA_FROM_BASE,
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
+  routeFromSpot,
   rejoinHome,
   syncAway,
   sortieBlocker,
@@ -5972,10 +5973,19 @@ export const useCharacterStore = defineStore('character', () => {
     if (post && (cur.expedition || map0.heroReturnAt !== undefined))
       return 'le héros est déjà en route ailleurs';
     const legOf = (p: Poi) => heroHomeLegMin(cur, map0, p, now);
-    const leg = post ? legFromSpot(poi, post, legOf) : legOf(poi);
+    // 🧭 Posté ailleurs, il part de CE lieu (signalé : de l'Ossuaire aux Archives, la carte le
+    // faisait partir de la base) — sauf si le détour par la ville est plus court.
+    const route = post ? routeFromSpot(poi, post, legOf) : { min: legOf(poi), direct: false };
     const map = post ? unpostHero(map0) : map0;
     await persist(userId, {
-      expedition_map: sendHeroToControl(map, id, now, now + leg * 60_000, unit),
+      expedition_map: sendHeroToControl(
+        map,
+        id,
+        now,
+        now + route.min * 60_000,
+        unit,
+        post && route.direct ? post : undefined,
+      ),
     });
     return null;
   }

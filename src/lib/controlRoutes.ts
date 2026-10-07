@@ -46,9 +46,19 @@ export function fromSpot<P extends Poi>(poi: P, origin: Spot): P {
  * par la ville (retour à la ville, puis départ habituel).
  */
 export function legFromSpot(poi: Poi, origin: Poi, legOf: (p: Poi) => number): number {
+  return routeFromSpot(poi, origin, legOf).min;
+}
+
+/** Le même trajet que `legFromSpot`, en disant s'il va en ligne DIRECTE (la carte le dessine
+ *  depuis `origin`) ou par la ville (dessiné depuis elle). */
+export function routeFromSpot(
+  poi: Poi,
+  origin: Poi,
+  legOf: (p: Poi) => number,
+): { min: number; direct: boolean } {
   const direct = legOf(fromSpot(poi, origin));
   const viaTown = legOf(origin) + legOf(poi);
-  return Math.min(direct, viaTown);
+  return direct <= viaTown ? { min: direct, direct: true } : { min: viaTown, direct: false };
 }
 
 const held = (map: ExpeditionMap, id: string) => {

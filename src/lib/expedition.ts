@@ -157,8 +157,10 @@ export interface ControlState {
   /** 🧝 Le héros EN ROUTE pour rejoindre la garnison (2026-10-05, demandé : « permettre au
    *  héros d'être en garnison sur les lieux fixes ») : parti à `from`, il arrive à `at` et
    *  devient alors `hero` + `heroUnit` (`settleReinforcements`). Ses 2 places lui sont
-   *  RÉSERVÉES dès le départ, comme celles d'un renfort. */
-  heroComing?: { at: number; from: number; unit: PostedHero };
+   *  RÉSERVÉES dès le départ, comme celles d'un renfort.
+   *  `origin` : parti d'un AUTRE lieu où il était posté, en ligne directe (signalé : envoyé de
+   *  l'Ossuaire aux Archives, il partait de la base sur la carte). Absent : de la base. */
+  heroComing?: { at: number; from: number; unit: PostedHero; origin?: { x: number; y: number } };
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;
