@@ -242,6 +242,8 @@
             :travel-targets="travelTargets"
             @select="selectPoi"
           />
+          <!-- ✨ Un objectif ennemi qui vient d'apparaître (nid, cimetière, brèche…). -->
+          <PoiAppearFx v-if="appearing.length" :items="appearing" />
 
           <!-- Héros -->
           <!-- 🔙 Une troupe encore en route se touche pour la faire rebrousser chemin : une cible
@@ -1807,6 +1809,17 @@ import {
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
+import PoiAppearFx from '@/components/PoiAppearFx.vue';
+import {
+  APPEAR_LABEL,
+  APPEAR_MS,
+  appearInput,
+  appearKey,
+  enemyIslandTargets,
+  freshAppearances,
+  type AppearRecord,
+  type Appearance,
+} from '@/lib/appearFx';
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import MapTown from '@/components/MapTown.vue';
@@ -2227,6 +2240,61 @@ const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG
 const fogR = ref(reveal.value);
 const fogPlan = ref<FogRevealPlan | null>(null);
 let fogRaf = 0;
+/** ✨ APPARITIONS D'OBJECTIFS ENNEMIS : ce qui est nouveau depuis la dernière fois que cet
+ *  appareil a vu la carte de l'île s'anime (lib/appearFx). Relevé par compte, jamais bloquant. */
+const appearing = ref<Appearance[]>([]);
+let appearTimer: ReturnType<typeof setTimeout> | undefined;
+let appearReady = false;
+const appearStoreKey = () => `muscu:appear:${auth.user?.id ?? 'anon'}`;
+function readAppear(): AppearRecord | null {
+  try {
+    const v = localStorage.getItem(appearStoreKey());
+    const r: unknown = v ? JSON.parse(v) : null;
+    return r && typeof r === 'object' ? (r as AppearRecord) : null;
+  } catch {
+    return null;
+  }
+}
+function writeAppear(r: AppearRecord) {
+  try {
+    localStorage.setItem(appearStoreKey(), JSON.stringify(r));
+  } catch {
+    /* stockage indisponible : on rejouera l'apparition, rien de grave */
+  }
+}
+function checkAppearances() {
+  const map = char.row?.expedition_map;
+  const n = island.value?.id;
+  if (!map || n == null) return;
+  const rec = readAppear();
+  const { seen, firstTime } = appearInput(rec, n);
+  const res = freshAppearances(map, seen, firstTime);
+  writeAppear({ ...(rec ?? {}), [String(n)]: res.seen });
+  if (!res.fresh.length) return;
+  const first = res.fresh[0]!;
+  const emoji = map.pois.find((p) => p.id === first.id)?.control?.emoji ?? '⚠️';
+  gameFx.celebrate({
+    kind: 'unlock',
+    emoji,
+    title:
+      res.fresh.length === 1
+        ? APPEAR_LABEL[first.variant]
+        : `${res.fresh.length} objectifs ennemis apparaissent`,
+    quiet: true,
+  });
+  appearing.value = res.fresh;
+  clearTimeout(appearTimer);
+  const last = res.fresh[res.fresh.length - 1]!.delay;
+  appearTimer = setTimeout(() => (appearing.value = []), APPEAR_MS + last + 200);
+}
+const appearSig = computed(() => {
+  const map = char.row?.expedition_map;
+  return map ? enemyIslandTargets(map).map(appearKey).join(',') : '';
+});
+watch([appearSig, () => island.value?.id], () => {
+  if (appearReady) checkAppearances();
+});
+onUnmounted(() => clearTimeout(appearTimer));
 const fogKey = () => `muscu:fog:seen:${auth.user?.id ?? 'anon'}`;
 function readFogSeen(): number | null {
   try {
@@ -5898,6 +5966,8 @@ onMounted(async () => {
   measure();
   await initialFit();
   liftFog(readFogSeen());
+  appearReady = true;
+  checkAppearances();
   window.addEventListener('resize', measure);
   // Ce qui est AU-DESSUS de la carte (ressources, effectifs de l'Aventure) finit souvent de
   // s'afficher après le montage : on recale sa hauteur une fois la page posée.

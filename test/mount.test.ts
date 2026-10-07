@@ -4243,3 +4243,19 @@ describe('⇄ ComboLegHead — le bouton « changer d’exo »', () => {
     expect(fresh).not.toContain('lh-fat');
   }, 30_000);
 });
+
+describe('✨ apparition d’un objectif ennemi', () => {
+  it('peint une animation par objectif, avec sa variante', async () => {
+    const { default: PoiAppearFx } = await import('@/components/PoiAppearFx.vue');
+    let html = '';
+    const items = [
+      { key: 'a@1', id: 'a', x: 10, y: 20, variant: 'nest', delay: 0 },
+      { key: 'b@1', id: 'b', x: 30, y: 40, variant: 'grave', delay: 450 },
+    ];
+    await mountIt(PoiAppearFx, { items }, undefined, undefined, '/', (h) => (html = h));
+    expect(html).toContain('afx v-nest');
+    expect(html).toContain('afx v-grave');
+    expect(html).toContain('translate(30 40)');
+    expect(html.match(/class="egg"/g)).toHaveLength(3);
+  }, 30_000);
+});
