@@ -1621,21 +1621,21 @@
       </q-card>
     </q-dialog>
 
-    <!-- 🏠 Tout à gauche des boutons ronds (demandé) : la base de l'île 1, en un geste. La carte
+    <!-- 🏠 Juste à gauche du ↕️ (demandé) : la base de l'île 1, en un geste. La carte
          vit dans l'Aventure, qui lit `?tab=` : elle bascule sur l'onglet Base et quitte la carte.
          ⚠️ Masqué pendant la barre d'un voyage (en bas à gauche) : à 344 px ils se chevauchent. -->
     <button
       v-show="!viewed && !tripBar"
       type="button"
       class="slide-fab tile-fab"
-      :style="{ right: 16 + 56 * (mapTabs.length + 1) + 'px' }"
+      :style="{ right: 16 + 56 + 'px' }"
       aria-label="Ma base (île 1)"
       title="Ma base (île 1)"
       @click="goBase"
     >
       <span class="tf-emo">🏠</span>
     </button>
-    <!-- 🧭🏰 À gauche du ↕️ : les tuiles des expéditions et des places fortes, par-dessus la
+    <!-- 🧭🏰 À gauche du 🏠 (du ↕️ quand il est masqué) : les tuiles des expéditions et des places fortes, par-dessus la
          carte (essai). La pastille reprend celle des tuiles sous la carte. -->
     <button
       v-for="(t, i) in mapTabs"
@@ -1644,7 +1644,7 @@
       type="button"
       class="slide-fab tile-fab"
       :class="{ on: overlay === t.id, alert: t.alert }"
-      :style="{ right: 16 + 56 * (mapTabs.length - i) + 'px' }"
+      :style="{ right: 16 + 56 * (mapTabs.length - i + (tripBar ? 0 : 1)) + 'px' }"
       :aria-label="t.label"
       :title="t.label"
       :aria-pressed="overlay === t.id"
