@@ -1906,6 +1906,27 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(foldedTip).toContain('hp-tip hp-pop');
     expect(foldedTip).toContain(SUPPLIES.rations.name);
     expect(foldedTip).toContain(SUPPLIES.rations.what);
+    // 🎒 OUVERT aussi (re-signalé : « toujours pas de bulle dans les butins des rapports ») :
+    // la bulle FLOTTE — ancrée dans la ligne, sans parent positionné, la fenêtre la rognait.
+    let openTip = '';
+    expect(
+      await mountIt(
+        MissionReportCard,
+        { card: supplyCard, state: 'claim', now: Date.now() },
+        undefined,
+        undefined,
+        '/',
+        (h) => (openTip = h),
+        (host) => host.querySelector<HTMLElement>('.gains .hp')?.click(),
+      ),
+    ).toBeNull();
+    expect(openTip).toContain('class="gains"');
+    expect(openTip).toContain('hp-tip hp-pop');
+    // ⚠️ Le harnais ne résout pas `q-menu` (son contenu est toujours dans le HTML) : ce qui
+    // distingue vraiment, c'est l'ABSENCE de bulle ancrée dans la ligne (classe seule).
+    expect(openTip).not.toMatch(/class="hp-tip"/);
+    expect(openTip).toContain(SUPPLIES.rations.name);
+    expect(openTip).toContain(SUPPLIES.rations.what);
     // Un CAMP : pas de rejeu, le verbe d'un camp, le bouton d'encaissement.
     const camp = await render(msg(base), 'claim');
     expect(camp).not.toContain('class="replay"');

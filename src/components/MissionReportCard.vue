@@ -102,9 +102,11 @@
          son encart titré (`missionMain`, au modèle commun des rapports). -->
     <ReportDetail :detail="main">
       <template #loot>
-        <!-- ❓ Toucher une ressource dit ce que c'est (`HaulPills`, partagé). -->
+        <!-- ❓ Toucher une ressource dit ce que c'est (`HaulPills`, partagé). ⚠️ FLOTTANTE : ancrée
+             dans la ligne, sans parent positionné, la bulle partait sur un ancêtre lointain et
+             la fenêtre du rapport, qui défile, la rognait (« toujours pas de bulle »). -->
         <div v-if="card.gains.length" class="gains">
-          <HaulPills :pills="card.gains" sign="+" />
+          <HaulPills :pills="card.gains" sign="+" floating />
         </div>
         <span v-if="empty" class="none">Rien de récolté</span>
       </template>
