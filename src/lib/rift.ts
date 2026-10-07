@@ -35,6 +35,7 @@ import {
   missionXpFor,
   partyAllies,
   refEscortUnits,
+  spareInjured,
   type PartyHero,
   type EscortKit,
 } from './caravan';
@@ -1016,7 +1017,13 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     kills: {},
     heroKills: 0,
     xp,
-    hurt: run.cleared ? [] : escort.map((a) => a.id),
+    hurt: run.cleared
+      ? []
+      : spareInjured(
+          escort,
+          escort.map((a) => a.id),
+          seed,
+        ),
     journal: run.journal,
     // ⚠️ De quoi REJOUER, jamais de quoi recalculer : la mise en scène lit ces nombres,
     // elle n'en produit aucun (règle fondatrice de `arenaStage` et `siegeStage`).
@@ -1313,7 +1320,13 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     kills: {},
     heroKills: 0,
     xp,
-    hurt: run.win ? [] : escort.map((a) => a.id),
+    hurt: run.win
+      ? []
+      : spareInjured(
+          escort,
+          escort.map((a) => a.id),
+          seed,
+        ),
     journal,
     ...(!run.win && part > 0
       ? { riftHit: { part, hitId: `${poi.id}@${seed}`, spawnedAt: poi.spawnedAt } }

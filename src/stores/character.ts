@@ -3276,9 +3276,7 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🏰 Le héros posté à la forteresse, ou rappelé et pas encore rentré (`heroReturnAt` est
    *  retiré par `settleHome` à son arrivée). */
   function heroOnMap(map: ExpeditionMap | null | undefined): boolean {
-    return (
-      heroPosted(map) || heroComing(map) || map?.heroReturnAt !== undefined || !!map?.crossing
-    );
+    return heroPosted(map) || heroComing(map) || map?.heroReturnAt !== undefined || !!map?.crossing;
   }
 
   /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
@@ -3515,7 +3513,7 @@ export const useCharacterStore = defineStore('character', () => {
     // Recopiée, elle perdait le plancher de la lib : après une longue absence le héros
     // revenait indemne pendant qu’on écrivait aux défenseurs une convalescence DÉJÀ dépassée.
     // `null` = elle est écoulée, personne ne part à l’infirmerie.
-    const hurt = woundUntil ? new Set(siegeHurtIds(report)) : new Set<string>();
+    const hurt = woundUntil ? new Set(siegeHurtIds(report, defenders)) : new Set<string>();
     // 🕯️ Les CHAMPIONS de l'île guérissent plus vite si l'hospice est tenu (le héros, non) :
     // la même échéance que le héros, sa durée multipliée par `hospiceHealMult`, comptée depuis
     // la bataille — `null` si elle est déjà écoulée.

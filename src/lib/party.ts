@@ -953,7 +953,7 @@ export function grantReportXp(
  * - XP par aventurier (`party.xp`, calculée au départ), plafonnée par la Guilde (`grantAdvXp`)
  *   — ⚠️ SEULEMENT si elle n'a pas déjà été versée à l'arrivée du rapport (`xpGranted`) ;
  * - 🤕 les blessés du camp (`party.hurt`) partent à l'infirmerie pour la durée d'un convoi
- *   (`caravanHurtMs`, soigneurs de l'escorte et Infirmerie compris). ⚠️ Jamais RACCOURCIE :
+ *   (`caravanHurtMs`, Infirmerie comprise — les ⛑️ premiers secours, eux, évitent la blessure). ⚠️ Jamais RACCOURCIE :
  *   un aventurier déjà alité plus longtemps (siège perdu) garde son échéance ;
  * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir).
  * ⚠️ Le HÉROS n'y figure jamais : ni XP (elle vient du sport), ni blessure.

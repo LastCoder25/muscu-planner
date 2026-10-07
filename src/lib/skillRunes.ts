@@ -76,7 +76,15 @@ export interface SkillDef {
 /** ⚠️ Un `Record` exhaustif : ajouter une compétence sans la décrire ne compile pas. */
 export const SKILLS: Record<SkillId, SkillDef> = {
   speed: { tier: 'green', emoji: '🧭', name: 'Vitesse', what: 'trajet −{v} %', base: 5.5 },
-  care: { tier: 'green', emoji: '🩺', name: 'Soin', what: 'convalescence −{v} %', base: 15 },
+  // ⛑️ Ex-🩺 Soin (2026-10-07) : il ÉVITE la blessure au lieu de raccourcir la convalescence.
+  // L'id `care` reste : il est persisté dans les compétences des champions.
+  care: {
+    tier: 'green',
+    emoji: '⛑️',
+    name: 'Premiers secours',
+    what: '{v} % de chances qu’un blessé de la troupe l’évite',
+    base: 15,
+  },
   haul: { tier: 'green', emoji: '🐫', name: 'Cargaison', what: 'cargaison +{v} %', base: 8 },
   scout: { tier: 'green', emoji: '👁️', name: 'Repérage', what: 'embuscades −{v} %', base: 8 },
 

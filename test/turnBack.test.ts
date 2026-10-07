@@ -48,7 +48,11 @@ function sample(p: Poi, esc: Adventurer[], n = 400) {
 
 describe('🔙 le convoi fait demi-tour sur une embuscade perdue à l’ALLER', () => {
   const p = poi();
-  const runs = sample(p, team(1));
+  // ⛑️ Une escorte SANS premiers secours : le sujet est le demi-tour, pas les blessés évités.
+  const runs = sample(
+    p,
+    team(1).map((a) => ({ ...a, skills: (a.skills ?? []).filter((s) => s.id !== 'care') })),
+  );
   it('toute défaite à l’aller fait faire demi-tour : rien de récolté, blessés gardés', () => {
     const aller = runs.filter((r) => r.lostAt !== null && r.lostAt < outLegs(p));
     expect(aller.length, 'aucune défaite à l’aller : le test ne prouve rien').toBeGreaterThan(20);

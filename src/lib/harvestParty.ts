@@ -26,6 +26,7 @@ import {
   caravanHaulMult,
   missionXpFor,
   resolveCaravan,
+  spareInjured,
   type CaravanOutcome,
   type EscortKit,
   type PartyHero,
@@ -260,7 +261,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
         !!hero,
         g.skirmish.foeDealt,
       ),
-      hurt: campHurt(g.skirmish, escort),
+      hurt: spareInjured(escort, campHurt(g.skirmish, escort), seed),
       journal: g.journal,
     };
     // ⚠️ Rien n'est récolté — mais les gardes ABATTUS laissent ce qu'ils portaient.
@@ -309,7 +310,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
       win: true,
       xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel, !!hero, 1),
       hurt: [],
-      lightHurt: spec ? campLightHurt(g.skirmish, escort) : [],
+      lightHurt: spec ? spareInjured(escort, campLightHurt(g.skirmish, escort), seed) : [],
       journal: [...g.journal, out.text],
     };
     return withSiteLoot(withGuardLoot({ ...out, text: `${tag} ${out.text}`, party }, loot), input);
@@ -332,7 +333,11 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     hurt: c.hurt,
     // 🩹 Gardes pris de justesse OU embuscade gagnée de justesse — jamais un blessé grave.
     lightHurt: [
-      ...new Set([...(spec ? campLightHurt(g.skirmish, escort) : []), ...(c.lightHurt ?? [])]),
+      ...new Set([
+        // ⛑️ La route a déjà eu ses premiers secours (`resolveCaravan`) : seuls les gardes passent ici.
+        ...(spec ? spareInjured(escort, campLightHurt(g.skirmish, escort), seed) : []),
+        ...(c.lightHurt ?? []),
+      ]),
     ].filter((id) => !c.hurt.includes(id)),
     journal: [...g.journal, ...c.events.map((e) => e.text)],
   };

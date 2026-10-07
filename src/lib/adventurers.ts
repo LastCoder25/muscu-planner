@@ -71,7 +71,7 @@ export type AdvRole = 'heal' | 'haul' | 'speed' | 'scout' | 'mentor';
  *  pas toujours un seul caractère.
  */
 const ADV_ROLE_INFO: Record<AdvRole, { emoji: string; what: string }> = {
-  heal: { emoji: '🩺', what: 'Convalescences plus courtes' },
+  heal: { emoji: '⛑️', what: 'Évite des blessures à la troupe' },
   haul: { emoji: '🐫', what: 'Cargaison plus grosse' },
   speed: { emoji: '🧭', what: 'Trajets plus rapides' },
   scout: { emoji: '👁️', what: 'Repère les embuscades' },

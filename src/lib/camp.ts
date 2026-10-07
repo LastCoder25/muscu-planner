@@ -31,6 +31,7 @@ import {
   HERO_UNIT_ID,
   partyAllies,
   refEscortUnits,
+  spareInjured,
   type PartyHero,
   type EscortKit,
 } from './caravan';
@@ -447,7 +448,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     kills: g.kills,
     heroKills: g.heroKills,
     xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero, d.foeDealt),
-    hurt: campHurt(d, escort),
+    hurt: spareInjured(escort, campHurt(d, escort), input.seed),
     ...(input.militia?.length
       ? {
           militiaLost: militiaLost(
@@ -456,7 +457,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
           ),
         }
       : {}),
-    lightHurt: campLightHurt(d, escort),
+    lightHurt: spareInjured(escort, campLightHurt(d, escort), input.seed),
     journal: g.journal,
     // 🐺 Une tanière se REJOUE (le duel contre la bête) : un camp, non.
     ...(poi.type === 'den' ? { den: g.replay } : {}),

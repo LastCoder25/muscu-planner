@@ -39,6 +39,7 @@ import {
   escortGear,
   mentorXpMult,
   refChampionAdv,
+  spareInjured,
   unitEffects,
   type EscortKit,
 } from './caravan';
@@ -1999,8 +2000,14 @@ export function healCost(remainingMs: number, playerLevel: number): number {
 /** 🤕 QUI PART À L’INFIRMERIE APRÈS UN SIÈGE (demandé : « les aventuriers blessés vont à
  *  l’infirmerie comme le héros »). Même règle que le héros : seule une DÉFAITE blesse —
  *  une victoire relève ceux qui étaient tombés, comme après une embuscade gagnée. */
-export function siegeHurtIds(report: RaidReport): string[] {
-  return report.held ? [] : [...(report.wounded ?? [])];
+export function siegeHurtIds(
+  report: RaidReport,
+  /** ⚠️ REQUIS : les aventuriers qui ont défendu — leurs ⛑️ premiers secours (`spareInjured`)
+   *  remettent sur pied une part des tombés. Un paramètre qu'on peut oublier finit par l'être. */
+  defenders: Adventurer[],
+): string[] {
+  if (report.held) return [];
+  return spareInjured(defenders, report.wounded ?? [], report.seed ?? 1);
 }
 
 /** Repos qu’il reste à un aventurier À L’INFIRMERIE (siège perdu OU mission), 0 s’il est sur

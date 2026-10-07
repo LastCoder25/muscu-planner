@@ -463,10 +463,10 @@ describe('les rôles hors combat servent à quelque chose', () => {
       ).reduce((x, y) => x + y, 0);
     expect(mana(team(2, 20, 'haul'))).toBeGreaterThan(mana(team(2, 20, 'speed')));
   });
-  it('un 🩺 raccourcit les convalescences, et l’Infirmerie aussi', () => {
-    const soigneur = team(2, 20, 'heal');
-    expect(caravanHurtMs(soigneur)).toBeLessThan(caravanHurtMs(team(2, 20, 'haul')));
-    expect(caravanHurtMs(soigneur, 10)).toBeLessThan(caravanHurtMs(soigneur, 0));
+  it('⛑️ les premiers secours ne raccourcissent plus la convalescence ; l’Infirmerie, si', () => {
+    const secouriste = team(2, 20, 'heal');
+    expect(caravanHurtMs(secouriste)).toBe(caravanHurtMs(team(2, 20, 'haul')));
+    expect(caravanHurtMs(secouriste, 10)).toBeLessThan(caravanHurtMs(secouriste, 0));
   });
 });
 
@@ -1274,7 +1274,9 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
     expect(c).toBeLessThan(b);
     // 🔓 Plus de plafond : chaque éclaireur retire sa part de ce qui reste (roleCut), donc
     // la probabilité baisse encore à chaque porteur sans jamais tomber à zéro.
-    const foule = Array.from({ length: 12 }, (_, i) => mk('e' + i, ['eclaireur', 'coursier', 'rodeur']));
+    const foule = Array.from({ length: 12 }, (_, i) =>
+      mk('e' + i, ['eclaireur', 'coursier', 'rodeur']),
+    );
     const d = ambushChance(poiOf(false), foule);
     expect(d).toBeLessThan(c);
     expect(d).toBeGreaterThan(0);

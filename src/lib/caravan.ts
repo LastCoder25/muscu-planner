@@ -26,6 +26,7 @@ import {
 import {
   simulateCombat,
   mulberry32,
+  seedOf,
   combatPower,
   offenseOf,
   survivalOf,
@@ -171,7 +172,7 @@ export const CARAVAN = {
   stonesShare: 0.2,
   haulPerRole: 0.12,
   haulMax: 0.4,
-  /** Un 🩺 raccourcit les convalescences de l'équipe. */
+  /** ⛑️ Premiers secours (rôle legacy) : part des blessés évités par cran. */
   carePerRole: 0.25,
   /** 👁️ ÉCLAIREUR : part d'embuscades ÉVITÉES par cran de compétence.
    *  ⚠️ Ce rôle existait, était attribué à 5 classes, et ne faisait **RIEN** — il n'était
@@ -334,6 +335,31 @@ export function roleCut(advs: Adventurer[], role: AdvRole): number {
   let keep = 1;
   for (const a of advs) keep *= 1 - Math.min(1, roleShare([a], role));
   return 1 - keep;
+}
+
+/** ⛑️ PREMIERS SECOURS (2026-10-07, demandé par l'utilisateur : remplace le « Soin » qui
+ *  raccourcissait la convalescence) : la chance qu'un membre tombé ÉVITE l'infirmerie, pour
+ *  toute la troupe. Les porteurs se cumulent comme les autres réductions (`roleCut`) : jamais
+ *  100 %, chaque porteur ajoute quelque chose. */
+export function firstAidChance(escort: Adventurer[]): number {
+  return roleCut(escort, 'heal');
+}
+
+/**
+ * ⛑️ Les blessés que les PREMIERS SECOURS de la troupe remettent sur pied : chaque id de `ids`
+ * a `firstAidChance(escort)` d'être épargné. SOURCE UNIQUE, appliquée là où les blessés sont
+ * DÉSIGNÉS (convoi, camp, point fixe, armée en campagne, récolte gardée, faille, interception,
+ * siège) : le rapport et l'infirmerie disent donc la même chose.
+ * ⚠️ Générateur À PART, un tirage par id (graine + id) : il ne décale aucun flux seedé, et un
+ * même blessé reçoit le même verdict quel que soit l'ordre de la liste. ⚠️ `Math.imul`, pas
+ * un produit flottant : `hash × 2654435761` dépasse 2⁵³ et la graine s'y perdait (vu en test).
+ */
+export function spareInjured(escort: Adventurer[], ids: readonly string[], seed: number): string[] {
+  const p = firstAidChance(escort);
+  if (p <= 0) return [...ids];
+  return ids.filter(
+    (id) => mulberry32((Math.imul(seedOf(id), 0x9e3779b1) ^ seed ^ 0x2f6b9d13) >>> 0 || 1)() >= p,
+  );
 }
 
 /** Effets apportés par les SIGNATURES de classe de l'escorte (strates hautes). */
@@ -1502,6 +1528,15 @@ export function resolveCaravan(
     }
   }
 
+  // ⛑️ Premiers secours : la troupe remet sur pied une part de ses blessés (un blessé grave
+  // ne se double pas d'une blessure légère — exclu AVANT le tirage).
+  const hurtFinal = spareInjured(escort, hurt, seed);
+  const lightFinal = spareInjured(
+    escort,
+    lightHurt.filter((id) => !hurt.includes(id)),
+    seed,
+  );
+
   if (turnBack !== undefined) {
     // Aucun lieu atteint : aucune cargaison. L'XP est celle d'un échec, plus les abattus.
     return {
@@ -1513,8 +1548,8 @@ export function resolveCaravan(
       // Un convoi n'est pas une attaque : son échec garde le socle plein (`dealt` null).
       xp: missionXpFor(escort, poi, false, xpShare, pantheonLevel, false, null),
       kills,
-      hurt,
-      lightHurt: lightHurt.filter((id) => !hurt.includes(id)),
+      hurt: hurtFinal,
+      lightHurt: lightFinal,
       events,
       text: events.map((e) => e.text).join(' '),
       turnBack,
@@ -1562,20 +1597,18 @@ export function resolveCaravan(
     mana: Math.round(y.mana * k),
     xp,
     kills,
-    hurt,
-    // ⚠️ Un blessé grave ne se double pas d'une blessure légère.
-    lightHurt: lightHurt.filter((id) => !hurt.includes(id)),
+    hurt: hurtFinal,
+    lightHurt: lightFinal,
     events,
     text: events.map((e) => e.text).join(' '),
   };
 }
 
-/** Durée de convalescence d'un blessé, raccourcie par les 🩺 de l'escorte ET par
- *  l'Infirmerie (le même bâtiment qui soigne le héros et les familiers). */
-export function caravanHurtMs(escort: Adventurer[], infirmaryLevel = 0): number {
-  const care = roleCut(escort, 'heal');
+/** Durée de convalescence d'un blessé, raccourcie par l'Infirmerie. ⛑️ Les premiers secours
+ *  (ex-🩺 Soin) ne la raccourcissent plus : ils ÉVITENT la blessure (`spareInjured`). */
+export function caravanHurtMs(_escort: Adventurer[], infirmaryLevel = 0): number {
   const inf = Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.05);
-  return Math.round(CARAVAN.hurtMs * (1 - care) * inf);
+  return Math.round(CARAVAN.hurtMs * inf);
 }
 
 /** Prépare un convoi : le POI est consommé par l'appelant, comme pour le héros. */

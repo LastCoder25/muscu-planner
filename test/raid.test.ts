@@ -777,7 +777,11 @@ describe('cycle de vie', () => {
   it('sans muraille, AUCUNE attaque — le système est opt-in', () => {
     const b = emptyBase(7, 0);
     expect(raidsEnabled(b, 7, 26)).toBe(false);
-    const r = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 10 * 24 * H);
+    const r = advanceBase(
+      b,
+      { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+      10 * 24 * H,
+    );
     expect(r.detected).toBeNull();
     expect(r.dueRaid).toBeNull();
   });
@@ -799,7 +803,13 @@ describe('cycle de vie', () => {
     expect(baseLeadMs(100, iv, 10)).toBe(Math.round(iv * RAID.scoutLeadIntervalCap));
     const b = base(0);
     b.nextRaidAt = 20 * H;
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0, towerBoost: 0 };
+    const ctx = {
+      playerLevel: 26,
+      activeDays7: 7,
+      globalXp: 0,
+      fortSightMs: () => 0,
+      towerBoost: 0,
+    };
     const lead = scoutLeadMs(6, iv);
     const t = b.nextRaidAt - Math.round(lead * 1.25);
     expect(advanceBase(b, ctx, t).detected).toBeNull();
@@ -833,13 +843,25 @@ describe('cycle de vie', () => {
   it('la production gelée se dégèle par une SÉANCE, ou toute seule', () => {
     const b = base(0);
     b.freeze = { until: 10 * H, atXp: 500 };
-    const still = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500, fortSightMs: () => 0 }, H);
+    const still = advanceBase(
+      b,
+      { playerLevel: 26, activeDays7: 7, globalXp: 500, fortSightMs: () => 0 },
+      H,
+    );
     expect(still.base.freeze).not.toBeNull();
     // Une séance de sport (XP en hausse) lève le gel immédiatement…
-    const bySport = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 620, fortSightMs: () => 0 }, H);
+    const bySport = advanceBase(
+      b,
+      { playerLevel: 26, activeDays7: 7, globalXp: 620, fortSightMs: () => 0 },
+      H,
+    );
     expect(bySport.base.freeze).toBeNull();
     // …et l'échéance le lève de toute façon : l'app ne réclame jamais d'entraînement.
-    const byTime = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 500, fortSightMs: () => 0 }, 11 * H);
+    const byTime = advanceBase(
+      b,
+      { playerLevel: 26, activeDays7: 7, globalXp: 500, fortSightMs: () => 0 },
+      11 * H,
+    );
     expect(byTime.base.freeze).toBeNull();
   });
 
@@ -852,7 +874,13 @@ describe('cycle de vie', () => {
       true,
     );
     expect(rep.held).toBe(true);
-    const { base: nb, damage } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 0);
+    const { base: nb, damage } = applyRaidOutcome(
+      b,
+      raid,
+      rep,
+      { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+      0,
+    );
     expect(damage).toEqual({ stockStolen: false, damaged: [], freeze: false });
     expect(nb.freeze).toBeNull();
     expect(nb.raid).toBeNull();
@@ -925,7 +953,13 @@ describe('cycle de vie', () => {
       const at = 10 * H;
       const { b, raid, rep } = perdu(at);
       // Bien au-delà de la convalescence la plus longue.
-      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, at + 72 * H).base;
+      const nb = applyRaidOutcome(
+        b,
+        raid,
+        rep,
+        { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+        at + 72 * H,
+      ).base;
       expect(nb.wound).toBeNull();
       expect(nb.field).toBeNull();
       expect(nb.freeze).toBeNull();
@@ -938,7 +972,13 @@ describe('cycle de vie', () => {
       const at = 10 * H;
       const { b, raid, rep } = perdu(at);
       const now = at + 72 * H;
-      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, now).base;
+      const nb = applyRaidOutcome(
+        b,
+        raid,
+        rep,
+        { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+        now,
+      ).base;
       expect(nb.nextRaidAt).toBeGreaterThan(now);
     });
   });
@@ -972,7 +1012,11 @@ describe('cycle de vie', () => {
       corpses: corpsesFrom(rollRaid(1, 26, 0, 0), { defeated: 2 } as never, 1),
       expiresAt: 5 * H,
     };
-    b = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 6 * H).base;
+    b = advanceBase(
+      b,
+      { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+      6 * H,
+    ).base;
     expect(b.field).toBeNull();
   });
 
@@ -1315,7 +1359,13 @@ describe('blessure du héros', () => {
       held: false,
       heroHome: true,
     };
-    const { base: nb } = applyRaidOutcome(b, raid, report, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 0);
+    const { base: nb } = applyRaidOutcome(
+      b,
+      raid,
+      report,
+      { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+      0,
+    );
     expect(nb.wound).not.toBeNull();
     // Il part à l'INFIRMERIE : plus de donjon, de faille ni d'expédition le temps qu'il
     // se remette. (Un simple malus de dégâts avait été essayé : sans mordant, puisqu'on
@@ -1343,7 +1393,13 @@ describe('blessure du héros', () => {
       true,
     );
     expect(rep.held).toBe(true);
-    const { base: nb } = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 }, 0);
+    const { base: nb } = applyRaidOutcome(
+      b,
+      raid,
+      rep,
+      { activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },
+      0,
+    );
     expect(nb.wound).toBeNull();
   });
 
@@ -2375,13 +2431,14 @@ describe('🏥 infirmerie des aventuriers', () => {
         raid,
         true,
       );
-      const hurt = siegeHurtIds(rep);
+      const hurt = siegeHurtIds(rep, advs);
       for (const id of rep.wounded ?? []) expect(ids.has(id), id).toBe(true);
       if (rep.held) {
         expect(hurt).toEqual([]);
       } else {
         lost++;
-        expect(hurt).toEqual(rep.wounded);
+        // ⛑️ Les premiers secours du vivier en épargnent une part : un sous-ensemble.
+        for (const id of hurt) expect(rep.wounded).toContain(id);
         if (hurt.length) withHurt++;
       }
     }
@@ -2391,9 +2448,9 @@ describe('🏥 infirmerie des aventuriers', () => {
 
   it('une victoire relève ceux qui étaient tombés, et un rapport d’avant n’envoie personne', () => {
     const rep = { held: true, wounded: ['a1'] } as never;
-    expect(siegeHurtIds(rep)).toEqual([]);
-    expect(siegeHurtIds({ held: false, wounded: ['a1', 'a2'] } as never)).toEqual(['a1', 'a2']);
-    expect(siegeHurtIds({ held: false } as never)).toEqual([]);
+    expect(siegeHurtIds(rep, [])).toEqual([]);
+    expect(siegeHurtIds({ held: false, wounded: ['a1', 'a2'] } as never, [])).toEqual(['a1', 'a2']);
+    expect(siegeHurtIds({ held: false } as never, [])).toEqual([]);
   });
 
   it('les soins d’un aventurier coûtent le QUART du tarif du héros, et rien s’il est sur pied', () => {

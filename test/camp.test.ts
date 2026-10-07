@@ -62,6 +62,7 @@ import {
   XP_TEAM_REF,
   refAdvGear,
   refChampionAdv,
+  spareInjured,
   escortGear,
   roadUnits,
   type EscortKit,
@@ -273,7 +274,8 @@ describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => 
       );
       expect(o.party!.win, `graine ${s}`).toBe(fight.win);
       expect(o.party!.slain).toBe(d.foesDown.length);
-      expect(o.party!.hurt).toEqual(d.win ? [] : d.down);
+      // ⛑️ Les premiers secours de l'escorte épargnent une part des tombés (même graine).
+      expect(o.party!.hurt).toEqual(d.win ? [] : spareInjured(inp0.escort, d.down, s));
       if (
         simulateCombat(group, foe, { seed: s + 17, goldOnWin: 0 }).log.length !== fight.log.length
       )
@@ -412,7 +414,11 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         expect(o.party!.hurt).toEqual([]);
       } else {
         defaites++;
-        expect([...o.party!.hurt].sort()).toEqual(['adv_0', 'adv_1', 'adv_2']);
+        // ⛑️ Tous les tombés, moins ceux que les premiers secours de l'escorte remettent sur pied.
+        const esc = input().escort;
+        expect([...o.party!.hurt].sort()).toEqual(
+          spareInjured(esc, ['adv_0', 'adv_1', 'adv_2'], s),
+        );
       }
     }
     expect(defaites, 'aucune défaite : le test ne prouve rien').toBeGreaterThan(0);

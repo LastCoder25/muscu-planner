@@ -6,6 +6,7 @@ import {
   caravanHaulMult,
   caravanHurtMs,
   caravanLegMin,
+  firstAidChance,
   mentorXpMult,
   roleCut,
   roleShare,
@@ -54,11 +55,14 @@ describe('🔓 compétences sans plafond', () => {
     expect(roleCut(team('speed', 40), 'speed')).toBeLessThan(1);
   });
 
-  it('Soin : la convalescence baisse à chaque soigneur, au-delà de −60 %, jamais à zéro', () => {
-    const h = (n: number) => caravanHurtMs(team('care', n), 0);
-    for (let n = 1; n <= 6; n++) expect(h(n)).toBeLessThan(h(n - 1));
-    expect(h(3)).toBeLessThan(CARAVAN.hurtMs * 0.4);
-    expect(h(6)).toBeGreaterThan(0);
+  it('⛑️ Premiers secours : la chance d’éviter la blessure monte à chaque porteur, jamais 100 %', () => {
+    const p = (n: number) => firstAidChance(team('care', n));
+    expect(p(0)).toBe(0);
+    for (let n = 1; n <= 6; n++) expect(p(n)).toBeGreaterThan(p(n - 1));
+    expect(p(3)).toBeGreaterThan(0.6);
+    expect(p(40)).toBeLessThan(1);
+    // La convalescence elle-même ne bouge plus.
+    expect(caravanHurtMs(team('care', 3), 0)).toBe(CARAVAN.hurtMs);
   });
 
   it('Cargaison et Mentor s’additionnent sans borne', () => {

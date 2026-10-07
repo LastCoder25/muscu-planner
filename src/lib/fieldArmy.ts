@@ -63,7 +63,7 @@ import {
   forceHaul,
   type PartyInput,
 } from './camp';
-import { missionXpFor, partyAllies, type EscortKit } from './caravan';
+import { missionXpFor, partyAllies, spareInjured, type EscortKit } from './caravan';
 import { militiaUnits } from './militia';
 import type { Adventurer } from './adventurers';
 import type { SkirmishUnit } from './skirmish';
@@ -584,8 +584,8 @@ export function resolveFieldArmy(input: Omit<PartyInput, 'spec'>): ExpeditionOut
     kills: g.kills,
     heroKills: g.heroKills,
     xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero, d.foeDealt),
-    hurt: campHurt(d, escort),
-    lightHurt: campLightHurt(d, escort),
+    hurt: spareInjured(escort, campHurt(d, escort), seed),
+    lightHurt: spareInjured(escort, campLightHurt(d, escort), seed),
     journal: g.journal,
     fieldHit: hit,
     // 🎬 Rejouée en bataille rangée, comme l'interception d'une bande (`warbandStage.ts`) :
