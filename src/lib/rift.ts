@@ -960,7 +960,8 @@ export function incursionFoesDown(run: RiftRun, bodies: readonly SkirmishUnit[])
  * - 🤕 **DÉFAITE → TOUT LE GROUPE À L'INFIRMERIE.** Une incursion perdue est une mort du
  *   combattant fondu : contrairement à un camp, il n'y a pas de corps à corps distincts à
  *   attribuer, donc pas de « certains sont tombés ». Aucune perte définitive, comme partout.
- * - ⚠️ **LE HÉROS N'EST JAMAIS BLESSÉ**, et c'est un écart ASSUMÉ avec la lettre de la spec
+ * - ⚠️ (PÉRIMÉ depuis le 2026-10-07 : le héros perdant est désormais blessé partout,
+ *   `markHeroHurt`.) Ancien texte : **LE HÉROS N'EST JAMAIS BLESSÉ**, écart ASSUMÉ avec la spec
  *   (« défaite du héros → Infirmerie, comme sur un camp ») : vérifié, un camp perdu ne
  *   blesse PAS le héros — `base.wound` n'est posé que par un SIÈGE perdu. La spec décrivait
  *   donc une règle qui n'existe pas. On honore son INTENTION (« comme sur un camp ») plutôt
@@ -1232,8 +1233,8 @@ export interface InterceptionInput {
  *   des camps, des convois et des incursions. Partagée entre les SEULS aventuriers.
  * - 🤕 **DÉFAITE → TOUT LE GROUPE À L'INFIRMERIE**, comme une incursion : le combattant
  *   fondu est tombé, il n'y a pas de corps à corps distincts à attribuer.
- * - ⚠️ **Le héros n'est jamais blessé** (cf. `resolveIncursion` : un camp perdu ne blesse
- *   pas le héros non plus — seul un SIÈGE perdu le fait).
+ * - 🤕 **Le héros perdant revient blessé** (2026-10-07, `markHeroHurt`, comme sur un camp
+ *   ou tout autre lieu ; avant, seul un SIÈGE perdu le blessait).
  */
 /**
  * 🐫 Intercepter un CONVOI de ravitaillement de l'île 4 (`islandConquest.warlordConvoys`).

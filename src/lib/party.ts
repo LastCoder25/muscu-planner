@@ -618,7 +618,7 @@ export function recallVoyage<T extends ActiveExpedition>(
     reported: true,
     recalled: true,
     baseSplit: true,
-    outcome: party ? { ...v.outcome, party: { ...party, hurt: [], lightHurt: [] } } : v.outcome,
+    outcome: party ? { ...v.outcome, party: unhurt(party) } : v.outcome,
   };
   delete out.dwellMs;
   delete out.returnLegs;
@@ -650,6 +650,62 @@ export function medkitHeal(party: PartyResult): PartyResult {
   };
   delete out.lightHurt;
   return out;
+}
+
+/** 🔙 Un demi-tour : personne n'a combattu, donc personne n'est blessé — héros compris. */
+function unhurt(party: PartyResult): PartyResult {
+  const out: PartyResult = { ...party, hurt: [], lightHurt: [] };
+  delete out.heroHurt;
+  return out;
+}
+
+/**
+ * 🤕 LE HÉROS PEUT ÊTRE BLESSÉ PARTOUT (2026-10-07, décision de l'utilisateur ; override
+ * « il n'est blessé qu'au siège »). Une mission de groupe PERDUE avec lui le renvoie blessé,
+ * comme ses champions — marqué sur l'issue, tirée au départ. 🩹 Avec la trousse, il en
+ * réchappe (`heroHealed`). Rend le MÊME objet s'il n'y a rien à dire.
+ */
+export function markHeroHurt(party: PartyResult, medkit: boolean): PartyResult {
+  if (!party.hero || party.win || party.heroHurt || party.heroHealed) return party;
+  return medkit
+    ? {
+        ...party,
+        heroHealed: true,
+        journal: [...party.journal, '🩹 La trousse de soins évite au héros l’infirmerie.'],
+      }
+    : {
+        ...party,
+        heroHurt: true,
+        journal: [...party.journal, '🤕 Le héros rentre blessé : direction l’infirmerie.'],
+      };
+}
+
+/**
+ * 🏥 La convalescence du héros après une mission perdue. ⚠️ Elle court depuis son ARRIVÉE à
+ * la base (`returnAt`), comme celle des champions (v0.1396) — pas depuis l'instant où l'app
+ * s'en aperçoit : `null` si elle est déjà écoulée ou si le héros n'est pas blessé. Une
+ * convalescence déjà plus longue (un siège) n'est jamais raccourcie.
+ */
+export function heroMissionWound(
+  v: Pick<ActiveExpedition, 'returnAt' | 'outcome'>,
+  woundMs: number,
+  current: { until: number } | null | undefined,
+  now: number,
+): { until: number } | null {
+  return v.outcome.party?.heroHurt ? heroWoundAfter(v.returnAt, woundMs, current, now) : null;
+}
+
+/** 🏥 Une convalescence qui commence quand le héros ARRIVE à la base (`homeAt`) : `null` si
+ *  elle est déjà écoulée, ou si une convalescence en cours dure déjà plus longtemps. */
+export function heroWoundAfter(
+  homeAt: number,
+  woundMs: number,
+  current: { until: number } | null | undefined,
+  now: number,
+): { until: number } | null {
+  const until = sinceEvent(homeAt, woundMs, now);
+  if (until === null || (current && current.until >= until)) return null;
+  return { until };
 }
 
 /**

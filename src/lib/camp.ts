@@ -306,7 +306,7 @@ export function forceLootPreview(
 /** 🤕 INFIRMERIE DES CAMPS : une défaite envoie à l'infirmerie TOUS les aventuriers tombés.
  *  ⚠️ ≠ `convoyHurt` (un seul blessé) : un convoi subit une embuscade en chemin, un camp est
  *  l'épreuve qu'on est venu chercher — on en connaît la taille avant de partir. Une victoire
- *  n'en blesse aucun (à terre, relevés). Le HÉROS n'est jamais blessé. */
+ *  n'en blesse aucun (à terre, relevés). Le HÉROS perdant est marqué à part (`markHeroHurt`). */
 export function campHurt(
   d: Pick<SkirmishResult, 'win' | 'down'>,
   escort: readonly { id: string }[],

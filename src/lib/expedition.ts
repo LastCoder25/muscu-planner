@@ -561,6 +561,11 @@ export interface PartyResult {
   /** 🩹 Ceux que la trousse de soins a remis sur pied : ils auraient été blessés. Absent =
    *  pas de trousse, ou personne à soigner. */
   healed?: string[];
+  /** 🤕 Le HÉROS revient blessé (mission PERDUE avec lui, sans trousse) : il passe à
+   *  l'infirmerie à son retour à la base (`heroMissionWound`). Absent = indemne. */
+  heroHurt?: true;
+  /** 🩹 La trousse lui a évité cette blessure. */
+  heroHealed?: true;
   journal: string[];
   /**
    * 🕳️ Ce qu'il faut pour REJOUER une incursion de faille (`riftStage.ts`) — et rien de

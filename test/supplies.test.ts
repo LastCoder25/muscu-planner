@@ -30,6 +30,8 @@ import { fuseUnits } from '@/lib/skirmish';
 import { partyWinChance } from '@/lib/partyForecast';
 import {
   baseWalkers,
+  heroMissionWound,
+  markHeroHurt,
   medkitHeal,
   partyClaimRoster,
   partyFightSeed,
@@ -346,7 +348,9 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
       healMult: 1,
     };
     // Sans trousse : le blessé part à l'infirmerie, et sur une sortie il rentre à la base.
-    expect(partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil).toBeGreaterThan(ctx.backAt);
+    expect(partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil).toBeGreaterThan(
+      ctx.backAt,
+    );
     const sortie = { homeId: 'ctl_mine', outcome: { party } } as Parameters<typeof baseWalkers>[0];
     expect(baseWalkers(sortie, ['a0', 'a1'], true)).toEqual(['a0', 'a1']);
     // Avec : plus aucun blessé (grave ni léger), donc ni infirmerie ni retour forcé à la base.
@@ -354,8 +358,11 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     expect(healed.hurt).toEqual([]);
     expect(healed.lightHurt).toBeUndefined();
     expect(healed.healed).toEqual(['a0', 'a1']);
-    for (const a of partyClaimRoster(healed, escort, ctx).adventurers) expect(a.hurtUntil).toBeUndefined();
-    const sortieHealed = { homeId: 'ctl_mine', outcome: { party: healed } } as Parameters<typeof baseWalkers>[0];
+    for (const a of partyClaimRoster(healed, escort, ctx).adventurers)
+      expect(a.hurtUntil).toBeUndefined();
+    const sortieHealed = { homeId: 'ctl_mine', outcome: { party: healed } } as Parameters<
+      typeof baseWalkers
+    >[0];
     expect(baseWalkers(sortieHealed, ['a0', 'a1'], true)).toEqual([]);
     // ⚠️ Un point PERDU renvoie quand même tout le monde à la base.
     expect(baseWalkers(sortieHealed, ['a0', 'a1'], false)).toEqual(['a0', 'a1']);
@@ -364,6 +371,41 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     expect(medkitHeal(clean)).toBe(clean);
     expect(supplyFx(['trousse']).medkit).toBe(true);
     expect(supplyFx([]).medkit).toBe(false);
+  });
+
+  it('🤕 le héros peut être blessé partout : une défaite avec lui le renvoie à l’infirmerie', () => {
+    const base: PartyResult = {
+      hero: true,
+      faction: 'bandits',
+      escort: [],
+      win: false,
+      foes: 3,
+      slain: 0,
+      kills: {},
+      heroKills: 0,
+      xp: {},
+      hurt: [],
+      journal: [],
+    };
+    const hurt = markHeroHurt(base, false);
+    expect(hurt.heroHurt).toBe(true);
+    // 🩹 Avec la trousse, il en réchappe.
+    const saved = markHeroHurt(base, true);
+    expect(saved.heroHurt).toBeUndefined();
+    expect(saved.heroHealed).toBe(true);
+    // Une victoire, ou une mission sans lui : rien.
+    expect(markHeroHurt({ ...base, win: true }, false)).toEqual({ ...base, win: true });
+    expect(markHeroHurt({ ...base, hero: false }, false).heroHurt).toBeUndefined();
+    // La convalescence court depuis son RETOUR à la base, jamais depuis l'ouverture de l'app.
+    const v = { returnAt: 1_000, outcome: { party: hurt } } as Parameters<
+      typeof heroMissionWound
+    >[0];
+    expect(heroMissionWound(v, 500, null, 1_200)).toEqual({ until: 1_500 });
+    expect(heroMissionWound(v, 500, null, 2_000)).toBeNull(); // déjà écoulée
+    expect(heroMissionWound(v, 500, { until: 9_000 }, 1_200)).toBeNull(); // un siège plus long reste
+    expect(
+      heroMissionWound({ ...v, outcome: { party: saved } } as typeof v, 500, null, 1_200),
+    ).toBeNull();
   });
 
   it('🥖 les rations raccourcissent le trajet — sous le plafond du rôle 🧭 pour les champions', () => {
@@ -410,7 +452,9 @@ describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
     expect(supplyUselessWhy('lanterne', t('rift'))).toBeNull();
     expect(supplyUselessWhy('bats', t('mine'))).toBeNull();
     expect(supplyUselessWhy('carte', t('mine', true, true))).not.toBeNull();
-    expect(supplyUselessWhy('trousse', t('camp', true, true, 0))).not.toBeNull();
+    // 🤕 Le héros seul peut revenir blessé d'un camp : la trousse lui sert aussi.
+    expect(supplyUselessWhy('trousse', t('camp', true, true, 0))).toBeNull();
+    expect(supplyUselessWhy('trousse', t('mine', false, true, 0))).not.toBeNull();
     // 🗡️ Une récolte SANS gardes se traverse quand même : une équipe sans le héros y subit des
     // embuscades, où potion, pierre et trousse servent. Le héros seul n'en tire rien.
     expect(supplyUselessWhy('potion', t('mine', false))).toBeNull();

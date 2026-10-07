@@ -251,6 +251,7 @@ import {
   retireKennel,
   healCost,
   woundRemainingMs,
+  woundMsFor,
   type BaseState,
   type DefenseId,
   type DefenseStructure,
@@ -349,6 +350,9 @@ import {
   rescheduleReturners,
   baseWalkers,
   medkitHeal,
+  markHeroHurt,
+  heroMissionWound,
+  heroWoundAfter,
   walkToBase,
   withoutWalkers,
   interceptLeg,
@@ -2902,8 +2906,18 @@ export const useCharacterStore = defineStore('character', () => {
       : null;
     const map2 = home?.map ?? map1;
     const homePoi = exp.homeId ? map2?.pois.find((p) => p.id === exp.homeId) : undefined;
+    // 🤕 Revenu blessé d'une défaite : infirmerie à la base, convalescence datée de son
+    // retour (`heroMissionWound`). Il ne reprend donc pas son poste.
+    const base0 = dw?.base ?? baseOf(cur, now);
+    const wound = heroMissionWound(
+      exp,
+      woundMsFor(defenseLevel(base0.defenses, 'infirmary'), raidIntervalMs(activeDays7)),
+      base0.wound,
+      now,
+    );
+    const hurtHero = !!exp.outcome.party?.heroHurt;
     const map =
-      exp.homeHero && exp.homeId && map2 && homePoi
+      !hurtHero && exp.homeHero && exp.homeId && map2 && homePoi
         ? heroBackToPost(
             map2,
             exp.homeId,
@@ -2914,7 +2928,7 @@ export const useCharacterStore = defineStore('character', () => {
         : map2;
     const advsOut = home?.adventurers ?? ctl?.adventurers;
     await persist(userId, {
-      ...(dw?.base ? { base: dw.base } : {}),
+      ...(wound ? { base: { ...base0, wound } } : dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
         ? { messages: dw ? dw.tag(x.messages) : x.messages }
         : {}),
@@ -4319,7 +4333,9 @@ export const useCharacterStore = defineStore('character', () => {
     const medkit = supplyFx(supplies).medkit;
     // 🏰 L'assaut d'un point de contrôle se reconnaît au rapport (`controlId`) : c'est ce
     // qui fera poster la garnison à l'arrivée.
-    const fought = outcome.party && medkit ? medkitHeal(outcome.party) : outcome.party;
+    // 🤕 Une défaite AVEC le héros le blesse aussi (`markHeroHurt`) — sauf trousse.
+    const marked = outcome.party ? markHeroHurt(outcome.party, medkit) : outcome.party;
+    const fought = marked && medkit ? medkitHeal(marked) : marked;
     const party =
       fought && poi.type === 'control'
         ? {
@@ -5337,6 +5353,8 @@ export const useCharacterStore = defineStore('character', () => {
     }
     let map = settled;
     let advs = advList.value;
+    // 🤕 Un héros posté et délogé rentre BLESSÉ : convalescence dès son arrivée à la base.
+    let heroWound: { until: number } | null = null;
     const stock0 = cur.adv_gear?.stock ?? [];
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
@@ -5462,10 +5480,20 @@ export const useCharacterStore = defineStore('character', () => {
       // `settleReturns` les rend à la base à leur arrivée — plus en un instant).
       const dead = o?.party?.militiaLost ?? [];
       if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
-      // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel). Il n'est
-      // jamais blessé hors d'un siège de la base.
-      if (!held && p.control!.hero)
-        map = recallPostedHero(map, at, heroHomeLegMin(cur, map, p, at));
+      // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel), BLESSÉ :
+      // l'infirmerie commence à son arrivée (2026-10-07 : il peut être blessé partout).
+      if (!held && p.control!.hero) {
+        const leg = heroHomeLegMin(cur, map, p, at);
+        map = recallPostedHero(map, at, leg);
+        const b = baseOf(cur, now);
+        heroWound =
+          heroWoundAfter(
+            at + Math.max(0, Math.round(leg)) * 60_000,
+            woundMsFor(defenseLevel(b.defenses, 'infirmary'), raidIntervalMs(activeDays7)),
+            heroWound ?? b.wound,
+            now,
+          ) ?? heroWound;
+      }
       map = held
         ? holdControl(map, p.id, at, activeDays7)
         : regainIslandTarget(
@@ -5544,6 +5572,7 @@ export const useCharacterStore = defineStore('character', () => {
       messages: x.messages,
       ...x.patch,
       ...forged,
+      ...(heroWound ? { base: { ...baseOf(cur, now), wound: heroWound } } : {}),
       ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
       ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn, blessedIn, exaltedIn) } : {}),

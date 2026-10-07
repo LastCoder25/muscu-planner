@@ -427,7 +427,8 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
     case 'pierre':
       return combat ? null : 'aucun combat ici';
     case 'trousse':
-      return !combat ? 'aucun combat ici' : t.escort ? null : 'le héros n’est jamais blessé';
+      // 🤕 Le héros aussi peut revenir blessé d'une défaite (2026-10-07) : utile dès qu'on combat.
+      return combat ? null : 'aucun combat ici';
     case 'fumigene':
       return CAMPS.has(t.type) || (harvest && t.fights) ? null : 'ni camp ni gardes ici';
     case 'cor':
