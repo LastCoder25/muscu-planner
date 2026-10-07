@@ -2334,7 +2334,7 @@
         </div>
         <div class="res-src-title">D’où elle vient</div>
         <ul class="res-src">
-          <li v-for="s in RESOURCE_SOURCES.energy.sources" :key="s.label">
+          <li v-for="s in sourcesFor('energy', srcCtx)" :key="s.label">
             <span class="res-src-emo">{{ s.emoji }}</span>
             <span class="res-src-txt"
               ><b>{{ s.label }}</b
@@ -2359,7 +2359,7 @@
         <div class="sec-hint">{{ resInfoData.use }}</div>
         <div class="res-src-title">Où en trouver</div>
         <ul class="res-src">
-          <li v-for="s in resInfoData.sources" :key="s.label">
+          <li v-for="s in sourcesFor(resInfo!, srcCtx)" :key="s.label">
             <span class="res-src-emo">{{ s.emoji }}</span>
             <span class="res-src-txt"
               ><b>{{ s.label }}</b
@@ -3150,7 +3150,12 @@ import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { familiarSpecies } from '@/data/familiars';
-import { RESOURCE_SOURCES, type ResourceId } from '@/data/resourceSources';
+import {
+  RESOURCE_SOURCES,
+  sourceContext,
+  sourcesFor,
+  type ResourceId,
+} from '@/data/resourceSources';
 import {
   DUNGEONS,
   dungeonFoes,
@@ -3500,6 +3505,8 @@ const energyHistOpen = ref(false);
 // Fiche « d'où vient cette ressource » (clic sur une puce du plateau).
 const resInfo = ref<ResourceId | null>(null);
 const resInfoData = computed(() => (resInfo.value ? RESOURCE_SOURCES[resInfo.value] : null));
+/** 🏝️ Les sources à portée de l'île où l'on est (`sourcesFor`). */
+const srcCtx = computed(() => sourceContext(char.row?.expedition_map));
 // Liste des 10 rangs de prestige (cosmétiques, dérivés du niveau) : 1 rang = 10 niveaux
 // (5 étoiles × 2 niveaux). Marque le rang courant + sa plage de niveaux.
 const rankList = computed(() =>
