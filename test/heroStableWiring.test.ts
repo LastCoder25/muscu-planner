@@ -34,4 +34,10 @@ describe('le store applique les règles du héros posté', () => {
     expect(b).toMatch(/recallPostedHero\(/);
     expect(b).toMatch(/turnBackComingHero\(/);
   });
+  it('en sortie de son poste, sa place lui est gardée (et seulement là où il revient)', () => {
+    expect(body('expeSend')).toMatch(/unpostHero\([\s\S]*?, now, true\)/);
+    expect(body('sendParty')).toMatch(/unpostHero\(map1, now, !!origin\)/);
+    expect(src).toMatch(/syncHeroAway\(\s*syncAway\(/);
+    expect(src).toMatch(/heroHomePostId\(cur\.expedition\)/);
+  });
 });

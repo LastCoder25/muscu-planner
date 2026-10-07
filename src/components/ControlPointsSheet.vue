@@ -104,9 +104,16 @@
               <span
                 v-else-if="s.kind === 'hero'"
                 class="mini hero"
-                :class="{ route: s.coming }"
-                :title="s.coming ? 'Le héros est en route (2 places)' : 'Le héros (2 places)'"
-                >{{ s.coming ? '🧭' : '🦸' }}</span
+                :class="{ route: s.coming, away: s.away }"
+                :title="
+                  s.coming
+                    ? 'Le héros est en route (2 places)'
+                    : s.away
+                      ? 'Le héros est en sortie, ses 2 places l’attendent'
+                      : 'Le héros (2 places)'
+                "
+                ><span>{{ s.coming ? '🧭' : '🦸' }}</span
+                ><i v-if="s.away" class="away-mark" aria-hidden="true">⚔️</i></span
               >
               <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME"
                 ><MilitiaPortrait
@@ -238,7 +245,7 @@ const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
 type Slot =
   | { kind: 'adv'; adv: Adventurer }
   | { kind: 'mil' }
-  | { kind: 'hero'; coming: boolean }
+  | { kind: 'hero'; coming: boolean; away: boolean }
   | { kind: 'route' }
   | { kind: 'away'; adv: Adventurer }
   | { kind: 'free' };
@@ -246,7 +253,9 @@ type Slot =
  *  place est gardée), puis places libres, jusqu'à `seats`. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
   // 🧝 Le héros prend 2 places : UNE case double, en tête (signalé : « je vois encore 5 boules »).
-  const hero: Slot[] = r.hero ? [{ kind: 'hero', coming: r.hero === 'coming' }] : [];
+  const hero: Slot[] = r.hero
+    ? [{ kind: 'hero', coming: r.hero === 'coming', away: r.hero === 'away' }]
+    : [];
   const filled: Slot[] = [
     ...hero,
     ...advsOf(r.garrison).map((adv) => ({ kind: 'adv' as const, adv })),

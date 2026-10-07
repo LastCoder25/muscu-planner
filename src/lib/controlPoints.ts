@@ -2773,7 +2773,7 @@ function occupants(
 /** 🧝 Les places que le héros occupe sur un point : 2 (`MILITIA.heroSeats`) s'il y est posté
  *  ou en route pour y être, 0 sinon. Il compte comme DEUX champions. */
 export function heroSeatsIn(c: ControlState | undefined | null): number {
-  return c && (c.hero || c.heroComing) ? MILITIA.heroSeats : 0;
+  return c && (c.hero || c.heroComing || c.heroAway) ? MILITIA.heroSeats : 0;
 }
 /** 🧝 Combien de CHAMPIONS resteront si l'assaut prend ce point, le héros y restant ou non
  *  (`holdSeats` : 0 pour un nid qu'on abat). Il en prend 2 sur les 5. */
@@ -2792,7 +2792,7 @@ export const HERO_POST_BLOCK_LABEL: Record<HeroPostBlock, string> = {
 };
 export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
-  if (c.hero || c.heroComing) return 'here';
+  if (c.hero || c.heroComing || c.heroAway) return 'here';
   if (seatsOf(c.kind) < MILITIA.heroSeats) return 'noSeat';
   if (controlFreeSeats(c) < MILITIA.heroSeats) return 'full';
   return null;
@@ -2917,7 +2917,8 @@ export function garrisonFreeSeats(c: ControlState | undefined | null): number {
  */
 export function interimSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player' || RAZE_KINDS.has(c.kind)) return 0;
-  const away = c.away?.length ?? 0;
+  // 🧝 Les 2 places gardées au héros en sortie s'ouvrent aussi à l'intérim.
+  const away = (c.away?.length ?? 0) + (c.heroAway ? MILITIA.heroSeats : 0);
   if (!away) return 0;
   const o = occupants(c);
   const open = Math.max(0, garrisonCap(c.kind) - (o.champs - away) - o.militia);
@@ -3673,7 +3674,7 @@ export interface ControlRosterRow {
   engaged: string[];
   assault: { ids: string[]; inMs: number } | null;
   /** 🧝 Le héros sur ce point : `posted` (en garnison) ou `coming` (en route) — 2 places. */
-  hero: 'posted' | 'coming' | null;
+  hero: 'posted' | 'coming' | 'away' | null;
   /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
   progress: ControlProgress | null;
 }
@@ -3730,7 +3731,14 @@ export function controlRoster(
           away: held ? [...(c.away ?? [])] : [],
           engaged: held ? c.garrison.filter((id) => engagedIds.has(id)) : [],
           assault,
-          hero: held && c.hero ? 'posted' : held && c.heroComing ? 'coming' : null,
+          hero:
+            held && c.hero
+              ? 'posted'
+              : held && c.heroComing
+                ? 'coming'
+                : held && c.heroAway
+                  ? 'away'
+                  : null,
           progress: held ? controlProgress(p, now, playerLevel) : null,
         };
       })

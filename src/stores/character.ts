@@ -186,6 +186,8 @@ import {
   heroPosted,
   heroComing,
   heroAwayOnMapAt,
+  syncHeroAway,
+  heroHomePostId,
   heroWalksHomeFrom,
   turnBackComingHero,
   heroPostOf,
@@ -2805,7 +2807,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🧝 Posté sur un lieu tenu, il en part directement (`unpostHero`).
     // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
     const map: ExpeditionMap = recordDeparture(
-      unpostHero({ ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) }, now),
+      unpostHero({ ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) }, now, true),
       now,
       exp.midAt,
     );
@@ -4259,7 +4261,7 @@ export const useCharacterStore = defineStore('character', () => {
       origin && map0 ? sortieLeaves(map0, origin.id, opts.escortIds, now, opts.playerLevel) : map0;
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
     // 🧝 Le héros posté sur un lieu tenu en part directement : il quitte la garnison.
-    const map2 = map1 && hero ? unpostHero(map1, now) : map1;
+    const map2 = map1 && hero ? unpostHero(map1, now, !!origin) : map1;
     // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
     const map = map2 ? recordDeparture(map2, now, trip.midAt) : map2;
     await persist(userId, {
@@ -4689,7 +4691,7 @@ export const useCharacterStore = defineStore('character', () => {
           advs = advs.map((x) => (went.has(x.id) ? { ...x, posted: undefined } : x));
         }
         // 🧝 Le héros quitte son poste à SON départ, pas à l'envoi de l'attaque.
-        if (d.hero && map) map = unpostHero(map, w.departAt);
+        if (d.hero && map) map = unpostHero(map, w.departAt, !!w.originId);
         const gone = d.members.length > 0 || d.hero;
         const wings = [...a.wings];
         wings[i] = gone
@@ -5042,11 +5044,15 @@ export const useCharacterStore = defineStore('character', () => {
     parties: readonly ActiveParty[],
     advs: readonly Adventurer[],
   ): ExpeditionMap {
-    return syncAway(
-      map,
-      [...parties, ...(cur.expedition ? [cur.expedition] : [])],
-      attackList.value.flatMap((a) => a.wings),
-      advs,
+    // 🧝 La place gardée au héros en sortie suit la même règle : seulement là où il revient.
+    return syncHeroAway(
+      syncAway(
+        map,
+        [...parties, ...(cur.expedition ? [cur.expedition] : [])],
+        attackList.value.flatMap((a) => a.wings),
+        advs,
+      ),
+      heroHomePostId(cur.expedition),
     );
   }
   /** ⚔️🏰 `syncAwayOf` sur la carte courante, écrite seulement si elle change (ce tick bat

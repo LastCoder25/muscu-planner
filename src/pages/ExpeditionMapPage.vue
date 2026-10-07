@@ -745,14 +745,20 @@
             <div class="car-pick">
               <!-- 🏰 Le héros posté (ou en route) : il prend 2 places sur les 5 — sa tuile
                  couvre donc deux cases de la grille (2026-10-05). -->
-              <div v-if="liveControl.hero || liveControl.heroComing" class="mil-tile hero-tile">
+              <div
+                v-if="liveControl.hero || liveControl.heroComing || liveControl.heroAway"
+                class="mil-tile hero-tile"
+                :class="{ away: liveControl.heroAway }"
+              >
                 <span class="mil-emo">🦸</span>
                 <span class="mil-name">Ton héros</span>
                 <span class="mil-sub"
                   >{{
                     liveControl.heroComing
                       ? `🧭 en route · ${formatDuration(Math.max(0, liveControl.heroComing.at - now))}`
-                      : 'posté ici'
+                      : liveControl.heroAway
+                        ? '⚔️ en sortie, revient ici'
+                        : 'posté ici'
                   }}
                   · 2 places</span
                 >
@@ -3456,7 +3462,10 @@ async function releaseCtl() {
   const heroHere = liveControl.value?.hero || liveControl.value?.heroComing ? 1 : 0;
   const wholeGarrison = recallIsWhole(
     { onPoint: onPoint.length, turning: turning.length },
-    { total: controlCount.value + heroHere, away: controlAway.value.length },
+    {
+      total: controlCount.value + heroHere,
+      away: controlAway.value.length + (liveControl.value?.heroAway ? 1 : 0),
+    },
   );
   ctlBusy.value = true;
   try {
@@ -6864,6 +6873,13 @@ onUnmounted(() => {
   cursor: default;
   border-style: solid;
   border-color: var(--accent);
+}
+/* ⚔️ En sortie : sa place l'attend (pointillé, estompé), comme un champion en sortie. */
+.hero-tile.away {
+  border-style: dashed;
+}
+.hero-tile.away .mil-emo {
+  opacity: 0.45;
 }
 .mil-tile {
   position: relative;

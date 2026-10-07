@@ -161,6 +161,10 @@ export interface ControlState {
    *  `origin` : parti d'un AUTRE lieu où il était posté, en ligne directe (signalé : envoyé de
    *  l'Ossuaire aux Archives, il partait de la base sur la carte). Absent : de la base. */
   heroComing?: { at: number; from: number; unit: PostedHero; origin?: { x: number; y: number } };
+  /** 🧝⚔️ Le héros est parti en SORTIE de ce poste et y revient : ses 2 places lui sont
+   *  GARDÉES (2026-10-07, demandé : « comme les champions », `away`). Levé à son retour
+   *  (`heroBackToPost`), ou s'il ne revient plus ici (`syncHeroAway`). */
+  heroAway?: true;
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;

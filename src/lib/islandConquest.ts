@@ -58,6 +58,7 @@ import {
   distNormAt,
   type ControlKind,
   type ControlState,
+  type ActiveExpedition,
   type ExpeditionMap,
   type PostedHero,
   type ExpeditionMessage,
@@ -1188,7 +1189,8 @@ export function heroBackToPost(
   // ⚠️ Déjà en route vers la base (le point qu'il venait de prendre est tombé, il a été
   // rappelé) : il ne peut pas en même temps reprendre son ancien poste.
   if (heroPosted(map) || heroComing(map) || (map.heroReturnAt ?? 0) > at) return map;
-  const p = map.pois.find((q) => q.id === homeId);
+  // ⚔️ Sa place gardée se rend AVANT de vérifier qu'il en a une : c'est elle qu'il reprend.
+  const p = withoutHeroAway(map.pois.find((q) => q.id === homeId));
   if (!p) return map;
   // 🛡️🏠 S'il manque des places, les derniers miliciens arrivés lui cèdent la leur et rentrent
   // à pied à la base (2026-10-07, demandé) — juste le nombre nécessaire.
@@ -1199,7 +1201,49 @@ export function heroBackToPost(
     const done = bumpMilitiaToFit(posted, at, militiaLegMs(p));
     return { ...map, pois: map.pois.map((q) => (q.id === homeId ? done : q)) };
   }
-  return heroWalksHomeFrom(map, p, at, legMin);
+  return heroWalksHomeFrom(
+    { ...map, pois: map.pois.map((q) => (q.id === homeId ? p : q)) },
+    p,
+    at,
+    legMin,
+  );
+}
+
+/** ⚔️🏰 Le poste où revient le héros en sortie (`homeId` d'un voyage du héros), `null` s'il
+ *  n'y revient pas : pas de voyage, voyage parti de la base, ou blessé une fois le rapport
+ *  déposé (il rentre à la base). ⚠️ Jamais avant le rapport : l'issue ne doit rien trahir. */
+export function heroHomePostId(
+  exp: Pick<ActiveExpedition, 'homeId' | 'homeHero' | 'reported' | 'outcome'> | null | undefined,
+): string | null {
+  if (!exp?.homeId || !exp.homeHero) return null;
+  if (exp.reported && exp.outcome.party?.heroHurt) return null;
+  return exp.homeId;
+}
+
+/** Le lieu sans la place gardée au héros (même objet s'il n'en avait pas). */
+function withoutHeroAway(p: Poi | undefined): Poi | undefined {
+  if (!p?.control?.heroAway) return p;
+  const { heroAway: _a, ...c } = p.control;
+  void _a;
+  return { ...p, control: c };
+}
+
+/**
+ * ⚔️🏰 Ne garde la place du héros (`heroAway`) que sur le poste où il revient VRAIMENT
+ * (`keepId`, `null` : nulle part) — blessé renvoyé à la base, resté sur un point pris, voyage
+ * disparu ou lieu perdu la libèrent. Pendant de `pruneAway` pour un champion ; ne fait que
+ * RETIRER. Rend la MÊME carte si rien ne change (le store n'écrit pas à vide).
+ */
+export function syncHeroAway(map: ExpeditionMap, keepId: string | null): ExpeditionMap {
+  if (!map.pois.some((p) => p.control?.heroAway)) return map;
+  let changed = false;
+  const pois = map.pois.map((p) => {
+    if (!p.control?.heroAway) return p;
+    if (p.id === keepId && p.control.owner === 'player') return p;
+    changed = true;
+    return withoutHeroAway(p)!;
+  });
+  return changed ? { ...map, pois } : map;
 }
 
 /** 🧭 LE HÉROS RENTRE À PIED À LA BASE depuis le lieu `from`, parti à `at` (`legMin` minutes) :
@@ -1268,7 +1312,12 @@ export function recallPostedHero(map: ExpeditionMap, now: number, legMin: number
 /** 🧝 Le héros QUITTE son poste pour partir ailleurs (demandé : « posté, je ne peux plus le
  *  bouger ») : il part directement de là, sans repasser par la base — donc aucun trajet de
  *  retour (`heroReturnAt`), contrairement au rappel. Le lieu perd sa défense héroïque. */
-export function unpostHero(map: ExpeditionMap, at: number): ExpeditionMap {
+export function unpostHero(
+  map: ExpeditionMap,
+  at: number,
+  /** ⚔️ Il part en SORTIE et reviendra : ses 2 places lui sont gardées (`heroAway`). */
+  keepSeat = false,
+): ExpeditionMap {
   if (!heroPosted(map)) return map;
   return {
     ...map,
@@ -1278,7 +1327,7 @@ export function unpostHero(map: ExpeditionMap, at: number): ExpeditionMap {
       const { hero: _h, heroUnit: _u, ...c } = bankForHero(map, p, at, p.control!.heroUnit?.level);
       void _h;
       void _u;
-      return { ...p, control: c };
+      return { ...p, control: keepSeat ? { ...c, heroAway: true as const } : c };
     }),
   };
 }
