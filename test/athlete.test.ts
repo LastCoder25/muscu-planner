@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { sessionXp, drillSessionXp, estimateSessionXp, otherSportXp } from '@/lib/athlete';
+import {
+  sessionXp,
+  drillSessionXp,
+  estimateSessionXp,
+  otherSportXp,
+  isTennisSport,
+} from '@/lib/athlete';
 import type { SessionLog, DrillLog, Session } from '@/lib/types';
 
 function log(over: Partial<SessionLog> = {}): SessionLog {
@@ -97,5 +103,15 @@ describe('estimateSessionXp', () => {
     };
     // reps 3*10=30 ×0,2=6 ; tonnage 1500/500=3 ; total 9 × XP_MULT(2) = 18
     expect(estimateSessionXp(s)).toBe(18);
+  });
+});
+
+describe('isTennisSport : une sortie tennis va à la piste Tennis', () => {
+  it('le choix rapide comme un nom libre, sans tenir compte de la casse', () => {
+    expect(isTennisSport('Tennis')).toBe(true);
+    expect(isTennisSport('  tennis ')).toBe(true);
+    expect(isTennisSport('Padel')).toBe(false);
+    expect(isTennisSport('Tennis de table')).toBe(false);
+    expect(isTennisSport(null)).toBe(false);
   });
 });

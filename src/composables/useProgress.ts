@@ -15,6 +15,7 @@ import {
   drillSessionXp,
   cardioSessionXp,
   otherSportXp,
+  isTennisSport,
   MUSCU_MIN_XP,
   XP_MULT,
 } from '@/lib/athlete';
@@ -130,11 +131,14 @@ export function useProgress() {
   );
   // XP « autre sport » (durée) → n'alimente QUE le global et l'énergie. INTENSITÉ-
   // scalé par le sport (yoga < tennis < course), plus un barème plat.
-  const autreXp = computed(() =>
+  // 🎾 Un « autre sport » nommé Tennis va à la piste Tennis (`isTennisSport`) — compté UNE
+  // fois : retiré d'ici, ajouté à `tennisXp` (le Global additionne les deux).
+  const autreSportXp = (tennisOnly: boolean) =>
     logs.all
-      .filter((r) => isAutreLog(r))
-      .reduce((a, r) => a + otherSportXp(r.payload.duration_min ?? 0, r.payload.name), 0),
-  );
+      .filter((r) => isAutreLog(r) && isTennisSport(r.payload.name) === tennisOnly)
+      .reduce((a, r) => a + otherSportXp(r.payload.duration_min ?? 0, r.payload.name), 0);
+  const autreXp = computed(() => autreSportXp(false));
+  const autreTennisXp = computed(() => autreSportXp(true));
   const specifiqueSessionXp = computed(() =>
     logs.all.filter((r) => isSpecifiqueLog(r)).reduce((a, r) => a + sessionXp(r.payload), 0),
   );
@@ -153,12 +157,14 @@ export function useProgress() {
 
   // Défi 360 (défi combiné) → piste Muscu (XP façon séance : reps + tonnage + prime).
   const comboXp = computed(() => comboXpPoints(combo.list));
-  // Piste Tennis = court (drills) + prépa physique + challenges tennis.
+  // Piste Tennis = court (drills) + prépa physique + challenges tennis + sorties « Tennis »
+  // saisies en autre sport.
   const tennisXp = computed(
     () =>
       specifiqueSessionXp.value +
       tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0) +
-      tennisChallengeXp.value,
+      tennisChallengeXp.value +
+      autreTennisXp.value,
   );
   // Boss entre amis : ses reps (et la prime de complétion) nourrissent la muscu, ou le
   // cardio pour un boss de conditionnement — comme les challenges du même exo.

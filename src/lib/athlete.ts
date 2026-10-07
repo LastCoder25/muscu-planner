@@ -82,6 +82,13 @@ export function otherSportXp(durationMin: number, sportName?: string | null): nu
   return Math.round(dur * MUSCU_MIN_XP * (sportIntensity(sportName) / 100) * XP_MULT);
 }
 
+/** 🎾 Un « autre sport » qui EST du tennis (saisie rapide « Tennis », ou nom libre « tennis ») :
+ *  son XP va à la piste Tennis, pas seulement au Global (signalé 2026-10-07 : une sortie tennis
+ *  ne faisait monter que le niveau Global). */
+export function isTennisSport(sportName?: string | null): boolean {
+  return (sportName ?? '').trim().toLowerCase() === 'tennis';
+}
+
 /** Estimation d'XP d'une séance PRÉVUE (avant de la faire) : même barème que
  *  `sessionXp` mais sur les objectifs planifiés (note d'effort supposée = 2). */
 export function estimateSessionXp(session: Session): number {

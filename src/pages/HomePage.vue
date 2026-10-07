@@ -807,6 +807,7 @@ import { useFriendBossEntry } from '@/composables/useFriendBossEntry';
 import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
 import { logicalToday } from '@/lib/challenges';
+import { isTennisSport } from '@/lib/athlete';
 import { defisSummary } from '@/lib/defisHome';
 import { QUEST_INFO } from '@/lib/weeklyQuests';
 import { useWeeklyQuests } from '@/composables/useWeeklyQuests';
@@ -1221,6 +1222,7 @@ async function saveAutre() {
   }
   autreSaving.value = true;
   const beforeG = progress.global.value; // snapshot XP Global (animation)
+  const beforeT = progress.tennis.value; // 🎾 et Tennis, si c'est du tennis
   try {
     const [y, m, dd] = autreDate.value.split('-').map((n) => Number(n) || 0);
     const now = new Date();
@@ -1246,10 +1248,21 @@ async function saveAutre() {
       discipline: 'autre_sport',
     };
     await logs.insert(uid, log);
-    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP global + énergie 💪' });
+    const tennisToo = isTennisSport(sport);
+    $q.notify({
+      type: 'positive',
+      message: tennisToo
+        ? 'Séance enregistrée — XP Tennis + global + énergie 🎾'
+        : 'Séance enregistrée — XP global + énergie 💪',
+    });
     autreOpen.value = false;
     await nextTick();
-    xpFx.show([xpRing('global', '🌍', 'Global', beforeG, progress.global.value)]);
+    // 🎾 Une sortie Tennis fait monter la piste Tennis aussi : on anime les deux anneaux,
+    // comme à la fin d'une séance sur court.
+    xpFx.show([
+      ...(tennisToo ? [xpRing('tennis', '🎾', 'Tennis', beforeT, progress.tennis.value)] : []),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
+    ]);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   } finally {
