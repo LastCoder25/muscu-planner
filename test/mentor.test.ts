@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHAMPIONS } from '@/data/champions';
 import { advBadges, type Adventurer } from '@/lib/adventurers';
-import { CARAVAN, mentorXpMult, missionXpFor } from '@/lib/caravan';
+import { mentorXpMult, missionXpFor } from '@/lib/caravan';
 import { siegeXp, siegeXpFor, type RaidReport } from '@/lib/raid';
 import { skillValue } from '@/lib/skillRunes';
 import type { Poi } from '@/lib/expedition';
@@ -41,12 +41,12 @@ describe('🎓 la compétence Mentor', () => {
     expect(advBadges(autre('a')).some((b) => b.emoji === '🎓')).toBe(false);
   });
 
-  it('elle suit le barème des runes, sous le plafond d’équipe', () => {
+  it('elle suit le barème des runes, sans plafond d’équipe', () => {
     expect(mentorXpMult([autre('a')])).toBe(1);
     expect(mentorXpMult([mentor('m'), autre('a')])).toBeCloseTo(1 + m1);
     expect(mentorXpMult([mentor('m', 3)])).toBeCloseTo(1 + skillValue('mentor', 3) / 100);
     expect(mentorXpMult([mentor('m', 5), mentor('n', 5), mentor('o', 5)])).toBeCloseTo(
-      1 + CARAVAN.mentorMax,
+      1 + (3 * skillValue('mentor', 5)) / 100,
     );
   });
 

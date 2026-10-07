@@ -321,6 +321,21 @@ export function roleShare(advs: Adventurer[], role: AdvRole): number {
   return v;
 }
 
+/**
+ * 🔓 CE QU'UN RÔLE DE RÉDUCTION RETIRE, SANS PLAFOND (demandé par l'utilisateur : « pas de cap
+ * sur ce que rajoutent les compétences des champions »). Chaque porteur retire sa part de CE
+ * QUI RESTE : deux Vitesse à 14,85 % donnent 1 − 0,8515² = 27,5 %. Chaque compétence ajoute
+ * donc toujours quelque chose, et une équipe de N porteurs ne fait jamais tomber un trajet,
+ * une embuscade ou une convalescence à zéro ou en négatif — ce qu'une somme ferait dès
+ * 7 Vitesse au maximum. Vitesse, Repérage et Soin la lisent ; Cargaison et Mentor (des
+ * bonus, pas des réductions) additionnent `roleShare` sans borne.
+ */
+export function roleCut(advs: Adventurer[], role: AdvRole): number {
+  let keep = 1;
+  for (const a of advs) keep *= 1 - Math.min(1, roleShare([a], role));
+  return 1 - keep;
+}
+
 /** Effets apportés par les SIGNATURES de classe de l'escorte (strates hautes). */
 function escortEffects(advs: Adventurer[]): AggregatedEffects {
   // ⚠️ L'effet SUIT LE NIVEAU de la signature : la porter deux fois vaut deux crans.
@@ -754,8 +769,10 @@ export function caravanLegMin(
   travelMult: number,
 ): number {
   const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
-  const speed = Math.min(CARAVAN.speedMax, roleShare(escort, 'speed') + Math.max(0, gearSpeed));
-  return Math.max(1, Math.round(hero * championOutpostMult(travelMult) * (1 - speed)));
+  // 🔓 Les compétences 🧭 ne sont plus plafonnées (`roleCut`) ; pièces et rations gardent le leur.
+  const gear = Math.min(CARAVAN.speedMax, Math.max(0, gearSpeed));
+  const keep = (1 - roleCut(escort, 'speed')) * (1 - gear);
+  return Math.max(1, Math.round(hero * championOutpostMult(travelMult) * keep));
 }
 
 /** 🧭 Le multiplicateur de trajet des CHAMPIONS, dérivé de celui du héros (`travelTimeMult`) :
@@ -932,7 +949,8 @@ const CATCH_UP_RANK = LEVELS_PER_RANK;
 /** 🎓 Le multiplicateur d'XP que les Mentors d'une équipe donnent à TOUS ses membres.
  *  SOURCE UNIQUE des missions (`missionXpFor`) et du siège (`siegeXpFor`). */
 export function mentorXpMult(team: Adventurer[]): number {
-  return 1 + Math.min(CARAVAN.mentorMax, roleShare(team, 'mentor'));
+  // 🔓 Plus de plafond : chaque Mentor ajoute sa part. Le Panthéon borne toujours le niveau.
+  return 1 + roleShare(team, 'mentor');
 }
 
 export function catchUpMult(advLevel: number, pantheonLevel: number): number {
@@ -1161,8 +1179,9 @@ export function ambushChance(poi: Poi, escort: Adventurer[], extraScout = 0): nu
   const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
   // 🗺️ La carte de contrebandier s'ajoute aux éclaireurs SOUS LEUR plafond : elle comble un
   // trou, elle ne le dépasse pas.
-  const cut = Math.min(CARAVAN.scoutMax, roleShare(escort, 'scout') + Math.max(0, extraScout));
-  return base * (1 - cut);
+  // 🔓 Les éclaireurs ne sont plus plafonnés (`roleCut`) ; la carte garde son plafond.
+  const extra = Math.min(CARAVAN.scoutMax, Math.max(0, extraScout));
+  return base * (1 - roleCut(escort, 'scout')) * (1 - extra);
 }
 
 /** 🗡️ Ce que l'escorte emmène : le STOCK d'équipement des aventuriers.
@@ -1324,10 +1343,8 @@ function pairedEscortEffects(
 export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[], extraHaul = 0): number {
   return (
     1 +
-    Math.min(
-      CARAVAN.haulMax,
-      roleShare(escort, 'haul') + advGearRoles(escort, stock).haul + Math.max(0, extraHaul),
-    )
+    roleShare(escort, 'haul') +
+    Math.min(CARAVAN.haulMax, advGearRoles(escort, stock).haul + Math.max(0, extraHaul))
   );
 }
 
@@ -1556,7 +1573,7 @@ export function resolveCaravan(
 /** Durée de convalescence d'un blessé, raccourcie par les 🩺 de l'escorte ET par
  *  l'Infirmerie (le même bâtiment qui soigne le héros et les familiers). */
 export function caravanHurtMs(escort: Adventurer[], infirmaryLevel = 0): number {
-  const care = Math.min(0.6, roleShare(escort, 'heal'));
+  const care = roleCut(escort, 'heal');
   const inf = Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.05);
   return Math.round(CARAVAN.hurtMs * (1 - care) * inf);
 }

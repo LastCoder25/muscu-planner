@@ -5912,6 +5912,40 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
+  /** 🔙 L'heure d'arrivée À LA BASE du héros rappelé de son poste (ou de sa route vers
+   *  lui), calculée par les MÊMES fonctions que `recallHeroFromPost`. */
+  function heroPostRecallArrival(now: number): number | null {
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return null;
+    if (heroComing(map)) return turnBackComingHero(map, now).heroReturnAt ?? null;
+    const poi = heroPostOf(map);
+    if (!poi) return null;
+    return recallPostedHero(map, now, heroHomeLegMin(cur, map, poi, now)).heroReturnAt ?? null;
+  }
+
+  /** 🔙 L'arrivée d'UN champion rappelé de son poste (ou de sa route vers lui), calculée
+   *  par les MÊMES fonctions que `releaseControlChampions` ; `toBase: false` = un transfert
+   *  qui repartirait vers son point d'origine. `null` : il ne peut pas encore rebrousser. */
+  function postRecallArrival(
+    id: string,
+    advId: string,
+    now: number,
+  ): { at: number; toBase: boolean } | null {
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    const ctl = map?.pois.find((p) => p.id === id)?.control;
+    if (!cur || !map || !ctl) return null;
+    const r = (ctl.reinforcing ?? []).find((x) => x.id === advId);
+    if (r) {
+      if (!canTurnBack(r, now)) return null;
+      const b = recallReinforcements(map, id, [advId], now)?.back[0];
+      return b ? { at: b.at, toBase: !b.to } : null;
+    }
+    if (!ctl.garrison.includes(advId)) return null;
+    return { at: walkHome(cur, id, [advId], [], now).advAt, toBase: true };
+  }
+
   /** 🧝 ENVOIE LE HÉROS EN GARNISON sur un point tenu (2026-10-05, demandé : « permettre au
    *  héros d'être en garnison sur les lieux fixes ; il prend 2 places sur les 5 »). Ses places
    *  sont réservées tout de suite ; il marche (son pas, celui d'un rappel) et devient défenseur
@@ -6860,6 +6894,8 @@ export const useCharacterStore = defineStore('character', () => {
     scheduleRecall,
     plannedTick,
     recallTrip,
+    heroPostRecallArrival,
+    postRecallArrival,
     applySpeedBoost,
     openXpTome,
     sendMilitiaToControl,

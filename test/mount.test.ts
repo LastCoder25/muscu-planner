@@ -114,6 +114,35 @@ const ROW = {
 };
 
 describe('🚪 montage des écrans (erreurs de setup)', () => {
+  // 🔙 Rappeler à la base : une équipe en route se propose au rappel.
+  it('RecallHomeSheet liste une équipe en route et propose de la rappeler', async () => {
+    const { default: RecallHomeSheet } = await import('@/components/RecallHomeSheet.vue');
+    const now = Date.now();
+    const party = {
+      id: 'g1',
+      poi: { id: 'p1', type: 'mine', level: 20, x: 100, y: 60, distNorm: 0.5 },
+      sentAt: now - 10 * 60_000,
+      midAt: now + 30 * 60_000,
+      returnAt: now + 70 * 60_000,
+      goldCost: 0,
+      seed: 1,
+      outcome: { win: true, gold: 0, party: { escort: ['a1'], hurt: [], lightHurt: [] } },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        RecallHomeSheet,
+        { modelValue: true, heroLevel: 10 },
+        { ...ROW, parties: [party] },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('rh-line');
+    expect(out).toContain('rh-go');
+  });
+
   // 🏠 La base comme un lieu fixe : qui y est, et une sélection qui propose les lieux tenus.
   it('BaseGarrisonSheet montre la base et propose d’envoyer la sélection', async () => {
     const { default: BaseGarrisonSheet } = await import('@/components/BaseGarrisonSheet.vue');
