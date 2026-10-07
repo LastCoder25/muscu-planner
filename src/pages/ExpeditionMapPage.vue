@@ -1883,6 +1883,7 @@ import {
   ADV_UNAVAILABLE_LABEL,
   advAvailable,
   advTitle,
+  advUnavailableReason,
   crewHeadsToInfirmary,
   engageCap,
   sortByGradeThenRank,
@@ -5069,13 +5070,21 @@ onUnmounted(() => applyScrollLock(false));
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, puis les champions présents. */
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, les champions présents, puis
  *  la milice en réserve de l'île (la garnison du village, signalé 2026-10-04). */
-const townRow = computed(() =>
-  townDots(
-    !!char.row && char.heroIsHome(char.row),
+const townRow = computed(() => {
+  // 🤕 À l'infirmerie : le héros blessé (rentré à la base) et les champions alités, en rouge.
+  const heroHome = !!char.row && char.heroIsHome(char.row);
+  const heroHurt = heroHome && heroHealIn.value > 0;
+  return townDots(
+    heroHome && !heroHurt,
     baseChamps.value.length,
     char.row?.base?.militia?.home ?? 0,
-  ),
-);
+    undefined,
+    {
+      hero: heroHurt,
+      champions: char.advList.filter((a) => advUnavailableReason(a, now.value) === 'hurt').length,
+    },
+  );
+});
 const heroBaseStatus = computed(() => {
   if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const map = char.row?.expedition_map;

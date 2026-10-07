@@ -25,4 +25,16 @@ describe('townDots — lignes de 5', () => {
     expect(r.more).toBe(31 - TOWN_ROWS_MAX * TOWN_ROW_SIZE);
     expect(townDots(false, 12, 9, 3)).toEqual({ rows: ['ccccc', 'ccccc', 'cc'], more: 9 });
   });
+  it('🤕 les blessés en boules rouges, sur leurs lignes, entre les présents et la milice', () => {
+    expect(townDots(false, 2, 1, undefined, { hero: true, champions: 2 })).toEqual({
+      rows: ['cc', 'www', 'm'],
+      more: 0,
+    });
+    expect(townDots(true, 0, 0, undefined, { champions: 6 })).toEqual({
+      rows: ['h', 'wwwww', 'w'],
+      more: 0,
+    });
+    // Comptés dans le reste quand les lignes manquent.
+    expect(townDots(false, 10, 0, 2, { champions: 3 }).more).toBe(3);
+  });
 });

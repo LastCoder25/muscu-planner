@@ -125,6 +125,10 @@ const DOT_GAP = 2.7;
 .mt-dots .d-m {
   fill: var(--text);
 }
+/* 🤕 À l'infirmerie (héros ou champion) : rouge franc, distinct de l'accent et de l'orange. */
+.mt-dots .d-w {
+  fill: #ff3b3b;
+}
 .mt-more {
   fill: var(--text);
   font-size: 2.8px;

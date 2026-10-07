@@ -26,14 +26,34 @@ const count = (n: number) => Math.max(0, Math.floor(n));
 const chunk = (s: string, n: number) =>
   Array.from({ length: Math.ceil(s.length / n) }, (_, i) => s.slice(i * n, (i + 1) * n));
 
+/**
+ * 🤕 À L'INFIRMERIE, EN BOULES ROUGES (demandé, 2026-10-07 : « quand des unités, des champions
+ * ou le héros sont à l'infirmerie, les noter sous la base avec des boules rouges »). `w` = un
+ * blessé (le héros d'abord), sur ses propres lignes, entre les présents et la milice. Un
+ * milicien ne va jamais à l'infirmerie (il meurt) : il n'a pas de boule rouge.
+ */
+export interface TownHurt {
+  hero?: boolean;
+  champions?: number;
+}
+
 export function townDots(
   heroHome: boolean,
   champions: number,
   militia = 0,
   maxRows = TOWN_ROWS_MAX,
+  hurt: TownHurt = {},
 ): TownDots {
   const champs = (heroHome ? 'h' : '') + 'c'.repeat(count(champions));
+  const sick = 'w'.repeat((hurt.hero ? 1 : 0) + count(hurt.champions ?? 0));
   const mil = 'm'.repeat(count(militia));
-  const shown = [...chunk(champs, TOWN_ROW_SIZE), ...chunk(mil, TOWN_ROW_SIZE)].slice(0, maxRows);
-  return { rows: shown, more: champs.length + mil.length - shown.join('').length };
+  const shown = [
+    ...chunk(champs, TOWN_ROW_SIZE),
+    ...chunk(sick, TOWN_ROW_SIZE),
+    ...chunk(mil, TOWN_ROW_SIZE),
+  ].slice(0, maxRows);
+  return {
+    rows: shown,
+    more: champs.length + sick.length + mil.length - shown.join('').length,
+  };
 }
