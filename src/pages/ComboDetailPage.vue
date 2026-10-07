@@ -92,7 +92,7 @@
           @keydown.enter="addFromBar(leg)"
         >
           <span
-            v-for="n in segCount(leg)"
+            v-for="n in legSegNumbers(leg, segCount(leg), legFilter)"
             :key="n"
             class="seg"
             :class="[
@@ -247,6 +247,7 @@ import {
   comboProgressPct,
   fmtPct,
   legSegZone,
+  legSegNumbers,
   legBarGeometry,
   legSetsDone,
   comboStopPlan,

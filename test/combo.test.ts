@@ -57,6 +57,7 @@ import {
   comboBarParts,
   comboBarSegments,
   filterLegsByZone,
+  legSegNumbers,
   legBarZone,
   NO_PACE,
   comboWeeklySets,
@@ -1433,6 +1434,16 @@ describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
     expect(filterLegsByZone(legs, 'obj').map((l) => l.exercise_name)).toEqual(['C', 'E']);
     expect(filterLegsByZone(legs, 'sec').map((l) => l.exercise_name)).toEqual(['B']);
     expect(filterLegsByZone(legs, 'all')).toHaveLength(5);
+  });
+  it('sous un filtre, seules les cases de sa zone restent, numérotées comme les séries', () => {
+    const l = ex('A', 3); // objectif 10 : secondaire 1-8, objectif 9-10
+    expect(legSegNumbers(l, 10, 'all')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(legSegNumbers(l, 10, 'sec')).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(legSegNumbers(l, 10, 'obj')).toEqual([9, 10]);
+    // Petit objectif : le repère secondaire EST l'objectif, pas de case secondaire.
+    const petit = { ...ex('P', 0), target: 1 };
+    expect(legSegNumbers(petit, 1, 'sec')).toEqual([]);
+    expect(legSegNumbers(petit, 1, 'obj')).toEqual([1]);
   });
   it('sans filtre, les exos terminés passent en bas, chacun dans son ordre', () => {
     const legs = [ex('A', 12), ex('B', 2), ex('C', 10), ex('D', 9)];

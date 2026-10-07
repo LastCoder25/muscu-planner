@@ -617,6 +617,18 @@ export function filterLegsByZone<T extends ComboLeg>(legs: readonly T[], f: Comb
   ];
 }
 
+/** 🔎 Les CASES d'un exo qu'on montre sous un filtre de zone (demandé : « en filtrant secondaire
+ *  ou objectif, n'afficher que les séries correspondantes »). Sans filtre : toutes, de 1 à
+ *  `count`. « Secondaire » : les cases de la zone secondaire ; « Objectif » : celles de la zone
+ *  principale. Les numéros restent ceux de la série (n ≥ 1) : libellés, corrections et « ＋ »
+ *  visent toujours la bonne série. */
+export function legSegNumbers(l: ComboLeg, count: number, f: ComboLegFilter): number[] {
+  const all = Array.from({ length: Math.max(0, count) }, (_, i) => i + 1);
+  if (f === 'all') return all;
+  const zone: SegZone = f === 'sec' ? 'secondary' : 'principal';
+  return all.filter((n) => legSegZone(l, n) === zone);
+}
+
 export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {
   const done = comboBarParts(c);
   const secLen = COMBO_TIER_SECONDARY * 100;
