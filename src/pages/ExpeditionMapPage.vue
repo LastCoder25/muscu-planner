@@ -4607,13 +4607,14 @@ const ctlCalls = computed(
 /** ➕ LE RENFORT DIRECT depuis la liste (demandé : « cliquer sur un slot libre et envoyer un
  *  renfort sans aller dans la gestion du lieu »). Un point l'accepte s'il a une place ET
  *  quelqu'un pour la prendre — les MÊMES règles que la fiche (`controlFreeSeats` pour un
- *  champion, `militiaFreeSeats` pour un milicien). */
+ *  champion ; un milicien part même vers un lieu plein, `acceptsMilitia`). */
 const reinforceable = computed(() =>
   ctlRoster.value
     .filter(
       (r) =>
         (controlFreeSeats(r.poi.control) > 0 && freeSorted.value.length > 0) ||
-        (militiaFreeSeats(r.poi.control) > 0 && milHome.value > 0) ||
+        // 🛡️ Des miliciens partent même vers un lieu plein : demi-tour à l’arrivée s’il l’est encore.
+        (acceptsMilitia(r.poi.control) && milHome.value > 0) ||
         // ⇄ Ou quelqu'un d'un AUTRE point tenu (la règle du transfert, `transferBlocker`),
         // qu'aucun départ programmé ni aucune attaque combinée n'attend.
         transferSourcesFor(char.row?.expedition_map, r.poi.id).some((src) =>

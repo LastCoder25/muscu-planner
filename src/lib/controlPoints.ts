@@ -3223,12 +3223,11 @@ export function recallReturns(
   if (!p || !c || !list.length) return { block: 'arrived' };
   if (list.some((r) => r.turnBack !== undefined)) return { block: 'turned' };
   if (c.owner !== 'player') return { block: 'notHeld' };
-  const nMil = list.filter((r) => isMilitiaId(r.id)).length;
-  if (
-    controlFreeSeats(c) < list.length - nMil ||
-    garrisonFreeSeats(c) < list.length ||
-    militiaFreeSeats(c) < nMil
-  )
+  // 🛡️ Seuls les CHAMPIONS ont besoin d'une place pour faire demi-tour. Les miliciens
+  // repartent même vers un lieu plein (champions, héros) : à l'arrivée, sans place, ils
+  // rentrent à pied à la base (`settleReinforcements`) — la règle d'un envoi de milice.
+  const nChamps = list.filter((r) => !isMilitiaId(r.id)).length;
+  if (nChamps > 0 && (controlFreeSeats(c) < nChamps || garrisonFreeSeats(c) < nChamps))
     return { block: 'full' };
   const town = EXPE.town;
   const back = list.map((r) => {
