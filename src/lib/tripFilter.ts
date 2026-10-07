@@ -67,8 +67,18 @@ export const ALL_TRIPS: TripSelection = { mode: 'except', cats: [] };
 export const tripCatOn = (sel: TripSelection, cat: TripCat): boolean =>
   sel.mode === 'except' ? !sel.cats.includes(cat) : sel.cats.includes(cat);
 
-/** Toucher une catégorie la retire si elle est affichée, l'ajoute sinon. */
-export function toggleTripCat(sel: TripSelection, cat: TripCat): TripSelection {
+/** Toucher une catégorie la retire si elle est affichée, l'ajoute sinon.
+ *  🎯 SAUF quand TOUT est affiché (v1.82.4, demandé : « si je ne clique que sur un seul, ça
+ *  doit les afficher ») : le premier toucher ISOLE la catégorie — on ne voit plus qu'elle —,
+ *  les touchers suivants ajoutent ou retirent. Retirer une catégorie de « tout » faisait
+ *  l'inverse de ce qu'on demandait. Une seule catégorie présente : rien à isoler. */
+export function toggleTripCat(
+  sel: TripSelection,
+  cat: TripCat,
+  present: readonly TripCat[],
+): TripSelection {
+  if (present.length > 1 && present.includes(cat) && allTripsOn(sel, present))
+    return { mode: 'only', cats: [cat] };
   const has = sel.cats.includes(cat);
   return { mode: sel.mode, cats: has ? sel.cats.filter((c) => c !== cat) : [...sel.cats, cat] };
 }

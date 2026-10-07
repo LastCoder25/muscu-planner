@@ -445,7 +445,7 @@ const presentLegs = computed(() => (['go', 'back'] as const).filter((l) => legCo
 const legsShown = computed(() => shownLegs(legSel.value, presentLegs.value));
 function pick(id: TripFilter | TripLeg) {
   if (id === 'go' || id === 'back') {
-    legSel.value = toggleLeg(legSel.value, id);
+    legSel.value = toggleLeg(legSel.value, id, presentLegs.value);
     return;
   }
   if (id === 'all') {
@@ -455,7 +455,7 @@ function pick(id: TripFilter | TripLeg) {
     selection.value = next;
     return;
   }
-  selection.value = toggleTripCat(selection.value, id);
+  selection.value = toggleTripCat(selection.value, id, present.value);
 }
 /** Les catégories VIDES ne sont pas proposées (six pastilles dont trois grisées encombraient
  *  la rangée). Une seule ligne (demandé) : l'icône seule (sauf « Tout »), le nom en

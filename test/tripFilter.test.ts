@@ -7,6 +7,7 @@ import {
   toggleAllTrips,
   toggleTripCat,
   type TripCat,
+  type TripSelection,
 } from '@/lib/tripFilter';
 
 const PRESENT: TripCat[] = ['trips', 'raids', 'reinf', 'attacks'];
@@ -18,32 +19,41 @@ describe('filtre combinable des voyages', () => {
     expect(shown(ALL_TRIPS)).toEqual([...PRESENT].sort());
     expect(allTripsOn(ALL_TRIPS, PRESENT)).toBe(true);
   });
-  it('depuis « Tout », toucher une catégorie la RETIRE, la retoucher la remet', () => {
-    const sans = toggleTripCat(ALL_TRIPS, 'attacks');
-    expect(shown(sans)).toEqual(['raids', 'reinf', 'trips']);
-    expect(allTripsOn(sans, PRESENT)).toBe(false);
-    expect(shown(toggleTripCat(sans, 'attacks'))).toEqual([...PRESENT].sort());
+  it('depuis « Tout », toucher UNE catégorie l’ISOLE ; les touchers suivants ajoutent ou retirent', () => {
+    const seul = toggleTripCat(ALL_TRIPS, 'attacks', PRESENT);
+    expect(shown(seul)).toEqual(['attacks']);
+    expect(allTripsOn(seul, PRESENT)).toBe(false);
+    const deux = toggleTripCat(seul, 'trips', PRESENT);
+    expect(shown(deux)).toEqual(['attacks', 'trips']);
+    expect(shown(toggleTripCat(deux, 'attacks', PRESENT))).toEqual(['trips']);
+  });
+  it('isole aussi depuis un « Tout » reconstruit pièce par pièce', () => {
+    const plein: TripSelection = { mode: 'only', cats: [...PRESENT] };
+    expect(shown(toggleTripCat(plein, 'reinf', PRESENT))).toEqual(['reinf']);
+  });
+  it('une seule catégorie présente : rien à isoler, le toucher la retire', () => {
+    expect(shown(toggleTripCat(ALL_TRIPS, 'trips', ['trips']), ['trips'])).toEqual([]);
   });
   it('« Tout » allumé le retire entièrement ; on AJOUTE ensuite ce qu’on veut', () => {
     const vide = toggleAllTrips(ALL_TRIPS, PRESENT);
     expect(shown(vide)).toEqual([]);
-    const combo = toggleTripCat(toggleTripCat(vide, 'trips'), 'reinf');
+    const combo = toggleTripCat(toggleTripCat(vide, 'trips', PRESENT), 'reinf', PRESENT);
     expect(shown(combo)).toEqual(['reinf', 'trips']);
-    expect(shown(toggleTripCat(combo, 'trips'))).toEqual(['reinf']);
+    expect(shown(toggleTripCat(combo, 'trips', PRESENT))).toEqual(['reinf']);
   });
   it('« Tout » éteint le rallume entièrement', () => {
-    const partiel = toggleTripCat(ALL_TRIPS, 'raids');
+    const partiel: TripSelection = { mode: 'except', cats: ['raids'] };
     expect(toggleAllTrips(partiel, PRESENT)).toEqual(ALL_TRIPS);
   });
   it('une catégorie qui APPARAÎT s’affiche sous « tout sauf », pas sous « seulement »', () => {
-    const sauf = toggleTripCat(ALL_TRIPS, 'raids');
-    const seul = toggleTripCat(toggleAllTrips(ALL_TRIPS, PRESENT), 'trips');
+    const sauf: TripSelection = { mode: 'except', cats: ['raids'] };
+    const seul = toggleTripCat(toggleAllTrips(ALL_TRIPS, PRESENT), 'trips', PRESENT);
     const plus: TripCat[] = [...PRESENT, 'planned'];
     expect(shownTripCats(sauf, plus).has('planned')).toBe(true);
     expect(shownTripCats(seul, plus).has('planned')).toBe(false);
   });
   it('un choix qui se vide TOUT SEUL retombe sur tout ; vidé par le joueur, il reste vide', () => {
-    const seul = toggleTripCat(toggleAllTrips(ALL_TRIPS, PRESENT), 'attacks');
+    const seul = toggleTripCat(toggleAllTrips(ALL_TRIPS, PRESENT), 'attacks', PRESENT);
     expect(shown(seul, ['trips', 'reinf'])).toEqual(['reinf', 'trips']);
     expect(shown(toggleAllTrips(ALL_TRIPS, PRESENT), ['trips', 'reinf'])).toEqual([]);
   });

@@ -4003,7 +4003,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     );
     expect(again).toMatch(/class="trf trf-attacks"/);
     expect(again).toContain('tr-none');
-    // Avec un voyage ET une armée, chaque filtre masque l'autre catégorie.
+    // Avec un voyage ET une armée, toucher une catégorie depuis « Tout » l'ISOLE (v1.82.4).
     const trip = {
       key: 'g1',
       kind: 'van',
@@ -4026,7 +4026,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (onlyAtk = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trf-trips')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
     );
     expect(onlyAtk).toContain('trip attack');
     expect(onlyAtk).not.toContain('→ 1 h 20');
@@ -4038,7 +4038,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (onlyTrips = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-trips')?.click(),
     );
     expect(onlyTrips).toContain('→ 1 h 20');
     expect(onlyTrips).not.toContain('trip attack');
