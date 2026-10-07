@@ -27,6 +27,9 @@
           l’infirmerie)</span
         >
       </p>
+      <button v-if="away > 0 || !heroHome" type="button" class="bgs-recall" @click="emit('recall')">
+        🔙 Rappeler à la base
+      </button>
       <div class="bgs-pick">
         <!-- 🦸 Le héros, PARMI les effectifs. Disponible, il se choisit comme un champion
              (2026-10-05, demandé : « envoyer le héros sur un lieu fixe depuis la base ») : il y
@@ -153,6 +156,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [v: boolean];
   send: [id: string, champIds: string[], militia: number, hero: boolean];
+  /** 🔙 Ouvrir le rappel de ceux qui sont dehors (héros compris). */
+  recall: [];
 }>();
 
 const sel = ref<string[]>([]);
@@ -247,6 +252,18 @@ const rows = computed(() =>
   font-size: 13px;
   flex: 1;
   min-width: 0;
+}
+.bgs-recall {
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 10px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
 }
 .bgs-x {
   width: 44px;

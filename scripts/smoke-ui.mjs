@@ -103,6 +103,8 @@ const ECRANS = [
       { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
       // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est.
       { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
+      // 🔙 De la base, rappeler ceux qui sont dehors (le voyage du compte de test).
+      { nom: 'rappel', clic: '.bgs-recall', attendu: '.rh' },
       // 🏝️ L'île actuelle, en haut à droite : toucher la pastille déplie les cinq îles.
       { nom: 'archipel', clic: '.arch-cur', attendu: '.arch-pop', escape: true },
       // 🗂️ (essai) Les tuiles par-dessus la carte, par les boutons à côté de ↕️ : toucher un

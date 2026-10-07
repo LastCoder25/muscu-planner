@@ -461,7 +461,9 @@
       :leg-min="baseLegMin"
       :busy="ctlBusy"
       @send="sendFromBase"
+      @recall="openHomeRecall"
     />
+    <RecallHomeSheet v-model="homeRecallOpen" :hero-level="heroLevel" />
     <!-- ⚔️⏱️ ILS ARRIVERONT TROP TARD (2026-10-06, demandé : « on affiche tous les champions et
          héros ; s'ils ne peuvent pas arriver à temps, une fenêtre de confirmation avec leurs
          portraits et leur lieu de départ »). Partir reste possible : un boost ⚡ en route peut
@@ -1723,6 +1725,7 @@ import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import HeroPickTile from '@/components/HeroPickTile.vue';
 import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
+import RecallHomeSheet from '@/components/RecallHomeSheet.vue';
 import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import {
   activeAttacks,
@@ -1971,6 +1974,12 @@ const character = computed(() =>
   ),
 );
 const heroLevel = computed(() => character.value.level.level);
+/** 🔙 Le rappel à la base, ouvert depuis la feuille de la ville. */
+const homeRecallOpen = ref(false);
+function openHomeRecall() {
+  baseOpen.value = false;
+  homeRecallOpen.value = true;
+}
 // Niveau de PROGRESSION DANS LE JEU (≠ niveau de sport) : profondeur atteinte en donjon
 // = recoLevel du donjon le plus profond nettoyé (frontière). Sert à caler la DIFFICULTÉ
 // des expéditions sur ce que le joueur a VRAIMENT accompli, pas sur son niveau de sport

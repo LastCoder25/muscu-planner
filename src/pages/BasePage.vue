@@ -482,6 +482,12 @@
             vaudrais <b>{{ fmtPow(forcesFull) }}</b
             >.
           </p>
+          <!-- 🔙 RAPPELER (demandé : « depuis la base je dois pouvoir rappeler des champions
+             ou le héros, pour la défense »). La feuille dit, pour chacun, s'il serait là
+             avant l'armée. -->
+          <button v-if="recallable > 0" type="button" class="f-recall" @click="recallOpen = true">
+            🔙 Rappeler à la base <span class="f-recall-n">{{ recallable }}</span>
+          </button>
           <!-- ⚠️ LA JAUGE EST LA TENUE ELLE-MÊME, et c’est tout le changement : plus de
              rapport de puissances, plus de seuil d’équilibre à connaître. « Tu tiens 7
              fois sur 10 » se lit sans notice, et ne peut pas diverger de la bataille
@@ -592,6 +598,7 @@
     <!-- ── LE REJEU DU SIÈGE, en plein écran ──────────────────────────────
          S'ouvre TOUT SEUL à la résolution : découvrir l'issue par une notification
          retirerait tout enjeu à l'animation. -->
+    <RecallHomeSheet v-model="recallOpen" :hero-level="heroLevel" />
     <q-dialog v-model="siegeOpen" maximized persistent>
       <SiegeStage
         v-if="siegeShown"
@@ -990,6 +997,8 @@ import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import RuneBankSheet from '@/components/RuneBankSheet.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
+import RecallHomeSheet from '@/components/RecallHomeSheet.vue';
+import { homeRecallLines } from '@/lib/baseRecall';
 import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import ReportDetail from '@/components/ReportDetail.vue';
@@ -1679,7 +1688,26 @@ const heroHome = computed(() => !!char.row && char.heroIsHome(char.row));
  *  que celle de l’écran d’envoi : la défense qui compte est celle du MOMENT OÙ L’ARMÉE
  *  FRAPPE. La RÉSOLUTION était déjà juste ; seul le panneau était pessimiste. */
 const heroBack = computed(() =>
-  heroDefends(heroHome.value, char.row?.expedition?.returnAt, raid.value?.arrivesAt),
+  heroDefends(
+    heroHome.value,
+    char.row?.expedition?.returnAt ?? char.row?.expedition_map?.heroReturnAt,
+    raid.value?.arrivesAt,
+  ),
+);
+/** 🔙 Combien peuvent être rappelés MAINTENANT (la feuille fait le reste). */
+const recallOpen = ref(false);
+const recallable = computed(
+  () =>
+    homeRecallLines({
+      now: coarseNow.value,
+      raidAt: raid.value?.arrivesAt ?? null,
+      expedition: char.row?.expedition,
+      parties: char.partyList,
+      map: char.row?.expedition_map,
+      advs: char.advList,
+      postArrival: (id, advId) => char.postRecallArrival(id, advId, coarseNow.value),
+      heroPostArrival: () => char.heroPostRecallArrival(coarseNow.value),
+    }).filter((l) => l.action).length,
 );
 const heroForDefense = computed(() => (heroBack.value ? (props.hero ?? null) : null));
 /** LA GARNISON PRÉSENTE : les aventuriers qui ne sont ni en convoi, ni à l’infirmerie,
@@ -2852,6 +2880,30 @@ function doHarvest() {
 /* ⚠️ Teinte d'AVERTISSEMENT (d3), pas de danger : des gens dehors n'est pas une
    faute — c'est le prix d'un convoi, et le joueur doit pouvoir le lire sans se
    croire en train de perdre. */
+.f-recall {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 6px 0;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.f-recall-n {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-size: 12px;
+}
 .f-gap {
   font-size: 12px;
   color: var(--d3);
