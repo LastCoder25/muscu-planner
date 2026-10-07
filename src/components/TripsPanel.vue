@@ -36,19 +36,21 @@
     Aucune catégorie choisie — touche « Tout » ou une catégorie.
   </p>
   <div v-if="tiles.length" ref="tilesEl" class="trips">
-    <template v-for="{ key, trip: t, attack: r } in shownTiles" :key="key">
+    <template v-for="{ key, trip: t, leg: lt, ends: e, attack: r } in shownTiles" :key="key">
       <button
-        v-if="t"
+        v-if="t && lt && e"
         type="button"
         class="trip"
         :class="[
           t.kind,
+          'leg-' + lt.leg,
           {
-            back: t.back,
+            back: lt.back,
+            future: lt.future,
             focus: focus === t.key,
             pending: t.pending,
             failed: !!t.failed,
-            'has-total': !!t.total,
+            'has-total': !!lt.total,
             sea: !!t.sea,
             combo: !!t.combo,
           },
@@ -60,19 +62,19 @@
       >
         <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, et OÙ ELLE VA en
            haut-droit. Sur le retour, les deux s'inversent (`tripEnds`). -->
-        <span :class="'tr-from'" :title="endTitle(tripEnds(t).left)">
-          <template v-if="tripEnds(t).left.kind === 'isle'"
-            >🏝️<sub>{{ (tripEnds(t).left as { n: number }).n }}</sub></template
+        <span :class="'tr-from'" :title="endTitle(e.left)">
+          <template v-if="e.left.kind === 'isle'"
+            >🏝️<sub>{{ (e.left as { n: number }).n }}</sub></template
           >
-          <template v-else-if="tripEnds(t).left.kind === 'base'">🏰</template>
-          <span v-else-if="isRiftPoi(endPoi(tripEnds(t).left))" class="tr-rift">
+          <template v-else-if="e.left.kind === 'base'">🏰</template>
+          <span v-else-if="isRiftPoi(endPoi(e.left))" class="tr-rift">
             <RiftPortal
-              :color="poiRank(endPoi(tripEnds(t).left)).color"
-              :seed="seedOf(endPoi(tripEnds(t).left).id)"
+              :color="poiRank(endPoi(e.left)).color"
+              :seed="seedOf(endPoi(e.left).id)"
               still
             />
           </span>
-          <template v-else>{{ poiEmo(endPoi(tripEnds(t).left)) }}</template>
+          <template v-else>{{ poiEmo(endPoi(e.left)) }}</template>
         </span>
         <span class="tr-who">{{ t.who }}</span>
         <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
@@ -87,38 +89,40 @@
             >+{{ t.members.length - facesMax(t) }}</span
           >
         </span>
-        <span :class="'tr-poi'" :title="endTitle(tripEnds(t).right)">
-          <template v-if="tripEnds(t).right.kind === 'isle'"
-            >🏝️<sub>{{ (tripEnds(t).right as { n: number }).n }}</sub></template
+        <span :class="'tr-poi'" :title="endTitle(e.right)">
+          <template v-if="e.right.kind === 'isle'"
+            >🏝️<sub>{{ (e.right as { n: number }).n }}</sub></template
           >
-          <template v-else-if="tripEnds(t).right.kind === 'base'">🏰</template>
-          <span v-else-if="isRiftPoi(endPoi(tripEnds(t).right))" class="tr-rift">
+          <template v-else-if="e.right.kind === 'base'">🏰</template>
+          <span v-else-if="isRiftPoi(endPoi(e.right))" class="tr-rift">
             <RiftPortal
-              :color="poiRank(endPoi(tripEnds(t).right)).color"
-              :seed="seedOf(endPoi(tripEnds(t).right).id)"
+              :color="poiRank(endPoi(e.right)).color"
+              :seed="seedOf(endPoi(e.right).id)"
               still
             />
           </span>
-          <template v-else>{{ poiEmo(endPoi(tripEnds(t).right)) }}</template>
+          <template v-else>{{ poiEmo(endPoi(e.right)) }}</template>
         </span>
-        <span v-if="t.time" class="tr-time">{{ t.time }}</span>
+        <span v-if="lt.time" class="tr-time">{{ lt.time }}</span>
         <span
-          v-if="t.total"
+          v-if="lt.total"
           class="tr-total"
           :title="
-            t.totalIcon === '📍'
+            lt.totalIcon === '📍'
               ? 'Arrivée'
-              : t.totalIcon === '⚓'
+              : lt.totalIcon === '⚓'
                 ? 'Arrivée au port'
                 : 'Temps total avant le retour'
           "
-          >{{ t.totalIcon ?? '🏠' }} {{ t.total }}</span
+          >{{ lt.totalIcon ?? '🏠' }} {{ lt.total }}</span
         >
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
         <span v-if="t.failed" class="tr-fail">{{
           t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
         }}</span>
-        <template v-if="t.legs">
+        <!-- ↩ Retour encore à venir (le voyage est à l'aller) : sa durée en sous-titre. -->
+        <span v-if="lt.line" class="tr-legs">{{ lt.line }}</span>
+        <template v-else-if="t.legs && lt.key === lt.tripKey">
           <!-- ⏱️ La prochaine étape est EN TÊTE (`tr-time`) : l'aller n'est redit que pour un
                départ programmé, dont la tête décompte le départ. -->
           <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
@@ -127,7 +131,7 @@
             >{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span
           >
         </template>
-        <i class="tr-bar" :style="{ width: t.pct + '%' }" />
+        <i class="tr-bar" :style="{ width: lt.pct + '%' }" />
       </button>
       <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
          haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
@@ -268,6 +272,8 @@ export interface MapTrip {
   legs?: { go: string | null; back: string; detail: string } | null;
   /** ⏱️ L'heure (ms) de la prochaine étape du voyage (`nextStepAt`) — l'ordre de la rangée. */
   endsAt?: number;
+  /** 🏠 L'heure (ms) du retour en ville : l'ordre de sa tuile « ↩ Retour » à venir. */
+  homeAt?: number;
   /** 🏠 Temps total avant le retour en ville, quand il diffère de la prochaine étape
    *  (`tripTimeLabel`). */
   total?: string | null;
@@ -299,6 +305,15 @@ import {
   type TripFilter,
   type TripSelection,
 } from '@/lib/tripFilter';
+import {
+  ALL_LEGS,
+  shownLegs,
+  toggleLeg,
+  tripLegTiles,
+  type LegSelection,
+  type LegTile,
+  type TripLeg,
+} from '@/lib/tripLegTiles';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -356,8 +371,25 @@ const emit = defineEmits<{
  *  STABLE : à égalité, les voyages d'abord, dans l'ordre reçu. Un voyage sans heure connue
  *  reste en tête, dans l'ordre reçu (il n'a rien à comparer). */
 const tiles = computed(() => {
-  const list: { key: string; at: number; trip?: MapTrip; attack?: ActiveAttack }[] = [
-    ...props.trips.map((t) => ({ key: t.key, at: t.endsAt ?? -Infinity, trip: t })),
+  const list: {
+    key: string;
+    at: number;
+    trip?: MapTrip;
+    leg?: LegTile;
+    ends?: ReturnType<typeof tripEnds>;
+    attack?: ActiveAttack;
+  }[] = [
+    // 🚶↩️ Une tuile par ÉTAPE (`tripLegTiles`) : la tuile « ↩ Retour » encore à venir se range
+    // à l'heure du retour en ville.
+    ...props.trips.flatMap((t) =>
+      tripLegTiles(t).map((leg) => ({
+        key: leg.key,
+        at: leg.future ? (t.homeAt ?? t.endsAt ?? Infinity) : (t.endsAt ?? -Infinity),
+        trip: t,
+        leg,
+        ends: tripEnds({ ...t, back: leg.back }),
+      })),
+    ),
     ...(props.attacks ?? []).map((r) => ({
       key: 'atk' + r.army.id,
       at: r.army.army?.at ?? Infinity,
@@ -379,18 +411,36 @@ const counts = computed(() => {
 const CAT_ORDER: readonly TripCat[] = ['trips', 'raids', 'reinf', 'planned', 'attacks'];
 const present = computed(() => CAT_ORDER.filter((c) => counts.value[c] > 0));
 const shown = computed(() => shownTripCats(selection.value, present.value));
-function pick(id: TripFilter) {
-  selection.value =
-    id === 'all'
-      ? toggleAllTrips(selection.value, present.value)
-      : toggleTripCat(selection.value, id);
+/** 🚶↩️ Filtre des ÉTAPES (demandé), en plus des catégories : il ne touche que les voyages,
+ *  les armées ennemies n'ont pas d'étape. */
+const legSel = ref<LegSelection>(ALL_LEGS);
+const legCounts = computed(() => {
+  const n: Record<TripLeg, number> = { go: 0, back: 0 };
+  for (const x of tiles.value) if (x.leg) n[x.leg.leg]++;
+  return n;
+});
+const presentLegs = computed(() => (['go', 'back'] as const).filter((l) => legCounts.value[l] > 0));
+const legsShown = computed(() => shownLegs(legSel.value, presentLegs.value));
+function pick(id: TripFilter | TripLeg) {
+  if (id === 'go' || id === 'back') {
+    legSel.value = toggleLeg(legSel.value, id);
+    return;
+  }
+  if (id === 'all') {
+    const next = toggleAllTrips(selection.value, present.value);
+    // Remettre tout remet aussi les deux étapes ; vider ne touche qu'aux catégories.
+    if (next.mode === 'except') legSel.value = ALL_LEGS;
+    selection.value = next;
+    return;
+  }
+  selection.value = toggleTripCat(selection.value, id);
 }
 /** Les catégories VIDES ne sont pas proposées (six pastilles dont trois grisées encombraient
  *  la rangée). Une seule ligne (demandé) : l'icône seule (sauf « Tout »), le nom en
  *  infobulle et en aria-label. Une pastille est allumée quand sa catégorie est AFFICHÉE
  *  (y compris par le repli de `shownTripCats`). */
 const filterOpts = computed<
-  { id: TripFilter; icon: string; label: string; n: number; on: boolean }[]
+  { id: TripFilter | TripLeg; icon: string; label: string; n: number; on: boolean }[]
 >(() => {
   const opts = [
     { id: 'all', icon: '', label: 'Tout', n: tiles.value.length },
@@ -400,19 +450,36 @@ const filterOpts = computed<
     { id: 'planned', icon: '⏳', label: 'Programmés', n: counts.value.planned },
     { id: 'attacks', icon: '⚔️', label: 'Ennemis', n: counts.value.attacks },
   ] as const;
-  return opts
+  const cats = opts
     .filter((o) => o.id === 'all' || o.n > 0)
     .map((o) => ({
       ...o,
       on:
         o.id === 'all'
-          ? present.value.length > 0 && present.value.every((c) => shown.value.has(c))
+          ? present.value.length > 0 &&
+            present.value.every((c) => shown.value.has(c)) &&
+            (presentLegs.value.length < 2 || presentLegs.value.every((l) => legsShown.value.has(l)))
           : shown.value.has(o.id),
     }));
+  // 🚶↩️ Les deux étapes, proposées seulement s'il y a les deux à séparer.
+  if (presentLegs.value.length < 2) return cats;
+  return [
+    ...cats,
+    ...(
+      [
+        { id: 'go', icon: '→', label: 'Aller', n: legCounts.value.go },
+        { id: 'back', icon: '↩', label: 'Retour', n: legCounts.value.back },
+      ] as const
+    ).map((o) => ({ ...o, on: legsShown.value.has(o.id) })),
+  ];
 });
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
-    x.attack ? shown.value.has('attacks') : !!x.trip && shown.value.has(catOf(x.trip)),
+    x.attack
+      ? shown.value.has('attacks')
+      : !!x.trip &&
+        shown.value.has(catOf(x.trip)) &&
+        (!x.leg || presentLegs.value.length < 2 || legsShown.value.has(x.leg.leg)),
   ),
 );
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
@@ -765,6 +832,12 @@ const crew = computed(() => {
 /* ⏳ Programmé, pas encore parti : contour en pointillés, comme un départ qui attend. */
 .trip.pending {
   border-style: dashed;
+}
+/* ↩ Le retour d'un voyage encore à l'aller (`tripLegTiles`) : à venir, donc estompé et en
+   pointillés, dans la teinte du retour. */
+.trip.future {
+  border-style: dashed;
+  opacity: 0.72;
 }
 .tr-who {
   font-size: 17px;

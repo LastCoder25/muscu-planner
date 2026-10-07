@@ -1174,6 +1174,52 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="trip van[^"]*combo/g)?.length).toBe(2);
   }, 30_000);
 
+  // 🚶↩️ Demandé : une tuile par étape, et les filtres Aller / Retour.
+  it('🚶↩️ TripsPanel : un voyage à l’aller donne une tuile Aller et une tuile Retour', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let out = '';
+    const trip = {
+      key: 'g1',
+      kind: 'van',
+      who: '⚔️',
+      cat: 'trips',
+      poi: MAP_POIS[0],
+      from: null,
+      time: '→ 12 min',
+      total: '1 h 05',
+      pct: 20,
+      back: false,
+      title: 'Groupe',
+      withHero: false,
+      members: [],
+      haul: [],
+      legs: { go: '12 min', back: '53 min', detail: '' },
+    };
+    const backTrip = {
+      ...trip,
+      key: 'g2',
+      back: true,
+      time: '',
+      legs: { go: null, back: '20 min', detail: '' },
+    };
+    expect(
+      await mountIt(
+        TripsPanel,
+        { trips: [trip, backTrip], focus: null, heroProfile: 'polyvalent' },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out.match(/class="trip van leg-go/g)?.length).toBe(1);
+    expect(out.match(/class="trip van leg-back/g)?.length).toBe(2);
+    expect(out).toMatch(/leg-back[^"]*future/);
+    expect(out).toContain('↩ 53 min');
+    expect(out).toContain('aria-label="Aller (1)"');
+    expect(out).toContain('aria-label="Retour (2)"');
+  }, 30_000);
+
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     let out = '';
@@ -1238,7 +1284,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(ko).toContain('✖ Échec');
     expect(ko).toContain('🔙 Demi-tour');
-    expect(ko).toMatch(/class="trip van back failed"/);
+    expect(ko).toMatch(/class="trip van leg-back back failed"/);
     // ⏳ Un départ PROGRAMMÉ : le filtre « Programmés » apparaît avec son compte, la tuile est
     // en pointillés, et l'équipe propose de l'annuler.
     let pl = '';
