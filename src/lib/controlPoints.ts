@@ -2797,6 +2797,12 @@ export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlo
   if (controlFreeSeats(c) < MILITIA.heroSeats) return 'full';
   return null;
 }
+/** 🧝🏠 Le héros qui REVIENT à son poste : comme `heroPostBlocker`, mais les miliciens lui
+ *  cèdent leurs places (`controlReturnSeats`, puis `bumpMilitiaToFit`). */
+export function heroReturnBlocker(c: ControlState | undefined | null): HeroPostBlock | null {
+  const b = heroPostBlocker(c);
+  return b === 'full' && controlReturnSeats(c) >= MILITIA.heroSeats ? null : b;
+}
 /** 🧝 Le héros part rejoindre la garnison d'un point tenu : ses places lui sont réservées
  *  tout de suite, il devient défenseur à `at` (son arrivée). `origin` : il part en ligne
  *  directe d'un autre lieu (sinon de la base). */
@@ -2835,6 +2841,48 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
   const o = occupants(c, false);
   const room = Math.max(0, garrisonCap(c.kind) - o.champs - o.militia);
   return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), room));
+}
+/**
+ * 🏠🛡️ Places de champion pour ceux qui REVIENNENT sur leur point (sortie qui rentre, héros
+ * qui reprend son poste) : les miliciens y CÈDENT leur place (2026-10-07, demandé : « s'il
+ * n'y a pas assez de place, renvoyer à la base les miliciens, le nombre nécessaire »). On
+ * compte donc la garnison sans eux ; seules les places de champion du point et la garnison
+ * de 5 bornent. ⚠️ Un nouvel envoi garde `controlFreeSeats` : ce sont les retours qui priment.
+ */
+export function controlReturnSeats(c: ControlState | undefined | null): number {
+  if (!c || c.owner !== 'player') return 0;
+  const champs = occupants(c, false).champs;
+  return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), garrisonCap(c.kind) - champs));
+}
+/**
+ * 🛡️🏠 Renvoie à la base, à pied, les DERNIERS miliciens arrivés tant que la garnison dépasse
+ * ses 5 places (champions, héros, renforts de champions en route et places gardées compris).
+ * Juste le nombre nécessaire. Rend le même point si personne n'a à partir.
+ */
+export function bumpMilitiaToFit(p: Poi, at: number, legMs: number): Poi {
+  const c = p.control;
+  if (!c) return p;
+  const garrison = [...c.garrison];
+  const bumped: string[] = [];
+  const mil = () => garrison.filter(isMilitiaId).length;
+  const champs = occupants(c, false).champs;
+  while (champs + mil() > garrisonCap(c.kind)) {
+    const i = garrison.map(isMilitiaId).lastIndexOf(true);
+    if (i < 0) break;
+    bumped.push(...garrison.splice(i, 1));
+  }
+  if (!bumped.length) return p;
+  return {
+    ...p,
+    control: {
+      ...c,
+      garrison,
+      returning: [
+        ...(c.returning ?? []),
+        ...bumped.map((id) => ({ id, from: at, at: at + legMs })),
+      ],
+    },
+  };
 }
 /** 🛡️ Ce lieu reçoit-il des miliciens ? Tenu par nous, et pas un objectif, la forteresse ni
  *  la citadelle. ⚠️ Indépendant des places (2026-10-06, demandé : « envoyer des miliciens en

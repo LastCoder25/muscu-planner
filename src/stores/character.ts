@@ -2924,6 +2924,14 @@ export const useCharacterStore = defineStore('character', () => {
             exp.homeHero,
             exp.returnAt,
             heroHomeLegMin(cur, map2, homePoi, exp.returnAt),
+            // 🛡️ Les miliciens qui lui cèdent la place rentrent au pas d'un milicien.
+            (p) =>
+              caravanLegMin(
+                p,
+                [],
+                0,
+                travelTimeMult(cur.buildings) * controlTravelMult(map2, exp.returnAt),
+              ) * 60_000,
           )
         : map2;
     const advsOut = home?.adventurers ?? ctl?.adventurers;

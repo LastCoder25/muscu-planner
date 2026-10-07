@@ -36,8 +36,10 @@ import {
   champSeatsWithHero,
   walkPoint,
   walkHomeMs,
-  heroPostBlocker,
+  heroReturnBlocker,
+  bumpMilitiaToFit,
 } from './controlPoints';
+import { caravanLegMin } from './caravan';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
 import { enemyWaitMs, sortieFires, SORTIE_EVENTS, type SortieKind } from './sortieClock';
@@ -1149,17 +1151,20 @@ export function heroBackToPost(
   unit: PostedHero,
   at: number,
   legMin: number,
+  /** 🛡️ Trajet à pied d'un milicien de ce lieu jusqu'à la base (ms), pour ceux qui lui cèdent
+   *  la place. Le store passe le vrai ; sans lui, celui d'une équipe sans rôle. */
+  militiaLegMs: (p: Poi) => number = (p) => caravanLegMin(p, [], 0, 1) * 60_000,
 ): ExpeditionMap {
   if (heroPosted(map) || heroComing(map)) return map;
   const p = map.pois.find((q) => q.id === homeId);
   if (!p) return map;
-  if (!heroPostBlocker(p.control))
-    return {
-      ...map,
-      pois: map.pois.map((q) =>
-        q.id === homeId ? { ...q, control: { ...q.control!, hero: true, heroUnit: unit } } : q,
-      ),
-    };
+  // 🛡️🏠 S'il manque des places, les derniers miliciens arrivés lui cèdent la leur et rentrent
+  // à pied à la base (2026-10-07, demandé) — juste le nombre nécessaire.
+  if (!heroReturnBlocker(p.control)) {
+    const posted = { ...p, control: { ...p.control!, hero: true, heroUnit: unit } };
+    const done = bumpMilitiaToFit(posted, at, militiaLegMs(p));
+    return { ...map, pois: map.pois.map((q) => (q.id === homeId ? done : q)) };
+  }
   return {
     ...map,
     heroReturnAt: at + Math.max(0, Math.round(legMin)) * 60_000,
