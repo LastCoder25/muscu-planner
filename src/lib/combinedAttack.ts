@@ -25,6 +25,7 @@ import type { Adventurer } from './adventurers';
 import type { ExpeditionMap, Poi } from './expedition';
 import type { SupplyId } from './supplies';
 import type { Outing } from './siegePresence';
+import { heroAwayOnMapAt } from './islandConquest';
 
 /** Un groupe de l'attaque, parti de la base (`originId` null) ou d'un point fixe. */
 export interface AttackWing {
@@ -185,7 +186,12 @@ export function wingDeparture(
       const a = ctx.advs.find((x) => x.id === id);
       return !!a && !a.posted && fit(a);
     });
-    return { members, hero: wing.hero && !ctx.heroWoundedAt(t) };
+    // 🧝 Il part de la base seulement s'il y est : posté ailleurs, en marche ou en mer depuis
+    // la réservation, il n'est pas là (sinon il serait à la fois en expédition et en marche).
+    return {
+      members,
+      hero: wing.hero && !ctx.heroWoundedAt(t) && !heroAwayOnMapAt(ctx.map, t),
+    };
   }
   const p = ctx.map?.pois.find((q) => q.id === wing.originId);
   const c = p?.control;

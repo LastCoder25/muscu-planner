@@ -1690,7 +1690,7 @@ const heroHome = computed(() => !!char.row && char.heroIsHome(char.row));
 const heroBack = computed(() =>
   heroDefends(
     heroHome.value,
-    char.row?.expedition?.returnAt ?? char.row?.expedition_map?.heroReturnAt,
+    char.row ? char.heroBackAtBase(char.row) : null,
     raid.value?.arrivesAt,
   ),
 );

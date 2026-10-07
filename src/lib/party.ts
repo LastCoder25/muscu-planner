@@ -501,6 +501,34 @@ export function shortenWonReturn<T extends ActiveExpedition>(v: T): T {
   return returnAt < v.returnAt ? { ...v, returnAt } : v;
 }
 
+/**
+ * 🧝🏰 LE HÉROS RESTE SUR LE POINT QU'IL VIENT DE PRENDRE : son voyage s'arrête là.
+ * ⚠️ Signalé (« rendre le héros stable ») : l'expédition restait ouverte jusqu'au retour des
+ * champions en trop, si bien que le héros, posté, restait AUSSI « en expédition » — il ne
+ * pouvait plus ressortir de son poste, la carte le montrait rentrer en ville, et si le point
+ * tombait avant ce retour il repartait à la fois vers la base et vers son ancien poste.
+ * Les champions qui rentrent continuent comme un groupe ORDINAIRE (sans le héros, rapport
+ * déjà déposé) : `settleParties` / `sortiesHome` les ramènent comme n'importe quelle sortie.
+ * `null` : rien à séparer (pas resté, perdu, ou il n'est pas posté sur ce point).
+ * `party: null` : personne ne rentre, l'expédition se termine simplement.
+ */
+export function heroStayedSplit(
+  exp: ActiveExpedition,
+  /** Le héros est-il posté, maintenant, sur le lieu visé par ce voyage ? */
+  heroPostedHere: boolean,
+  /** Les champions de ce voyage restés en garnison (ils ne rentrent pas). */
+  stayed: ReadonlySet<string>,
+  now: number,
+  id: string,
+): { party: ActiveParty | null } | null {
+  if (!exp.outcome.win || !exp.outcome.party?.heroStays || !heroPostedHere) return null;
+  const crew = tripCrew(exp).filter((x) => !stayed.has(x));
+  if (!crew.length || exp.returnAt <= now) return { party: null };
+  const { homeHero: _h, ...rest } = exp;
+  void _h;
+  return { party: { ...rest, crew, id, reported: true } };
+}
+
 /** Les champions encore en route du voyage (retour prévu à `oldAt`) rentrent désormais à
  *  `newAt`. Ceux déjà postés (`busyUntil` 0) ne bougent pas. Même référence si rien. */
 export function rescheduleReturners(

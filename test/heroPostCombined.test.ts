@@ -19,6 +19,6 @@ describe('héros posté et attaque combinée', () => {
   });
 
   it('il le quitte au départ de son groupe', () => {
-    expect(body('attackTick')).toMatch(/if \(d\.hero && map\) map = unpostHero\(map\)/);
+    expect(body('attackTick')).toMatch(/if \(d\.hero && map\) map = unpostHero\(map, w\.departAt\)/);
   });
 });

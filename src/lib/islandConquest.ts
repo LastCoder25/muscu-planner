@@ -21,7 +21,13 @@
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état (la MÊME carte quand rien ne change :
  * le store n'écrit pas à vide).
  */
-import { activeIsland, islandPacified, ISLANDS, type Island } from './archipelago';
+import {
+  activeIsland,
+  islandPacified,
+  ISLANDS,
+  mapPlayerLevel,
+  type Island,
+} from './archipelago';
 import { buildingType, collectable, type BuildResource, type Building } from './buildings';
 import { mulberry32, seedOf } from './combat';
 import {
@@ -1091,6 +1097,24 @@ export function heroHeldOnMap(
   return heroPosted(map) || heroComing(map) || (map?.heroReturnAt ?? 0) > now;
 }
 
+/** 🏰 LE HÉROS ÉTAIT-IL DEHORS, SUR LA CARTE, À L'INSTANT `at` ? (l'heure d'un siège, qui se
+ *  tranche parfois des heures plus tard). Posté, en marche vers un poste déjà partie, en
+ *  retour à pied pas encore arrivé, ou en mer : il ne défend pas la base. ⚠️ Le siège ne
+ *  lisait que les voyages (`outingsOf`) : un héros posté se battait au rempart, et pouvait
+ *  même finir blessé à l'infirmerie tout en tenant son poste. */
+export function heroAwayOnMapAt(
+  map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt' | 'crossing'> | null | undefined,
+  at: number,
+): boolean {
+  if (!map) return false;
+  if (heroPosted(map)) return true;
+  const coming = map.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing)
+    ?.control?.heroComing;
+  if (coming && coming.from <= at) return true;
+  if ((map.heroReturnAt ?? 0) > at) return true;
+  return !!map.crossing && map.crossing.departAt <= at;
+}
+
 /** 🧭 Le héros MARCHE sur la carte : vers le lieu tenu où il va se poster (`to`), ou vers la
  *  base après un rappel ou la perte de son lieu. Rend l'heure d'arrivée, `null` s'il ne
  *  marche pas. ⚠️ Signalé : la ligne des disponibilités le disait « dispo » pendant ces
@@ -1138,7 +1162,12 @@ export function heroWalkVoyage(
   const at = map?.heroReturnAt;
   const from = map?.heroReturnFrom;
   if (at === undefined || at <= now || !from) return null;
-  const spot = { id: 'hero-walk', type: 'control', x: from.x, y: from.y } as unknown as Poi;
+  // 🏷️ Le lieu réel qu'il a quitté, s'il est encore sur la carte : la tuile porte son nom
+  // (« Archives → La base ») au lieu de « Point de contrôle ».
+  const left = map?.pois.find(
+    (q) => !!q.control && Math.abs(q.x - from.x) < 0.5 && Math.abs(q.y - from.y) < 0.5,
+  );
+  const spot = left ?? ({ id: 'hero-walk', type: 'control', x: from.x, y: from.y } as unknown as Poi);
   return { poi: spot, sentAt: from.at, midAt: from.at, returnAt: at, back: true };
 }
 
@@ -1156,21 +1185,52 @@ export function heroBackToPost(
    *  la place. Le store passe le vrai ; sans lui, celui d'une équipe sans rôle. */
   militiaLegMs: (p: Poi) => number = (p) => caravanLegMin(p, [], 0, 1) * 60_000,
 ): ExpeditionMap {
-  if (heroPosted(map) || heroComing(map)) return map;
+  // ⚠️ Déjà en route vers la base (le point qu'il venait de prendre est tombé, il a été
+  // rappelé) : il ne peut pas en même temps reprendre son ancien poste.
+  if (heroPosted(map) || heroComing(map) || (map.heroReturnAt ?? 0) > at) return map;
   const p = map.pois.find((q) => q.id === homeId);
   if (!p) return map;
   // 🛡️🏠 S'il manque des places, les derniers miliciens arrivés lui cèdent la leur et rentrent
   // à pied à la base (2026-10-07, demandé) — juste le nombre nécessaire.
   if (!heroReturnBlocker(p.control)) {
-    const posted = { ...p, control: { ...p.control!, hero: true, heroUnit: unit } };
+    // 💰 La production faite sans lui est mise de côté AVANT qu'il ne compte à nouveau.
+    const banked = { ...p, control: bankForHero(map, p, at, unit.level) };
+    const posted = { ...p, control: { ...banked.control, hero: true, heroUnit: unit } };
     const done = bumpMilitiaToFit(posted, at, militiaLegMs(p));
     return { ...map, pois: map.pois.map((q) => (q.id === homeId ? done : q)) };
   }
-  return {
-    ...map,
-    heroReturnAt: at + Math.max(0, Math.round(legMin)) * 60_000,
-    heroReturnFrom: { x: p.x, y: p.y, at },
-  };
+  return heroWalksHomeFrom(map, p, at, legMin);
+}
+
+/** 🧭 LE HÉROS RENTRE À PIED À LA BASE depuis le lieu `from`, parti à `at` (`legMin` minutes) :
+ *  ce que fait un héros qui ne peut pas reprendre son poste, et un héros BLESSÉ revenu d'une
+ *  sortie (2026-10-07 : il était « téléporté » à l'infirmerie dès son retour au poste, sans
+ *  trajet, alors que ses champions blessés rentrent à pied). Un retour déjà en cours plus long
+ *  n'est jamais raccourci. */
+export function heroWalksHomeFrom(
+  map: ExpeditionMap,
+  from: Pick<Poi, 'x' | 'y'>,
+  at: number,
+  legMin: number,
+): ExpeditionMap {
+  const back = at + Math.max(0, Math.round(legMin)) * 60_000;
+  if ((map.heroReturnAt ?? 0) >= back) return map;
+  return { ...map, heroReturnAt: back, heroReturnFrom: { x: from.x, y: from.y, at } };
+}
+
+/** 💰 Met de côté la production d'un lieu tenu à `at`, avant qu'un départ ou un retour du
+ *  héros (qui compte pour 2) ne change son effectif — la règle de `releaseFromControl` pour un
+ *  champion. Le niveau est celui que le héros portait en se postant (`heroUnit`). Sans niveau
+ *  connu (poste d'avant), ou lieu jamais récolté, rien ne change. */
+function bankForHero(
+  map: Pick<ExpeditionMap, 'archipel'>,
+  p: Poi,
+  at: number,
+  level: number | undefined,
+): ControlState {
+  const c = p.control!;
+  if (level === undefined || c.collectedAt === undefined) return c;
+  return bankAt(p, at, mapPlayerLevel(map, level));
 }
 
 /** 🧝 Le héros est-il EN ROUTE pour rejoindre la garnison d'un lieu tenu ? */
@@ -1199,7 +1259,7 @@ export function recallPostedHero(map: ExpeditionMap, now: number, legMin: number
   if (!heroPosted(map)) return map;
   const post = heroPostOf(map)!;
   return {
-    ...unpostHero(map),
+    ...unpostHero(map, now),
     heroReturnAt: now + Math.max(0, Math.round(legMin)) * 60_000,
     heroReturnFrom: { x: post.x, y: post.y, at: now },
   };
@@ -1208,13 +1268,14 @@ export function recallPostedHero(map: ExpeditionMap, now: number, legMin: number
 /** 🧝 Le héros QUITTE son poste pour partir ailleurs (demandé : « posté, je ne peux plus le
  *  bouger ») : il part directement de là, sans repasser par la base — donc aucun trajet de
  *  retour (`heroReturnAt`), contrairement au rappel. Le lieu perd sa défense héroïque. */
-export function unpostHero(map: ExpeditionMap): ExpeditionMap {
+export function unpostHero(map: ExpeditionMap, at: number): ExpeditionMap {
   if (!heroPosted(map)) return map;
   return {
     ...map,
     pois: map.pois.map((p) => {
       if (!heroPostPoi(p)) return p;
-      const { hero: _h, heroUnit: _u, ...c } = p.control!;
+      // 💰 Ce qu'il a fait produire jusqu'ici reste acquis (comme un champion qui part).
+      const { hero: _h, heroUnit: _u, ...c } = bankForHero(map, p, at, p.control!.heroUnit?.level);
       void _h;
       void _u;
       return { ...p, control: c };
@@ -1230,10 +1291,16 @@ export function boardFromFortress(
   map: ExpeditionMap,
   only?: ReadonlySet<string>,
   hero = true,
+  /** L'instant de l'embarquement : la production faite jusque-là est mise de côté. Absent
+   *  pour un simple aperçu (`ids`). */
+  at?: number,
 ): { map: ExpeditionMap; ids: string[] } {
   const f = map.pois.find(heldFortress);
   if (!f) return { map, ids: [] };
-  const c = f.control!;
+  const c0 = f.control!;
+  const boarding =
+    c0.garrison.some((x) => !isMilitiaId(x) && (!only || only.has(x))) || (hero && !!c0.hero);
+  const c = at !== undefined && boarding ? bankForHero(map, f, at, c0.heroUnit?.level) : c0;
   const boards = (x: string) => !isMilitiaId(x) && (!only || only.has(x));
   const ids = c.garrison.filter(boards);
   const heroBoards = hero && !!c.hero;
@@ -1706,12 +1773,16 @@ export function stripChampions(map: ExpeditionMap, at: number, playerLevel: numb
       (c.reinforcing ?? []).some((r) => champ(r.id)) ||
       (c.returning ?? []).some((r) => champ(r.id)) ||
       !!c.away?.length ||
-      !!c.hero;
+      !!c.hero ||
+      !!c.heroComing;
     if (!hasChamp) return p;
     changed = true;
     const banked = c.collectedAt !== undefined ? bankAt(p, at, playerLevel) : c;
-    const { hero: _h, heroUnit: _u, away: _a, reinforcing, returning, perXp, ...rest } = banked;
+    // 🧝 Le héros EN ROUTE vers ce poste aussi : il quitte l'île avec tout le monde.
+    const { hero: _h, heroUnit: _u, heroComing: _hc, away: _a, reinforcing, returning, perXp, ...rest } =
+      banked;
     void _h;
+    void _hc;
     void _u;
     void _a;
     const reinf = (reinforcing ?? []).filter((r) => !champ(r.id));

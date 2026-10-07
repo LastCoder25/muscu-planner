@@ -83,13 +83,13 @@ describe('🧝 le héros tient garnison partout', () => {
   it('il QUITTE son poste pour partir ailleurs : sans retour à la base, la garnison reste', () => {
     const m0 = map();
     const m = captureControl(m0, mine(m0).id, ['a'], NOW, 7, HERO);
-    const u = unpostHero(m);
+    const u = unpostHero(m, 0);
     expect(heroPosted(u)).toBe(false);
     expect(u.heroReturnAt).toBeUndefined();
     expect(heroHeldOnMap(u, NOW)).toBe(false);
     expect(mine(u).control!.garrison).toEqual(mine(m).control!.garrison);
     expect(mine(u).control!.heroUnit).toBeUndefined();
-    expect(unpostHero(u)).toBe(u);
+    expect(unpostHero(u, 0)).toBe(u);
   });
   it('sans héros, rien n’est posté', () => {
     const m0 = map();

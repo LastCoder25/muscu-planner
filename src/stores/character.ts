@@ -185,6 +185,8 @@ import {
   ENDLESS_ID,
   heroPosted,
   heroComing,
+  heroAwayOnMapAt,
+  heroWalksHomeFrom,
   turnBackComingHero,
   heroPostOf,
   heroBackToPost,
@@ -347,6 +349,7 @@ import {
   tripCrew,
   voyageMemberIds,
   shortenWonReturn,
+  heroStayedSplit,
   rescheduleReturners,
   baseWalkers,
   medkitHeal,
@@ -2465,11 +2468,8 @@ export const useCharacterStore = defineStore('character', () => {
       // 🪺 De même un nid tenu d'avant la règle « on l'abat » (`heldNests`).
       const old = [...retiredHeld(cur.expedition_map), ...heldNests(cur.expedition_map)];
       if (old.length) {
-        for (const p of old) {
-          if (heroPostOf(row.value?.expedition_map)?.id === p.id)
-            await recallHeroFromPost(userId, now);
-          await recallControl(userId, p.id, now, level);
-        }
+        // 🧝 `recallControl` ramène aussi le héros posté là (ou en route vers ce lieu).
+        for (const p of old) await recallControl(userId, p.id, now, level);
         return;
       }
     }
@@ -2639,6 +2639,8 @@ export const useCharacterStore = defineStore('character', () => {
       heroBusy:
         !!cur.expedition ||
         heroInAttack(attackList.value) ||
+        // 🧭 En marche vers un poste : il le rejoindrait après avoir réservé la traversée.
+        heroComing(cur.expedition_map) ||
         cur.expedition_map.heroReturnAt !== undefined,
     });
   }
@@ -2652,8 +2654,8 @@ export const useCharacterStore = defineStore('character', () => {
     return [...new Set([...crossingTravellers(advList.value, now), ...boardFromFortress(map).ids])];
   }
   /** 🏰 Les champions choisis quittent la garnison de la forteresse (le port) avant d'embarquer. */
-  function leavePort(map: ExpeditionMap, ids: readonly string[], hero: boolean) {
-    const port = boardFromFortress(map, new Set(ids), hero);
+  function leavePort(map: ExpeditionMap, ids: readonly string[], hero: boolean, at: number) {
+    const port = boardFromFortress(map, new Set(ids), hero, at);
     const fromPort = new Set(port.ids);
     const advs = advList.value.map((a) =>
       fromPort.has(a.id) && a.posted === FORTRESS_ID ? { ...a, posted: undefined } : a,
@@ -2672,9 +2674,9 @@ export const useCharacterStore = defineStore('character', () => {
     const ok = boardableIds(cur.expedition_map.archipel.island, now);
     const ids = pick ? ok.filter((id) => pick.includes(id)) : ok;
     // 🏰 La forteresse est le port : les choisis de sa garnison et le héros embarquent de là.
-    const { map: m, advs } = leavePort(cur.expedition_map, ids, true);
+    const { map: m, advs } = leavePort(cur.expedition_map, ids, true, now);
     // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste.
-    const map = startCrossing(unpostHero(m), to, ids, now, troopsBackAt(cur));
+    const map = startCrossing(unpostHero(m, now), to, ids, now, troopsBackAt(cur));
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.crossing!),
@@ -2697,7 +2699,7 @@ export const useCharacterStore = defineStore('character', () => {
     const active = cur.expedition_map.archipel.island;
     const { map: m, advs } =
       from === active
-        ? leavePort(cur.expedition_map, ids, false)
+        ? leavePort(cur.expedition_map, ids, false, now)
         : { map: cur.expedition_map, advs: advList.value };
     const map = startSailing(m, from, to, ids, now);
     await persist(userId, {
@@ -2803,7 +2805,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🧝 Posté sur un lieu tenu, il en part directement (`unpostHero`).
     // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
     const map: ExpeditionMap = recordDeparture(
-      unpostHero({ ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) }),
+      unpostHero({ ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) }, now),
       now,
       exp.midAt,
     );
@@ -2843,9 +2845,19 @@ export const useCharacterStore = defineStore('character', () => {
     // renvoyer une équipe sans attendre qu'il rentre (`restoreUnvanquished`).
     const mapIn = ctl?.map ?? cur.expedition_map;
     const mapOut = restoreUnvanquished(mapIn, [exp, ...partyList.value], now);
+    // 🧝🏰 Resté sur le point qu'il vient de prendre : son voyage s'arrête ici, ceux qui
+    // rentrent deviennent un groupe ordinaire (`heroStayedSplit`).
+    const split = heroStayedSplit(
+      exp2,
+      heroPostOf(mapOut)?.id === exp.poi.id,
+      new Set(advs1.filter((a) => a.posted === exp.poi.id).map((a) => a.id)),
+      now,
+      `party_${now.toString(36)}`,
+    );
     await persist(userId, {
       ...(dw.base ? { base: dw.base } : {}),
-      expedition: exp2,
+      expedition: split ? null : exp2,
+      ...(split?.party ? { parties: [...partyList.value, split.party] } : {}),
       messages: dw.tag(x.messages),
       ...x.patch,
       ...(ctl ? { adventurers: ctl.adventurers } : {}),
@@ -2909,15 +2921,28 @@ export const useCharacterStore = defineStore('character', () => {
     // 🤕 Revenu blessé d'une défaite : infirmerie à la base, convalescence datée de son
     // retour (`heroMissionWound`). Il ne reprend donc pas son poste.
     const base0 = dw?.base ?? baseOf(cur, now);
-    const wound = heroMissionWound(
-      exp,
-      woundMsFor(defenseLevel(base0.defenses, 'infirmary'), raidIntervalMs(activeDays7)),
-      base0.wound,
-      now,
-    );
     const hurtHero = !!exp.outcome.party?.heroHurt;
-    const map =
-      !hurtHero && exp.homeHero && exp.homeId && map2 && homePoi
+    // 🧭 Blessé au retour d'une sortie depuis son poste : il rentre À PIED de son poste à la
+    // base, comme ses champions blessés ; sa convalescence ne court qu'à son arrivée.
+    const hurtWalk =
+      hurtHero && map2 && homePoi
+        ? heroWalksHomeFrom(
+            map2,
+            homePoi,
+            exp.returnAt,
+            heroHomeLegMin(cur, map2, homePoi, exp.returnAt),
+          )
+        : null;
+    const woundMs = woundMsFor(
+      defenseLevel(base0.defenses, 'infirmary'),
+      raidIntervalMs(activeDays7),
+    );
+    const wound = hurtWalk
+      ? heroWoundAfter(hurtWalk.heroReturnAt ?? exp.returnAt, woundMs, base0.wound, now)
+      : heroMissionWound(exp, woundMs, base0.wound, now);
+    const map = hurtWalk
+      ? hurtWalk
+      : !hurtHero && exp.homeHero && exp.homeId && map2 && homePoi
         ? heroBackToPost(
             map2,
             exp.homeId,
@@ -3236,10 +3261,22 @@ export const useCharacterStore = defineStore('character', () => {
   function heroIsHome(cur: CharacterRow): boolean {
     return !cur.expedition && !heroOutInAttack(attackList.value) && !heroOnMap(cur.expedition_map);
   }
+  /** 🏠 QUAND LE HÉROS SERA DE RETOUR À LA BASE, s'il est dehors ; `null` s'il n'y revient pas
+   *  de lui-même (posté, en route vers un poste, en mer, ou en sortie depuis son poste — il y
+   *  retourne, pas en ville). Lu par le pronostic de siège des DEUX écrans (`heroDefends`) :
+   *  la carte n'y passait que l'expédition, la Base l'expédition ou la marche. */
+  function heroBackAtBase(cur: CharacterRow): number | null {
+    const map = cur.expedition_map;
+    if (heroPosted(map) || heroComing(map) || map?.crossing) return null;
+    if (cur.expedition) return cur.expedition.homeId ? null : cur.expedition.returnAt;
+    return map?.heroReturnAt ?? null;
+  }
   /** 🏰 Le héros posté à la forteresse, ou rappelé et pas encore rentré (`heroReturnAt` est
    *  retiré par `settleHome` à son arrivée). */
   function heroOnMap(map: ExpeditionMap | null | undefined): boolean {
-    return heroPosted(map) || heroComing(map) || map?.heroReturnAt !== undefined;
+    return (
+      heroPosted(map) || heroComing(map) || map?.heroReturnAt !== undefined || !!map?.crossing
+    );
   }
 
   /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
@@ -3373,7 +3410,8 @@ export const useCharacterStore = defineStore('character', () => {
       attacks: attackList.value,
       planned: plannedList.value,
     });
-    const home = heroHomeAt(outings, at);
+    // 🧝 Posté sur un lieu fixe, en marche sur la carte ou en mer, il n'est pas au rempart.
+    const home = heroHomeAt(outings, at) && !heroAwayOnMapAt(cur.expedition_map, at);
     // Chaque champion se bat avec SES pièces (plus de compagnon ni de talent, v0.996).
     const cctx = escortKitOf(cur);
     // Les aventuriers DISPONIBLES défendent (ni en convoi, ni à l’infirmerie, ni en
@@ -4221,7 +4259,7 @@ export const useCharacterStore = defineStore('character', () => {
       origin && map0 ? sortieLeaves(map0, origin.id, opts.escortIds, now, opts.playerLevel) : map0;
     // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
     // 🧝 Le héros posté sur un lieu tenu en part directement : il quitte la garnison.
-    const map2 = map1 && hero ? unpostHero(map1) : map1;
+    const map2 = map1 && hero ? unpostHero(map1, now) : map1;
     // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
     const map = map2 ? recordDeparture(map2, now, trip.midAt) : map2;
     await persist(userId, {
@@ -4651,7 +4689,7 @@ export const useCharacterStore = defineStore('character', () => {
           advs = advs.map((x) => (went.has(x.id) ? { ...x, posted: undefined } : x));
         }
         // 🧝 Le héros quitte son poste à SON départ, pas à l'envoi de l'attaque.
-        if (d.hero && map) map = unpostHero(map);
+        if (d.hero && map) map = unpostHero(map, w.departAt);
         const gone = d.members.length > 0 || d.hero;
         const wings = [...a.wings];
         wings[i] = gone
@@ -5869,12 +5907,20 @@ export const useCharacterStore = defineStore('character', () => {
     const mil = militiaOfControl(cur.expedition_map.pois.find((p) => p.id === id)?.control);
     const champs = advList.value.filter((a) => a.posted === id).map((a) => a.id);
     const home = walkHome(cur, id, champs, mil, now);
+    // 🧝 Le héros posté ici rentre aussi à pied (le rappel vidait le lieu « sans défense » en
+    // l'y laissant), et celui qui y marchait fait demi-tour — comme un renfort en route.
+    const emptied = home.map(releaseFromControl(h.map, id, [...champs, ...mil], now, playerLevel));
+    const poiHere = emptied.pois.find((p) => p.id === id);
+    const heroOut =
+      poiHere && heroPostOf(emptied)?.id === id
+        ? recallPostedHero(emptied, now, heroHomeLegMin(cur, emptied, poiHere, now))
+        : poiHere?.control?.heroComing
+          ? turnBackComingHero(emptied, now)
+          : emptied;
     await persist(userId, {
       // 🏠 Tous rentrent À PIED : on les voit revenir sur la carte, les miliciens rejoignent
       // la base à leur arrivée (`settleReturns`), les champions restent occupés jusque-là.
-      expedition_map: home.map(
-        releaseFromControl(h.map, id, [...champs, ...mil], now, playerLevel),
-      ),
+      expedition_map: heroOut,
       adventurers: h.advs.map((a) =>
         a.posted === id ? { ...a, posted: undefined, busyUntil: home.advAt } : a,
       ),
@@ -6005,15 +6051,15 @@ export const useCharacterStore = defineStore('character', () => {
     if (block) return HERO_POST_BLOCK_LABEL[block];
     if (woundRemainingMs(cur.base, now) > 0) return 'le héros est à l’infirmerie';
     const post = heroPostOf(map0);
-    // 🧝 Posté ailleurs, il en part directement ; sinon il doit être libre.
-    if (!post && !heroIsHome(cur)) return 'le héros est déjà en route ailleurs';
-    if (post && (cur.expedition || map0.heroReturnAt !== undefined))
-      return 'le héros est déjà en route ailleurs';
+    // 🧝 Posté ailleurs, il en part directement ; sinon il doit être libre. ⚠️ La MÊME règle
+    // que l'écran (`heroEngaged`) : réservé dans une attaque combinée en attente, en mer ou
+    // déjà en marche, le store le laissait se poster quand même.
+    if (heroEngaged.value) return 'le héros est déjà en route ailleurs';
     const legOf = (p: Poi) => heroHomeLegMin(cur, map0, p, now);
     // 🧭 Posté ailleurs, il part de CE lieu (signalé : de l'Ossuaire aux Archives, la carte le
     // faisait partir de la base) — sauf si le détour par la ville est plus court.
     const route = post ? routeFromSpot(poi, post, legOf) : { min: legOf(poi), direct: false };
-    const map = post ? unpostHero(map0) : map0;
+    const map = post ? unpostHero(map0, now) : map0;
     await persist(userId, {
       expedition_map: sendHeroToControl(
         map,
@@ -6906,6 +6952,7 @@ export const useCharacterStore = defineStore('character', () => {
     healHero,
     healAdventurers,
     heroIsHome,
+    heroBackAtBase,
     ownedLevel,
     applyRun,
     applyBossWin,

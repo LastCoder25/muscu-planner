@@ -1678,6 +1678,7 @@
 import {
   FORTRESS_ID,
   heroPostOf,
+  heroWalk,
   heroWalkVoyage,
   islandConquest,
   islandTargetLabel,
@@ -2580,7 +2581,11 @@ const raidAt = computed(() => incoming.value?.arrivesAt ?? 0);
  *  l’assaut défend quand même — même règle que le panneau de la Base, écrite une seule fois
  *  dans `heroDefends`, et lue une seule fois ici pour le convoi ET le groupe. */
 const heroDefendsNow = computed(() =>
-  heroDefends(!!char.row && char.heroIsHome(char.row), char.row?.expedition?.returnAt, raidAt.value)
+  heroDefends(
+    !!char.row && char.heroIsHome(char.row),
+    char.row ? char.heroBackAtBase(char.row) : null,
+    raidAt.value,
+  )
     ? fighter.value
     : null,
 );
@@ -5089,11 +5094,17 @@ const townRow = computed(() => {
   );
 });
 const heroBaseStatus = computed(() => {
-  if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const map = char.row?.expedition_map;
+  // 🧭 En marche d'abord : blessé, il n'est « à l'infirmerie » qu'une fois arrivé (sa
+  // convalescence part de son arrivée), comme un champion en route.
+  const walk = heroWalk(map, now.value);
+  if (walk)
+    return walk.to
+      ? `🧭 en route vers ${poiLabel(walk.to)}`
+      : `🧭 rentre à la base · ${formatDuration(walk.at - now.value)}`;
+  if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const post = heroPostOf(map);
   if (post) return `🏰 posté : ${poiLabel(post)}`;
-  if (map?.heroReturnAt !== undefined) return '🧭 rentre à la base';
   if (char.heroEngaged) return '🧭 en expédition';
   return '✅ à la base — il part depuis la fiche d’un lieu';
 });

@@ -73,6 +73,11 @@ const char = useCharacterStore();
  *  plus longtemps. */
 const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: number }>(() => {
   const healMs = woundRemainingMs(char.row?.base, props.now);
+  // 🧭 Il marche vers un lieu tenu où se poster, ou rentre à pied à la base — blessé compris :
+  // sa convalescence ne commence qu'à son arrivée (comme un champion « en route », pas encore
+  // « à l'infirmerie »).
+  const walk = heroWalk(char.row?.expedition_map, props.now);
+  if (walk) return { label: `🧭 ${formatDuration(walk.at - props.now)}`, tone: 'away', healMs };
   if (isWounded(char.row?.base, props.now))
     return { label: `⛑️ ${formatDuration(healMs)}`, tone: 'hurt', healMs };
   // ⛵ En traversée (réservée ou en mer) : il est sur le bateau jusqu'au débarquement
@@ -88,9 +93,6 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
   const attackBack = heroAttackReturnAt(char.attackList);
   if (attackBack !== null && attackBack > props.now)
     return { label: `⚔️ ${formatDuration(attackBack - props.now)}`, tone: 'away', healMs };
-  // 🧭 Il marche vers un lieu tenu où se poster, ou rentre à pied à la base.
-  const walk = heroWalk(char.row?.expedition_map, props.now);
-  if (walk) return { label: `🧭 ${formatDuration(walk.at - props.now)}`, tone: 'away', healMs };
   return { label: 'dispo', tone: 'ok', healMs };
 });
 
@@ -153,7 +155,9 @@ const title = computed(() => {
           ? seaTitle.value
           : h.label.startsWith('⚔️')
             ? `Héros engagé dans une attaque combinée — libre dans ${h.label.slice(3)}`
-            : `Héros en expédition — de retour dans ${h.label}`,
+            : h.label.startsWith('🧭')
+              ? `Héros en marche — arrivée dans ${h.label.slice(3)}`
+              : `Héros en expédition — de retour dans ${h.label}`,
   ];
   if (d.value.champHurt) parts.push(`${d.value.champHurt} champion(s) à l'infirmerie`);
   if (d.value.champTotal)
