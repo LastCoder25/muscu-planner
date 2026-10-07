@@ -1776,6 +1776,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(entres.size);
     // Les intrus montrent l'illustration de leur espèce, plus l'emoji (v1.49.9).
     expect(out).toContain('src="/monsters/g_');
+    // ⚔️ Le HUD dit l'avancement : ennemis restants sur l'effectif de départ (état final).
+    const st = buildSiegeStage(report!, 8);
+    const morts = new Set(st.beats.flatMap((b) => b.kills));
+    expect(out).toContain(
+      `${st.bodies.length - morts.size} ennemis restants sur ${st.bodies.length}`,
+    );
   }, 30_000);
 
   it('⚔️ WarbandStage peint la colonne corps par corps, avec ses illustrations', async () => {

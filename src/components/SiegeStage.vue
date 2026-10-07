@@ -291,7 +291,11 @@
         <span class="hud-tag"
           >{{ FACTION_EMOJI[report.faction] }} {{ FACTION_LABEL[report.faction] }}</span
         >
-        <span class="hud-tag">Debout {{ standing }}</span>
+        <!-- ⚔️ L'avancement : ennemis encore debout sur l'effectif de départ (demandé). -->
+        <span class="hud-tag foes" :aria-label="`${standing} ennemis restants sur ${totalFoes}`"
+          >⚔️ Ennemis <b>{{ standing }}</b
+          >/{{ totalFoes }}</span
+        >
         <span v-if="width > 0" class="hud-tag breach"
           >🧱 Brèche · {{ insideAlive }} dans la cour</span
         >
@@ -595,7 +599,9 @@ const inside = computed(() => state.value.inside);
 const wounded = computed(() => state.value.wounded);
 const silenced = computed(() => state.value.silenced);
 const curRound = computed(() => cur.value?.round ?? 0);
-const standing = computed(() => stage.value.bodies.length - dead.value.size);
+/** L'effectif de DÉPART : un corps dessiné par assaillant réel (`RaidGroup.count`). */
+const totalFoes = computed(() => stage.value.bodies.length);
+const standing = computed(() => totalFoes.value - dead.value.size);
 const insideAlive = computed(
   () => [...inside.value.keys()].filter((b) => !dead.value.has(b)).length,
 );
@@ -1377,6 +1383,10 @@ onUnmounted(clearTimers);
   padding: 3px 10px;
   font-size: 12px;
   color: #f3eee6;
+}
+.hud-tag.foes b {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 .hud-tag.breach {
   border-color: #ff6a45;
