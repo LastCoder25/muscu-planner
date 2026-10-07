@@ -1794,6 +1794,54 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
   }, 30_000);
 
+  // 🐞 Signalé : « l'animation montre un combat arrêté alors qu'il restait beaucoup
+  // d'ennemis debout ». Le moteur les avait tous tués : avec l'illustration, un mort restait
+  // la même image debout, juste grisée. Il se couche désormais et porte un 💀.
+  it('💀 SiegeStage : un assaillant mort se couche et porte un crâne', async () => {
+    const { default: SiegeStage } = await import('@/components/SiegeStage.vue');
+    const { resolveRaid, rollRaid } = await import('@/lib/raid');
+    const { buildSiegeStage } = await import('@/lib/siegeStage');
+    const { speciesArt } = await import('@/data/monsterArt');
+    // Une enceinte pleine : l'armée meurt dehors, sans brèche (le cas signalé).
+    const defs = [
+      { typeId: 'wall' as const, level: 36 },
+      { typeId: 'turret' as const, level: 36 },
+    ];
+    let report = null as ReturnType<typeof resolveRaid> | null;
+    for (let s2 = 1; s2 <= 40 && !report; s2++) {
+      const r = resolveRaid(
+        { defenses: defs, playerLevel: 36, hero: null, guard: [] },
+        rollRaid(s2 * 7919, 36, 0, 0),
+        false,
+      );
+      if (r.held && !r.breached) report = r;
+    }
+    expect(report).not.toBeNull();
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia;
+    let out = '';
+    try {
+      expect(
+        await mountIt(
+          SiegeStage,
+          { report: report!, turretLevel: 36 },
+          undefined,
+          undefined,
+          '/',
+          (h) => (out = h),
+        ),
+      ).toBeNull();
+    } finally {
+      window.matchMedia = mm;
+    }
+    const st = buildSiegeStage(report!, 36);
+    const morts = new Set(st.beats.flatMap((b) => b.kills));
+    const illustres = [...morts].filter((i) => speciesArt(st.bodies[i]!.name)).length;
+    expect(illustres).toBeGreaterThan(0);
+    expect([...out.matchAll(/class="s-foe-skull"/g)]).toHaveLength(illustres);
+    expect([...out.matchAll(/rotate\(80\)/g)]).toHaveLength(illustres);
+  }, 30_000);
+
   it('⚔️ WarbandStage peint la colonne corps par corps, avec ses illustrations', async () => {
     const { default: WarbandStage } = await import('@/components/WarbandStage.vue');
     const { buildWarbandStage } = await import('@/lib/warbandStage');

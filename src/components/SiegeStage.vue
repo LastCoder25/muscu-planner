@@ -247,11 +247,15 @@
           width="20"
           height="20"
           class="s-foe-art"
-          :transform="bodyPos(b, i).x < 100 ? 'scale(-1,1)' : undefined"
+          :transform="foeArtTransform(b, i)"
           preserveAspectRatio="xMidYMax meet"
           @error="failedArt.add(b.name)"
         />
         <text v-else y="3.7" class="s-foe-emo">{{ dead.has(i) ? '💀' : b.emoji }}</text>
+        <!-- ⚠️ Avec l'illustration, un mort restait la même image debout, juste grisée : à
+             cette taille il se lisait comme un vivant (signalé : « le combat s'arrête alors
+             qu'il reste beaucoup d'ennemis debout »). Il se COUCHE et porte un 💀. -->
+        <text v-if="dead.has(i) && foeArt(b.name)" y="-4" class="s-foe-skull">💀</text>
       </g>
 
       <!-- ── LES PROJECTILES ── -->
@@ -605,6 +609,13 @@ const standing = computed(() => totalFoes.value - dead.value.size);
 const insideAlive = computed(
   () => [...inside.value.keys()].filter((b) => !dead.value.has(b)).length,
 );
+
+/** L'illustration regarde la ville (retournée à l'ouest) ; un corps tombé se COUCHE. */
+function foeArtTransform(b: SiegeBody, i: number): string | undefined {
+  const flip = bodyPos(b, i).x < 100 ? 'scale(-1,1)' : '';
+  const lying = dead.value.has(i) ? 'translate(0 4) rotate(80) scale(0.8)' : '';
+  return `${lying} ${flip}`.trim() || undefined;
+}
 
 /** Un corps marche sur son pan jusqu'au pied du mur — et le LONGE s'il n'a plus de cible
  *  (un tireur va chercher la baliste suivante) ; entré, il se tient dans la cour. */
@@ -1301,7 +1312,11 @@ onUnmounted(clearTimers);
   filter: drop-shadow(0 0 2px rgba(255, 106, 69, 0.9)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
 }
 .s-foe.dead .s-foe-art {
-  filter: grayscale(1) brightness(0.6);
+  filter: grayscale(1) brightness(0.45);
+}
+.s-foe-skull {
+  font-size: 7px;
+  text-anchor: middle;
 }
 .s-foe.dead .s-foe-bg {
   fill: #14110c;
