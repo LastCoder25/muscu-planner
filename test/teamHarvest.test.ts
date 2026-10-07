@@ -122,10 +122,13 @@ describe('⚡🔮 les équipes restent un complément', { timeout: 300_000 }, ()
       expect(r, `niveau ${L} : ça rapporte quand même`).toBeGreaterThan(0.1);
     }
   });
-  it('pierres (sanctuaires d’abord) : au plus la moitié d’une journée de donjons', () => {
+  // 🔓 Borne relevée 0,55 → 0,75 quand les compétences des champions ont perdu leur plafond
+  // (demandé par l'utilisateur) : la Cargaison s'additionne sans borne. Mesuré : niveau 30
+  // 33 % avant comme après, niveau 100 44 % → 68 %. On garde une borne, sous une journée.
+  it('pierres (sanctuaires d’abord) : sous les trois quarts d’une journée de donjons', () => {
     for (const L of [30, 100]) {
       const r = moyenne(L, 'shrine').stones / stonesPerDay(L);
-      expect(r, `niveau ${L} : ${(100 * r).toFixed(0)} % des donjons`).toBeLessThanOrEqual(0.55);
+      expect(r, `niveau ${L} : ${(100 * r).toFixed(0)} % des donjons`).toBeLessThanOrEqual(0.75);
       expect(r, `niveau ${L} : ça rapporte quand même`).toBeGreaterThan(0.1);
     }
   });

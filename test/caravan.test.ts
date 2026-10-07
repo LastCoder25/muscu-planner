@@ -45,6 +45,8 @@ import {
   caravanHaulMult,
   refAdvGear,
   type Caravan,
+  roleCut,
+  roleShare,
 } from '@/lib/caravan';
 import { trialXpBase } from '@/lib/skirmish';
 import { rankStartLevel } from '@/lib/characterRank';
@@ -1264,14 +1266,19 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
     expect(ambushChance(poiOf(true), sans())).toBeCloseTo(0.42, 6);
   });
 
-  it('chaque cran en évite davantage, et le plafond tient', () => {
+  it('chaque cran en évite davantage, sans plafond mais jamais à zéro', () => {
     const a = ambushChance(poiOf(false), sans());
     const b = ambushChance(poiOf(false), un());
     const c = ambushChance(poiOf(false), beaucoup());
     expect(b).toBeLessThan(a);
     expect(c).toBeLessThan(b);
-    // Jamais en dessous du plafond d’évitement : une route ne devient pas sûre.
-    expect(c).toBeGreaterThanOrEqual(0.24 * (1 - CARAVAN.scoutMax) - 1e-9);
+    // 🔓 Plus de plafond : chaque éclaireur retire sa part de ce qui reste (roleCut), donc
+    // la probabilité baisse encore à chaque porteur sans jamais tomber à zéro.
+    const foule = Array.from({ length: 12 }, (_, i) => mk('e' + i, ['eclaireur', 'coursier', 'rodeur']));
+    const d = ambushChance(poiOf(false), foule);
+    expect(d).toBeLessThan(c);
+    expect(d).toBeGreaterThan(0);
+    expect(c).toBeCloseTo(0.24 * (1 - roleCut(beaucoup(), 'scout')), 9);
   });
 
   it('⚠️ il RÉDUIT LE RISQUE, il ne FABRIQUE PAS de butin', () => {
@@ -1419,8 +1426,12 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     expect(avec).toBeCloseTo(sans + 0.05, 9);
   });
 
-  it('⚠️ …et un bonus ÉNORME s’arrête EXACTEMENT à 1 + haulMax', () => {
-    expect(caravanHaulMult([caravanier()], [bat(5)])).toBe(1 + CARAVAN.haulMax);
+  it('⚠️ …un bonus de PIÈCE énorme s’arrête à haulMax, les compétences s’ajoutent sans plafond', () => {
+    const esc = [caravanier()];
+    expect(caravanHaulMult(esc, [bat(5)])).toBeCloseTo(
+      1 + roleShare(esc, 'haul') + CARAVAN.haulMax,
+      9,
+    );
   });
 
   it('⚠️ c’est bien CE calcul que le convoi lit : la cargaison grossit', () => {
