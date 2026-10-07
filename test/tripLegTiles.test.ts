@@ -42,10 +42,11 @@ describe('🚶↩️ une tuile par étape', () => {
 });
 
 describe('🔎 filtre des étapes', () => {
-  it('toucher retire puis rajoute', () => {
-    const a = toggleLeg(ALL_LEGS, 'go');
-    expect([...a]).toEqual(['back']);
-    expect([...toggleLeg(a, 'go')].sort()).toEqual(['back', 'go']);
+  it('les deux affichées : toucher ISOLE, puis ajoute ou retire', () => {
+    const a = toggleLeg(ALL_LEGS, 'go', ['go', 'back']);
+    expect([...a]).toEqual(['go']);
+    expect([...toggleLeg(a, 'back', ['go', 'back'])].sort()).toEqual(['back', 'go']);
+    expect([...toggleLeg(a, 'go', ['go', 'back'])]).toEqual([]);
   });
   it('une étape choisie qui se vide retombe sur tout, une rangée vidée reste vide', () => {
     expect([...shownLegs(new Set(['go']), ['back'])]).toEqual(['back']);

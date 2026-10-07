@@ -90,8 +90,15 @@ export function tripLegTiles(t: LegSource): LegTile[] {
 export type LegSelection = ReadonlySet<TripLeg>;
 export const ALL_LEGS: LegSelection = new Set<TripLeg>(['go', 'back']);
 
-/** Toucher une étape l'ajoute ou la retire. */
-export function toggleLeg(sel: LegSelection, leg: TripLeg): LegSelection {
+/** Toucher une étape l'ajoute ou la retire. 🎯 Les deux affichées : le premier toucher ISOLE
+ *  l'étape touchée (même règle que les catégories, `toggleTripCat`). */
+export function toggleLeg(
+  sel: LegSelection,
+  leg: TripLeg,
+  present: readonly TripLeg[],
+): LegSelection {
+  if (present.length > 1 && present.includes(leg) && present.every((l) => sel.has(l)))
+    return new Set([leg]);
   const next = new Set(sel);
   if (next.has(leg)) next.delete(leg);
   else next.add(leg);
