@@ -72,6 +72,7 @@
           :fallback="slotEmoji(leg.slot)"
           :history="combo.list"
           :swappable="c.status === 'active'"
+          :fatigue="legFatigue(leg)"
           @history="openHistory(leg)"
           @swap="openSwap(leg)"
         />
@@ -289,6 +290,7 @@ import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useLibraryStore } from '@/stores/library';
 import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
 import { useProfileStore } from '@/stores/profile';
+import { useComboFatigue } from '@/composables/useComboFatigue';
 
 const router = useRouter();
 const route = useRoute();
@@ -337,6 +339,11 @@ const orderedLegs = computed(() => legsByGroup(c.value?.legs ?? []));
 // 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
 const legFilter = ref<ComboLegFilter>('all');
 const shownLegs = computed(() => filterLegsByZone(orderedLegs.value, legFilter.value));
+// Fatigue des groupes : un conseil sur ce qu'on peut enchaîner (défi en cours seulement).
+const fatigue = useComboFatigue(computed(() => c.value?.legs ?? []));
+function legFatigue(leg: ComboLeg) {
+  return c.value?.status === 'active' && !legComplete(leg) ? fatigue.fatigueOf(leg) : null;
+}
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);

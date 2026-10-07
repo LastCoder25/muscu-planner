@@ -4035,4 +4035,39 @@ describe('⇄ ComboLegHead — le bouton « changer d’exo »', () => {
     expect(on).toContain('class="lh-swap"');
     expect(off).not.toContain('lh-swap');
   }, 30_000);
+
+  it('🔥 affiche la fatigue du groupe avec sa raison, rien quand il est reposé', async () => {
+    const { default: ComboLegHead } = await import('@/components/ComboLegHead.vue');
+    const leg = {
+      slot: 'push',
+      exercise_id: 'ex_dips',
+      exercise_name: 'Dips',
+      muscle_primary: 'pectoraux',
+      rep_weight: 1,
+      target: 6,
+      count_mode: 'sets',
+      sets: [],
+    };
+    let hot = '';
+    let fresh = '';
+    await mountIt(
+      ComboLegHead,
+      { leg, fatigue: { level: 'hot', muscles: ['pectoraux'] } },
+      undefined,
+      undefined,
+      '/',
+      (h) => (hot = h),
+    );
+    await mountIt(
+      ComboLegHead,
+      { leg, fatigue: { level: 'fresh', muscles: [] } },
+      undefined,
+      undefined,
+      '/',
+      (h) => (fresh = h),
+    );
+    expect(hot).toContain('class="lh-fat hot"');
+    expect(hot).toContain('pectoraux');
+    expect(fresh).not.toContain('lh-fat');
+  }, 30_000);
 });

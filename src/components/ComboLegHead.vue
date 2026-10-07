@@ -34,6 +34,11 @@
           <span v-if="extra > 0" class="lh-extra">+{{ extra }}</span>
         </span>
       </button>
+      <!-- Fatigue du groupe : un CONSEIL discret (jamais un grisé — le gris veut déjà dire
+           « exo terminé »), avec la raison écrite. Rien quand les muscles sont reposés. -->
+      <span v-if="fatigueText" class="lh-fat" :class="fatigue?.level" :title="fatigueText.title">{{
+        fatigueText.text
+      }}</span>
     </div>
     <!-- ⇄ Changer d'exo en cours de défi : seulement là où on peut agir (défi en cours). -->
     <button
@@ -65,6 +70,7 @@ import {
 } from '@/lib/combo';
 import { repRangeLabel } from '@/lib/repScheme';
 import { comboLegColor } from '@/lib/volume';
+import { fatigueLabel, type ExoFatigue } from '@/lib/muscleFatigue';
 import type { Objective } from '@/lib/types';
 
 const props = withDefaults(
@@ -79,6 +85,8 @@ const props = withDefaults(
     history?: ComboChallenge[];
     /** Affiche le bouton ⇄ « changer d'exo » (défi en cours seulement). */
     swappable?: boolean;
+    /** Fatigue des muscles de l'exo (useComboFatigue) : null = pas de conseil. */
+    fatigue?: ExoFatigue | null;
   }>(),
   {
     objective: null,
@@ -87,6 +95,7 @@ const props = withDefaults(
     fallback: '💪',
     history: () => [],
     swappable: false,
+    fatigue: null,
   },
 );
 const emit = defineEmits<{ history: []; swap: [] }>();
@@ -134,6 +143,7 @@ const load = computed(() => {
 const extra = computed(() => legDone(props.leg) - props.leg.target);
 /** Couleur du groupe musculaire, celle de l'Équilibre du corps : on relie l'exo à sa barre. */
 const color = computed(() => comboLegColor(props.leg));
+const fatigueText = computed(() => (props.fatigue ? fatigueLabel(props.fatigue) : null));
 </script>
 
 <style scoped>
@@ -274,6 +284,17 @@ const color = computed(() => comboLegColor(props.leg));
 .lh-extra {
   margin-left: 3px;
   color: var(--d1);
+}
+.lh-fat {
+  /* Sa propre ligne, sous le nom et l'avancement : elle ne vole la place de personne. */
+  flex: 1 0 100%;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--d2);
+}
+.lh-fat.hot {
+  color: var(--d3);
 }
 .lh-count.ok .lh-extra {
   color: #15120e;

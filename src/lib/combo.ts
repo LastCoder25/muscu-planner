@@ -988,7 +988,11 @@ export function buildComboSessionFromCounts(
 // l'utilisateur), sans jamais deux séries du même exo à la suite — y compris à la jonction
 // entre deux tours. ⚠️ Seule exception, inévitable : quand il ne reste qu'UN exo (il avait
 // plus de séries que les autres), ses dernières séries s'enchaînent, en alterné aussi.
-export type ComboSessionOrder = 'standard' | 'alternate' | 'shuffle';
+// « par groupe » (v1.81) : la prochaine série est choisie EN DIRECT, sur l'exo dont les
+// muscles sont les plus reposés (`pickFreshest`, lib/muscleFatigue) — elle dépend de l'heure
+// des séries faites, donc elle ne se planifie pas d'avance. `comboSessionSteps` la traite
+// comme « alterné » (même suite de repli, quand on ne connaît pas les muscles).
+export type ComboSessionOrder = 'standard' | 'alternate' | 'shuffle' | 'muscle';
 
 export const COMBO_SESSION_ORDERS: { id: ComboSessionOrder; label: string; hint: string }[] = [
   { id: 'standard', label: 'Standard', hint: 'Toutes les séries d’un exo, puis le suivant' },
@@ -997,6 +1001,11 @@ export const COMBO_SESSION_ORDERS: { id: ComboSessionOrder; label: string; hint:
     id: 'shuffle',
     label: 'Aléatoire',
     hint: 'À tour de rôle, dans un ordre mélangé à chaque tour',
+  },
+  {
+    id: 'muscle',
+    label: 'Par groupe',
+    hint: 'La prochaine série va aux muscles les plus reposés',
   },
 ];
 

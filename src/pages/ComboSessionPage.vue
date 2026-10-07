@@ -152,6 +152,14 @@
                on lit une consigne AVANT de faire la série. -->
           <span class="se-range">🎯 {{ exoRangeLabel(exo) }}</span>
           <span v-if="exo.weight_kg" class="se-kg">{{ exo.weight_kg }} kg</span>
+          <!-- Fatigue du groupe : un conseil, jamais un blocage (même pastille que la fiche). -->
+          <span
+            v-if="exoFatigueText(i)"
+            class="se-fat"
+            :class="exoFatigueOf(i)?.level"
+            :title="exoFatigueText(i)?.title"
+            >{{ exoFatigueText(i)?.text }}</span
+          >
         </div>
         <!-- Exo de DURÉE (gainage) : chrono (chaque pause valide une série) au lieu de reps. -->
         <div v-if="exo.time" class="se-sets">
@@ -265,6 +273,8 @@ import { useProfileStore } from '@/stores/profile';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
+import { useComboFatigue } from '@/composables/useComboFatigue';
+import { fatigueLabel, pickFreshest, type FatigueHit } from '@/lib/muscleFatigue';
 
 const router = useRouter();
 const progress = useProgress();
@@ -375,7 +385,15 @@ function exoRangeLabel(e: ComboSessionExo): string {
 
 const session = ref<ComboSessionExo[]>([]);
 // Séries validées, clé `i-j` → { reps, weight, assisted } saisis par l'utilisateur.
-const logged = ref<Record<string, { reps: number; weight: number | null; assisted: boolean }>>({});
+// `at` = l'heure où la série a été faite : elle part au défi telle quelle (sinon toutes les
+// séries de la séance porteraient l'heure de l'enregistrement) et nourrit la fatigue.
+interface LoggedSet {
+  reps: number;
+  weight: number | null;
+  assisted: boolean;
+  at: number;
+}
+const logged = ref<Record<string, LoggedSet>>({});
 const totalSets = computed(() => session.value.reduce((a, e) => a + e.sets.length, 0));
 const validatedCount = computed(() => Object.keys(logged.value).length);
 function isDone(i: number, j: number) {
@@ -392,7 +410,50 @@ const steps = computed(() =>
     orderSeed.value,
   ),
 );
-const nextStep = computed(() => steps.value.find((st) => !isDone(st.exo, st.set)) ?? null);
+// ── Fatigue des groupes : les séries du défi déjà faites aujourd'hui + celles de la séance
+// (pas encore enregistrées). Sert à l'ordre « Par groupe » et à la pastille de chaque exo.
+function legOf(exo: ComboSessionExo | undefined): ComboLeg | undefined {
+  return exo ? c.value?.legs.find((l) => l.exercise_id === exo.exercise_id) : undefined;
+}
+const sessionHits = computed<FatigueHit[]>(() =>
+  Object.entries(logged.value).flatMap(([key, v]) => {
+    const leg = legOf(session.value[Number(key.split('-')[0])]);
+    return leg ? [{ at: v.at, profile: fatigue.legProfile(leg) }] : [];
+  }),
+);
+const fatigue = useComboFatigue(
+  computed(() => c.value?.legs ?? []),
+  sessionHits,
+);
+function exoFatigueOf(i: number) {
+  const leg = legOf(session.value[i]);
+  return leg && firstOpenSet(i) >= 0 ? fatigue.fatigueOf(leg) : null;
+}
+function exoFatigueText(i: number) {
+  const f = exoFatigueOf(i);
+  return f ? fatigueLabel(f) : null;
+}
+/** Première série non faite d'un exo (-1 si toutes faites). */
+function firstOpenSet(i: number): number {
+  return session.value[i]?.sets.findIndex((_v: number, j: number) => !isDone(i, j)) ?? -1;
+}
+/** L'exo de la dernière série faite : à fatigue égale, on ne le répète pas. */
+const lastExo = computed(() => {
+  let best: { exo: number; at: number } | null = null;
+  for (const [key, v] of Object.entries(logged.value))
+    if (!best || v.at > best.at) best = { exo: Number(key.split('-')[0]), at: v.at };
+  return best?.exo;
+});
+const nextStep = computed(() => {
+  if (order.value !== 'muscle') return steps.value.find((st) => !isDone(st.exo, st.set)) ?? null;
+  // « Par groupe » : choisie EN DIRECT parmi les exos qui ont encore une série à faire.
+  const cands = session.value.flatMap((e, exo) => {
+    const leg = legOf(e);
+    return leg && firstOpenSet(exo) >= 0 ? [{ key: exo, profile: fatigue.legProfile(leg) }] : [];
+  });
+  const exo = pickFreshest(cands, fatigue.load.value, lastExo.value);
+  return exo == null ? null : { exo, set: firstOpenSet(exo) };
+});
 function goNext() {
   const st = nextStep.value;
   const exo = st ? session.value[st.exo] : undefined;
@@ -473,8 +534,10 @@ function onLogSave(v: { reps: number; weight: number | null; assisted: boolean }
   const slot = logSlot.value;
   if (!slot) return;
   const key = `${slot.i}-${slot.j}`;
-  const wasDone = key in logged.value;
-  logged.value = { ...logged.value, [key]: v };
+  const prev = logged.value[key];
+  const wasDone = !!prev;
+  // Corriger une série ne change pas l'heure où elle a été faite.
+  logged.value = { ...logged.value, [key]: { ...v, at: prev?.at ?? Date.now() } };
   if (!wasDone) restLeft.value = restSec.value; // repos après une NOUVELLE série
   if (validatedCount.value >= totalSets.value) {
     $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });
@@ -503,7 +566,10 @@ function validateTimeSet(i: number, sec: number) {
     exo.sets.push(sec); // toutes faites → série bonus
     j = exo.sets.length - 1;
   }
-  logged.value = { ...logged.value, [`${i}-${j}`]: { reps: sec, weight: null, assisted: false } };
+  logged.value = {
+    ...logged.value,
+    [`${i}-${j}`]: { reps: sec, weight: null, assisted: false, at: Date.now() },
+  };
   restLeft.value = restSec.value;
   if (validatedCount.value >= totalSets.value)
     $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });
@@ -543,14 +609,12 @@ async function commitWithXpFx() {
 }
 function commitLogged() {
   const today = logicalToday();
-  const entries = Object.entries(logged.value) as [
-    string,
-    { reps: number; weight: number | null; assisted: boolean },
-  ][];
+  // Dans l'ordre où elles ont été faites : l'ordre des séries d'un exo est celui du suivi.
+  const entries = Object.entries(logged.value).sort((a, b) => a[1].at - b[1].at);
   for (const [key, v] of entries) {
     const i = Number(key.split('-')[0]);
     const exo = session.value[i];
-    if (exo) combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted);
+    if (exo) combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted, v.at);
   }
 }
 function finish() {
@@ -841,6 +905,15 @@ onUnmounted(() => {
 .se-kg {
   font-size: 11px;
   color: var(--dim);
+}
+.se-fat {
+  flex: 1 0 100%;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--d2);
+}
+.se-fat.hot {
+  color: var(--d3);
 }
 .se-sets {
   display: flex;

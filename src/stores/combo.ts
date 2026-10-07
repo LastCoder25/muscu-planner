@@ -145,13 +145,18 @@ export const useComboStore = defineStore('combo', () => {
     reps: number,
     weight: number | null,
     assisted = false,
+    /** Heure réelle de la série (ms). La séance générée n'enregistre qu'à la fin : sans
+     *  elle, toutes ses séries porteraient l'heure de l'enregistrement, et la fatigue des
+     *  groupes (lue sur cette heure) croirait qu'elles ont été faites d'un coup. */
+    at?: number,
   ) {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps <= 0) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg || legComplete(leg)) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
-    leg.sets.push({ date, reps, weight: weight ?? null, assisted, at: new Date().toISOString() });
+    const stamp = new Date(at ?? Date.now()).toISOString();
+    leg.sets.push({ date, reps, weight: weight ?? null, assisted, at: stamp });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
     // ⚠️ On SIGNALE la transition vers « terminé ». Le coffre de fin de 360 doit tomber à
     // l'instant même où le défi se boucle — or le store ne connaît ni le niveau du joueur

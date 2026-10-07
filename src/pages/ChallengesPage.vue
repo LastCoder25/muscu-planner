@@ -418,6 +418,7 @@
               :size="36"
               :history="comboStore.list"
               swappable
+              :fatigue="legFatigue(leg)"
               @history="openHistory(leg)"
               @swap="openSwap(leg)"
             />
@@ -576,6 +577,7 @@ import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import { useComboFatigue } from '@/composables/useComboFatigue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import {
@@ -767,6 +769,11 @@ const activeComboLegs = computed(() => legsByGroup(activeCombo.value?.legs ?? []
 // 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
 const legFilter = ref<ComboLegFilter>('all');
 const shownComboLegs = computed(() => filterLegsByZone(activeComboLegs.value, legFilter.value));
+// Fatigue des groupes : un conseil sur ce qu'on peut enchaîner (même règle que la fiche).
+const comboFatigue = useComboFatigue(computed(() => activeCombo.value?.legs ?? []));
+function legFatigue(leg: ComboLeg) {
+  return legComplete(leg) ? null : comboFatigue.fatigueOf(leg);
+}
 const comboList = computed(() =>
   comboStore.list
     .filter((c) => c.status === comboTab.value)
