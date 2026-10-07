@@ -3701,8 +3701,8 @@ const returnsOnMap = computed(() =>
   })),
 );
 /** 🧭 Le HÉROS À PIED (signalé : « je n'ai pas le tracé du déplacement du héros ») : vers un
- *  lieu tenu où il va se poster (aller simple, comme un renfort), ou vers la base depuis là où
- *  il est parti (rappel, demi-tour, lieu perdu). */
+ *  lieu tenu où il va se poster (aller simple, comme un renfort, depuis la base ou le lieu
+ *  qu'il a quitté), ou vers la base depuis là où il est parti (rappel, demi-tour, lieu perdu). */
 const heroWalkOnMap = computed(() => {
   const v = heroWalkVoyage(char.row?.expedition_map, now.value);
   if (!v) return null;
@@ -3710,7 +3710,7 @@ const heroWalkOnMap = computed(() => {
     id: 'hw',
     poi: v.poi,
     back: v.back,
-    origin: undefined as { x: number; y: number } | undefined,
+    origin: v.origin,
     at: drawnAt(v),
     pct: voyageProgress(v, now.value).overall * 100,
     arriveAt: v.back ? v.returnAt : v.midAt,
@@ -4023,7 +4023,7 @@ const trips = computed(() => {
       pct: w.pct,
       back: w.back,
       withHero: true,
-      from: w.back ? w.poi : null,
+      from: w.back ? w.poi : tripOriginPoi(pois.value, w.origin),
       ...(w.back ? { toBase: true } : {}),
       members: [],
       haul: [],

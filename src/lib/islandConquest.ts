@@ -35,6 +35,7 @@ import {
   retakeCalmMs,
   champSeatsWithHero,
   walkPoint,
+  walkHomeMs,
   heroPostBlocker,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
@@ -1104,17 +1105,33 @@ export function heroWalk(
 }
 
 /** 🧭 LE TRAJET À PIED DU HÉROS, tel que la carte le dessine (signalé : « je n'ai pas le
- *  tracé du déplacement du héros »). Vers un poste : un aller simple base → lieu (comme un
- *  renfort). Vers la base : un retour simple depuis là où il est parti (`heroReturnFrom`) ;
- *  un retour d'avant, sans point de départ, n'est pas dessiné. `null` s'il ne marche pas. */
+ *  tracé du déplacement du héros »). Vers un poste : un aller simple (comme un renfort), de
+ *  la base ou du lieu qu'il a quitté (`origin`, signalé : de l'Ossuaire aux Archives il
+ *  partait de la base). Vers la base : un retour simple depuis là où il est parti
+ *  (`heroReturnFrom`) ; un retour d'avant, sans point de départ, n'est pas dessiné. `null`
+ *  s'il ne marche pas. */
 export function heroWalkVoyage(
   map: Pick<ExpeditionMap, 'pois' | 'heroReturnAt' | 'heroReturnFrom'> | null | undefined,
   now: number,
-): { poi: Poi; sentAt: number; midAt: number; returnAt: number; back: boolean } | null {
+): {
+  poi: Poi;
+  sentAt: number;
+  midAt: number;
+  returnAt: number;
+  back: boolean;
+  origin?: { x: number; y: number };
+} | null {
   const p = map?.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing);
   const c = p?.control?.heroComing;
   if (p && c && c.at > now)
-    return { poi: p, sentAt: c.from, midAt: c.at, returnAt: c.at, back: false };
+    return {
+      poi: p,
+      sentAt: c.from,
+      midAt: c.at,
+      returnAt: c.at,
+      back: false,
+      ...(c.origin ? { origin: c.origin } : {}),
+    };
   const at = map?.heroReturnAt;
   const from = map?.heroReturnFrom;
   if (at === undefined || at <= now || !from) return null;
@@ -1155,17 +1172,17 @@ export function heroComing(map: Pick<ExpeditionMap, 'pois'> | null | undefined):
   return !!map?.pois.some((p) => p.control?.owner === 'player' && !!p.control.heroComing);
 }
 
-/** 🧝 Le héros en route vers un poste fait DEMI-TOUR : il rentre à la base en autant de temps
- *  qu'il a déjà marché, et ses places se libèrent. Rend la même carte s'il n'est pas en route. */
+/** 🧝 Le héros en route vers un poste fait DEMI-TOUR : il rentre à la base depuis là où il est
+ *  (`walkHomeMs` : autant qu'il a marché s'il venait de la base), et ses places se libèrent.
+ *  Rend la même carte s'il n'est pas en route. */
 export function turnBackComingHero(map: ExpeditionMap, now: number): ExpeditionMap {
   const p = map.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing);
   if (!p) return map;
   const { heroComing: c, ...rest } = p.control!;
-  const walked = Math.max(0, now - c!.from);
   return {
     ...map,
     pois: map.pois.map((q) => (q.id === p.id ? { ...q, control: rest } : q)),
-    heroReturnAt: Math.max(map.heroReturnAt ?? 0, now + walked),
+    heroReturnAt: Math.max(map.heroReturnAt ?? 0, now + walkHomeMs(p, c!, now)),
     heroReturnFrom: walkPoint(p, c!, now),
   };
 }

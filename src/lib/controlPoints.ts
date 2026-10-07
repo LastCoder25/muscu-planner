@@ -1625,16 +1625,35 @@ export function sortieHomeLabel(n: number): string {
     : ' 🏠 1 champion en sortie rentre à la base.';
 }
 
-/** 🧭 Où en est le héros sur la ligne base → lieu, à l'instant `t` de sa marche vers un poste. */
+/** 🧭 Où en est le héros sur la ligne départ → lieu (la base, ou le lieu qu'il a quitté,
+ *  `origin`), à l'instant `t` de sa marche vers un poste. */
 export function walkPoint(
   p: Pick<Poi, 'x' | 'y'>,
-  c: { from: number; at: number },
+  c: { from: number; at: number; origin?: { x: number; y: number } },
   t: number,
 ): { x: number; y: number; at: number } {
   const span = c.at - c.from;
   const f = span > 0 ? Math.min(1, Math.max(0, (t - c.from) / span)) : 1;
-  const town = EXPE.town;
-  return { x: town.x + (p.x - town.x) * f, y: town.y + (p.y - town.y) * f, at: t };
+  const o = c.origin ?? EXPE.town;
+  return { x: o.x + (p.x - o.x) * f, y: o.y + (p.y - o.y) * f, at: t };
+}
+
+/** 🔙 Le héros en route vers un poste fait demi-tour à `t` : combien de temps (ms) pour
+ *  rentrer à la BASE, à son pas de l'aller. Parti de la base, autant qu'il a déjà marché ;
+ *  parti d'un autre lieu (`origin`), la distance qui le sépare de la base à ce pas — et non
+ *  le chemin déjà fait, qui ne mène pas à la base. */
+export function walkHomeMs(
+  p: Pick<Poi, 'x' | 'y'>,
+  c: { from: number; at: number; origin?: { x: number; y: number } },
+  t: number,
+): number {
+  const walked = Math.max(0, t - c.from);
+  if (!c.origin) return walked;
+  const span = Math.max(0, c.at - c.from);
+  const length = Math.hypot(p.x - c.origin.x, p.y - c.origin.y);
+  if (!span || !length) return walked;
+  const at = walkPoint(p, c, t);
+  return Math.round((span / length) * Math.hypot(at.x - EXPE.town.x, at.y - EXPE.town.y));
 }
 
 /** 🏰 Perdu (reprise ennemie ou abandon) : le lieu redevient ennemi, troupe re-tirée. Repris
@@ -1648,14 +1667,14 @@ export function loseControl(
   at: number,
   won?: { level: number; faction: ControlState['faction'] },
 ): ExpeditionMap {
-  // 🧝 Le héros encore EN ROUTE vers ce point fait demi-tour : il rentre à la base en autant
-  // de temps qu'il a déjà marché (le héros posté, lui, est rappelé par le store).
+  // 🧝 Le héros encore EN ROUTE vers ce point fait demi-tour : il rentre à la base depuis là
+  // où il est (`walkHomeMs`) (le héros posté, lui, est rappelé par le store).
   const lostPoi = map.pois.find((p) => p.id === id);
   const coming = lostPoi?.control?.heroComing;
   const back =
     lostPoi && coming && coming.at > at
       ? {
-          heroReturnAt: Math.max(map.heroReturnAt ?? 0, at + Math.max(0, at - coming.from)),
+          heroReturnAt: Math.max(map.heroReturnAt ?? 0, at + walkHomeMs(lostPoi, coming, at)),
           heroReturnFrom: walkPoint(lostPoi, coming, at),
         }
       : {};
@@ -2779,17 +2798,22 @@ export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlo
   return null;
 }
 /** 🧝 Le héros part rejoindre la garnison d'un point tenu : ses places lui sont réservées
- *  tout de suite, il devient défenseur à `at` (son arrivée). */
+ *  tout de suite, il devient défenseur à `at` (son arrivée). `origin` : il part en ligne
+ *  directe d'un autre lieu (sinon de la base). */
 export function sendHeroToControl(
   map: ExpeditionMap,
   id: string,
   from: number,
   at: number,
   unit: PostedHero,
+  origin?: { x: number; y: number },
 ): ExpeditionMap {
   return withControl(map, id, (p) => ({
     ...p,
-    control: { ...p.control!, heroComing: { at, from, unit } },
+    control: {
+      ...p.control!,
+      heroComing: { at, from, unit, ...(origin ? { origin: { x: origin.x, y: origin.y } } : {}) },
+    },
   }));
 }
 /** 🏰 Les places de CHAMPION occupées d'un point : la garnison, les renforts en route et
