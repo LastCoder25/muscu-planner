@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyMilitiaPlan,
   crossingBlocker,
-  embarkHeroAnywhere,
+  championsTravelling,
   landCrossing,
   leavingMilitiaPoints,
   startCrossing,
@@ -50,36 +50,32 @@ function island1(pois: Poi[] = []): ExpeditionMap {
 const count = (m: ExpeditionMap, id: string) =>
   militiaIn(m.pois.find((p) => p.id === id)!.control!.garrison).length;
 
-describe('⛵ le héros n’a pas besoin d’être à la forteresse', () => {
+describe('⛵ quitter l’île : personne en trajet, mais pas besoin d’être à la forteresse', () => {
   const m = island1();
-  it('en marche, il ne bloque pas une traversée VERS L’AVANT', () => {
-    expect(crossingBlocker(m, 2, { heroBusy: false, heroWalking: true })).toBeNull();
+  const ok = { heroBusy: false, championsAway: 0 };
+  it('héros posté n’importe où, aucun champion en route : on part', () => {
+    expect(crossingBlocker(m, 2, ok)).toBeNull();
   });
-  it('mais il bloque un retour vers une île déjà visitée', () => {
-    const on2 = {
-      ...m,
-      archipel: { ...archipelOn(2) },
-      islands: { '1': m },
-    } as ExpeditionMap;
-    expect(crossingBlocker(on2, 1, { heroBusy: false, heroWalking: true })).toBe('heroBusy');
+  it('un héros en trajet (combat, marche, retour) retient le départ', () => {
+    expect(crossingBlocker(m, 2, { ...ok, heroBusy: true })).toBe('heroBusy');
   });
-  it('un combat en cours le retient, même vers l’avant', () => {
-    expect(crossingBlocker(m, 2, { heroBusy: true, heroWalking: false })).toBe('heroBusy');
+  it('un champion en route retient le départ vers l’avant', () => {
+    expect(crossingBlocker(m, 2, { ...ok, championsAway: 1 })).toBe('troopsAway');
   });
-  it('il embarque d’où il est : poste, marche et retour à la base effacés', () => {
-    const map: ExpeditionMap = {
-      ...island1([
-        point('ctl_a', [], { hero: true }),
-        point('ctl_b', [], { heroComing: { at: T0 + H, from: { x: 1, y: 1, at: T0 } } }),
-      ]),
-      heroReturnAt: T0 + 2 * H,
-      heroReturnFrom: { x: 3, y: 3, at: T0 },
-    };
-    const out = embarkHeroAnywhere(map, T0);
-    expect(out.pois.some((p) => p.control?.hero)).toBe(false);
-    expect(out.pois.some((p) => p.control?.heroComing)).toBe(false);
-    expect(out.heroReturnAt).toBeUndefined();
-    expect(out.heroReturnFrom).toBeUndefined();
+  it('un retour vers une île visitée attend les troupes, il n’est pas refusé', () => {
+    const on2 = { ...m, archipel: { ...archipelOn(2) }, islands: { '1': m } } as ExpeditionMap;
+    expect(crossingBlocker(on2, 1, { ...ok, championsAway: 2 })).toBeNull();
+  });
+  it('en route = busyUntil dans le futur ; posté en garnison ou sur une autre île, non', () => {
+    const a = (id: string, x: Record<string, unknown>) =>
+      ({ id, name: id, seed: 1, path: ['guerrier'], level: 5, xp: 0, ...x }) as never;
+    const advs = [
+      a('route', { busyUntil: T0 + H }),
+      a('poste', { posted: 'ctl_a', busyUntil: 0 }),
+      a('rentre', { busyUntil: T0 - 1 }),
+      a('ailleurs', { elsewhere: 3, busyUntil: T0 + H }),
+    ];
+    expect(championsTravelling(advs, T0)).toBe(1);
   });
 });
 

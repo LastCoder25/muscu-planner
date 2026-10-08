@@ -151,7 +151,7 @@ import {
   boardTravellers,
   CROSSING_BLOCK_LABEL,
   crossingBlocker,
-  embarkHeroAnywhere,
+  championsTravelling,
   type MilitiaPlan,
   crossingDeparture,
   crossingTravellers,
@@ -2638,10 +2638,14 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return 'noArchipel' as const;
     return crossingBlocker(cur.expedition_map, to, {
-      heroBusy: !!cur.expedition || heroInAttack(attackList.value),
-      // 🧭 En marche vers un poste, ou rappelé et pas encore rentré : il ne bloque plus qu'un
-      // RETOUR vers une île visitée ; vers l'avant, il embarque d'où il est.
-      heroWalking: heroComing(cur.expedition_map) || cur.expedition_map.heroReturnAt !== undefined,
+      // 🏰 Posté sur un lieu fixe, il embarque de là ; en marche (vers un poste ou de retour),
+      // il est en trajet.
+      heroBusy:
+        !!cur.expedition ||
+        heroInAttack(attackList.value) ||
+        heroComing(cur.expedition_map) ||
+        cur.expedition_map.heroReturnAt !== undefined,
+      championsAway: championsTravelling(advList.value, Date.now()),
     });
   }
   /** ⛵ Les champions qui PEUVENT embarquer depuis l'île `from` : sur l'île active, les libres
@@ -2682,11 +2686,8 @@ export const useCharacterStore = defineStore('character', () => {
     const ids = pick ? ok.filter((id) => pick.includes(id)) : ok;
     // 🏰 La forteresse est le port : les choisis de sa garnison et le héros embarquent de là.
     const { map: m, advs } = leavePort(cur.expedition_map, ids, true, now);
-    // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste. Vers
-    // l'avant, il embarque même en marche (vers un poste ou vers la base).
-    const here = cur.expedition_map.archipel.island;
-    const freed = to > here ? embarkHeroAnywhere(m, now) : unpostHero(m, now);
-    const map = startCrossing(freed, to, ids, now, troopsBackAt(cur), militiaPlan);
+    // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste.
+    const map = startCrossing(unpostHero(m, now), to, ids, now, troopsBackAt(cur), militiaPlan);
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.crossing!),

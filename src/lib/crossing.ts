@@ -35,7 +35,7 @@ import {
   type ExpeditionMap,
   type ExpeditionMessage,
 } from './expedition';
-import { ENDLESS, FORTRESS_ID, stripChampions, unpostHero, vacateIsland } from './islandConquest';
+import { ENDLESS, FORTRESS_ID, stripChampions, vacateIsland } from './islandConquest';
 import {
   emptyMilitia,
   militiaIn,
@@ -218,7 +218,7 @@ export function openIslands(map: Pick<ExpeditionMap, 'archipel' | 'islands'>): n
   return [...open].sort((a, b) => a - b);
 }
 
-export type CrossingBlock = 'noArchipel' | 'same' | 'locked' | 'atSea' | 'heroBusy';
+export type CrossingBlock = 'noArchipel' | 'same' | 'locked' | 'atSea' | 'heroBusy' | 'troopsAway';
 
 export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
   noArchipel: 'Le mode archipel est désactivé.',
@@ -226,7 +226,15 @@ export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
   locked: 'Abats d’abord la forteresse portuaire de l’île précédente.',
   atSea: 'Une traversée est déjà en cours.',
   heroBusy: 'Ton héros doit être rentré pour embarquer.',
+  troopsAway: 'Des champions sont encore en route : attends leur retour pour quitter l’île.',
 };
+
+/** 🧭 Combien de champions de l'île active sont EN ROUTE (mission, renfort, retour à pied,
+ *  navigation) — `busyUntil` dans le futur, le « en route » de `advUnavailableReason`. Un
+ *  champion en garnison n'en est pas : il y est posé (`busyUntil` remis à 0). */
+export function championsTravelling(advs: readonly Adventurer[], now: number): number {
+  return advs.filter((a) => a.elsewhere === undefined && (a.busyUntil ?? 0) > now).length;
+}
 
 /**
  * Peut-on traverser vers l'île `to` ? ⚠️ SOURCE UNIQUE écran + store.
@@ -240,10 +248,11 @@ export function crossingBlocker(
   map: Pick<ExpeditionMap, 'archipel' | 'islands' | 'crossing'>,
   to: number,
   ctx: {
-    /** Le héros est pris par un combat : expédition en cours, attaque combinée. */
+    /** Le héros est EN TRAJET : expédition, attaque combinée, marche vers un poste ou retour
+     *  à pied. Posté sur un lieu fixe, il ne l'est pas : il embarque de là. */
     heroBusy: boolean;
-    /** Le héros MARCHE sur l'île (vers un poste, ou retour à la base). */
-    heroWalking: boolean;
+    /** Les champions de l'île encore en route (`championsTravelling`). */
+    championsAway: number;
   },
 ): CrossingBlock | null {
   if (!map.archipel) return 'noArchipel';
@@ -252,31 +261,12 @@ export function crossingBlocker(
   if (!openIslands(map).includes(to)) return 'locked';
   if (ctx.heroBusy) return 'heroBusy';
   // ⛵ VERS L'AVANT, TOUT LE MONDE QUITTE L'ÎLE (2026-10-08, décision de l'utilisateur : « pas
-  // besoin que le héros soit à la forteresse ») : le héros embarque d'où il est, en marche
-  // comme en poste (`embarkHeroAnywhere`). Un retour vers une île visitée, lui, l'attend.
-  if (ctx.heroWalking && !isForwardCrossing({ from: map.archipel.island, to })) return 'heroBusy';
+  // besoin que le héros soit à la forteresse », mais « il faut que les champions et le héros
+  // ne soient pas en trajet ») : héros et champions embarquent d'où ils sont posés, jamais
+  // en pleine route. Un retour vers une île visitée attend, lui, le retour des troupes.
+  if (ctx.championsAway > 0 && isForwardCrossing({ from: map.archipel.island, to }))
+    return 'troopsAway';
   return null;
-}
-
-/** ⛵ Le héros EMBARQUE D'OÙ IL EST (traversée vers l'avant) : il quitte son poste, cesse de
- *  marcher vers un poste et ne rentre plus à la base — il est sur le bateau. */
-export function embarkHeroAnywhere(map: ExpeditionMap, at: number): ExpeditionMap {
-  let m = unpostHero(map, at);
-  if (m.pois.some((p) => p.control?.heroComing))
-    m = {
-      ...m,
-      pois: m.pois.map((p) => {
-        if (!p.control?.heroComing) return p;
-        const { heroComing: _c, ...control } = p.control;
-        void _c;
-        return { ...p, control };
-      }),
-    };
-  if (m.heroReturnAt === undefined && m.heroReturnFrom === undefined) return m;
-  const { heroReturnAt: _r, heroReturnFrom: _f, ...rest } = m;
-  void _r;
-  void _f;
-  return rest;
 }
 
 /** ⛵ Le départ d'une traversée du héros : maintenant, ou le retour des troupes encore en

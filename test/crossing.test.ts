@@ -41,7 +41,7 @@ function island1(destroyed: string[] = []): ExpeditionMap {
 }
 const adv = (id: string, extra: Partial<Adventurer> = {}): Adventurer =>
   ({ id, name: id, seed: 1, path: ['guerrier'], level: 5, xp: 0, ...extra }) as Adventurer;
-const free = { heroBusy: false, heroWalking: false };
+const free = { heroBusy: false, championsAway: 0 };
 
 describe('⛵ départ immédiat (plus d’heure pile, v1.46.0)', () => {
   it('le prochain départ est maintenant, quelle que soit l’heure', () => {
