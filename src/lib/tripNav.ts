@@ -1,8 +1,7 @@
 /**
  * 🧭 CE QUE LE FILTRE DES VOYAGES LAISSE VOIR, ET DANS QUEL ORDRE — une seule règle pour la
- * rangée des tuiles (`TripsPanel`) et pour les flèches ‹ › de la fiche d'un voyage (demandé,
- * 2026-10-08 : « les flèches parcourent le filtre actif »). Deux copies de « qui passe le
- * filtre » finiraient par ne plus montrer la même chose.
+ * rangée des tuiles (`TripsPanel`), sous la carte comme par-dessus. Deux copies de « qui passe
+ * le filtre » finiraient par ne plus montrer la même chose.
  */
 import { shownTripCats, type TripCat, type TripSelection } from './tripFilter';
 import {
@@ -80,27 +79,4 @@ export function tripLegOrder<T extends NavTrip>(
       })),
     )
     .sort((x, y) => x.at - y.at);
-}
-
-/** ‹ › Les voyages que le filtre laisse voir, dans l'ordre de la rangée, chacun une fois. */
-export function navTripKeys(
-  trips: readonly NavTrip[],
-  sel: TripSelection,
-  legSel: LegSelection,
-): string[] {
-  const ctx = tripFilterCtx(trips, 0, sel, legSel);
-  const out: string[] = [];
-  for (const x of tripLegOrder(trips))
-    if (legTileShown(x.trip, x.leg.leg, ctx) && !out.includes(x.trip.key)) out.push(x.trip.key);
-  return out;
-}
-
-/** ‹ › Le voisin de `key` dans `keys` (`dir` −1 ou +1), en boucle ; `null` s'il n'y en a pas
- *  d'autre. Un voyage hors du filtre part du premier. */
-export function navStep(keys: readonly string[], key: string, dir: 1 | -1): string | null {
-  if (!keys.length) return null;
-  const i = keys.indexOf(key);
-  if (i < 0) return keys[0]!;
-  if (keys.length < 2) return null;
-  return keys[(i + dir + keys.length) % keys.length]!;
 }

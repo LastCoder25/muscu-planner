@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navStep, navTripKeys, tripCatOf, type NavTrip } from '@/lib/tripNav';
+import { legTileShown, tripCatOf, tripFilterCtx, tripLegOrder, type NavTrip } from '@/lib/tripNav';
 import { ALL_TRIPS, type TripSelection } from '@/lib/tripFilter';
 import { ALL_LEGS } from '@/lib/tripLegTiles';
 
@@ -17,30 +17,36 @@ const TRIPS: NavTrip[] = [
   trip('p', 50, { pending: true, cat: 'reinf' }),
   trip('b', 200, { cat: 'raids' }),
 ];
+/** Les voyages que la rangée montre, dans son ordre, chacun une fois. */
+const shown = (trips: NavTrip[], sel: TripSelection, legs = ALL_LEGS) => {
+  const ctx = tripFilterCtx(trips, 0, sel, legs);
+  const out: string[] = [];
+  for (const x of tripLegOrder(trips))
+    if (legTileShown(x.trip, x.leg.leg, ctx) && !out.includes(x.trip.key)) out.push(x.trip.key);
+  return out;
+};
 
-describe('‹ › navTripKeys : les voyages du filtre actif, dans l’ordre de la rangée', () => {
+describe('🧭 tripNav : la rangée des voyages, sa règle de filtre et son ordre', () => {
   it('sans filtre : tous, rangés à l’heure de leur étape', () => {
-    expect(navTripKeys(TRIPS, ALL_TRIPS, ALL_LEGS)).toEqual(['p', 'a', 'b', 'c']);
+    expect(shown(TRIPS, ALL_TRIPS)).toEqual(['p', 'a', 'b', 'c']);
   });
   it('avec un filtre : seulement ce qu’il laisse voir', () => {
-    const only: TripSelection = { mode: 'only', cats: ['reinf'] };
-    expect(navTripKeys(TRIPS, only, ALL_LEGS)).toEqual(['c']);
+    expect(shown(TRIPS, { mode: 'only', cats: ['reinf'] })).toEqual(['c']);
   });
   it('un voyage programmé ne compte que dans « Programmés »', () => {
     expect(tripCatOf(TRIPS[2]!)).toBe('planned');
-    const noPlanned: TripSelection = { mode: 'except', cats: ['planned'] };
-    expect(navTripKeys(TRIPS, noPlanned, ALL_LEGS)).toEqual(['a', 'b', 'c']);
+    expect(shown(TRIPS, { mode: 'except', cats: ['planned'] })).toEqual(['a', 'b', 'c']);
   });
-  it('un voyage à deux étapes n’apparaît qu’une fois', () => {
+  it('la tuile « ↩ Retour » encore à venir se range à l’heure du retour en ville', () => {
     const two = trip('x', 10, {
       cat: 'trips',
       homeAt: 500,
       legs: { go: '→', back: '↩', detail: '' },
     });
-    expect(navTripKeys([two, trip('y', 20, { cat: 'trips' })], ALL_TRIPS, ALL_LEGS)).toEqual([
-      'x',
-      'y',
-    ]);
+    const order = tripLegOrder([two, trip('y', 20, { cat: 'trips' })]).map(
+      (t) => `${t.trip.key}:${t.leg.leg}`,
+    );
+    expect(order).toEqual(['x:go', 'y:go', 'x:back']);
   });
   it('le filtre d’étape s’applique : « Retour » seul garde ceux dont le retour est à venir', () => {
     const two = trip('x', 10, {
@@ -48,20 +54,8 @@ describe('‹ › navTripKeys : les voyages du filtre actif, dans l’ordre de l
       homeAt: 500,
       legs: { go: '→', back: '↩', detail: '' },
     });
-    const goOnly = trip('y', 20, { cat: 'trips' });
-    expect(navTripKeys([two, goOnly], ALL_TRIPS, new Set(['back']))).toEqual(['x']);
-  });
-});
-
-describe('‹ › navStep', () => {
-  it('avance et recule en boucle', () => {
-    expect(navStep(['a', 'b', 'c'], 'a', 1)).toBe('b');
-    expect(navStep(['a', 'b', 'c'], 'c', 1)).toBe('a');
-    expect(navStep(['a', 'b', 'c'], 'a', -1)).toBe('c');
-  });
-  it('rien à parcourir avec un seul voyage, le premier si on est hors du filtre', () => {
-    expect(navStep(['a'], 'a', 1)).toBeNull();
-    expect(navStep(['a', 'b'], 'z', 1)).toBe('a');
-    expect(navStep([], 'a', 1)).toBeNull();
+    expect(shown([two, trip('y', 20, { cat: 'trips' })], ALL_TRIPS, new Set(['back']))).toEqual([
+      'x',
+    ]);
   });
 });
