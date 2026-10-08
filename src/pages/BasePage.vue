@@ -391,6 +391,18 @@
             rx="7"
             class="yard-ring todo"
           />
+          <g v-if="y.pantheon && y.built" class="pan-dots">
+            <circle
+              v-for="d in pantheonDots(y)"
+              :key="d.id"
+              :cx="d.cx"
+              :cy="d.cy"
+              r="1.9"
+              class="pan-dot"
+              :class="{ on: d.on }"
+              :style="{ '--dot': d.color }"
+            />
+          </g>
         </g>
       </svg>
 
@@ -1065,7 +1077,9 @@ import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
-import { emptySeals, readyAscensions } from '@/lib/ascension';
+import { emptySeals } from '@/lib/ascension';
+import { pantheonLights } from '@/lib/pantheonLights';
+import { normalizeRuneBank } from '@/lib/runeBank';
 
 const props = defineProps<{
   embedded?: boolean;
@@ -1377,6 +1391,8 @@ interface YardCell {
   timer?: string;
   /** Quelque chose est À FAIRE ici (des corps à fouiller, des fossoyeurs rentrés). */
   todo?: boolean;
+  /** 🛕 La tuile du Panthéon : elle porte les 4 voyants à sa gauche. */
+  pantheon?: boolean;
   /** Demi-côté DESSINÉ. ⚠️ Porté par la cellule et non global : le Panthéon trône au
    *  centre et doit se voir comme tel — tout le reste de la cour garde `YARD_HALF`. */
   half: number;
@@ -1475,10 +1491,9 @@ const yard = computed<YardCell[]>(() => {
       level: b?.level ?? 0,
       ready: b ? buildingAccrued(b, now.value) > 0 : false,
       damaged: false,
-      // ⬆️ Le Panthéon s'allume quand une ascension est PAYABLE (champion ou pièce) : sans ce
-      // signal, un champion bloqué au ★5 — dont les convois s'effondrent (v0.1017) — ne se
-      // verrait qu'en ouvrant sa fiche.
-      todo: b?.typeId === 'pantheon' && ascensionsReady.value > 0,
+      // 🛕 Le Panthéon n'a plus d'anneau : ses 4 voyants (`pantheonDots`) disent QUOI est
+      // disponible (ascension champion / objet, 10 runes, invocation ×10).
+      pantheon: b?.typeId === 'pantheon',
       half: i === pantheonSlot ? PANTHEON_HALF : YARD_HALF,
       ...(b?.typeId === 'barracks' ? { timer: militiaTimer(b.level) } : {}),
       onClick: () => (plotSlot.value = i),
@@ -1885,13 +1900,29 @@ const patients = computed(() =>
 );
 const patientsCost = computed(() => patients.value.reduce((s, p) => s + p.cost, 0));
 const patientCount = computed(() => patients.value.length + (wounded.value ? 1 : 0));
-const ascensionsReady = computed(() =>
-  readyAscensions(char.advList, char.advGearStock, {
+/** 🛕 Les 4 voyants du Panthéon (ascension champion · ascension d'objet · 10 runes ·
+ *  invocation ×10) — chacun lit la règle de son bouton (`pantheonLights`). */
+const pantheonLit = computed(() =>
+  pantheonLights({
+    advs: char.advList,
+    stock: char.advGearStock,
     pantheonLevel: char.pantheonLevel,
     seals: char.row?.seals ?? emptySeals(),
     gold: char.row?.gold ?? 0,
+    runes: char.row?.runes ?? normalizeRuneBank(null),
+    tickets: char.row?.gacha_tickets ?? 0,
+    mana: char.row?.mana ?? 0,
   }),
 );
+/** Quatre boules empilées à gauche de la tuile, réparties sur sa hauteur. */
+function pantheonDots(y: YardCell) {
+  const gap = (y.half * 2) / 4;
+  return pantheonLit.value.map((l, i) => ({
+    ...l,
+    cx: y.x - y.half - 3,
+    cy: y.y - y.half + gap * (i + 0.5),
+  }));
+}
 /** 🦴 Ce que le dernier assaut a rapporté — posé à la résolution, jamais recalculé
  *  ici, et mis en forme par la LIB : l'écran de fin du rejeu affiche exactement les
  *  mêmes puces, et deux copies divergeraient au premier ajout de devise. */
@@ -2690,6 +2721,34 @@ function doHarvest() {
    et deux signaux de même couleur se lisent comme un seul — on confondait la fosse à
    fouiller avec une mine à récolter. Vert « gain » (d1), trait plus épais, ET pointillé :
    deux différences en plus de la couleur, pour que ça tienne sans elle. */
+/* 🛕 Les 4 voyants du Panthéon : éteints = creux discret, allumés = leur couleur + halo. */
+.pan-dot {
+  fill: rgba(0, 0, 0, 0.35);
+  stroke: color-mix(in srgb, var(--dot) 45%, #3a332a);
+  stroke-width: 0.6;
+  pointer-events: none;
+}
+.pan-dot.on {
+  fill: var(--dot);
+  stroke: #fff;
+  stroke-width: 0.4;
+  filter: drop-shadow(0 0 1.6px var(--dot));
+  animation: pan-dot 2.2s ease-in-out infinite;
+}
+@keyframes pan-dot {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pan-dot.on {
+    animation: none;
+  }
+}
 .yard-ring.todo {
   stroke: #7bc86c;
   stroke-width: 1.8;
