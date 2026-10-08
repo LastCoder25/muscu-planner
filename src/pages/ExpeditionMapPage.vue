@@ -833,6 +833,21 @@
                 <span class="slot-plus">＋</span>
                 <span class="slot-name">{{ slot.label }}</span>
               </button>
+              <!-- 🏰 PLEIN DE MILICIENS, MAIS UN CHAMPION PEUT VENIR (2026-10-08, signalé : « je ne
+                 peux pas faire venir des champions d'un autre lieu fixe quand il y a déjà une
+                 garnison de miliciens ») : un champion (de la base ou d'un autre lieu) déloge
+                 un milicien à son arrivée (v1.90.0). Sans cette case, seule « Miliciens à
+                 l'avance » ouvrait le renfort, et rien ne disait qu'un champion y avait droit. -->
+              <button
+                v-if="champOverMilitia > 0"
+                type="button"
+                class="slot-tile"
+                aria-label="Faire venir un champion : un milicien lui cède sa place"
+                @click="openQuick"
+              >
+                <span class="slot-plus">＋</span>
+                <span class="slot-name">Champion · un milicien lui cède sa place</span>
+              </button>
               <!-- 🛡️ PLEIN, MAIS ON PRÉVOIT (demandé : « envoyer les miliciens avant que les
                  champions ne partent ») : des miliciens partent quand même ; à l'arrivée, ils
                  s'installent si une place s'est libérée, sinon ils font demi-tour. -->
@@ -2998,6 +3013,13 @@ const garrisonSlots = computed(() =>
         }),
       ),
 );
+/** 🏰 Les places de champion que tiennent aujourd'hui des miliciens : un champion peut encore
+ *  venir (`controlFreeSeats` ne compte pas les miliciens), mais aucune case vide ne le dit. */
+const champOverMilitia = computed(() => {
+  if (unlimitedGarrison.value) return 0;
+  const emptyChamp = garrisonSlots.value.filter((s) => s.label === 'Place libre').length;
+  return Math.max(0, controlFree.value - emptyChamp);
+});
 /** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
  *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
  *  ou un lieu sans 2 places). */
