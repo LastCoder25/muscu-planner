@@ -151,6 +151,8 @@ import {
   boardTravellers,
   CROSSING_BLOCK_LABEL,
   crossingBlocker,
+  embarkHeroAnywhere,
+  type MilitiaPlan,
   crossingDeparture,
   crossingTravellers,
   fortressReward,
@@ -2636,13 +2638,10 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return 'noArchipel' as const;
     return crossingBlocker(cur.expedition_map, to, {
-      // 🏰 Posté à la forteresse, il embarque de là ; rappelé, il marche encore.
-      heroBusy:
-        !!cur.expedition ||
-        heroInAttack(attackList.value) ||
-        // 🧭 En marche vers un poste : il le rejoindrait après avoir réservé la traversée.
-        heroComing(cur.expedition_map) ||
-        cur.expedition_map.heroReturnAt !== undefined,
+      heroBusy: !!cur.expedition || heroInAttack(attackList.value),
+      // 🧭 En marche vers un poste, ou rappelé et pas encore rentré : il ne bloque plus qu'un
+      // RETOUR vers une île visitée ; vers l'avant, il embarque d'où il est.
+      heroWalking: heroComing(cur.expedition_map) || cur.expedition_map.heroReturnAt !== undefined,
     });
   }
   /** ⛵ Les champions qui PEUVENT embarquer depuis l'île `from` : sur l'île active, les libres
@@ -2666,7 +2665,14 @@ export const useCharacterStore = defineStore('character', () => {
   /** ⛵ RÉSERVE LA TRAVERSÉE du héros vers l'île `to` : départ tout de suite (ou au retour des troupes), arrivée
    *  2 h après. `pick` = les champions qui l'accompagnent (option A, 2026-10-03) ; absent =
    *  tous ceux qui peuvent embarquer. */
-  async function crossIsland(userId: string, to: number, now: number, pick?: readonly string[]) {
+  async function crossIsland(
+    userId: string,
+    to: number,
+    now: number,
+    pick?: readonly string[],
+    /** 🛡️ Vers l'avant : où laisser la milice sur l'île quittée (`leavingMilitiaPoints`). */
+    militiaPlan?: MilitiaPlan,
+  ) {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map?.archipel) return;
@@ -2676,8 +2682,11 @@ export const useCharacterStore = defineStore('character', () => {
     const ids = pick ? ok.filter((id) => pick.includes(id)) : ok;
     // 🏰 La forteresse est le port : les choisis de sa garnison et le héros embarquent de là.
     const { map: m, advs } = leavePort(cur.expedition_map, ids, true, now);
-    // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste.
-    const map = startCrossing(unpostHero(m, now), to, ids, now, troopsBackAt(cur));
+    // 🧝 Posté sur un AUTRE lieu tenu, le héros embarque aussi : il quitte son poste. Vers
+    // l'avant, il embarque même en marche (vers un poste ou vers la base).
+    const here = cur.expedition_map.archipel.island;
+    const freed = to > here ? embarkHeroAnywhere(m, now) : unpostHero(m, now);
+    const map = startCrossing(freed, to, ids, now, troopsBackAt(cur), militiaPlan);
     await persist(userId, {
       expedition_map: map,
       adventurers: boardTravellers(advs, map.crossing!),

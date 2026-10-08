@@ -30,6 +30,8 @@
       :hero-mode="crossHeroMode"
       :hero-block="crossAsk ? (crossInfo.blocks[crossAsk.to] ?? null) : null"
       :candidates="crossCandidates"
+      :militia-points="crossMilitia.points"
+      :militia-total="crossMilitia.total"
       :depart-at="nextCrossingDeparture(now)"
       :hero-depart-at="char.crossingDepartAt(now)"
       :busy="archBusy"
@@ -1827,10 +1829,18 @@ import { townDots } from '@/lib/townDots';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
-import { activeIsland, islandPacified, ISLANDS, mapOutpostLevel } from '@/lib/archipelago';
+import {
+  activeIsland,
+  islandPacified,
+  ISLANDS,
+  mapOutpostLevel,
+  mapPlayerLevel,
+} from '@/lib/archipelago';
 import {
   CROSSING_BLOCK_LABEL,
   islandChampions,
+  leavingMilitiaPoints,
+  type MilitiaPlan,
   nextCrossingDeparture,
   openIslands,
   remotePoints,
@@ -2206,14 +2216,24 @@ const crossCandidates = computed(() => {
   const ok = new Set(char.boardableIds(a.from, now.value));
   return char.advList.filter((x) => ok.has(x.id));
 });
-async function confirmCross(pick: { hero: boolean; ids: string[] }) {
+/** 🛡️ Vers l'avant : les lieux fixes de l'île quittée qui garderont la milice, et toute la
+ *  milice de l'île (réserve + postée) à répartir. */
+const crossMilitia = computed(() => {
+  const a = crossAsk.value;
+  const map = char.row?.expedition_map;
+  if (!a || !map || a.from !== island.value?.id || a.to <= a.from) return { points: [], total: 0 };
+  const points = leavingMilitiaPoints(map, now.value, mapPlayerLevel(map, heroLevel.value));
+  const posted = points.reduce((s, p) => s + p.militia, 0);
+  return { points, total: posted + (char.row?.base?.militia?.home ?? 0) };
+});
+async function confirmCross(pick: { hero: boolean; ids: string[]; militiaPlan?: MilitiaPlan }) {
   const uid = auth.user?.id;
   const a = crossAsk.value;
   if (!uid || !a || archBusy.value) return;
   archBusy.value = true;
   try {
     if (pick.hero) {
-      await char.crossIsland(uid, a.to, Date.now(), pick.ids);
+      await char.crossIsland(uid, a.to, Date.now(), pick.ids, pick.militiaPlan);
       $q.notify({ type: 'positive', message: `⛵ Traversée réservée vers l'île ${a.to}` });
     } else {
       await char.sailChampions(uid, a.from, a.to, pick.ids, Date.now());

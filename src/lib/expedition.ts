@@ -943,6 +943,9 @@ export interface Crossing {
   arriveAt: number;
   /** Les champions embarqués (avec le héros pour `crossing`, seuls pour `sailings`). */
   ids: string[];
+  /** 🛡️ Vers l'avant : combien de miliciens laisser sur chaque lieu fixe de l'île quittée
+   *  (id du lieu → nombre), appliqué au débarquement (`applyMilitiaPlan`). */
+  militiaPlan?: Record<string, number>;
 }
 
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de

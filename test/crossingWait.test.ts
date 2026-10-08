@@ -27,7 +27,7 @@ const island1 = (): ExpeditionMap => {
 
 describe('⏳ la traversée attend le retour des troupes, sinon part tout de suite', () => {
   it('le héros libre peut réserver, même avec des troupes en route', () => {
-    expect(crossingBlocker(island1(), 2, { heroBusy: false })).toBeNull();
+    expect(crossingBlocker(island1(), 2, { heroBusy: false, heroWalking: false })).toBeNull();
   });
   it('sans troupes dehors : départ immédiat, pas à l’heure pile', () => {
     expect(crossingDeparture(T0, 0)).toBe(T0);

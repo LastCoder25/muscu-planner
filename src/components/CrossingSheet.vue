@@ -85,6 +85,43 @@
         </p>
       </template>
 
+      <!-- 🛡️ La milice reste sur l'île quittée (2026-10-08, demandé) : on choisit où. Posée au
+           débarquement, tant que les places et la réserve le permettent. -->
+      <div v-if="forward && militiaPoints.length && militiaTotal > 0" class="cs-mil">
+        <div class="cs-mil-head">
+          <b>🛡️ Où reste ta milice ?</b>
+          <span class="cs-mil-left" :class="{ zero: militiaLeft === 0 }"
+            >{{ militiaLeft }} en réserve</span
+          >
+        </div>
+        <div v-for="p in militiaPoints" :key="p.id" class="cs-mil-row">
+          <span class="cs-mil-emo" aria-hidden="true">{{ p.emoji }}</span>
+          <span class="cs-mil-lab">{{ p.label }}</span>
+          <button
+            type="button"
+            class="cs-mil-btn"
+            :aria-label="`Un milicien de moins sur ${p.label}`"
+            :disabled="(plan[p.id] ?? 0) < 1"
+            @click="bump(p.id, -1)"
+          >
+            −
+          </button>
+          <span class="cs-mil-n">{{ plan[p.id] ?? 0 }}/{{ p.max }}</span>
+          <button
+            type="button"
+            class="cs-mil-btn"
+            :aria-label="`Un milicien de plus sur ${p.label}`"
+            :disabled="militiaLeft < 1 || (plan[p.id] ?? 0) >= p.max"
+            @click="bump(p.id, 1)"
+          >
+            +
+          </button>
+        </div>
+        <button type="button" class="cs-all cs-mil-spread" @click="spread">
+          ⚖️ Répartir au mieux
+        </button>
+      </div>
+
       <div class="cs-actions">
         <q-btn flat no-caps label="Annuler" @click="emit('update:modelValue', false)" />
         <q-btn
@@ -95,7 +132,13 @@
           class="cs-go"
           :disable="!canGo || busy"
           :label="goLabel"
-          @click="emit('confirm', { hero, ids: [...picked] })"
+          @click="
+            emit('confirm', {
+              hero,
+              ids: [...picked],
+              militiaPlan: forward ? { ...plan } : undefined,
+            })
+          "
         />
       </div>
     </div>
@@ -106,7 +149,7 @@
 import { computed, ref, watch } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import type { Adventurer } from '@/lib/adventurers';
-import { CROSSING } from '@/lib/crossing';
+import { CROSSING, type LeavingPoint, type MilitiaPlan } from '@/lib/crossing';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -122,16 +165,25 @@ const props = defineProps<{
   departAt: number;
   /** Le départ avec le héros : après le retour des troupes encore en marche. */
   heroDepartAt: number;
+  /** 🛡️ Les lieux fixes de l'île quittée qui peuvent garder des miliciens (vers l'avant). */
+  militiaPoints?: LeavingPoint[];
+  /** 🛡️ Tous les miliciens de l'île : réserve + ceux déjà postés. */
+  militiaTotal?: number;
   busy?: boolean;
 }>();
 const emit = defineEmits<{
   'update:modelValue': [boolean];
-  confirm: [{ hero: boolean; ids: string[] }];
+  confirm: [{ hero: boolean; ids: string[]; militiaPlan?: MilitiaPlan | undefined }];
 }>();
 
 const travelMs = CROSSING.travelMs;
 const leaveAt = computed(() => (hero.value ? props.heroDepartAt : props.departAt));
 const hero = ref(true);
+/** 🛡️ La répartition choisie : au départ, la milice là où elle est déjà. */
+const plan = ref<MilitiaPlan>({});
+const militiaPoints = computed(() => props.militiaPoints ?? []);
+const militiaTotal = computed(() => props.militiaTotal ?? 0);
+
 const picked = ref<string[]>([]);
 // À chaque ouverture : héros embarqué s'il le peut, tous les champions cochés.
 watch(
@@ -142,9 +194,32 @@ watch(
     // sur un bouton grisé — sauf vers une île neuve, où il est obligatoire.
     hero.value = props.heroMode === 'forced' || (props.heroMode === 'optional' && !props.heroBlock);
     picked.value = props.candidates.map((a) => a.id);
+    plan.value = Object.fromEntries(militiaPoints.value.map((p) => [p.id, p.militia]));
   },
   { immediate: true },
 );
+const militiaLeft = computed(() =>
+  Math.max(0, militiaTotal.value - Object.values(plan.value).reduce((s, n) => s + n, 0)),
+);
+function bump(id: string, d: number) {
+  const max = militiaPoints.value.find((p) => p.id === id)?.max ?? 0;
+  const n = (plan.value[id] ?? 0) + d;
+  if (n < 0 || n > max || (d > 0 && militiaLeft.value < 1)) return;
+  plan.value = { ...plan.value, [id]: n };
+}
+/** ⚖️ Répartit TOUTE la milice à tour de rôle, le lieu le moins garni d'abord. */
+function spread() {
+  const next: MilitiaPlan = Object.fromEntries(militiaPoints.value.map((p) => [p.id, 0]));
+  let left = militiaTotal.value;
+  while (left > 0) {
+    const room = militiaPoints.value.filter((p) => next[p.id]! < p.max);
+    if (!room.length) break;
+    const p = room.reduce((a, b) => (next[b.id]! < next[a.id]! ? b : a));
+    next[p.id] = next[p.id]! + 1;
+    left--;
+  }
+  plan.value = next;
+}
 const toggle = (id: string) => {
   picked.value = picked.value.includes(id)
     ? picked.value.filter((x) => x !== id)
@@ -264,6 +339,68 @@ const clock = (t: number) =>
   p {
     margin: 0;
   }
+}
+.cs-mil {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 13px;
+}
+.cs-mil-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cs-mil-left {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.cs-mil-left.zero {
+  color: var(--dim);
+}
+.cs-mil-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cs-mil-emo {
+  font-size: 18px;
+}
+.cs-mil-lab {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cs-mil-n {
+  min-width: 36px;
+  text-align: center;
+  font-family: Oswald, sans-serif;
+  font-weight: 600;
+}
+.cs-mil-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+}
+.cs-mil-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.cs-mil-spread {
+  align-self: flex-start;
 }
 .cs-bar {
   display: flex;

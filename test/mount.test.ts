@@ -429,7 +429,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     let forced = '';
     await mountIt(
       CrossingSheet,
-      { ...base, heroMode: 'forced' },
+      {
+        ...base,
+        heroMode: 'forced',
+        militiaPoints: [{ id: 'ctl_mine', label: 'Mine', emoji: '⛏️', militia: 1, max: 5 }],
+        militiaTotal: 3,
+      },
       undefined,
       undefined,
       '/',
@@ -441,6 +446,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(forced).toContain('île 1 est pacifiée');
     expect(forced).not.toMatch(/2\/2\s+champions/);
     expect(forced).toContain('Le départ attend le retour de tes troupes');
+    // 🛡️ Vers l'avant, on choisit où reste la milice (2026-10-08).
+    expect(forced).toContain('Où reste ta milice');
+    expect(forced).toContain('2 en réserve');
     let back = '';
     await mountIt(
       CrossingSheet,

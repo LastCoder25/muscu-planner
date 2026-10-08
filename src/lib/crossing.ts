@@ -35,7 +35,7 @@ import {
   type ExpeditionMap,
   type ExpeditionMessage,
 } from './expedition';
-import { ENDLESS, FORTRESS_ID, stripChampions, vacateIsland } from './islandConquest';
+import { ENDLESS, FORTRESS_ID, stripChampions, unpostHero, vacateIsland } from './islandConquest';
 import {
   emptyMilitia,
   militiaIn,
@@ -239,14 +239,44 @@ export const CROSSING_BLOCK_LABEL: Record<CrossingBlock, string> = {
 export function crossingBlocker(
   map: Pick<ExpeditionMap, 'archipel' | 'islands' | 'crossing'>,
   to: number,
-  ctx: { heroBusy: boolean },
+  ctx: {
+    /** Le héros est pris par un combat : expédition en cours, attaque combinée. */
+    heroBusy: boolean;
+    /** Le héros MARCHE sur l'île (vers un poste, ou retour à la base). */
+    heroWalking: boolean;
+  },
 ): CrossingBlock | null {
   if (!map.archipel) return 'noArchipel';
   if (map.crossing) return 'atSea';
   if (map.archipel.island === to) return 'same';
   if (!openIslands(map).includes(to)) return 'locked';
   if (ctx.heroBusy) return 'heroBusy';
+  // ⛵ VERS L'AVANT, TOUT LE MONDE QUITTE L'ÎLE (2026-10-08, décision de l'utilisateur : « pas
+  // besoin que le héros soit à la forteresse ») : le héros embarque d'où il est, en marche
+  // comme en poste (`embarkHeroAnywhere`). Un retour vers une île visitée, lui, l'attend.
+  if (ctx.heroWalking && !isForwardCrossing({ from: map.archipel.island, to })) return 'heroBusy';
   return null;
+}
+
+/** ⛵ Le héros EMBARQUE D'OÙ IL EST (traversée vers l'avant) : il quitte son poste, cesse de
+ *  marcher vers un poste et ne rentre plus à la base — il est sur le bateau. */
+export function embarkHeroAnywhere(map: ExpeditionMap, at: number): ExpeditionMap {
+  let m = unpostHero(map, at);
+  if (m.pois.some((p) => p.control?.heroComing))
+    m = {
+      ...m,
+      pois: m.pois.map((p) => {
+        if (!p.control?.heroComing) return p;
+        const { heroComing: _c, ...control } = p.control;
+        void _c;
+        return { ...p, control };
+      }),
+    };
+  if (m.heroReturnAt === undefined && m.heroReturnFrom === undefined) return m;
+  const { heroReturnAt: _r, heroReturnFrom: _f, ...rest } = m;
+  void _r;
+  void _f;
+  return rest;
 }
 
 /** ⛵ Le départ d'une traversée du héros : maintenant, ou le retour des troupes encore en
@@ -299,9 +329,12 @@ export function startCrossing(
   ids: readonly string[],
   now: number,
   troopsBackAt = 0,
+  /** 🛡️ La répartition de la milice sur l'île quittée (traversée vers l'avant seulement). */
+  militiaPlan?: MilitiaPlan,
 ): ExpeditionMap {
   if (!map.archipel) return map;
   const departAt = crossingDeparture(now, troopsBackAt);
+  const forward = to > map.archipel.island;
   const crossing: Crossing = {
     from: map.archipel.island,
     to,
@@ -309,6 +342,7 @@ export function startCrossing(
     departAt,
     arriveAt: departAt + CROSSING.travelMs,
     ids: [...ids],
+    ...(forward && militiaPlan && Object.keys(militiaPlan).length ? { militiaPlan } : {}),
   };
   return { ...map, crossing };
 }
@@ -475,7 +509,12 @@ export function landCrossing(
     stash[k] = forward ? stripChampions(im, c.arriveAt, lvl(im)) : im;
   const found = stash[String(c.to)];
   delete stash[String(c.to)];
-  stash[String(c.from)] = militia ? { ...left, militia } : left;
+  const leftWithMilitia = militia ? { ...left, militia } : left;
+  // 🛡️ La milice de l'île quittée se range comme le joueur l'a choisi en partant.
+  stash[String(c.from)] =
+    forward && c.militiaPlan
+      ? applyMilitiaPlan(leftWithMilitia, c.militiaPlan, c.arriveAt, lvl(left))
+      : leftWithMilitia;
   // La réserve de l'île d'arrivée quitte sa carte : elle revient dans `base.militia`.
   let saved: ExpeditionMap | undefined;
   let arrival: MilitiaState | undefined;
@@ -597,6 +636,80 @@ export function moveRemoteMilitia(
     militia,
     pois: im.pois.map((x) => (x.id === pointId ? { ...x, control: { ...banked, garrison } } : x)),
   };
+}
+
+/** 🛡️ Combien de miliciens sur chaque lieu fixe de l'île quittée (id du lieu → nombre). */
+export type MilitiaPlan = Record<string, number>;
+
+/** 🛡️ Un lieu fixe de l'île qu'on quitte, vu APRÈS le départ des champions : ses miliciens et
+ *  le plus qu'il pourra en tenir (`max`, les places des champions partis comprises). */
+export interface LeavingPoint {
+  id: string;
+  label: string;
+  emoji: string;
+  militia: number;
+  max: number;
+}
+
+/**
+ * 🛡️ QUITTER L'ÎLE, C'EST CHOISIR OÙ RESTE LA MILICE (2026-10-08, demandé par l'utilisateur :
+ * « quand on quitte l'île, on demande au joueur comment il veut répartir ses miliciens dans les
+ * lieux fixes »). Les lieux sont lus tels qu'ils seront une fois les champions partis
+ * (`stripChampions`, la règle du débarquement) : leurs places libérées comptent.
+ */
+export function leavingMilitiaPoints(
+  map: ExpeditionMap,
+  at: number,
+  playerLevel: number,
+): LeavingPoint[] {
+  return remotePoints(stripChampions(map, at, playerLevel))
+    .map((p) => ({
+      id: p.id,
+      label: p.label,
+      emoji: p.emoji,
+      militia: p.militia,
+      max: p.militia + p.room,
+    }))
+    .filter((p) => p.max > 0);
+}
+
+/**
+ * 🛡️ Applique une répartition à une île RANGÉE : on retire d'abord (vers la réserve), puis on
+ * pose — une réserve vide se remplit avant de servir. Chaque pas passe par
+ * `moveRemoteMilitia` (places, réserve, production mise de côté) ; ce qui ne tient plus (lieu
+ * perdu, réserve plus maigre qu'au départ) est posé au mieux. Rend la MÊME carte si rien ne
+ * bouge.
+ */
+export function applyMilitiaPlan(
+  im: ExpeditionMap,
+  plan: MilitiaPlan,
+  at: number,
+  playerLevel: number,
+): ExpeditionMap {
+  const count = (m: ExpeditionMap, id: string) => {
+    const c = m.pois.find((p) => p.id === id)?.control;
+    return c && c.owner === 'player' ? militiaIn(c.garrison).length : null;
+  };
+  let m = im;
+  const step = (id: string, delta: number) => {
+    for (let n = Math.abs(delta); n > 0; n--) {
+      const next = moveRemoteMilitia(m, id, Math.sign(delta) * n, at, playerLevel);
+      if (next) {
+        m = next;
+        return;
+      }
+    }
+  };
+  const want = (v: number) => Math.max(0, Math.trunc(v));
+  for (const [id, v] of Object.entries(plan)) {
+    const have = count(m, id);
+    if (have !== null && have > want(v)) step(id, want(v) - have);
+  }
+  for (const [id, v] of Object.entries(plan)) {
+    const have = count(m, id);
+    if (have !== null && have < want(v)) step(id, want(v) - have);
+  }
+  return m;
 }
 
 /**
