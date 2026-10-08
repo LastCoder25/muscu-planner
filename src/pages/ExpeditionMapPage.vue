@@ -827,10 +827,11 @@
                 :key="'slot' + slot.i"
                 type="button"
                 class="slot-tile"
+                :class="{ reserved: slot.kind === 'reserved' }"
                 :aria-label="slot.label"
                 @click="openQuick"
               >
-                <span class="slot-plus">＋</span>
+                <span class="slot-plus">{{ slot.kind === 'reserved' ? '⏳' : '＋' }}</span>
                 <span class="slot-name">{{ slot.label }}</span>
               </button>
               <!-- 🏰 PLEIN DE MILICIENS, MAIS UN CHAMPION PEUT VENIR (2026-10-08, signalé : « je ne
@@ -852,7 +853,12 @@
                  champions ne partent ») : des miliciens partent quand même ; à l'arrivée, ils
                  s'installent si une place s'est libérée, sinon ils font demi-tour. -->
               <button
-                v-if="!garrisonSlots.length && !controlInterim && acceptsMilitia(liveControl)"
+                v-if="
+                  !garrisonSlots.length &&
+                  !controlInterim &&
+                  ctlMayFreeUp &&
+                  acceptsMilitia(liveControl)
+                "
                 type="button"
                 class="slot-tile"
                 aria-label="Envoyer des miliciens à l’avance"
@@ -1109,8 +1115,8 @@
               >, 2× moins si sa citadelle reste cachée</template
             >). Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
             <template v-if="militiaBuilt"
-              >Une fois pris, des miliciens de ta Caserne peuvent y remplacer tes
-              champions.</template
+              >Des miliciens de ta Caserne peuvent aussi y aller, même à l’avance : s’il est pris à
+              leur arrivée, ils s’y installent, sinon ils font demi-tour.</template
             >
           </p>
           <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
@@ -3003,23 +3009,44 @@ const controlInterim = computed(() => interimSeats(liveControl.value));
 const unlimitedGarrison = computed(
   () => !!liveControl.value && !Number.isFinite(seatsOf(liveControl.value.kind)),
 );
-const garrisonSlots = computed(() =>
-  unlimitedGarrison.value
-    ? [{ i: 0, label: 'Place libre · sans limite' }]
-    : Array.from(
-        { length: garrisonFreeSeats(liveControl.value) - controlInterim.value },
-        (_, i) => ({
-          i,
-          label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
-        }),
-      ),
+/** ⏳ Les places déjà promises à des départs PROGRAMMÉS vers ce lieu (`plannedSeatsTo`) : la
+ *  fenêtre de renfort les retire, la fiche les montre « réservées » (revue du 2026-10-08). */
+const ctlPlannedSeats = computed(() =>
+  livePoi.value ? plannedSeatsTo(char.plannedList, livePoi.value.id) : { champ: 0, total: 0 },
 );
+type GarrisonSlot = { i: number; kind: 'champ' | 'mil' | 'reserved' | 'any'; label: string };
+const garrisonSlots = computed<GarrisonSlot[]>(() => {
+  if (unlimitedGarrison.value) return [{ i: 0, kind: 'any', label: 'Place libre · sans limite' }];
+  const empty = Math.max(0, garrisonFreeSeats(liveControl.value) - controlInterim.value);
+  const taken = ctlPlannedSeats.value;
+  const champ = Math.max(0, controlFree.value - taken.champ);
+  return Array.from({ length: empty }, (_, i) => {
+    if (i < taken.total)
+      return { i, kind: 'reserved' as const, label: 'Réservée · départ programmé' };
+    return i - taken.total < champ
+      ? { i, kind: 'champ', label: 'Place libre' }
+      : { i, kind: 'mil', label: 'Milicien seulement' };
+  });
+});
 /** 🏰 Les places de champion que tiennent aujourd'hui des miliciens : un champion peut encore
  *  venir (`controlFreeSeats` ne compte pas les miliciens), mais aucune case vide ne le dit. */
 const champOverMilitia = computed(() => {
   if (unlimitedGarrison.value) return 0;
-  const emptyChamp = garrisonSlots.value.filter((s) => s.label === 'Place libre').length;
-  return Math.max(0, controlFree.value - emptyChamp);
+  const emptyChamp = garrisonSlots.value.filter((s) => s.kind === 'champ').length;
+  return Math.max(0, controlFree.value - ctlPlannedSeats.value.champ - emptyChamp);
+});
+/** 🛡️ « Miliciens à l'avance » n'a de sens que si quelqu'un va LIBÉRER une place : un champion
+ *  ou le héros en poste (il peut partir), ou un départ programmé depuis ce lieu. Sur un lieu
+ *  tenu par des miliciens seuls, ceux envoyés en plus feraient demi-tour (revue 2026-10-08). */
+const ctlMayFreeUp = computed(() => {
+  const c = liveControl.value;
+  const id = livePoi.value?.id;
+  if (!c || !id) return false;
+  if (c.hero || c.garrison.some((x) => !isMilitiaId(x))) return true;
+  return char.plannedList.some(
+    (m) =>
+      (m.toId === id && (m.recall?.length || m.whole)) || m.transfers.some((t) => t.fromId === id),
+  );
 });
 /** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
  *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
@@ -3636,6 +3663,22 @@ function celebrateHarvest(p: Poi, got: { mana?: number; supplies: SupplyStock; r
     got.runes ? `${where} · runes à ouvrir au Panthéon` : where,
   );
 }
+/** 🏠 Ce que dit le rappel complet : QUI rentre (héros, champions, miliciens — tous à pied) et
+ *  ce que devient CE lieu (il disait toujours « la mine », signalé par la revue du 2026-10-08). */
+function recallAllMessage(p: Poi): string {
+  const c = p.control!;
+  const champs = c.garrison.filter((id) => !isMilitiaId(id)).length;
+  const mil = c.garrison.length - champs;
+  const who = [
+    c.hero || c.heroComing ? 'ton héros' : '',
+    champs ? `${champs} champion${champs > 1 ? 's' : ''}` : '',
+    mil ? `${mil} milicien${mil > 1 ? 's' : ''}` : '',
+  ].filter(Boolean);
+  const list =
+    who.length > 1 ? `${who.slice(0, -1).join(', ')} et ${who.at(-1)}` : (who[0] ?? 'Personne');
+  const head = list.charAt(0).toUpperCase() + list.slice(1);
+  return `${head} ${who.length > 1 || champs > 1 || mil > 1 ? 'rentrent' : 'rentre'} à pied à la base. ${poiLabel(p)} reste à toi, mais sans défense : l’ennemi le reprendra à sa prochaine attaque, sauf si un renfort arrive avant.`;
+}
 async function recallCtl() {
   const uid = auth.user?.id;
   const p = livePoi.value;
@@ -3648,8 +3691,7 @@ async function recallCtl() {
     $q
       .dialog({
         title: 'Rappeler la garnison ?',
-        message:
-          'Tes champions rentrent. La mine reste à toi, mais sans défense : l’ennemi la reprendra à sa prochaine attaque, sauf si un renfort arrive avant.',
+        message: recallAllMessage(p),
         cancel: true,
       })
       .onOk(() => res(true))
@@ -6819,6 +6861,11 @@ onUnmounted(() => {
   color: var(--dim);
   cursor: pointer;
   font: inherit;
+}
+.slot-tile.reserved {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--d3) 55%, transparent);
+  color: var(--d3);
 }
 .slot-plus {
   font-size: 22px;

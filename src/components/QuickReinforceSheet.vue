@@ -117,7 +117,9 @@
         <p v-else class="qr-none">Aucun champion disponible pour l’instant.</p>
       </template>
       <p v-else-if="poi.control.owner === 'player'" class="qr-none">
-        Plus de place de champion ici : seuls des miliciens peuvent encore la compléter.
+        Plus de place de champion ici{{
+          milAnyway ? ' : des miliciens peuvent encore y aller.' : '.'
+        }}
       </p>
       <!-- ⇄ DEPUIS UN AUTRE LIEU (demandé : « faire venir un champion ou milicien d'un autre
            lieu fixe »). Seuls ceux dont le transfert passe (`transferSourcesFor`) ; ils partent
