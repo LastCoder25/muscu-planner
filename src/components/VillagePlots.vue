@@ -383,6 +383,7 @@ const preview = computed(() =>
         selectedPlot.value.building.typeId,
         selectedPlot.value.building.level,
         PREVIEW_AHEAD,
+        islandMilitiaOf(char.row?.expedition_map),
       )
     : [],
 );
@@ -395,7 +396,7 @@ const previewHint = computed(() =>
 const milestone = computed(() => {
   const b = selectedPlot.value?.building;
   if (!b) return null;
-  const m = nextMilestone(b.typeId, b.level);
+  const m = nextMilestone(b.typeId, b.level, 40, islandMilitiaOf(char.row?.expedition_map));
   return m && !preview.value.some((r) => r.level === m.level) ? m : null;
 });
 

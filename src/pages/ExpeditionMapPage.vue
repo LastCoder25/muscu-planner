@@ -170,6 +170,7 @@
               :class="[
                 v.at.phase === 'return' ? 'done' : 'todo',
                 v.kind,
+                crewClass(v),
                 { 'trail-focus': v.tripKey === traceKey, 'hero-wing': isHeroWing(v) },
               ]"
             />
@@ -182,6 +183,7 @@
               :class="[
                 v.at.phase === 'return' ? 'todo' : 'done',
                 v.kind,
+                crewClass(v),
                 { 'trail-focus': v.tripKey === traceKey, 'hero-wing': isHeroWing(v) },
               ]"
             />
@@ -262,14 +264,28 @@
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
               @click.stop="askRecall(v.recall, v.recallInfo)"
             />
+            <!-- 🗡️🛡️ Un renfort dit QUI il porte : champions (or, 🗡️), miliciens (vert, 🛡️)
+                 ou les deux (🗡️ + pastille 🛡️). Pion un peu plus gros pour se lire. -->
             <circle
               :cx="v.at.x"
               :cy="v.at.y"
-              r="3"
+              :r="crewClass(v) ? 3.7 : 3"
               class="van-mark"
-              :class="[v.kind, { 'hero-wing': isHeroWing(v) }]"
+              :class="[v.kind, crewClass(v), { 'hero-wing': isHeroWing(v) }]"
             />
-            <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
+            <text
+              :x="v.at.x"
+              :y="v.at.y + (crewClass(v) ? 1.3 : 1.1)"
+              class="van-emo"
+              :class="{ 'crew-emo': crewClass(v) }"
+            >
+              {{ v.emo }}
+            </text>
+            <g v-if="crewClass(v) === 'crew-mixed'" class="crew-badge">
+              <title>Champions et miliciens</title>
+              <circle :cx="v.at.x - 3.2" :cy="v.at.y - 3.2" r="2.1" />
+              <text :x="v.at.x - 3.2" :y="v.at.y - 2.35">🛡️</text>
+            </g>
             <!-- 🏥 Il rentre à l'infirmerie (demandé : le voir d'un coup d'œil sur la carte). -->
             <g v-if="v.infirmary" class="infirm-badge">
               <title>Rentre à l’infirmerie</title>
@@ -2002,9 +2018,12 @@ import {
   transferSourcesFor,
 } from '@/lib/controlRoutes';
 import {
+  CREW_EMO,
+  CREW_WHO,
   MILITIA,
   MILITIA_NAME,
   MILITIA_PREFIX,
+  crewMix,
   isMilitiaId,
   militiaIn,
   militiaOnMap,
@@ -3853,6 +3872,7 @@ const reinforcementsOnMap = computed(() =>
     sentAt: r.sentAt,
     poi: r.poi,
     members: r.members,
+    crew: crewMix(r.members),
     origin: r.origin,
     recallable: !r.turned,
     at: drawnAt(r),
@@ -4012,7 +4032,7 @@ const travelersOnMap = computed(() =>
     ...reinforcementsOnMap.value.map((r) => ({
       ...r,
       tripKey: r.id,
-      emo: '🛡️',
+      emo: CREW_EMO[r.crew],
       kind: 'reinf' as const,
       recall: r.recallable
         ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members }
@@ -4021,7 +4041,7 @@ const travelersOnMap = computed(() =>
       recallInfo: {
         kind: 'reinf',
         label: `Les renforts (${r.members.length})`,
-        emo: '🛡️',
+        emo: CREW_WHO[r.crew],
         poi: r.poi,
         hero: false,
         members: r.members,
@@ -4073,6 +4093,11 @@ const travelersOnMap = computed(() =>
   })),
 );
 const shownTravelers = travelersOnMap;
+/** 🗡️🛡️ La classe de composition d'un renfort (préfixée : `.militia` et consorts pourraient
+ *  croiser un utilitaire Quasar). Vide pour tout autre voyage. */
+function crewClass(v: object): string {
+  return 'crew' in v && typeof v.crew === 'string' ? 'crew-' + v.crew : '';
+}
 /** 🧝 Le voyageur est-il le groupe du héros d'une attaque combinée ? */
 const isHeroWing = (v: object) => 'heroWing' in v && !!v.heroWing;
 const shownBands = bandsOnMap;
@@ -4179,7 +4204,7 @@ const trips = computed(() => {
     out.push({
       key: r.id,
       kind: 'van',
-      who: '🛡️',
+      who: CREW_WHO[r.crew],
       cat: 'reinf',
       poi: r.poi,
       time: '',
@@ -7549,6 +7574,44 @@ onUnmounted(() => {
 }
 .van-mark.reinf {
   stroke: #7bc86c;
+}
+/* 🗡️🛡️ Qui part en renfort : les MILICIENS gardent le vert, les CHAMPIONS passent à l'or (pion
+   ET trait à venir), une troupe MIXTE garde le vert avec un contour or et la pastille 🛡️. */
+.van-mark.reinf.crew-militia {
+  stroke-width: 1.1;
+  fill: color-mix(in srgb, #7bc86c 28%, var(--surface));
+}
+.van-mark.reinf.crew-champions {
+  stroke: var(--accent);
+  stroke-width: 1.1;
+  fill: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+.van-mark.reinf.crew-mixed {
+  stroke: var(--accent);
+  stroke-width: 1.1;
+  fill: color-mix(in srgb, #7bc86c 28%, var(--surface));
+}
+.trail.van.reinf.crew-champions.todo {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 1px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+.trail.van.reinf.crew-champions.done {
+  stroke: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.van-emo.crew-emo {
+  font-size: 3.8px;
+}
+.crew-badge {
+  pointer-events: none;
+}
+.crew-badge circle {
+  fill: var(--surface);
+  stroke: #7bc86c;
+  stroke-width: 0.4;
+}
+.crew-badge text {
+  font-size: 2.4px;
+  text-anchor: middle;
 }
 /* ⚔️ La bande qu'on intercepte : rouge (elle menace la base), son chemin vers le point de
    rencontre, et un anneau qui pulse là où les deux colonnes vont se heurter. */

@@ -285,13 +285,15 @@ export const BUILDING_TYPES: BuildingType[] = [
   // anonymes qui prennent la place des champions sur les points de contrôle déjà pris (ils
   // n'attaquent pas ; la défense de la base viendra plus tard). Production GRATUITE et lente (décision de l'utilisateur) : c'est la montée de niveau
   // qui coûte de l'or. DEUX leviers, vivants du niveau 1 au 100 : la CADENCE (asymptotique,
-  // chaque niveau l'accélère) et l'EFFECTIF maximal (+1 tous les 3 niveaux).
+  // chaque niveau l'accélère) et l'EFFECTIF maximal (`militiaCap` : +1 par niveau, et sur une
+  // île la tranche de niveaux de l'île mène pile à ses places).
   {
     id: 'barracks',
     label: 'Caserne de la milice',
     emoji: '🛡️',
     category: 'utility',
-    perLevelNote: 'miliciens produits un peu plus vite, +1 milicien au plus tous les 3 niveaux',
+    perLevelNote:
+      'miliciens produits un peu plus vite, et un effectif maximal plus grand (sur une île : jusqu’à ses places)',
     buildGold: 600,
     unlockLevel: 3,
     unique: true,

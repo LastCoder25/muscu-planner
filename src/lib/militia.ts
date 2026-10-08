@@ -168,6 +168,30 @@ export function returnMilitia(s: MilitiaState, n: number): MilitiaState {
 /** Les miliciens d'une liste d'ids. */
 export const militiaIn = (ids: readonly string[]): string[] => ids.filter(isMilitiaId);
 
+/**
+ * 🗡️🛡️ QUI COMPOSE UNE TROUPE (2026-10-08, demandé : « que ce soit plus visible qui on envoie
+ * sur un lieu fixe »). Des champions seuls, des miliciens seuls, ou les deux : la carte change
+ * d'icône et de couleur selon la réponse.
+ */
+export type CrewMix = 'champions' | 'militia' | 'mixed';
+export function crewMix(ids: readonly string[]): CrewMix {
+  const nMil = militiaIn(ids).length;
+  if (nMil === 0) return 'champions';
+  return nMil === ids.length ? 'militia' : 'mixed';
+}
+/** L'icône d'une troupe : 🗡️ des champions, 🛡️ des miliciens (la mixte garde 🗡️ et porte
+ *  une pastille 🛡️ sur la carte ; `CREW_WHO` l'écrit en entier là où un texte suffit). */
+export const CREW_EMO: Record<CrewMix, string> = {
+  champions: '🗡️',
+  militia: MILITIA_EMO,
+  mixed: '🗡️',
+};
+export const CREW_WHO: Record<CrewMix, string> = {
+  champions: '🗡️',
+  militia: MILITIA_EMO,
+  mixed: '🗡️' + MILITIA_EMO,
+};
+
 /** Les miliciens HORS de la base : postés sur un point ou en route vers lui. Ils comptent
  *  dans l'effectif (`militiaCap`). */
 export function militiaOnMap(map: ExpeditionMap | null | undefined): number {

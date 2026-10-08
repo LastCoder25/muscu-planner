@@ -25,7 +25,7 @@ import {
 } from './buildings';
 import { championOutpostMult } from './caravan';
 import { altarLuckBonus } from './items';
-import { militiaCap, militiaIntervalH } from './militia';
+import { militiaCap, militiaIntervalH, type IslandMilitia } from './militia';
 
 /** Une pastille d'aperçu. */
 interface PreviewBit {
@@ -48,7 +48,11 @@ const one = (typeId: BuildingTypeId, level: number): Building[] => [
 const pct = (x: number) => `${Math.round(x * 100)} %`;
 
 /** Le texte d'un niveau donné, par type. `null` = ce bâtiment n'a rien à prévisualiser. */
-function textAt(typeId: BuildingTypeId, level: number): string | null {
+function textAt(
+  typeId: BuildingTypeId,
+  level: number,
+  isl: IslandMilitia | null = null,
+): string | null {
   const t = BUILDING_TYPES.find((b) => b.id === typeId);
   if (!t) return null;
   // ⚠️ CHAQUE BÂTIMENT GÈRE SA PRODUCTION ET SA RÉSERVE (plus d'Entrepôt) : un producteur
@@ -82,7 +86,14 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       const h = militiaIntervalH(level);
       const hh = Math.floor(h);
       const mm = Math.round((h - hh) * 60);
-      return `1 milicien / ${hh} h${mm ? ` ${String(mm).padStart(2, '0')}` : ''} · ${militiaCap(level, null)} au plus (sur une île : monte avec la Caserne jusqu’à 5 par lieu fixe au dernier niveau de l’île)`;
+      // ⚠️ Sur une île, le plafond est celui de L'ÎLE (`militiaCap(niveau, île)`), pas le
+      // niveau de la Caserne : sans l'île, l'aperçu annonçait « 38 au plus » à la Caserne 38
+      // alors que l'île n'en loge que 15 (signalé par l'utilisateur).
+      const cap = militiaCap(level, isl);
+      const where = isl
+        ? ` sur cette île (${isl.seats} places, atteintes à la Caserne ${isl.maxLevel})`
+        : '';
+      return `1 milicien / ${hh} h${mm ? ` ${String(mm).padStart(2, '0')}` : ''} · ${cap} au plus${where}`;
     }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);
@@ -113,8 +124,12 @@ export function previewNote(typeId: BuildingTypeId): string | null {
 }
 
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
-function isMilestone(typeId: BuildingTypeId, level: number): boolean {
-  if (typeId === 'barracks') return militiaCap(level, null) > militiaCap(level - 1, null);
+function isMilestone(
+  typeId: BuildingTypeId,
+  level: number,
+  isl: IslandMilitia | null = null,
+): boolean {
+  if (typeId === 'barracks') return militiaCap(level, isl) > militiaCap(level - 1, isl);
   return false;
 }
 
@@ -129,10 +144,11 @@ export function buildingPreview(
   typeId: BuildingTypeId,
   current: number,
   count = 6,
+  isl: IslandMilitia | null = null,
 ): LevelPreview[] {
   const out: LevelPreview[] = [];
   for (let l = current; l <= current + count; l++) {
-    const text = textAt(typeId, l);
+    const text = textAt(typeId, l, isl);
     if (text === null) return [];
     // On n'affiche pas deux fois la même ligne : un palier qui ne change rien n'apprend
     // rien. (Impossible depuis « aucun niveau mort » (v0.731), mais si un jour un effet
@@ -141,7 +157,7 @@ export function buildingPreview(
     out.push({
       level: l,
       text,
-      milestone: isMilestone(typeId, l),
+      milestone: isMilestone(typeId, l, isl),
       ...(typeId === 'outpost' ? { bits: outpostBits(l) } : {}),
     });
   }
@@ -155,10 +171,11 @@ export function nextMilestone(
   typeId: BuildingTypeId,
   current: number,
   horizon = 40,
+  isl: IslandMilitia | null = null,
 ): LevelPreview | null {
   for (let l = current + 1; l <= current + horizon; l++) {
-    if (!isMilestone(typeId, l)) continue;
-    const text = textAt(typeId, l);
+    if (!isMilestone(typeId, l, isl)) continue;
+    const text = textAt(typeId, l, isl);
     if (text)
       return {
         level: l,
