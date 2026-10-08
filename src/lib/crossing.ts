@@ -56,8 +56,10 @@ export const CROSSING = {
    *  donnait 20 (10 en pierres de mana + 10 tickets). L'animation des tickets se joue à
    *  l'ouverture du coffre (`expeClaim` → `celebrateTickets`). */
   firstLandingTickets: 10,
-  /** 🏰 Forteresse abattue : sceaux de champion au rang max de l'île. */
-  fortressSeals: 3,
+  /** 🏰 Forteresse abattue : sceaux de champion au rang max de l'île, PAR NIVEAU MAXIMAL de
+   *  l'île (v1.88.0, demandé : « plus on avance, plus on a de champions ») — 5 / 10 / 15 / 20 / 25
+   *  des îles 1 à 5. Lu par `fortressSealCount`. (3 fixes avant.) */
+  fortressSealsPerLevel: 0.25,
   /** 🏰 Forteresse abattue : runes = base + numéro de l'île. */
   fortressRunesBase: 2,
 } as const;
@@ -84,6 +86,12 @@ export function landingChestMessage(isl: Island, at: number): ExpeditionMessage 
   };
 }
 
+/** 🏰 Les sceaux de champion du coffre d'une forteresse : proportionnels au niveau maximal
+ *  de l'île, au moins 1. */
+export function fortressSealCount(isl: Pick<Island, 'maxLevel'>): number {
+  return Math.max(1, Math.round(isl.maxLevel * CROSSING.fortressSealsPerLevel));
+}
+
 /** 🏰 Le coffre de la forteresse portuaire abattue : runes et sceaux de champion au rang max
  *  de l'île (jamais d'XP sur la carte). */
 export function fortressChestMessage(isl: Island, at: number): ExpeditionMessage {
@@ -100,7 +108,7 @@ export function fortressChestMessage(isl: Island, at: number): ExpeditionMessage
     seals: {
       kind: 'champion',
       rank: characterRank(isl.maxLevel).rankIndex,
-      n: CROSSING.fortressSeals,
+      n: fortressSealCount(isl),
     },
     key: 0,
     resolvedAt: at,
@@ -126,6 +134,12 @@ export function fortressReward(
   };
 }
 
+/** 🌀 Les sceaux d'une victoire sur la brèche sans fin : proportionnels au niveau maximal
+ *  de l'île (5 sur l'île 5), au moins 1. */
+export function endlessSealCount(isl: Pick<Island, 'maxLevel'>): number {
+  return Math.max(1, Math.round(isl.maxLevel * ENDLESS.sealsPerLevel));
+}
+
 /** 🌀 Les coffres de la brèche sans fin (île 5) pas encore déposés : un par victoire, plus
  *  riche à chaque cran (runes `runesBase + cran`, bornées), et la carte marquée — même
  *  écriture, donc une seule fois chacun. `null` si rien à déposer. */
@@ -149,7 +163,11 @@ export function endlessReward(
       gold: 0,
       energy: 0,
       runes: Math.min(ENDLESS.runesMax, ENDLESS.runesBase + t),
-      seals: { kind: 'champion', rank: characterRank(isl.maxLevel).rankIndex, n: ENDLESS.seals },
+      seals: {
+        kind: 'champion',
+        rank: characterRank(isl.maxLevel).rankIndex,
+        n: endlessSealCount(isl),
+      },
       key: 0,
       resolvedAt: e.at ?? now,
       claimAt: e.at ?? now,

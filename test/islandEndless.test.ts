@@ -67,7 +67,7 @@ describe('🌀 l’île 5, puis sans fin', () => {
     expect(r.msgs[0]!.seals).toEqual({
       kind: 'champion',
       rank: characterRank(100).rankIndex,
-      n: ENDLESS.seals,
+      n: 5,
     });
     expect(new Set(r.msgs.map((x) => x.id)).size).toBe(2);
     expect(endlessReward(r.map, NOW + 4 * DAY)).toBeNull();

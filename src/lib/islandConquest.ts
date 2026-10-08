@@ -21,13 +21,7 @@
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état (la MÊME carte quand rien ne change :
  * le store n'écrit pas à vide).
  */
-import {
-  activeIsland,
-  islandPacified,
-  ISLANDS,
-  mapPlayerLevel,
-  type Island,
-} from './archipelago';
+import { activeIsland, islandPacified, ISLANDS, mapPlayerLevel, type Island } from './archipelago';
 import { buildingType, collectable, type BuildResource, type Building } from './buildings';
 import { mulberry32, seedOf } from './combat';
 import {
@@ -478,7 +472,9 @@ export const ENDLESS = {
   perTier: 1,
   runesBase: 2,
   runesMax: 8,
-  seals: 1,
+  /** Sceaux de champion par victoire, par NIVEAU MAXIMAL de l'île (v1.88.0 : 5 sur l'île 5,
+   *  1 fixe avant). Lu par `endlessSealCount` (crossing.ts). */
+  sealsPerLevel: 0.05,
 } as const;
 
 /** 🌀 La troupe de la brèche après `tier` victoires. */
@@ -1168,7 +1164,8 @@ export function heroWalkVoyage(
   const left = map?.pois.find(
     (q) => !!q.control && Math.abs(q.x - from.x) < 0.5 && Math.abs(q.y - from.y) < 0.5,
   );
-  const spot = left ?? ({ id: 'hero-walk', type: 'control', x: from.x, y: from.y } as unknown as Poi);
+  const spot =
+    left ?? ({ id: 'hero-walk', type: 'control', x: from.x, y: from.y } as unknown as Poi);
   return { poi: spot, sentAt: from.at, midAt: from.at, returnAt: at, back: true };
 }
 
@@ -1828,8 +1825,16 @@ export function stripChampions(map: ExpeditionMap, at: number, playerLevel: numb
     changed = true;
     const banked = c.collectedAt !== undefined ? bankAt(p, at, playerLevel) : c;
     // 🧝 Le héros EN ROUTE vers ce poste aussi : il quitte l'île avec tout le monde.
-    const { hero: _h, heroUnit: _u, heroComing: _hc, away: _a, reinforcing, returning, perXp, ...rest } =
-      banked;
+    const {
+      hero: _h,
+      heroUnit: _u,
+      heroComing: _hc,
+      away: _a,
+      reinforcing,
+      returning,
+      perXp,
+      ...rest
+    } = banked;
     void _h;
     void _hc;
     void _u;

@@ -5,6 +5,7 @@ import {
   crossingBlocker,
   crossingTravellers,
   fortressReward,
+  fortressSealCount,
   landAdventurers,
   landCrossing,
   landingChestMessage,
@@ -388,8 +389,12 @@ describe('🎁 récompenses', () => {
     expect(r.msg.seals).toEqual({
       kind: 'champion',
       rank: characterRank(20).rankIndex,
-      n: CROSSING.fortressSeals,
+      n: 5,
     });
+    // ⚒️ Proportionnel au niveau max de l'île : 5 / 10 / 15 / 20 / 25.
+    expect([20, 40, 60, 80, 100].map((maxLevel) => fortressSealCount({ maxLevel }))).toEqual([
+      5, 10, 15, 20, 25,
+    ]);
     expect(r.msg.runes).toBe(CROSSING.fortressRunesBase + 1);
     expect(fortressReward(r.map, T0 + 1)).toBeNull();
   });
