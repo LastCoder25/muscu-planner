@@ -5867,7 +5867,11 @@ async function expeLifecycle() {
     if (!progress.ready.value) return;
     // ⏳ Les renforts programmés partent à leur heure — AVANT les reprises, pour qu'un renfort
     // parti avant une attaque la trouve déjà en route.
-    for (const message of await char.plannedTick(uid, Date.now(), c.value.level.level))
+    for (const message of await char.plannedTick(uid, Date.now(), c.value.level.level, {
+      name: char.row?.pseudo ?? 'Toi',
+      level: c.value.level.level,
+      combatant: fighter.value,
+    }))
       $q.notify({ type: 'info', message });
     // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
     // défend plus son point).

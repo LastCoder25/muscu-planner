@@ -8,7 +8,7 @@
  * (`reinforceControlPoint`, `sendMilitiaToControl`, `transferControlGarrison`), qui refusent
  * ce qui ne passe pas.
  */
-import { MILITIA_PREFIX } from '@/lib/militia';
+import { MILITIA, MILITIA_PREFIX } from '@/lib/militia';
 
 export interface ReinfSelection {
   /** Champions de la base. */
@@ -17,6 +17,10 @@ export interface ReinfSelection {
   militia: number;
   /** Membres d'autres lieux tenus (champions ou miliciens). */
   transfers: { fromId: string; id: string }[];
+  /** 🦸 Le héros part AVEC la sélection (2026-10-08, demandé : il partait seul et tout de
+   *  suite, par son propre bouton) : il prend 2 places de champion (`MILITIA.heroSeats`), et
+   *  se programme comme les autres. */
+  hero?: boolean;
 }
 
 /** Les places libres du lieu visé : de champion (`champ`), et au total, miliciens compris. */
@@ -45,7 +49,7 @@ const isMil = (id: string) => id.startsWith(MILITIA_PREFIX);
 /** Ce que la sélection occupe : places de champion, et places au total. */
 export function reinfSeats(sel: ReinfSelection): ReinfFree {
   const transChamps = sel.transfers.filter((t) => !isMil(t.id)).length;
-  const champ = sel.champs.length + transChamps;
+  const champ = sel.champs.length + transChamps + (sel.hero ? MILITIA.heroSeats : 0);
   return { champ, total: champ + sel.militia + (sel.transfers.length - transChamps) };
 }
 
@@ -64,7 +68,19 @@ export function reinfCanAdd(sel: ReinfSelection, kind: 'champ' | 'mil', free: Re
   return kind === 'mil' || used.champ < free.champ;
 }
 
-export const reinfCount = (sel: ReinfSelection) => reinfSeats(sel).total;
+/** Combien de MEMBRES partent (le héros compte pour un, même s'il prend deux places). */
+export const reinfCount = (sel: ReinfSelection) =>
+  sel.champs.length + sel.militia + sel.transfers.length + (sel.hero ? 1 : 0);
+
+/** 🦸 Coche ou décoche le héros — jamais au-delà des places de champion (il en prend 2). */
+export function toggleReinfHero(sel: ReinfSelection, free: ReinfFree): ReinfSelection {
+  if (sel.hero) {
+    const rest = { ...sel };
+    delete rest.hero;
+    return rest;
+  }
+  return reinfSeats(sel).champ + MILITIA.heroSeats <= free.champ ? { ...sel, hero: true } : sel;
+}
 
 /** Les miliciens de la sélection, base et transferts compris. */
 const militiaOf = (sel: ReinfSelection) =>

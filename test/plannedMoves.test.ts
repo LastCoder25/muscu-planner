@@ -116,3 +116,19 @@ describe('🏠⏳ retour programmé (rappel d’une garnison)', () => {
     expect(normalizePlanned([{ ...r, recall: [3, 'a'] }])[0]!.recall).toEqual(['a']);
   });
 });
+
+describe('🦸 le héros dans un renfort programmé (2026-10-08)', () => {
+  const withHero = { champs: ['a'], militia: 1, transfers: [], hero: true };
+  it('le départ programmé emporte le héros, qui prend 2 places de champion', () => {
+    const m = makePlannedMove(withHero, 'mine', 0, H);
+    expect(m.hero).toBe(true);
+    expect(plannedSeatsTo([m], 'mine')).toEqual({ champ: 3, total: 4 });
+    expect(plannedCount(m)).toBe(3);
+  });
+  it('relu depuis la base, le héros reste ; sans lui, aucun champ', () => {
+    const m = makePlannedMove(withHero, 'mine', 0, H);
+    expect(normalizePlanned([m])[0]!.hero).toBe(true);
+    const sans = makePlannedMove({ ...withHero, hero: false }, 'mine', 0, H);
+    expect('hero' in normalizePlanned([sans])[0]!).toBe(false);
+  });
+});

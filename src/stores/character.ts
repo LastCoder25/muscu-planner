@@ -6648,6 +6648,13 @@ export const useCharacterStore = defineStore('character', () => {
       return 'ce lieu ne reçoit pas de miliciens';
     if (seats.champ > controlFreeSeats(to.control) - taken.champ)
       return 'plus assez de places sur ce lieu';
+    // 🦸 Le héros : la règle d'un envoi immédiat, et un seul départ programmé à la fois.
+    if (sel.hero) {
+      const hb = heroPostBlocker(to.control);
+      if (hb && hb !== 'full') return HERO_POST_BLOCK_LABEL[hb];
+      if (list.some((m) => m.hero)) return 'le héros est déjà programmé ailleurs';
+      if (heroEngaged.value) return 'le héros est déjà en route ailleurs';
+    }
     const champs = sel.champs.map((id) => advList.value.find((a) => a.id === id));
     if (champs.some((a) => !a || !advAvailable(a, now)))
       return 'un champion choisi n’est plus disponible';
@@ -6724,7 +6731,13 @@ export const useCharacterStore = defineStore('character', () => {
    * échus quittent la liste AVANT d'être joués : un second tick ne les rejoue jamais.
    * Rend les textes à annoncer.
    */
-  async function plannedTick(userId: string, now: number, playerLevel: number): Promise<string[]> {
+  async function plannedTick(
+    userId: string,
+    now: number,
+    playerLevel: number,
+    /** 🦸 L'instantané de combat du héros, pour un renfort programmé qui l'emmène. */
+    heroUnit?: PostedHero,
+  ): Promise<string[]> {
     const { due, rest } = planDue(plannedList.value, now);
     if (!due.length) return [];
     await writesSettled();
@@ -6787,6 +6800,14 @@ export const useCharacterStore = defineStore('character', () => {
           else sent++;
         }
       };
+      // 🦸 Le héros d'abord : il prend ses 2 places avant les champions (l'ordre de l'envoi).
+      if (m.hero) {
+        const why = heroUnit
+          ? await sendHeroToPost(userId, m.toId, at, heroUnit)
+          : 'le héros n’a pas pu partir';
+        if (why) fails.push(`héros : ${why}`);
+        else sent++;
+      }
       await tryGroup(m.champs, (ids) => reinforceControlPoint(userId, m.toId, ids, at));
       if (m.militia > 0) {
         let n = m.militia;
@@ -6808,7 +6829,7 @@ export const useCharacterStore = defineStore('character', () => {
         await tryGroup(ids, (x) =>
           transferControlGarrison(userId, fromId, m.toId, x, at, playerLevel),
         );
-      const lost = m.champs.length + m.militia + m.transfers.length - sent;
+      const lost = m.champs.length + m.militia + m.transfers.length + (m.hero ? 1 : 0) - sent;
       const to = row.value?.expedition_map?.pois.find((p) => p.id === m.toId);
       const label = to?.control ? CONTROL_LABEL[to.control.kind] : 'un lieu fixe';
       const why = [...new Set(fails)].join(' ; ');

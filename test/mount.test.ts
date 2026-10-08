@@ -241,7 +241,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(sent).toEqual([['m1', [], 0, true]]);
   });
 
-  it('QuickReinforceSheet propose le héros avec son trajet, et l’envoie', async () => {
+  it('QuickReinforceSheet propose le héros avec son trajet, et le coche', async () => {
     const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
     let hero = 0;
     let out = '';
@@ -280,13 +280,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           selHold: null,
           hold: null,
           heroOffer: { why: null, min: 90 },
-          onHero: () => hero++,
+          onToggleHero: () => hero++,
         },
         ROW,
         undefined,
         '/',
         (h) => (out = h),
-        (host) => host.querySelector<HTMLElement>('.qr-hero-go')?.click(),
+        (host) => host.querySelector<HTMLElement>('.qr-hero')?.click(),
       ),
     ).toBeNull();
     expect(out).toContain('Ton héros · 2 places');

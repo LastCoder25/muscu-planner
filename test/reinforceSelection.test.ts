@@ -3,6 +3,8 @@ import {
   emptyReinfSelection,
   reinfBumped,
   reinfCanAdd,
+  reinfCount,
+  toggleReinfHero,
   reinfSeats,
   setReinfMilitia,
   toggleReinfChamp,
@@ -77,5 +79,30 @@ describe('🏠 les miliciens délogés par les champions (reinfBumped)', () => {
   });
   it('jamais au-delà des places de champion (au-delà, l’envoi est refusé)', () => {
     expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a', 'b', 'c', 'd'] }, full)).toBe(2);
+  });
+});
+
+describe('🦸 le héros se coche avec la sélection (2026-10-08)', () => {
+  it('il prend 2 places de champion et compte pour un membre', () => {
+    const sel = toggleReinfHero(emptyReinfSelection(), { champ: 3, total: 5 });
+    expect(sel.hero).toBe(true);
+    expect(reinfSeats(sel)).toEqual({ champ: 2, total: 2 });
+    expect(reinfCount(sel)).toBe(1);
+  });
+  it('refusé s’il ne reste qu’une place de champion', () => {
+    const sel = { ...emptyReinfSelection(), champs: ['a'] };
+    expect(toggleReinfHero(sel, { champ: 2, total: 5 })).toBe(sel);
+  });
+  it('coché, il retire une place aux champions, et se décoche', () => {
+    const free = { champ: 3, total: 5 };
+    const sel = toggleReinfHero(emptyReinfSelection(), free);
+    expect(reinfCanAdd(sel, 'champ', free)).toBe(true);
+    const two = toggleReinfChamp(sel, 'a', free);
+    expect(reinfCanAdd(two, 'champ', free)).toBe(false);
+    expect(toggleReinfHero(sel, free).hero).toBeUndefined();
+  });
+  it('les miliciens qu’il déloge sont comptés', () => {
+    const sel = toggleReinfHero(emptyReinfSelection(), { champ: 3, total: 1 });
+    expect(reinfBumped(sel, { champ: 3, total: 1 })).toBe(1);
   });
 });

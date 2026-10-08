@@ -14,7 +14,7 @@
  * `transferControlGarrison`), appelées à l'HEURE DU DÉPART : trajet, places et refus sont
  * donc exactement ceux d'un renfort parti à la main à cet instant.
  */
-import { MILITIA_PREFIX } from '@/lib/militia';
+import { MILITIA, MILITIA_PREFIX } from '@/lib/militia';
 import type { ReinfSelection } from '@/lib/reinforceSelection';
 import type { Outing } from '@/lib/siegePresence';
 
@@ -36,6 +36,9 @@ export interface PlannedMove {
   recall?: string[];
   /** 🏠 Le rappel de TOUTE la garnison (la réserve est récoltée au départ). */
   whole?: boolean;
+  /** 🦸 Le héros part avec ce renfort (2 places de champion). En attendant, il reste libre :
+   *  s'il est ailleurs à l'heure dite, il ne part pas et le message le dit. */
+  hero?: boolean;
 }
 
 /** On ne programme pas au-delà de ce délai : un départ si lointain ne veut plus rien dire
@@ -68,6 +71,7 @@ export function normalizePlanned(raw: unknown): PlannedMove[] {
           ? { recall: o.recall.filter((x): x is string => typeof x === 'string') }
           : {}),
         ...(o.whole === true ? { whole: true } : {}),
+        ...(o.hero === true ? { hero: true } : {}),
       },
     ];
   });
@@ -89,6 +93,7 @@ export function makePlannedMove(
     champs: [...sel.champs],
     militia: sel.militia,
     transfers: sel.transfers.map((t) => ({ ...t })),
+    ...(sel.hero ? { hero: true } : {}),
   };
 }
 
@@ -149,15 +154,16 @@ export function plannedSeatsTo(
   for (const m of list) {
     if (m.toId !== toId) continue;
     const tChamps = m.transfers.filter((t) => !t.id.startsWith(MILITIA_PREFIX)).length;
-    champ += m.champs.length + tChamps;
-    total += m.champs.length + m.militia + m.transfers.length;
+    const heroSeats = m.hero ? MILITIA.heroSeats : 0;
+    champ += m.champs.length + tChamps + heroSeats;
+    total += m.champs.length + m.militia + m.transfers.length + heroSeats;
   }
   return { champ, total };
 }
 
 /** Le nombre de membres d'un départ programmé. */
 export const plannedCount = (m: PlannedMove): number =>
-  m.champs.length + m.militia + m.transfers.length + (m.recall?.length ?? 0);
+  m.champs.length + m.militia + m.transfers.length + (m.recall?.length ?? 0) + (m.hero ? 1 : 0);
 
 /**
  * 🏰 La présence au siège : un champion de la base réservé est À LA MAISON jusqu'à son départ

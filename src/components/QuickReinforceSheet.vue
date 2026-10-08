@@ -53,30 +53,30 @@
         </button>
       </div>
       <!-- 🦸 LE HÉROS (2026-10-05, demandé : « je n'ai pas la possibilité d'envoyer le héros sur
-           un lieu fixe qui a 2 places ») : il tient garnison et prend 2 places sur les 5. Il part
-           seul, tout de suite (pas de départ différé) ; grisé AVEC la raison. -->
-      <div v-if="heroOffer" class="qr-mil qr-hero">
+           un lieu fixe qui a 2 places ») : il tient garnison et prend 2 places sur les 5.
+           Depuis le 2026-10-08 (demandé) il se COCHE avec la sélection : il part avec elle, se
+           programme comme elle et compte dans la tenue. Grisé AVEC la raison. -->
+      <button
+        v-if="heroOffer"
+        type="button"
+        class="qr-mil qr-hero"
+        :class="{ on: sel.hero }"
+        :aria-pressed="!!sel.hero"
+        :disabled="busy || (!sel.hero && (!!heroOffer.why || !canHero))"
+        @click="emit('toggleHero')"
+      >
         <span class="qr-mil-emo" aria-hidden="true">🦸</span>
         <span class="qr-mil-main">
           <span class="qr-mil-name">Ton héros · 2 places</span>
           <span class="qr-mil-sub">{{
             heroOffer.why ??
-            `🧭 ${formatDurationMin(heroOffer.min)} · part tout de suite, défend à son arrivée`
+            (!sel.hero && !canHero
+              ? 'plus assez de places de champion (il en prend 2)'
+              : `🧭 ${formatDurationMin(heroOffer.min)} · défend à son arrivée`)
           }}</span>
-          <span v-if="!heroOffer.why && heroBumped > 0" class="qr-mil-sub qr-bump"
-            >🏠 {{ heroBumped }} milicien{{ heroBumped > 1 ? 's' : '' }} lui céderont leur place et
-            rentreront à la base</span
-          >
         </span>
-        <button
-          type="button"
-          class="qr-hero-go"
-          :disabled="busy || !!heroOffer.why"
-          @click="emit('hero')"
-        >
-          Envoyer
-        </button>
-      </div>
+        <span class="qr-hero-mark" aria-hidden="true">{{ sel.hero ? '✓' : '＋' }}</span>
+      </button>
       <!-- 🛡️ Les miliciens d'abord : c'est le renfort qu'on a le plus souvent sous la main, et
            il ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
       <div v-if="(milRoom > 0 || milAnyway) && milHome > 0" class="qr-mil">
@@ -241,7 +241,7 @@ import {
   reinfCount,
   reinfMilitiaOver,
   reinfBumped,
-  emptyReinfSelection,
+  reinfSeats,
   type ReinfSelection,
 } from '@/lib/reinforceSelection';
 
@@ -312,10 +312,8 @@ const canBaseMil = computed(() => props.milAnyway || canMil.value);
 const milOver = computed(() => reinfMilitiaOver(props.sel, free.value));
 /** 🏠 Les miliciens en poste que les champions cochés (ou le héros) délogeront. */
 const bumped = computed(() => reinfBumped(props.sel, free.value));
-// Le héros part SEUL, tout de suite : sans la sélection.
-const heroBumped = computed(() =>
-  reinfBumped(emptyReinfSelection(), free.value, MILITIA.heroSeats),
-);
+/** 🦸 Le héros tient-il encore dans les places de champion, avec la sélection ? */
+const canHero = computed(() => reinfSeats(props.sel).champ + MILITIA.heroSeats <= free.value.champ);
 /** Le milicien suivant partirait-il au-delà des places ? (son gain ne se promet pas.) */
 const nextOver = computed(
   () => reinfMilitiaOver({ ...props.sel, militia: props.sel.militia + 1 }, free.value) > 0,
@@ -328,7 +326,7 @@ const gainTitle = (on: boolean) =>
     : 'Ce qu’il ajouterait à la défense, en plus de ta sélection';
 const emit = defineEmits<{
   close: [];
-  hero: [];
+  toggleHero: [];
   toggleChamp: [string];
   militia: [number];
   transfer: [string, string];
@@ -464,24 +462,37 @@ const emit = defineEmits<{
   color: var(--dim);
   font-size: 13px;
 }
-.qr-hero {
+.qr-mil.qr-hero {
   margin-bottom: 8px;
-}
-.qr-hero-go {
-  flex: none;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #15120e;
+  color: inherit;
   font: inherit;
-  font-weight: 700;
+  text-align: left;
   cursor: pointer;
+  border-color: var(--line);
+  background: var(--surface-2, var(--bg));
 }
-.qr-hero-go:disabled {
-  opacity: 0.45;
+.qr-mil.qr-hero.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2, var(--bg)));
+}
+.qr-mil.qr-hero:disabled {
+  opacity: 0.5;
   cursor: default;
+}
+.qr-hero-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-weight: 700;
+}
+.qr-hero.on .qr-hero-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #15120e;
 }
 .qr-mil {
   display: flex;

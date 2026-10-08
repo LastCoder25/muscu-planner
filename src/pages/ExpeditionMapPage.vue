@@ -549,7 +549,7 @@
       :planned="quickPlanned"
       :busy="ctlBusy"
       :hero-offer="quickHeroOffer"
-      @hero="sendHeroTo(quickPoi?.id)"
+      @toggle-hero="quickSel = toggleReinfHero(quickSel, quickFree)"
       @close="quickId = null"
       @delay="(n: number) => (quickDelayMin = n)"
       @cancel="quickCancel"
@@ -1920,6 +1920,7 @@ import {
   reinfMilitiaOver,
   setReinfMilitia,
   toggleReinfChamp,
+  toggleReinfHero,
   toggleReinfTransfer,
   transfersByOrigin,
   type ReinfSelection,
@@ -4800,6 +4801,8 @@ const quickArrival = computed(() => {
   const p = quickPoi.value;
   if (!p || !reinfCount(quickSel.value)) return null;
   const arr = quickExtra(p, quickSel.value);
+  const heroAt = quickHeroAt();
+  if (heroAt !== null) arr.push({ id: 'hero', at: heroAt });
   if (!arr.length) return null;
   const last = Math.max(...arr.map((x) => x.at));
   const start = coarseNow.value + quickDelayMin.value * 60_000;
@@ -4822,6 +4825,38 @@ const quickPlanned = computed(() =>
       }),
     })),
 );
+/** 🦸 L'heure d'arrivée du héros coché (null s'il ne part pas) : son trajet, après le départ
+ *  différé — le calcul de la ligne du héros (`heroOfferFor`). */
+function quickHeroAt(): number | null {
+  const min = quickHeroOffer.value?.min;
+  if (!quickSel.value.hero || min === undefined) return null;
+  return coarseNow.value + (quickDelayMin.value + min) * 60_000;
+}
+/** 🛡️ La tenue d'une sélection : ses arrivées, et le héros coché en route vers le lieu (la
+ *  bataille le compte s'il arrive avant l'attaque, `heroAtAttack`). */
+function quickDefense(p: Poi, sel: ReinfSelection) {
+  const heroAt = sel.hero ? quickHeroAt() : null;
+  const c = p.control;
+  const q =
+    heroAt !== null && c && !c.hero && !c.heroComing
+      ? {
+          ...p,
+          control: {
+            ...c,
+            heroComing: {
+              at: heroAt,
+              from: coarseNow.value,
+              unit: {
+                name: char.row?.pseudo ?? 'Toi',
+                level: heroLevel.value,
+                combatant: fighter.value,
+              },
+            },
+          },
+        }
+      : p;
+  return defenseOf(q, quickExtra(p, sel));
+}
 /** Les arrivées d'une sélection, comme au départ réel : les champions de la base partent
  *  ensemble (au pas du plus lent, `partyLegMin`), ceux d'un même lieu aussi (`legFromSpot`,
  *  la règle du transfert), les miliciens à leur pas. */
@@ -4861,8 +4896,8 @@ const quickHold = computed(() => {
   const base = defenseOf(p);
   if (!p || !base) return null;
   const sel = quickSel.value;
-  const cur = defenseOf(p, quickExtra(p, sel))?.pct ?? base.pct;
-  const pctWith = (next: ReinfSelection) => defenseOf(p, quickExtra(p, next))?.pct ?? cur;
+  const cur = quickDefense(p, sel)?.pct ?? base.pct;
+  const pctWith = (next: ReinfSelection) => quickDefense(p, next)?.pct ?? cur;
   const free = quickFree.value;
   const champ: Record<string, number> = {};
   for (const a of freeSorted.value) {
@@ -4892,7 +4927,7 @@ const quickHold = computed(() => {
 const quickSelHold = computed(() => {
   const p = quickPoi.value;
   if (!p || !reinfCount(quickSel.value)) return null;
-  const d = defenseOf(p, quickExtra(p, quickSel.value));
+  const d = quickDefense(p, quickSel.value);
   return d ? { pct: d.pct, late: d.late } : null;
 });
 /** ⇄ Les membres des AUTRES points tenus qui peuvent venir, avec leur trajet depuis leur
@@ -5216,6 +5251,12 @@ async function quickSend() {
       message: `Renfort impossible : ${why}${sent ? ` (${sent} déjà en route)` : ''}`,
     });
   try {
+    // 🦸 Le héros d'abord : il prend ses 2 places avant les champions.
+    if (sel.hero) {
+      const why = await heroToPost(uid, p.id);
+      if (why) return fail(`héros : ${why}`);
+      sent++;
+    }
     if (sel.champs.length) {
       const why = await char.reinforceControlPoint(uid, p.id, sel.champs, Date.now());
       if (why) return fail(why);
