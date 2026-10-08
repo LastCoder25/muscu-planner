@@ -28,7 +28,7 @@ import {
   reinforceControl,
   releaseFromControl,
   seatsOf,
-  garrisonCap,
+  militiaSeatsOf,
   heroSeatsIn,
   sendHomeFromControl,
 } from './controlPoints';
@@ -204,7 +204,7 @@ function seatsOkAfter(c: ControlState, out: string, add: string): boolean {
   ids.push(add);
   const militia = ids.filter(isMilitiaId).length;
   const champs = ids.length - militia + heroSeatsIn(c);
-  return champs + militia <= garrisonCap(c.kind) && champs <= seatsOf(c.kind);
+  return militia <= militiaSeatsOf(c.kind) && champs <= seatsOf(c.kind);
 }
 
 export function swapBlocker(
@@ -342,12 +342,9 @@ export function rejoinHome(
   if (!held(map, homeId) || !ids.length) return { map, back: [], out: [...ids] };
   // ⚔️🏰 Leur place leur était GARDÉE (`away`) : on la leur rend avant de compter les places
   // libres, sinon ils se la disputeraient avec eux-mêmes.
-  // 🛡️⚔️ Ceux dont la place était gardée la REPRENNENT toujours, même si des miliciens la
-  // tiennent en intérim (`interimSeats`) : à leur arrivée, le dernier milicien rentre à pied à
-  // la base (`settleReinforcements`).
-  // 🛡️🏠 Les autres aussi font céder les miliciens (2026-10-07, demandé : « s'il n'y a pas
-  // assez de place, renvoyer à la base les miliciens, le nombre nécessaire ») : seules les
-  // places de CHAMPION du point les bornent (`controlFreeSeats`).
+  // 🛡️ Ceux dont la place était gardée la REPRENNENT toujours ; les autres, dans la limite des
+  // places de CHAMPION (`controlFreeSeats`). Les miliciens ont leurs places à part : personne
+  // n'est délogé.
   const kept = new Set(held(map, homeId)!.control!.away ?? []);
   const owed = ids.filter((id) => kept.has(id));
   const rest = ids.filter((id) => !kept.has(id));

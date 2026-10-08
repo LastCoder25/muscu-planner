@@ -93,7 +93,7 @@
           <span
             v-if="r.status !== 'enemy' && r.status !== 'assault'"
             class="cps-minis"
-            :aria-label="`Garnison ${r.garrison.length} sur ${Number.isFinite(r.seats) ? r.seats : 'sans limite'}`"
+            :aria-label="`Garnison ${r.garrison.length} sur ${Number.isFinite(r.seats) ? garrisonCap(r.kind) : 'sans limite'}`"
           >
             <template v-for="(s, i) in slotsOf(r)" :key="i">
               <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
@@ -142,20 +142,6 @@
               >
               <!-- ➕ Une place libre ENVOIE un renfort, sans passer par la gestion du lieu
                    (demandé). Grisée si personne ne peut partir (ni champion ni milicien). -->
-              <button
-                v-else-if="s.kind === 'bump' && canReinforce(r)"
-                type="button"
-                class="mini free go bump"
-                title="Plein, mais un champion peut venir : un milicien lui cèdera sa place"
-                :aria-label="`Envoyer un champion : ${CONTROL_LABEL[r.kind]}, un milicien lui cède sa place`"
-                @click.stop="emit('reinforce', r.poi)"
-                @keydown.stop
-              >
-                ＋
-              </button>
-              <span v-else-if="s.kind === 'bump'" class="mini free" title="Un champion peut venir"
-                >＋</span
-              >
               <button
                 v-else-if="canReinforce(r)"
                 type="button"
@@ -268,9 +254,6 @@ type Slot =
   | { kind: 'route'; mil: boolean }
   | { kind: 'away'; adv: Adventurer }
   | { kind: 'free'; mil: boolean }
-  /** 🏰 Plein, mais des miliciens tiennent une place de CHAMPION : un champion peut venir, un
-   *  milicien lui cédera sa place à son arrivée (v1.90.0). */
-  | { kind: 'bump' }
   /** 🛡️ Le trait entre les titulaires et la milice (`garrisonCells`). */
   | { kind: 'sep' };
 /** Les cases de la ligne, en DEUX GROUPES (`garrisonCells`) : titulaires (héros, champions,

@@ -3458,14 +3458,15 @@ describe('🔀 FusionPanel', () => {
     // Ennemie : ce qu’elle rapporterait, à la même place.
     expect(out).toContain('XP pour la garnison 🎓');
     expect(out).toContain('1/5 tenus');
-    // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`) : 5 cases, 1 occupée,
-    // 4 libres — elles remplacent la pastille « 🛡️ 1/5 ». Les 4 s'ouvrent à un champion :
-    // elles vont au bloc des titulaires, sans trait de milice (aucun milicien).
+    // Une mine : 5 places de champion (`seatsOf`) ET, à part, 5 places de milice
+    // (`militiaSeatsOf`, 2026-10-08 : seuls les miliciens défendent). 1 champion posté :
+    // 4 places de champion libres, un trait, puis les 5 places de milice.
     expect(out).not.toContain('🛡️ 1/5');
     expect(out.match(/class="mini"/g)?.length).toBe(1);
     expect(out.match(/class="mini free"/g)?.length).toBe(4);
+    expect(out.match(/class="mini free mil"/g)?.length).toBe(5);
     expect(out).toMatch(/Place de champion libre/);
-    expect(out).not.toContain('mini-sep');
+    expect(out).toContain('mini-sep');
     // 🔎 Les filtres par statut, avec leur nombre (une tenue, quatre ennemies ; aucune vide).
     expect(out).toContain('🏰 Tenues · 1');
     expect(out).toContain('☠️ Pas tenues · 4');
@@ -3557,7 +3558,7 @@ describe('🔀 FusionPanel', () => {
     // 🖼️ La garnison, dans sa pastille : une miniature par champion posté, une par milicien
     // posté, et une case 🧭 par renfort en route (2026-09-29 : laissée « libre », elle
     // invitait à en envoyer un second) — lui aussi compté dans « 🧭 +1 en route ».
-    expect(out).toContain('Garnison 3 sur 5');
+    expect(out).toContain('Garnison 3 sur 10');
     expect(out.match(/class="mini"/g)?.length).toBe(1);
     expect(out.match(/class="mini mil"/g)?.length).toBe(2);
     // Chaque milicien porte son portrait (l’emoji 🛡️ n’est plus que le repli).
@@ -3565,7 +3566,9 @@ describe('🔀 FusionPanel', () => {
     // 🛡️ Titulaires puis milice, séparés d'un trait (2026-10-08) : le renfort en route est
     // un MILICIEN, il va donc au bloc de la milice.
     expect(out.match(/class="mini route mil"/g)?.length).toBe(1);
-    expect(out.match(/class="mini free"/g)?.length).toBe(1);
+    // Deux réserves : 4 places de champion libres, 2 places de milice libres (5 − 2 − 1).
+    expect(out.match(/class="mini free"/g)?.length).toBe(4);
+    expect(out.match(/class="mini free mil"/g)?.length).toBe(2);
     const minis = out.slice(out.indexOf('cps-minis'));
     const sep = minis.indexOf('mini-sep');
     expect(sep).toBeGreaterThan(0);

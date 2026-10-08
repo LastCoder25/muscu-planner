@@ -59,8 +59,8 @@ export function reinfCanAdd(sel: ReinfSelection, kind: 'champ' | 'mil', free: Re
   // personne dans la sélection — demi-tour à l'arrivée s'il n'y a pas de place.
   if (kind === 'mil' && free.milAnyway) return true;
   const all = reinfSeats(sel);
-  // 🏰 Un champion déloge les miliciens à son arrivée (2026-10-08) : seules les places de
-  // champion (`controlFreeSeats`, miliciens non comptés) le bornent.
+  // 🏰 Seules les places de champion (`controlFreeSeats`) bornent un champion : les miliciens
+  // ont les leurs à part (2026-10-08).
   if (kind === 'champ') return all.champ < free.champ;
   const used = free.milAnyway ? { ...all, total: all.champ } : all;
   if (used.total >= free.total) return false;
@@ -98,18 +98,6 @@ function militiaRoom(sel: ReinfSelection, free: ReinfFree): number {
  *  sortie qui part), sinon ils font demi-tour. */
 export function reinfMilitiaOver(sel: ReinfSelection, free: ReinfFree): number {
   return Math.max(0, militiaOf(sel) - Math.max(0, militiaRoom(sel, free)));
-}
-
-/**
- * 🏠 Combien de miliciens DÉJÀ EN POSTE rentreront à la base pour faire place aux champions
- * de la sélection (revue du 2026-10-08) : un champion déloge un milicien à son arrivée
- * (`bumpMilitiaToFit`), donc ceux qui dépassent les places VIDES en chassent autant.
- * `extraChamp` = des places de champion en plus (le héros en prend 2). Borné par les places de
- * champion : au-delà, l'envoi est refusé, il ne déloge personne.
- */
-export function reinfBumped(sel: ReinfSelection, free: ReinfFree, extraChamp = 0): number {
-  const champ = Math.min(free.champ, reinfSeats(sel).champ + extraChamp);
-  return Math.max(0, champ - Math.max(0, free.total));
 }
 
 /** Coche ou décoche un champion de la base — jamais au-delà des places. */

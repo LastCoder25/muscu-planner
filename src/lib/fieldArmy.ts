@@ -51,9 +51,9 @@ import {
   CONTROL,
   attackerLevel,
   citadelIdFor,
-  defendsControl,
   retakeBoost,
   retakeForce,
+  controlAllies,
 } from './controlPoints';
 import {
   campHurt,
@@ -63,8 +63,7 @@ import {
   forceHaul,
   type PartyInput,
 } from './camp';
-import { missionXpFor, partyAllies, spareInjured, type EscortKit } from './caravan';
-import { militiaUnits } from './militia';
+import { missionXpFor, spareInjured, type EscortKit } from './caravan';
 import type { Adventurer } from './adventurers';
 import type { SkirmishUnit } from './skirmish';
 import { RIFT, riftMana } from './rift';
@@ -840,8 +839,8 @@ export function controlAttackHold(
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
-  const allies = [...partyAllies(champs, kit, hero), ...militiaUnits([...ids], playerLevel)];
-  if (!allies.length || !defendsControl(p.control?.kind)) return 0;
+  const allies = controlAllies(p.control?.kind, champs, kit, hero, ids, playerLevel);
+  if (!allies.length) return 0;
   const { foe, force } = retakeBattle(map, p, allies, playerLevel, fort);
   return campWinPct(foe, force, allies, CONTROL.holdSamples);
 }

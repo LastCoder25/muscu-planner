@@ -1,13 +1,14 @@
-// 🛡️🏠 Quand des champions ou le héros REVIENNENT sur leur lieu fixe et qu'il manque des
-// places, les derniers miliciens arrivés rentrent à pied à la base — juste le nombre
-// nécessaire (2026-10-07, demandé par l'utilisateur).
+// 🛡️🏠 Quand des champions ou le héros REVIENNENT sur leur lieu fixe, ils reprennent une place
+// de CHAMPION. Depuis le 2026-10-08 les miliciens ont leurs places à part (`militiaSeatsOf`) :
+// personne ne leur cède la sienne, aucun milicien ne rentre à la base pour leur faire de la place
+// (le délogement de la 2026-10-07 est retiré).
 import { describe, expect, it } from 'vitest';
 import {
   captureControl,
   controlFreeSeats,
   controlIdOf,
   ensureControls,
-  garrisonCap,
+  militiaFreeSeats,
   heroPostBlocker,
   reinforceControl,
   seatsOf,
@@ -33,27 +34,21 @@ describe('🧝 le héros revient à son poste', () => {
     }) as unknown as Poi;
   const map = (p: Poi) => ({ pois: [p] }) as unknown as ExpeditionMap;
 
-  it('garnison pleine de miliciens : il reprend sa place, juste assez de miliciens rentrent', () => {
-    const p = ossuary(['a', 'b', 'mil:1', 'mil:2', 'mil:3']);
-    // 🛡️ 2026-10-08 : les miliciens cèdent aussi leur place à un nouvel envoi.
-    expect(controlFreeSeats(p.control)).toBe(
-      Math.min(seatsOf('ossuary'), garrisonCap('ossuary')) - 2,
-    );
+  it('places de milice pleines : il reprend sa place de champion, aucun milicien ne bouge', () => {
+    const mil = ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'];
+    const p = ossuary(['a', 'b', ...mil]);
+    expect(militiaFreeSeats(p.control)).toBe(0);
+    expect(controlFreeSeats(p.control)).toBe(seatsOf('ossuary') - 2);
     expect(heroPostBlocker(p.control)).toBeNull();
-    const c = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20, () => LEG).pois[0]!.control!;
+    const c = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20).pois[0]!.control!;
     expect(c.hero).toBe(true);
-    // 2 champions + le héros (2 places) + 1 milicien = 5 : deux miliciens cèdent leur place,
-    // les DERNIERS arrivés.
-    expect(c.garrison).toEqual(['a', 'b', 'mil:1']);
-    expect(c.returning).toEqual([
-      { id: 'mil:3', from: NOW, at: NOW + LEG },
-      { id: 'mil:2', from: NOW, at: NOW + LEG },
-    ]);
+    expect(c.garrison).toEqual(['a', 'b', ...mil]);
+    expect(c.returning).toBeUndefined();
   });
 
   it('assez de place : aucun milicien ne bouge', () => {
     const p = ossuary(['a', 'mil:1']);
-    const c = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20, () => LEG).pois[0]!.control!;
+    const c = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20).pois[0]!.control!;
     expect(c.garrison).toEqual(['a', 'mil:1']);
     expect(c.returning).toBeUndefined();
   });
@@ -61,7 +56,7 @@ describe('🧝 le héros revient à son poste', () => {
   it('les CHAMPIONS ne cèdent jamais leur place : sans place de champion, il rentre', () => {
     const p = ossuary(['a', 'b', 'c', 'd']);
     expect(heroPostBlocker(p.control)).toBe('full');
-    const m = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20, () => LEG);
+    const m = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20);
     expect(m.pois[0]!.control!.hero).toBeUndefined();
     expect(m.heroReturnAt).toBe(NOW + 20 * MIN);
   });
@@ -79,23 +74,29 @@ describe('⚔️ une sortie revient à son point', () => {
         p.control ? { ...p, control: { ...p.control, attackAt: 9e15 } } : p,
       ),
     };
-    // Trois miliciens arrivent : la garnison de 5 est pleine.
-    m = reinforceControl(m, MINE, ['mil:1', 'mil:2', 'mil:3'], NOW - 2 * MIN, NOW - 2 * MIN);
+    // Cinq miliciens arrivent : leurs places sont toutes prises.
+    m = reinforceControl(
+      m,
+      MINE,
+      ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'],
+      NOW - 2 * MIN,
+      NOW - 2 * MIN,
+    );
     return settleReinforcements(m, NOW - MIN, 30, () => LEG);
   };
 
-  it('la garnison est pleine de miliciens avant le retour', () => {
+  it('les places de milice sont pleines avant le retour, celles de champion non', () => {
     const c = ctl(world());
-    expect(c.garrison).toHaveLength(garrisonCap('mine'));
-    expect(controlFreeSeats(c)).toBe(Math.min(seatsOf('mine'), garrisonCap('mine')) - 2);
+    expect(militiaFreeSeats(c)).toBe(0);
+    expect(controlFreeSeats(c)).toBe(seatsOf('mine') - 2);
   });
 
-  it('un champion qui rentre reprend une place, un seul milicien rentre à la base', () => {
+  it('un champion qui rentre reprend une place de champion, aucun milicien ne rentre', () => {
     const r = rejoinHome(world(), MINE, ['x'], NOW);
     expect(r.back).toEqual(['x']);
     expect(r.out).toEqual([]);
     const c = ctl(settleReinforcements(r.map, NOW, 30, () => LEG));
-    expect(c.garrison).toEqual(['g0', 'g1', 'mil:1', 'mil:2', 'x']);
-    expect(c.returning?.map((x) => x.id)).toEqual(['mil:3']);
+    expect(c.garrison).toEqual(['g0', 'g1', 'mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5', 'x']);
+    expect(c.returning).toBeUndefined();
   });
 });

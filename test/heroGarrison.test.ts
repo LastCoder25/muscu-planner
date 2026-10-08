@@ -44,13 +44,15 @@ const held = (ids: string[], hero = false): ExpeditionMap =>
   captureControl(base(), id, ids, 0, 7, hero ? unit : undefined);
 const ctl = (m: ExpeditionMap) => m.pois.find((p) => p.id === id)!.control!;
 
-describe('🧝 le héros prend 2 places sur les 5', () => {
-  it('posté, il compte comme deux champions et deux places de garnison', () => {
+describe('🧝 le héros prend 2 places de champion sur les 5', () => {
+  it('posté, il compte comme deux champions ; les places de milice restent toutes libres', () => {
     expect(MILITIA.heroSeats).toBe(2);
     const m = held(['a'], true);
     expect(heroSeatsIn(ctl(m))).toBe(2);
     expect(controlFreeSeats(ctl(m))).toBe(seatsOf('mine') - 3);
-    expect(militiaFreeSeats(ctl(m))).toBe(MILITIA.perPoint - 3);
+    // 🛡️ Deux réserves séparées (2026-10-08) : ni le héros ni les champions ne prennent une
+    // place de milicien.
+    expect(militiaFreeSeats(ctl(m))).toBe(MILITIA.perPoint);
     expect(heroSeatsIn(ctl(held(['a'])))).toBe(0);
   });
   it('pris avec lui, le lieu garde 3 champions au plus (5 sans lui)', () => {

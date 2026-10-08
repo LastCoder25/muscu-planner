@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { garrisonCells } from '@/lib/garrisonView';
 
+// 🏰 Deux réserves séparées (2026-10-08) : la garnison d'un point = ses places de champion PLUS
+// ses places de milice (`garrisonCap`). Camp d'entraînement : 3 + 5 = 8. Mine : 5 + 5 = 10.
 const base = {
   hero: null,
   heroSeats: 2,
   garrison: [] as string[],
   reinforcing: [] as { id: string }[],
   away: [] as string[],
-  cap: 5,
+  cap: 8,
   champFree: 3,
 };
 const kinds = (cells: { kind: string }[]) => cells.map((c) => c.kind);
@@ -21,52 +23,49 @@ describe('garrisonCells — titulaires et milice séparés', () => {
       champFree: 0,
     });
     expect(kinds(g.champ)).toEqual(['adv', 'adv', 'route']);
-    expect(kinds(g.mil)).toEqual(['mil', 'mil', 'route']);
+    expect(kinds(g.mil)).toEqual(['mil', 'mil', 'route', 'free', 'free']);
   });
 
-  it('les places libres ouvertes aux champions vont aux titulaires, le reste à la milice', () => {
-    // Camp : 3 places de champion, 5 au total ; 1 champion posté.
+  it('les places libres de champion vont aux titulaires, celles de milice à la milice', () => {
+    // Camp : 3 places de champion, 5 de milice ; 1 champion posté.
     const g = garrisonCells({ ...base, garrison: ['a1'], champFree: 2 });
     expect(kinds(g.champ)).toEqual(['adv', 'free', 'free']);
-    expect(kinds(g.mil)).toEqual(['free', 'free']);
+    expect(kinds(g.mil)).toEqual(['free', 'free', 'free', 'free', 'free']);
   });
 
-  it('le héros compte pour 2 places', () => {
-    const g = garrisonCells({ ...base, hero: 'posted', champFree: 1 });
-    expect(kinds(g.champ)).toEqual(['hero', 'free']);
-    expect(kinds(g.mil)).toEqual(['free', 'free']);
-  });
-
-  it('plein de miliciens sur des places de champion : une case « un champion peut venir »', () => {
+  it('des miliciens ne prennent jamais une place de champion', () => {
+    // Camp plein de miliciens : les 3 places de champion restent ouvertes.
     const g = garrisonCells({
       ...base,
       garrison: ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'],
       champFree: 3,
     });
-    expect(kinds(g.champ)).toEqual(['bump']);
+    expect(kinds(g.champ)).toEqual(['free', 'free', 'free']);
     expect(kinds(g.mil)).toEqual(['mil', 'mil', 'mil', 'mil', 'mil']);
   });
 
-  it('une place de champion libre suffit : pas de case « bump » en plus', () => {
-    const g = garrisonCells({ ...base, garrison: ['a1', 'mil:1', 'mil:2', 'mil:3'], champFree: 4 });
-    expect(kinds(g.champ)).toEqual(['adv', 'free']);
+  it('le héros compte pour 2 places de champion', () => {
+    // Mine : 5 + 5 ; le héros posté laisse 3 places de champion.
+    const g = garrisonCells({ ...base, cap: 10, hero: 'posted', champFree: 3 });
+    expect(kinds(g.champ)).toEqual(['hero', 'free', 'free', 'free']);
+    expect(kinds(g.mil)).toEqual(['free', 'free', 'free', 'free', 'free']);
   });
 
-  it('sans milicien, aucune case « bump »', () => {
-    const g = garrisonCells({ ...base, garrison: ['a1', 'a2', 'a3', 'a4', 'a5'], champFree: 0 });
-    expect(g.champ.some((c) => c.kind === 'bump')).toBe(false);
-    expect(g.mil).toEqual([]);
-  });
-
-  it('« bump » exige un milicien à déloger, même si des places de champion restent annoncées', () => {
-    // Plein de champions en sortie : leurs places gardées ne se libèrent pas pour un autre.
+  it('champions au complet : il reste les places de milice', () => {
     const g = garrisonCells({
       ...base,
-      garrison: ['a1', 'a2'],
-      away: ['a3', 'a4', 'a5'],
-      champFree: 2,
+      cap: 10,
+      garrison: ['a1', 'a2', 'a3', 'a4', 'a5'],
+      champFree: 0,
     });
-    expect(g.champ.some((c) => c.kind === 'bump')).toBe(false);
+    expect(kinds(g.champ)).toEqual(['adv', 'adv', 'adv', 'adv', 'adv']);
+    expect(kinds(g.mil)).toEqual(['free', 'free', 'free', 'free', 'free']);
+  });
+
+  it('sans place de milice (objectif) : aucune case de milice', () => {
+    const g = garrisonCells({ ...base, cap: 5, garrison: ['a1', 'a2'], champFree: 3 });
+    expect(kinds(g.champ)).toEqual(['adv', 'adv', 'free', 'free', 'free']);
+    expect(g.mil).toEqual([]);
   });
 
   it('sans limite (la forteresse) : une seule place libre, de champion', () => {

@@ -43,7 +43,7 @@ const point = (L: number, kind: 'mine' | 'garden' = 'mine'): Poi =>
     control: { kind, owner: 'player', garrison: [], retakes: 0, faction: 'bandits', size: 1 },
   }) as unknown as Poi;
 
-describe('une garnison de 5 au plus, champions et miliciens compris', () => {
+describe('deux réserves : les miliciens ont leurs places, à part des champions', () => {
   it('pas de milicien dans les objectifs, la forteresse ni la citadelle — seulement les lieux de production', () => {
     for (const kind of ['objective', 'fortress', 'citadel'] as const) {
       const p = point(30, kind as 'mine');
@@ -52,37 +52,49 @@ describe('une garnison de 5 au plus, champions et miliciens compris', () => {
     }
     expect(militiaFreeSeats(point(30).control)).toBe(MILITIA.perPoint);
   });
-  it('les miliciens prennent ce qui reste des 5, champions compris', () => {
+  it('les miliciens prennent leurs places à eux : les champions ne les entament pas', () => {
     const p = point(30);
     p.control!.garrison = ['adv_a', 'adv_b', 'mil:1'];
     p.control!.reinforcing = [{ id: 'mil:2', at: 1 }];
-    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 4);
+    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 2);
     expect(reinforceBlocker(p.control, 1, true)).toBeNull();
-    expect(reinforceBlocker(p.control, 2, true)).toBeNull(); // 🛡️ v1.70 : au-delà des places, ils partent quand même (demi-tour à l'arrivée)
+    expect(reinforceBlocker(p.control, 4, true)).toBeNull(); // 🛡️ v1.70 : au-delà des places, ils partent quand même (demi-tour à l'arrivée)
   });
-  it('un champion a sa place même quand des miliciens remplissent la garnison (ils la lui cèdent)', () => {
+  it('un champion a sa place même quand les miliciens remplissent la leur', () => {
     const p = point(30);
-    p.control!.garrison = ['adv_a', 'mil:1', 'mil:2', 'mil:3', 'mil:4'];
+    p.control!.garrison = ['adv_a', 'mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'];
     expect(controlFreeSeats(p.control)).toBe(seatsOf('mine') - 1);
+    expect(militiaFreeSeats(p.control)).toBe(0);
     expect(reinforceBlocker(p.control, 1)).toBeNull();
   });
-  it('les champions gardent aussi la limite du point (3 au camp d’entraînement)', () => {
+  it('les champions gardent la limite du point (3 au camp d’entraînement), les miliciens leurs 5', () => {
     const p = point(30, 'training' as 'mine');
     p.control!.garrison = ['adv_a', 'adv_b', 'adv_c'];
     expect(controlFreeSeats(p.control)).toBe(0);
-    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 3);
+    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint);
   });
-  it('à l’arrivée des renforts, la garnison est coupée à 5 dans l’ordre d’arrivée', () => {
+  it('à l’arrivée des renforts, chaque réserve est coupée à ses places, dans l’ordre d’arrivée', () => {
     const p = point(30);
-    p.control!.garrison = ['adv_a', 'adv_b', 'mil:1'];
+    p.control!.garrison = ['adv_a', 'adv_b', 'mil:1', 'mil:2', 'mil:3', 'mil:4'];
     p.control!.reinforcing = [
-      { id: 'mil:2', at: 1 },
+      { id: 'mil:5', at: 1 },
       { id: 'adv_c', at: 2 },
-      { id: 'mil:3', at: 3 },
+      { id: 'mil:6', at: 3 },
     ];
     const map = { pois: [p] } as unknown as ExpeditionMap;
-    const g = settleReinforcements(map, 10, 30).pois[0]!.control!.garrison;
-    expect(g).toEqual(['adv_a', 'adv_b', 'mil:1', 'mil:2', 'adv_c']);
+    const c = settleReinforcements(map, 10, 30).pois[0]!.control!;
+    expect(c.garrison).toEqual([
+      'adv_a',
+      'adv_b',
+      'mil:1',
+      'mil:2',
+      'mil:3',
+      'mil:4',
+      'mil:5',
+      'adv_c',
+    ]);
+    // Le 6ᵉ milicien n'a plus de place de milice : il rentre à pied, il ne disparaît pas.
+    expect((c.returning ?? []).map((r) => r.id)).toEqual(['mil:6']);
   });
   // ⚠️ MESURÉ (60 combats) : 5 miliciens tiennent mieux que 3 (ils valent 2,5 champions),
   // mais la tenue reste plafonnée à `CONTROL.maxHold` : jamais un point sans risque.

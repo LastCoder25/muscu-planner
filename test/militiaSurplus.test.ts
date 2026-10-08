@@ -26,6 +26,7 @@ import {
   toggleReinfChamp,
   toggleReinfTransfer,
 } from '@/lib/reinforceSelection';
+import { MILITIA } from '@/lib/militia';
 
 const H = 3600_000;
 const L = 30;
@@ -42,6 +43,13 @@ const world = (ids: string[]) => {
 };
 const full = () => Array.from({ length: seatsOf('mine') }, (_, i) => `g${i}`);
 const settle = (m: ExpeditionMap, t: number) => settleReinforcements(m, t, L, () => LEG);
+/** Remplace la garnison d'un point (miliciens compris). */
+const withGarrison = (m: ExpeditionMap, id: string, garrison: string[]): ExpeditionMap => ({
+  ...m,
+  pois: m.pois.map((p) => (p.id === id ? { ...p, control: { ...p.control!, garrison } } : p)),
+});
+/** Les places de milice d'une mine, toutes prises. */
+const fullMil = () => Array.from({ length: MILITIA.perPoint }, (_, i) => `mil:m${i}`);
 
 describe('🛡️ partir vers un lieu plein', () => {
   it('des miliciens peuvent partir vers un lieu plein, pas des champions', () => {
@@ -58,36 +66,41 @@ describe('🛡️ partir vers un lieu plein', () => {
       expect(baseSendBlocker(c, 0, 1)).toBe('noMilitia');
     }
   });
-  it('toujours plein à l’arrivée : demi-tour, à pied vers la base', () => {
-    const m = settle(reinforceControl(world(full()), MINE, ['mil:1'], 2 * H, H), 2 * H);
-    expect(ctl(m).garrison).toEqual(full());
+  it('places de milice toujours pleines à l’arrivée : demi-tour, à pied vers la base', () => {
+    const start = withGarrison(world(full()), MINE, [...full(), ...fullMil()]);
+    const m = settle(reinforceControl(start, MINE, ['mil:1'], 2 * H, H), 2 * H);
+    expect(ctl(m).garrison).toEqual([...full(), ...fullMil()]);
     expect(ctl(m).returning).toEqual([{ id: 'mil:1', from: 2 * H, at: 2 * H + LEG }]);
   });
-  it('les champions sont partis en sortie entre-temps : ils s’installent', () => {
+  it('une mine pleine de CHAMPIONS : les miliciens s’installent quand même (places à part)', () => {
+    let m = reinforceControl(world(full()), MINE, ['mil:1', 'mil:2'], 2 * H, 0);
+    m = settle(m, 2 * H);
+    expect(ctl(m).garrison).toEqual([...full(), 'mil:1', 'mil:2']);
+    expect(ctl(m).returning).toBeUndefined();
+  });
+  it('une sortie des champions ne change rien aux places de milice', () => {
     let m = reinforceControl(world(full()), MINE, ['mil:1', 'mil:2'], 2 * H, 0);
     m = sortieLeaves(m, MINE, ['g0', 'g1'], H, L);
     m = settle(m, 2 * H);
     expect(ctl(m).garrison).toEqual(['g2', 'g3', 'g4', 'mil:1', 'mil:2']);
     expect(ctl(m).returning).toBeUndefined();
   });
-  it('autant s’installent qu’il y a de places, les autres font demi-tour', () => {
-    const m = settle(
-      reinforceControl(world(['a', 'b', 'c']), MINE, ['mil:1', 'mil:2', 'mil:3', 'mil:4'], H, 0),
-      H,
-    );
-    expect(ctl(m).garrison).toEqual(['a', 'b', 'c', 'mil:1', 'mil:2']);
+  it('autant s’installent qu’il y a de places de milice, les autres font demi-tour', () => {
+    const start = withGarrison(world(['a', 'b', 'c']), MINE, [
+      'a',
+      'b',
+      'c',
+      'mil:x',
+      'mil:y',
+      'mil:z',
+    ]);
+    const m = settle(reinforceControl(start, MINE, ['mil:1', 'mil:2', 'mil:3', 'mil:4'], H, 0), H);
+    expect(ctl(m).garrison).toEqual(['a', 'b', 'c', 'mil:x', 'mil:y', 'mil:z', 'mil:1', 'mil:2']);
     expect(ctl(m).returning?.map((r) => r.id)).toEqual(['mil:3', 'mil:4']);
   });
   it('des miliciens en route ne prennent la place d’aucun champion', () => {
     const m = reinforceControl(world(['a', 'b', 'c', 'd']), MINE, ['mil:1'], 2 * H, 0);
     expect(controlFreeSeats(ctl(m))).toBe(1);
-  });
-  it('un champion qui arrive après eux reprend la place : le dernier milicien rentre à pied', () => {
-    let m = reinforceControl(world(['a', 'b', 'c', 'd']), MINE, ['mil:1'], H, 0);
-    m = reinforceControl(m, MINE, ['e'], 2 * H, 0);
-    m = settle(m, 3 * H);
-    expect(ctl(m).garrison).toEqual(['a', 'b', 'c', 'd', 'e']);
-    expect(ctl(m).returning).toEqual([{ id: 'mil:1', from: 2 * H, at: 2 * H + LEG }]);
   });
 });
 
@@ -132,7 +145,7 @@ describe('⇄ transférer des miliciens vers un lieu plein', () => {
       ...m,
       pois: m.pois.map((p) =>
         p.id === CAMP
-          ? { ...p, control: { ...p.control!, garrison: [...campFull(), 'mil:7', 'mil:8'] } }
+          ? { ...p, control: { ...p.control!, garrison: [...campFull(), ...fullMil()] } }
           : p,
       ),
     };

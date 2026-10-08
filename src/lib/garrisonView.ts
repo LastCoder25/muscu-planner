@@ -15,10 +15,7 @@ export type ChampCell =
   | { kind: 'adv'; id: string }
   | { kind: 'route'; id: string }
   | { kind: 'away'; id: string }
-  | { kind: 'free' }
-  /** 🏰 Plein, mais des miliciens tiennent une place de CHAMPION : un champion peut venir,
-   *  un milicien lui cédera sa place à son arrivée. */
-  | { kind: 'bump' };
+  | { kind: 'free' };
 export type MilCell =
   | { kind: 'mil'; id: string }
   | { kind: 'route'; id: string }
@@ -36,7 +33,8 @@ export interface GarrisonCellInput {
   garrison: readonly string[];
   reinforcing: readonly { id: string }[];
   away: readonly string[];
-  /** La garnison entière (5, miliciens compris) ; `Infinity` = sans limite (la forteresse). */
+  /** La garnison entière : places de champion PLUS places de milice (`garrisonCap`) ;
+   *  `Infinity` = sans limite (la forteresse). */
   cap: number;
   /** Les places encore ouvertes à un CHAMPION (`controlFreeSeats`, miliciens non comptés). */
   champFree: number;
@@ -66,9 +64,5 @@ export function garrisonCells(i: GarrisonCellInput): GarrisonCells {
   const champFree = Math.min(free, Math.max(0, i.champFree));
   for (let k = 0; k < champFree; k++) champ.push({ kind: 'free' });
   for (let k = champFree; k < free; k++) mil.push({ kind: 'free' });
-  // Aucune place de champion libre à montrer, mais des miliciens en bouchent une : un champion
-  // peut quand même venir (une seule case ; sinon la place libre le dit déjà).
-  const militia = mil.filter((c) => c.kind !== 'free').length;
-  if (militia && !champFree && i.champFree > 0) champ.push({ kind: 'bump' });
   return { champ, mil };
 }

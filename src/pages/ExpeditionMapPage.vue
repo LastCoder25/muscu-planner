@@ -761,18 +761,22 @@
                     seatsOf(liveControl.kind)
                   }}</b
                 >
-                <b v-if="acceptsMilitia(liveControl)"> · 🛡️ {{ controlMilitia.length }}</b>
-                <span class="ctl-dim">
-                  · {{ controlCount + heroSeatsIn(liveControl) }}/{{
-                    MILITIA.perPoint
-                  }}
-                  places</span
+                <b v-if="acceptsMilitia(liveControl)">
+                  · 🛡️ {{ controlMilitia.length }}/{{ militiaSeatsOf(liveControl.kind) }}</b
                 >
               </template>
             </p>
             <p class="gar-head">
               ⚔️ Titulaires
-              <span class="ctl-dim">· touche-en un pour le ramener ou le remplacer</span>
+              <span class="ctl-dim"
+                >·
+                {{
+                  champsDefend(liveControl.kind)
+                    ? 'ils défendent le lieu'
+                    : 'ils produisent et interceptent, sans défendre'
+                }}
+                · touche-en un pour le ramener ou le remplacer</span
+              >
             </p>
             <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
             <div class="car-pick">
@@ -806,7 +810,7 @@
                     ? `🧭 en route · ${formatDuration(m.arriveIn)}`
                     : (ctlReservedLabel.get(m.adv.id) ?? null)
                 "
-                :gain="occupantLoss[m.adv.id] ? -occupantLoss[m.adv.id]!.loss : null"
+                :gain="occupantLoss[m.adv.id]?.loss ? -occupantLoss[m.adv.id]!.loss : null"
                 :gain-title="lossTitle(m.adv.id)"
                 @toggle="toggleRecall(m.adv.id)"
               />
@@ -814,16 +818,12 @@
                  dit au lieu de laisser croire la place libre. Pas sélectionnables : ils ne sont
                  pas là. -->
               <AdvPickTile
-                v-for="(m, i) in controlAway"
+                v-for="m in controlAway"
                 :key="'away' + m.adv.id"
                 class="away-tile"
                 :adv="m.adv"
                 :on="false"
-                :reason="
-                  `⚔️ en sortie · revient ${m.backIn > 0 ? 'dans ' + formatDuration(m.backIn) : 'bientôt'}` +
-                  (i < controlInterim ? ' · 🛡️ un milicien peut tenir sa place' : '')
-                "
-                @toggle="i < controlInterim && openQuick()"
+                :reason="`⚔️ en sortie · revient ${m.backIn > 0 ? 'dans ' + formatDuration(m.backIn) : 'bientôt'}`"
               />
               <!-- ➕ LES PLACES DE CHAMPION VIDES : toucher une case amène au renfort. -->
               <button
@@ -838,23 +838,13 @@
                 <span class="slot-plus">{{ slot.kind === 'reserved' ? '⏳' : '＋' }}</span>
                 <span class="slot-name">{{ slot.label }}</span>
               </button>
-              <!-- 🏰 PLEIN DE MILICIENS, MAIS UN CHAMPION PEUT VENIR (2026-10-08) : un champion
-                 déloge un milicien à son arrivée (v1.90.0). -->
-              <button
-                v-if="champOverMilitia > 0 && !champSlots.some((s) => s.kind === 'champ')"
-                type="button"
-                class="slot-tile"
-                aria-label="Faire venir un champion : un milicien lui cède sa place"
-                @click="openQuick"
-              >
-                <span class="slot-plus">＋</span>
-                <span class="slot-name">Place de champion · un milicien la tient</span>
-              </button>
             </div>
             <!-- 🛡️ LA MILICE, BOUCHE-TROU : une tuile ×N, sa part de la tenue pour le GROUPE
                entier (demandé), et le nombre à ramener. -->
             <template v-if="acceptsMilitia(liveControl)">
-              <p class="gar-head mil">🛡️ Milice <span class="ctl-dim">· bouche-trou</span></p>
+              <p class="gar-head mil">
+                🛡️ Milice <span class="ctl-dim">· seule à défendre le lieu</span>
+              </p>
               <div class="mil-group">
                 <div v-if="controlMilitia.length" class="mil-stack">
                   <span class="mil-emo"><MilitiaPortrait /></span>
@@ -895,12 +885,7 @@
                     </button>
                   </span>
                 </div>
-                <p v-if="controlMilitia.length && champOverMilitia > 0" class="mil-note">
-                  dont {{ champOverMilitia }} sur une place de champion :
-                  {{ champOverMilitia > 1 ? 'ils la cèdent' : 'il la cède' }} à l’arrivée d’un
-                  champion
-                </p>
-                <div v-if="milSlots.length || showMilAhead" class="mil-slots">
+                <div v-if="milSlots.length" class="mil-slots">
                   <button
                     v-for="slot in milSlots"
                     :key="'mslot' + slot.i"
@@ -912,25 +897,9 @@
                     <span class="slot-plus">＋</span>
                     <span class="slot-name">{{ slot.label }}</span>
                   </button>
-                  <!-- 🛡️ PLEIN, MAIS ON PRÉVOIT (demandé : « envoyer les miliciens avant que les
-                     champions ne partent ») : à l'arrivée, ils s'installent si une place s'est
-                     libérée, sinon ils font demi-tour. -->
-                  <button
-                    v-if="showMilAhead"
-                    type="button"
-                    class="slot-tile mil"
-                    aria-label="Envoyer des miliciens à l’avance"
-                    @click="openQuick"
-                  >
-                    <span class="slot-plus">🛡️</span>
-                    <span class="slot-name">Miliciens à l’avance</span>
-                  </button>
                 </div>
-                <p
-                  v-if="!controlMilitia.length && !milSlots.length && !showMilAhead"
-                  class="mil-note"
-                >
-                  Aucun milicien ici.
+                <p v-if="!controlMilitia.length" class="mil-note">
+                  ⚠️ Aucun milicien : le lieu tombera à la prochaine attaque.
                 </p>
               </div>
             </template>
@@ -1362,6 +1331,10 @@
               🛡️ Garnison : repousse environ <b>{{ stayHold }} %</b> des attaques
               <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
             </p>
+            <p v-else-if="stayNoDefense" class="car-cap stay-hold-line">
+              🛡️ Ceux qui restent produisent et interceptent, mais ne défendent pas : envoie des
+              miliciens pour tenir le lieu.
+            </p>
             <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
                sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
             <div v-if="partyGroups.length" class="car-pick">
@@ -1536,39 +1509,6 @@
             </p>
             <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
               ✅ Une armée arrive, mais ils seront rentrés avant elle.
-            </p>
-            <!-- 🛡️⚔️ UNE SORTIE LAISSE SON POINT (demandé : « propose de compenser avec des
-               miliciens ») : des miliciens de la base tiennent les places gardées pendant la
-               sortie et rentrent à pied quand les champions reviennent. -->
-            <button
-              v-if="sortieCoverInfo && sortieCoverInfo.n"
-              type="button"
-              class="sh-cover"
-              :class="{ on: coverOn }"
-              :aria-pressed="coverOn"
-              @click="coverOn = !coverOn"
-            >
-              <span class="sh-cover-box">{{ coverOn ? '✓' : '' }}</span>
-              <span class="sh-cover-txt">
-                <b
-                  >🛡️ Envoyer {{ sortieCoverInfo.n }} milicien{{
-                    sortieCoverInfo.n > 1 ? 's' : ''
-                  }}
-                  à {{ sortieCoverInfo.emo }} {{ sortieCoverInfo.label }}</b
-                >
-                <span
-                  >{{
-                    sortieCoverInfo.empty
-                      ? 'Sinon le lieu reste sans défenseur'
-                      : 'Pour garder sa défense'
-                  }}
-                  pendant la sortie · ils rentreront à pied au retour des champions</span
-                >
-              </span>
-            </button>
-            <p v-else-if="sortieCoverInfo && sortieCoverInfo.empty" class="sh-risk">
-              ⚠️ {{ sortieCoverInfo.emo }} {{ sortieCoverInfo.label }} restera sans défenseur
-              pendant la sortie, et aucun milicien n’est libre à la base.
             </p>
             <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
@@ -2020,7 +1960,8 @@ import {
   garrisonFreeSeats,
   acceptsMilitia,
   militiaMayHead,
-  interimSeats,
+  champsDefend,
+  militiaSeatsOf,
   heroPostBlocker,
   heroSeatsIn,
   HERO_POST_BLOCK_LABEL,
@@ -2072,7 +2013,6 @@ import {
 import {
   CREW_EMO,
   CREW_WHO,
-  MILITIA,
   MILITIA_NAME,
   MILITIA_PREFIX,
   crewMix,
@@ -3083,11 +3023,8 @@ const controlCount = computed(
   () => controlMembers.value.length + controlAway.value.length + controlMilitia.value.length,
 );
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
-/** 🛡️⚔️ Les places gardées (sortie) qu'un milicien peut tenir en intérim : elles sont DITES
- *  sur la tuile du sortant, pas comptées une seconde fois dans les cases vides. */
-const controlInterim = computed(() => interimSeats(liveControl.value));
-/** ➕ Les cases vides de la garnison de 5 : les premières prennent un champion, les
- *  suivantes (au-delà des places de champion du lieu) seulement un milicien. */
+/** ➕ Les cases vides : places de champion d'un côté, places de milice de l'autre (deux
+ *  réserves séparées depuis le 2026-10-08). */
 /** 🏰 La forteresse prise : garnison sans limite. */
 const unlimitedGarrison = computed(
   () => !!liveControl.value && !Number.isFinite(seatsOf(liveControl.value.kind)),
@@ -3100,16 +3037,17 @@ const ctlPlannedSeats = computed(() =>
 type GarrisonSlot = { i: number; kind: 'champ' | 'mil' | 'reserved' | 'any'; label: string };
 const garrisonSlots = computed<GarrisonSlot[]>(() => {
   if (unlimitedGarrison.value) return [{ i: 0, kind: 'any', label: 'Place libre · sans limite' }];
-  const empty = Math.max(0, garrisonFreeSeats(liveControl.value) - controlInterim.value);
   const taken = ctlPlannedSeats.value;
   const champ = Math.max(0, controlFree.value - taken.champ);
-  return Array.from({ length: empty }, (_, i) => {
-    if (i < taken.total)
-      return { i, kind: 'reserved' as const, label: 'Réservée · départ programmé' };
-    return i - taken.total < champ
-      ? { i, kind: 'champ', label: 'Place libre' }
-      : { i, kind: 'mil', label: 'Milicien seulement' };
-  });
+  const mil = Math.max(0, militiaFreeSeats(liveControl.value) - (taken.total - taken.champ));
+  const slots: GarrisonSlot[] = [];
+  for (let k = 0; k < taken.total; k++)
+    slots.push({ i: slots.length, kind: 'reserved', label: 'Réservée · départ programmé' });
+  for (let k = 0; k < champ; k++)
+    slots.push({ i: slots.length, kind: 'champ', label: 'Place de champion' });
+  for (let k = 0; k < mil; k++)
+    slots.push({ i: slots.length, kind: 'mil', label: 'Place de milicien' });
+  return slots;
 });
 /** ⚔️ Les cases vides du bloc des TITULAIRES (places de champion, réservées, sans limite). */
 const champSlots = computed(() => garrisonSlots.value.filter((s) => s.kind !== 'mil'));
@@ -3141,34 +3079,6 @@ function stepMilitia(d: 1 | -1) {
     if (last) ctlRecallSel.value = sel.filter((x) => x !== last);
   }
 }
-/** 🛡️ « Miliciens à l'avance » : plein, mais une place va se libérer. */
-const showMilAhead = computed(
-  () =>
-    !garrisonSlots.value.length &&
-    !controlInterim.value &&
-    ctlMayFreeUp.value &&
-    acceptsMilitia(liveControl.value),
-);
-/** 🏰 Les places de champion que tiennent aujourd'hui des miliciens : un champion peut encore
- *  venir (`controlFreeSeats` ne compte pas les miliciens), mais aucune case vide ne le dit. */
-const champOverMilitia = computed(() => {
-  if (unlimitedGarrison.value || !controlMilitia.value.length) return 0;
-  const emptyChamp = garrisonSlots.value.filter((s) => s.kind === 'champ').length;
-  return Math.max(0, controlFree.value - ctlPlannedSeats.value.champ - emptyChamp);
-});
-/** 🛡️ « Miliciens à l'avance » n'a de sens que si quelqu'un va LIBÉRER une place : un champion
- *  ou le héros en poste (il peut partir), ou un départ programmé depuis ce lieu. Sur un lieu
- *  tenu par des miliciens seuls, ceux envoyés en plus feraient demi-tour (revue 2026-10-08). */
-const ctlMayFreeUp = computed(() => {
-  const c = liveControl.value;
-  const id = livePoi.value?.id;
-  if (!c || !id) return false;
-  if (c.hero || c.garrison.some((x) => !isMilitiaId(x))) return true;
-  return char.plannedList.some(
-    (m) =>
-      (m.toId === id && (m.recall?.length || m.whole)) || m.transfers.some((t) => t.fromId === id),
-  );
-});
 /** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
  *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
  *  ou un lieu sans 2 places). */
@@ -6127,6 +6037,7 @@ const {
   stayCap,
   stayHold,
   stayHoldOf,
+  stayNoDefense,
   stayIds,
   stayChoice,
   toggleStay,
@@ -6165,8 +6076,6 @@ const {
   partyWonLeg,
   partyMin,
   partyRisk,
-  coverOn,
-  sortieCoverInfo,
   partySendBlock,
   canSendPartyNow,
   partyMax,

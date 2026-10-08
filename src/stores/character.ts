@@ -480,6 +480,7 @@ import {
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
   setCartoFavor,
+  champsDefend,
   defendsControl,
   applyLapis,
   setLapisSkill,
@@ -2961,14 +2962,6 @@ export const useCharacterStore = defineStore('character', () => {
             exp.homeHero,
             exp.returnAt,
             heroHomeLegMin(cur, map2, homePoi, exp.returnAt),
-            // 🛡️ Les miliciens qui lui cèdent la place rentrent au pas d'un milicien.
-            (p) =>
-              caravanLegMin(
-                p,
-                [],
-                0,
-                travelTimeMult(cur.buildings) * controlTravelMult(map2, exp.returnAt),
-              ) * 60_000,
           )
         : map2;
     const advsOut = home?.adventurers ?? ctl?.adventurers;
@@ -5204,8 +5197,7 @@ export const useCharacterStore = defineStore('character', () => {
       if (!mine.length) continue;
       any = true;
       // ⚔️🏰 Les blessés (partis à la base) rendent tout de suite la place qu'on leur gardait ;
-      // les autres la reprennent dans `rejoinHome`, qui doit encore la VOIR gardée : c'est ce
-      // qui leur permet de déloger un milicien en intérim (`interimSeats`).
+      // les autres la reprennent dans `rejoinHome`, qui doit encore la VOIR gardée.
       const r = rejoinHome(
         freeAway(
           map,
@@ -5457,19 +5449,22 @@ export const useCharacterStore = defineStore('character', () => {
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
-      // 💎 Le lapidaire : son champion ne se bat pas, il rentre (sans blessure) si le lieu tombe.
+      // 🛡️ SEULS LES MILICIENS DÉFENDENT un lieu fixe (2026-10-08, décision de l'utilisateur) :
+      // champions et héros postés y produisent, interceptent, mais ne combattent pas la reprise
+      // — sauf là où aucune milice ne va (objectif tenu, forteresse, `champsDefend`). Le
+      // lapidaire ne se défend pas du tout. Qui ne combat pas rentre SANS blessure s'il tombe.
       const fights = defendsControl(p.control!.kind);
+      const champsFight = champsDefend(p.control!.kind);
       const posted = advs.filter((a) => ids.has(a.id));
-      const escort = fights ? posted : [];
-      // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
-      const militia = fights ? militiaUnits(p.control!.garrison, playerLevel) : [];
+      const escort = champsFight ? posted : [];
+      const militia = fights && !champsFight ? militiaUnits(p.control!.garrison, playerLevel) : [];
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
-      const heroUnit = fights && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
+      const heroUnit = champsFight && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
@@ -5539,7 +5534,10 @@ export const useCharacterStore = defineStore('character', () => {
               ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}`
               : militia.length
                 ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
-                : `${emo} L’ennemi a repris le lieu, laissé sans défense.`) +
+                : `${emo} L’ennemi a repris le lieu, laissé sans milicien pour le défendre.`) +
+          (!held && !champsFight && (posted.length || p.control!.hero)
+            ? ' Tes champions postés n’ont pas combattu : ils rentrent à pied, sans blessure.'
+            : '') +
           turnBackLabel(back.length) +
           sortieHomeLabel(rr?.n ?? 0) +
           tierLostLabel(held ? 0 : controlTier(p.control, at)),
@@ -5551,19 +5549,22 @@ export const useCharacterStore = defineStore('character', () => {
       // `settleReturns` les rend à la base à leur arrivée — plus en un instant).
       const dead = o?.party?.militiaLost ?? [];
       if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
-      // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel), BLESSÉ :
-      // l'infirmerie commence à son arrivée (2026-10-07 : il peut être blessé partout).
+      // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel). BLESSÉ
+      // seulement s'il a COMBATTU (objectif, forteresse : `champsDefend`) — ailleurs il ne
+      // défend pas, il rentre indemne. L'infirmerie commence à son arrivée.
       if (!held && p.control!.hero) {
         const leg = heroHomeLegMin(cur, map, p, at);
         map = recallPostedHero(map, at, leg);
-        const b = baseOf(cur, now);
-        heroWound =
-          heroWoundAfter(
-            at + Math.max(0, Math.round(leg)) * 60_000,
-            woundMsFor(defenseLevel(b.defenses, 'infirmary'), raidIntervalMs(activeDays7)),
-            heroWound ?? b.wound,
-            now,
-          ) ?? heroWound;
+        if (heroUnit) {
+          const b = baseOf(cur, now);
+          heroWound =
+            heroWoundAfter(
+              at + Math.max(0, Math.round(leg)) * 60_000,
+              woundMsFor(defenseLevel(b.defenses, 'infirmary'), raidIntervalMs(activeDays7)),
+              heroWound ?? b.wound,
+              now,
+            ) ?? heroWound;
+        }
       }
       map = held
         ? holdControl(map, p.id, at, activeDays7)

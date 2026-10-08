@@ -120,7 +120,7 @@
             :key="a.id"
             :adv="a"
             :on="sel.champs.includes(a.id)"
-            :gain="hold?.champ[a.id] ?? null"
+            :gain="hold?.champ[a.id] || null"
             :travel-min="champMin[a.id] ?? null"
             :gain-title="gainTitle(sel.champs.includes(a.id))"
             :reason="busy ? '…' : !sel.champs.includes(a.id) && !canChamp ? 'plus de place' : null"
@@ -177,15 +177,6 @@
              attaque », depuis la base comme depuis un autre lieu) : les miliciens en trop
              s'installent si une place se libère d'ici leur arrivée, sinon ils font demi-tour
              vers la base. -->
-        <p v-if="bumped > 0" class="qr-mil-over">
-          🏠 {{ bumped }} milicien{{ bumped > 1 ? 's' : '' }} en poste céder{{
-            bumped > 1 ? 'ont' : 'a'
-          }}
-          {{ bumped > 1 ? 'leur' : 'sa' }} place à tes champions et rentrer{{
-            bumped > 1 ? 'ont' : 'a'
-          }}
-          à la base
-        </p>
         <p v-if="milOver > 0" class="qr-mil-over">
           🔄 {{ milOver }} milicien{{ milOver > 1 ? 's' : '' }} en trop : demi-tour vers la base si
           toujours plein à l’arrivée
@@ -240,7 +231,6 @@ import {
   reinfCanAdd,
   reinfCount,
   reinfMilitiaOver,
-  reinfBumped,
   reinfSeats,
   type ReinfSelection,
 } from '@/lib/reinforceSelection';
@@ -310,8 +300,6 @@ const canMil = computed(() => reinfCanAdd(props.sel, 'mil', free.value));
 const canBaseMil = computed(() => props.milAnyway || canMil.value);
 /** 🛡️ Ceux de la sélection qui partent au-delà des places libres d'aujourd'hui. */
 const milOver = computed(() => reinfMilitiaOver(props.sel, free.value));
-/** 🏠 Les miliciens en poste que les champions cochés (ou le héros) délogeront. */
-const bumped = computed(() => reinfBumped(props.sel, free.value));
 /** 🦸 Le héros tient-il encore dans les places de champion, avec la sélection ? */
 const canHero = computed(() => reinfSeats(props.sel).champ + MILITIA.heroSeats <= free.value.champ);
 /** Le milicien suivant partirait-il au-delà des places ? (son gain ne se promet pas.) */

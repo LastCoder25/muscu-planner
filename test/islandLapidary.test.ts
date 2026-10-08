@@ -12,6 +12,7 @@ import {
   garrisonCap,
   garrisonHold,
   lapidaryHours,
+  militiaSeatsOf,
   seatsOf,
   setLapisSkill,
 } from '@/lib/controlPoints';
@@ -64,15 +65,21 @@ describe('💎 le lapidaire de l’île 3', () => {
     const m = captureControl(island3(), id, ['a', 'b'], NOW, 7);
     const p = m.pois.find((q) => q.id === id)!;
     expect(p.control!.garrison).toEqual(['a']);
+    expect(militiaSeatsOf('lapidary')).toBe(0);
     expect(garrisonHold(p, refEscortUnits(LV), 1)).toBe(0);
-    // Les mêmes défenseurs tiendraient une mine : c'est bien le lapidaire qui ne se défend pas.
+    // Les mêmes défenseurs tiendraient un autre lieu : c'est bien le lapidaire qui ne se défend
+    // pas. 🛡️ Depuis le 2026-10-08, seuls des MILICIENS défendent une mine ; des champions,
+    // eux, défendent un objectif (aucune milice n'y va).
     const champs = [0, 1, 2].map((k) => refChampionAdv(LV + 20, k));
     const ids = champs.map((c) => c.id);
-    const asMine = { ...p, control: { ...p.control!, kind: 'mine' as const, garrison: ids } };
-    expect(controlAttackHold(m, asMine, ids, champs, { advGear: [] }, LV, 1, null)).toBeGreaterThan(
-      0,
-    );
-    expect(controlAttackHold(m, p, ids, champs, { advGear: [] }, LV, 1, null)).toBe(0);
+    const kit = { advGear: [] };
+    const asObj = { ...p, control: { ...p.control!, kind: 'objective' as const, garrison: ids } };
+    expect(controlAttackHold(m, asObj, ids, champs, kit, LV, 1, null)).toBeGreaterThan(0);
+    expect(controlAttackHold(m, p, ids, champs, kit, LV, 1, null)).toBe(0);
+    const mil = ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'];
+    const asMine = { ...p, control: { ...p.control!, kind: 'mine' as const, garrison: mil } };
+    expect(controlAttackHold(m, asMine, mil, [], kit, LV, 1, null)).toBeGreaterThan(0);
+    expect(controlAttackHold(m, p, mil, [], kit, LV, 1, null)).toBe(0);
   });
 
   it('le temps dépend de la couleur et du niveau', () => {

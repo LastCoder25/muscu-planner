@@ -77,7 +77,8 @@ describe('recallReturns', () => {
     expect(recallReturns(lost, 'ctl_mine', ['adv_a'], 300)).toEqual({ block: 'notHeld' });
     const full = sentHome();
     full.pois[0]!.control!.garrison = ['mil:2', 'mil:3', 'mil:4', 'mil:5', 'mil:6'];
-    // 🛡️ Pleine de MILICIENS : un champion fait quand même demi-tour (ils lui cèdent la place).
+    // 🛡️ Pleine de MILICIENS : un champion fait quand même demi-tour (les miliciens
+    // ont leurs places à part, il ne déloge personne).
     expect('block' in recallReturns(full, 'ctl_mine', ['adv_a'], 300)).toBe(false);
     // Au camp (3 places de champion) : la garnison a encore de la place pour un milicien,
     // pas pour un champion.
@@ -88,24 +89,35 @@ describe('recallReturns', () => {
     expect('block' in recallReturns(camp, 'ctl_mine', ['mil:1'], 300)).toBe(false);
   });
 
-  // 🛡️ Signalé (ossuaire) : des miliciens renvoyés par l'arrivée de champions ou du héros
-  // doivent pouvoir refaire demi-tour même sans place — à l'arrivée, ils repartent.
-  it('des miliciens font demi-tour même si le lieu est plein (champions, héros)', () => {
-    const full = sentHome();
-    full.pois[0]!.control!.garrison = ['adv_b', 'adv_c', 'adv_d', 'adv_e', 'adv_f'];
-    const r = recallReturns(full, 'ctl_mine', ['mil:1'], 300);
+  // 🛡️ Un milicien fait toujours demi-tour : il ne prend jamais une place de champion (deux
+  // réserves séparées depuis le 2026-10-08). Arrivé sans place de MILICE, il rentre à pied
+  // vers la base, jamais perdu.
+  it('des miliciens font demi-tour quelles que soient les places de champion', () => {
+    // Places de champion pleines : le milicien reprend SA place de milice, sans déloger personne.
+    const champs = sentHome();
+    champs.pois[0]!.control!.garrison = ['adv_b', 'adv_c', 'adv_d', 'adv_e', 'adv_f'];
+    const r = recallReturns(champs, 'ctl_mine', ['mil:1'], 300);
     if ('block' in r) throw new Error(r.block);
-    // Arrivés sans place : ils rentrent à pied vers la base, jamais perdus.
     const after = settleReinforcements(r.map, 600, 20).pois[0]!.control!;
-    expect(after.garrison).not.toContain('mil:1');
-    expect(after.returning?.map((x) => x.id)).toContain('mil:1');
+    expect(after.garrison).toEqual(['adv_b', 'adv_c', 'adv_d', 'adv_e', 'adv_f', 'mil:1']);
+    expect((after.returning ?? []).map((x) => x.id)).not.toContain('mil:1');
+    // Un champion, lui, a toujours besoin d'une place de champion.
+    expect(recallReturns(champs, 'ctl_mine', ['adv_a', 'mil:1'], 300)).toEqual({ block: 'full' });
 
+    // Le héros posté ne prend aucune place de milice non plus.
     const hero = sentHome();
     hero.pois[0]!.control!.garrison = ['adv_b', 'adv_c', 'adv_d'];
     hero.pois[0]!.control!.hero = true;
     expect('block' in recallReturns(hero, 'ctl_mine', ['mil:1'], 300)).toBe(false);
-    // Un champion, lui, a toujours besoin d'une place.
-    expect(recallReturns(full, 'ctl_mine', ['adv_a', 'mil:1'], 300)).toEqual({ block: 'full' });
+
+    // Places de MILICE pleines : le demi-tour part quand même, mais à l'arrivée il rentre.
+    const mil = sentHome();
+    mil.pois[0]!.control!.garrison = ['mil:2', 'mil:3', 'mil:4', 'mil:5', 'mil:6'];
+    const r2 = recallReturns(mil, 'ctl_mine', ['mil:1'], 300);
+    if ('block' in r2) throw new Error(r2.block);
+    const after2 = settleReinforcements(r2.map, 600, 20).pois[0]!.control!;
+    expect(after2.garrison).not.toContain('mil:1');
+    expect(after2.returning?.map((x) => x.id)).toContain('mil:1');
   });
 
   it('un retour qui est déjà un demi-tour ne rebrousse pas', () => {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   emptyReinfSelection,
-  reinfBumped,
   reinfCanAdd,
   reinfCount,
   toggleReinfHero,
@@ -61,27 +60,6 @@ describe('renfort groupé : les places', () => {
   });
 });
 
-describe('🏠 les miliciens délogés par les champions (reinfBumped)', () => {
-  // Camp : 3 places de champion, 1 seule vide (deux miliciens tiennent les autres).
-  const full = { champ: 3, total: 1 };
-  it('rien tant que les champions tiennent dans les places vides', () => {
-    expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a'] }, full)).toBe(0);
-  });
-  it('un champion au-delà des places vides déloge un milicien', () => {
-    expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a', 'b', 'c'] }, full)).toBe(2);
-  });
-  it('les champions venus d’un autre lieu comptent aussi', () => {
-    const sel = { ...emptyReinfSelection(), champs: ['a'], transfers: [{ fromId: 'm', id: 'b' }] };
-    expect(reinfBumped(sel, full)).toBe(1);
-  });
-  it('le héros prend deux places', () => {
-    expect(reinfBumped(emptyReinfSelection(), full, 2)).toBe(1);
-  });
-  it('jamais au-delà des places de champion (au-delà, l’envoi est refusé)', () => {
-    expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a', 'b', 'c', 'd'] }, full)).toBe(2);
-  });
-});
-
 describe('🦸 le héros se coche avec la sélection (2026-10-08)', () => {
   it('il prend 2 places de champion et compte pour un membre', () => {
     const sel = toggleReinfHero(emptyReinfSelection(), { champ: 3, total: 5 });
@@ -100,9 +78,5 @@ describe('🦸 le héros se coche avec la sélection (2026-10-08)', () => {
     const two = toggleReinfChamp(sel, 'a', free);
     expect(reinfCanAdd(two, 'champ', free)).toBe(false);
     expect(toggleReinfHero(sel, free).hero).toBeUndefined();
-  });
-  it('les miliciens qu’il déloge sont comptés', () => {
-    const sel = toggleReinfHero(emptyReinfSelection(), { champ: 3, total: 1 });
-    expect(reinfBumped(sel, { champ: 3, total: 1 })).toBe(1);
   });
 });

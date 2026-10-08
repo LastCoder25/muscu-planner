@@ -36,10 +36,8 @@ import {
   champSeatsWithHero,
   walkPoint,
   walkHomeMs,
-  bumpMilitiaToFit,
   heroPostBlocker,
 } from './controlPoints';
-import { caravanLegMin } from './caravan';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
 import { enemyWaitMs, sortieFires, SORTIE_EVENTS, type SortieKind } from './sortieClock';
@@ -1179,9 +1177,6 @@ export function heroBackToPost(
   unit: PostedHero,
   at: number,
   legMin: number,
-  /** 🛡️ Trajet à pied d'un milicien de ce lieu jusqu'à la base (ms), pour ceux qui lui cèdent
-   *  la place. Le store passe le vrai ; sans lui, celui d'une équipe sans rôle. */
-  militiaLegMs: (p: Poi) => number = (p) => caravanLegMin(p, [], 0, 1) * 60_000,
 ): ExpeditionMap {
   // ⚠️ Déjà en route vers la base (le point qu'il venait de prendre est tombé, il a été
   // rappelé) : il ne peut pas en même temps reprendre son ancien poste.
@@ -1189,13 +1184,13 @@ export function heroBackToPost(
   // ⚔️ Sa place gardée se rend AVANT de vérifier qu'il en a une : c'est elle qu'il reprend.
   const p = withoutHeroAway(map.pois.find((q) => q.id === homeId));
   if (!p) return map;
-  // 🛡️🏠 S'il manque des places, les derniers miliciens arrivés lui cèdent la leur et rentrent
-  // à pied à la base (2026-10-07, demandé) — juste le nombre nécessaire.
+  // 🛡️ Il reprend une place de CHAMPION ; les miliciens ont les leurs à part (2026-10-08) :
+  // personne ne lui cède rien.
   if (!heroPostBlocker(p.control)) {
     // 💰 La production faite sans lui est mise de côté AVANT qu'il ne compte à nouveau.
     const banked = { ...p, control: bankForHero(map, p, at, unit.level) };
     const posted = { ...p, control: { ...banked.control, hero: true, heroUnit: unit } };
-    const done = bumpMilitiaToFit(posted, at, militiaLegMs(p));
+    const done = posted;
     return { ...map, pois: map.pois.map((q) => (q.id === homeId ? done : q)) };
   }
   return heroWalksHomeFrom(
