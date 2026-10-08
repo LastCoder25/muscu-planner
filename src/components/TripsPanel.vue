@@ -313,32 +313,14 @@ export interface MapTrip {
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import {
-  parseTripFilters,
-  serializeTripFilters,
-  shownTripCats,
-  tripFiltersKey,
-  toggleAllTrips,
-  toggleTripCat,
-  tripCatPillOn,
-  type TripCat,
-  type TripFilter,
-  type TripSelection,
-} from '@/lib/tripFilter';
-import {
-  legPillOn,
-  shownLegs,
-  toggleLeg,
-  tripLegTiles,
-  type LegSelection,
-  type LegTile,
-  type TripLeg,
-} from '@/lib/tripLegTiles';
+import { toggleAllTrips, toggleTripCat, tripCatPillOn, type TripFilter } from '@/lib/tripFilter';
+import { legPillOn, toggleLeg, type LegTile, type TripLeg } from '@/lib/tripLegTiles';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { useCharacterStore } from '@/stores/character';
-import { useAuthStore } from '@/stores/auth';
+import { useTripFilters } from '@/composables/useTripFilters';
+import { legTileShown, tripCatOf, tripFilterCtx, tripLegOrder } from '@/lib/tripNav';
 import { isRiftPoi, poiEmo, poiLabel } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { tripEnds, type TripEnd } from '@/lib/tripEnds';
@@ -400,17 +382,15 @@ const tiles = computed(() => {
     ends?: ReturnType<typeof tripEnds>;
     attack?: ActiveAttack;
   }[] = [
-    // 🚶↩️ Une tuile par ÉTAPE (`tripLegTiles`) : la tuile « ↩ Retour » encore à venir se range
-    // à l'heure du retour en ville.
-    ...props.trips.flatMap((t) =>
-      tripLegTiles(t).map((leg) => ({
-        key: leg.key,
-        at: leg.future ? (t.homeAt ?? t.endsAt ?? Infinity) : (t.endsAt ?? -Infinity),
-        trip: t,
-        leg,
-        ends: tripEnds({ ...t, back: leg.back }),
-      })),
-    ),
+    // 🚶↩️ Une tuile par ÉTAPE, rangée à l'heure de son étape (`tripLegOrder`, la règle des
+    // flèches ‹ › de la fiche d'un voyage).
+    ...tripLegOrder(props.trips).map((x) => ({
+      key: x.key,
+      at: x.at,
+      trip: x.trip,
+      leg: x.leg,
+      ends: tripEnds({ ...x.trip, back: x.leg.back }),
+    })),
     ...(props.attacks ?? []).map((r) => ({
       key: 'atk' + r.army.id,
       at: r.army.army?.at ?? Infinity,
@@ -419,48 +399,17 @@ const tiles = computed(() => {
   ];
   return list.sort((x, y) => x.at - y.at);
 });
-/** 🧭⚔️ Le filtre (cf. `TripSelection`). Un voyage programmé ne compte QUE dans
- *  « Programmés » ; en route, il compte dans sa catégorie (`MapTrip.cat`). */
-/** 💾 Les filtres sont relus au montage et réécrits à chaque changement, par compte
- *  (`tripFiltersKey`) — d'une ouverture à l'autre (demandé). Stockage indisponible : on
- *  garde « tout », sans rien bloquer. */
-const auth = useAuthStore();
-function readSavedFilters() {
-  try {
-    return parseTripFilters(localStorage.getItem(tripFiltersKey(auth.user?.id)));
-  } catch {
-    return parseTripFilters(null);
-  }
-}
-const saved = readSavedFilters();
-const selection = ref<TripSelection>(saved.sel);
-const catOf = (t: MapTrip): Exclude<TripCat, 'attacks'> =>
-  t.pending ? 'planned' : (t.cat ?? 'trips');
-const counts = computed(() => {
-  const n = { trips: 0, reinf: 0, raids: 0, planned: 0, attacks: props.attacks?.length ?? 0 };
-  for (const t of props.trips) n[catOf(t)]++;
-  return n;
-});
-const CAT_ORDER: readonly TripCat[] = ['trips', 'raids', 'reinf', 'planned', 'attacks'];
-const present = computed(() => CAT_ORDER.filter((c) => counts.value[c] > 0));
-const shown = computed(() => shownTripCats(selection.value, present.value));
-/** 🚶↩️ Filtre des ÉTAPES (demandé), en plus des catégories : il ne touche que les voyages,
- *  les armées ennemies n'ont pas d'étape. */
-const legSel = ref<LegSelection>(new Set<TripLeg>(saved.legs));
-watch([selection, legSel], ([sel, legs]) => {
-  try {
-    localStorage.setItem(tripFiltersKey(auth.user?.id), serializeTripFilters(sel, legs));
-  } catch {
-    /* stockage indisponible : le filtre vaut pour cette ouverture seulement */
-  }
-});
-const legCounts = computed(() => {
-  const n: Record<TripLeg, number> = { go: 0, back: 0 };
-  for (const x of tiles.value) if (x.leg) n[x.leg.leg]++;
-  return n;
-});
-const presentLegs = computed(() => (['go', 'back'] as const).filter((l) => legCounts.value[l] > 0));
-const legsShown = computed(() => shownLegs(legSel.value, presentLegs.value));
+/** 🧭⚔️ Le filtre (cf. `TripSelection`), PARTAGÉ avec l'autre rangée et les flèches de la
+ *  fiche d'un voyage (`useTripFilters`). Ce qu'il laisse voir : `tripFilterCtx` (lib). */
+const { selection, legSel } = useTripFilters();
+const ctx = computed(() =>
+  tripFilterCtx(props.trips, props.attacks?.length ?? 0, selection.value, legSel.value),
+);
+const counts = computed(() => ctx.value.counts);
+const present = computed(() => ctx.value.present);
+const shown = computed(() => ctx.value.shown);
+const legCounts = computed(() => ctx.value.legCounts);
+const presentLegs = computed(() => ctx.value.presentLegs);
 function pick(id: TripFilter | TripLeg) {
   if (id === 'go' || id === 'back') {
     legSel.value = toggleLeg(legSel.value, id, presentLegs.value);
@@ -515,9 +464,7 @@ const shownTiles = computed(() =>
   tiles.value.filter((x) =>
     x.attack
       ? shown.value.has('attacks')
-      : !!x.trip &&
-        shown.value.has(catOf(x.trip)) &&
-        (!x.leg || presentLegs.value.length < 2 || legsShown.value.has(x.leg.leg)),
+      : !!x.trip && !!x.leg && legTileShown(x.trip, x.leg.leg, ctx.value),
   ),
 );
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
@@ -601,7 +548,7 @@ function facesOf(t: MapTrip) {
  *  compté à part plutôt que de faire tomber l'écran. */
 const crew = computed(() => {
   const t = props.trips.find((x) => x.key === props.focus);
-  if (!t || !shown.value.has(catOf(t))) return null;
+  if (!t || !shown.value.has(tripCatOf(t))) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
   // 🛡️ Les miliciens sont anonymes, hors du vivier : comptés à part (sans ça ils passaient

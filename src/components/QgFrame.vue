@@ -47,6 +47,11 @@ const brackets = computed(() => {
 </script>
 
 <style scoped lang="scss">
+/* Un décor : il ne vole pas le toucher d'une troupe qui passe près de la base (signalé par le
+   smoke, 2026-10-08 : le halo recouvrait l'icône du héros sur le départ). */
+.qg {
+  pointer-events: none;
+}
 .qg-br {
   fill: none;
   stroke-width: 0.45;

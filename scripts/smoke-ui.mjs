@@ -98,6 +98,10 @@ const ECRANS = [
       // d'abord, puis l'équipe de l'un d'eux.
       { nom: 'expeditions', clic: '.map-tab.trips', attendu: '.tr-filter' },
       { nom: 'voyage', clic: '.trip', attendu: '.trip-crew' },
+      // 🧭 La carte est centrée sur ce voyage : toucher l'icône de la troupe, puis son tracé,
+      // ouvre la fiche du voyage (qui voyage, heures d'arrivée et de retour de chaque groupe).
+      { nom: 'voyage-icone', clic: '.recall-hit', attendu: '.vc .vc-time', ferme: '.vc-x' },
+      { nom: 'voyage-trace', clic: '.trail-hit', attendu: '.vc .vc-troop', ferme: '.vc-x' },
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
       // 🗂️ Les places fortes, dépliées par leur tuile.
       { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
@@ -114,11 +118,11 @@ const ECRANS = [
         clic: '.tile-fab[aria-label="Expéditions"]',
         attendu: '.map-overlay .trip',
       },
-      // ⚡🔙 …et une barre en bas à gauche garde l'accès aux boosts et au demi-tour.
+      // 🧭 …et toucher un voyage de la liste ouvre sa fiche, le tracé en avant sur la carte.
       {
         nom: 'tuile-trace',
         clic: '.map-overlay .trip',
-        attendu: 'body:has(.trail-focus) .trip-bar',
+        attendu: 'body:has(.trail-focus) .vc',
       },
       {
         nom: 'tuiles-forts',

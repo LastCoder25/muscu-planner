@@ -122,6 +122,17 @@
 
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
           <template v-if="active && hero">
+            <!-- 🧭 Toucher le tracé ouvre la fiche du voyage (une bande plus large que le trait). -->
+            <line
+              :x1="TOWN.x"
+              :y1="TOWN.y"
+              :x2="heroEnd.x"
+              :y2="heroEnd.y"
+              class="trail-hit"
+              role="button"
+              aria-label="Voir le voyage de ton héros"
+              @click.stop="openVoyage('hero')"
+            />
             <line
               :x1="heroEnd.x"
               :y1="heroEnd.y"
@@ -161,6 +172,16 @@
              ⚠️ Un groupe (⚔️) a son PROPRE motif (tiret-point) : même violet qu'un convoi, sans
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
           <template v-for="v in shownTravelers" :key="'vt' + v.id">
+            <line
+              :x1="v.origin?.x ?? TOWN.x"
+              :y1="v.origin?.y ?? TOWN.y"
+              :x2="lineEnd(v).x"
+              :y2="lineEnd(v).y"
+              class="trail-hit"
+              role="button"
+              :aria-label="`Voir le voyage : ${v.recallLabel || 'troupe en route'}`"
+              @click.stop="openVoyage(v.tripKey)"
+            />
             <line
               :x1="lineEnd(v).x"
               :y1="lineEnd(v).y"
@@ -251,18 +272,18 @@
           <PoiAppearFx v-if="appearing.length" :items="appearing" />
 
           <!-- Héros -->
-          <!-- 🔙 Une troupe encore en route se touche pour la faire rebrousser chemin : une cible
+          <!-- 🧭 Toucher une troupe ouvre la FICHE de son voyage (`VoyageCard`, demandé) : qui
+               voyage, les heures de chaque groupe, ce qu'il ramène, et le demi-tour. Une cible
                élargie (transparente) sous le marqueur, qui est trop petit pour un doigt. -->
           <g v-for="v in shownTravelers" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
             <circle
-              v-if="v.recall"
               :cx="v.at.x"
               :cy="v.at.y"
               r="7"
               class="recall-hit"
               role="button"
-              :aria-label="`Faire demi-tour : ${v.recallLabel}`"
-              @click.stop="askRecall(v.recall, v.recallInfo)"
+              :aria-label="`Voir le voyage : ${v.recallLabel || 'troupe en route'}`"
+              @click.stop="openVoyage(v.tripKey)"
             />
             <!-- 🗡️🛡️ Un renfort dit QUI il porte : champions (or, 🗡️), miliciens (vert, 🛡️)
                  ou les deux (🗡️ + pastille 🛡️). Pion un peu plus gros pour se lire. -->
@@ -296,14 +317,13 @@
 
           <g v-if="active && hero" :class="{ recallable: heroRecallable }">
             <circle
-              v-if="heroRecallable"
               :cx="hero.x"
               :cy="hero.y"
               r="7"
               class="recall-hit"
               role="button"
-              aria-label="Faire demi-tour : ton héros"
-              @click.stop="askRecall({ kind: 'hero' }, heroRecallInfo)"
+              aria-label="Voir le voyage de ton héros"
+              @click.stop="openVoyage('hero')"
             />
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
@@ -1639,18 +1659,32 @@
         ✕
       </button>
     </div>
+    <VoyageCard
+      v-if="voyageCard"
+      :card="voyageCard"
+      :now="now"
+      :can-boost="!!focusActions?.boost"
+      :can-recall="!!focusActions?.recall"
+      :nav="voyageNav"
+      @close="closeVoyage"
+      @boost="boostAskOpen = true"
+      @recall="cardKey && recallTripByKey(cardKey)"
+      @prev="stepVoyage(-1)"
+      @next="stepVoyage(1)"
+      @list="openTripList"
+    />
     <q-dialog v-model="boostAskOpen">
       <q-card class="boost-ask">
         <div class="ba-title">⚡ Accélérer ce voyage</div>
-        <p v-if="tripBar?.boost?.block" class="ba-note">{{ tripBar.boost.block }}</p>
-        <div v-else-if="tripBar?.boost" class="ba-row">
+        <p v-if="focusActions?.boost?.block" class="ba-note">{{ focusActions.boost.block }}</p>
+        <div v-else-if="focusActions?.boost" class="ba-row">
           <button
-            v-for="b in tripBar.boost.choices"
+            v-for="b in focusActions.boost.choices"
             :key="b.id"
             type="button"
             class="ba-btn"
             :class="{ lossy: b.lostMs > 0 }"
-            @click="((boostAskOpen = false), boostTrip(tripBar.key, b.id))"
+            @click="((boostAskOpen = false), boostTrip(focusActions.key, b.id))"
           >
             <b>⚡ {{ b.minutes >= 60 ? b.minutes / 60 + ' h' : b.minutes + ' min' }}</b>
             <span class="ba-n">×{{ b.count }}</span>
@@ -1880,6 +1914,10 @@ import {
 } from '@/lib/crossing';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import VoyageCard from '@/components/VoyageCard.vue';
+import { useTripFilters } from '@/composables/useTripFilters';
+import { navStep, navTripKeys } from '@/lib/tripNav';
+import type { TroopLeg, VoyageCardData, VoyageCardTroop } from '@/lib/voyageCard';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
@@ -4393,6 +4431,222 @@ function crewLabel(members: readonly string[]): string {
  *  retoucher la même tuile les éteint. Un voyage qui se termine emporte son halo
  *  (`tracePoi` ne le retrouve plus). */
 const focusTrip = ref<string | null>(null);
+/**
+ * 🧭 LA FICHE DU VOYAGE TOUCHÉ (demandé, 2026-10-08) : toucher le tracé ou l'icône d'une troupe,
+ * ou une tuile de la liste par-dessus la carte, ouvre une fiche compacte en bas à gauche — qui
+ * voyage, si c'est une attaque combinée, l'arrivée et le retour de chaque groupe, ce que le
+ * voyage ramène, ⚡ et 🔙. La carte reste visible, le tracé en rouge. ‹ › parcourent les voyages
+ * du filtre actif (le même que les rangées, `useTripFilters`).
+ */
+const cardKey = ref<string | null>(null);
+function openVoyage(key: string) {
+  cardKey.value = key;
+  if (focusTrip.value === key) frameTrip(key);
+  else focusTrip.value = key;
+}
+function closeVoyage() {
+  cardKey.value = null;
+  focusTrip.value = null;
+}
+/** ☰ Rouvre la liste par-dessus la carte (le voyage reste surligné). */
+function openTripList() {
+  cardKey.value = null;
+  overlay.value = 'trips';
+}
+watch(focusTrip, (k) => {
+  if (k !== cardKey.value) cardKey.value = null;
+});
+const { selection: tripSel, legSel: tripLegSel } = useTripFilters();
+const voyageNavKeys = computed(() => navTripKeys(trips.value, tripSel.value, tripLegSel.value));
+const voyageNav = computed(() => {
+  const k = cardKey.value;
+  const i = k ? voyageNavKeys.value.indexOf(k) : -1;
+  return i < 0 ? null : { index: i, count: voyageNavKeys.value.length };
+});
+function stepVoyage(dir: 1 | -1) {
+  const k = cardKey.value;
+  const next = k ? navStep(voyageNavKeys.value, k, dir) : null;
+  if (next) openVoyage(next);
+}
+const homeLabel = computed(() => (townIsVillage.value ? 'le village du port' : 'la base'));
+/** D'où part une troupe : un lieu tenu, ou la base (le village du port sur une île). */
+function fromLabel(origin?: { x: number; y: number }): string {
+  const p = tripOriginPoi(pois.value, origin);
+  return p ? poiLabel(p) : homeLabel.value;
+}
+function cardCrew(ids: readonly string[]) {
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  return {
+    champs: ids
+      .filter((id) => !isMilitiaId(id))
+      .flatMap((id) => {
+        const a = byId.get(id);
+        return a
+          ? [
+              {
+                id,
+                name: a.name,
+                championId: a.championId ?? null,
+                emoji: advTitle(a)?.emoji ?? '🧑',
+              },
+            ]
+          : [];
+      }),
+    militia: militiaIn(ids).length,
+  };
+}
+const legOf = (v: {
+  sentAt: number;
+  midAt: number;
+  returnAt: number;
+  dwellMs?: number;
+  turnBack?: number;
+}): TroopLeg => ({
+  sentAt: v.sentAt,
+  midAt: v.midAt,
+  returnAt: v.returnAt,
+  dwellMs: v.dwellMs,
+  turnBack: v.turnBack,
+});
+const placeOf = (p: Poi) => `${poiLabel(p)} · niv ${p.level}`;
+function groupTroop(
+  key: string,
+  v: ActiveExpedition,
+  isHero: boolean,
+  combined: boolean,
+): VoyageCardTroop {
+  const from = fromLabel(v.origin);
+  const crew = cardCrew(tripCrew(v));
+  return {
+    key,
+    emo: isHero ? '🧝' : '⚔️',
+    label: isHero
+      ? `Ton héros${crew.champs.length ? ' et son groupe' : ''}`
+      : combined
+        ? `Groupe de ${from}`
+        : 'L’équipe',
+    from,
+    hero: isHero,
+    ...crew,
+    leg: legOf(v),
+  };
+}
+const voyageCard = computed<VoyageCardData | null>(() => {
+  const k = cardKey.value;
+  if (!k || overlay.value) return null;
+  const a = active.value;
+  const all: ActiveExpedition[] = [...(a ? [a] : []), ...char.partyList];
+  // ⚔️🧭 Un voyage déjà parti : lui et les autres groupes de la même attaque combinée.
+  const launched = (v: ActiveExpedition): VoyageCardData => {
+    const group = [v, ...combinedSiblings(v, all)].sort((x, y) => (x === a ? -1 : y === a ? 1 : 0));
+    const combined = group.length > 1 || !!v.crew || !!v.wingOf;
+    return {
+      title: combined
+        ? '⚔️🧭 Attaque combinée'
+        : v === a
+          ? '🧝 Expédition de ton héros'
+          : '⚔️ Expédition d’équipe',
+      place: placeOf(v.poi),
+      combined,
+      troops: group.map((x, i) => groupTroop(String(i), x, x === a, combined)),
+      haul: expeHaul(v.outcome),
+    };
+  };
+  if (k === 'hero') return a ? launched(a) : null;
+  if (k.startsWith('g')) {
+    const g = char.partyList.find((x) => 'g' + x.id === k);
+    return g ? launched(g) : null;
+  }
+  // ⏳ Une attaque combinée pas encore toute partie : tous ses groupes, partis ou non.
+  const w = attacksOnMap.value.find((x) => x.id === k);
+  if (w) {
+    const wings = attackWingVoyages(
+      char.attackList.filter((x) => x.id === w.attackId),
+      char.row?.expedition_map,
+    );
+    return {
+      title: '⚔️🧭 Attaque combinée',
+      place: placeOf(w.poi),
+      combined: true,
+      haul: [],
+      troops: wings.map((x) => {
+        const from = fromLabel(x.voyage.origin);
+        return {
+          key: x.key,
+          emo: x.hero ? '🧝' : '⚔️',
+          label: x.hero
+            ? `Ton héros${x.members.length ? ' et son groupe' : ''}`
+            : `Groupe de ${from}`,
+          from,
+          hero: x.hero,
+          ...cardCrew(x.members),
+          leg: legOf(x.voyage),
+        };
+      }),
+    };
+  }
+  const r = reinforcementsOnMap.value.find((x) => x.id === k);
+  if (r)
+    return {
+      title: '🛡️ Renfort',
+      place: placeOf(r.poi),
+      combined: false,
+      haul: [],
+      troops: [
+        {
+          key: r.id,
+          emo: CREW_EMO[r.crew],
+          label: crewLabel(r.members),
+          from: fromLabel(r.origin),
+          hero: false,
+          ...cardCrew(r.members),
+          stays: true,
+          leg: { sentAt: r.sentAt, midAt: r.arriveAt, returnAt: r.arriveAt, oneWay: true },
+        },
+      ],
+    };
+  const h = returnsOnMap.value.find((x) => x.id === k);
+  if (h)
+    return {
+      title: '🏠 Retour',
+      place: `vers ${homeLabel.value}`,
+      combined: false,
+      haul: [],
+      troops: [
+        {
+          key: h.id,
+          emo: '🏠',
+          label: crewLabel(h.members),
+          from: poiLabel(h.poi),
+          hero: false,
+          ...cardCrew(h.members),
+          leg: { sentAt: h.sentAt, midAt: h.returnAt, returnAt: h.returnAt, oneWay: true },
+        },
+      ],
+    };
+  const hw = heroWalkOnMap.value;
+  if (hw && hw.id === k)
+    return {
+      title: hw.back ? '🧝 Ton héros rentre à pied' : '🧝 Ton héros va se poster',
+      place: hw.back ? `vers ${homeLabel.value}` : placeOf(hw.poi),
+      combined: false,
+      haul: [],
+      troops: [
+        {
+          key: hw.id,
+          emo: '🧝',
+          label: 'Ton héros',
+          from: hw.back ? poiLabel(hw.poi) : fromLabel(hw.origin),
+          hero: true,
+          champs: [],
+          militia: 0,
+          stays: !hw.back,
+          leg: { sentAt: 0, midAt: hw.arriveAt, returnAt: hw.arriveAt, oneWay: true },
+        },
+      ],
+    };
+  return null;
+});
 /** 🔴 Le tracé mis en avant sur la carte (et le halo de son lieu) s'éteint de lui-même au bout
  *  de `TRACE_MS` (demandé) ; recentrer sur le voyage le rallume. Le voyage reste sélectionné
  *  (son équipe sous la carte ne se referme pas). */
@@ -4579,8 +4833,7 @@ function pickOverlayTrip(key: string | null) {
   overlay.value = null;
   const k = key ?? focusTrip.value;
   if (!k) return;
-  if (focusTrip.value === k) frameTrip(k);
-  else focusTrip.value = k;
+  openVoyage(k);
 }
 /** Refermer la partie Expéditions (ou passer aux Places fortes) désélectionne le voyage
  *  touché : sinon son halo restait sur la carte sans sa tuile (signalé). */
@@ -5121,9 +5374,9 @@ const focusBoosts = computed(() => {
 /** ⚡🔙 La barre du voyage touché (cf. le gabarit) : seulement quand son détail sous la carte
  *  n'est pas affiché (panneau Expéditions replié) et que le panneau par-dessus est fermé. */
 const boostAskOpen = ref(false);
-const tripBar = computed(() => {
+const focusActions = computed(() => {
   const key = focusTrip.value;
-  if (!key || overlay.value || mapPanel.value === 'trips') return null;
+  if (!key) return null;
   const t = trips.value.find((x) => x.key === key);
   if (!t) return null;
   const b = focusBoosts.value;
@@ -5138,7 +5391,13 @@ const tripBar = computed(() => {
   const recall = recallableTrips.value.has(key);
   return { key, title: t.title, boost, recall };
 });
-watch(tripBar, (b) => {
+/** La barre du bas : seulement sans fiche ouverte (la fiche porte les mêmes actions). */
+const tripBar = computed(() => {
+  const f = focusActions.value;
+  if (!f || overlay.value || mapPanel.value === 'trips' || cardKey.value === f.key) return null;
+  return f;
+});
+watch(focusActions, (b) => {
   if (!b?.boost) boostAskOpen.value = false;
 });
 const boostBusy = ref(false);
@@ -7645,6 +7904,8 @@ onUnmounted(() => {
   stroke-width: 1.4;
   stroke-linecap: round;
   fill: none;
+  /* Le toucher passe à la bande `.trail-hit`, dessinée dessous. */
+  pointer-events: none;
 }
 .trail.done {
   stroke: var(--line);
@@ -7834,6 +8095,24 @@ onUnmounted(() => {
   fill: transparent;
   cursor: pointer;
 }
+/* Les dessins d'une troupe laissent passer le toucher vers sa zone (`.recall-hit`) : sinon
+   toucher l'emoji lui-même ne faisait rien (trouvé par le smoke, 2026-10-08). */
+.hero,
+.hero-emo,
+.van-mark,
+.crew-badge,
+.infirm-badge {
+  pointer-events: none;
+}
+/* 🧭 Le tracé d'un voyage se touche (il ouvre sa fiche) : une bande transparente plus large
+   que le trait, dessinée sous les marqueurs. */
+.trail-hit {
+  stroke: transparent;
+  stroke-width: 6;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  cursor: pointer;
+}
 .recallable .van-mark,
 .recallable .hero {
   stroke-dasharray: 1.2 0.8;
@@ -7863,6 +8142,8 @@ onUnmounted(() => {
   fill: #4a9eff;
   stroke: none;
   opacity: 0;
+  /* Le toucher passe au tracé (`.trail-hit`) dessous. */
+  pointer-events: none;
   animation: dir-flow 1.5s ease-in-out infinite;
 }
 @keyframes dir-flow {
