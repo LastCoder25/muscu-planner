@@ -30,6 +30,7 @@ import {
   releaseFromControl,
   seatsOf,
   garrisonCap,
+  heroSeatsIn,
   sendHomeFromControl,
 } from './controlPoints';
 
@@ -192,12 +193,19 @@ export const SWAP_BLOCK_LABEL: Record<SwapBlock, string> = {
 };
 
 /** Les places d'un point une fois `out` parti et `add` arrivé : 5 au plus en tout, et les
- *  champions dans la limite du point (`seatsOf`) — la règle de `capGarrison`. */
+ *  champions dans la limite du point (`seatsOf`) — la règle de `capGarrison`. ⚠️ Le héros y
+ *  compte pour 2 (`heroSeatsIn`), les places gardées aux sortants (`away`) restent prises, et
+ *  un milicien n'entre jamais dans un objectif ni la forteresse (`acceptsMilitia`) — signalé
+ *  par la revue du 2026-10-08 : un échange mettait 4 champions sur les 3 places du camp. */
 function seatsOkAfter(c: ControlState, out: string, add: string): boolean {
-  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)].filter((x) => x !== out);
+  if (isMilitiaId(add) && !acceptsMilitia(c)) return false;
+  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id), ...(c.away ?? [])].filter(
+    (x) => x !== out,
+  );
   ids.push(add);
-  const champs = ids.filter((x) => !isMilitiaId(x)).length;
-  return ids.length <= garrisonCap(c.kind) && champs <= seatsOf(c.kind);
+  const militia = ids.filter(isMilitiaId).length;
+  const champs = ids.length - militia + heroSeatsIn(c);
+  return champs + militia <= garrisonCap(c.kind) && champs <= seatsOf(c.kind);
 }
 
 export function swapBlocker(

@@ -458,7 +458,7 @@
       v-model="baseOpen"
       :champs="baseChamps"
       :away="char.advList.length - baseChamps.length"
-      :mil-home="milHome"
+      :mil-home="milHomeFree"
       :hero-home="!heroUnavailable"
       :hero-status="heroBaseStatus"
       :targets="baseTargets"
@@ -1027,7 +1027,7 @@
             </div>
             <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
-            <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
+            <p v-if="!controlWorkforce(liveControl)" class="ctl-line ctl-warn">
               ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
               attaque — sauf si un renfort arrive avant.
             </p>
@@ -1823,6 +1823,7 @@ import {
   type HaulPill,
   type PartyResult,
   veinDwellMs,
+  controlWorkforce,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';

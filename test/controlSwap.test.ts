@@ -56,6 +56,27 @@ describe('⇄ swapBlocker', () => {
     const m2 = withGarrison(world(['a', 'mil:1'], ['c1']), CAMP, ['c1', 'c2', 'c3', 'mil:9']);
     expect(swapBlocker(m2, MINE, 'mil:1', 'mil:9', CAMP)).toBeNull();
   });
+  it('le héros compte pour 2 : héros + 1 champion au camp, un 2ᵉ champion n’entre pas contre un milicien', () => {
+    const m0 = withGarrison(world(['a'], ['c1']), CAMP, ['c1', 'mil:8', 'mil:9']);
+    const m = {
+      ...m0,
+      pois: m0.pois.map((p) =>
+        p.id === CAMP ? { ...p, control: { ...p.control!, hero: true } } : p,
+      ),
+    };
+    expect(swapBlocker(m, CAMP, 'mil:9', 'b', null)).toBe('full');
+    expect(swapBlocker(m0, CAMP, 'mil:9', 'b', null)).toBeNull();
+  });
+  it('une place gardée à un sortant reste prise', () => {
+    const m0 = withGarrison(world(['a'], ['c1']), CAMP, ['c1', 'c2', 'mil:9']);
+    const m = {
+      ...m0,
+      pois: m0.pois.map((p) =>
+        p.id === CAMP ? { ...p, control: { ...p.control!, away: ['c3'] } } : p,
+      ),
+    };
+    expect(swapBlocker(m, CAMP, 'mil:9', 'b', null)).toBe('full');
+  });
 });
 
 describe('⇄ swapGarrison', () => {
