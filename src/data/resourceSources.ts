@@ -155,7 +155,7 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
       {
         emoji: '🏛️',
         label: 'Ruines anciennes de la carte',
-        detail: 'gardées — 3 sceaux, une ruine sur deux',
+        detail: 'gardées — 3 × (1 + rang de la ruine) sceaux, une ruine sur deux',
       },
       fixed('ossuary', 'lieu fixe tenu, en continu'),
       {

@@ -20,6 +20,7 @@ import {
 } from '@/lib/caravan';
 import {
   RUINS_SEALS,
+  ruinsChampionSeals,
   advanceWorld,
   campSpecOf,
   createMap,
@@ -76,7 +77,7 @@ describe('🏛️ les ruines anciennes : la seule source de sceaux', () => {
     expect(ruinsSeals({ id: c, level: 25 }, 60)).toEqual({
       kind: 'champion',
       rank: characterRank(25).rankIndex,
-      n: RUINS_SEALS.champion,
+      n: ruinsChampionSeals(25),
     });
     const s = ruinsSeals({ id: g, level: 25 }, 35);
     expect(s.kind).toBe('gear');
@@ -164,9 +165,11 @@ describe('🔱 le débit de sceaux reste celui d’avant — mesuré sur de vrai
       );
       expect(objet / avantObjet).toBeGreaterThan(0.75);
       expect(objet / avantObjet).toBeLessThan(1.3);
-      // Les failles montent avec le niveau (1 → 2 par jour) : on encadre large.
-      expect(champ / avantChamp).toBeGreaterThan(0.7);
-      expect(champ / avantChamp).toBeLessThan(1.9);
+      // 🔱 v1.89.0 : les sceaux de champion suivent le rang de la ruine (3 × (1 + rang)) —
+      // demandé, le vivier grossit avec le niveau. Mesuré : ×2,7 / ×2,6 / ×3,1 le débit des
+      // failles d'avant aux niveaux 12 / 30 / 60.
+      expect(champ / avantChamp).toBeGreaterThan(2);
+      expect(champ / avantChamp).toBeLessThan(4);
     });
   }
 });

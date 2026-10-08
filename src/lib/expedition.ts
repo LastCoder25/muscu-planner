@@ -688,14 +688,20 @@ const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
  * désormais la SEULE source de sceaux : plus rien sur les failles (mana seul) ni les camps.
  * La FAMILLE est dérivée de l'id (générateur séparé, comme les gardes) : une ruine sur deux
  * garde des sceaux de champion, l'autre des sceaux d'objet — la carte l'annonce avant l'envoi.
- * - 🔱 champion : `RUINS_SEALS.champion` sceaux au rang du LIEU (comme le gardien d'une faille) ;
+ * - 🔱 champion : `RUINS_SEALS.championPerRank` × (1 + rang de la RUINE) — 3 en Bronze, 30 en
+ *   Tout-puissant (v1.89.0, demandé : « lié au niveau de la ruine » ; 3 fixes avant). Même forme
+ *   que les sceaux d'objet, et que le coût d'une ascension (4 × rang visé) ;
  * - ⚜️ objet : `RUINS_SEALS.gearPerRank` × (1 + rang du joueur) (sans rang, v0.1138).
  * ⚠️ MESURÉ sur de vraies cartes (6 × 14 jours, niveaux 12/30/60) : 1,67 ruines par jour, une
  * sur deux de chaque famille — contre 7,9 camps et repaires (qui rendaient 1 + rang sceaux
  * d'objet chacun) et 1 à 2 failles (1,5 sceau de champion en moyenne). Les valeurs gardent
  * ce débit (`ruinsSeals.test`) : les sceaux sont plus RARES à trouver, plus gros à la fois.
  */
-export const RUINS_SEALS = { champion: 3, gearPerRank: 9 } as const;
+export const RUINS_SEALS = { championPerRank: 3, gearPerRank: 9 } as const;
+/** 🔱 Les sceaux de champion d'une ruine de ce niveau : 3 × (1 + son rang). */
+export function ruinsChampionSeals(level: number): number {
+  return RUINS_SEALS.championPerRank * (1 + characterRank(Math.max(1, level)).rankIndex);
+}
 export function ruinsSealKind(poi: Pick<Poi, 'id'>): SealDrop['kind'] {
   return mulberry32((hashId(poi.id) ^ 0x2545f491) >>> 0 || 1)() < 0.5 ? 'champion' : 'gear';
 }
@@ -704,7 +710,7 @@ export function ruinsSeals(poi: Pick<Poi, 'id' | 'level'>, playerLevel: number):
     return {
       kind: 'champion',
       rank: characterRank(Math.max(1, poi.level)).rankIndex,
-      n: RUINS_SEALS.champion,
+      n: ruinsChampionSeals(poi.level),
     };
   return {
     kind: 'gear',

@@ -16,7 +16,7 @@ const capOf = (rank: number) => (rank >= LAST ? 100 : rankStartLevel(rank + 1) -
 
 /** Part des jours où le trio de tête a 5 niveaux de retard ou plus sur le joueur. */
 // 🏛️ Depuis le 2026-09-27, les sceaux de champion viennent des RUINES ANCIENNES (une ruine
-// sur deux), `RUINS_SEALS.champion` au rang du lieu. `ruinsPerDay` compte ces ruines-là, et
+// sur deux), `RUINS_SEALS.championPerRank` × (1 + rang du lieu) depuis la v1.89.0. `ruinsPerDay` compte ces ruines-là, et
 // peut être fractionnaire (0,5 = une tous les deux jours). ⚠️ Les mesures d'avant parlaient
 // de failles (1,5 sceau en moyenne) : à 3 sceaux par ruine, 0,5 ruine/jour vaut une faille
 // par jour d'avant, 1 ruine/jour deux failles.
@@ -34,11 +34,10 @@ function trioStuckShare(xpDay: number, ruinsPerDay: number, seed: number): numbe
     const L = Math.min(100, computeLevel(xp).level);
     const r = characterRank(L).rankIndex;
     const visits = Math.floor(ruinsPerDay) + (rng() < ruinsPerDay % 1 ? 1 : 0);
-    // Le tirage du rang de la ruine est gardé : il n'a plus d'effet, mais le retirer décalerait
-    // le flux aléatoire et donc la mesure.
+    // 🔱 v1.89.0 : le rang de la ruine (tiré entre Bronze et celui du joueur) fixe ses sceaux.
     for (let i = 0; i < visits; i++) {
-      void Math.floor(rng() * (r + 1));
-      seals += RUINS_SEALS.champion;
+      const rank = Math.floor(rng() * (r + 1));
+      seals += RUINS_SEALS.championPerRank * (1 + rank);
     }
     for (let pass = 0; pass < 3; pass++)
       for (let i = 0; i < ranks.length; i++) {
@@ -72,9 +71,57 @@ describe('⬆️ les sceaux arrivent à temps pour le trio de tête', () => {
   it('mais l’ascension n’est pas une formalité : sans ruine, le trio reste bloqué', () => {
     expect(mean((s) => trioStuckShare(1066, 0, s))).toBeGreaterThan(0.5);
   });
-  it('…et un joueur très actif qui n’en prend qu’une tous les deux jours sent le frein', () => {
-    // Mesuré (v1.50, sans rang) : 12,7 % à 4 × rang ; 0 % à 3 × rang (formalité).
-    expect(mean((s) => trioStuckShare(1066, 0.5, s))).toBeGreaterThan(0.05);
+});
+
+// 🔱 LE VIVIER ENTIER (v1.89.0, demandé : « on a pas mal de champions, et plus on avance plus
+// on en a »). Le trio de tête ne dit rien du reste : 1 + niveau/2 champions à monter, à une
+// ruine de sceaux de champion toutes les 1,2 jours (le débit mesuré sur de vraies cartes).
+// Part des champions-jours bloqués de 5 niveaux ou plus. Mesuré : 3 sceaux fixes → 72 / 96 /
+// 99 % (tranquille / régulier / très actif) ; 3 × (1 + rang) → 0 / 42 / 74 % ; 4 × (1 + rang)
+// → 0 / 1 / 37 %. Un frein, plus un mur.
+function rosterBlockedShare(xpDay: number, seed: number): number {
+  const rng = mulberry32(seed);
+  let seals = 0;
+  const ranks: number[] = [];
+  let xp = 0;
+  let blocked = 0;
+  let total = 0;
+  for (let d = 0; d < 730; d++) {
+    xp += xpDay;
+    const L = Math.min(100, computeLevel(xp).level);
+    const r = characterRank(L).rankIndex;
+    while (ranks.length < 1 + Math.floor(L / 2)) ranks.push(0);
+    if (rng() < 0.83) seals += RUINS_SEALS.championPerRank * (1 + Math.floor(rng() * (r + 1)));
+    for (let pass = 0; pass < 3; pass++)
+      for (let i = 0; i < ranks.length; i++) {
+        if (L <= capOf(ranks[i]!) || ranks[i]! >= r) continue;
+        const need = ascensionCost(ranks[i]! + 1).seals;
+        if (seals >= need) {
+          seals -= need;
+          ranks[i] = ranks[i]! + 1;
+        }
+      }
+    if (d < 30) continue;
+    for (const k of ranks) {
+      total++;
+      if (L - Math.min(L, capOf(k)) >= 5) blocked++;
+    }
+  }
+  return blocked / total;
+}
+
+describe('🔱 le vivier entier suit le rythme des sceaux de ruine', () => {
+  const m = (xpd: number) =>
+    Array.from({ length: 10 }, (_, i) => rosterBlockedShare(xpd, i + 1)).reduce(
+      (a, b) => a + b,
+      0,
+    ) / 10;
+  it('un joueur tranquille ne bute pas, un joueur régulier en garde moins de la moitié bloqués', () => {
+    expect(m(PROFILS[0]![1])).toBeLessThan(0.1);
+    expect(m(PROFILS[1]![1])).toBeLessThan(0.6);
+  });
+  it('…mais ce n’est pas une formalité : le joueur très actif sent le frein', () => {
+    expect(m(PROFILS[2]![1])).toBeGreaterThan(0.4);
   });
 });
 
