@@ -929,7 +929,9 @@
               {{
                 liveControl.heroComing
                   ? '🔙 Le héros fait demi-tour'
-                  : '🦸 Rappeler le héros à la base'
+                  : ctlRecallDelay > 0 && (ctlRecallSel.length || controlMembersHere)
+                    ? '🦸 Rappeler le héros à la base · tout de suite'
+                    : '🦸 Rappeler le héros à la base'
               }}
             </button>
             <!-- 🧝 LE HÉROS EN GARNISON (2026-10-05, demandé) : il prend 2 places sur les 5. -->

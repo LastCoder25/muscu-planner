@@ -77,12 +77,23 @@ function militiaRoom(sel: ReinfSelection, free: ReinfFree): number {
   return Math.min(free.total - champs, free.mil === undefined ? Infinity : free.mil);
 }
 
-/** 🛡️ Combien de miliciens (base et transferts) partent AU-DELÀ des places libres d’aujourd’hui :
- *  ils ne
- *  s'installeront que si des places se libèrent d'ici leur arrivée (une sortie qui part),
- *  sinon ils font demi-tour. */
+/** 🛡️ Combien de miliciens (base et transferts) partent AU-DELÀ des places libres
+ *  d’aujourd’hui : ils ne s'installeront que si des places se libèrent d'ici leur arrivée (une
+ *  sortie qui part), sinon ils font demi-tour. */
 export function reinfMilitiaOver(sel: ReinfSelection, free: ReinfFree): number {
   return Math.max(0, militiaOf(sel) - Math.max(0, militiaRoom(sel, free)));
+}
+
+/**
+ * 🏠 Combien de miliciens DÉJÀ EN POSTE rentreront à la base pour faire place aux champions
+ * de la sélection (revue du 2026-10-08) : un champion déloge un milicien à son arrivée
+ * (`bumpMilitiaToFit`), donc ceux qui dépassent les places VIDES en chassent autant.
+ * `extraChamp` = des places de champion en plus (le héros en prend 2). Borné par les places de
+ * champion : au-delà, l'envoi est refusé, il ne déloge personne.
+ */
+export function reinfBumped(sel: ReinfSelection, free: ReinfFree, extraChamp = 0): number {
+  const champ = Math.min(free.champ, reinfSeats(sel).champ + extraChamp);
+  return Math.max(0, champ - Math.max(0, free.total));
 }
 
 /** Coche ou décoche un champion de la base — jamais au-delà des places. */

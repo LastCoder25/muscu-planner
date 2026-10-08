@@ -2801,12 +2801,6 @@ export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlo
   if (controlFreeSeats(c) < MILITIA.heroSeats) return 'full';
   return null;
 }
-/** 🧝🏠 Le héros qui REVIENT à son poste : comme `heroPostBlocker`, mais les miliciens lui
- *  cèdent leurs places (`controlReturnSeats`, puis `bumpMilitiaToFit`). */
-export function heroReturnBlocker(c: ControlState | undefined | null): HeroPostBlock | null {
-  const b = heroPostBlocker(c);
-  return b === 'full' && controlReturnSeats(c) >= MILITIA.heroSeats ? null : b;
-}
 /** 🧝 Le héros part rejoindre la garnison d'un point tenu : ses places lui sont réservées
  *  tout de suite, il devient défenseur à `at` (son arrivée). `origin` : il part en ligne
  *  directe d'un autre lieu (sinon de la base). */
@@ -2849,14 +2843,6 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
   const champs = occupants(c, false).champs;
   return Math.max(0, Math.min(seatsOf(c.kind) - champs, garrisonCap(c.kind) - champs));
-}
-/**
- * 🏠🛡️ Places de champion pour ceux qui REVIENNENT sur leur point (sortie qui rentre, héros
- * qui reprend son poste) : les miliciens y CÈDENT leur place (2026-10-07). Depuis le
- * 2026-10-08 c'est la règle de TOUT envoi : identique à `controlFreeSeats`.
- */
-export function controlReturnSeats(c: ControlState | undefined | null): number {
-  return controlFreeSeats(c);
 }
 /**
  * 🛡️🏠 Renvoie à la base, à pied, les DERNIERS miliciens arrivés tant que la garnison dépasse
@@ -3385,6 +3371,58 @@ function capGarrison(kind: ControlKind, ids: readonly string[], heroSeats = 0): 
 /** 🏰 Les renforts ARRIVÉS rejoignent la garnison. ⚠️ Seulement ceux arrivés AVANT la
  *  prochaine attaque : une attaque due se résout d'abord avec la garnison qui était là, un
  *  renfort encore en route ne combat pas. Rend la même carte si rien n'arrive. */
+/**
+ * 📬 LES MILICIENS RENVOYÉS À LA BASE PAR `settleReinforcements` (revue du 2026-10-08) : un
+ * milicien délogé par un champion, ou arrivé sur un lieu plein ou encore ennemi, repartait sans
+ * un mot — on le retrouvait à la base sans savoir pourquoi. Compare la carte avant/après et rend
+ * un message par lieu : délogés (ils étaient en GARNISON) et demi-tours (ils étaient EN ROUTE).
+ * Rien à encaisser : la boîte le dit, c'est tout.
+ */
+export function militiaSentBackMessages(
+  before: ExpeditionMap,
+  after: ExpeditionMap,
+): ExpeditionMessage[] {
+  const out: ExpeditionMessage[] = [];
+  for (const p of after.pois) {
+    const c = p.control;
+    if (!c?.returning?.length) continue;
+    const prev = before.pois.find((q) => q.id === p.id)?.control;
+    const was = new Set((prev?.returning ?? []).map((r) => r.id));
+    const fresh = c.returning.filter((r) => isMilitiaId(r.id) && !was.has(r.id));
+    if (!fresh.length) continue;
+    const posted = new Set(prev?.garrison ?? []);
+    const bumped = fresh.filter((r) => posted.has(r.id)).length;
+    const back = fresh.length - bumped;
+    const name = CONTROL_KIND_LABEL[c.kind];
+    const parts: string[] = [];
+    if (bumped)
+      parts.push(
+        `${bumped} milicien${bumped > 1 ? 's ont' : ' a'} cédé ${bumped > 1 ? 'leur' : 'sa'} place à tes champions`,
+      );
+    if (back)
+      parts.push(
+        `${back} milicien${back > 1 ? 's' : ''} arrivé${back > 1 ? 's' : ''} ${
+          c.owner === 'player' ? 'sans place libre' : 'sur un lieu encore ennemi'
+        } fai${back > 1 ? 'nt' : 't'} demi-tour`,
+      );
+    const at = Math.min(...fresh.map((r) => r.from));
+    out.push({
+      id: `milback_${p.id}_${at}`,
+      poiType: 'control',
+      title: `🛡️ Miliciens renvoyés · ${name}`,
+      level: p.level,
+      win: true,
+      text: `${parts.join(' ; ')} : ${fresh.length > 1 ? 'ils rentrent' : 'il rentre'} à pied à la base.`,
+      gold: 0,
+      energy: 0,
+      key: 0,
+      resolvedAt: at,
+      read: false,
+    });
+  }
+  return out;
+}
+
 export function settleReinforcements(
   map: ExpeditionMap,
   now: number,

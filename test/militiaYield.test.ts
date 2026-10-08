@@ -6,10 +6,9 @@ import {
   captureControl,
   controlFreeSeats,
   controlIdOf,
-  controlReturnSeats,
   ensureControls,
   garrisonCap,
-  heroReturnBlocker,
+  heroPostBlocker,
   reinforceControl,
   seatsOf,
   settleReinforcements,
@@ -40,7 +39,7 @@ describe('🧝 le héros revient à son poste', () => {
     expect(controlFreeSeats(p.control)).toBe(
       Math.min(seatsOf('ossuary'), garrisonCap('ossuary')) - 2,
     );
-    expect(heroReturnBlocker(p.control)).toBeNull();
+    expect(heroPostBlocker(p.control)).toBeNull();
     const c = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20, () => LEG).pois[0]!.control!;
     expect(c.hero).toBe(true);
     // 2 champions + le héros (2 places) + 1 milicien = 5 : deux miliciens cèdent leur place,
@@ -61,7 +60,7 @@ describe('🧝 le héros revient à son poste', () => {
 
   it('les CHAMPIONS ne cèdent jamais leur place : sans place de champion, il rentre', () => {
     const p = ossuary(['a', 'b', 'c', 'd']);
-    expect(heroReturnBlocker(p.control)).toBe('full');
+    expect(heroPostBlocker(p.control)).toBe('full');
     const m = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20, () => LEG);
     expect(m.pois[0]!.control!.hero).toBeUndefined();
     expect(m.heroReturnAt).toBe(NOW + 20 * MIN);
@@ -88,8 +87,7 @@ describe('⚔️ une sortie revient à son point', () => {
   it('la garnison est pleine de miliciens avant le retour', () => {
     const c = ctl(world());
     expect(c.garrison).toHaveLength(garrisonCap('mine'));
-    expect(controlFreeSeats(c)).toBe(controlReturnSeats(c));
-    expect(controlReturnSeats(c)).toBe(Math.min(seatsOf('mine'), garrisonCap('mine')) - 2);
+    expect(controlFreeSeats(c)).toBe(Math.min(seatsOf('mine'), garrisonCap('mine')) - 2);
   });
 
   it('un champion qui rentre reprend une place, un seul milicien rentre à la base', () => {

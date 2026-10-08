@@ -15,6 +15,7 @@ import {
   seatsOf,
   sendHeroToControl,
   settleReinforcements,
+  militiaSentBackMessages,
 } from '@/lib/controlPoints';
 import { transferBlocker } from '@/lib/controlRoutes';
 import { MILITIA } from '@/lib/militia';
@@ -87,5 +88,25 @@ describe('🏰 un lieu plein de miliciens reste ouvert aux champions et au héro
     expect(reinfCanAdd({ champs: ['a', 'b', 'c'], militia: 0, transfers: [] }, 'champ', free)).toBe(
       false,
     );
+  });
+});
+
+describe('📬 un mot dans la boîte pour les miliciens renvoyés (revue 2026-10-08)', () => {
+  it('un champion arrive : le milicien délogé est annoncé', () => {
+    const before = reinforceControl(world(), MINE, ['x'], NOW + 10 * MIN, NOW);
+    const msgs = militiaSentBackMessages(before, settle(before, NOW + 10 * MIN));
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]!.text).toContain('1 milicien a cédé sa place');
+    expect(msgs[0]!.id).toBe(`milback_${MINE}_${NOW + 10 * MIN}`);
+  });
+  it('un milicien arrivé sur un lieu plein fait demi-tour, et c’est dit', () => {
+    const before = reinforceControl(world(), MINE, ['mil:4'], NOW + 10 * MIN, NOW);
+    const msgs = militiaSentBackMessages(before, settle(before, NOW + 10 * MIN));
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]!.text).toContain('sans place libre');
+  });
+  it('rien quand personne ne repart', () => {
+    const before = world();
+    expect(militiaSentBackMessages(before, settle(before, NOW))).toEqual([]);
   });
 });

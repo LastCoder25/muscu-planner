@@ -464,6 +464,7 @@ import {
   recallReturns,
   RETURN_RECALL_LABEL,
   settleReinforcements,
+  militiaSentBackMessages,
   boostControlTrip,
   turnBackLabel,
   sortieHomeLabel,
@@ -5379,6 +5380,17 @@ export const useCharacterStore = defineStore('character', () => {
       playerLevel,
       (p) => caravanLegMin(p, [], 0, milMult) * 60_000,
     );
+    // 📬 Les miliciens que l'arrivée renvoie à la base (délogés, sans place, lieu ennemi)
+    // laissent un mot dans la boîte : sans lui, on les retrouve à la base sans savoir pourquoi.
+    const sentBack = militiaSentBackMessages(cur.expedition_map, settled0);
+    if (sentBack.length) {
+      if (tickMayWrite(cur))
+        await persist(userId, {
+          expedition_map: settled0,
+          messages: boxWith(cur, sentBack, MESSAGES_CAP),
+        });
+      return none;
+    }
     // ⚔️🗼 Les chocs en rase campagne contre les armées de REPRISE, AVANT les reprises : une
     // armée amputée arrive amputée, une armée battue n'arrive pas (la reprise est repoussée).
     let settled = settled0;

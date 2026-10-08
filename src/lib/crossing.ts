@@ -239,10 +239,11 @@ export function championsTravelling(advs: readonly Adventurer[], now: number): n
 /**
  * Peut-on traverser vers l'île `to` ? ⚠️ SOURCE UNIQUE écran + store.
  * `heroBusy` : le héros est en expédition ou réservé.
- * ⚠️ Des troupes qui marchent vers un lieu fixe ou en reviennent NE BLOQUENT PLUS la
- * réservation (signalé le 2026-10-03 : « le héros est dispo et je ne peux pas traverser ») :
- * le départ attend leur retour (`startCrossing`, `postponeCrossing`) — leur arrivée se règle
- * sur la carte ACTIVE, qui ne doit pas changer sous leurs pieds.
+ * `championsAway` : des CHAMPIONS encore en route bloquent la réservation (`troopsAway`,
+ * 2026-10-08, demandé : « les champions et le héros ne doivent pas être en trajet »). Les
+ * MILICIENS en route, eux, ne bloquent pas : le départ attend leur arrivée (`startCrossing`,
+ * `postponeCrossing`), qui se règle sur la carte ACTIVE — elle ne doit pas changer sous leurs
+ * pieds.
  */
 export function crossingBlocker(
   map: Pick<ExpeditionMap, 'archipel' | 'islands' | 'crossing'>,

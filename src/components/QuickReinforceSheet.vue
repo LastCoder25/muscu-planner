@@ -24,8 +24,16 @@
         arrivée, ils prennent les places libres ; sinon ils font demi-tour vers la base.
       </p>
       <p v-else class="qr-sub">
-        {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion · {{ milFree }} au total ·
-        coche tes renforts, puis envoie-les ou programme leur départ
+        <template v-if="champFree > milFree"
+          >{{ milFree }} place{{ milFree > 1 ? 's' : '' }} libre{{ milFree > 1 ? 's' : '' }} ·
+          jusqu’à {{ champFree }} champion{{ champFree > 1 ? 's' : '' }} (des miliciens leur
+          céderont leur place)</template
+        >
+        <template v-else
+          >{{ milFree }} place{{ milFree > 1 ? 's' : '' }} libre{{ milFree > 1 ? 's' : '' }}, dont
+          {{ champFree }} de champion</template
+        >
+        · coche tes renforts, puis envoie-les ou programme leur départ
       </p>
       <!-- 🛡️ La tenue À L'ATTAQUE, et ce que la sélection y change (arrivées comprises). -->
       <p v-if="hold" class="qr-hold">
@@ -52,8 +60,13 @@
         <span class="qr-mil-main">
           <span class="qr-mil-name">Ton héros · 2 places</span>
           <span class="qr-mil-sub">{{
-            heroOffer.why ?? `🧭 ${formatDurationMin(heroOffer.min)} · il défend à son arrivée`
+            heroOffer.why ??
+            `🧭 ${formatDurationMin(heroOffer.min)} · part tout de suite, défend à son arrivée`
           }}</span>
+          <span v-if="!heroOffer.why && heroBumped > 0" class="qr-mil-sub qr-bump"
+            >🏠 {{ heroBumped }} milicien{{ heroBumped > 1 ? 's' : '' }} lui céderont leur place et
+            rentreront à la base</span
+          >
         </span>
         <button
           type="button"
@@ -164,6 +177,15 @@
              attaque », depuis la base comme depuis un autre lieu) : les miliciens en trop
              s'installent si une place se libère d'ici leur arrivée, sinon ils font demi-tour
              vers la base. -->
+        <p v-if="bumped > 0" class="qr-mil-over">
+          🏠 {{ bumped }} milicien{{ bumped > 1 ? 's' : '' }} en poste céder{{
+            bumped > 1 ? 'ont' : 'a'
+          }}
+          {{ bumped > 1 ? 'leur' : 'sa' }} place à tes champions et rentrer{{
+            bumped > 1 ? 'ont' : 'a'
+          }}
+          à la base
+        </p>
         <p v-if="milOver > 0" class="qr-mil-over">
           🔄 {{ milOver }} milicien{{ milOver > 1 ? 's' : '' }} en trop : demi-tour vers la base si
           toujours plein à l’arrivée
@@ -211,13 +233,15 @@ import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { CONTROL_EMO, CONTROL_LABEL } from '@/lib/controlPoints';
 import type { Poi } from '@/lib/expedition';
-import { MILITIA_NAME } from '@/lib/militia';
+import { MILITIA, MILITIA_NAME } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { formatDurationMin } from '@/lib/duration';
 import {
   reinfCanAdd,
   reinfCount,
   reinfMilitiaOver,
+  reinfBumped,
+  emptyReinfSelection,
   type ReinfSelection,
 } from '@/lib/reinforceSelection';
 
@@ -286,6 +310,12 @@ const canMil = computed(() => reinfCanAdd(props.sel, 'mil', free.value));
 const canBaseMil = computed(() => props.milAnyway || canMil.value);
 /** 🛡️ Ceux de la sélection qui partent au-delà des places libres d'aujourd'hui. */
 const milOver = computed(() => reinfMilitiaOver(props.sel, free.value));
+/** 🏠 Les miliciens en poste que les champions cochés (ou le héros) délogeront. */
+const bumped = computed(() => reinfBumped(props.sel, free.value));
+// Le héros part SEUL, tout de suite : sans la sélection.
+const heroBumped = computed(() =>
+  reinfBumped(emptyReinfSelection(), free.value, MILITIA.heroSeats),
+);
 /** Le milicien suivant partirait-il au-delà des places ? (son gain ne se promet pas.) */
 const nextOver = computed(
   () => reinfMilitiaOver({ ...props.sel, militia: props.sel.militia + 1 }, free.value) > 0,

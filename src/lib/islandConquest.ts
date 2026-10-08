@@ -36,8 +36,8 @@ import {
   champSeatsWithHero,
   walkPoint,
   walkHomeMs,
-  heroReturnBlocker,
   bumpMilitiaToFit,
+  heroPostBlocker,
 } from './controlPoints';
 import { caravanLegMin } from './caravan';
 import { islandTerrain } from './islandTerrain';
@@ -1191,7 +1191,7 @@ export function heroBackToPost(
   if (!p) return map;
   // 🛡️🏠 S'il manque des places, les derniers miliciens arrivés lui cèdent la leur et rentrent
   // à pied à la base (2026-10-07, demandé) — juste le nombre nécessaire.
-  if (!heroReturnBlocker(p.control)) {
+  if (!heroPostBlocker(p.control)) {
     // 💰 La production faite sans lui est mise de côté AVANT qu'il ne compte à nouveau.
     const banked = { ...p, control: bankForHero(map, p, at, unit.level) };
     const posted = { ...p, control: { ...banked.control, hero: true, heroUnit: unit } };

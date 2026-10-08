@@ -20,7 +20,6 @@ import { distNormAt, type ControlState, type ExpeditionMap, type Poi } from './e
 import { isMilitiaId } from './militia';
 import {
   controlFreeSeats,
-  controlReturnSeats,
   freeAway,
   holdAway,
   acceptsMilitia,
@@ -348,13 +347,13 @@ export function rejoinHome(
   // la base (`settleReinforcements`).
   // 🛡️🏠 Les autres aussi font céder les miliciens (2026-10-07, demandé : « s'il n'y a pas
   // assez de place, renvoyer à la base les miliciens, le nombre nécessaire ») : seules les
-  // places de CHAMPION du point les bornent (`controlReturnSeats`).
+  // places de CHAMPION du point les bornent (`controlFreeSeats`).
   const kept = new Set(held(map, homeId)!.control!.away ?? []);
   const owed = ids.filter((id) => kept.has(id));
   const rest = ids.filter((id) => !kept.has(id));
   let m = freeAway(map, homeId, ids);
   if (owed.length) m = reinforceControl(m, homeId, owed, at);
-  const more = rest.slice(0, controlReturnSeats(held(m, homeId)!.control));
+  const more = rest.slice(0, controlFreeSeats(held(m, homeId)!.control));
   if (more.length) m = reinforceControl(m, homeId, more, at);
   return { map: m, back: [...owed, ...more], out: rest.slice(more.length) };
 }

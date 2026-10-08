@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   emptyReinfSelection,
+  reinfBumped,
   reinfCanAdd,
   reinfSeats,
   setReinfMilitia,
@@ -55,5 +56,26 @@ describe('renfort groupé : les places', () => {
       ['mine', ['mil:1', 'a']],
       ['camp', ['b']],
     ]);
+  });
+});
+
+describe('🏠 les miliciens délogés par les champions (reinfBumped)', () => {
+  // Camp : 3 places de champion, 1 seule vide (deux miliciens tiennent les autres).
+  const full = { champ: 3, total: 1 };
+  it('rien tant que les champions tiennent dans les places vides', () => {
+    expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a'] }, full)).toBe(0);
+  });
+  it('un champion au-delà des places vides déloge un milicien', () => {
+    expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a', 'b', 'c'] }, full)).toBe(2);
+  });
+  it('les champions venus d’un autre lieu comptent aussi', () => {
+    const sel = { ...emptyReinfSelection(), champs: ['a'], transfers: [{ fromId: 'm', id: 'b' }] };
+    expect(reinfBumped(sel, full)).toBe(1);
+  });
+  it('le héros prend deux places', () => {
+    expect(reinfBumped(emptyReinfSelection(), full, 2)).toBe(1);
+  });
+  it('jamais au-delà des places de champion (au-delà, l’envoi est refusé)', () => {
+    expect(reinfBumped({ ...emptyReinfSelection(), champs: ['a', 'b', 'c', 'd'] }, full)).toBe(2);
   });
 });

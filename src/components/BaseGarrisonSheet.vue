@@ -107,6 +107,10 @@
                 t.why ??
                 `🧭 ${formatDurationMin(t.min)} · ${Number.isFinite(t.free) ? `${t.free} place${t.free > 1 ? 's' : ''}` : 'sans limite'}`
               }}</span>
+              <span v-if="!t.why && t.bumped > 0" class="bgs-t-over"
+                >🏠 {{ t.bumped }} milicien{{ t.bumped > 1 ? 's' : '' }} en poste
+                {{ t.bumped > 1 ? 'rentreront' : 'rentrera' }} à la base pour leur faire place</span
+              >
               <span v-if="!t.why && t.over > 0 && Number.isFinite(t.free)" class="bgs-t-over"
                 >🔄 {{ t.over }} en trop : demi-tour si toujours plein à l’arrivée</span
               >
@@ -126,7 +130,13 @@ import { computed, ref, watch } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Adventurer } from '@/lib/adventurers';
-import { REINFORCE_BLOCK_LABEL, baseSendBlocker, garrisonFreeSeats } from '@/lib/controlPoints';
+import {
+  REINFORCE_BLOCK_LABEL,
+  baseSendBlocker,
+  controlFreeSeats,
+  garrisonFreeSeats,
+} from '@/lib/controlPoints';
+import { emptyReinfSelection, reinfBumped } from '@/lib/reinforceSelection';
 import { MILITIA } from '@/lib/militia';
 import type { ControlState } from '@/lib/expedition';
 import { formatDurationMin } from '@/lib/duration';
@@ -209,6 +219,12 @@ const rows = computed(() =>
       emo: t.emo,
       label: t.label,
       free: garrisonFreeSeats(t.control),
+      // 🏠 Les miliciens en poste que le héros et les champions délogeront (revue 2026-10-08).
+      bumped: reinfBumped(
+        { ...emptyReinfSelection(), champs: [...sel.value] },
+        { champ: controlFreeSeats(t.control), total: garrisonFreeSeats(t.control) },
+        hero.value ? MILITIA.heroSeats : 0,
+      ),
       // 🛡️ Les miliciens partent même vers un lieu plein : ceux au-delà des places libres
       // s'installent si une place se libère d'ici l'arrivée, sinon ils font demi-tour.
       over: Math.max(
