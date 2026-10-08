@@ -76,7 +76,9 @@ describe('🏝️ toute l’île, jusqu’aux côtes', () => {
           9,
         );
       }
-      expect(worst, `île ${isl.id}`).toBeGreaterThan(150);
+      // ⚠️ Mesuré au pas des voyages (`EXPE.travelSpeed`, v1.103) : ce test vérifie que les
+      // lieux couvrent l'île jusqu'aux côtes, pas une vitesse — 150 min au pas de référence.
+      expect(worst, `île ${isl.id}`).toBeGreaterThan(150 * EXPE.travelSpeed);
     }
   });
   it('les lieux sont espacés : ~23 unités au plus proche voisin en moyenne (16,5 avant)', () => {

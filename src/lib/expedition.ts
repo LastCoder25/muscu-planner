@@ -1666,6 +1666,13 @@ export const EXPE = {
   cartoChance: [0, 0.12, 0.2, 0.25, 0.29, 0.33] as readonly number[],
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
+  /** 🏃 Le pas RÉEL des voyages (v1.103, demandé : « accélérer un peu les trajets ») : tout
+   *  trajet (héros, équipes, renforts, sorties) dure 80 % de sa durée de RÉFÉRENCE.
+   *  ⚠️ Les RÉCOMPENSES restent calées sur la référence (`rewardTripHours` lit
+   *  `travelRefMin`) : aller plus vite ne fait pas baisser l'or d'une mine. Payé par
+   *  `LOOT.stoneShare` (−20 %) : mesuré, les pierres des camps étaient déjà à 49,8 % pour une
+   *  borne de 50 % (campEconomy), plus de voyages les faisaient déborder. */
+  travelSpeed: 0.8,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
   // rapporte ~1600 or à reco10, ~4920 à reco20 ; un repaire coûte ~6k (niv10) → ~20k
   // (niv20) = plusieurs runs de donjon pour une pièce de set (l'or s'écoule).
@@ -1891,7 +1898,7 @@ function earlySpawnLevel(tire: number, playerLevel: number): number {
 /** Le trajet de RÉFÉRENCE (aller-retour, en heures) d'un lieu de difficulté `level` — le même
  *  quelle que soit sa distance réelle (v0.1153). */
 export function rewardTripHours(level: number): number {
-  return (2 * travelOneWayMin(Math.max(1, level), EXPE.rewardDist)) / 60;
+  return (2 * Math.round(travelRefMin(Math.max(1, level), EXPE.rewardDist))) / 60;
 }
 
 /** Le facteur de voyage de l'OR d'un lieu de difficulté `level` : la distance ne paie plus,
@@ -2069,12 +2076,19 @@ export function warbandAt<
   return { ...p, x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
 }
 
-/** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
-export function travelOneWayMin(level: number, distNorm: number): number {
+/** Trajet ALLER de RÉFÉRENCE (minutes) selon distance + niveau : celui sur lequel se paient les
+ *  récompenses (`rewardTripHours`). Le trajet réel en est une part (`travelOneWayMin`). */
+function travelRefMin(level: number, distNorm: number): number {
   const base =
     EXPE.travelOneWayMinMin +
     (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * Math.max(0, distNorm);
-  return Math.round(base * (1 + Math.max(0, level) * 0.02));
+  return base * (1 + Math.max(0, level) * 0.02);
+}
+
+/** Trajet ALLER réel (minutes) : la référence au pas des voyages (`EXPE.travelSpeed`).
+ *  Round-trip = 2×. */
+export function travelOneWayMin(level: number, distNorm: number): number {
+  return Math.round(travelRefMin(level, distNorm) * EXPE.travelSpeed);
 }
 
 /** Adversaire d'un POI (Combatant) pour la résolution auto — scalé au niveau.

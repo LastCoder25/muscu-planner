@@ -215,7 +215,9 @@ export const LOOT = {
   /*  ⚠️ 0,024 → 0,0173 en v1.8.0 : la visite de sanctuaire vaut 2,5× plus et les
    *  morts-vivants ne devaient que ~doubler — ×1,8 : à ×2 les camps dépassaient la borne de
    *  `campEconomy` au niveau 90 (53 %) (décision de l'utilisateur). */
-  stoneShare: 0.0173,
+  /*  ⚠️ 0,0173 → 0,0138 en v1.103 (×0,8) : les trajets ont raccourci de 20 %, donc plus de
+   *  camps par jour ; mesuré, sans cette baisse les pierres des camps dépassaient 50 %. */
+  stoneShare: 0.0138,
   /** Chance qu'une bête de troupe laisse un consommable (× son poids, plafonné à 1). */
   beastDrop: 0.2,
 } as const;
