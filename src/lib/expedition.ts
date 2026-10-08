@@ -3469,6 +3469,15 @@ export function voyageProgress(voyage: Voyage, now: number): { overall: number; 
   };
 }
 
+/** 🏠 Où un voyage RENTRE : son point de départ s'il est parti d'un lieu fixe (`origin` :
+ *  sortie, transfert, héros posté), sinon la ville. SOURCE UNIQUE du retour, lue par la position
+ *  (`travelPosition`) ET par le dessin du tracé restant et de ses chevrons — signalé (v1.106.4) :
+ *  le héros parti de l'Ossuaire y rentrait bien, mais son tracé et ses flèches pointaient vers la
+ *  ville, et il semblait « repartir vers la base ». */
+export function voyageHome(v: { origin?: { x: number; y: number } }): { x: number; y: number } {
+  return v.origin ?? EXPE.town;
+}
+
 /** Position d'un voyageur (héros OU convoi) à l'instant `now`. */
 export function travelPosition(
   voyage: Voyage,
@@ -3486,7 +3495,7 @@ export function travelPosition(
   // 🔙 Un demi-tour forcé encore à venir ne se voit pas (`shownVoyage`).
   const exp = shownVoyage(voyage, now);
   // 🏰 Un voyage parti d'un point fixe part de lui ET y revient (sortie, transfert).
-  const town = exp.origin ?? EXPE.town;
+  const town = voyageHome(exp);
   // 🔙 Un demi-tour s'arrête en chemin : on marche vers ce point, pas vers le lieu.
   const p = voyageTarget(exp);
   const remainTotalMs = Math.max(0, exp.returnAt - now);

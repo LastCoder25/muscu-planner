@@ -134,8 +134,8 @@
               ]"
             />
             <line
-              :x1="TOWN.x"
-              :y1="TOWN.y"
+              :x1="heroHome.x"
+              :y1="heroHome.y"
               :x2="hero.x"
               :y2="hero.y"
               class="trail"
@@ -175,8 +175,8 @@
               ]"
             />
             <line
-              :x1="v.origin?.x ?? TOWN.x"
-              :y1="v.origin?.y ?? TOWN.y"
+              :x1="voyageHome(v).x"
+              :y1="voyageHome(v).y"
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
@@ -1802,6 +1802,7 @@ import {
   type ExpeditionMessage,
   EXPE,
   travelPosition,
+  voyageHome,
   mapTravelPoint,
   voyageDrawnEnd,
   warbandAt,
@@ -2433,6 +2434,8 @@ function drawnAt(v: Parameters<typeof travelPosition>[0]) {
 }
 const hero = computed(() => (active.value ? drawnAt(active.value) : null));
 /** 🔙 Le bout du tracé du héros : le lieu, ou le point où il a fait demi-tour. */
+/** 🏠 Où le héros rentre : son poste s'il en est parti, sinon la ville (`voyageHome`). */
+const heroHome = computed(() => (active.value ? voyageHome(active.value) : TOWN));
 const heroEnd = computed(() => {
   const a = active.value;
   return a ? voyageDrawnEnd(a, now.value) : TOWN;
@@ -2464,7 +2467,7 @@ const travelArrows = computed(() => {
   const h = hero.value;
   const a = active.value;
   if (!h || !a || h.phase === 'done') return [];
-  const target = h.phase === 'return' ? TOWN : a.poi;
+  const target = h.phase === 'return' ? voyageHome(a) : a.poi;
   const dx = target.x - h.x;
   const dy = target.y - h.y;
   const len = Math.hypot(dx, dy);
