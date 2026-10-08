@@ -1979,6 +1979,8 @@ import {
   attackImminent,
   attackerHidden,
   controlDefenseHold,
+  defenderCount,
+  memberDefends,
   lapidaryHours,
   defendersAtAttack,
   imminentControlKey,
@@ -3261,8 +3263,8 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
     : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort, hero);
   return {
     pct: Math.round(hold * 100),
-    count: present.length + (hero ? 1 : 0),
-    late: late.length + (heroLate ? 1 : 0),
+    count: defenderCount(c.kind, present, !!hero),
+    late: defenderCount(c.kind, late, !!heroLate),
     vsArmy,
   };
 }
@@ -3287,6 +3289,7 @@ const occupantLoss = computed<Record<string, { loss: number; without: number }>>
   if (!p?.control || p.control.owner !== 'player' || base === undefined) return {};
   const out: Record<string, { loss: number; without: number }> = {};
   for (const id of p.control.garrison) {
+    if (!memberDefends(p.control.kind, id)) continue;
     const without = holdAfter(p, [id], []);
     out[id] = { loss: base - without, without };
   }
@@ -4907,15 +4910,18 @@ const quickHold = computed(() => {
   const pctWith = (next: ReinfSelection) => quickDefense(p, next)?.pct ?? cur;
   const free = quickFree.value;
   const champ: Record<string, number> = {};
-  for (const a of freeSorted.value) {
-    const on = sel.champs.includes(a.id);
-    if (!on && !reinfCanAdd(sel, 'champ', free)) continue;
-    const other = pctWith(toggleReinfChamp(sel, a.id, free));
-    champ[a.id] = on ? cur - other : other - cur;
-  }
+  const champsFight = champsDefend(p.control?.kind);
+  if (champsFight)
+    for (const a of freeSorted.value) {
+      const on = sel.champs.includes(a.id);
+      if (!on && !reinfCanAdd(sel, 'champ', free)) continue;
+      const other = pctWith(toggleReinfChamp(sel, a.id, free));
+      champ[a.id] = on ? cur - other : other - cur;
+    }
   const trans: Record<string, number> = {};
   for (const src of quickSources.value)
     for (const m of src.members) {
+      if (!memberDefends(p.control?.kind, m.id)) continue;
       const on = sel.transfers.some((t) => t.id === m.id);
       if (!on && !reinfCanAdd(sel, isMilitiaId(m.id) ? 'mil' : 'champ', free)) continue;
       const next = toggleReinfTransfer(sel, src.fromId, m.id, free);

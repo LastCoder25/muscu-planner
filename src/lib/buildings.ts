@@ -301,7 +301,7 @@ export const BUILDING_TYPES: BuildingType[] = [
       activity: 'La milice',
       where: 'Sur la carte : envoie-les depuis la fiche d’un point de contrôle que tu tiens.',
     },
-    desc: 'Forme des miliciens, un à un, gratuitement. Ils remplacent tes champions sur les points de contrôle déjà pris (ils font tourner le lieu, mais n’apprennent rien et n’attaquent pas). Un milicien tombé est perdu.',
+    desc: 'Forme des miliciens, un à un, gratuitement. Ce sont eux qui défendent les lieux fixes déjà pris (ils les font aussi tourner, mais n’apprennent rien et n’attaquent pas). Un milicien tombé est perdu.',
   },
 ];
 

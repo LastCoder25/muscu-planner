@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import {
   captureControl,
   champsDefend,
+  defenderCount,
+  memberDefends,
   controlAllies,
   controlFreeSeats,
   controlIdOf,
@@ -184,5 +186,20 @@ describe('🛡️ (c) qui défend la reprise', () => {
   it('au lapidaire, personne', () => {
     expect(champsDefend('lapidary')).toBe(false);
     expect(allyIds('lapidary', HERO)).toEqual([]);
+  });
+});
+
+describe('🛡️ qui compte comme défenseur (memberDefends, defenderCount)', () => {
+  it('sur un lieu de production : la milice seule, jamais un champion ni le héros', () => {
+    expect(memberDefends('mine', 'mil:1')).toBe(true);
+    expect(memberDefends('mine', 'a')).toBe(false);
+    expect(defenderCount('mine', ['a', 'b', 'mil:1'], true)).toBe(1);
+  });
+  it('sur un objectif tenu : les champions et le héros', () => {
+    expect(memberDefends('objective', 'a')).toBe(true);
+    expect(defenderCount('objective', ['a', 'b'], true)).toBe(3);
+  });
+  it('au lapidaire : personne', () => {
+    expect(defenderCount('lapidary', ['a', 'mil:1'], true)).toBe(0);
   });
 });

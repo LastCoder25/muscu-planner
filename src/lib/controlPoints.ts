@@ -463,6 +463,18 @@ export function controlAllies(
   if (champsDefend(kind)) return partyAllies([...champs], kit, hero);
   return militiaUnits([...ids], playerLevel);
 }
+/** 🛡️ Ce membre de garnison (`ids` d'une garnison : champion ou `mil:`) COMBAT-il la reprise ?
+ *  La règle de `controlAllies`, lue membre par membre (compte des défenseurs, part de chacun). */
+export const memberDefends = (kind: ControlKind | undefined, id: string): boolean =>
+  defendsControl(kind) && (isMilitiaId(id) ? !champsDefend(kind) : champsDefend(kind));
+/** 🛡️ Combien COMBATTRONT : les membres qui défendent (`memberDefends`), plus le héros là où
+ *  les champions défendent. */
+export const defenderCount = (
+  kind: ControlKind | undefined,
+  ids: readonly string[],
+  hero: boolean,
+): number =>
+  ids.filter((id) => memberDefends(kind, id)).length + (hero && champsDefend(kind) ? 1 : 0);
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
  *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
  *  la Forge de campagne (2026-09-29). */

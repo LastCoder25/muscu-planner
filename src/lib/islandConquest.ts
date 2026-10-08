@@ -37,6 +37,7 @@ import {
   walkPoint,
   walkHomeMs,
   heroPostBlocker,
+  defenderCount,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
@@ -1445,7 +1446,7 @@ const PILLAGE_ISLANDS: ReadonlySet<number> = new Set([1]);
  * 🚩 L'ARMÉE MOBILE DU SEIGNEUR DE GUERRE (île 4, roadmap : « armée mobile qui vise le moins
  * défendu ») : tant qu'un camp de guerre tient, une armée sort toutes les `SORTIE_EVENTS.warlord`
  * sorties sur la carte (v1.66.0, plus d'horloge) et marche, depuis le camp le plus proche, sur
- * le lieu tenu le MOINS défendu (la plus petite garnison, champions et miliciens ; départage
+ * le lieu tenu le MOINS défendu (le moins de défenseurs, `defenderCount` ; départage
  * tiré) : elle attend comme une armée de nid, puis marche (`marchOn`) — on la voit venir et on
  * l'intercepte. Elle ne crée pas d'attaque, elle avance celle qui vient. Abattre les camps
  * l'espace, les abattre tous l'arrête.
@@ -1458,8 +1459,9 @@ const WARLORD = {
 export function weakestHeld(pois: readonly Poi[], at: number, seed: number): Poi | null {
   const held = heldBefore(pois, at);
   if (!held.length) return null;
-  const least = Math.min(...held.map((p) => p.control!.garrison.length));
-  const ties = held.filter((p) => p.control!.garrison.length === least);
+  const def = (p: Poi) => defenderCount(p.control!.kind, p.control!.garrison, !!p.control!.hero);
+  const least = Math.min(...held.map(def));
+  const ties = held.filter((p) => def(p) === least);
   const r = mulberry32((seedOf(`${seed}:warTarget:${at}`) ^ 0x7f4a7c15) >>> 0 || 1)();
   return ties[Math.floor(r * ties.length)]!;
 }
