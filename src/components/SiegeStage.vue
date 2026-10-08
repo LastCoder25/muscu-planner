@@ -32,7 +32,6 @@
           :defenders="stage.defenders"
           :turret-count="hasTurrets ? TURRET_SLOTS : 0"
           :idx="idx"
-          :impacted="impacted"
           :state="state"
           :hero-pv-pct="heroPvPct"
           :hero="hero ?? null"

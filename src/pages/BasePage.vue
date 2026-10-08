@@ -1580,7 +1580,7 @@ function perLevel(id: DefenseId): string {
   return defensePerLevelLabel(id, lvlOf(id), {
     playerLevel: heroLevel.value,
     defenses: defenses.value,
-    intervalMs: raidIntervalMs(progress.activeDaysInLast(7)),
+    intervalMs: raidIntervalMs(activeDays7.value),
   });
 }
 const defSheetOpen = computed({
@@ -1679,7 +1679,7 @@ const structureHelp = computed(() =>
     next: defensePerLevelLabel(t.id, lvlOf(t.id), {
       playerLevel: heroLevel.value,
       defenses: defenses.value,
-      intervalMs: raidIntervalMs(progress.activeDaysInLast(7)),
+      intervalMs: raidIntervalMs(activeDays7.value),
     }),
     link: STRUCTURE_LINK[t.id],
   })),
@@ -1767,6 +1767,9 @@ const guardFull = computed(() =>
  *  des champions (convois, infirmerie). Le brancher
  *  sur le tick d’une seconde referait 66 ms de travail identique 60 fois par minute. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
+/** Jours actifs sur 7 jours : un balayage COMPLET de l'historique sportif. Lu une fois ici,
+ *  et non dans des `computed` qui tournent chaque seconde sur `now`. */
+const activeDays7 = computed(() => progress.activeDaysInLast(7));
 const forces = computed(() =>
   defenseBreakdown(
     defenses.value,
@@ -1860,11 +1863,7 @@ const arriveIn = computed(() => (raid.value ? fmtDelay(raid.value.arrivesAt - no
  *  retiré : il rendait gratuit ce que ce bâtiment fait payer. */
 const scoutLeadLabel = computed(() => {
   const boost = controlDetectBoost(char.row?.expedition_map, now.value);
-  const ms = baseLeadMs(
-    scoutLevel(defenses.value),
-    raidIntervalMs(progress.activeDaysInLast(7)),
-    boost,
-  );
+  const ms = baseLeadMs(scoutLevel(defenses.value), raidIntervalMs(activeDays7.value), boost);
   const m = Math.round(ms / 60000);
   const txt = m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) : ''}`;
   // 🗼 On DIT d'où vient le surplus : sinon monter une Tour de la carte allonge un chiffre

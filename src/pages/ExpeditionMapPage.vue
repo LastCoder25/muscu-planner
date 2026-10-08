@@ -6142,12 +6142,18 @@ const controlReturnNote = computed(() =>
       )
     : null,
 );
+/** ⚠️ La page peut être démontée PENDANT les `await` du montage (l'onglet Carte se replie) :
+ *  sans ce drapeau, les écouteurs et l'intervalle d'une seconde posés ensuite survivaient à
+ *  `onUnmounted` (déjà passé) et retenaient la page détachée. */
+let disposed = false;
 onMounted(async () => {
   // La carte est tenue à jour par l'Aventure qui l'héberge (`expeSyncMap` dans sa boucle).
   if (auth.user?.id && !char.row) await char.fetchMine().catch(() => undefined);
   await nextTick();
+  if (disposed) return;
   measure();
   await initialFit();
+  if (disposed) return;
   liftFog(readFogSeen());
   appearReady = true;
   checkAppearances();
@@ -6192,6 +6198,7 @@ async function initialFit() {
   else centerTown();
 }
 onUnmounted(() => {
+  disposed = true;
   resizeObs?.disconnect();
   if (timer) clearInterval(timer);
   cancelAnimationFrame(fogRaf);

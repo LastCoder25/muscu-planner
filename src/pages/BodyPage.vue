@@ -249,6 +249,7 @@
 defineProps<{ embedded?: boolean }>();
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
+import { localDayIso } from '@/lib/localDay';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useBodyStore, type BodyEntry } from '@/stores/body';
@@ -504,7 +505,7 @@ function fmtSleep(h: number | null) {
 
 // ── Saisie du jour : on modifie celle du jour si elle existe ─────
 const todayEntry = computed(() => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDayIso(new Date());
   return entries.value.find((e) => e.measured_at === today) ?? null;
 });
 function prefillFromEntry(e: BodyEntry) {
@@ -549,8 +550,8 @@ async function save() {
       note: f.note.trim() || null,
     };
     if (todayEntry.value) await body.update(todayEntry.value.id, input);
-    else await body.add({ measured_at: new Date().toISOString().slice(0, 10), ...input });
-    markBodyEntrySaved(new Date().toISOString().slice(0, 10)); // coupe le rappel du jour
+    else await body.add({ measured_at: localDayIso(new Date()), ...input });
+    markBodyEntrySaved(localDayIso(new Date())); // coupe le rappel du jour
     syncForm(); // garde les valeurs de la saisie du jour
     formOpen.value = false;
     $q.notify({

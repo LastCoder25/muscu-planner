@@ -13,7 +13,7 @@
  * revient jamais au stock. La qualité ne dépend plus de la source : seule la QUANTITÉ change.
  */
 
-import { mulberry32 } from './combat';
+import { mulberry32, seedOf } from './combat';
 import {
   RUNE_TIERS,
   SKILLS,
@@ -88,20 +88,13 @@ export interface StockSkill {
   level: number;
 }
 
-/** Graine stable d'une chaîne (FNV-1a). */
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0 || 1;
-}
-
 /**
  * Ouvre la `n`-ième rune du joueur `owner` : couleur dans `RUNE_ODDS`, puis une compétence de
  * cette couleur, uniformément. ⚠️ DÉTERMINISTE (graine = joueur + numéro d'ouverture) : un
  * rechargement pendant l'animation ne fait pas retirer une autre compétence.
  */
 export function openRune(owner: string, n: number, grade: boolean | RuneGrade = false): StockSkill {
-  const rng = mulberry32(hashStr(`rune:${owner}:${n}`));
+  const rng = mulberry32(seedOf(`rune:${owner}:${n}`));
   // `true` = l'ancien drapeau « bénie » (autel), gardé pour les appels d'avant.
   const g: RuneGrade = grade === true ? 'blessed' : grade === false ? 'base' : grade;
   const tier = pickTier(rng, GRADE_ODDS[g]);

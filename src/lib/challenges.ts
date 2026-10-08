@@ -155,7 +155,9 @@ function dayFromIso(iso: string): Date {
 export function addDaysIso(iso: string, d: number): string {
   const dt = dayFromIso(iso);
   dt.setDate(dt.getDate() + d);
-  return dt.toISOString().slice(0, 10);
+  // ⚠️ Date construite à minuit LOCAL → on la relit en LOCAL. `toISOString` rendait la
+  // veille en France (repos décalés d'un jour, jours d'un défi datés de la veille).
+  return localDayIso(dt);
 }
 function diffDays(fromIso: string, toIso: string): number {
   return Math.round((dayFromIso(toIso).getTime() - dayFromIso(fromIso).getTime()) / 86400000);

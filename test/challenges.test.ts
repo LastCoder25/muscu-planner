@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { cardioSessionXp, REP_XP, XP_MULT } from '@/lib/athlete';
 import {
+  addDaysIso,
   computeDailyTargets,
   challengeXpPoints,
   challengeXpBreakdown,
@@ -117,6 +118,16 @@ describe('computeDailyTargets', () => {
     const t = computeDailyTargets('fixed', cfg({ start: 30, rest_weekdays: [3] }), 7, '2026-01-05');
     expect(t.filter((x) => x === 0)).toHaveLength(1);
     expect(t.filter((x) => x === 30)).toHaveLength(6);
+  });
+
+  it('📅 le jour de repos tombe le BON jour de la semaine (aucun décalage local ↔ UTC)', () => {
+    // ⚠️ `addDaysIso` formatait en UTC une date construite à minuit LOCAL : en France il
+    // rendait la veille, donc un repos le mercredi tombait le jeudi. 2026-01-05 = lundi.
+    expect(addDaysIso('2026-01-05', 0)).toBe('2026-01-05');
+    expect(addDaysIso('2026-01-05', 2)).toBe('2026-01-07');
+    expect(addDaysIso('2026-03-28', 1)).toBe('2026-03-29'); // passage à l'heure d'été
+    const t = computeDailyTargets('fixed', cfg({ start: 30, rest_weekdays: [3] }), 7, '2026-01-05');
+    expect(t.indexOf(0)).toBe(2); // mercredi
   });
 
   it('les objectifs sont des entiers ≥ 0', () => {

@@ -8,6 +8,9 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 // faites s'il a été commencé, comme pour les challenges »).
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
+import { localDayIso } from './localDay';
+import { mulberry32 } from './combat';
+import { addDaysUtcIso } from './startDate';
 import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
@@ -363,7 +366,7 @@ export function comboComplete(c: ComboChallenge): boolean {
 
 /** Dernier jour du défi (inclus), en UTC explicite. */
 export function comboEndDate(c: ComboChallenge): string {
-  return addDaysUtc(c.start_date, Math.max(1, c.duration_days) - 1);
+  return addDaysUtcIso(c.start_date, Math.max(1, c.duration_days) - 1);
 }
 /** Le défi tel qu'il était à sa date de fin : seules les séries faites dans les temps. */
 export function comboInDeadline(c: ComboChallenge): ComboChallenge {
@@ -707,13 +710,10 @@ function legPlannedEffort(l: ComboLeg): number {
 /** Le défi est-il TERMINÉ — bouclé, ou sa période écoulée ? C'est ce moment qui déclenche
  *  le versement de la prime, et lui seul. `today` est passé pour rester pur (le projet
  *  s'est déjà fait piéger par un aller-retour local↔UTC sur les dates de défi). */
-export function comboEnded(
-  c: ComboChallenge,
-  today = new Date().toISOString().slice(0, 10),
-): boolean {
+export function comboEnded(c: ComboChallenge, today = localDayIso(new Date())): boolean {
   if (comboCompleteInTime(c)) return true;
   if (c.duration_days <= 0) return false;
-  return today > addDaysUtc(c.start_date, c.duration_days - 1);
+  return today > addDaysUtcIso(c.start_date, c.duration_days - 1);
 }
 
 export function comboTieredBonus(
@@ -723,7 +723,7 @@ export function comboTieredBonus(
    *  la fin du défi) : laisser la fonction lire l'horloge en douce la rendrait impossible
    *  à tester et sensible au fuseau — deux pièges que ce projet a déjà payés. Le défaut
    *  reste la date du jour pour les appelants qui n'ont rien à décider. */
-  today = new Date().toISOString().slice(0, 10),
+  today = localDayIso(new Date()),
 ): number {
   // ⚠️ VERSÉE À LA FIN DU DÉFI (v0.717), pas au fil des séries. Avant, la prime tombait
   // par petits bouts à chaque série qui décrochait un palier : l'énergie montait en
@@ -966,14 +966,7 @@ export interface ComboSessionStep {
 /** Tirage seedé (mulberry32) — la même graine redonne le même ordre : la séance ne se
  *  re-mélange pas à chaque rendu, ni quand on ajoute une série en cours de route. */
 function orderRng(seed: number): () => number {
-  let a = seed >>> 0 || 1;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  return mulberry32(seed >>> 0 || 1);
 }
 
 /** L'ordre dans lequel faire les séries d'une séance. `sets[i]` = nombre de séries de
@@ -1225,14 +1218,11 @@ function fmtDM(iso: string): string {
   const [, m, d] = iso.split('-');
   return `${d}/${m}`;
 }
-function addDaysUtc(iso: string, n: number): string {
-  return new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
-}
 /** Texte détaillé du défi complet : entête (semaine, %, théorique) + chaque exo
  *  (cible/réalisé, paliers) avec le détail de chaque série faite (reps×poids / secondes).
  *  `today` = jour logique courant (pour l'avancement théorique). */
 export function comboExportText(c: ComboChallenge, today: string): string {
-  const end = addDaysUtc(c.start_date, c.duration_days - 1);
+  const end = addDaysUtcIso(c.start_date, c.duration_days - 1);
   const pct = comboProgressPct(c);
   let onTime = 0;
   if (today >= c.start_date && c.duration_days > 0) {

@@ -7071,6 +7071,9 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+  // ⚠️ Démontée pendant le chargement : l'intervalle posé ensuite ne serait jamais arrêté,
+  // et il écrit en base chaque seconde (`expeLifecycle`).
+  if (disposed) return;
   try {
     showIntro.value = !localStorage.getItem(INTRO_KEY);
   } catch {
@@ -7084,7 +7087,9 @@ onMounted(async () => {
   }, 1000);
 });
 let expeTimer: ReturnType<typeof setInterval> | null = null;
+let disposed = false;
 onUnmounted(() => {
+  disposed = true;
   if (expeTimer) clearInterval(expeTimer);
 });
 </script>

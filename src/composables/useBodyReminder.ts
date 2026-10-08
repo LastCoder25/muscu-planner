@@ -3,6 +3,7 @@
 // aujourd'hui → notification navigateur (si permission accordée).
 import { onMounted, onBeforeUnmount } from 'vue';
 import { useProfileStore } from '@/stores/profile';
+import { localDayIso } from '@/lib/localDay';
 
 const LAST_ENTRY_KEY = 'muscu:body:lastEntry'; // 'YYYY-MM-DD' de la dernière saisie
 const NOTIFIED_KEY = 'muscu:body:notified'; // 'YYYY-MM-DD' du dernier rappel envoyé
@@ -12,7 +13,7 @@ export function markBodyEntrySaved(date: string) {
 }
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDayIso(new Date());
 }
 
 // Le jour est-il planifié aujourd'hui selon la fréquence/jour choisis ?

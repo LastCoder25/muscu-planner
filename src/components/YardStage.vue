@@ -143,9 +143,8 @@ const props = defineProps<{
   bodies: SiegeBody[];
   defenders: SiegeStage['defenders'];
   turretCount: number;
-  /** Le temps joué, et s'il a déjà frappé — ceux de `SiegeStage`, jamais les nôtres. */
+  /** Le temps joué — celui de `SiegeStage`, jamais le nôtre. */
   idx: number;
-  impacted: boolean;
   state: {
     dead: Map<number, number>;
     inside: Map<number, number>;
