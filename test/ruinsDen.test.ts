@@ -165,11 +165,12 @@ describe('🔱 le débit de sceaux reste celui d’avant — mesuré sur de vrai
       );
       expect(objet / avantObjet).toBeGreaterThan(0.75);
       expect(objet / avantObjet).toBeLessThan(1.3);
-      // 🔱 v1.89.0 : les sceaux de champion suivent le rang de la ruine (3 × (1 + rang)) —
-      // demandé, le vivier grossit avec le niveau. Mesuré : ×2,7 / ×2,6 / ×3,1 le débit des
-      // failles d'avant aux niveaux 12 / 30 / 60.
-      expect(champ / avantChamp).toBeGreaterThan(2);
-      expect(champ / avantChamp).toBeLessThan(4);
+      // 🔱 v1.89.0 : les sceaux de champion suivent le rang de la ruine — demandé, le vivier
+      // grossit avec le niveau. Puis ×3 le 2026-10-08 (9 × (1 + rang), comme les sceaux
+      // d'objet : même besoin, même offre). Mesuré avant ce ×3 : ×2,7 / ×2,6 / ×3,1 le débit
+      // des failles d'avant aux niveaux 12 / 30 / 60.
+      expect(champ / avantChamp).toBeGreaterThan(6);
+      expect(champ / avantChamp).toBeLessThan(12);
     });
   }
 });

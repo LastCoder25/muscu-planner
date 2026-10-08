@@ -78,7 +78,10 @@ describe('⬆️ les sceaux arrivent à temps pour le trio de tête', () => {
 // ruine de sceaux de champion toutes les 1,2 jours (le débit mesuré sur de vraies cartes).
 // Part des champions-jours bloqués de 5 niveaux ou plus. Mesuré : 3 sceaux fixes → 72 / 96 /
 // 99 % (tranquille / régulier / très actif) ; 3 × (1 + rang) → 0 / 42 / 74 % ; 4 × (1 + rang)
-// → 0 / 1 / 37 %. Un frein, plus un mur.
+// → 0 / 1 / 37 % ; 5 → 0 / 0 / 15 % ; 6 → 0 / 0 / 1 % ; 9 → 0 / 0 / 0 %.
+// ⚖️ 2026-10-08 (décision de l'utilisateur, « champion = objet ») : 9 × (1 + rang), comme les
+// sceaux d'objet — le même besoin appelle la même offre. Les sceaux de champion ne freinent
+// donc PLUS le vivier ; ce qui borne la montée, c'est le niveau du joueur (le sport).
 function rosterBlockedShare(xpDay: number, seed: number): number {
   const rng = mulberry32(seed);
   let seals = 0;
@@ -120,8 +123,8 @@ describe('🔱 le vivier entier suit le rythme des sceaux de ruine', () => {
     expect(m(PROFILS[0]![1])).toBeLessThan(0.1);
     expect(m(PROFILS[1]![1])).toBeLessThan(0.6);
   });
-  it('…mais ce n’est pas une formalité : le joueur très actif sent le frein', () => {
-    expect(m(PROFILS[2]![1])).toBeGreaterThan(0.4);
+  it('⚖️ offre = besoin (2026-10-08) : même le joueur très actif n’est plus bloqué par les sceaux', () => {
+    expect(m(PROFILS[2]![1])).toBeLessThan(0.05);
   });
 });
 

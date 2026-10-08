@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, ISLAND_OUTPOST_LEVEL } from '@/lib/archipelago';
 import { createMap, ruinsChampionSeals, RUINS_SEALS, type ExpeditionMap } from '@/lib/expedition';
-import { captureControl, collectControl, ensureControls } from '@/lib/controlPoints';
+import { captureControl, collectControl, ensureControls, CONTROL } from '@/lib/controlPoints';
 import { ensureIslandConquest } from '@/lib/islandConquest';
 import { characterRank } from '@/lib/characterRank';
 import { harvestOver } from './helpers/controlHarvest';
 
 /**
  * ⚱️ L'OSSUAIRE PRODUIT SELON LE NIVEAU DU HÉROS (2026-10-08, demandé par l'utilisateur), comme
- * l'arsenal : la part de champion d'une ruine du rang du héros (3 × (1 + rang)) toutes les
- * 216 h, garnison au complet — 1 sceau / 72 h en Bronze comme avant, 10 au rang suprême.
+ * l'arsenal : la part de champion d'une ruine du rang du héros (9 × (1 + rang)) toutes les
+ * 144 h, garnison au complet — 1 sceau / 16 h en Bronze (au rythme de l'arsenal depuis le
+ * 2026-10-08 : les sceaux de champion étaient 4,5 fois plus rares que ceux d'objet).
  * Le RANG des sceaux est celui du héros.
  */
 const NOW = Date.UTC(2026, 9, 8, 12);
@@ -36,9 +37,13 @@ describe('⚱️ l’ossuaire suit le niveau du héros', () => {
       expect(k * RUINS_SEALS.championPerRank).toBe(ruinsChampionSeals(level));
     });
   }
-  it('en Bronze, le débit d’avant (1 sceau / 72 h au complet, crans en plus)', () => {
-    // Avant : shareOf / 72 ; maintenant 3 × shareOf / 216 — le même débit.
-    expect(ruinsChampionSeals(5) / 216).toBeCloseTo(1 / 72);
+  it('⚖️ au rythme de l’arsenal : même besoin, même offre (2026-10-08)', () => {
+    // Monter un champion d'un rang coûte autant de sceaux de champion que ses 4 pièces en
+    // sceaux d'objet : l'ossuaire et l'arsenal produisent donc au même débit (1 / 16 h en
+    // Bronze au complet), et une ruine « champion » vaut une ruine « objet ».
+    expect(RUINS_SEALS.championPerRank).toBe(RUINS_SEALS.gearPerRank);
+    expect(CONTROL.ossuaryHoursPerRuin).toBe(CONTROL.arsenalHoursPerRuin);
+    expect(ruinsChampionSeals(5) / CONTROL.ossuaryHoursPerRuin).toBeCloseTo(1 / 16);
     expect(bronze).toBeGreaterThan(0);
   });
   it('les sceaux sont au rang du héros', () => {

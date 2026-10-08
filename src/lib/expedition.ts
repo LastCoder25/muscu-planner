@@ -688,7 +688,7 @@ const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
  * désormais la SEULE source de sceaux : plus rien sur les failles (mana seul) ni les camps.
  * La FAMILLE est dérivée de l'id (générateur séparé, comme les gardes) : une ruine sur deux
  * garde des sceaux de champion, l'autre des sceaux d'objet — la carte l'annonce avant l'envoi.
- * - 🔱 champion : `RUINS_SEALS.championPerRank` × (1 + rang de la RUINE) — 3 en Bronze, 30 en
+ * - 🔱 champion : `RUINS_SEALS.championPerRank` × (1 + rang de la RUINE) — 9 en Bronze, 90 en
  *   Tout-puissant (v1.89.0, demandé : « lié au niveau de la ruine » ; 3 fixes avant). Même forme
  *   que les sceaux d'objet, et que le coût d'une ascension (4 × rang visé) ;
  * - ⚜️ objet : `RUINS_SEALS.gearPerRank` × (1 + rang du joueur) (sans rang, v0.1138).
@@ -697,7 +697,11 @@ const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
  * d'objet chacun) et 1 à 2 failles (1,5 sceau de champion en moyenne). Les valeurs gardent
  * ce débit (`ruinsSeals.test`) : les sceaux sont plus RARES à trouver, plus gros à la fois.
  */
-export const RUINS_SEALS = { championPerRank: 3, gearPerRank: 9 } as const;
+// ⚖️ 2026-10-08 (demandé : « les sceaux de champion sont très durs à avoir comparé à ceux des
+// items ») : faire monter un champion d'un rang coûte autant de sceaux de champion (4 × rang)
+// que de sceaux d'objet pour ses 4 pièces (4 × rang). L'offre s'aligne : 9 × (1 + rang) des
+// deux côtés (c'était 3 côté champion, soit 3 fois moins pour le même besoin).
+export const RUINS_SEALS = { championPerRank: 9, gearPerRank: 9 } as const;
 /** 🔱 Les sceaux de champion d'une ruine de ce niveau : 3 × (1 + son rang). */
 export function ruinsChampionSeals(level: number): number {
   return RUINS_SEALS.championPerRank * (1 + characterRank(Math.max(1, level)).rankIndex);
