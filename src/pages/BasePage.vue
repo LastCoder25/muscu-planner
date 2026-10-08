@@ -1914,12 +1914,12 @@ const pantheonLit = computed(() =>
     mana: char.row?.mana ?? 0,
   }),
 );
-/** Quatre boules empilées à gauche de la tuile, réparties sur sa hauteur. */
+/** Quatre boules posées SUR le trait gauche de la tuile, réparties sur sa hauteur. */
 function pantheonDots(y: YardCell) {
   const gap = (y.half * 2) / 4;
   return pantheonLit.value.map((l, i) => ({
     ...l,
-    cx: y.x - y.half - 3,
+    cx: y.x - y.half,
     cy: y.y - y.half + gap * (i + 0.5),
   }));
 }
