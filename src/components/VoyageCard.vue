@@ -129,15 +129,19 @@ const inLabel = (ms: number) =>
   left: 16px;
   bottom: calc(76px + env(safe-area-inset-bottom));
   z-index: 50;
-  width: min(340px, calc(100vw - 32px));
-  /* ~40 % de l'écran : la carte garde le reste. */
-  max-height: 40vh;
+  width: min(300px, calc(100vw - 32px));
+  /* ~32 % de l'écran, et TRANSLUCIDE (demandé : « elle prend toute la place ») : la carte
+     se devine dessous, le flou garde le texte lisible. */
+  max-height: 32vh;
   overflow-y: auto;
-  padding: 10px 12px 12px;
-  border: 1.5px solid var(--accent);
+  padding: 8px 10px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   color: var(--text);
 }
 .vc-head {
@@ -214,17 +218,17 @@ const inLabel = (ms: number) =>
 }
 .vc-troops {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .vc-troop {
-  padding: 8px;
-  border: 1px solid var(--line);
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   border-radius: 10px;
-  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 35%, transparent);
 }
 .vc-line {
   display: flex;
@@ -308,14 +312,14 @@ const inLabel = (ms: number) =>
 .vc-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 .vc-btn {
   flex: 1;
   min-height: 44px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
   color: var(--text);
   font-weight: 700;
   font-size: 13px;
@@ -325,5 +329,6 @@ const inLabel = (ms: number) =>
   background: var(--accent);
   border-color: var(--accent);
   color: #15120e;
+  text-shadow: none;
 }
 </style>

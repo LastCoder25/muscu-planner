@@ -101,7 +101,20 @@ const ECRANS = [
       // 🧭 La carte est centrée sur ce voyage : toucher l'icône de la troupe, puis son tracé,
       // ouvre la fiche du voyage (qui voyage, heures d'arrivée et de retour de chaque groupe).
       { nom: 'voyage-icone', clic: '.recall-hit', attendu: '.vc .vc-time', ferme: '.vc-x' },
-      { nom: 'voyage-trace', clic: '.trail-hit', attendu: '.vc .vc-troop', ferme: '.vc-x' },
+      {
+        nom: 'voyage-trace',
+        clic: '.trail-hit',
+        attendu: '.vc .vc-troop',
+        ferme: '.vc-x',
+        // ⚠️ Le CENTRE du tracé peut tomber sous la troupe qui y marche (son icône capte le
+        // toucher, et c'est voulu) : on essaie des points le long des deux diagonales.
+        points: [
+          [0.3, 0.3],
+          [0.7, 0.7],
+          [0.3, 0.7],
+          [0.7, 0.3],
+        ],
+      },
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
       // 🗂️ Les places fortes, dépliées par leur tuile.
       { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
@@ -319,20 +332,28 @@ try {
           // ⚠️ Le PREMIER lieu du DOM peut être sous les boutons de la carte (zoom, liste des
           // points fixes) : on prend le premier qu'un doigt peut réellement toucher.
           let cible = toutes.first();
+          let position;
           const n = Math.min(await toutes.count(), 12);
-          for (let i = 0; i < n; i++) {
+          cherche: for (let i = 0; i < n; i++) {
             const c = toutes.nth(i);
-            if (
-              await c.click({ trial: true, timeout: 800 }).then(
-                () => true,
-                () => false,
-              )
-            ) {
-              cible = c;
-              break;
+            const box = geste.points ? await c.boundingBox() : null;
+            const essais = box
+              ? geste.points.map(([fx, fy]) => ({ x: box.width * fx, y: box.height * fy }))
+              : [undefined];
+            for (const pos of essais) {
+              if (
+                await c.click({ trial: true, timeout: 800, position: pos }).then(
+                  () => true,
+                  () => false,
+                )
+              ) {
+                cible = c;
+                position = pos;
+                break cherche;
+              }
             }
           }
-          await cible.click({ timeout: 10000 });
+          await cible.click({ timeout: 10000, position });
           await page.waitForTimeout(900);
           if (!(await page.locator(geste.attendu).count()))
             fail.push(`${width}px ${e.nom} : « ${geste.nom} » ne montre pas ${geste.attendu}`);
