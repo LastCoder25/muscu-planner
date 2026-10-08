@@ -189,7 +189,7 @@ import {
   heroComing,
   heroAwayOnMapAt,
   syncHeroAway,
-  heroHomePostId,
+  heroKeepPostId,
   heroWalksHomeFrom,
   turnBackComingHero,
   heroPostOf,
@@ -5053,7 +5053,10 @@ export const useCharacterStore = defineStore('character', () => {
         attackList.value.flatMap((a) => a.wings),
         advs,
       ),
-      heroHomePostId(cur.expedition),
+      heroKeepPostId(
+        cur.expedition,
+        attackList.value.flatMap((a) => a.wings),
+      ),
     );
   }
   /** ⚔️🏰 `syncAwayOf` sur la carte courante, écrite seulement si elle change (ce tick bat

@@ -38,6 +38,7 @@ describe('le store applique les règles du héros posté', () => {
     expect(body('expeSend')).toMatch(/unpostHero\([\s\S]*?, now, true\)/);
     expect(body('sendParty')).toMatch(/unpostHero\(map1, now, !!origin\)/);
     expect(src).toMatch(/syncHeroAway\(\s*syncAway\(/);
-    expect(src).toMatch(/heroHomePostId\(cur\.expedition\)/);
+    // ⚔️ Son voyage OU le groupe d'attaque combinée avec lequel il est parti (2026-10-08).
+    expect(src).toMatch(/heroKeepPostId\(\s*cur\.expedition,\s*attackList\.value\.flatMap/);
   });
 });
