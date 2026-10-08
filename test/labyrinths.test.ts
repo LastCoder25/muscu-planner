@@ -8,7 +8,6 @@ import {
   labyClearId,
   labyrinthUnlockedTier,
   labyrinthCleared,
-  frontierLabyrinth,
   deathKeepFraction,
   labyKeyCost,
   keysAfterPaying,
@@ -55,11 +54,6 @@ describe('labyrinths — ladder de paliers', () => {
     expect(labyrinthUnlockedTier(LABYRINTHS[2]!.id, cleared)).toBe(false); // pas encore
     expect(labyrinthCleared(LABYRINTHS[0]!.id, cleared)).toBe(true);
     expect(labyrinthCleared(LABYRINTHS[1]!.id, cleared)).toBe(false);
-  });
-
-  it('frontierLabyrinth = premier palier non nettoyé', () => {
-    expect(frontierLabyrinth([]).id).toBe(LABYRINTHS[0]!.id);
-    expect(frontierLabyrinth([labyClearId(LABYRINTHS[0]!.id)]).id).toBe(LABYRINTHS[1]!.id);
   });
 
   it('id inconnu → verrouillé', () => {

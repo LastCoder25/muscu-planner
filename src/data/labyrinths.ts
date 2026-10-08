@@ -250,10 +250,3 @@ export function deathKeepFraction(id: string): number {
   const i = LABYRINTHS.findIndex((l) => l.id === id);
   return Math.max(0.4, 1 - Math.max(0, i) * 0.07); // 10 paliers : novice 100 % → infini 40 %
 }
-
-/** Premier palier NON nettoyé (la « frontière » à afficher par défaut). */
-export function frontierLabyrinth(cleared: string[]): Labyrinth {
-  return (
-    LABYRINTHS.find((l) => !labyrinthCleared(l.id, cleared)) ?? LABYRINTHS[LABYRINTHS.length - 1]!
-  );
-}

@@ -8,7 +8,6 @@ import {
   applyDamage,
   descend,
   frontier,
-  isNewRoom,
   pathTo,
   type Floor,
 } from '@/lib/dungeonCrawl';
@@ -119,14 +118,14 @@ describe('dungeonCrawl — exploration (état)', () => {
     if (notLinked) expect(canMove(s, floor, notLinked.id)).toBe(false);
   });
 
-  it('enterRoom : déplace + marque visitée ; isNewRoom bascule', () => {
+  it('enterRoom : déplace + marque visitée ; la salle passe visitée', () => {
     const s = startRun(3, floor, 140);
     const link = floor.rooms[floor.startId]!.links[0]!;
-    expect(isNewRoom(s, link)).toBe(true);
+    expect(!s.visited.includes(link)).toBe(true);
     const s2 = enterRoom(s, floor, link);
     expect(s2.current).toBe(link);
     expect(s2.visited).toContain(link);
-    expect(isNewRoom(s2, link)).toBe(false);
+    expect(!s2.visited.includes(link)).toBe(false);
   });
 
   it('pathTo : retour arrière auto via salles visitées', () => {

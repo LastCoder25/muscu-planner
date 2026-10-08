@@ -8222,20 +8222,6 @@ button.pt-mini:active {
   flex: 0 0 auto;
   padding-bottom: 6px;
 }
-.ic-jet {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 8px;
-  font-weight: 800;
-  line-height: 1;
-  padding: 1px 4px;
-  border-radius: 999px;
-  color: #15120e;
-  background: var(--dim);
-  white-space: nowrap;
-}
 .tal-emo {
   flex: 0 0 auto;
   display: grid;
@@ -8269,12 +8255,6 @@ button.pt-mini:active {
 .tal-nm {
   min-width: 0;
 }
-/* Le niveau est « décollé » du couple rang+qualité : poussé à droite de la ligne. */
-.tal-lv {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--dim);
-}
 .tal-eff {
   font-size: 11.5px;
   font-weight: 600;
@@ -8306,64 +8286,6 @@ button.pt-mini:active {
   font-family: var(--font-body);
   font-weight: 400;
   opacity: 0.85;
-}
-/* Voie (spécialisation) — sélecteur ouvert depuis le cercle 🧭 du carré. */
-.voie-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.voie-opt {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-}
-.voie-opt.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-}
-.vo-emo {
-  font-size: 24px;
-}
-.vo-main {
-  flex: 1;
-  min-width: 0;
-}
-.vo-name {
-  font-weight: 700;
-  font-size: 14.5px;
-}
-.vo-eq {
-  margin-left: 6px;
-  font-size: 11px;
-  color: var(--accent);
-}
-.vo-blurb {
-  font-size: 12px;
-  color: var(--dim);
-  margin: 2px 0;
-}
-.vo-stats {
-  font-size: 11.5px;
-  color: var(--text);
-}
-.voie-clear {
-  width: 100%;
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px dashed var(--line);
-  background: transparent;
-  color: var(--dim);
-  font-size: 12.5px;
-  cursor: pointer;
 }
 .talent-reco-btn {
   width: 100%;
@@ -8397,11 +8319,6 @@ button.pt-mini:active {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
-.tal-xp span {
-  display: block;
-  height: 100%;
-  background: currentColor;
-}
 .tal-actions {
   flex: 0 0 auto;
   display: flex;
@@ -8423,13 +8340,6 @@ button.pt-mini:active {
 .tal-b:disabled {
   opacity: 0.4;
   cursor: default;
-}
-/* Actions de gestion (grade / recycle) : séparées visuellement de l'action primaire
-   (Équiper/Retirer) par un liseré discret → on ne recycle plus par erreur (8bfe2262). */
-.tal-posted {
-  font-size: 11px;
-  color: var(--dim);
-  white-space: nowrap;
 }
 .tal-b.ghost {
   color: var(--dim);
@@ -8792,22 +8702,6 @@ button.pt-mini:active {
   gap: 6px;
   margin-top: 7px;
 }
-.up-btn {
-  border: 1px solid var(--accent);
-  background: transparent;
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 11px;
-  cursor: pointer;
-}
-.up-btn:disabled {
-  border-color: var(--line);
-  color: var(--dim);
-  cursor: not-allowed;
-}
 .link-btn {
   background: none;
   border: none;
@@ -8888,28 +8782,6 @@ button.pt-mini:active {
   position: relative;
   right: auto;
   bottom: auto;
-}
-/* Flèche ↑ du bouton de grade (⭐↑) : hérite de la couleur du texte, collée à l'étoile. */
-.gu-up {
-  font-weight: 900;
-  margin: 0 1px 0 -1px;
-  font-size: 0.92em;
-}
-/* Bouton « À fond » (infuser au cap) : accent plein pour le distinguer du +1. */
-.slot-up.alt {
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-}
-.slot-up.alt:disabled {
-  background: transparent;
-  color: var(--dim);
-}
-/* Note « une fois infusé · ~N ✨ » sous un comparateur de puissance. */
-.pow-cost {
-  display: block;
-  font-size: 10px;
-  color: var(--dim);
-  margin-top: 2px;
 }
 /* Bouton bag « à fond » mis en avant. */
 .link-btn.strong {
@@ -9034,12 +8906,6 @@ button.pt-mini:active {
   gap: 8px;
   max-height: 60vh;
   overflow-y: auto;
-}
-/* Conflit de rangement de set (comparatif nouvelle vs rangée) */
-.stash-sub {
-  font-size: 12px;
-  color: var(--dim);
-  margin-bottom: 8px;
 }
 /* ── Revue de l'équipement conseillé ──────────────────────────────────────
    Une ligne = un remplacement. Colonne gauche l'actuel, droite le proposé, et le
@@ -9185,9 +9051,6 @@ button.pt-mini:active {
   color: var(--dim-2);
   font-style: italic;
 }
-.plan-voie {
-  font-size: 13px;
-}
 .plan-set {
   display: grid;
   gap: 4px;
@@ -9217,40 +9080,6 @@ button.pt-mini:active {
   display: grid;
   gap: 8px;
   margin-top: 12px;
-}
-.stash-side.best {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-/* La PUISSANCE est le verdict de cette modale : elle se lit avant tout le reste. */
-.stash-pow {
-  font-family: var(--font-display, inherit);
-  font-size: 20px;
-  line-height: 1.1;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  margin: 2px 0 5px;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.stash-side.best .stash-pow {
-  color: var(--accent);
-}
-.stash-delta.up {
-  color: var(--d1, #7bc86c);
-}
-.stash-delta.down {
-  color: var(--d4, #ff6a45);
-}
-.stash-actions .drops-close.accent {
-  background: var(--accent);
-  color: var(--bg);
-  font-weight: 700;
-}
-.stash-actions .drops-close.ghost {
-  background: none;
-  color: var(--dim);
 }
 /* ── Loadouts (sets d'équipement rangés) ── */
 .loadouts {
@@ -9552,24 +9381,6 @@ button.pt-mini:active {
   border-color: var(--accent);
   font-weight: 800;
 }
-/* Barre d'enchant en tête du sac : ressources + toggle protection. */
-.ench-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 12px;
-  margin: 4px 0 10px;
-  font-size: 13px;
-}
-.ench-prot.off {
-  opacity: 0.5;
-  cursor: default;
-}
 .gpill.p-commun,
 .gpill.p-inhabituel,
 .gpill.p-magique,
@@ -9746,22 +9557,6 @@ button.pt-mini:active {
 }
 .ii-dot {
   opacity: 0.5;
-}
-/* Cadenas : petit bouton inline en fin de ligne méta. */
-.inv-lock {
-  margin-left: auto;
-  width: 30px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-.inv-lock.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 /* Ligne 3 : EFFET mis en avant (ce que l'objet fait). */
 /* Comparaison d'EFFET : cet objet vs équipé, en 2 lignes alignées et lisibles. */
@@ -10017,16 +9812,6 @@ button.pt-mini:active {
 .ii-cmp2-chip.sub {
   opacity: 0.72;
   transform: scale(0.96);
-}
-/* Rentabilité : palier d'infusion où l'objet dépasse l'équipé actuel. */
-.ii-be {
-  margin-top: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--d3);
-}
-.ii-be.ok {
-  color: var(--d1);
 }
 /* Actions : Équiper (+ Infuser puis équiper) · icônes casser/vendre/lock · ⋯. */
 .ii-actions {
@@ -10286,16 +10071,6 @@ button.pt-mini:active {
   border-radius: 999px;
   padding: 2px 9px;
 }
-/* Modale détail du combat */
-.fight-card {
-  width: 100%;
-  max-width: 420px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 16px 18px;
-  color: var(--text);
-}
 .reward-cand:active {
   transform: scale(0.98);
 }
@@ -10364,24 +10139,6 @@ button.pt-mini:active {
   color: var(--accent);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-/* Emplacement cliquable : hint « gérer » */
-.slot-manage {
-  margin-top: auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-}
-/* Modale de gestion d'un emplacement */
-.manage-card {
-  width: 100%;
-  background: var(--surface);
-  border-top: 2px solid var(--accent);
-  border-radius: 16px 16px 0 0;
-  padding: 16px 18px calc(24px + env(safe-area-inset-bottom, 0px));
-  color: var(--text);
-  max-height: 82vh;
-  overflow-y: auto;
 }
 .drops-title {
   font-size: 18px;
@@ -10601,24 +10358,6 @@ button.pt-mini:active {
   font-weight: 700;
   font-size: 13px;
   color: var(--text);
-}
-.summon-forge .sf-craft {
-  border: 1px solid var(--accent);
-  background: transparent;
-  color: var(--accent);
-  border-radius: 9px;
-  padding: 6px 12px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 12px;
-  cursor: pointer;
-}
-.summon-forge .sf-craft:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.summon-forge .sf-craft:not(:disabled):active {
-  transform: scale(0.96);
 }
 /* ── Carte d'entrée « Expéditions » (nouveau mode) ── */
 .expe-card:disabled {
@@ -11265,36 +11004,7 @@ button.pt-mini:active {
   font-weight: 600;
   color: var(--accent);
 }
-.cons-drop b {
-  color: var(--accent);
-}
 
-/* Boss communautaire */
-.boss-card {
-  background: linear-gradient(180deg, var(--surface-2, #2b241b), var(--surface));
-  border: 1px solid var(--d4);
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 18px;
-}
-.boss-name {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text);
-}
-.boss-hpbar > span {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--d4);
-  transition: width 0.3s ease;
-}
-.boss-card.dead .boss-hpbar > span {
-  background: var(--d1);
-}
-.ladder-row.me {
-  border-color: var(--accent);
-}
 .foot {
   font-size: 11.5px;
   color: var(--dim);

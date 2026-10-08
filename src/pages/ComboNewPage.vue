@@ -1141,11 +1141,6 @@ onMounted(async () => {
   font-family: 'Oswald', sans-serif;
   font-size: 13.5px;
 }
-.opt-tiles {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
 .opt-tile {
   flex: 1;
   display: flex;
@@ -1162,10 +1157,6 @@ onMounted(async () => {
 .opt-tile.on {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
-}
-.ot-emo {
-  font-size: 22px;
-  line-height: 1;
 }
 .ot-lbl {
   font-size: 13.5px;

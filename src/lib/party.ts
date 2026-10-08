@@ -368,16 +368,6 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',
 };
-export function canSendParty(
-  poi: Poi,
-  escortCount: number,
-  hero: boolean,
-  cap: number,
-  winChance: number | null,
-  now: number,
-): boolean {
-  return partySendBlocker(poi, escortCount, hero, cap, winChance, now) === null;
-}
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.
  *  ⚠️ SOURCE UNIQUE : le store (`sendParty`) refuse avec la MÊME règle, l'écran dit POURQUOI

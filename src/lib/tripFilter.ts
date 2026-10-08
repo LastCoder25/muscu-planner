@@ -123,7 +123,7 @@ export function shownTripCats(sel: TripSelection, present: readonly TripCat[]): 
  *  commodité d'affichage, pas un état de jeu. ⚠️ La relecture est DÉFENSIVE : une valeur
  *  illisible ou d'une ancienne version retombe sur « tout afficher », jamais sur une rangée
  *  vide qui se lirait comme « aucun voyage ». */
-export const TRIP_CATS: readonly TripCat[] = ['trips', 'reinf', 'raids', 'planned', 'attacks'];
+const TRIP_CATS: readonly TripCat[] = ['trips', 'reinf', 'raids', 'planned', 'attacks'];
 const LEGS = ['go', 'back'] as const;
 export interface SavedTripFilters {
   sel: TripSelection;

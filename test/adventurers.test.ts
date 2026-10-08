@@ -22,7 +22,6 @@ import {
   ADV_STARS,
   advRank,
   advRankProgress,
-  advStar,
   advProgressOf,
   advXpToNext,
   engageCap,
@@ -34,6 +33,8 @@ import {
   sortByGradeThenRank,
   advShapeLabel,
 } from '@/lib/adventurers';
+
+const starOf = (a: Parameters<typeof advRank>[0]): number => advRank(a).star;
 import { RANK_ORDER } from '@/lib/items';
 import { CHARACTER_RANKS, characterRank, rankStartLevel } from '@/lib/characterRank';
 
@@ -223,9 +224,9 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
     // promotion se lit sur le rang, la progression de terrain sur l'étoile.
     // (tant que la classe autorise ce rang — cf. le test suivant)
     for (let n = 2; n <= LIGNEE.length; n++)
-      expect(advStar(strate(n, 17))).toBe(advStar(strate(2, 17)));
+      expect(starOf(strate(n, 17))).toBe(starOf(strate(2, 17)));
     // …et monter d'un cran de niveau les fait bouger.
-    expect(advStar(strate(1, 3))).toBeGreaterThan(advStar(strate(1, 1)));
+    expect(starOf(strate(1, 3))).toBeGreaterThan(starOf(strate(1, 1)));
   });
 
   it('⚠️ PAS PROMU, PAS DE NOUVEAU RANG À L’ÉCRAN (v0.834) — il reste ★★★★★, barre pleine', () => {
@@ -234,7 +235,7 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
     const argent = PROMO_LEVELS[1]!;
     const bleu = strate(1, argent + 4);
     expect(advRank(bleu).name).toBe(characterRank(1).name);
-    expect(advStar(bleu)).toBe(ADV_STARS);
+    expect(starOf(bleu)).toBe(ADV_STARS);
     expect(advRankProgress(bleu)).toBe(1);
     // La promotion le fait monter aussitôt, à l'étoile que son niveau lui vaut.
     expect(advRank(strate(2, argent + 4))).toEqual(characterRank(argent + 4));
@@ -255,7 +256,7 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
   it('l’étoile ne recule jamais et reste dans ses bornes', () => {
     let vu = 0;
     for (let l = 1; l <= ADV_MAX_LEVEL; l++) {
-      const st = advStar(suiveur(l));
+      const st = starOf(suiveur(l));
       expect(st, `niveau ${l}`).toBeGreaterThanOrEqual(1);
       expect(st).toBeLessThanOrEqual(ADV_STARS);
       if (advRank(suiveur(l)).rankIndex === advRank(suiveur(Math.max(1, l - 1))).rankIndex)
@@ -291,7 +292,7 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
   it('un aventurier sans classe ne fait pas exploser l’échelle', () => {
     const nu = make({ path: [], level: 1 });
     expect(Number.isFinite(advRankProgress(nu))).toBe(true);
-    expect(advStar(nu)).toBeGreaterThanOrEqual(1);
+    expect(starOf(nu)).toBeGreaterThanOrEqual(1);
   });
 });
 describe('⭐ CE QU’UNE MISSION ANNONCE', () => {

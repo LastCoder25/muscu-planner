@@ -29,15 +29,12 @@ import {
   comboTieredBonus,
   comboBonusXp,
   comboXpByDay,
-  suggestComboTarget,
   suggestComboTargetFromHistory,
   suggestFullBodyPlan,
   comboMuscleInZone,
   comboEmphasis,
   objectiveToGoal,
   type ComboSlotSpec,
-  buildComboSession,
-  comboSessionSetBudget,
   comboSessionDurationMin,
   buildComboSessionFromCounts,
   comboSessionSteps,
@@ -154,12 +151,6 @@ describe('mode séries vs reps par exo (173b322a)', () => {
       sets: [set(100)],
     }); // 100 %
     expect(comboProgressPct(combo([a, b]))).toBe(75); // (0.5 + 1)/2
-  });
-  it('buildComboSession : mode reps → assez de séries pour couvrir les reps restantes', () => {
-    const c = combo([leg({ count_mode: 'reps', target: 100, exercise_id: 'a' })]);
-    const s = buildComboSession(c, { minutes: 60, restSec: 60 });
-    const totalReps = s[0]!.sets.reduce((x, r) => x + r, 0);
-    expect(totalReps).toBeGreaterThanOrEqual(100); // couvre l'objectif de reps
   });
   it('suggestComboTargetFromHistory : reprend le target du dernier défi (converti si mode diffère)', () => {
     const past = combo([leg({ exercise_id: 'a', target: 8 })], {
@@ -309,42 +300,13 @@ describe('paliers du Défi 360 (secondaire 80 % / objectif 100 %)', () => {
   });
 });
 
-describe('buildComboSession (time-boxée, en séries)', () => {
+describe('séance générée (séries choisies par exo)', () => {
   const bigCombo = () =>
     combo([
       leg({ slot: 'push', exercise_id: 'a', target: 40 }),
       leg({ slot: 'pull', exercise_id: 'b', target: 40 }),
       leg({ slot: 'squat', exercise_id: 'c', target: 40 }),
     ]);
-  it('plus de temps = plus de séries, mais pas tout', () => {
-    const short = buildComboSession(bigCombo(), { minutes: 15, restSec: 60 });
-    const long = buildComboSession(bigCombo(), { minutes: 45, restSec: 60 });
-    const nbSets = (s: ReturnType<typeof buildComboSession>) =>
-      s.reduce((a, e) => a + e.sets.length, 0);
-    expect(nbSets(long)).toBeGreaterThan(nbSets(short));
-    expect(nbSets(long)).toBeLessThan(120); // bien moins que les 120 séries restantes
-  });
-  it('budget de séries = durée / (exécution + repos)', () => {
-    expect(comboSessionSetBudget(15, 60)).toBe(9);
-    expect(comboSessionSetBudget(30, 60)).toBe(18);
-  });
-  it('exclut les exos déjà finis', () => {
-    const c = combo([
-      leg({ slot: 'push', exercise_id: 'a', target: 2, sets: [set(10), set(10)] }),
-      leg({ slot: 'pull', exercise_id: 'b', target: 10 }),
-    ]);
-    const s = buildComboSession(c, { minutes: 30, restSec: 60 });
-    expect(s.map((e) => e.exercise_id)).toEqual(['b']);
-  });
-  it('includeIds : ne garde que les exos choisis', () => {
-    const s = buildComboSession(bigCombo(), { minutes: 45, restSec: 60, includeIds: ['a', 'c'] });
-    expect(new Set(s.map((e) => e.exercise_id))).toEqual(new Set(['a', 'c']));
-  });
-  it('budget de séries DIRECT (sets) : place exactement ce nombre', () => {
-    const s = buildComboSession(bigCombo(), { sets: 12, restSec: 60 });
-    const total = s.reduce((a, e) => a + e.sets.length, 0);
-    expect(total).toBe(12);
-  });
   it('comboSessionDurationMin : durée estimée croît avec les séries et le repos', () => {
     expect(comboSessionDurationMin(12, 60)).toBeGreaterThan(comboSessionDurationMin(6, 60));
     expect(comboSessionDurationMin(12, 90)).toBeGreaterThan(comboSessionDurationMin(12, 30));
@@ -354,17 +316,6 @@ describe('buildComboSession (time-boxée, en séries)', () => {
     expect(s.map((e) => e.exercise_id)).toEqual(['a', 'c']); // b (0) exclu, ordre des legs
     expect(s.find((e) => e.exercise_id === 'a')!.sets.length).toBe(3);
     expect(s.find((e) => e.exercise_id === 'c')!.sets.length).toBe(5);
-  });
-});
-
-describe('suggestComboTarget (séries)', () => {
-  it('essentiel > optionnel ; avancé > débutant', () => {
-    expect(suggestComboTarget('intermediaire', true)).toBeGreaterThan(
-      suggestComboTarget('intermediaire', false),
-    );
-    expect(suggestComboTarget('avance', true)).toBeGreaterThan(
-      suggestComboTarget('debutant', true),
-    );
   });
 });
 
@@ -810,20 +761,16 @@ describe('séance générée — les reps annoncées AVANT la série', () => {
       heavy({ exercise_id: 'a', target: 3, rep_min: 4, rep_max: 6 }),
       heavy({ exercise_id: 'b', slot: 'pull', target: 3, rep_min: 15, rep_max: 20 }),
     ]);
-    const s = buildComboSession(c, { sets: 6, restSec: 60 });
+    const s = buildComboSessionFromCounts(c, { a: 3, b: 3 });
     expect(s.find((e) => e.exercise_id === 'a')!.sets).toEqual([6, 6, 6]);
     expect(s.find((e) => e.exercise_id === 'b')!.sets).toEqual([20, 20, 20]);
   });
   it('une série déjà faite prime : on continue ce qu’on fait', () => {
     const c = combo([heavy({ target: 3, rep_min: 4, rep_max: 6, sets: [set(9, 40)] })]);
-    expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]!.sets).toEqual([9, 9]);
+    expect(buildComboSessionFromCounts(c, { ex_bench_press: 2 })[0]!.sets).toEqual([9, 9]);
   });
-  it('la fourchette voyage jusqu’au runner (les deux constructeurs)', () => {
+  it('la fourchette voyage jusqu’au runner', () => {
     const c = combo([heavy({ target: 3, rep_min: 8, rep_max: 12 })]);
-    expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]).toMatchObject({
-      rep_min: 8,
-      rep_max: 12,
-    });
     expect(buildComboSessionFromCounts(c, { ex_bench_press: 2 })[0]).toMatchObject({
       rep_min: 8,
       rep_max: 12,
@@ -833,7 +780,7 @@ describe('séance générée — les reps annoncées AVANT la série', () => {
     // Le repli n’est plus COMBO_PLAN_REPS mais le haut de la fourchette par défaut
     // (hypertrophie 8–12) : même famille de chiffre, mais dérivé d’une règle.
     const c = combo([heavy({ target: 2 })]);
-    expect(buildComboSession(c, { sets: 2, restSec: 60 })[0]!.sets).toEqual([12, 12]);
+    expect(buildComboSessionFromCounts(c, { ex_bench_press: 2 })[0]!.sets).toEqual([12, 12]);
   });
 });
 

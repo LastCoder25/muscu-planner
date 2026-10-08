@@ -21,7 +21,6 @@ import {
   missionXpSplit,
   SOLO_XP_MULT,
   missionXpPreview,
-  canSendCaravan,
   caravanHurtMs,
   caravanLegMin,
   poiOffers,
@@ -417,27 +416,6 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
       if (o.energy >= Math.round(cap) - 1) vu = true;
     }
     expect(vu, 'aucun voyage n’a approché le plafond : le test ne prouve rien').toBe(true);
-  });
-  it('elle ne va que sur les POI de RÉCOLTE', () => {
-    for (const t of ['camp', 'lair', 'arena'] as PoiType[]) {
-      expect(canSendCaravan(poi({ type: t }), team(3), 99)).toBe(false);
-    }
-    for (const t of ['well', 'shrine', 'archive', 'mana_mine', 'mine'] as PoiType[]) {
-      expect(canSendCaravan(poi({ type: t }), team(3), 99)).toBe(true);
-    }
-  });
-  it('escorte vide ou pléthorique : refusée', () => {
-    expect(canSendCaravan(poi(), [], 99)).toBe(false);
-    expect(canSendCaravan(poi(), team(CARAVAN.escortMax + 1), 99)).toBe(false);
-  });
-
-  it('🗿 le PLAFOND DU PANTHÉON borne aussi une escorte, et le plus strict gagne', () => {
-    // ⚠️ `escortMax` (4) domine dès le Panthéon 6 ; en dessous c'est le Panthéon qui
-    // décide, sinon un débutant enverrait plus de monde qu'il ne peut en engager.
-    expect(canSendCaravan(poi(), team(2), 2)).toBe(true);
-    expect(canSendCaravan(poi(), team(3), 2)).toBe(false);
-    expect(canSendCaravan(poi(), team(CARAVAN.escortMax), 99)).toBe(true);
-    expect(canSendCaravan(poi(), team(CARAVAN.escortMax + 1), 99)).toBe(false);
   });
 });
 

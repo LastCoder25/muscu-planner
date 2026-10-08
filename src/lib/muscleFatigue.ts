@@ -70,7 +70,7 @@ export function muscleLoad(hits: readonly FatigueHit[], now: number): Record<str
   return load;
 }
 
-export type FatigueLevel = 'fresh' | 'warm' | 'hot';
+type FatigueLevel = 'fresh' | 'warm' | 'hot';
 export interface ExoFatigue {
   level: FatigueLevel;
   /** Les muscles en cause, le principal d'abord. Vide si `fresh`. */

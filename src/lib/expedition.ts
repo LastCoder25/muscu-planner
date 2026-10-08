@@ -958,7 +958,7 @@ export const ARCHIPEL_TRAVEL_LEVEL = 0;
 export type SortieClock = { from: number; charge: number; fired: number; last?: number };
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
-export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
+const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
 
 /** 🗺️ Les départs gardés : ceux de la fenêtre, et ceux encore en route (datés de leur
  *  ARRIVÉE, dans le futur). */
@@ -1243,8 +1243,8 @@ export const MESSAGES_CAP = 40;
  *  mesuré le 2026-10-06 sur le compte réel, elles occupaient 9 places sur 30 et chassaient en
  *  ~1,5 jour les rapports de combat vers lesquels pointaient les notifications — le tap sur
  *  « ton groupe est rentré » ouvrait alors un AUTRE rapport. */
-export const NOTES_CAP = 6;
-export function isMessageNote(m: Pick<ExpeditionMessage, 'id'>): boolean {
+const NOTES_CAP = 6;
+function isMessageNote(m: Pick<ExpeditionMessage, 'id'>): boolean {
   return /^(ctlloot_|ctlgold_|planned_)/.test(m.id);
 }
 
@@ -2273,7 +2273,7 @@ function placePoi(
  *  place dans son quota (`mapQuota`). Jamais moins que les points de contrôle d'une carte
  *  ordinaire : une carte qui vient de basculer ne les a pas encore tous posés. `undefined`
  *  hors archipel. */
-export function islandFixedOf(map: Pick<ExpeditionMap, 'archipel' | 'pois'>): number | undefined {
+function islandFixedOf(map: Pick<ExpeditionMap, 'archipel' | 'pois'>): number | undefined {
   if (!map.archipel) return undefined;
   // 🪺 Les nids NÉS EN ROUTE (île 2) n’en prennent pas : ce sont des conséquences de la menace,
   // comme les mines d’une faille — l’île se charge, c’est le prix de les laisser pondre.
@@ -3167,7 +3167,7 @@ export function dwellMsFor(poi: Pick<Poi, 'type'>, champions: number): number {
 }
 
 /** 💎 L'extraction d'un filon pour 1 champion ; à plusieurs, elle se PARTAGE. */
-export const VEIN_DWELL_MS = 6 * 3600_000;
+const VEIN_DWELL_MS = 6 * 3600_000;
 /** 💎 Le filon ne garde que 3 champions à la fois (décision de l'utilisateur). */
 export const VEIN_MAX_CHAMPIONS = 3;
 /** 💎 Combien de temps l'équipe reste à extraire : 6 h seul, 3 h à deux, 2 h à trois. La

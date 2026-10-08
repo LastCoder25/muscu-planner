@@ -40,7 +40,6 @@ import {
   rollFamiliar,
   starOdds,
   RANK_COLOR,
-  dropBand,
   dropPeakRank,
   prestigeRankIndex,
   RANK_ORDER,
@@ -65,8 +64,6 @@ import {
   effectiveValue,
   sellValue,
   canSell,
-  upgradeCost,
-  canUpgrade,
   setCounts,
   setEffects,
   ITEM_SETS,
@@ -314,13 +311,7 @@ describe('rollTier : le rang des objets s’ouvre sur la durée du rang (v0.894)
     for (let s = 1; s <= 200; s++) rolls.add(rollTier(mulberry32(s * 5 + 1), 30, 0.3).roll);
     expect(rolls.size).toBeGreaterThan(150);
   });
-  it('bande de drop affichée en RANGS : pic = rang d’en dessous tant que le rang n’est pas ouvert', () => {
-    const ri = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK];
-    for (const lv of [4, 12, 25, 60]) {
-      const b = dropBand(lv, 0.4);
-      expect(ri(b.lo.rank)).toBeLessThanOrEqual(ri(b.hi.rank));
-      expect(ri(b.hi.rank)).toBe(prestigeRankIndex(lv));
-    }
+  it('rang le plus probable : celui d’en dessous tant que le rang n’est pas ouvert', () => {
     expect(dropPeakRank(4)).toBe(RANK_ORDER[0]);
     expect(dropPeakRank(25)).toBe(RANK_ORDER[prestigeRankIndex(25) - 1]);
     expect(dropPeakRank(85, 20)).toBe(RANK_ORDER[prestigeRankIndex(20) - 1]);
@@ -343,16 +334,6 @@ describe('niveaux d’objet', () => {
     expect(effectiveValue(eff, 1)).toBe(10);
     expect(effectiveValue(eff, 51)).toBe(Math.round(10 * (1 + 50 * 0.006))); // 13
     expect(effectiveValue(eff, 100)).toBeGreaterThan(effectiveValue(eff, 50)); // monotone
-  });
-  it('upgradeCost croît avec le niveau ET le rang', () => {
-    expect(upgradeCost(1, 'commun')).toBeLessThan(upgradeCost(5, 'commun'));
-    expect(upgradeCost(3, 'legendaire')).toBeGreaterThan(upgradeCost(3, 'commun'));
-  });
-  it('canUpgrade : faux si poussière insuffisante ou au plafond', () => {
-    const it = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, level: 2 });
-    expect(canUpgrade(it, upgradeCost(2, 'commun'), 10)).toBe(true);
-    expect(canUpgrade(it, upgradeCost(2, 'commun') - 1, 10)).toBe(false);
-    expect(canUpgrade({ ...it, level: 5 }, 9999, 5)).toBe(false); // au plafond
   });
 });
 

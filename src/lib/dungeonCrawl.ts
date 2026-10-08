@@ -211,10 +211,6 @@ export function canMove(state: RunState, floor: Floor, roomId: number): boolean 
   if (state.status !== 'exploring' || roomId === state.current) return false;
   return floor.rooms[state.current]?.links.includes(roomId) ?? false;
 }
-/** Salle jamais entrée (→ à résoudre : combat/coffre/piège). */
-export function isNewRoom(state: RunState, roomId: number): boolean {
-  return !state.visited.includes(roomId);
-}
 /** Chemin le plus court de la salle COURANTE vers `targetId`, en ne traversant que des
  *  salles DÉJÀ VISITÉES (la cible peut être une salle-frontière non visitée, atteinte au
  *  DERNIER pas → on y déclenchera son événement). Renvoie la liste ordonnée des ids à

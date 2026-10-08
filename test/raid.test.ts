@@ -55,7 +55,6 @@ import {
   type DefenseId,
   woundMsFor,
   woundRemainingMs,
-  heroAvailable,
   healCost,
   isWounded,
   WOUND_MAX_MS,
@@ -1371,10 +1370,10 @@ describe('blessure du héros', () => {
     // se remette. (Un simple malus de dégâts avait été essayé : sans mordant, puisqu'on
     // farme surtout du contenu qu’on domine largement — il ne changeait rien.)
     expect(isWounded(nb, 0)).toBe(true);
-    expect(heroAvailable(nb, 0)).toBe(false);
+    expect(isWounded(nb, 0)).toBe(true);
     expect(woundRemainingMs(nb, 0)).toBeGreaterThan(0);
     // …et il se remet tout seul.
-    expect(heroAvailable(nb, nb.wound!.until + 1)).toBe(true);
+    expect(isWounded(nb, nb.wound!.until + 1)).toBe(false);
     const healed = advanceBase(
       nb,
       { playerLevel: 26, activeDays7: 7, globalXp: 0, fortSightMs: () => 0 },

@@ -5,7 +5,6 @@ import {
   makePlannedRecall,
   normalizePlanned,
   planDue,
-  plannedChamps,
   plannedCount,
   plannedMilitia,
   plannedOutings,
@@ -57,7 +56,6 @@ describe('⏳ renforts programmés', () => {
       makePlannedMove({ ...sel, militia: 1 }, 'x', 0, H),
     ];
     expect(plannedMilitia(list)).toBe(3);
-    expect([...plannedChamps(list)].sort()).toEqual(['a', 'b']);
     expect(plannedTransferIds(list)).toEqual(new Set(['c', 'mil:3']));
   });
 
@@ -105,7 +103,6 @@ describe('🏠⏳ retour programmé (rappel d’une garnison)', () => {
   it('réserve les membres ramenés, sans prendre de place ni sortir de la base', () => {
     expect(plannedTransferIds([r])).toEqual(new Set(['a', 'mil:1']));
     expect(plannedSeatsTo([r], 'ctl_mine')).toEqual({ champ: 0, total: 0 });
-    expect(plannedChamps([r]).size).toBe(0);
     expect(plannedMilitia([r])).toBe(0);
     expect(plannedOutings([r])).toEqual([]);
     expect(plannedCount(r)).toBe(2);

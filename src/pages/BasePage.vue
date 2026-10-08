@@ -2503,23 +2503,6 @@ function doHarvest() {
   text-align: center;
   font-style: italic;
 }
-.sh-gsum {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.sh-gchip {
-  font-size: 12px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.fam-eff {
-  font-size: 12.5px;
-  color: var(--accent);
-}
 /* Le gain du prochain niveau : accent, parce que c’est sur ce chiffre qu’on décide. */
 .sh-pow {
   margin-top: 4px;
@@ -2599,46 +2582,6 @@ function doHarvest() {
   font-size: 12px;
   color: var(--dim);
   margin: 0 0 8px;
-}
-/* Carte d’entrée de la Guilde : une ligne cliquable, pas un panneau de plus. */
-.guild-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  color: var(--text);
-  min-height: 44px;
-  cursor: pointer;
-}
-.ge-emo {
-  font-size: 24px;
-}
-.ge-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.ge-title {
-  font-weight: 600;
-  font-size: 14.5px;
-}
-.ge-sub {
-  font-size: 12px;
-  color: var(--dim);
-}
-.ge-badge {
-  background: var(--accent);
-  color: #15120e;
-  border-radius: 10px;
-  padding: 2px 7px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.ge-go {
-  color: var(--dim);
-  font-size: 20px;
 }
 .def-sheet {
   width: 100%;
@@ -3316,9 +3259,6 @@ function doHarvest() {
   border-color: #ff6a45;
   color: #ff6a45;
 }
-.dim-note {
-  font-style: italic;
-}
 .fam {
   display: flex;
   align-items: center;
@@ -3330,67 +3270,8 @@ function doHarvest() {
   border-left: 3px solid var(--accent, #ffd23f);
   padding-left: 8px;
 }
-.fam-emo {
-  font-size: 22px;
-}
-.fam-main {
-  flex: 1;
-  min-width: 0;
-}
-.fam-name {
-  font-size: 13px;
-  font-weight: 600;
-}
-.fam-rar {
-  font-size: 10.5px;
-  color: var(--rk, var(--dim));
-}
-.fam-lvl {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-variant-numeric: tabular-nums;
-}
-.fam-capped {
-  color: var(--d3, #ffb23f);
-}
-.fam-tired {
-  color: var(--dim);
-  font-size: 11px;
-  margin-left: 6px;
-}
-.fam-role {
-  font-size: 12px;
-  color: var(--dim);
-}
 .siege-rd {
   margin: 6px 0 8px;
-}
-.scav-back {
-  margin-top: 8px;
-  padding: 10px;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: var(--bg);
-}
-.scav-title {
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.scav-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.scav-pill {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
 }
 /* Ce qui MANQUE se voit : le reste de la phrase reste lisible. */
 .miss {

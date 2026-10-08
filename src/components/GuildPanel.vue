@@ -1863,7 +1863,6 @@ function leftOf(at: number): string {
 </script>
 
 <style scoped lang="scss">
-.g-hire,
 .g-full {
   margin-bottom: 10px;
 }
@@ -2022,12 +2021,6 @@ function leftOf(at: number): string {
   font-size: 12.5px;
   color: var(--dim);
   margin: 2px 0 8px;
-}
-.adv-pow {
-  margin-left: auto;
-  font-family: 'Oswald', sans-serif;
-  font-size: 13px;
-  white-space: nowrap;
 }
 .d-pow {
   display: flex;
@@ -2212,10 +2205,6 @@ function leftOf(at: number): string {
   color: var(--dim);
   margin: 6px 0 4px;
 }
-/* 🐾🧠 LA PAIRE — une ligne par chose confiée, cible tactile pleine largeur.
-   ⚠️ Préfixe `d-` (detail) comme le reste de la fiche : des classes génériques
-   écraseraient celles d’un autre écran (la leçon des `fp-*`, v0.751). */
-.d-pair,
 .d-pick {
   display: flex;
   align-items: center;
@@ -2333,12 +2322,6 @@ function leftOf(at: number): string {
   margin-left: 4px;
   color: var(--accent);
   font-family: Oswald, sans-serif;
-}
-/* L'HORIZON d'une voie : en retrait, parce que c'est un possible, pas une promesse. */
-.gc-horizon {
-  font-size: 10.5px;
-  color: var(--dim);
-  opacity: 0.85;
 }
 .guild-card {
   background: var(--surface);
@@ -2459,42 +2442,9 @@ function leftOf(at: number): string {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-.adv-emo {
-  font-size: 26px;
-  line-height: 1.1;
-}
-.adv-main {
-  flex: 1;
-  min-width: 0;
-}
-.adv-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-}
-.adv-name {
-  font-weight: 600;
-  font-size: 14.5px;
-}
 .adv-rank {
   font-size: 12px;
   white-space: nowrap;
-}
-/* La rareté de la classe, à côté du métier : discrète, elle explique le rang sans
-   lui faire concurrence. */
-.adv-rar {
-  margin-left: 6px;
-  font-size: 11px;
-  text-transform: capitalize;
-}
-.adv-sub {
-  font-size: 12px;
-  color: var(--dim);
-}
-.adv-sig {
-  margin-left: 4px;
-  color: var(--accent);
 }
 .adv-bar {
   position: relative;
@@ -2508,79 +2458,6 @@ function leftOf(at: number): string {
   display: block;
   height: 100%;
   background: var(--accent);
-}
-.adv-state {
-  font-size: 11px;
-  color: var(--dim);
-}
-.adv-promo {
-  align-self: center;
-  background: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 5px 9px;
-  font-size: 12px;
-  min-height: 32px;
-}
-/* Grille fluide : jamais de débordement, les cartes se réorganisent. */
-.g-cost {
-  margin: 2px 0 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 12.5px;
-  color: var(--dim);
-}
-.g-choices {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-}
-.g-choice {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 6px;
-  background: #1d1913;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--text);
-  min-height: 44px;
-}
-.g-choice:disabled {
-  opacity: 0.45;
-}
-.gc-emo {
-  font-size: 24px;
-}
-.gc-lbl {
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: center;
-}
-.gc-w,
-.gc-shape {
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.gc-perk {
-  font-size: 11.5px;
-  color: var(--text);
-  line-height: 1.3;
-}
-.gc-perk.sig {
-  color: var(--accent, #ffd23f);
-}
-.gc-perk.none {
-  color: var(--dim);
-  font-style: italic;
-}
-.gc-rar {
-  font-size: 11px;
-  color: var(--dim);
 }
 .g-actions {
   display: flex;
@@ -2691,28 +2568,6 @@ function leftOf(at: number): string {
   color: var(--d4, #ff6a45);
 }
 
-/* ── 🗡️ LE STOCK D'ÉQUIPEMENT — pli + lignes ── */
-.g-fold {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 2px;
-  margin-top: 10px;
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--line);
-  color: var(--text);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.fold-ico {
-  color: var(--dim);
-  font-size: 14px;
-}
 /* 2 colonnes à 344/390 px, 3 dès qu'il y a la place (cockpit, tablette) — `auto-fill` le
    décide seul, sans point de rupture à maintenir. ⚠️ `minmax(0, …)` et non `minmax(148px, …)`
    en 2ᵉ borne : une piste qui refuse de passer sous son contenu fait déborder la grille. */

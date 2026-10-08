@@ -17,7 +17,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 
-export const MODEL = 'zimage';
+const MODEL = 'zimage';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Client authentifié. `null` si la clé est absente (l'appelant décide s'il peut s'en passer). */

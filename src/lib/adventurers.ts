@@ -2004,11 +2004,6 @@ export function sortByGradeThenRank(advs: readonly Adventurer[]): Adventurer[] {
   return groupByGrade(advs, () => 0).flatMap((g) => g.advs);
 }
 
-/** Étoile courante, 1..5 — la progression du niveau DANS le rang. */
-export function advStar(adv: Adventurer): number {
-  return advRank(adv).star;
-}
-
 /** Avancement DANS l’étoile courante (0..1) — la BARRE. L’XP du niveau en cours compte,
  *  sinon elle ne bougerait qu’au passage de niveau : plusieurs jours de convois sans
  *  le moindre retour, alors que le niveau est caché. */

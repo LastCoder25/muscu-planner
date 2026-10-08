@@ -1291,32 +1291,11 @@ async function saveAutre() {
   justify-content: space-between;
   gap: 12px;
 }
-.xp-lvl.next {
-  color: var(--dim);
-}
 .head-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-}
-.ic-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-  border-radius: 8px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 10px;
-  line-height: 1;
 }
 /* Carrés du header : Aventure / Défis / Niveau (même taille) */
 .hsq,
@@ -2086,24 +2065,6 @@ async function saveAutre() {
   color: var(--dim);
   margin: 0 2px 8px;
   font-weight: 600;
-}
-/* Grande ligne Challenges (au-dessus des sports) */
-.challenge-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  margin-bottom: 10px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid var(--accent);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-.adv-tile .q-icon {
-  color: var(--accent);
 }
 .main-tiles {
   display: grid;

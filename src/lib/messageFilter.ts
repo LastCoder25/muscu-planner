@@ -15,15 +15,14 @@ import { isIslandTargetId } from './islandConquest';
 export type MessageCategory = 'place' | 'attack' | 'objective' | 'rift' | 'gift' | 'other';
 
 /** L'ordre d'affichage des filtres, et leur libellé. */
-export const MESSAGE_CATEGORIES: readonly { id: MessageCategory; emoji: string; label: string }[] =
-  [
-    { id: 'place', emoji: '🗺️', label: 'Lieux' },
-    { id: 'attack', emoji: '⚔️', label: 'Attaques' },
-    { id: 'objective', emoji: '🎯', label: 'Objectifs' },
-    { id: 'rift', emoji: '🕳️', label: 'Failles' },
-    { id: 'gift', emoji: '🎁', label: 'Cadeaux' },
-    { id: 'other', emoji: '📜', label: 'Autres' },
-  ];
+const MESSAGE_CATEGORIES: readonly { id: MessageCategory; emoji: string; label: string }[] = [
+  { id: 'place', emoji: '🗺️', label: 'Lieux' },
+  { id: 'attack', emoji: '⚔️', label: 'Attaques' },
+  { id: 'objective', emoji: '🎯', label: 'Objectifs' },
+  { id: 'rift', emoji: '🕳️', label: 'Failles' },
+  { id: 'gift', emoji: '🎁', label: 'Cadeaux' },
+  { id: 'other', emoji: '📜', label: 'Autres' },
+];
 
 const RIFT_POIS = new Set(['rift', 'mana_mine']);
 

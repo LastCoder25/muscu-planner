@@ -728,20 +728,6 @@ onBeforeUnmount(() => {
   color: #e5544b;
   border: 1px solid #e5544b55;
 }
-.stile.done {
-  background: var(--d1);
-  color: var(--accent-ink);
-}
-.stile.cur {
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 0 0 2px #ffd23f44;
-}
-.stile.todo {
-  background: #e5544b22;
-  color: #e5544b;
-  border: 1px solid #e5544b55;
-}
 .scroll {
   flex: 1;
   overflow-y: auto;
@@ -1102,14 +1088,6 @@ onBeforeUnmount(() => {
 .set.up {
   opacity: 0.5;
 }
-.set.cur .set-idx {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.set.done .set-idx {
-  background: var(--surface-2);
-  color: var(--d1);
-}
 /* Même libellé que la séance libre : les deux écrans doivent rester identiques. */
 .cell-lbl {
   font-size: 10.5px;
@@ -1174,31 +1152,6 @@ onBeforeUnmount(() => {
 .set.cur .val {
   color: var(--accent);
 }
-.dpill {
-  justify-self: end;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--accent-ink);
-}
-.dpill.d1 {
-  background: var(--d1);
-}
-.dpill.d2 {
-  background: var(--d2);
-}
-.dpill.d3 {
-  background: var(--d3);
-}
-.dpill.d4 {
-  background: var(--d4);
-  color: #fff;
-}
 .rm {
   justify-self: end;
   width: 28px;
@@ -1208,10 +1161,6 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--dim-2);
   cursor: pointer;
-}
-.dpill.editable {
-  cursor: pointer;
-  border: none;
 }
 .load-step {
   display: flex;

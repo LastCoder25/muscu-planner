@@ -295,7 +295,7 @@ export function controlTier(c: ControlState | undefined, at: number): number {
 
 /** 🏅👥 L'effectif va changer à `at` : on FIGE le cran et la part déjà chargée, pour que la
  *  suite se charge au rythme de la nouvelle garnison. Rien n'est perdu ni gagné. */
-export function rebaseTier(c: ControlState, at: number): ControlState {
+function rebaseTier(c: ControlState, at: number): ControlState {
   const ref = tierRef(c);
   if (c.owner !== 'player' || ref === undefined) return c;
   const tier = controlTier(c, at);
@@ -627,7 +627,7 @@ export const isCitadel = (p: Pick<Poi, 'control'> | null | undefined): boolean =
   p?.control?.kind === 'citadel';
 export const isCitadelId = (id: string): boolean => CITADEL_IDS.includes(id);
 /** 🏯 Une citadelle découverte (donc visible et attaquable). */
-export const isCitadelFound = (p: Pick<Poi, 'control'> | null | undefined): boolean =>
+const isCitadelFound = (p: Pick<Poi, 'control'> | null | undefined): boolean =>
   isCitadel(p) && p!.control!.discoveredAt !== undefined;
 
 /** 🏯 Le niveau d'Avant-poste qui fait découvrir la citadelle `i`. */
@@ -644,7 +644,7 @@ function presentCitadels(pois: readonly Poi[]): number[] {
 
 /** 🏯 Parmi `present`, la citadelle la plus proche (en angle) d'un type de point ; `null`
  *  s'il n'y en a aucune. */
-export function citadelIndexOf(kind: ControlKind, present: readonly number[]): number | null {
+function citadelIndexOf(kind: ControlKind, present: readonly number[]): number | null {
   const q = CONTROL_QUARTER[kind];
   let best: number | null = null;
   let bestD = Infinity;
@@ -689,7 +689,7 @@ function rageSinceOf(c: ControlState): number | undefined {
 /** 😡 Ce que la colère ajoute par jour, selon les jours actifs sur 7 : pleine à 7/7, nulle
  *  à 0 — un joueur peu actif n'est pas harcelé comme un joueur actif (même règle que le délai
  *  des reprises, `retakeDelayMs`). */
-export function rageRate(activeDays7: number): number {
+function rageRate(activeDays7: number): number {
   return (CITADEL.ragePerDay * Math.min(7, Math.max(0, activeDays7))) / 7;
 }
 
@@ -2006,7 +2006,7 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
   return baseUnitsPerHour(p, n, playerLevel) * (p.control?.yieldMult ?? 1);
 }
 /** 🏅🏝️ Le multiplicateur de cran AU CRAN D'AUJOURD'HUI, 1 pour un socle pacifié (sans crans). */
-export function yieldTierMult(c: ControlState, now: number): number {
+function yieldTierMult(c: ControlState, now: number): number {
   return c.flatTier ? 1 : tierYieldMult(controlTier(c, now));
 }
 function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {

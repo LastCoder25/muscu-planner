@@ -13,7 +13,7 @@ export interface Pt {
 }
 
 /** Marge (px) gardée de chaque côté du trajet, pour que ses deux bouts ne collent pas au bord. */
-export const TRIP_FRAME_MARGIN = 48;
+const TRIP_FRAME_MARGIN = 48;
 
 export interface TripFrame {
   /** Centre du trajet, en coordonnées de carte. */

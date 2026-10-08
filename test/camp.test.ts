@@ -16,7 +16,6 @@ import {
   type PartyInput,
 } from '@/lib/camp';
 import {
-  canSendParty,
   normalizeParties,
   PARTY_HERO_BLOCK_LABEL,
   partyClaimRoster,
@@ -31,6 +30,9 @@ import {
   partyFightSeed,
   partyForecastSeed,
 } from '@/lib/party';
+
+const canSendParty = (...a: Parameters<typeof partySendBlocker>): boolean =>
+  partySendBlocker(...a) === null;
 import { CAMP_SAMPLE_MULT, partyWinChance } from '@/lib/partyForecast';
 import {
   HERO_UNIT_ID,

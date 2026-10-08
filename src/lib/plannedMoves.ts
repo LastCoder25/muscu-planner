@@ -119,9 +119,6 @@ export function makePlannedRecall(
   };
 }
 
-/** Est-ce un retour programmé (et non un renfort) ? */
-export const isPlannedRecall = (m: PlannedMove): boolean => !!m.recall;
-
 /** Les départs échus (le plus ancien d'abord) et ceux qui attendent encore. */
 export function planDue(
   list: readonly PlannedMove[],
@@ -134,10 +131,6 @@ export function planDue(
 /** Les miliciens de la base réservés par des départs programmés. */
 export const plannedMilitia = (list: readonly PlannedMove[]): number =>
   list.reduce((n, m) => n + m.militia, 0);
-
-/** Les champions de la base réservés. */
-export const plannedChamps = (list: readonly PlannedMove[]): Set<string> =>
-  new Set(list.flatMap((m) => m.champs));
 
 /** Les membres de lieux tenus réservés (champions ou miliciens postés) : ceux qu'un renfort
  *  programmé transférera, et ceux qu'un retour programmé ramènera. */

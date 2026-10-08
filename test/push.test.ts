@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { planPushes, livePushKeys, pushVoyage, type PushContext } from '@/lib/push';
+import { planPushes, pushVoyage, type PushContext, type PushPlan } from '@/lib/push';
+
+const livePushKeys = (plans: PushPlan[]): Set<string> => new Set(plans.map((p) => p.dedupe));
 import { buildMessage, controlAttackReportId } from '@/lib/expedition';
 import { __stampFrom } from '@/composables/useAppUpdate';
 import {

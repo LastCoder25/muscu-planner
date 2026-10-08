@@ -56,7 +56,6 @@ import { REF_CHAMPIONS_BY_RANK, type Champion } from '../data/champions';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import {
   PARTY_TARGETS,
-  HARVEST_TYPES,
   harvestYield,
   harvestGold,
   isRiftPoi,
@@ -1177,17 +1176,6 @@ export function poiOffers(
           (opts.advsAvailable > 0 || (RAZE_KINDS.has(poi.control.kind) && !opts.heroAway))
         : !opts.heroAway || opts.advsAvailable > 0),
   };
-}
-
-/** ⚠️ `cap` = le plafond d'engagement du Panthéon (`engageCap`), REQUIS : il borne une
- *  escorte comme il borne un groupe ou le rempart. `escortMax` le domine dès qu'on a un
- *  Panthéon de niveau 6 — en dessous, c'est le Panthéon qui décide. */
-export function canSendCaravan(poi: Poi, escort: Adventurer[], cap: number): boolean {
-  return (
-    HARVEST_TYPES.has(poi.type) &&
-    escort.length > 0 &&
-    escort.length <= Math.min(CARAVAN.escortMax, Math.max(0, Math.floor(cap)))
-  );
 }
 
 /** Probabilité de base qu'une jambe de trajet tourne à l'embuscade, AVANT éclaireurs. */

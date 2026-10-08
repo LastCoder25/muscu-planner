@@ -1924,10 +1924,6 @@ export function assaultEstimate(
 export function isWounded(base: BaseState | null | undefined, now: number): boolean {
   return !!base?.wound && now < base.wound.until;
 }
-/** Le héros peut-il partir en donjon / boss / portail / Labyrinthe / expédition ? */
-export function heroAvailable(base: BaseState | null | undefined, now: number): boolean {
-  return !isWounded(base, now);
-}
 export function woundRemainingMs(base: BaseState | null | undefined, now: number): number {
   return isWounded(base, now) ? base!.wound!.until - now : 0;
 }

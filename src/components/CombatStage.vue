@@ -785,7 +785,4 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--dim);
 }
-.cs-result.win {
-  color: var(--d1);
-}
 </style>

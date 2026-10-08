@@ -10,16 +10,13 @@
  */
 import { isMilitiaId } from './militia';
 
-export type ChampCell =
+type ChampCell =
   | { kind: 'hero'; coming: boolean; away: boolean }
   | { kind: 'adv'; id: string }
   | { kind: 'route'; id: string }
   | { kind: 'away'; id: string }
   | { kind: 'free' };
-export type MilCell =
-  | { kind: 'mil'; id: string }
-  | { kind: 'route'; id: string }
-  | { kind: 'free' };
+type MilCell = { kind: 'mil'; id: string } | { kind: 'route'; id: string } | { kind: 'free' };
 
 export interface GarrisonCells {
   champ: ChampCell[];

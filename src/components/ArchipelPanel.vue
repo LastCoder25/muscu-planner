@@ -500,11 +500,6 @@ const islandCapRank = computed(() =>
   color: var(--dim);
   box-shadow: inset 0 0 0 1px var(--line);
 }
-.at-name {
-  font-size: 12px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
 .at-ranks {
   display: flex;
   flex-wrap: wrap;

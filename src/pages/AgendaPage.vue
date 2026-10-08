@@ -622,17 +622,6 @@ onMounted(async () => {
   gap: 6px;
   margin-bottom: 1px;
 }
-.entry-src {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--src-c, var(--accent));
-  border: 1px solid var(--src-c, var(--accent));
-  border-radius: 999px;
-  padding: 1px 7px;
-  line-height: 1.5;
-}
 .entry-go {
   color: var(--dim);
   flex: none;

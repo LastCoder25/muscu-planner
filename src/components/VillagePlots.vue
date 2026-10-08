@@ -576,14 +576,6 @@ function collectAll() {
 </script>
 
 <style scoped>
-.vp-tile.locked {
-  opacity: 0.45;
-  cursor: default;
-}
-.vp-tile.ready {
-  border-color: var(--accent, #ffd23f);
-}
-
 /* Feuille */
 /* Aperçu des prochains niveaux : une ligne par palier, le niveau ACTUEL en repère. */
 .pm-prev {

@@ -226,14 +226,6 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
   return out;
 }
 
-/** Les clés des messages qu'on peut RETIRER quand ils n'ont plus lieu d'être.
- *  ⚠️ Nécessaire : si le joueur récupère un convoi avant son heure de notification, ou
- *  si l'échéance d'un siège est repoussée (elle l'est pendant l'inactivité), la ligne
- *  programmée doit disparaître, sinon on notifie un événement qui n'existe plus. */
-export function livePushKeys(plans: PushPlan[]): Set<string> {
-  return new Set(plans.map((p) => p.dedupe));
-}
-
 /** @public — contrat miroir de STALE_MS dans supabase/functions/push-dispatch. */
 export const PUSH = {
   /** Au-delà, un message programmé n'a plus de sens : on le laisse expirer plutôt que

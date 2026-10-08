@@ -278,7 +278,7 @@ export function nestSpot(
  * debout (au plafond, l'apparition est perdue). ⚠️ À la première lecture, les sorties passées
  * ne comptent pas (`nestFrom` part de maintenant). Rend la MÊME carte si rien ne change.
  */
-export function spawnNests(map: ExpeditionMap, now: number): ExpeditionMap {
+function spawnNests(map: ExpeditionMap, now: number): ExpeditionMap {
   const isl = activeIsland(map);
   const a = map.archipel;
   if (!isl || !a || !NEST.islands.has(isl.id) || a.pacifiedAt !== undefined) return map;
@@ -902,7 +902,7 @@ function heldFortress(p: Poi): boolean {
 }
 
 /** 🏝️ Un objectif ou la forteresse TENU par le joueur (étape 6 bis : ils se tiennent). */
-export function heldIslandTarget(p: Poi): boolean {
+function heldIslandTarget(p: Poi): boolean {
   return isIslandTargetId(p.id) && p.id !== ENDLESS_ID && p.control?.owner === 'player';
 }
 
@@ -962,7 +962,7 @@ function heldObjective(
  * fixe de l'île compté abattu (`destroyed`) mais absent de la carte est donc un reliquat : il
  * revient à sa place, à nous, sans garnison. Rien si la carte n'en a pas.
  */
-export function restoreRazedObjectives(
+function restoreRazedObjectives(
   map: ExpeditionMap,
   pois: readonly Poi[],
   now: number,

@@ -94,7 +94,7 @@ export function fortressSealCount(isl: Pick<Island, 'maxLevel'>): number {
 
 /** 🏰 Le coffre de la forteresse portuaire abattue : runes et sceaux de champion au rang max
  *  de l'île (jamais d'XP sur la carte). */
-export function fortressChestMessage(isl: Island, at: number): ExpeditionMessage {
+function fortressChestMessage(isl: Island, at: number): ExpeditionMessage {
   return {
     id: `isl_fort_${isl.id}`,
     chest: true,
@@ -136,7 +136,7 @@ export function fortressReward(
 
 /** 🌀 Les sceaux d'une victoire sur la brèche sans fin : proportionnels au niveau maximal
  *  de l'île (5 sur l'île 5), au moins 1. */
-export function endlessSealCount(isl: Pick<Island, 'maxLevel'>): number {
+function endlessSealCount(isl: Pick<Island, 'maxLevel'>): number {
   return Math.max(1, Math.round(isl.maxLevel * ENDLESS.sealsPerLevel));
 }
 
@@ -180,7 +180,7 @@ export function endlessReward(
 /** ⛵ Une traversée VERS L'AVANT (vers une île de numéro plus grand) : c'est elle qui pacifie
  *  l'île quittée et emmène tous les champions. Un retour vers une île déjà visitée ne change
  *  rien de tout ça. */
-export function isForwardCrossing(c: Pick<Crossing, 'from' | 'to'>): boolean {
+function isForwardCrossing(c: Pick<Crossing, 'from' | 'to'>): boolean {
   return c.to > c.from;
 }
 
@@ -452,7 +452,7 @@ export function settleSailings(
 
 /** La graine d'une île neuve : dérivée de la carte quittée et du numéro de l'île (une île
  *  ne se dessine pas comme la précédente, mais reste la même d'un tick à l'autre). */
-export function islandSeed(seed: number, island: number): number {
+function islandSeed(seed: number, island: number): number {
   return (Math.imul(seed ^ 0x9e3779b9, 31 + island) ^ (island * 0x85ebca6b)) >>> 0 || 1;
 }
 

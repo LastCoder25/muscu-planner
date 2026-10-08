@@ -143,7 +143,7 @@ export function islandRadiusAt(id: number, t: number): number {
 }
 
 /** Le village de pêcheurs est à cette distance de la côte, au fond de la baie. */
-export const PORT_INSET = 6;
+const PORT_INSET = 6;
 
 const centers = new Map<number, { x: number; y: number }>();
 /**
@@ -271,8 +271,8 @@ export function islandView(id: number, half: number): { x: number; y: number; si
 /** 🏰 La forteresse de l'île `id` : sur le cap, à `FORTRESS_INSET` de la côte. ⚠️ MÊME règle
  *  que `islandTerrain` (qui la dessine) : le placement des lieux la lit ici sans importer le
  *  décor. */
-export const FORTRESS_INSET = 9;
-export function islandFortressAt(id: number): { x: number; y: number } {
+const FORTRESS_INSET = 9;
+function islandFortressAt(id: number): { x: number; y: number } {
   const c = islandCenter(id);
   const t = islandShape(id).cape;
   const r = islandRadiusAt(id, t) - FORTRESS_INSET;
@@ -283,9 +283,9 @@ export function islandFortressAt(id: number): { x: number; y: number } {
  *  accoste et la partie avec la forteresse » ; 2026-10-05 : « chaque lieu fixe à égale distance
  *  du village portuaire et de la forteresse, donc en diagonale ») : la MÉDIATRICE du segment
  *  départ → forteresse. Elle passe par son milieu (`DEFENSE_LINE_T`)… */
-export const DEFENSE_LINE_T = 0.5;
+const DEFENSE_LINE_T = 0.5;
 /** …et s'étale sur cette part de la terre le long de la médiatrice. */
-export const DEFENSE_LINE_SPREAD = 0.75;
+const DEFENSE_LINE_SPREAD = 0.75;
 /** 〰️ Décalage le long de l'axe départ → forteresse (« pas totalement droit ») : alterné, en
  *  unités de carte. Petit devant la longueur de l'axe : l'écart des distances reste ≤ 2× cela. */
 export const DEFENSE_LINE_WOBBLE = 3;

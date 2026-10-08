@@ -679,15 +679,6 @@ onMounted(async () => {
   color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
-/* Niveau d'athlète */
-.ath-card {
-  --tier: var(--accent);
-  background: var(--surface-2);
-  border: 1px solid var(--tier);
-  border-radius: 16px;
-  padding: 14px 16px;
-  margin-bottom: 18px;
-}
 .p-title {
   font-size: 28px;
   font-weight: 700;

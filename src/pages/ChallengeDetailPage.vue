@@ -1916,45 +1916,9 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 18px;
   cursor: pointer;
-  &.minus {
-    border-color: var(--d4);
-    color: var(--d4);
-  }
-  &.editing {
-    border-color: var(--d4);
-    color: var(--d4);
-    border-style: dashed;
-  }
-  &.ghost {
-    border-style: dashed;
-    border-color: var(--dim);
-    color: var(--dim);
-    background: transparent;
-    flex: none;
-    width: 52px;
-  }
 }
 .rm {
   font-size: 15px;
-}
-.opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--dim);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  &.on {
-    border-color: var(--d4);
-    color: var(--d4);
-    background: color-mix(in srgb, var(--d4) 14%, transparent);
-  }
 }
 .corr-link {
   margin-left: 10px;
@@ -1979,10 +1943,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--accent);
   background: var(--surface-2);
   text-align: center;
-}
-.rpe-btn.ok:active {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 .today-ok {
   color: var(--d1);

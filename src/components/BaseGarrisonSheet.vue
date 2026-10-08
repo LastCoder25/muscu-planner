@@ -135,7 +135,7 @@ import {
 import type { ControlState } from '@/lib/expedition';
 import { formatDurationMin } from '@/lib/duration';
 
-export interface BaseSendTarget {
+interface BaseSendTarget {
   id: string;
   emo: string;
   label: string;

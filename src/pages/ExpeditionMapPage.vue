@@ -6224,12 +6224,6 @@ onUnmounted(() => {
   color: var(--dim);
   text-align: center;
 }
-.car-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
 /* Grille fluide : l’escorte peut compter jusqu’à quatre noms sur un écran plié. */
 /* Suggestion d'escorte : pleine largeur et 44 px (règle mobile), mais en secondaire —
    elle propose, elle ne décide pas. */
@@ -6819,47 +6813,6 @@ onUnmounted(() => {
   font-size: 11px;
   color: var(--dim);
   overflow-wrap: anywhere;
-}
-.yield-take {
-  width: 100%;
-  margin-top: 10px;
-}
-.forge-gauges {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 4px 0 8px;
-}
-.forge-g {
-  display: grid;
-  grid-template-columns: minmax(0, 6.5em) minmax(0, 1fr) 8.5em;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-.forge-g-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.forge-g-bar {
-  height: 8px;
-  border-radius: 4px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.08));
-  overflow: hidden;
-}
-.forge-g-bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent, #ffd23f);
-  border-radius: 4px;
-  transition: width 0.4s ease;
-}
-.forge-g-val {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--dim, #9a8f7e);
 }
 .ctl-dim {
   color: var(--dim);
@@ -8020,55 +7973,6 @@ onUnmounted(() => {
   color: var(--d4);
   font-weight: 600;
 }
-/* Et quand le voyage se termine AVANT l’assaut, on le DIT : le silence, à la place
-   d’une alerte attendue, ressemble à un oubli. Vert « gain » de la charte. */
-/* 🛡️⚔️ La relève de miliciens proposée au départ d'une sortie : une tuile cochable. */
-.sh-cover {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 44px;
-  margin: 4px 0 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.sh-cover.on {
-  border-color: var(--d1);
-  background: color-mix(in srgb, var(--d1) 10%, var(--surface));
-}
-.sh-cover-box {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  border: 1.5px solid var(--dim);
-  display: grid;
-  place-items: center;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--bg);
-}
-.sh-cover.on .sh-cover-box {
-  border-color: var(--d1);
-  background: var(--d1);
-}
-.sh-cover-txt {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-size: 12.5px;
-  line-height: 1.3;
-}
-.sh-cover-txt span {
-  color: var(--dim);
-  font-size: 11.5px;
-}
 .sh-ok {
   font-size: 12px;
   color: var(--d1);
@@ -8099,17 +8003,6 @@ onUnmounted(() => {
 .sheet-leave-to {
   opacity: 0;
   transform: translateY(12px);
-}
-/* Annonce « activité débloquée » (construction d'un bâtiment de déblocage). */
-.unlock-card {
-  padding: 24px;
-  text-align: center;
-  background: var(--surface);
-  color: var(--text);
-  border-radius: 16px;
-  min-width: 280px;
-  max-width: 360px;
-  border: 1px solid var(--accent);
 }
 .empty {
   margin: 24px 16px;

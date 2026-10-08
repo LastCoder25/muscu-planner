@@ -131,7 +131,7 @@ export const TOP_GRADE: PullGrade = 'S';
 /** La lettre garantie tous les `minorPity` tirages (ou mieux). */
 export const FLOOR_GRADE: PullGrade = 'A';
 /** 🖤 La lettre au-dessus du sommet — garantie tous les `apexPity` tirages. */
-export const APEX_GRADE: PullGrade = 'X';
+const APEX_GRADE: PullGrade = 'X';
 
 /** Ce que le tirage doit retenir entre deux pulls. ⚠️ TROIS compteurs, pas un : chaque
  *  garantie se remplit et se vide indépendamment — un seul compteur ferait remettre le

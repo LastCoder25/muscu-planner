@@ -794,7 +794,7 @@ export function armyTrajectory(p: Poi): ArmyPath | null {
 }
 
 /** La part de la troupe de reprise qui arrive vraiment (ce que les chocs n'ont pas abattu). */
-export function retakeRemaining(p: Pick<Poi, 'control'>): number {
+function retakeRemaining(p: Pick<Poi, 'control'>): number {
   return 1 - clamp01(p.control?.retakeCut ?? 0);
 }
 

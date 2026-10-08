@@ -161,8 +161,8 @@ export function speedKmh(distanceKm?: number, durationMin?: number): number | nu
  * (personne ne marche à moins de 1 km/h). Rend le motif à afficher, `null` si rien à redire.
  * L'appareil d'appartement compris : 1 km en plus d'une heure n'y a pas plus de sens.
  */
-export const MAX_PLAUSIBLE_MIN = 24 * 60;
-export const MIN_PLAUSIBLE_KMH = 1;
+const MAX_PLAUSIBLE_MIN = 24 * 60;
+const MIN_PLAUSIBLE_KMH = 1;
 export function implausibleDuration(
   distanceKm?: number | null,
   durationMin?: number | null,

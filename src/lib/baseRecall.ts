@@ -25,7 +25,7 @@ import { heroPostOf } from './islandConquest';
 import { heroDefends } from './raid';
 
 /** Ce que le bouton « Rappeler » déclenche. */
-export type HomeRecallAction =
+type HomeRecallAction =
   | { kind: 'trip'; target: RecallTarget }
   | { kind: 'post'; pointId: string; advId: string }
   | { kind: 'heroPost' };

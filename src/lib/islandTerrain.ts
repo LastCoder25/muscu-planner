@@ -39,7 +39,7 @@ export interface IslandStyle {
   tuft: string;
 }
 
-export type DecorKind =
+type DecorKind =
   | 'mountain'
   | 'hill'
   | 'tree'
@@ -58,7 +58,7 @@ export type DecorKind =
   | 'field'
   | 'ruin';
 
-export interface Decor {
+interface Decor {
   kind: DecorKind;
   d: string;
   x: number;
@@ -66,7 +66,7 @@ export interface Decor {
 }
 
 /** Une ancre posée sur la côte : sa position et l'angle vers la mer (radians). */
-export interface CoastAnchor {
+interface CoastAnchor {
   x: number;
   y: number;
   angle: number;

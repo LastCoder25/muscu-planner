@@ -162,17 +162,17 @@ export function setWork(leg: ComboLeg, s: ComboSet): ComboSetWork {
   return setOrigin(leg, s).done ?? s;
 }
 /** Charge d'une série pour le tonnage (repli sur la charge mémorisée de SON exo). */
-export function setLoad(leg: ComboLeg, s: ComboSet): number {
+function setLoad(leg: ComboLeg, s: ComboSet): number {
   return setWork(leg, s).weight ?? setOrigin(leg, s).weight_kg ?? 0;
 }
 /** XP « reps » d'une série (pré-XP_MULT), sur ce qui a VRAIMENT été fait : reps × poids de
  *  rep de son exo d'origine × assistance. */
-export function setRepXp(leg: ComboLeg, s: ComboSet): number {
+function setRepXp(leg: ComboLeg, s: ComboSet): number {
   const w = setWork(leg, s);
   return (w.reps || 0) * REP_XP * setOrigin(leg, s).rep_weight * assistMult(w.assisted);
 }
 /** Tonnage d'une série (reps × charge), sur ce qui a vraiment été fait. */
-export function setTonnage(leg: ComboLeg, s: ComboSet): number {
+function setTonnage(leg: ComboLeg, s: ComboSet): number {
   return (setWork(leg, s).reps || 0) * setLoad(leg, s);
 }
 /** Part de travail réel par unité comptée : 12 dips posés comme 5 reps de développé couché
@@ -894,75 +894,11 @@ export interface ComboSessionExo {
 
 const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
 
-/** Nb de séries qui tiennent dans une séance de `minutes` (exécution + repos). */
-export function comboSessionSetBudget(minutes: number, restSec: number): number {
-  const perSet = COMBO_EXEC_SEC + Math.max(0, restSec);
-  return Math.max(1, Math.floor((minutes * 60) / perSet));
-}
-
 /** Durée estimée (min) d'une séance de `sets` séries (exécution + repos) → affichage
  *  quand on choisit directement le nombre de séries. */
 export function comboSessionDurationMin(sets: number, restSec: number): number {
   const perSet = COMBO_EXEC_SEC + Math.max(0, restSec);
   return Math.max(1, Math.round((sets * perSet) / 60));
-}
-
-/**
- * Génère une SÉANCE à partir des SÉRIES restantes : on ne dump pas tout — on
- * remplit un BUDGET de séries (soit choisi directement via `sets`, soit déduit
- * d'un temps `minutes`), réparti en round-robin sur les exos dont il reste des
- * séries. Chaque série reprend les reps de la dernière faite, sinon le HAUT de la
- * fourchette conseillée de l’exo (`legRepRange`) — c’est le seul écran du 360 qui
- * annonce un nombre de reps AVANT l’effort, il ne doit pas annoncer un chiffre
- * arbitraire. `objective` ne sert qu’au repli des 360 créés sans fourchette.
- */
-export function buildComboSession(
-  c: ComboChallenge,
-  opts: {
-    minutes?: number;
-    restSec: number;
-    sets?: number;
-    includeIds?: string[];
-    objective?: Objective | null;
-  },
-): ComboSessionExo[] {
-  const budget = opts.sets ?? comboSessionSetBudget(opts.minutes ?? 30, opts.restSec);
-  // Sélection manuelle éventuelle : ne garder que les exos choisis (sinon tous).
-  const include = opts.includeIds ? new Set(opts.includeIds) : null;
-  const exos = c.legs
-    .filter((l) => !include || include.has(l.exercise_id))
-    .map((l) => {
-      const range = legRepRange(l, opts.objective);
-      // Dernière série faite (cohérence : on continue ce qu’on fait) → sinon la cible.
-      const reps = legLastReps(l, prescribedReps(range));
-      // Séries restantes à générer : direct en mode 'sets' ; en mode 'reps' on
-      // convertit les reps restantes en nb de séries (à ~reps/série).
-      const remaining =
-        legMode(l) !== 'sets' ? Math.ceil(legRemaining(l) / Math.max(1, reps)) : legRemaining(l);
-      return { leg: l, remaining, reps, range, sets: [] as number[] };
-    })
-    .filter((e) => e.remaining > 0);
-  let placed = 0;
-  while (placed < budget && exos.some((e) => e.remaining > 0)) {
-    for (const e of exos) {
-      if (placed >= budget) break;
-      if (e.remaining <= 0) continue;
-      e.sets.push(e.reps);
-      e.remaining -= 1;
-      placed++;
-    }
-  }
-  return exos
-    .filter((e) => e.sets.length)
-    .map((e) => ({
-      exercise_id: e.leg.exercise_id,
-      exercise_name: e.leg.exercise_name,
-      weight_kg: legLastWeight(e.leg),
-      sets: e.sets,
-      time: legMode(e.leg) === 'time',
-      rep_min: e.range.min,
-      rep_max: e.range.max,
-    }));
 }
 
 /** Construit une séance à partir d'un nombre de séries CHOISI PAR EXO (indépendant).
@@ -1071,14 +1007,6 @@ export function comboSessionSteps(
     for (const exo of round) steps.push({ exo, set: r });
   }
   return steps;
-}
-
-/** Objectif de SÉRIES/semaine suggéré pour un emplacement (repère hypertrophie
- *  ~10-15 séries/muscle/sem). Essentiel ~12, optionnel ~9, ajusté au niveau. */
-export function suggestComboTarget(level: Level, essential: boolean): number {
-  const base = essential ? 12 : 9;
-  const f = level === 'debutant' ? 0.75 : level === 'avance' ? 1.3 : 1;
-  return Math.max(4, Math.round(base * f));
 }
 
 /** Suggère un objectif pour un exo à partir de l'HISTORIQUE : reprend le `target`

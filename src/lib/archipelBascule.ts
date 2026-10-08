@@ -64,7 +64,7 @@ export function basculeRefunds(map: ExpeditionMap): BasculeRefund[] {
 }
 
 /** Le coffre de compensation, déposé dans la boîte (rien s'il n'y a rien à rendre). */
-export function basculeMessage(refunds: BasculeRefund[], at: number): ExpeditionMessage | null {
+function basculeMessage(refunds: BasculeRefund[], at: number): ExpeditionMessage | null {
   const gold = refunds.reduce((s, r) => s + r.gold, 0);
   if (gold <= 0) return null;
   return {

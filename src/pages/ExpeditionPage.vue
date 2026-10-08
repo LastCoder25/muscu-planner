@@ -2567,9 +2567,6 @@ function returnToLobby() {
   background: var(--surface-2);
   animation: fx-pop 0.4s ease-out 0.5s both;
 }
-.fl-emoji {
-  font-size: 34px;
-}
 .fl-icon {
   margin: 0 auto 6px;
 }

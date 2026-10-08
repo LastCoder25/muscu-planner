@@ -11,7 +11,7 @@ import { openBlocker, RUNE_LOT, type RuneBank } from '@/lib/runeBank';
 import { pullPayment } from '@/lib/sportTickets';
 import { GACHA } from '@/lib/gacha';
 
-export type PantheonLightId = 'champion' | 'gear' | 'runes' | 'summon';
+type PantheonLightId = 'champion' | 'gear' | 'runes' | 'summon';
 
 export interface PantheonLight {
   id: PantheonLightId;
@@ -49,5 +49,9 @@ export function pantheonLights(input: {
     runes: openBlocker(input.runes, RUNE_LOT.size) == null,
     summon: pullPayment(GACHA.multiCount, { tickets: input.tickets, mana: input.mana }) != null,
   };
-  return (Object.keys(LIGHTS) as PantheonLightId[]).map((id) => ({ id, on: on[id], ...LIGHTS[id] }));
+  return (Object.keys(LIGHTS) as PantheonLightId[]).map((id) => ({
+    id,
+    on: on[id],
+    ...LIGHTS[id],
+  }));
 }

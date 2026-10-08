@@ -248,14 +248,6 @@ const RARITY_COST_MULT: Record<Rarity, number> = Object.fromEntries(
   RANK_ORDER.map((r, i) => [r, 1 + i * 0.28]),
 ) as Record<Rarity, number>;
 
-/** Coût en poussière pour passer du niveau `level` au suivant, selon la rareté.
- *  SUPER-LINÉAIRE (terme quadratique 2026‑08‑18) : le robinet de poussière suit le
- *  volume de runs (∝ niveau), donc un coût linéaire laissait la poussière déborder et
- *  le stuff toujours maxé → l'infusion cesse d'être un objectif. `level²×0.4` fait de
- *  l'infusion un vrai puits qui reste un but en fin de partie. */
-export function upgradeCost(level: number, rarity: Rarity): number {
-  return Math.round((5 + level * 3 + level * level * 0.4) * RARITY_COST_MULT[rarity]);
-}
 /** Or de vente d'un drop selon RANG + JET + NIVEAU d'objet (source unique objets/talents/
  *  familiers). Rang = base RAIDE (×1,8/rang) ; jet = jusqu'à +70 % ; ilvl = bonus de niveau
  *  (objet farmé plus profond = plus cher). → deux mêmes rangs ne valent pas pareil, et vendre
@@ -279,10 +271,6 @@ export function sellValue(it: Item): number {
  *  `sellFamiliars`, qui garde ses propres garde-fous (confié à un aventurier, etc.). */
 export function canSell(it: Item): boolean {
   return !it.locked && it.slot !== FAMILIAR_SLOT;
-}
-/** Peut-on améliorer cet objet ? (poussière suffisante + pas au plafond). */
-export function canUpgrade(it: Item, dust: number, playerLevel: number): boolean {
-  return it.level < playerLevel && dust >= upgradeCost(it.level, it.rarity);
 }
 
 export type Equipped = Partial<Record<ItemSlot, Item>>;
@@ -534,8 +522,7 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     emoji: '🌀',
     voie: 'frenetique',
     charge: () => `À chaque tour, à partir de ton ${RELIC.tempeteStacks + 1}ᵉ`,
-    effect: () =>
-      'une rafale bonus qui grossit avec ton élan (presque rien sans stat d’élan)',
+    effect: () => 'une rafale bonus qui grossit avec ton élan (presque rien sans stat d’élan)',
   },
   {
     id: 'riposte_parfaite',
@@ -592,7 +579,8 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     id: 'second_souffle',
     name: 'Second souffle',
     emoji: '💨',
-    charge: () => `Une fois par combat, quand tu passes sous ${pctOf(COMBAT.secondWindThreshold)} de tes PV`,
+    charge: () =>
+      `Une fois par combat, quand tu passes sous ${pctOf(COMBAT.secondWindThreshold)} de tes PV`,
     effect: (f) =>
       `tu récupères ${pctOf(Math.min(RELIC.souffleMax, RELIC.souffleHeal * f))} de tes PV max`,
   },
@@ -1903,21 +1891,6 @@ export function rollItemLevel(rng: () => number, center: number, luck = 0): numb
   const hi = center + Math.round(4 + l * 5); // borne haute : +4 (luck 0) → +9 (luck 1)
   const lo = Math.max(1, center - 6);
   return Math.max(lo, Math.min(hi, Math.round(raw)));
-}
-
-/** Bande de rang TYPIQUE d'un contenu : du rang typiquement en dessous au rang de référence
- *  (jamais au-dessus). Déterministe. */
-export function dropBand(
-  level: number,
-  luck = 0,
-  playerLevel?: number,
-): { lo: { rank: Rarity; quality: number }; hi: { rank: Rarity; quality: number } } {
-  const ref = companionDropRank(level, playerLevel);
-  const peak = RARITY_RANK[dropPeakRank(level, playerLevel)];
-  const l = Math.min(1, Math.max(0, luck));
-  const width = COMPANION_RANK.loWidth - COMPANION_RANK.loWidthLuck * l;
-  const loI = Math.max(0, peak - Math.round(1.3 * width));
-  return { lo: { rank: RANK_ORDER[loI]!, quality: 3 }, hi: { rank: RANK_ORDER[ref]!, quality: 3 } };
 }
 
 /** Rang le PLUS PROBABLE d'un drop : le rang de référence (min contenu, joueur), ou celui
