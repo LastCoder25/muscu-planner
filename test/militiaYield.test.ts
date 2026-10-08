@@ -36,7 +36,10 @@ describe('🧝 le héros revient à son poste', () => {
 
   it('garnison pleine de miliciens : il reprend sa place, juste assez de miliciens rentrent', () => {
     const p = ossuary(['a', 'b', 'mil:1', 'mil:2', 'mil:3']);
-    expect(controlFreeSeats(p.control)).toBe(0);
+    // 🛡️ 2026-10-08 : les miliciens cèdent aussi leur place à un nouvel envoi.
+    expect(controlFreeSeats(p.control)).toBe(
+      Math.min(seatsOf('ossuary'), garrisonCap('ossuary')) - 2,
+    );
     expect(heroReturnBlocker(p.control)).toBeNull();
     const c = heroBackToPost(map(p), 'ctl_ossuary', unit, NOW, 20, () => LEG).pois[0]!.control!;
     expect(c.hero).toBe(true);
@@ -85,7 +88,7 @@ describe('⚔️ une sortie revient à son point', () => {
   it('la garnison est pleine de miliciens avant le retour', () => {
     const c = ctl(world());
     expect(c.garrison).toHaveLength(garrisonCap('mine'));
-    expect(controlFreeSeats(c)).toBe(0);
+    expect(controlFreeSeats(c)).toBe(controlReturnSeats(c));
     expect(controlReturnSeats(c)).toBe(Math.min(seatsOf('mine'), garrisonCap('mine')) - 2);
   });
 

@@ -21,6 +21,7 @@ import {
   garrisonHoldChance,
   militiaFreeSeats,
   reinforceBlocker,
+  seatsOf,
   settleReinforcements,
 } from '@/lib/controlPoints';
 import { refEscortUnits } from '@/lib/caravan';
@@ -59,11 +60,11 @@ describe('une garnison de 5 au plus, champions et miliciens compris', () => {
     expect(reinforceBlocker(p.control, 1, true)).toBeNull();
     expect(reinforceBlocker(p.control, 2, true)).toBeNull(); // 🛡️ v1.70 : au-delà des places, ils partent quand même (demi-tour à l'arrivée)
   });
-  it('un champion n’a pas de place quand la garnison est pleine, même sous sa limite', () => {
+  it('un champion a sa place même quand des miliciens remplissent la garnison (ils la lui cèdent)', () => {
     const p = point(30);
     p.control!.garrison = ['adv_a', 'mil:1', 'mil:2', 'mil:3', 'mil:4'];
-    expect(controlFreeSeats(p.control)).toBe(0);
-    expect(reinforceBlocker(p.control, 1)).toBe('full');
+    expect(controlFreeSeats(p.control)).toBe(seatsOf('mine') - 1);
+    expect(reinforceBlocker(p.control, 1)).toBeNull();
   });
   it('les champions gardent aussi la limite du point (3 au camp d’entraînement)', () => {
     const p = point(30, 'training' as 'mine');

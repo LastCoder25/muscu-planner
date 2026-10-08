@@ -29,9 +29,10 @@ describe('renfort groupé : les places', () => {
     expect(setReinfMilitia(s, 9, 10, free).militia).toBe(3);
     expect(setReinfMilitia(s, 9, 2, free).militia).toBe(2);
     expect(setReinfMilitia(s, -1, 5, free).militia).toBe(0);
-    // Pleine de miliciens, plus de place même pour un champion.
+    // Pleine de miliciens : plus de place pour un milicien, mais un champion passe encore (il
+    // délogera un milicien à l'arrivée, 2026-10-08).
     const full = setReinfMilitia(s, 3, 5, free);
-    expect(reinfCanAdd(full, 'champ', free)).toBe(false);
+    expect(reinfCanAdd(full, 'champ', free)).toBe(true);
     expect(reinfCanAdd(full, 'mil', free)).toBe(false);
   });
 

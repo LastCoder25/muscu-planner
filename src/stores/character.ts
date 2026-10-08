@@ -452,7 +452,6 @@ import {
   campGear,
   reinforceBlocker,
   controlFreeSeats,
-  garrisonFreeSeats,
   acceptsMilitia,
   reinforceControl,
   releaseFromControl,
@@ -6625,10 +6624,7 @@ export const useCharacterStore = defineStore('character', () => {
     const seats = reinfSeats(sel);
     if (seats.total > seats.champ && !acceptsMilitia(to.control))
       return 'ce lieu ne reçoit pas de miliciens';
-    if (
-      seats.champ > controlFreeSeats(to.control) - taken.champ ||
-      seats.champ > garrisonFreeSeats(to.control) - taken.total
-    )
+    if (seats.champ > controlFreeSeats(to.control) - taken.champ)
       return 'plus assez de places sur ce lieu';
     const champs = sel.champs.map((id) => advList.value.find((a) => a.id === id));
     if (champs.some((a) => !a || !advAvailable(a, now)))

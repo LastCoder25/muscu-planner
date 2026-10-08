@@ -77,7 +77,8 @@ describe('recallReturns', () => {
     expect(recallReturns(lost, 'ctl_mine', ['adv_a'], 300)).toEqual({ block: 'notHeld' });
     const full = sentHome();
     full.pois[0]!.control!.garrison = ['mil:2', 'mil:3', 'mil:4', 'mil:5', 'mil:6'];
-    expect(recallReturns(full, 'ctl_mine', ['adv_a'], 300)).toEqual({ block: 'full' });
+    // 🛡️ Pleine de MILICIENS : un champion fait quand même demi-tour (ils lui cèdent la place).
+    expect('block' in recallReturns(full, 'ctl_mine', ['adv_a'], 300)).toBe(false);
     // Au camp (3 places de champion) : la garnison a encore de la place pour un milicien,
     // pas pour un champion.
     const camp = sentHome();

@@ -55,6 +55,9 @@ export function reinfCanAdd(sel: ReinfSelection, kind: 'champ' | 'mil', free: Re
   // personne dans la sélection — demi-tour à l'arrivée s'il n'y a pas de place.
   if (kind === 'mil' && free.milAnyway) return true;
   const all = reinfSeats(sel);
+  // 🏰 Un champion déloge les miliciens à son arrivée (2026-10-08) : seules les places de
+  // champion (`controlFreeSeats`, miliciens non comptés) le bornent.
+  if (kind === 'champ') return all.champ < free.champ;
   const used = free.milAnyway ? { ...all, total: all.champ } : all;
   if (used.total >= free.total) return false;
   if (kind === 'mil' && free.mil !== undefined && used.total - used.champ >= free.mil) return false;

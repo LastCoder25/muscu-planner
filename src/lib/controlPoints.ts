@@ -2832,27 +2832,27 @@ function garrisonRoom(c: ControlState): number {
   const o = occupants(c);
   return Math.max(0, garrisonCap(c.kind) - o.champs - o.militia);
 }
-/** 🏰 Places de champion libres pour un renfort : celles du point, dans la limite de la
- *  garnison entière (0 si le point n'est pas à nous). */
+/**
+ * 🏰 Places de champion libres pour un renfort (champion OU héros) : celles du point, dans la
+ * limite de la garnison de 5 — MILICIENS NON COMPTÉS (2026-10-08, demandé : « on doit pouvoir
+ * envoyer des champions et/ou le héros sur un lieu fixe plein ; à leur arrivée, les miliciens
+ * rentrent à la base »). Un milicien, présent ou en route, cède toujours sa place : à
+ * l'arrivée du champion (ou du héros), les derniers miliciens arrivés rentrent à pied
+ * (`settleReinforcements`). Seuls les champions (garnison, renforts, places gardées des
+ * sortants) et le héros bornent. 0 si le point n'est pas à nous.
+ */
 export function controlFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
-  // ⚠️ Les miliciens en route ne prennent pas la place d'un champion : arrivé après eux, le
-  // champion déloge le dernier ; arrivés après lui, ils font demi-tour.
-  const o = occupants(c, false);
-  const room = Math.max(0, garrisonCap(c.kind) - o.champs - o.militia);
-  return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), room));
+  const champs = occupants(c, false).champs;
+  return Math.max(0, Math.min(seatsOf(c.kind) - champs, garrisonCap(c.kind) - champs));
 }
 /**
  * 🏠🛡️ Places de champion pour ceux qui REVIENNENT sur leur point (sortie qui rentre, héros
- * qui reprend son poste) : les miliciens y CÈDENT leur place (2026-10-07, demandé : « s'il
- * n'y a pas assez de place, renvoyer à la base les miliciens, le nombre nécessaire »). On
- * compte donc la garnison sans eux ; seules les places de champion du point et la garnison
- * de 5 bornent. ⚠️ Un nouvel envoi garde `controlFreeSeats` : ce sont les retours qui priment.
+ * qui reprend son poste) : les miliciens y CÈDENT leur place (2026-10-07). Depuis le
+ * 2026-10-08 c'est la règle de TOUT envoi : identique à `controlFreeSeats`.
  */
 export function controlReturnSeats(c: ControlState | undefined | null): number {
-  if (!c || c.owner !== 'player') return 0;
-  const champs = occupants(c, false).champs;
-  return Math.max(0, Math.min(seatsOf(c.kind) - controlSeats(c), garrisonCap(c.kind) - champs));
+  return controlFreeSeats(c);
 }
 /**
  * 🛡️🏠 Renvoie à la base, à pied, les DERNIERS miliciens arrivés tant que la garnison dépasse
@@ -3122,7 +3122,6 @@ export function recallReinforcements(
     !!origin?.control &&
     origin.control.owner === 'player' &&
     controlFreeSeats(origin.control) >= nChamp &&
-    garrisonFreeSeats(origin.control) >= moving.length &&
     militiaFreeSeats(origin.control) >= nMil;
   const toOrigin = room && target ? moving : [];
   const toOriginIds = new Set(toOrigin.map((r) => r.id));
@@ -3227,8 +3226,7 @@ export function recallReturns(
   // repartent même vers un lieu plein (champions, héros) : à l'arrivée, sans place, ils
   // rentrent à pied à la base (`settleReinforcements`) — la règle d'un envoi de milice.
   const nChamps = list.filter((r) => !isMilitiaId(r.id)).length;
-  if (nChamps > 0 && (controlFreeSeats(c) < nChamps || garrisonFreeSeats(c) < nChamps))
-    return { block: 'full' };
+  if (nChamps > 0 && controlFreeSeats(c) < nChamps) return { block: 'full' };
   const town = EXPE.town;
   const back = list.map((r) => {
     const from = Math.min(now, r.from);
@@ -3467,11 +3465,16 @@ export function settleReinforcements(
         },
       };
     }
-    // 🧝 Le héros arrivé devient défenseur : il prend sa place (déjà réservée).
+    // 🧝 Le héros arrivé devient défenseur : il prend sa place (déjà réservée). Les
+    // miliciens qui la tenaient la lui cèdent et rentrent à pied (`bumpMilitiaToFit`).
     if (heroIn) {
       const { heroComing: _h, ...c } = bankAt(p, heroIn.at, playerLevel);
       void _h;
-      p = { ...p, control: { ...c, hero: true, heroUnit: heroIn.unit } };
+      p = bumpMilitiaToFit(
+        { ...p, control: { ...c, hero: true, heroUnit: heroIn.unit } },
+        heroIn.at,
+        militiaLegMs(p),
+      );
     }
     const done = p;
     out = withControl(out, p0.id, () => done);

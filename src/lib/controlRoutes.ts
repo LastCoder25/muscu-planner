@@ -23,7 +23,6 @@ import {
   controlReturnSeats,
   freeAway,
   holdAway,
-  garrisonFreeSeats,
   acceptsMilitia,
   militiaMayHead,
   pruneAway,
@@ -112,8 +111,7 @@ export function transferBlocker(
   // garnison du lieu aussi »), comme depuis la base : à l'arrivée ils s'installent s'il y a de
   // la place, sinon ils font demi-tour vers la base (`settleReinforcements`). Les champions,
   // eux, restent bornés par les places.
-  if (champs > controlFreeSeats(to.control) || champs > garrisonFreeSeats(to.control))
-    return 'full';
+  if (champs > controlFreeSeats(to.control)) return 'full';
   if (ids.length > champs && !acceptsMilitia(to.control)) return 'noMilitia';
   return null;
 }
