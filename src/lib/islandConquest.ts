@@ -1213,6 +1213,23 @@ export function heroHomePostId(
   return exp.homeId;
 }
 
+/** ⚔️🏰 Le poste dont la place reste gardée au héros : celui de son voyage
+ *  (`heroHomePostId`), ou celui du groupe d'ATTAQUE COMBINÉE avec lequel il est parti.
+ *  ⚠️ Signalé (2026-10-08, Ossuaire) : tant que l'attaque n'est pas résolue, son voyage vit
+ *  dans l'attaque et pas encore dans `expedition` — lire seulement l'expédition libérait sa
+ *  place au tick suivant, et un renfort pouvait la prendre : à son retour, poste plein, il
+ *  rentrait à pied à la base. */
+export function heroKeepPostId(
+  exp: Parameters<typeof heroHomePostId>[0],
+  wings: readonly { originId: string | null; state: string; heroGone?: boolean }[],
+): string | null {
+  return (
+    heroHomePostId(exp) ??
+    wings.find((w) => w.state === 'gone' && w.heroGone && w.originId)?.originId ??
+    null
+  );
+}
+
 /** Le lieu sans la place gardée au héros (même objet s'il n'en avait pas). */
 function withoutHeroAway(p: Poi | undefined): Poi | undefined {
   if (!p?.control?.heroAway) return p;
