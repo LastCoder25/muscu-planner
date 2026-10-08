@@ -52,6 +52,7 @@ import {
   ARCHIPEL_TRAVEL_LEVEL,
   archipelFloor,
   RUINS_SEALS,
+  ruinsChampionSeals,
   CAMP_FACTIONS,
   CARTO_TYPES,
   cartoPick,
@@ -90,14 +91,16 @@ export const CONTROL = {
   /**
    * 🏝️ LES SPÉCIALITÉS DES ÎLES 3 À 5, aux débits DÉCIDÉS à l'étape 0 de l'archipel (roadmap,
    * « Les lieux fixes ») — garnison au complet :
-   * - ⚱️ ossuaire (île 3) : 1 sceau de champion au rang de l'île / 3 jours (+13 %) ;
+   * - ⚱️ ossuaire (île 3) : la part de sceaux de champion d'une ruine (3 × (1 + rang du héros))
+   *   toutes les 9 jours — 1 sceau / 3 jours en Bronze, 10 au rang suprême (2026-10-08 :
+   *   « produit selon le niveau du héros », comme l'arsenal) ;
    * - ⚒️ arsenal (île 4) : ⅙ de la part d'objet d'une ruine / jour (+20 %) ;
    * - 🌀 cercle d'invocation (île 4, le « sanctuaire d'invocation » de la roadmap, renommé :
    *   c'est déjà le nom d'un lieu de récolte) : 1 tentative de boss de l'île / 2 jours (+18 %) ;
    * - 🪬 autel des runes (île 5) : 1 rune multicolore / 2 jours, « à partir du bleu » : elle
    *   ne s'ouvre jamais verte (`runeBank.BLESSED_ODDS`).
    */
-  ossuaryHoursPerSeal: 72,
+  ossuaryHoursPerRuin: 216,
   /** 💎 Lapidaire (île 3, 2026-10-03) : heures de polissage pour passer une compétence du
    *  niveau 1 au 2, selon sa couleur ; chaque niveau au-dessus en demande la moitié de plus
    *  (`lapidaryHours`). Une verte 1 → 2 en un jour, une dorée 4 → 5 en vingt. Premier calage. */
@@ -1992,8 +1995,9 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
       // 📖 Une entrée du palier de l'île toutes les 48 h au complet (étape 0 de l'archipel).
       return (labyKeyPriceAt(playerLevel) * shareOf(n)) / CONTROL.archiveHoursPerEntry;
     case 'ossuary':
-      // ⚱️ Un sceau de champion toutes les 72 h au complet.
-      return shareOf(n) / CONTROL.ossuaryHoursPerSeal;
+      // ⚱️ La part de champion d'une ruine du rang du héros (3 × (1 + rang)) toutes les 216 h
+      // au complet : 1 sceau / 72 h en Bronze, comme avant ; elle grossit avec chaque rang.
+      return (ruinsChampionSeals(playerLevel) * shareOf(n)) / CONTROL.ossuaryHoursPerRuin;
     case 'arsenal':
       // ⚒️ La part d'objet d'une ruine (9 × (1 + rang)) toutes les 144 h au complet.
       return (

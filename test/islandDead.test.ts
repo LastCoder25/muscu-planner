@@ -102,15 +102,17 @@ describe('⚱️ l’ossuaire, sur l’île 2', () => {
     const k2 = islandMap(2, 40).pois.flatMap((p) => (p.control ? [p.control.kind] : []));
     expect(k2).toContain('ossuary');
   });
-  it('tenu au complet, un sceau de champion au rang du joueur tous les 3 jours (étape 0)', () => {
+  it('tenu au complet, (1 + rang du joueur) sceaux de champion tous les 3 jours', () => {
     const id = controlIdOf('ossuary');
     let m = islandMap(2, LV);
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Ossuaire');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
     const got = harvestOver(m, id, NOW, 12 * 24, LV);
-    // 4 sceaux en 12 jours (au cran du jour du point, d’où la marge basse).
-    expect(got.champSeals).toBeGreaterThanOrEqual(3);
-    expect(got.champSeals).toBeLessThanOrEqual(6);
+    // 4 sceaux en 12 jours en Bronze, × (1 + rang) au-dessus (2026-10-08 : l’ossuaire suit le
+    // niveau du héros, comme l’arsenal) ; au cran du jour du point, d’où la marge basse.
+    const k = 1 + characterRank(LV).rankIndex;
+    expect(got.champSeals).toBeGreaterThanOrEqual(3 * k);
+    expect(got.champSeals).toBeLessThanOrEqual(6 * k);
     expect(collectControl(m, id, NOW + 72 * H, LV).champSealRank).toBe(characterRank(LV).rankIndex);
     expect(got.gold + got.mana + got.keys + got.runes + got.summon + got.gearSeals).toBe(0);
     const one = captureControl(islandMap(2, LV), id, ['a'], NOW, 7);
