@@ -120,9 +120,15 @@
               /></span>
               <!-- 🧭 Un renfort en route occupe déjà sa place : la montrer libre inviterait à
                    en envoyer un second. -->
-              <span v-else-if="s.kind === 'route'" class="mini route" title="Renfort en route"
+              <span
+                v-else-if="s.kind === 'route'"
+                class="mini route"
+                :class="{ mil: s.mil }"
+                :title="s.mil ? 'Milicien en route' : 'Champion en route'"
                 >🧭</span
               >
+              <!-- 🛡️ Le trait entre les titulaires et la milice (bouche-trou). -->
+              <span v-else-if="s.kind === 'sep'" class="mini-sep" aria-hidden="true"></span>
               <!-- ⚔️ En SORTIE : son portrait, estompé, marqué ⚔️ — sa place l'attend, elle
                    n'est pas libre. -->
               <span
@@ -154,14 +160,17 @@
                 v-else-if="canReinforce(r)"
                 type="button"
                 class="mini free go"
-                :title="`Place ${i + 1} libre — envoyer un renfort`"
-                :aria-label="`Envoyer un renfort : ${CONTROL_LABEL[r.kind]}, place ${i + 1}`"
+                :class="{ mil: s.mil }"
+                :title="freeTitle(s.mil) + ' — envoyer un renfort'"
+                :aria-label="`Envoyer un renfort : ${CONTROL_LABEL[r.kind]}, ${freeTitle(s.mil)}`"
                 @click.stop="emit('reinforce', r.poi)"
                 @keydown.stop
               >
                 ＋
               </button>
-              <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
+              <span v-else class="mini free" :class="{ mil: s.mil }" :title="freeTitle(s.mil)"
+                >＋</span
+              >
             </template>
           </span>
           <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
@@ -200,7 +209,8 @@ import {
   type ControlRosterRow,
   type ControlRosterStatus,
 } from '@/lib/controlPoints';
-import { MILITIA, MILITIA_NAME, isMilitiaId } from '@/lib/militia';
+import { MILITIA, MILITIA_NAME } from '@/lib/militia';
+import { garrisonCells } from '@/lib/garrisonView';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Poi } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
@@ -251,51 +261,54 @@ const heldCount = computed(
   () => props.rows.filter((r) => r.status !== 'enemy' && r.status !== 'assault').length,
 );
 const byId = computed(() => new Map(props.advs.map((a) => [a.id, a])));
-const advsOf = (ids: readonly string[]) =>
-  ids.flatMap((id) => {
-    const a = byId.value.get(id);
-    return a ? [a] : [];
-  });
-/** 🛡️ Les miliciens d'une garnison : ils n'existent pas dans le vivier (`advsOf` les ignore). */
-const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
 type Slot =
   | { kind: 'adv'; adv: Adventurer }
   | { kind: 'mil' }
   | { kind: 'hero'; coming: boolean; away: boolean }
-  | { kind: 'route' }
+  | { kind: 'route'; mil: boolean }
   | { kind: 'away'; adv: Adventurer }
-  | { kind: 'free' }
+  | { kind: 'free'; mil: boolean }
   /** 🏰 Plein, mais des miliciens tiennent une place de CHAMPION : un champion peut venir, un
    *  milicien lui cédera sa place à son arrivée (v1.90.0). */
-  | { kind: 'bump' };
-/** Les cases de la ligne : champions, miliciens, renforts en route, champions en sortie (leur
- *  place est gardée), puis places libres, jusqu'à `seats`. */
+  | { kind: 'bump' }
+  /** 🛡️ Le trait entre les titulaires et la milice (`garrisonCells`). */
+  | { kind: 'sep' };
+/** Les cases de la ligne, en DEUX GROUPES (`garrisonCells`) : titulaires (héros, champions,
+ *  renforts de champions, sortants, places de champion), puis la milice (miliciens, miliciens
+ *  en route, places qu'un milicien seul peut prendre), séparés d'un trait. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
-  // 🧝 Le héros prend 2 places : UNE case double, en tête (signalé : « je vois encore 5 boules »).
-  const hero: Slot[] = r.hero
-    ? [{ kind: 'hero', coming: r.hero === 'coming', away: r.hero === 'away' }]
-    : [];
-  const filled: Slot[] = [
-    ...hero,
-    ...advsOf(r.garrison).map((adv) => ({ kind: 'adv' as const, adv })),
-    ...milOf(r.garrison).map(() => ({ kind: 'mil' as const })),
-    ...r.reinforcing.map(() => ({ kind: 'route' as const })),
-    ...advsOf(r.away).map((adv) => ({ kind: 'away' as const, adv })),
-  ];
-  // 🏰 Sans limite (la forteresse) : une seule case libre, qui dit qu'on peut en ajouter.
-  // ⚠️ La garnison ENTIÈRE (5, miliciens compris) et non les seules places de champion : au
-  // camp (3 champions), 2 miliciens le faisaient paraître plein (revue du 2026-10-08).
-  const used = filled.length + (hero.length ? MILITIA.heroSeats - 1 : 0);
   const cap = r.seats > 0 && Number.isFinite(r.seats) ? garrisonCap(r.kind) : r.seats;
-  const free = Number.isFinite(cap) ? Math.max(0, cap - used) : 1;
-  const cells: Slot[] = [
-    ...filled,
-    ...Array.from({ length: free }, () => ({ kind: 'free' as const })),
-  ];
-  if (!free && milOf(r.garrison).length && controlFreeSeats(r.poi.control) > 0)
-    cells.push({ kind: 'bump' });
-  return cells;
+  const g = garrisonCells({
+    hero: r.hero,
+    heroSeats: MILITIA.heroSeats,
+    garrison: r.garrison,
+    reinforcing: r.reinforcing,
+    away: r.away,
+    cap,
+    champFree: controlFreeSeats(r.poi.control),
+  });
+  const champ = g.champ.flatMap((c): Slot[] => {
+    if (c.kind === 'adv' || c.kind === 'away') {
+      const adv = byId.value.get(c.id);
+      return adv ? [{ kind: c.kind, adv }] : [];
+    }
+    if (c.kind === 'route') return [{ kind: 'route', mil: false }];
+    if (c.kind === 'free') return [{ kind: 'free', mil: false }];
+    return [c];
+  });
+  const mil = g.mil.map(
+    (c): Slot =>
+      c.kind === 'mil'
+        ? { kind: 'mil' }
+        : c.kind === 'route'
+          ? { kind: 'route', mil: true }
+          : { kind: 'free', mil: true },
+  );
+  return champ.length && mil.length ? [...champ, { kind: 'sep' }, ...mil] : [...champ, ...mil];
 };
+/** Une place libre dit à qui elle s'ouvre. */
+const freeTitle = (mil: boolean) =>
+  mil ? 'Place libre : un milicien seulement' : 'Place de champion libre';
 const rankOf = (r: ControlRosterRow) => poiRank(r.poi);
 /** Réserve pleine (or/XP) ou unité prête (consommable, rune) : la jauge passe à l'accent. */
 const isFull = (r: ControlRosterRow) =>
@@ -541,6 +554,22 @@ const isFull = (r: ControlRosterRow) =>
 }
 .mini.free.go:active {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+/* 🛡️ Le trait entre les titulaires et la milice : fin, la hauteur d'une case. */
+.mini-sep {
+  flex: 0 0 2px;
+  align-self: stretch;
+  margin: 2px 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--d1) 55%, var(--line));
+}
+/* 🛡️ Les places de la milice : vert (le langage des miliciens sur la carte). */
+.mini.free.mil,
+.mini.route.mil {
+  border-color: color-mix(in srgb, var(--d1) 55%, transparent);
+}
+.mini.free.go.mil {
+  color: var(--d1);
 }
 .mini.route {
   font-size: 14px;

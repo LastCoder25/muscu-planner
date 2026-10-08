@@ -743,24 +743,36 @@
                 </p>
               </template>
             </div>
-            <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
-               Toucher un champion le sélectionne pour le RAMENER. -->
+            <!-- 🏰 QUI L'OCCUPE, EN DEUX BLOCS (2026-10-08, demandé : « séparer la partie
+               champions/héros des miliciens qui sont là en remplacement ou en bouche-trou ») :
+               les TITULAIRES d'abord, puis la MILICE, comptée d'un bloc (les miliciens n'ont ni
+               nom ni niveau : une tuile ×N au lieu de N tuiles identiques). -->
             <p class="ctl-line">
+              🏰
               <template v-if="unlimitedGarrison">
-                🏰 <b>Garnison {{ controlCount }}{{ liveControl.hero ? ' + ton héros' : '' }}</b>
-                <span class="ctl-dim"> · sans limite</span>
-              </template>
-              <template v-else>
-                🏰
-                <b>Garnison {{ controlCount + heroSeatsIn(liveControl) }}/{{ MILITIA.perPoint }}</b>
-                <span class="ctl-dim">
-                  · {{ controlMembers.length + controlAway.length + heroSeatsIn(liveControl) }}/{{
-                    seatsOf(liveControl.kind)
-                  }}
-                  champion{{ seatsOf(liveControl.kind) > 1 ? 's' : '' }}</span
+                <b>⚔️ {{ controlMembers.length + controlAway.length }}</b
+                ><span class="ctl-dim"
+                  >{{ liveControl.hero ? ' + ton héros' : '' }} · sans limite</span
                 >
               </template>
-              <span class="ctl-dim"> · touche un membre pour le ramener ou le remplacer</span>
+              <template v-else>
+                <b
+                  >⚔️ {{ controlMembers.length + controlAway.length + heroSeatsIn(liveControl) }}/{{
+                    seatsOf(liveControl.kind)
+                  }}</b
+                >
+                <b v-if="acceptsMilitia(liveControl)"> · 🛡️ {{ controlMilitia.length }}</b>
+                <span class="ctl-dim">
+                  · {{ controlCount + heroSeatsIn(liveControl) }}/{{
+                    MILITIA.perPoint
+                  }}
+                  places</span
+                >
+              </template>
+            </p>
+            <p class="gar-head">
+              ⚔️ Titulaires
+              <span class="ctl-dim">· touche-en un pour le ramener ou le remplacer</span>
             </p>
             <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
             <div class="car-pick">
@@ -813,34 +825,9 @@
                 "
                 @toggle="i < controlInterim && openQuick()"
               />
-              <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
+              <!-- ➕ LES PLACES DE CHAMPION VIDES : toucher une case amène au renfort. -->
               <button
-                v-for="m in controlMilitia"
-                :key="m.id"
-                type="button"
-                class="mil-tile"
-                :class="{ on: ctlRecallSel.includes(m.id) }"
-                :aria-pressed="ctlRecallSel.includes(m.id)"
-                @click="toggleRecall(m.id)"
-              >
-                <span class="mil-emo"><MilitiaPortrait /></span>
-                <span class="mil-name">{{ MILITIA_NAME }}</span>
-                <span v-if="m.arriveIn > 0" class="mil-sub"
-                  >🧭 {{ formatDuration(m.arriveIn) }}</span
-                >
-                <span
-                  v-else-if="occupantLoss[m.id]"
-                  class="mil-loss"
-                  :class="{ zero: occupantLoss[m.id]!.loss === 0 }"
-                  :title="lossTitle(m.id) ?? ''"
-                  >🎯 −{{ occupantLoss[m.id]!.loss }} %</span
-                >
-              </button>
-              <!-- ➕ LES PLACES VIDES (demandé : « les 5 slots ») : la garnison se lit comme 5
-                 cases, pleines ou non. Toucher une case vide amène au renfort. Au-delà des
-                 places de champion, une case ne prend qu'un milicien (`controlFree`). -->
-              <button
-                v-for="slot in garrisonSlots"
+                v-for="slot in champSlots"
                 :key="'slot' + slot.i"
                 type="button"
                 class="slot-tile"
@@ -851,40 +838,102 @@
                 <span class="slot-plus">{{ slot.kind === 'reserved' ? '⏳' : '＋' }}</span>
                 <span class="slot-name">{{ slot.label }}</span>
               </button>
-              <!-- 🏰 PLEIN DE MILICIENS, MAIS UN CHAMPION PEUT VENIR (2026-10-08, signalé : « je ne
-                 peux pas faire venir des champions d'un autre lieu fixe quand il y a déjà une
-                 garnison de miliciens ») : un champion (de la base ou d'un autre lieu) déloge
-                 un milicien à son arrivée (v1.90.0). Sans cette case, seule « Miliciens à
-                 l'avance » ouvrait le renfort, et rien ne disait qu'un champion y avait droit. -->
+              <!-- 🏰 PLEIN DE MILICIENS, MAIS UN CHAMPION PEUT VENIR (2026-10-08) : un champion
+                 déloge un milicien à son arrivée (v1.90.0). -->
               <button
-                v-if="champOverMilitia > 0"
+                v-if="champOverMilitia > 0 && !champSlots.some((s) => s.kind === 'champ')"
                 type="button"
                 class="slot-tile"
                 aria-label="Faire venir un champion : un milicien lui cède sa place"
                 @click="openQuick"
               >
                 <span class="slot-plus">＋</span>
-                <span class="slot-name">Champion · un milicien lui cède sa place</span>
-              </button>
-              <!-- 🛡️ PLEIN, MAIS ON PRÉVOIT (demandé : « envoyer les miliciens avant que les
-                 champions ne partent ») : des miliciens partent quand même ; à l'arrivée, ils
-                 s'installent si une place s'est libérée, sinon ils font demi-tour. -->
-              <button
-                v-if="
-                  !garrisonSlots.length &&
-                  !controlInterim &&
-                  ctlMayFreeUp &&
-                  acceptsMilitia(liveControl)
-                "
-                type="button"
-                class="slot-tile"
-                aria-label="Envoyer des miliciens à l’avance"
-                @click="openQuick"
-              >
-                <span class="slot-plus">🛡️</span>
-                <span class="slot-name">Miliciens à l’avance</span>
+                <span class="slot-name">Place de champion · un milicien la tient</span>
               </button>
             </div>
+            <!-- 🛡️ LA MILICE, BOUCHE-TROU : une tuile ×N, sa part de la tenue pour le GROUPE
+               entier (demandé), et le nombre à ramener. -->
+            <template v-if="acceptsMilitia(liveControl)">
+              <p class="gar-head mil">🛡️ Milice <span class="ctl-dim">· bouche-trou</span></p>
+              <div class="mil-group">
+                <div v-if="controlMilitia.length" class="mil-stack">
+                  <span class="mil-emo"><MilitiaPortrait /></span>
+                  <span class="mil-stack-main">
+                    <b>{{ MILITIA_NAME }} ×{{ milHere.length }}</b>
+                    <span v-if="milComing.length" class="mil-sub">
+                      🧭 +{{ milComing.length }} en route ·
+                      {{ formatDuration(milComing[0]!.arriveIn) }}</span
+                    >
+                    <span
+                      v-if="militiaLoss"
+                      class="mil-loss"
+                      :class="{ zero: militiaLoss.loss === 0 }"
+                      :title="`Sans tes miliciens, la tenue tombe à ${militiaLoss.without} % (au lieu de ${defenseNow?.pct} %).`"
+                      >🎯 −{{ militiaLoss.loss }} % sans eux</span
+                    >
+                  </span>
+                  <span v-if="milRecallable.length" class="mil-step">
+                    <span class="mil-step-lab">🔙 Ramener</span>
+                    <button
+                      type="button"
+                      class="mil-step-btn"
+                      :disabled="!milSelected"
+                      aria-label="Un milicien de moins à ramener"
+                      @click="stepMilitia(-1)"
+                    >
+                      −
+                    </button>
+                    <b class="mil-step-n">{{ milSelected }}</b>
+                    <button
+                      type="button"
+                      class="mil-step-btn"
+                      :disabled="milSelected >= milRecallable.length"
+                      aria-label="Un milicien de plus à ramener"
+                      @click="stepMilitia(1)"
+                    >
+                      +
+                    </button>
+                  </span>
+                </div>
+                <p v-if="controlMilitia.length && champOverMilitia > 0" class="mil-note">
+                  dont {{ champOverMilitia }} sur une place de champion :
+                  {{ champOverMilitia > 1 ? 'ils la cèdent' : 'il la cède' }} à l’arrivée d’un
+                  champion
+                </p>
+                <div v-if="milSlots.length || showMilAhead" class="mil-slots">
+                  <button
+                    v-for="slot in milSlots"
+                    :key="'mslot' + slot.i"
+                    type="button"
+                    class="slot-tile mil"
+                    :aria-label="slot.label"
+                    @click="openQuick"
+                  >
+                    <span class="slot-plus">＋</span>
+                    <span class="slot-name">{{ slot.label }}</span>
+                  </button>
+                  <!-- 🛡️ PLEIN, MAIS ON PRÉVOIT (demandé : « envoyer les miliciens avant que les
+                     champions ne partent ») : à l'arrivée, ils s'installent si une place s'est
+                     libérée, sinon ils font demi-tour. -->
+                  <button
+                    v-if="showMilAhead"
+                    type="button"
+                    class="slot-tile mil"
+                    aria-label="Envoyer des miliciens à l’avance"
+                    @click="openQuick"
+                  >
+                    <span class="slot-plus">🛡️</span>
+                    <span class="slot-name">Miliciens à l’avance</span>
+                  </button>
+                </div>
+                <p
+                  v-if="!controlMilitia.length && !milSlots.length && !showMilAhead"
+                  class="mil-note"
+                >
+                  Aucun milicien ici.
+                </p>
+              </div>
+            </template>
             <!-- ⚔️⏳ UNE ATTAQUE COMBINÉE PART D'ICI (signalé : « des troupes attendent leur départ
                sur un lieu fixe mais je n'ai pas d'indication ») : combien, quand, vers quoi. -->
             <div v-for="w in ctlAttackWaits" :key="'atk' + w.key" class="ctl-plan">
@@ -3062,10 +3111,48 @@ const garrisonSlots = computed<GarrisonSlot[]>(() => {
       : { i, kind: 'mil', label: 'Milicien seulement' };
   });
 });
+/** ⚔️ Les cases vides du bloc des TITULAIRES (places de champion, réservées, sans limite). */
+const champSlots = computed(() => garrisonSlots.value.filter((s) => s.kind !== 'mil'));
+/** 🛡️ Les cases vides du bloc de la MILICE : celles qu'un milicien seul peut prendre. */
+const milSlots = computed(() => garrisonSlots.value.filter((s) => s.kind === 'mil'));
+/** 🛡️ Les miliciens arrivés, puis ceux en route (le plus proche d'abord). */
+const milHere = computed(() => controlMilitia.value.filter((m) => m.arriveIn <= 0));
+const milComing = computed(() =>
+  controlMilitia.value.filter((m) => m.arriveIn > 0).sort((x, y) => x.arriveIn - y.arriveIn),
+);
+/** 🔙 Ceux qu'on peut ramener : arrivés d'abord, puis en route (demi-tour), jamais un réservé. */
+const milRecallable = computed(() =>
+  [...milHere.value, ...milComing.value]
+    .map((m) => m.id)
+    .filter((id) => !ctlReservedLabel.value.has(id)),
+);
+const milSelected = computed(
+  () => ctlRecallSel.value.filter((id) => milRecallable.value.includes(id)).length,
+);
+/** 🔙 Le nombre de miliciens à ramener : on ajoute (ou retire) le suivant de la liste. */
+function stepMilitia(d: 1 | -1) {
+  const pool = milRecallable.value;
+  const sel = ctlRecallSel.value;
+  if (d > 0) {
+    const next = pool.find((id) => !sel.includes(id));
+    if (next) ctlRecallSel.value = [...sel, next];
+  } else {
+    const last = [...pool].reverse().find((id) => sel.includes(id));
+    if (last) ctlRecallSel.value = sel.filter((x) => x !== last);
+  }
+}
+/** 🛡️ « Miliciens à l'avance » : plein, mais une place va se libérer. */
+const showMilAhead = computed(
+  () =>
+    !garrisonSlots.value.length &&
+    !controlInterim.value &&
+    ctlMayFreeUp.value &&
+    acceptsMilitia(liveControl.value),
+);
 /** 🏰 Les places de champion que tiennent aujourd'hui des miliciens : un champion peut encore
  *  venir (`controlFreeSeats` ne compte pas les miliciens), mais aucune case vide ne le dit. */
 const champOverMilitia = computed(() => {
-  if (unlimitedGarrison.value) return 0;
+  if (unlimitedGarrison.value || !controlMilitia.value.length) return 0;
   const emptyChamp = garrisonSlots.value.filter((s) => s.kind === 'champ').length;
   return Math.max(0, controlFree.value - ctlPlannedSeats.value.champ - emptyChamp);
 });
@@ -3294,6 +3381,16 @@ const occupantLoss = computed<Record<string, { loss: number; without: number }>>
     out[id] = { loss: base - without, without };
   }
   return out;
+});
+/** 🛡️ CE QUE LA MILICE APPORTE, POUR LE GROUPE ENTIER (demandé) : la tenue sans aucun des
+ *  miliciens arrivés. `null` sans milicien arrivé. */
+const militiaLoss = computed(() => {
+  const p = livePoi.value;
+  const base = defenseNow.value?.pct;
+  const ids = militiaIn(p?.control?.garrison ?? []);
+  if (!p?.control || p.control.owner !== 'player' || base === undefined || !ids.length) return null;
+  const without = holdAfter(p, ids, []);
+  return { loss: base - without, without };
 });
 const lossTitle = (id: string) => {
   const l = occupantLoss.value[id];
@@ -6994,6 +7091,93 @@ onUnmounted(() => {
 }
 .mil-loss.zero {
   color: var(--dim);
+}
+/* 🏰 Les deux blocs de la garnison : titulaires, puis la milice (bouche-trou). */
+.gar-head {
+  margin: 6px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.gar-head.mil {
+  margin-top: 2px;
+  color: var(--d1);
+}
+.mil-group {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--d1) 45%, var(--line));
+  background: color-mix(in srgb, var(--d1) 6%, transparent);
+}
+/* 🛡️ La milice en UNE tuile ×N : portrait, compte, part de la tenue, nombre à ramener. */
+.mil-stack {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mil-stack .mil-emo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mil-stack .mil-emo :deep(.mil-portrait) {
+  width: 100%;
+  height: 100%;
+}
+.mil-stack-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 13px;
+}
+.mil-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mil-step-lab {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.mil-step-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mil-step-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mil-step-n {
+  min-width: 16px;
+  text-align: center;
+  font-family: Oswald, sans-serif;
+  font-size: 16px;
+}
+.mil-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.mil-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.slot-tile.mil {
+  border-color: color-mix(in srgb, var(--d1) 55%, transparent);
+  color: var(--d1);
 }
 /* ⇄ Les remplaçants : une ligne chacun, la tenue obtenue à droite. */
 .swap {

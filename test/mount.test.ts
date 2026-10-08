@@ -3459,11 +3459,13 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('XP pour la garnison 🎓');
     expect(out).toContain('1/5 tenus');
     // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`) : 5 cases, 1 occupée,
-    // 4 libres numérotées — elles remplacent la pastille « 🛡️ 1/5 ».
+    // 4 libres — elles remplacent la pastille « 🛡️ 1/5 ». Les 4 s'ouvrent à un champion :
+    // elles vont au bloc des titulaires, sans trait de milice (aucun milicien).
     expect(out).not.toContain('🛡️ 1/5');
     expect(out.match(/class="mini"/g)?.length).toBe(1);
     expect(out.match(/class="mini free"/g)?.length).toBe(4);
-    expect(out).toMatch(/Place 5 libre/);
+    expect(out).toMatch(/Place de champion libre/);
+    expect(out).not.toContain('mini-sep');
     // 🔎 Les filtres par statut, avec leur nombre (une tenue, quatre ennemies ; aucune vide).
     expect(out).toContain('🏰 Tenues · 1');
     expect(out).toContain('☠️ Pas tenues · 4');
@@ -3560,8 +3562,15 @@ describe('🔀 FusionPanel', () => {
     expect(out.match(/class="mini mil"/g)?.length).toBe(2);
     // Chaque milicien porte son portrait (l’emoji 🛡️ n’est plus que le repli).
     expect(out.match(/class="mil-portrait"/g)?.length).toBe(2);
-    expect(out.match(/class="mini route"/g)?.length).toBe(1);
+    // 🛡️ Titulaires puis milice, séparés d'un trait (2026-10-08) : le renfort en route est
+    // un MILICIEN, il va donc au bloc de la milice.
+    expect(out.match(/class="mini route mil"/g)?.length).toBe(1);
     expect(out.match(/class="mini free"/g)?.length).toBe(1);
+    const minis = out.slice(out.indexOf('cps-minis'));
+    const sep = minis.indexOf('mini-sep');
+    expect(sep).toBeGreaterThan(0);
+    expect(minis.indexOf('class="mini"')).toBeLessThan(sep);
+    expect(minis.indexOf('class="mini mil"')).toBeGreaterThan(sep);
     expect(out).toContain('🧭 +1 en route');
     // Retiré (demandé) : il fallait de toute façon ouvrir le lieu pour récolter.
     expect(out).not.toContain('à récolter');
@@ -3605,7 +3614,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(reinf).toEqual([id]);
     expect(opened).toEqual([]);
   }, 30_000);
-  it('sans renfort possible, les places libres restent de simples cases numérotées', async () => {
+  it('sans renfort possible, les places libres restent de simples cases', async () => {
     const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
     const { rows } = await held();
     let out = '';
@@ -3620,7 +3629,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
       ),
     ).toBeNull();
     expect(out).not.toContain('mini free go');
-    expect(out).toMatch(/Place 5 libre/);
+    expect(out).toMatch(/Place de champion libre/);
   }, 30_000);
   it('le sélecteur coche plusieurs renforts, annonce la tenue avec eux, et les envoie ensemble', async () => {
     const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
