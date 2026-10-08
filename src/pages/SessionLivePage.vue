@@ -572,7 +572,9 @@ async function finish() {
     });
     // Snapshot XP AVANT (piste de la séance + Global) pour l'animation de gain.
     const isMuscu = (log.discipline ?? 'musculation') === 'musculation';
-    const beforeA = isMuscu ? progress.muscu.value : progress.tennis.value;
+    // Le niveau de la TUILE d'accueil (celui qu'on retrouve ensuite), pas la piste.
+    const tile = progress.sessionTile(log);
+    const beforeA = progress.tileSnapshot(tile.key);
     const beforeG = progress.global.value;
     await logs.insert(userId, log);
     live.clear();
@@ -580,10 +582,10 @@ async function finish() {
     xpFx.show([
       xpRing(
         isMuscu ? 'muscu' : 'prepa',
-        isMuscu ? '🏋️' : '🤸',
-        isMuscu ? 'Muscu' : 'Prépa',
+        isMuscu ? '🏋️' : tile.key === 'tennis' ? '🎾' : '🤸',
+        tile.label,
         beforeA,
-        isMuscu ? progress.muscu.value : progress.tennis.value,
+        progress.tileSnapshot(tile.key),
       ),
       xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);

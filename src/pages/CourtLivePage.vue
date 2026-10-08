@@ -223,13 +223,13 @@ async function finish() {
   const log = live.buildLog();
   if (!log || !userId) return;
   try {
-    const beforeT = progress.tennis.value;
+    const beforeT = progress.tileSnapshot('tennis');
     const beforeG = progress.global.value;
     await tennis.addLog(userId, log);
     live.clear();
     await nextTick();
     xpFx.show([
-      xpRing('tennis', '🎾', 'Tennis', beforeT, progress.tennis.value),
+      xpRing('tennis', '🎾', 'Tennis', beforeT, progress.tileSnapshot('tennis')),
       xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
     await router.push(`/court/bilan/${log.id}`);

@@ -317,11 +317,14 @@ async function saveQuick() {
     return;
   }
   saving.value = true;
-  const beforeM = progress.muscu.value; // snapshots XP (animation)
+  // Snapshot AVANT pour l'animation : le niveau de la TUILE d'accueil de la discipline
+  // (celui qu'on retrouve ensuite), pas la piste Muscu calculée sur l'XP.
+  const disc = qDiscipline.value;
+  const tile = progress.sessionTile(disc === 'musculation' ? {} : { discipline: disc });
+  const beforeM = progress.tileSnapshot(tile.key);
   const beforeG = progress.global.value;
   try {
     const iso = performedAtIso(qDate.value);
-    const disc = qDiscipline.value;
     const label = DISCIPLINES.find((d) => d.value === disc)?.label ?? 'Muscu';
     const log: SessionLog = {
       schema_version: SCHEMA_VERSION,
@@ -342,7 +345,7 @@ async function saveQuick() {
     });
     await nextTick();
     xpFx.show([
-      xpRing('muscu', '🏋️', 'Muscu', beforeM, progress.muscu.value),
+      xpRing('muscu', '🏋️', tile.label, beforeM, progress.tileSnapshot(tile.key)),
       xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
     qDate.value = todayIso();

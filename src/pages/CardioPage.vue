@@ -364,16 +364,6 @@ async function save() {
     if (!ok) return;
   }
   saving.value = true;
-  /** Le niveau d'une tuile de sport (celle de l'accueil), par sa clé. Absente = jamais
-   *  pratiquée → niveau 1 à 0 %. */
-  function tileLevel(key: string) {
-    const t = progress.sportTiles.value.find((x) => x.key === key);
-    return t ? t.level : { level: 1, progressPct: 0 };
-  }
-  /** L'XP cumulée d'une tuile (son niveau, lui, suit des minutes). */
-  function tileXp(key: string) {
-    return progress.sportTiles.value.find((x) => x.key === key)?.xp ?? 0;
-  }
 
   // Snapshot AVANT, pour l'animation de progression.
   // ⚠️ On prend le niveau de L'ACTIVITÉ (la tuile « Marche », « Course »…), PAS la piste
@@ -383,8 +373,7 @@ async function save() {
   // l'utilisateur. On anime désormais exactement ce qu'il verra ensuite.
   // Une constante, pas un computed : on est dans une fonction, l'activité ne bougera plus.
   const tileKey = `cardio:${activity.value}`;
-  const beforeT = tileLevel(tileKey);
-  const beforeXp = tileXp(tileKey);
+  const beforeT = progress.tileSnapshot(tileKey);
   const beforeG = progress.global.value;
   try {
     const log: CardioLog = {
@@ -448,16 +437,14 @@ async function save() {
     }
     // Animation d'XP gagnée (cercle Cardio + cercle Global, progression avant→après).
     await nextTick();
-    const afterT = tileLevel(tileKey);
+    const afterT = progress.tileSnapshot(tileKey);
     xpFx.show([
       xpRing(
         'cardio',
         ACTIVITY_EMOJI[activity.value] ?? '🏃',
         ACTIVITY_LABELS[activity.value] ?? 'Cardio',
         beforeT,
-        afterT,
-        // Le niveau d'une tuile suit des MINUTES : le gain d'XP se lit sur l'XP de la tuile.
-        tileXp(tileKey) - beforeXp,
+        afterT, // le gain d'XP se lit sur l'XP de la tuile (son niveau suit des minutes)
       ),
       xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);

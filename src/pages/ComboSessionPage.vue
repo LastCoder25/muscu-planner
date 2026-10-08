@@ -597,13 +597,13 @@ function toggleExoTimer(i: number) {
 // Sans données de fond chargées, l'« avant » serait faux : on se tait plutôt que de mentir.
 async function commitWithXpFx() {
   const ok = progress.ready.value;
-  const beforeM = progress.muscu.value;
+  const beforeM = progress.tileSnapshot('disc:musculation'); // tuile d'accueil, pas la piste
   const beforeG = progress.global.value;
   commitLogged();
   if (!ok) return;
   await nextTick();
   xpFx.show([
-    xpRing('muscu', '🏋️', 'Muscu', beforeM, progress.muscu.value),
+    xpRing('muscu', '🏋️', 'Muscu', beforeM, progress.tileSnapshot('disc:musculation')),
     xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
   ]);
 }

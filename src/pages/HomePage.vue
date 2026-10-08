@@ -1222,7 +1222,6 @@ async function saveAutre() {
   }
   autreSaving.value = true;
   const beforeG = progress.global.value; // snapshot XP Global (animation)
-  const beforeT = progress.tennis.value; // 🎾 et Tennis, si c'est du tennis
   try {
     const [y, m, dd] = autreDate.value.split('-').map((n) => Number(n) || 0);
     const now = new Date();
@@ -1236,6 +1235,10 @@ async function saveAutre() {
     ).toISOString();
     const sport =
       autreSport.value === 'Autre' ? autreCustom.value.trim() || 'Autre sport' : autreSport.value;
+    // Snapshot AVANT de la TUILE d'accueil de ce sport (celle qu'on retrouve ensuite) :
+    // l'animation montrait la piste Tennis (niveau sur l'XP), pas le niveau de la tuile.
+    const tile = progress.sessionTile({ discipline: 'autre_sport', name: sport });
+    const beforeT = progress.tileSnapshot(tile.key);
     const log: SessionLog = {
       schema_version: SCHEMA_VERSION,
       type: 'session_log',
@@ -1257,10 +1260,15 @@ async function saveAutre() {
     });
     autreOpen.value = false;
     await nextTick();
-    // 🎾 Une sortie Tennis fait monter la piste Tennis aussi : on anime les deux anneaux,
-    // comme à la fin d'une séance sur court.
+    // L'anneau du sport (sa tuile d'accueil) puis le Global.
     xpFx.show([
-      ...(tennisToo ? [xpRing('tennis', '🎾', 'Tennis', beforeT, progress.tennis.value)] : []),
+      xpRing(
+        tennisToo ? 'tennis' : 'sport',
+        tennisToo ? '🎾' : '🏅',
+        tile.label,
+        beforeT,
+        progress.tileSnapshot(tile.key),
+      ),
       xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
   } catch (e) {

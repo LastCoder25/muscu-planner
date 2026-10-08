@@ -334,6 +334,35 @@ export function useProgress() {
     mobilite: { label: 'Mobilité', icon: 'self_improvement' },
     prepa_physique: { key: 'tennis', label: 'Tennis', icon: 'sports_tennis' },
   };
+  /** La tuile d'accueil d'une séance : SOURCE UNIQUE, lue par les tuiles ET par
+   *  l'animation d'XP de fin de séance (`tileSnapshot`).
+   *  ⚠️ Un « autre sport » nommé Tennis rejoint la tuile `tennis` : c'est déjà la piste
+   *  Tennis côté XP (`isTennisSport`). Sur sa propre tuile `sport:Tennis`, l'accueil
+   *  montrait DEUX tuiles « Tennis » (les sorties, et les challenges/le court). */
+  function sessionTile(p: { discipline?: string | undefined; name?: string | undefined }): {
+    key: string;
+    label: string;
+    icon: string;
+  } {
+    const d = p.discipline ?? 'musculation';
+    if (d === 'autre_sport') {
+      const name = p.name || 'Autre';
+      if (isTennisSport(name)) return { key: 'tennis', label: 'Tennis', icon: 'sports_tennis' };
+      return { key: `sport:${name}`, label: name, icon: SPORT_ICON[name] ?? 'sports' };
+    }
+    const t = DISC_TILE[d] ?? DISC_TILE.musculation!;
+    return { key: t.key ?? `disc:${d}`, label: t.label, icon: t.icon };
+  }
+  /** Relevé d'une tuile d'accueil pour l'animation d'XP : son NIVEAU (il suit des
+   *  minutes) et son XP cumulée (d'où `xpRing` tire le gain). ⚠️ L'animation lisait la
+   *  PISTE (niveau sur l'XP) : Tennis y affichait le niveau 17 quand l'accueil disait 7.
+   *  Absente = jamais pratiquée → niveau 1 à 0 %. */
+  function tileSnapshot(key: string): { level: number; progressPct: number; xp: number } {
+    const t = sportTiles.value.find((x) => x.key === key);
+    return t
+      ? { level: t.level.level, progressPct: t.level.progressPct, xp: t.xp }
+      : { level: 1, progressPct: 0, xp: 0 };
+  }
   const sportTiles = computed(() => {
     const map = new Map<
       string,
@@ -362,13 +391,11 @@ export function useProgress() {
       const d = r.payload.discipline ?? 'musculation';
       const ts = Date.parse(r.performed_at) || 0;
       const min = r.payload.duration_min || 0;
-      if (d === 'autre_sport') {
-        const name = r.payload.name || 'Autre';
-        bump(`sport:${name}`, name, SPORT_ICON[name] ?? 'sports', sessionXp(r.payload), min, ts);
-      } else {
-        const t = DISC_TILE[d] ?? DISC_TILE.musculation!;
-        bump(t.key ?? `disc:${d}`, t.label, t.icon, sessionXp(r.payload), min, ts);
-      }
+      const t = sessionTile(r.payload);
+      // Un « autre sport » vaut l'XP que la piste lui donne (intensité du sport), pas le
+      // barème d'une séance de muscu : sinon le gain affiché par l'animation divergerait.
+      const xp = d === 'autre_sport' ? otherSportXp(min, r.payload.name) : sessionXp(r.payload);
+      bump(t.key, t.label, t.icon, xp, min, ts);
     }
     for (const r of cardio.logs) {
       if (r.payload.challenge_id) continue; // sorties miroir = pas d'XP
@@ -536,6 +563,8 @@ export function useProgress() {
   return {
     ready,
     sportTiles,
+    sessionTile,
+    tileSnapshot,
     sportEntries,
     activeDaysInLast,
     global: computed(() => computeLevel(globalXp.value)),
