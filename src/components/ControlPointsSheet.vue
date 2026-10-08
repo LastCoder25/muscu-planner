@@ -137,6 +137,20 @@
               <!-- ➕ Une place libre ENVOIE un renfort, sans passer par la gestion du lieu
                    (demandé). Grisée si personne ne peut partir (ni champion ni milicien). -->
               <button
+                v-else-if="s.kind === 'bump' && canReinforce(r)"
+                type="button"
+                class="mini free go bump"
+                title="Plein, mais un champion peut venir : un milicien lui cèdera sa place"
+                :aria-label="`Envoyer un champion : ${CONTROL_LABEL[r.kind]}, un milicien lui cède sa place`"
+                @click.stop="emit('reinforce', r.poi)"
+                @keydown.stop
+              >
+                ＋
+              </button>
+              <span v-else-if="s.kind === 'bump'" class="mini free" title="Un champion peut venir"
+                >＋</span
+              >
+              <button
                 v-else-if="canReinforce(r)"
                 type="button"
                 class="mini free go"
@@ -178,6 +192,8 @@ import {
   CONTROL_FILTERS,
   CONTROL_FILTER_LABEL,
   controlFilterOf,
+  controlFreeSeats,
+  garrisonCap,
   HELD_COLOR,
   isHeldControl,
   type ControlFilter,
@@ -248,7 +264,10 @@ type Slot =
   | { kind: 'hero'; coming: boolean; away: boolean }
   | { kind: 'route' }
   | { kind: 'away'; adv: Adventurer }
-  | { kind: 'free' };
+  | { kind: 'free' }
+  /** 🏰 Plein, mais des miliciens tiennent une place de CHAMPION : un champion peut venir, un
+   *  milicien lui cédera sa place à son arrivée (v1.90.0). */
+  | { kind: 'bump' };
 /** Les cases de la ligne : champions, miliciens, renforts en route, champions en sortie (leur
  *  place est gardée), puis places libres, jusqu'à `seats`. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
@@ -264,9 +283,18 @@ const slotsOf = (r: ControlRosterRow): Slot[] => {
     ...advsOf(r.away).map((adv) => ({ kind: 'away' as const, adv })),
   ];
   // 🏰 Sans limite (la forteresse) : une seule case libre, qui dit qu'on peut en ajouter.
+  // ⚠️ La garnison ENTIÈRE (5, miliciens compris) et non les seules places de champion : au
+  // camp (3 champions), 2 miliciens le faisaient paraître plein (revue du 2026-10-08).
   const used = filled.length + (hero.length ? MILITIA.heroSeats - 1 : 0);
-  const free = Number.isFinite(r.seats) ? Math.max(0, r.seats - used) : 1;
-  return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
+  const cap = r.seats > 0 && Number.isFinite(r.seats) ? garrisonCap(r.kind) : r.seats;
+  const free = Number.isFinite(cap) ? Math.max(0, cap - used) : 1;
+  const cells: Slot[] = [
+    ...filled,
+    ...Array.from({ length: free }, () => ({ kind: 'free' as const })),
+  ];
+  if (!free && milOf(r.garrison).length && controlFreeSeats(r.poi.control) > 0)
+    cells.push({ kind: 'bump' });
+  return cells;
 };
 const rankOf = (r: ControlRosterRow) => poiRank(r.poi);
 /** Réserve pleine (or/XP) ou unité prête (consommable, rune) : la jauge passe à l'accent. */

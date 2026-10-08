@@ -32,6 +32,7 @@
       :candidates="crossCandidates"
       :militia-points="crossMilitia.points"
       :militia-total="crossMilitia.total"
+      :militia-transit="crossMilitia.transit"
       :depart-at="nextCrossingDeparture(now)"
       :hero-depart-at="char.crossingDepartAt(now)"
       :busy="archBusy"
@@ -2000,7 +2001,14 @@ import {
   transferBlocker,
   transferSourcesFor,
 } from '@/lib/controlRoutes';
-import { MILITIA, MILITIA_NAME, MILITIA_PREFIX, isMilitiaId, militiaIn } from '@/lib/militia';
+import {
+  MILITIA,
+  MILITIA_NAME,
+  MILITIA_PREFIX,
+  isMilitiaId,
+  militiaIn,
+  militiaOnMap,
+} from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const router = useRouter();
@@ -2243,10 +2251,14 @@ const crossCandidates = computed(() => {
 const crossMilitia = computed(() => {
   const a = crossAsk.value;
   const map = char.row?.expedition_map;
-  if (!a || !map || a.from !== island.value?.id || a.to <= a.from) return { points: [], total: 0 };
+  if (!a || !map || a.from !== island.value?.id || a.to <= a.from)
+    return { points: [], total: 0, transit: 0 };
   const points = leavingMilitiaPoints(map, now.value, mapPlayerLevel(map, heroLevel.value));
   const posted = points.reduce((s, p) => s + p.militia, 0);
-  return { points, total: posted + (char.row?.base?.militia?.home ?? 0) };
+  // 🚶 Ceux encore EN ROUTE (renfort ou retour) : la traversée attend leur arrivée
+  // (`troopsBackAt`), ils sont donc à répartir comme les autres (revue du 2026-10-08).
+  const transit = Math.max(0, militiaOnMap(map) - posted);
+  return { points, total: posted + transit + (char.row?.base?.militia?.home ?? 0), transit };
 });
 async function confirmCross(pick: { hero: boolean; ids: string[]; militiaPlan?: MilitiaPlan }) {
   const uid = auth.user?.id;

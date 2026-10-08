@@ -94,6 +94,10 @@
             >{{ militiaLeft }} en réserve</span
           >
         </div>
+        <p v-if="militiaTransit > 0" class="cs-mil-transit">
+          🚶 Dont {{ militiaTransit }} milicien{{ militiaTransit > 1 ? 's' : '' }} encore en route :
+          la traversée attend {{ militiaTransit > 1 ? 'leur' : 'son' }} arrivée.
+        </p>
         <div v-for="p in militiaPoints" :key="p.id" class="cs-mil-row">
           <span class="cs-mil-emo" aria-hidden="true">{{ p.emoji }}</span>
           <span class="cs-mil-lab">{{ p.label }}</span>
@@ -169,6 +173,8 @@ const props = defineProps<{
   militiaPoints?: LeavingPoint[];
   /** 🛡️ Tous les miliciens de l'île : réserve + ceux déjà postés. */
   militiaTotal?: number;
+  /** 🚶 Dont ceux encore en route : la traversée attend leur arrivée. */
+  militiaTransit?: number;
   busy?: boolean;
 }>();
 const emit = defineEmits<{
@@ -183,6 +189,7 @@ const hero = ref(true);
 const plan = ref<MilitiaPlan>({});
 const militiaPoints = computed(() => props.militiaPoints ?? []);
 const militiaTotal = computed(() => props.militiaTotal ?? 0);
+const militiaTransit = computed(() => props.militiaTransit ?? 0);
 
 const picked = ref<string[]>([]);
 // À chaque ouverture : héros embarqué s'il le peut, tous les champions cochés.
@@ -432,5 +439,10 @@ const clock = (t: number) =>
 .cs-go {
   min-height: 44px;
   font-weight: 700;
+}
+.cs-mil-transit {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--dim);
 }
 </style>

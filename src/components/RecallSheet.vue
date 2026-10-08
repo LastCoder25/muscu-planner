@@ -21,8 +21,8 @@
            tournerait. Le marqueur se lit comme la troupe sur la carte. -->
       <div class="rc-route" :class="{ rev: back }" role="img" :aria-label="routeAria">
         <span class="rc-end">
-          <span class="rc-end-ico">🏰</span>
-          <small>Base</small>
+          <span class="rc-end-ico">{{ fromHome ? '↩' : '🏰' }}</span>
+          <small>{{ fromHome ? 'Départ' : 'Base' }}</small>
         </span>
         <div class="rc-track">
           <div class="rc-todo" />
@@ -52,7 +52,9 @@
           {{ a.name }}
         </span>
         <span v-if="militia" class="rc-who"
-          >🪖 {{ militia }} milicien{{ militia > 1 ? 's' : '' }}</span
+          ><span class="rc-who-pic"><MilitiaPortrait /></span> {{ militia }} milicien{{
+            militia > 1 ? 's' : ''
+          }}</span
         >
       </div>
 
@@ -87,7 +89,11 @@
       <div class="rc-pills">
         <template v-if="back">
           <span class="rc-pill">🏰 Pas rentrés à la base</span>
-          <span class="rc-pill">🛡️ Ils reprennent leur poste à l’arrivée</span>
+          <span class="rc-pill">{{
+            militia
+              ? '🛡️ Ils reprennent leur poste — un milicien sans place rentrera'
+              : '🛡️ Ils reprennent leur poste à l’arrivée'
+          }}</span>
         </template>
         <template v-else>
           <span class="rc-pill">🚫 Lieu non atteint</span>
@@ -106,6 +112,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { POI_EMO, POI_LABEL, type Poi } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { formatDuration } from '@/lib/duration';
@@ -137,6 +144,9 @@ const rank = computed(() =>
 );
 /** 🏠 Un retour vers la base : le chemin se lit du lieu vers la base. */
 const back = computed(() => props.ask?.kind === 'return');
+/** ↩ Ils ne rentrent pas à la base mais à leur point de départ (sortie d'un lieu fixe, attaque
+ *  combinée) : le bout du chemin ne doit pas dire « Base » (revue du 2026-10-08). */
+const fromHome = computed(() => !back.value && !!props.ask?.homeName);
 const pct = computed(() => `${Math.round((props.preview?.frac ?? 0) * 1000) / 10}%`);
 /** Ce que le demi-tour fait gagner sur le retour, si l'on continuait. */
 const saved = computed(() => {
