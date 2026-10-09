@@ -65,7 +65,7 @@ describe('outingsOf : tous les voyages, une seule forme', () => {
     const o = outingsOf({
       expedition: exp(1, 2, ['x']),
       parties: [exp(3, 4, ['y'])],
-      attacks: [], planned: [],
+      attacks: [],
     });
     expect(o).toEqual([
       { sentAt: 1, returnAt: 2, escort: ['x'], hero: true },
@@ -74,19 +74,6 @@ describe('outingsOf : tous les voyages, une seule forme', () => {
   });
 
   it('une expédition solo n’a pas d’escorte', () => {
-    expect(
-      outingsOf({ expedition: exp(1, 2), parties: [], attacks: [], planned: [] })[0]!.escort,
-    ).toEqual([]);
-  });
-
-  it('⏳ un renfort programmé : ses champions défendent jusqu’au départ', () => {
-    const planned = [
-      { id: 'p', toId: 't', createdAt: 0, departAt: T + H, champs: ['c'], militia: 0, transfers: [] },
-    ];
-    const o = outingsOf({ expedition: null, parties: [], attacks: [], planned });
-    expect(o).toEqual([{ sentAt: T + H, returnAt: T + H, escort: ['c'], hero: false }]);
-    // Réservé (busyUntil = départ), il est quand même à la base à l'heure de l'attaque.
-    const home = advsHomeAt([adv('c', { busyUntil: T + H })], o, T);
-    expect(home.map((a) => a.id)).toEqual(['c']);
+    expect(outingsOf({ expedition: exp(1, 2), parties: [], attacks: [] })[0]!.escort).toEqual([]);
   });
 });

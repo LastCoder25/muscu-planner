@@ -19,7 +19,7 @@ import {
   type CombinedAttack,
 } from '@/lib/combinedAttack';
 import type { Adventurer } from '@/lib/adventurers';
-import { travelPosition, type ExpeditionMap, type Poi } from '@/lib/expedition';
+import type { ExpeditionMap, Poi } from '@/lib/expedition';
 
 const MIN = 60_000;
 const target = { id: 'camp1', type: 'camp', x: 150, y: 60, level: 20 } as unknown as Poi;
@@ -304,46 +304,5 @@ describe('attackWaitingIds — les membres qu’une attaque attend encore', () =
     ]);
     expect([...ids].sort()).toEqual(['a', 'b']);
     expect(attackWaitingIds(null).size).toBe(0);
-  });
-});
-
-describe('planWings — « tous maintenant » (les plus proches ralentis)', () => {
-  const now = 1_000_000;
-  const inputs = [
-    { originId: null, members: ['a'], hero: true, legMin: 60 },
-    { originId: 'pt1', members: ['c1'], hero: false, legMin: 20 },
-  ];
-  const p = planWings(inputs, now, 5 * MIN, 0, true);
-  it('tout le monde part maintenant et arrive ensemble', () => {
-    expect(p.arriveAt).toBe(now + 60 * MIN);
-    for (const w of p.wings) expect(w.departAt).toBe(now);
-  });
-  it('le retour reste à leur pas (pas ralenti)', () => {
-    for (const w of p.wings) expect(w.returnAt).toBe(p.midAt + w.legMin * MIN);
-    expect(p.wings[1]!.legMin).toBe(20);
-  });
-  it('même arrivée et même retour que « chacun à son heure » : seul le départ change', () => {
-    const q = planWings(inputs, now, 5 * MIN);
-    expect(q.arriveAt).toBe(p.arriveAt);
-    expect(q.wings.map((w) => w.returnAt)).toEqual(p.wings.map((w) => w.returnAt));
-    expect(q.wings[1]!.departAt).toBe(now + 40 * MIN);
-  });
-  it('à mi-chemin du temps, le groupe proche est à mi-chemin de sa route', () => {
-    const map = mapWith();
-    const a: CombinedAttack = {
-      id: 'atk',
-      poi: target,
-      seed: 2,
-      createdAt: now,
-      arriveAt: p.arriveAt,
-      midAt: p.midAt,
-      playerLevel: 30,
-      supplies: [],
-      wings: p.wings,
-    };
-    const v = attackWingVoyages([a], map).find((x) => x.key === 'atk:1')!;
-    const pos = travelPosition(v.voyage, now + 30 * MIN);
-    expect(pos.phase).toBe('outbound');
-    expect(pos.frac).toBeCloseTo(0.5, 5);
   });
 });

@@ -85,10 +85,6 @@ export function planWings(
   /** ⚔️🧭 Cible en MARCHE : la minute de rencontre commune (`meetAll`), qui peut dépasser le
    *  plus long trajet (il faut que l'armée soit venue jusque-là). */
   meetInMin = 0,
-  /** 🐢 « Tous ensemble » (demandé par l'utilisateur) : tout le monde part MAINTENANT et
-   *  les groupes plus proches marchent plus lentement pour arriver avec le plus lointain ;
-   *  le RETOUR reste à leur pas (`legMin`). Sans lui, chacun attend son heure chez lui. */
-  together = false,
 ): { arriveAt: number; midAt: number; wings: AttackWing[] } {
   const longest = Math.max(1, meetInMin, ...inputs.map((w) => w.legMin));
   const arriveAt = now + longest * 60_000;
@@ -101,7 +97,7 @@ export function planWings(
       members: [...w.members],
       hero: w.hero,
       legMin: w.legMin,
-      departAt: together ? now : arriveAt - w.legMin * 60_000,
+      departAt: arriveAt - w.legMin * 60_000,
       returnAt: midAt + w.legMin * 60_000,
       state: 'waiting' as const,
     })),
@@ -308,7 +304,7 @@ export function attackHeroWaitingAt(
 
 /** ⏳ Les champions qu'une attaque combinée ATTEND encore : ils restent dans la garnison de
  *  leur point (ou à la base) jusqu'à leur départ, mais ils sont pris — on ne les transfère,
- *  ne les échange ni ne les ramène, comme un membre d'un départ programmé. */
+ *  ne les échange ni ne les ramène, comme un membre d'un groupe qui attend son départ. */
 export function attackWaitingIds(
   attacks: readonly CombinedAttack[] | null | undefined,
 ): Set<string> {

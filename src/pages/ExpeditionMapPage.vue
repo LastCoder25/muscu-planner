@@ -502,7 +502,7 @@
       v-model="baseOpen"
       :champs="baseChamps"
       :away="char.advList.length - baseChamps.length"
-      :mil-home="milHomeFree"
+      :mil-home="milHome"
       :hero-home="!heroUnavailable"
       :hero-status="heroBaseStatus"
       :targets="baseTargets"
@@ -562,7 +562,7 @@
       :mil-free="quickFree.total"
       :mil-room="quickFree.mil"
       :mil-anyway="quickFree.milAnyway"
-      :mil-home="milHomeFree"
+      :mil-home="milHome"
       :militia-min="quickMilitiaMin"
       :champ-min="quickChampMin"
       :arrival="quickArrival"
@@ -570,18 +570,12 @@
       :hold="quickHold"
       :sel="quickSel"
       :sel-hold="quickSelHold"
-      :delay-min="quickDelayMin"
-      :max-delay-min="PLAN_MAX_DELAY_MS / 60_000"
-      :depart-label="quickDepartLabel"
-      :planned="quickPlanned"
       :busy="ctlBusy"
       :hero-offer="quickHeroOffer"
       @toggle-hero="quickSel = toggleReinfHero(quickSel, quickFree)"
       @close="quickId = null"
-      @delay="(n: number) => (quickDelayMin = n)"
-      @cancel="quickCancel"
       @toggle-champ="(id: string) => (quickSel = toggleReinfChamp(quickSel, id, quickFree))"
-      @militia="(n: number) => (quickSel = setReinfMilitia(quickSel, n, milHomeFree, quickFree))"
+      @militia="(n: number) => (quickSel = setReinfMilitia(quickSel, n, milHome, quickFree))"
       @transfer="
         (from: string, id: string) =>
           (quickSel = toggleReinfTransfer(quickSel, from, id, quickFree))
@@ -607,7 +601,6 @@
       @recall="recallTripByKey"
       @boost="boostTrip"
       @attack="openAttack"
-      @cancel-plan="quickCancel"
     />
 
     <!-- Panneau POI sélectionné -->
@@ -807,31 +800,6 @@
                 <b>{{ w.target }}</b></span
               >
             </div>
-            <!-- ⏳ RETOURS PROGRAMMÉS (demandé : « quand je fais rappel depuis le lieu fixe, il
-               faut que je puisse le programmer ») : ils restent en poste jusqu'au départ. -->
-            <div v-for="m in ctlPlannedBack" :key="m.id" class="ctl-plan">
-              <span class="ctl-plan-main"
-                >⏳ <b>{{ m.count }}</b> retour{{ m.count > 1 ? 's' : '' }} programmé{{
-                  m.count > 1 ? 's' : ''
-                }}
-                · dans {{ m.departIn }} ({{ m.departAt }})</span
-              >
-              <button
-                type="button"
-                class="ctl-plan-x"
-                :disabled="ctlBusy"
-                @click="quickCancel(m.id)"
-              >
-                Annuler
-              </button>
-            </div>
-            <DepartDelayPicker
-              v-if="ctlRecallSel.length || controlMembersHere"
-              v-model="ctlRecallDelay"
-              label="Retour"
-              :max-delay-min="PLAN_MAX_DELAY_MS / 60_000"
-              :at="ctlRecallAt"
-            />
             <button
               v-if="liveControl.hero || liveControl.heroComing"
               type="button"
@@ -842,9 +810,7 @@
               {{
                 liveControl.heroComing
                   ? '🔙 Le héros fait demi-tour'
-                  : ctlRecallDelay > 0 && (ctlRecallSel.length || controlMembersHere)
-                    ? '🦸 Rappeler le héros à la base · tout de suite'
-                    : '🦸 Rappeler le héros à la base'
+                  : '🦸 Rappeler le héros à la base'
               }}
             </button>
             <!-- 🧝 LE HÉROS EN GARNISON (2026-10-05, demandé) : il prend 2 places sur les 5. -->
@@ -865,7 +831,7 @@
               v-if="ctlRecallSel.length"
               type="button"
               class="ctl-recall ctl-back"
-              :disabled="ctlBusy || (ctlRecallDelay > 0 && !ctlSchedulable.length)"
+              :disabled="ctlBusy"
               @click="releaseCtl"
             >
               {{ recallSelLabel }}
@@ -1007,11 +973,7 @@
               :disabled="ctlBusy"
               @click="recallCtl"
             >
-              {{
-                ctlRecallDelay > 0
-                  ? `⏳ Programmer le retour de toute la garnison`
-                  : 'Rappeler toute la garnison'
-              }}
+              Rappeler toute la garnison
             </button>
           </div>
           <p v-else-if="citadelRestIn > 0" class="sh-note">
@@ -1096,37 +1058,9 @@
                   ⚔️ <b>Attaque combinée</b> · tous arrivent dans
                   <b>{{ formatDurationMin(Math.max(...wingPlan.map((w) => w.legMin))) }}</b>
                 </p>
-                <!-- 🐢 Deux façons d'arriver ensemble (demandé) : chacun attend son heure chez lui,
-                   ou tout le monde part MAINTENANT et les plus proches marchent au pas du plus
-                   lointain. Le retour reste à leur pas dans les deux cas. -->
-                <div class="wing-mode" role="radiogroup" aria-label="Départ des groupes">
-                  <button
-                    type="button"
-                    role="radio"
-                    class="wing-mode-b"
-                    :class="{ on: !wingsTogether }"
-                    :aria-checked="!wingsTogether"
-                    @click="setWingsTogether(false)"
-                  >
-                    ⏳ Chacun à son heure
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    class="wing-mode-b"
-                    :class="{ on: wingsTogether }"
-                    :aria-checked="wingsTogether"
-                    @click="setWingsTogether(true)"
-                  >
-                    🐢 Tous maintenant
-                  </button>
-                </div>
                 <p class="car-cap">
-                  {{
-                    wingsTogether
-                      ? 'Tous partent maintenant, les plus proches ralentis pour arriver ensemble : ils quittent leur poste dès le départ. Retour à leur pas.'
-                      : 'Les plus proches attendent chez eux (ils produisent, ils défendent) ; battus avant leur départ, ils ne viennent pas.'
-                  }}
+                  Les plus proches attendent chez eux (ils produisent) et partent à leur heure ;
+                  battus avant leur départ, ils ne viennent pas.
                 </p>
                 <div v-for="w in wingPlan" :key="w.id" class="wing-row" :class="{ empty: !w.n }">
                   <span class="wing-emo">{{ w.emo }}</span>
@@ -1136,9 +1070,7 @@
                     !w.n
                       ? 'personne'
                       : w.departInMin <= 0
-                        ? w.outMin > w.legMin
-                          ? `part maintenant · 🐢 aller ${formatDurationMin(w.outMin)}`
-                          : 'part maintenant'
+                        ? 'part maintenant'
                         : `part dans ${formatDurationMin(w.departInMin)}`
                   }}</span>
                   <span
@@ -1691,7 +1623,6 @@ import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { SKILLS, SKILL_MAX_LEVEL, type SkillId } from '@/lib/skillRunes';
-import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1787,13 +1718,6 @@ import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { groupSwapRows, SWAP_BASE_KEY } from '@/lib/swapGroups';
-import {
-  PLAN_MAX_DELAY_MS,
-  plannedCount,
-  plannedMilitia,
-  plannedSeatsTo,
-  plannedTransferIds,
-} from '@/lib/plannedMoves';
 import { poiTripCategory } from '@/lib/tripFilter';
 import {
   lockPageScroll,
@@ -2656,12 +2580,7 @@ const riskHero = computed(() => {
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
 /** 🏰 Les garnisons prêtes à sortir, point par point (grisage de la carte). */
 const readyGarrisonMap = computed(() =>
-  readyGarrisons(
-    char.row?.expedition_map,
-    char.advList,
-    now.value,
-    plannedTransferIds(char.plannedList),
-  ),
+  readyGarrisons(char.row?.expedition_map, char.advList, now.value),
 );
 /** ⚠️ Le MÊME vivier disponible, mais STABLE d'une seconde à l'autre : `freeAdvs` rend un
  *  nouveau tableau à chaque tick, et tout ce qui en dépend (pronostics de siège ~13 ms, % de
@@ -2805,7 +2724,7 @@ const enemyMilitia = computed(() => {
     // 🛡️ De la base, OU de la garnison d'un autre lieu tenu (`transferSourcesFor`, la règle
     // du store) — signalé : seuls ceux de la base pouvaient partir.
     canSend:
-      milHomeFree.value > 0 ||
+      milHome.value > 0 ||
       (!!livePoi.value &&
         transferSourcesFor(char.row?.expedition_map, livePoi.value.id).some((s) =>
           s.ids.some((id) => !reserved.has(id)),
@@ -2900,12 +2819,6 @@ const ctlMoving = computed(
 );
 /** Le bouton dit ce qu'il fera : ceux en route font DEMI-TOUR, les autres sont ramenés. */
 const recallSelLabel = computed(() => {
-  if (ctlRecallDelay.value > 0) {
-    const k = ctlSchedulable.value.length;
-    const skip = ctlRecallSel.value.length - k;
-    if (!k) return '⏳ Seuls les membres déjà sur le lieu se programment';
-    return `⏳ Programmer le retour de ${k} membre${k > 1 ? 's' : ''}${skip ? ` (${skip} en route ignoré${skip > 1 ? 's' : ''})` : ''}`;
-  }
   const moving = ctlMoving.value;
   const n = ctlRecallSel.value.length;
   const t = ctlRecallSel.value.filter((x) => moving.has(x)).length;
@@ -2934,27 +2847,19 @@ const controlFree = computed(() => controlFreeSeats(liveControl.value));
 const unlimitedGarrison = computed(
   () => !!liveControl.value && !Number.isFinite(seatsOf(liveControl.value.kind)),
 );
-/** ⏳ Les places déjà promises à des départs PROGRAMMÉS vers ce lieu (`plannedSeatsTo`) : la
- *  fenêtre de renfort les retire, la fiche les montre « réservées » (revue du 2026-10-08). */
-const ctlPlannedSeats = computed(() =>
-  livePoi.value ? plannedSeatsTo(char.plannedList, livePoi.value.id) : { champ: 0, total: 0 },
-);
-type GarrisonSlot = { i: number; kind: 'champ' | 'mil' | 'reserved' | 'any'; label: string };
+type GarrisonSlot = { i: number; kind: 'champ' | 'mil' | 'any'; label: string };
 const garrisonSlots = computed<GarrisonSlot[]>(() => {
   if (unlimitedGarrison.value) return [{ i: 0, kind: 'any', label: 'Place libre · sans limite' }];
-  const taken = ctlPlannedSeats.value;
-  const champ = Math.max(0, controlFree.value - taken.champ);
-  const mil = Math.max(0, militiaFreeSeats(liveControl.value) - (taken.total - taken.champ));
+  const champ = controlFree.value;
+  const mil = militiaFreeSeats(liveControl.value);
   const slots: GarrisonSlot[] = [];
-  for (let k = 0; k < taken.total; k++)
-    slots.push({ i: slots.length, kind: 'reserved', label: 'Réservée · départ programmé' });
   for (let k = 0; k < champ; k++)
     slots.push({ i: slots.length, kind: 'champ', label: 'Place de champion' });
   for (let k = 0; k < mil; k++)
     slots.push({ i: slots.length, kind: 'mil', label: 'Place de milicien' });
   return slots;
 });
-/** ⚔️ Les cases vides du bloc des TITULAIRES (places de champion, réservées, sans limite). */
+/** ⚔️ Les cases vides du bloc des TITULAIRES (places de champion, sans limite). */
 const champSlots = computed(() => garrisonSlots.value.filter((s) => s.kind !== 'mil'));
 /** 🛡️ Les cases vides du bloc de la MILICE : celles qu'un milicien seul peut prendre. */
 const milSlots = computed(() => garrisonSlots.value.filter((s) => s.kind === 'mil'));
@@ -2988,7 +2893,6 @@ const champStrip = computed(() => {
   return garrisonStrip({
     hero,
     members,
-    reserved: champSlots.value.filter((s) => s.kind === 'reserved').length,
     free: champSlots.value.filter((s) => s.kind === 'champ').length,
     unlimited: unlimitedGarrison.value,
     selected: ctlRecallSel.value,
@@ -3011,7 +2915,6 @@ const milStrip = computed(() =>
       inMs: m.arriveIn,
       reserved: ctlReservedLabel.value.get(m.id) ?? null,
     })),
-    reserved: 0,
     free: milSlots.value.length,
     selected: ctlRecallSel.value,
   }),
@@ -3097,39 +3000,6 @@ function openQuick() {
 }
 /** La sélection de la fiche : qui ramener. */
 const ctlRecallSel = ref<string[]>([]);
-/** ⏳ Dans combien de minutes ils rentrent (0 = tout de suite). */
-const ctlRecallDelay = ref(0);
-const ctlRecallAt = computed(() =>
-  ctlRecallDelay.value > 0
-    ? new Date(now.value + ctlRecallDelay.value * 60_000).toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null,
-);
-/** Ceux de la sélection qu'on peut programmer : déjà SUR le lieu (un renfort en route ne peut
- *  que faire demi-tour, tout de suite) et pas déjà programmés. */
-const ctlSchedulable = computed(() => {
-  const here = new Set(liveControl.value?.garrison ?? []);
-  const reserved = char.reservedIds;
-  return ctlRecallSel.value.filter((x) => here.has(x) && !reserved.has(x));
-});
-/** Il y a quelqu'un sur le lieu à ramener (le choix du moment n'a de sens qu'alors). */
-const controlMembersHere = computed(() => (liveControl.value?.garrison.length ?? 0) > 0);
-/** ⏳ Les retours déjà programmés depuis ce lieu. */
-const ctlPlannedBack = computed(() =>
-  char.plannedList
-    .filter((m) => m.recall && m.toId === livePoi.value?.id)
-    .map((m) => ({
-      id: m.id,
-      count: plannedCount(m),
-      departIn: formatDuration(Math.max(0, m.departAt - now.value)),
-      departAt: new Date(m.departAt).toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    })),
-);
 /** ⚡ Les boosts de vitesse en stock (la fenêtre « trop tard » les rappelle). */
 const boostStock = computed(() =>
   BOOST_IDS.reduce((n, id) => n + (char.row?.supplies?.[id] ?? 0), 0),
@@ -3141,23 +3011,12 @@ watch(
   () => selected.value?.id,
   () => {
     ctlRecallSel.value = [];
-    ctlRecallDelay.value = 0;
   },
 );
-/** ⏳ Les membres du lieu attendus par un départ programmé (retour ou transfert) : leur tuile
- *  le dit, et on ne peut plus les choisir (ils sont réservés, on annule d'abord). */
+/** ⚔️ Les membres du lieu attendus par une attaque combinée qui part d'ici (signalé : rien ne
+ *  le disait) : leur tuile le dit, et on ne peut plus les choisir (on annule l'attaque d'abord). */
 const ctlReservedLabel = computed(() => {
   const out = new Map<string, string>();
-  const here = livePoi.value?.id;
-  for (const m of char.plannedList) {
-    const at = new Date(m.departAt).toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    if (m.recall && m.toId === here) for (const id of m.recall) out.set(id, `⏳ retour à ${at}`);
-    for (const t of m.transfers) if (t.fromId === here) out.set(t.id, `⏳ part à ${at}`);
-  }
-  // ⚔️ Réservés pour une attaque combinée qui part d'ici (signalé : rien ne le disait).
   for (const w of ctlAttackWaits.value)
     for (const id of w.ids) out.set(id, `⚔️ part à ${w.departAt}`);
   return out;
@@ -3318,8 +3177,7 @@ const swapCandidates = computed(() => {
       a.id,
     );
   }
-  // ⏳ Un milicien de la base réservé par un départ programmé ne remplace personne.
-  if (milHome.value - plannedMilitia(char.plannedList) > 0) {
+  if (milHome.value > 0) {
     const why = swapBlocker(map, p.id, out.id, SWAP_MILITIA_FROM_BASE, null);
     push(
       {
@@ -3338,7 +3196,7 @@ const swapCandidates = computed(() => {
   }
   // 🏰 Les autres points tenus : chaque membre arrivé.
   const byId = new Map(char.advList.map((a) => [a.id, a]));
-  // ⏳ Ceux qu'un départ programmé attend ne remplacent personne.
+  // ⚔️ Ceux qu'une attaque combinée attend ne remplacent personne.
   const reserved = char.reservedIds;
   for (const q of map.pois) {
     if (q.id === p.id || q.control?.owner !== 'player') continue;
@@ -3495,29 +3353,6 @@ async function transferCtl(toId: string) {
     ctlBusy.value = false;
   }
 }
-/** ⏳ Programme le retour : `whole` = toute la garnison. */
-async function scheduleCtlRecall(ids: readonly string[], whole: boolean) {
-  const uid = auth.user?.id;
-  const p = livePoi.value;
-  if (!uid || !p || ctlBusy.value) return;
-  const delay = ctlRecallDelay.value * 60_000;
-  ctlBusy.value = true;
-  try {
-    const why = await char.scheduleRecall(uid, p.id, ids, whole, delay, Date.now());
-    if (why) $q.notify({ type: 'warning', message: `Retour non programmé : ${why}.` });
-    else {
-      const n = whole ? (liveControl.value?.garrison.length ?? ids.length) : ids.length;
-      $q.notify({
-        type: 'positive',
-        message: `⏳ Retour de ${n} membre${n > 1 ? 's' : ''} programmé — départ dans ${formatDuration(delay)}`,
-      });
-      ctlRecallSel.value = [];
-      ctlRecallDelay.value = 0;
-    }
-  } finally {
-    ctlBusy.value = false;
-  }
-}
 /** 💎 Les compétences du champion du lapidaire : niveau, et temps de polissage restant. */
 const lapisRows = computed(() => {
   const c = liveControl.value;
@@ -3565,12 +3400,6 @@ async function releaseCtl() {
   const p = livePoi.value;
   const ids = ctlRecallSel.value;
   if (!uid || !p || !ids.length || ctlBusy.value) return;
-  if (ctlRecallDelay.value > 0) {
-    const k = ctlSchedulable.value;
-    if (k.length)
-      await scheduleCtlRecall(k, k.length === (liveControl.value?.garrison.length ?? -1));
-    return;
-  }
   // 🔙 Ceux encore EN ROUTE font demi-tour (le store les fait rebrousser chemin, en autant de
   // temps qu'ils ont marché). « Tout rappeler » seulement si la sélection couvre TOUT le monde
   // (sur place, en route, en sortie, et le héros posté, qui ne se coche pas ici).
@@ -3663,10 +3492,6 @@ async function recallCtl() {
   const uid = auth.user?.id;
   const p = livePoi.value;
   if (!uid || !p || ctlBusy.value) return;
-  if (ctlRecallDelay.value > 0) {
-    await scheduleCtlRecall([], true);
-    return;
-  }
   const ok = await new Promise<boolean>((res) =>
     $q
       .dialog({
@@ -4269,55 +4094,6 @@ const trips = computed(() => {
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatCountdown(r.arriveIn)}`,
     });
   }
-  // ⏳ LES DÉPARTS PROGRAMMÉS (demandé : « un filtre pour les déplacements programmés en
-  // attente ») : renforts et retours qui n'ont pas encore quitté leur lieu. Leur tuile
-  // décompte le temps avant le DÉPART, et s'annule depuis l'équipe.
-  for (const m of char.plannedList) {
-    const poi = pois.value.find((p) => p.id === m.toId);
-    if (!poi) continue;
-    const key = 'p' + m.id;
-    const members = m.recall
-      ? [...m.recall]
-      : [
-          ...m.champs,
-          ...Array.from({ length: m.militia }, (_, i) => `${MILITIA_PREFIX}plan${i}`),
-          ...m.transfers.map((t) => t.id),
-        ];
-    // D'où partent-ils : le lieu quitté pour un retour ; pour un renfort, la base, sauf si
-    // tout le monde vient d'un même autre lieu tenu.
-    const froms = new Set(m.transfers.map((t) => t.fromId));
-    const fromId = m.recall
-      ? m.toId
-      : !m.champs.length && !m.militia && froms.size === 1
-        ? [...froms][0]
-        : null;
-    const at = new Date(m.departAt).toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    const inMs = Math.max(0, m.departAt - now.value);
-    ends.set(key, m.departAt);
-    out.push({
-      key,
-      kind: 'van',
-      who: '⏳',
-      cat: 'reinf',
-      pending: true,
-      cancelPlan: m.id,
-      poi,
-      time: `⏳ ${formatCountdown(inMs)}`,
-      pct: 0,
-      back: !!m.recall,
-      withHero: false,
-      from: fromId ? (pois.value.find((p) => p.id === fromId) ?? null) : null,
-      ...(m.recall ? { toBase: true } : {}),
-      members,
-      haul: [],
-      title: m.recall
-        ? `Retour programmé de ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`
-        : `Renfort programmé — ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`,
-    });
-  }
   // ⛵ EN MER (demandé : « comment on voit que le héros est en traversée ? ») : la traversée
   // du héros et les navigations de champions, ancrées au port (la forteresse) ou à la ville.
   const port =
@@ -4744,7 +4520,7 @@ const reinforceable = computed(() =>
         // 🛡️ Des miliciens partent même vers un lieu plein : demi-tour à l’arrivée s’il l’est encore.
         (acceptsMilitia(r.poi.control) && milHome.value > 0) ||
         // ⇄ Ou quelqu'un d'un AUTRE point tenu (la règle du transfert, `transferBlocker`),
-        // qu'aucun départ programmé ni aucune attaque combinée n'attend.
+        // qu'aucune attaque combinée n'attend.
         transferSourcesFor(char.row?.expedition_map, r.poi.id).some((src) =>
           src.ids.some((id) => !char.reservedIds.has(id)),
         ) ||
@@ -4763,42 +4539,27 @@ const quickMilitiaMin = computed(() =>
 );
 /** ➕ La sélection du renfort groupé (`reinforceSelection`), remise à zéro à chaque lieu. */
 const quickSel = ref<ReinfSelection>(emptyReinfSelection());
-/** ⏳ Dans combien de minutes la sélection part (0 = tout de suite). */
-const quickDelayMin = ref(0);
 watch(quickId, () => {
   quickSel.value = emptyReinfSelection();
-  quickDelayMin.value = 0;
 });
-/** Les places libres du lieu, MOINS celles que des départs programmés vers lui occupent déjà. */
+/** Les places libres du lieu. */
 const quickFree = computed(() => {
-  const taken = quickId.value ? plannedSeatsTo(char.plannedList, quickId.value) : null;
   return {
-    champ: Math.max(0, controlFreeSeats(quickPoi.value?.control) - (taken?.champ ?? 0)),
-    total: Math.max(0, garrisonFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
-    mil: Math.max(0, militiaFreeSeats(quickPoi.value?.control) - (taken?.total ?? 0)),
+    champ: controlFreeSeats(quickPoi.value?.control),
+    total: garrisonFreeSeats(quickPoi.value?.control),
+    mil: militiaFreeSeats(quickPoi.value?.control),
     // 🛡️ Les miliciens de la base partent même si le lieu est plein : demi-tour à l'arrivée
     // s'il l'est encore (prévoir une sortie : ils arrivent avant que les champions partent).
     milAnyway: militiaMayHead(quickPoi.value?.control),
   };
 });
-/** 🛡️ Les miliciens de la base qui ne sont pas réservés pour un départ programmé. */
-const milHomeFree = computed(() => Math.max(0, milHome.value - plannedMilitia(char.plannedList)));
-/** L'heure du départ programmé, lisible. */
-const quickDepartLabel = computed(() =>
-  quickDelayMin.value > 0
-    ? new Date(now.value + quickDelayMin.value * 60_000).toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null,
-);
 /** 🧭 Le trajet de chaque champion disponible jusqu'au lieu, seul (la règle d'un renfort). */
 const quickChampMin = computed<Record<string, number>>(() => {
   const p = quickPoi.value;
   if (!p) return {};
   return Object.fromEntries(freeSorted.value.map((a) => [a.id, legOfMember(a)(p)]));
 });
-/** 🧭 Le trajet de la sélection (le plus long, départ différé non compris) et son heure
+/** 🧭 Le trajet de la sélection (le plus long) et son heure
  *  d'arrivée — lus sur les mêmes arrivées que la tenue (`quickExtra`), donc ceux du départ réel. */
 const quickArrival = computed(() => {
   const p = quickPoi.value;
@@ -4808,32 +4569,18 @@ const quickArrival = computed(() => {
   if (heroAt !== null) arr.push({ id: 'hero', at: heroAt });
   if (!arr.length) return null;
   const last = Math.max(...arr.map((x) => x.at));
-  const start = coarseNow.value + quickDelayMin.value * 60_000;
+  const start = coarseNow.value;
   return {
     min: Math.max(0, Math.round((last - start) / 60_000)),
     at: new Date(last).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
 });
-/** ⏳ Les départs déjà programmés vers ce lieu. */
-const quickPlanned = computed(() =>
-  char.plannedList
-    .filter((m) => !m.recall && m.toId === quickId.value)
-    .map((m) => ({
-      id: m.id,
-      count: plannedCount(m),
-      departIn: formatDuration(Math.max(0, m.departAt - now.value)),
-      departAt: new Date(m.departAt).toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    })),
-);
-/** 🦸 L'heure d'arrivée du héros coché (null s'il ne part pas) : son trajet, après le départ
- *  différé — le calcul de la ligne du héros (`heroOfferFor`). */
+/** 🦸 L'heure d'arrivée du héros coché (null s'il ne part pas) : son trajet — le calcul de la
+ *  ligne du héros (`heroOfferFor`). */
 function quickHeroAt(): number | null {
   const min = quickHeroOffer.value?.min;
   if (!quickSel.value.hero || min === undefined) return null;
-  return coarseNow.value + (quickDelayMin.value + min) * 60_000;
+  return coarseNow.value + min * 60_000;
 }
 /** 🛡️ La tenue d'une sélection : ses arrivées, et le héros coché en route vers le lieu (la
  *  bataille le compte s'il arrive avant l'attaque, `heroAtAttack`). */
@@ -4864,8 +4611,7 @@ function quickDefense(p: Poi, sel: ReinfSelection) {
  *  ensemble (au pas du plus lent, `partyLegMin`), ceux d'un même lieu aussi (`legFromSpot`,
  *  la règle du transfert), les miliciens à leur pas. */
 function quickExtra(p: Poi, sel: ReinfSelection) {
-  // ⏳ Un départ programmé arrive d'autant plus tard.
-  const t = coarseNow.value + quickDelayMin.value * 60_000;
+  const t = coarseNow.value;
   const at = (min: number) => t + min * 60_000;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const legOf = (q: Poi, escort: Adventurer[]) =>
@@ -5216,44 +4962,11 @@ async function confirmRecall() {
 /** 🚀 Envoie toute la sélection : les champions de la base, les miliciens, puis un envoi par
  *  lieu d'origine — les actions du store, qui refusent ce qui ne passe pas. Au premier refus
  *  on s'arrête et on dit ce qui est parti. */
-/** ⏳ Annule un départ programmé vers le lieu ouvert. */
-async function quickCancel(id: string) {
-  const uid = auth.user?.id;
-  if (!uid || ctlBusy.value) return;
-  ctlBusy.value = true;
-  try {
-    if (await char.cancelPlannedMove(uid, id))
-      $q.notify({ type: 'info', message: '⏳ Départ programmé annulé.' });
-  } finally {
-    ctlBusy.value = false;
-  }
-}
 async function quickSend() {
   const uid = auth.user?.id;
   const p = quickPoi.value;
   const sel = quickSel.value;
   if (!uid || !p || ctlBusy.value || !reinfCount(sel)) return;
-  // ⏳ Programmé : rien ne part maintenant, la sélection est réservée jusqu'à l'heure dite.
-  if (quickDelayMin.value > 0) {
-    ctlBusy.value = true;
-    try {
-      const delay = quickDelayMin.value * 60_000;
-      const why = await char.scheduleReinforcement(uid, p.id, sel, delay, Date.now());
-      if (why) {
-        $q.notify({ type: 'warning', message: `Programmation impossible : ${why}` });
-        return;
-      }
-      const n = reinfCount(sel);
-      $q.notify({
-        type: 'positive',
-        message: `⏳ ${n} renfort${n > 1 ? 's' : ''} programmé${n > 1 ? 's' : ''} — départ dans ${formatDuration(delay)}`,
-      });
-      quickId.value = null;
-    } finally {
-      ctlBusy.value = false;
-    }
-    return;
-  }
   ctlBusy.value = true;
   let sent = 0;
   const fail = (why: string) =>
@@ -6054,8 +5767,6 @@ const {
   heroStayChoice,
   combined,
   wingPlan,
-  wingsTogether,
-  setWingsTogether,
   combinedBlock,
   originOptions,
   heroOriginId,
@@ -6291,30 +6002,6 @@ onUnmounted(() => {
 /* ⚔️🧭 Le plan d'une attaque combinée : une ligne par groupe. */
 .wing-plan {
   margin-top: 8px;
-}
-/* 🐢 Le choix du départ : deux tuiles côte à côte, cibles de 44 px. */
-.wing-mode {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin: 6px 0 2px;
-}
-.wing-mode-b {
-  min-height: 44px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--dim);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.wing-mode-b.on {
-  border-color: var(--accent);
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 }
 .wing-row {
   display: flex;
@@ -6848,16 +6535,6 @@ onUnmounted(() => {
 .ctl-plan-main {
   flex: 1;
   min-width: 0;
-}
-.ctl-plan-x {
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
 }
 .ctl-recall {
   width: 100%;

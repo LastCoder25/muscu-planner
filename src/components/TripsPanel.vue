@@ -124,7 +124,7 @@
         <span v-if="lt.line" class="tr-legs">{{ lt.line }}</span>
         <template v-else-if="t.legs && lt.key === lt.tripKey">
           <!-- ⏱️ La prochaine étape est dans le bandeau du bas : l'aller n'est redit que pour un
-               départ programmé, dont la tête décompte le départ. -->
+               départ en attente, dont la tête décompte le départ. -->
           <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
           <!-- Sur le retour, le bandeau du bas DIT déjà ce temps : pas de seconde ligne. -->
           <span v-if="t.legs.go || t.sea || !t.back || !t.total" class="tr-legs"
@@ -267,15 +267,6 @@
         </button>
       </div>
     </div>
-    <!-- ⏳ Un départ programmé s'annule depuis sa tuile : rien n'est encore parti. -->
-    <button
-      v-if="crew.cancelPlan"
-      type="button"
-      class="tc-recall"
-      @click="emit('cancelPlan', crew.cancelPlan)"
-    >
-      ✖ Annuler ce départ programmé
-    </button>
     <!-- 🔙 FAIRE DEMI-TOUR depuis la tuile (demandé) : même feuille que sur la carte, la page
          décide de ce qui peut rebrousser chemin (`recallable`). -->
     <button
@@ -337,8 +328,6 @@ export interface MapTrip {
   cat: TripCategory;
   /** ⏳ Programmé, pas encore parti (filtre « Programmés »). */
   pending?: boolean;
-  /** ⏳ Un départ programmé qu'on peut annuler : son id (`PlannedMove.id`). */
-  cancelPlan?: string;
   /** ✖ Mission ratée (rapport tombé) : la tuile le dit, pour voir ce qu'il faut refaire. */
   failed?: VoyageFailure | null;
   /** ⛵ Un voyage en MER d'une île à l'autre : `poi` n'est que le port d'ancrage. */
@@ -411,7 +400,6 @@ const emit = defineEmits<{
   recall: [key: string];
   boost: [key: string, id: BoostId];
   attack: [army: Poi];
-  cancelPlan: [id: string];
 }>();
 
 /** ⏱️ Une seule rangée, dans l'ordre d'arrivée : le retour en ville d'un voyage (`homeAt`, cf.
@@ -664,7 +652,6 @@ const crew = computed(() => {
     pending: !!t.pending,
     toBase: !!t.toBase,
     sea: t.sea ?? null,
-    cancelPlan: t.cancelPlan ?? null,
   };
 });
 </script>

@@ -40,14 +40,10 @@
           </span>
           <span class="gs-lab">{{ militia ? MILITIA_NAME : (advOf(c.id)?.name ?? '?') }}</span>
           <span class="gs-sub" :class="{ loss: c.state === 'here' && !!c.loss }">{{
-            stateSub(c.state, c.inMs) ?? (c.reserved ? '⏳' : c.loss ? `−${c.loss} %` : '')
+            stateSub(c.state, c.inMs) ?? (c.reserved ? '⚔️' : c.loss ? `−${c.loss} %` : '')
           }}</span>
           <span v-if="c.selected" class="gs-check">✓</span>
         </button>
-        <div v-else-if="c.kind === 'reserved'" class="gs-cell reserved" title="Réservée par un départ programmé">
-          <span class="gs-face">⏳</span>
-          <span class="gs-lab">Réservée</span>
-        </div>
         <button
           v-else
           type="button"
@@ -89,7 +85,9 @@ const emit = defineEmits<{ toggle: [id: string]; add: [] }>();
 const cols = computed(() => Math.min(5, stripColumns(props.cells)));
 const advOf = (id: string) => props.advs?.get(id);
 const freeLabel = computed(() =>
-  props.militia ? 'Place de milicien · envoyer en renfort' : 'Place de champion · envoyer en renfort',
+  props.militia
+    ? 'Place de milicien · envoyer en renfort'
+    : 'Place de champion · envoyer en renfort',
 );
 
 function stateSub(s: StripState, inMs: number): string | null {
@@ -107,7 +105,8 @@ function memberTitle(c: Extract<StripCell, { kind: 'member' }>) {
   if (c.reserved) return `${who} · ${c.reserved}`;
   if (c.state === 'away')
     return `${who} est en sortie · sa place l'attend (${stateSub(c.state, c.inMs)})`;
-  if (c.state === 'coming') return `${who} arrive dans ${formatDuration(c.inMs)} · touche pour le faire rebrousser chemin`;
+  if (c.state === 'coming')
+    return `${who} arrive dans ${formatDuration(c.inMs)} · touche pour le faire rebrousser chemin`;
   const loss = c.loss ? ` · sans lui, la tenue perd ${c.loss} %` : '';
   return `${who}${loss} · touche pour le ramener ou le remplacer`;
 }
@@ -219,10 +218,6 @@ button.gs-cell {
   font-size: 11px;
   font-weight: 800;
   color: var(--accent, #ffd23f);
-}
-.gs-cell.reserved {
-  border-style: dotted;
-  color: var(--dim);
 }
 .gs-cell.free {
   border-style: dashed;

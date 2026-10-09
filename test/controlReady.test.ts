@@ -24,34 +24,27 @@ describe('🏰 garnisons prêtes à sortir', () => {
   it('les champions postés sur un point tenu, ni blessés ni en route', () => {
     const m = world(['a', 'b', 'c']);
     const advs = [adv('a'), adv('b', { hurtUntil: 100 }), adv('c', { busyUntil: 100 }), adv('z')];
-    const r = readyGarrisons(m, advs, 50, new Set());
+    const r = readyGarrisons(m, advs, 50);
     expect(r.get(MINE)?.map((a) => a.id)).toEqual(['a']);
     // Plus tard, blessé soigné et arrivé : tous prêts.
     expect(
-      readyGarrisons(m, advs, 200, new Set())
+      readyGarrisons(m, advs, 200)
         .get(MINE)
         ?.map((a) => a.id),
     ).toEqual(['a', 'b', 'c']);
     // Un champion hors garnison n'y figure jamais.
-    expect(
-      [...readyGarrisons(m, advs, 200, new Set()).values()].flat().some((a) => a.id === 'z'),
-    ).toBe(false);
+    expect([...readyGarrisons(m, advs, 200).values()].flat().some((a) => a.id === 'z')).toBe(false);
   });
   it('les miliciens ne sortent pas', () => {
     const m = world(['a', 'mil:1']);
     expect(
-      readyGarrisons(m, [adv('a'), adv('mil:1')], 0, new Set())
+      readyGarrisons(m, [adv('a'), adv('mil:1')], 0)
         .get(MINE)
         ?.map((a) => a.id),
     ).toEqual(['a']);
   });
-  it('⏳ un membre attendu par un départ programmé (retour, transfert) ne sort pas', () => {
-    const m = world(['a', 'b']);
-    const r = readyGarrisons(m, [adv('a'), adv('b')], 0, new Set(['b']));
-    expect(r.get(MINE)?.map((a) => a.id)).toEqual(['a']);
-  });
   it('aucun point tenu : rien', () => {
-    expect(readyGarrisons(world([]), [adv('a')], 0, new Set()).size).toBe(0);
+    expect(readyGarrisons(world([]), [adv('a')], 0).size).toBe(0);
   });
 });
 
@@ -70,7 +63,7 @@ describe('👥 qui peut partir vers un lieu', () => {
     const m = world(['a']);
     const target = m.pois.find((p) => p.control?.owner === 'enemy' && !p.control.assault)!;
     expect(target).toBeTruthy();
-    const n = championsAbleToGo(0, readyGarrisons(m, [adv('a')], 0, new Set()), target.id);
+    const n = championsAbleToGo(0, readyGarrisons(m, [adv('a')], 0), target.id);
     expect(poiOffers(target, { heroAway: true, comptoirLevel: 0, advsAvailable: n }).party).toBe(
       true,
     );

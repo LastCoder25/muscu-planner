@@ -41,7 +41,6 @@ import {
   champsDefend,
 } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import { plannedTransferIds } from '@/lib/plannedMoves';
 import { heroPostOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
@@ -149,14 +148,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  quelqu'un change d'état — même principe que `freeKey` de la page. « Prêt à sortir » est
    *  la règle de la lib (`readyGarrisons`), partagée avec le grisage de la carte. */
   const garrisonKey = computed(() =>
-    [
-      ...readyGarrisons(
-        char.row?.expedition_map,
-        char.advList,
-        now.value,
-        plannedTransferIds(char.plannedList),
-      ),
-    ]
+    [...readyGarrisons(char.row?.expedition_map, char.advList, now.value)]
       .map(([id, ready]) => `${id}=${ready.map((a) => a.id).join(',')}`)
       .join('|'),
   );
@@ -248,24 +240,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** ⚔️🧭 Plusieurs départs : une attaque combinée. */
   const combined = computed(() => partyOrigins.value.length > 1);
-  /** 🐢 Attaque combinée « tous ensemble » : tout le monde part maintenant, les groupes plus
-   *  proches au pas du plus lointain ; le retour reste à leur pas. Sinon, chacun attend son
-   *  heure chez lui (il produit, il défend). Retenu par appareil. */
-  const TOGETHER_KEY = 'muscu:attack:together';
-  const wingsTogether = ref(false);
-  try {
-    wingsTogether.value = localStorage.getItem(TOGETHER_KEY) === '1';
-  } catch {
-    /* stockage indisponible : réglage par défaut */
-  }
-  function setWingsTogether(on: boolean) {
-    wingsTogether.value = on;
-    try {
-      localStorage.setItem(TOGETHER_KEY, on ? '1' : '0');
-    } catch {
-      /* stockage indisponible */
-    }
-  }
   /** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
    *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
    *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
@@ -713,9 +687,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     return byReach(
       rows.map((r) => ({
         ...r,
-        departInMin: wingsTogether.value ? 0 : longest - r.legMin,
-        // 🐢 Tous ensemble : l'aller s'étire jusqu'à l'arrivée commune.
-        outMin: wingsTogether.value ? longest : r.legMin,
+        departInMin: longest - r.legMin,
       })),
     );
   });
@@ -987,7 +959,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
             now: Date.now(),
             supplies: activeSupplies.value,
             ...(stayCap.value ? { stayIds: stayIds.value } : {}),
-            together: wingsTogether.value,
             ...(lateOk ? { lateOk: true } : {}),
           })
         : await char.sendParty(uid, poi, {
@@ -1123,8 +1094,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyGain,
     combined,
     wingPlan,
-    wingsTogether,
-    setWingsTogether,
     combinedBlock,
     originOptions,
     heroOriginId,

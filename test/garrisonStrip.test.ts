@@ -2,16 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { garrisonStrip, stripColumns } from '@/lib/garrisonStrip';
 
 describe('🏰 frise des places d’une garnison', () => {
-  it('une case par place : le héros en vaut deux, réservées et libres viennent de la fiche', () => {
+  it('une case par place : le héros en vaut deux, les libres viennent de la fiche', () => {
     const cells = garrisonStrip({
       hero: { state: 'here' },
       members: [{ id: 'a', state: 'here' }],
-      reserved: 1,
       free: 1,
       selected: [],
     });
-    expect(cells.map((c) => c.kind)).toEqual(['hero', 'member', 'reserved', 'free']);
-    expect(stripColumns(cells)).toBe(5);
+    expect(cells.map((c) => c.kind)).toEqual(['hero', 'member', 'free']);
+    expect(stripColumns(cells)).toBe(4);
   });
 
   it('range les présents, puis ceux qui arrivent (le plus proche d’abord), puis ceux en sortie', () => {
@@ -22,7 +21,6 @@ describe('🏰 frise des places d’une garnison', () => {
         { id: 'ici', state: 'here' },
         { id: 'pres', state: 'coming', inMs: 100 },
       ],
-      reserved: 0,
       free: 0,
       selected: [],
     });
@@ -34,20 +32,17 @@ describe('🏰 frise des places d’une garnison', () => {
     ]);
   });
 
-  it('on ne choisit ni un membre en sortie ni un membre réservé par un départ programmé', () => {
+  it('on ne choisit ni un membre en sortie ni un membre réservé par une attaque combinée', () => {
     const cells = garrisonStrip({
       members: [
         { id: 'ici', state: 'here' },
         { id: 'sortie', state: 'away' },
-        { id: 'parti', state: 'here', reserved: '⏳ part à 18:00' },
+        { id: 'parti', state: 'here', reserved: '⚔️ part à 18:00' },
       ],
-      reserved: 0,
       free: 0,
       selected: ['ici'],
     });
-    const by = Object.fromEntries(
-      cells.flatMap((c) => (c.kind === 'member' ? [[c.id, c]] : [])),
-    );
+    const by = Object.fromEntries(cells.flatMap((c) => (c.kind === 'member' ? [[c.id, c]] : [])));
     expect(by.ici.selectable && by.ici.selected).toBe(true);
     expect(by.sortie.selectable).toBe(false);
     expect(by.parti.selectable).toBe(false);
@@ -56,7 +51,6 @@ describe('🏰 frise des places d’une garnison', () => {
   it('sans limite (forteresse) : une seule case « ＋ », quel que soit le compte libre', () => {
     const cells = garrisonStrip({
       members: [],
-      reserved: 0,
       free: 7,
       unlimited: true,
       selected: [],
@@ -68,7 +62,6 @@ describe('🏰 frise des places d’une garnison', () => {
   it('un temps négatif (horloge en retard) ne s’affiche jamais', () => {
     const [c] = garrisonStrip({
       members: [{ id: 'x', state: 'coming', inMs: -500 }],
-      reserved: 0,
       free: 0,
       selected: [],
     });
