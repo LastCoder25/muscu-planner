@@ -43,7 +43,13 @@ import {
   unitEffects,
   type EscortKit,
 } from './caravan';
-import { ADV_GEAR_SLOTS, canWearAdvGear, type AdvGear, type AdvGearSlot } from './advGear';
+import {
+  ADV_GEAR_SLOTS,
+  awakenAllAdvGear,
+  canWearAdvGear,
+  type AdvGear,
+  type AdvGearSlot,
+} from './advGear';
 import { beyondCap, buildingUpgradeCost } from './buildings';
 import {
   MILITIA,
@@ -2457,6 +2463,34 @@ export function autoAdvGear(
     }
   }
   return out;
+}
+
+/**
+ * ✨ TOUT FUSIONNER = ÉQUIPER PUIS FONDRE (v1.106.11, décision de l'utilisateur : « que les
+ * champions soient tous équipés, puis fusionner les doublons sur les items équipés »).
+ *
+ * ⚠️ L'ORDRE EST TOUTE LA RÈGLE : « Confier au mieux » (`autoAdvGear`) d'abord, pour qu'une
+ * pièce libre qui peut remplir un emplacement aille sur un champion au lieu d'être fondue ;
+ * puis l'éveil (`awakenAllAdvGear`) fond les doublons qui restent dans les pièces portées,
+ * la plus avancée d'abord. Les deux plans existants, enchaînés — aucune règle nouvelle.
+ * ⚠️ Comme « Confier au mieux », il REMPLACE les choix faits à la main.
+ * ⚠️ La réserve du plan d’éveil (`advGearAwakenPlan`) protège DÉJÀ une copie libre dont un
+ * champion nu a besoin : fondre d’abord donne alors le même stock (mutation mesurée,
+ * équivalente). L’ordre reste celui de la règle — c’est lui que l’écran annonce.
+ */
+export function equipThenMerge(
+  advs: Adventurer[],
+  kit: EscortKit,
+): {
+  advs: Adventurer[];
+  stock: AdvGear[];
+  merged: number;
+  worn: number;
+  locked: number;
+} {
+  const plan = autoAdvGear(advs, kit);
+  const equipped = advs.map((a) => ({ ...a, gear: plan.get(a.id) ?? {} }));
+  return { advs: equipped, ...awakenAllAdvGear(kit.advGear, equipped) };
 }
 
 /**

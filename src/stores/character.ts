@@ -254,6 +254,7 @@ import {
   rushRepairCost,
   totalRepairCost,
   autoAdvGear,
+  equipThenMerge,
   retireKennel,
   healCost,
   woundRemainingMs,
@@ -325,7 +326,6 @@ import {
   normalizeAdvGearState,
   advGearAwakenPlan,
   awakenAdvGear,
-  awakenAllAdvGear,
   stripAdvGear,
   advGearNextRank,
   advGearRankCap,
@@ -1833,7 +1833,7 @@ export const useCharacterStore = defineStore('character', () => {
         }
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
-        const piece = gachaPiece(advs);
+        const piece = gachaPiece(advs, cur.adv_gear?.stock ?? [], pieces);
         pieces.push(piece);
         results.push({
           grade: piece.grade,
@@ -1861,8 +1861,16 @@ export const useCharacterStore = defineStore('character', () => {
   /** La pièce d'un tirage B — sa LETTRE est tirée à part (`rollGearGrade`) : les pièces A
    *  et S sortent des tirages B (décision de l'utilisateur). `rollGachaPiece` est la seule
    *  source d'équipement de champion. */
-  function gachaPiece(advs: Adventurer[]): Omit<AdvGear, 'id'> {
-    return rollGachaPiece(Math.random, advs, { grade: rollGearGrade(Math.random) });
+  function gachaPiece(
+    advs: Adventurer[],
+    stock: AdvGear[],
+    pending: Omit<AdvGear, 'id'>[],
+  ): Omit<AdvGear, 'id'> {
+    return rollGachaPiece(Math.random, advs, {
+      grade: rollGearGrade(Math.random),
+      stock,
+      pending,
+    });
   }
 
   /** Un tirage à l'unité. */
@@ -3754,9 +3762,14 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<{ merged: number; worn: number; locked: number }> {
     const cur = row.value;
     if (!cur) return { merged: 0, worn: 0, locked: 0 };
-    const out = awakenAllAdvGear(cur.adv_gear?.stock ?? [], cur.adventurers ?? []);
+    // ✨ Équiper d'abord, fondre ensuite (`equipThenMerge`) — vivier et stock dans la MÊME
+    // écriture : séparés, une coupure laisserait des pièces fondues encore assignées.
+    const out = equipThenMerge(cur.adventurers ?? [], escortKitOf(cur));
     if (out.merged)
-      await persist(userId, { adv_gear: { ...(cur.adv_gear ?? {}), stock: out.stock } });
+      await persist(userId, {
+        adventurers: out.advs,
+        adv_gear: { ...(cur.adv_gear ?? {}), stock: out.stock },
+      });
     return { merged: out.merged, worn: out.worn, locked: out.locked };
   }
 

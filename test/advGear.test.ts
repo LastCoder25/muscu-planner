@@ -172,7 +172,7 @@ describe('🎰 la pièce d’un tirage B — la SEULE source d’équipement de 
       const v = vivier(L);
       const lignees = new Set(v.map(lineageOf));
       for (let s = 1; s <= 80; s++) {
-        const g = rollGachaPiece(mulberry32(s * 7919 + L), v, { grade: 'B' });
+        const g = rollGachaPiece(mulberry32(s * 7919 + L), v, { grade: 'B', stock: [] });
         expect(g.grade).toBe('B');
         expect(lignees.has(g.lineage)).toBe(true);
         // ⚠️ Décision de l'utilisateur : une pièce naît au PREMIER rang, ★1 — le rang se
@@ -189,7 +189,7 @@ describe('🎰 la pièce d’un tirage B — la SEULE source d’équipement de 
   it('une pièce tirée est exactement le modèle Bronze ★1 de sa lignée et de son emplacement', () => {
     const recrue = { ...adv('r', ['archer']), level: 60 };
     for (let s = 1; s <= 100; s++) {
-      const g = rollGachaPiece(mulberry32(s), [recrue], { grade: 'B' });
+      const g = rollGachaPiece(mulberry32(s), [recrue], { grade: 'B', stock: [] });
       expect(g.rarity).toBe('commun');
       expect(g).toEqual(
         makeAdvGear({ lineage: 'archer', slot: g.slot, rank: 'commun', grade: 'B' }),
@@ -198,7 +198,7 @@ describe('🎰 la pièce d’un tirage B — la SEULE source d’équipement de 
   });
   it('un compte SANS champion reçoit quand même une pièce (le premier tirage ne rend pas du vide)', () => {
     for (let s = 1; s <= 50; s++) {
-      const g = rollGachaPiece(mulberry32(s), [], { grade: 'B' });
+      const g = rollGachaPiece(mulberry32(s), [], { grade: 'B', stock: [] });
       expect(Object.keys(LINEAGE_GEAR)).toContain(g.lineage);
       expect(g.rarity).toBe(RANK_ORDER[0]);
     }

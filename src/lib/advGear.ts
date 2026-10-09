@@ -369,9 +369,16 @@ export function makeAdvGear(opts: {
  * 🎰 LA PIÈCE D'UN TIRAGE B — la SEULE source d'équipement de champion (v0.1012, décision de
  * l'utilisateur : « les items de champions ne peuvent venir QUE du tirage gacha »).
  *
- * - Lignée tirée parmi celles du vivier (jamais une lignée qu'on ne possède pas) ; vivier
- *   vide → parmi toutes, sinon le tout premier tirage d'un compte ne rendrait rien.
- * - Emplacement tiré.
+ * - 🧩 LES TROUS D'ABORD (v1.106.11, décision de l'utilisateur : « que les champions soient
+ *   tous équipés », tirage FORCÉ) : tant qu'un champion a un emplacement vide que rien
+ *   d'en stock ne peut remplir (`gearGaps`), la pièce est tirée parmi ces trous. Mesuré
+ *   sur le compte réel : 11 emplacements vides (archers, caravanier, mages) pendant que les
+ *   10 pièces libres étaient toutes de guerrier ou d'homme d'armes — le tirage libre
+ *   remplissait les lignées déjà servies.
+ * - Sinon : lignée tirée parmi celles du vivier (jamais une lignée qu'on ne possède pas) ;
+ *   vivier vide → parmi toutes, sinon le tout premier tirage d'un compte ne rendrait rien.
+ *   Emplacement tiré.
+ * - ⚠️ La LETTRE ne change pas : seule la DESTINATION de la pièce est guidée.
  * - ⚠️ TOUJOURS BRONZE ★1 (décision de l'utilisateur, 2026-09-21 ; override la spec
  *   « rang = celui du joueur ») : une pièce ne naît jamais au-dessus du premier rang. Le
  *   rang se GAGNE ensuite — niveau en combattant avec son porteur, puis ascension. Tirée
@@ -382,11 +389,63 @@ export function makeAdvGear(opts: {
 export function rollGachaPiece(
   rng: () => number,
   advs: Adventurer[],
-  opts: { grade: GearGrade },
+  opts: {
+    grade: GearGrade;
+    /** ⚠️ REQUIS : sans lui, aucun trou n'est vu et le tirage redevient aveugle. */
+    stock: AdvGear[];
+    /** Les pièces déjà tirées dans le MÊME lot, pas encore en stock : sans elles, un ×10
+     *  remplirait dix fois le même trou. */
+    pending?: Pick<AdvGear, 'lineage' | 'slot' | 'rarity'>[];
+  },
 ): Omit<AdvGear, 'id'> {
+  const gaps = gearGaps(advs, opts.stock, opts.pending ?? []);
+  if (gaps.length) {
+    const gap = gaps[Math.floor(rng() * gaps.length)]!;
+    return makeAdvGear({ ...gap, rank: RANK_ORDER[0]!, grade: opts.grade });
+  }
   const lineage = pickLineage(rng, advs) ?? LINEAGES[Math.floor(rng() * LINEAGES.length)]!;
   const slot = ADV_GEAR_SLOTS[Math.floor(rng() * ADV_GEAR_SLOTS.length)]!;
   return makeAdvGear({ lineage, slot, rank: RANK_ORDER[0]!, grade: opts.grade });
+}
+
+/**
+ * 🧩 LES TROUS DU VIVIER — un trou par emplacement vide qu'aucune pièce LIBRE ne peut
+ * remplir, rendu sous forme (lignée, emplacement), répété autant de fois qu'il manque de
+ * pièces (un tirage uniforme dans la liste favorise donc le trou le plus profond).
+ *
+ * « Vide » = rien de RÉELLEMENT porté là (`wornGear`, la règle du combat). « Libre » = en
+ * stock et porté par personne, plus les pièces `pending` du même lot. ⚠️ Une pièce libre ne
+ * bouche le trou que si un des champions concernés peut la porter (une pièce montée plus
+ * haut que leur classe ne compte pas).
+ */
+export function gearGaps(
+  advs: Adventurer[],
+  stock: AdvGear[],
+  pending: Pick<AdvGear, 'lineage' | 'slot' | 'rarity'>[] = [],
+): { lineage: Lineage; slot: AdvGearSlot }[] {
+  const worn = wornGear(advs, stock);
+  const wornIds = new Set([...worn.values()].flat().map((x) => x.id));
+  const free: Pick<AdvGear, 'lineage' | 'slot' | 'rarity'>[] = [
+    ...stock.filter((x) => !wornIds.has(x.id)),
+    ...pending,
+  ];
+  const out: { lineage: Lineage; slot: AdvGearSlot }[] = [];
+  for (const lineage of LINEAGES) {
+    const team = advs.filter((a) => lineageOf(a) === lineage);
+    if (!team.length) continue;
+    for (const slot of ADV_GEAR_SLOTS) {
+      const empty = team.filter((a) => !(worn.get(a.id) ?? []).some((x) => x.slot === slot));
+      if (!empty.length) continue;
+      const fills = free.filter(
+        (x) =>
+          x.lineage === lineage &&
+          x.slot === slot &&
+          empty.some((a) => RARITY_RANK[x.rarity] <= RARITY_RANK[advRarity(a)]),
+      ).length;
+      for (let n = empty.length - fills; n > 0; n--) out.push({ lineage, slot });
+    }
+  }
+  return out;
 }
 
 /** ✨ Éveil des objets : 5 crans (spec § 4), au MÊME pas que celui des champions
@@ -884,7 +943,20 @@ export function advGearAwakenPlan(
   const at = keepIndex(copies);
   if (at < 0) return null;
   const keep = copies[at]!;
-  const free = copies.slice(at + 1).filter((x) => !worn.has(x.id) && !x.locked);
+  // 🧩 RÉSERVE (v1.106.11) : un champion de la lignée dont cet emplacement est VIDE a droit
+  // à une copie avant qu'on la fonde — équiper passe avant éveiller. Les mieux placées
+  // sont gardées ; si la pièce gardée est elle-même libre, c'est elle qui sert la 1re place.
+  const want = advs.filter(
+    (a) =>
+      lineageOf(a) === keep.lineage &&
+      !(a.gear?.[keep.slot] && worn.has(a.gear[keep.slot]!)) &&
+      canWearAdvGear(a, keep),
+  ).length;
+  const reserve = Math.max(0, want - (worn.has(keep.id) ? 0 : 1));
+  const free = copies
+    .slice(at + 1)
+    .filter((x) => !worn.has(x.id) && !x.locked)
+    .slice(reserve);
   const consume = free[free.length - 1];
   return consume ? { keep, consume, spare: free.length } : null;
 }

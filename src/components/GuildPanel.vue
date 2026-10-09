@@ -1006,7 +1006,7 @@ import {
   engageCap,
 } from '@/lib/adventurers';
 import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
-import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
+import { adventurerPowers, adventurerGearPower, autoAdvGear, equipThenMerge } from '@/lib/raid';
 import {
   champShowK,
   champStat,
@@ -1040,7 +1040,6 @@ import {
   wornGear,
   ADV_GEAR_AWAKEN,
   advGearAwakenPlan,
-  awakenAllAdvGear,
   countAssignedGear,
   advGearNextRank,
   type AdvGear,
@@ -1654,7 +1653,7 @@ const stockWornCount = computed(() => countAssignedGear(char.advList));
 /** ✨ Ce que « Tout fusionner » ferait. ⚠️ La MÊME fonction que le geste : l'aperçu ne peut
  *  pas promettre autre chose que ce que le bouton fait. Ne dépend pas de l'horloge du
  *  panneau — il ne se recalcule qu'au changement du stock ou du vivier. */
-const mergePreview = computed(() => awakenAllAdvGear(char.advGearStock, char.advList));
+const mergePreview = computed(() => equipThenMerge(char.advList, compCtx.value));
 /** ⚠️ Un bouton grisé DIT pourquoi : sans ça, « rien ne se passe » se lit comme une panne —
  *  et le cas courant est que les doublons soient portés. */
 const mergeSub = computed(() => {
@@ -1685,7 +1684,7 @@ function doMergeGear() {
   if (!m.merged) return;
   $q.dialog({
     title: '✨ Tout fusionner',
-    message: `${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé encore sous ✨${ADV_GEAR_AWAKEN.max} de chaque modèle (porté ou non) : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
+    message: `Tes champions sont d’abord équipés au mieux (comme « Confier au mieux » : les choix faits à la main sont remplacés), puis ${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé encore sous ✨${ADV_GEAR_AWAKEN.max} de chaque modèle (porté ou non) : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
     cancel: true,
   }).onOk(() => {
     void pair(async (uid) => {
