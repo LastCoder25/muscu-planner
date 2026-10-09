@@ -238,7 +238,7 @@ import { championOutpostMult } from '@/lib/caravan';
 import { altarLuckBonus } from '@/lib/items';
 import { GACHA } from '@/lib/gacha';
 import { buildTickets } from '@/lib/sportTickets';
-import { emptySeals, readyAscensionIds } from '@/lib/ascension';
+import { readyAscensionIds } from '@/lib/ascension';
 import {
   perLevelLabel,
   BUILD,
@@ -356,8 +356,6 @@ const gearSummary = computed(() => {
 const ascReady = computed(() => {
   const r = readyAscensionIds(char.advList, char.advGearStock, {
     pantheonLevel: char.pantheonLevel,
-    seals: char.row?.seals ?? emptySeals(),
-    gold: char.row?.gold ?? 0,
   });
   return { champions: r.champions.size, gear: r.gear.size };
 });

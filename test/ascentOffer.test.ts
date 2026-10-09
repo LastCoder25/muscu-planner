@@ -9,7 +9,9 @@ import {
   ascensionCost,
   championAscentOffer,
   emptySeals,
+  gearAscensionPossible,
   gearAscentOffer,
+  readyAscensionIds,
 } from '@/lib/ascension';
 import { advGearRankCap, makeAdvGear, type AdvGear } from '@/lib/advGear';
 import { advXpToNext, type Adventurer } from '@/lib/adventurers';
@@ -91,5 +93,33 @@ describe('⬆️ l’offre d’ascension d’une pièce', () => {
     const o = gearAscentOffer(g, { ...base, advs: [adv(10)], stock: [g] })!;
     expect(o.block).toBe('wearer');
     expect(o.why).toBe(GEAR_ASCENSION_BLOCK_LABEL.wearer);
+  });
+});
+
+describe('⬆️ « peut faire l’ascension » ne regarde pas les ressources (2026-10-09)', () => {
+  it('un champion à ★5 s’annonce sans or ni sceaux', () => {
+    const r = readyAscensionIds([pret()], [], { pantheonLevel: 100 });
+    expect(r.champions.has('a')).toBe(true);
+  });
+  it('mais pas si le Panthéon ne le laisse pas monter, ni avant ★5', () => {
+    expect(readyAscensionIds([pret()], [], { pantheonLevel: 10 }).champions.size).toBe(0);
+    expect(readyAscensionIds([adv(9)], [], { pantheonLevel: 100 }).champions.size).toBe(0);
+  });
+  it('une pièce à ★5 portée par un champion qui sait porter le rang suivant : oui, sans ressources', () => {
+    const g = piece(10);
+    const advs = [adv(20, ['guerrier', 'epeiste'], { weapon: 'p' })];
+    expect(gearAscensionPossible(g, advs, [g])).toBe(true);
+    expect(readyAscensionIds(advs, [g], { pantheonLevel: 100 }).gear.has('p')).toBe(true);
+  });
+  it('une pièce que son porteur ne saurait plus porter : non', () => {
+    const g = piece(10);
+    const advs = [adv(10, ['guerrier'], { weapon: 'p' })];
+    expect(gearAscensionPossible(g, advs, [g])).toBe(false);
+    expect(readyAscensionIds(advs, [g], { pantheonLevel: 100 }).gear.size).toBe(0);
+  });
+  it('une pièce pas encore à ★5 : non', () => {
+    const g = piece(9);
+    const advs = [adv(20, ['guerrier', 'epeiste'], { weapon: 'p' })];
+    expect(gearAscensionPossible(g, advs, [g])).toBe(false);
   });
 });

@@ -35,7 +35,6 @@ export const emptySeals = (): Seals => ({ champion: {}, gear: {} });
  *  lieu tenu qui en produit) rejoint la réserve commune. */
 const SEAL_KEY = 0;
 
-
 const ASCENSION = {
   /** Or d'une ascension = ce que coûte un cran de BÂTIMENT au premier niveau du rang visé,
    *  divisé par ce facteur. ⚠️ Adossé au puits d'or du projet (`buildingUpgradeCost`) plutôt
@@ -189,16 +188,16 @@ export function sealsSummary(seals: Seals, kind: SealKind): { total: number } {
   return { total: sealCount(seals, kind, SEAL_KEY) };
 }
 
-/** ⬆️ Combien d'ascensions sont PAYABLES tout de suite (champions + pièces) — ce qui allume
- *  la tuile du Panthéon sur la Base. ⚠️ Lu par les MÊMES refus que les boutons
- *  (`ascensionBlocker`, `advGearAscensionBlocker`) : la pastille ne peut pas promettre une
- *  ascension que la Guilde refuserait. ⚠️ Le coût s'additionne : deux ascensions payables
- *  séparément ne le sont pas forcément ensemble — la pastille dit « il y a à faire », pas
- *  « tout est payable ». */
+/** ⬆️ Combien d'ascensions sont POSSIBLES (champions + pièces) — ce qui allume la tuile du
+ *  Panthéon sur la Base. ⚠️ SANS regarder les ressources (décision de l'utilisateur,
+ *  2026-10-09) : un champion ou une pièce à ★5 que rien d'autre ne bloque s'annonce, même
+ *  s'il manque de l'or ou des sceaux — le bouton dit alors ce qui manque. Les refus
+ *  STRUCTURELS restent ceux des boutons (`ascensionBlocker`, `advGearAscensionBlocker`) :
+ *  pas encore ★5, sommet, Panthéon trop bas, aucun porteur pour le rang suivant. */
 export function readyAscensions(
   advs: Adventurer[],
   stock: AdvGear[],
-  ctx: { pantheonLevel: number; seals: Seals; gold: number },
+  ctx: { pantheonLevel: number },
 ): number {
   const r = readyAscensionIds(advs, stock, ctx);
   return r.champions.size + r.gear.size;
@@ -212,21 +211,38 @@ export function readyAscensions(
 export function readyAscensionIds(
   advs: Adventurer[],
   stock: AdvGear[],
-  ctx: { pantheonLevel: number; seals: Seals; gold: number },
+  ctx: { pantheonLevel: number },
 ): { champions: Set<string>; gear: Set<string> } {
   const champions = new Set<string>();
   const gear = new Set<string>();
-  for (const a of advs) if (ascensionBlocker(a, ctx) == null) champions.add(a.id);
-  for (const g of stock)
-    if (
-      advGearAscensionBlocker(g, {
-        rankCap: advGearRankCap(g, advs, stock),
-        seals: ctx.seals,
-        gold: ctx.gold,
-      }) == null
-    )
-      gear.add(g.id);
+  // On rejoue les refus avec une bourse VIDE : les blocages structurels passent AVANT les
+  // ressources dans les deux règles, donc un refus « sceaux » ou « or » veut dire « possible ».
+  const broke = { seals: emptySeals(), gold: 0 };
+  for (const a of advs) {
+    const b = ascensionBlocker(a, { ...broke, pantheonLevel: ctx.pantheonLevel });
+    if (b == null || RESOURCE_BLOCKS.has(b)) champions.add(a.id);
+  }
+  for (const g of stock) if (gearAscensionPossible(g, advs, stock)) gear.add(g.id);
   return { champions, gear };
+}
+
+/** Refus qui ne disent QUE « il manque des ressources ». */
+const RESOURCE_BLOCKS = new Set<string>(['seals', 'gold']);
+
+/** 🗡️ La pièce peut-elle monter de rang, ressources mises à part ? Vrai à ★5 de son rang,
+ *  sous le sommet, ET si son porteur (sinon le meilleur champion de sa lignée) sait porter
+ *  le rang suivant — sinon l'ascension la ferait tomber de son porteur. */
+export function gearAscensionPossible(
+  g: AdvGear,
+  advs: readonly Adventurer[],
+  stock: readonly AdvGear[],
+): boolean {
+  const b = advGearAscensionBlocker(g, {
+    rankCap: advGearRankCap(g, [...advs], [...stock]),
+    seals: emptySeals(),
+    gold: 0,
+  });
+  return b == null || RESOURCE_BLOCKS.has(b);
 }
 
 // ── ⬆️ L'OFFRE D'ASCENSION, prête à afficher (2026-09-28) ─────────────────────────────────

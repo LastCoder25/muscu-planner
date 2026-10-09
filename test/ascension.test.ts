@@ -126,7 +126,9 @@ describe('le coût', () => {
   it('l’or est adossé au puits des bâtiments, au 1er niveau du rang visé', () => {
     for (const r of [1, 3, 6, 9])
       // ⚠️ ÷ 20/3 depuis la v1.51 (or ×0,6, décision de l'utilisateur ; c'était ÷ 4).
-      expect(ascensionCost(r).gold).toBe(Math.round(buildingUpgradeCost(rankStartLevel(r)) / (20 / 3)));
+      expect(ascensionCost(r).gold).toBe(
+        Math.round(buildingUpgradeCost(rankStartLevel(r)) / (20 / 3)),
+      );
   });
 
   it('les sceaux : 4 × le rang visé (Argent 4, Or 8… Tout-puissant 36)', () => {
@@ -219,17 +221,14 @@ describe('⬆️ on SAIT qu’un champion attend son ascension', () => {
     const bloque = grantAdvXp(adv(9, 0), 1_000_000, 100);
     expect(advProgressOf([bloque], [grantAdvXp(bloque, 5000, 100)])).toEqual([]);
   });
-  it('la Base compte les ascensions PAYABLES, avec les mêmes refus que les boutons', () => {
-    const seals = addSeals(emptySeals(), 'champion', 1, 5);
-    const ctx = { pantheonLevel: 100, seals, gold: 1e12 };
+  it('la Base compte les ascensions POSSIBLES, ressources mises à part', () => {
+    const ctx = { pantheonLevel: 100 };
     expect(readyAscensions([pret(), adv(5, 0)], [], ctx)).toBe(1);
-    expect(readyAscensions([pret()], [], { ...ctx, gold: 0 })).toBe(0);
-    expect(readyAscensions([pret()], [], { ...ctx, seals: emptySeals() })).toBe(0);
+    expect(readyAscensions([pret()], [], { pantheonLevel: 9 })).toBe(0);
   });
 
   it('le Panthéon montre QUI peut monter — les mêmes que la pastille compte', () => {
-    const seals = addSeals(emptySeals(), 'champion', 1, 5);
-    const ctx = { pantheonLevel: 100, seals, gold: 1e12 };
+    const ctx = { pantheonLevel: 100 };
     const ready = { ...pret(), id: 'pret' };
     const early = { ...adv(5, 0), id: 'tot' };
     const ids = readyAscensionIds([ready, early], [], ctx);

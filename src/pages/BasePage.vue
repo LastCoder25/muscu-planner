@@ -1077,7 +1077,6 @@ import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
-import { emptySeals } from '@/lib/ascension';
 import { pantheonLights } from '@/lib/pantheonLights';
 import { normalizeRuneBank } from '@/lib/runeBank';
 
@@ -1906,8 +1905,6 @@ const pantheonLit = computed(() =>
     advs: char.advList,
     stock: char.advGearStock,
     pantheonLevel: char.pantheonLevel,
-    seals: char.row?.seals ?? emptySeals(),
-    gold: char.row?.gold ?? 0,
     runes: char.row?.runes ?? normalizeRuneBank(null),
     tickets: char.row?.gacha_tickets ?? 0,
     mana: char.row?.mana ?? 0,

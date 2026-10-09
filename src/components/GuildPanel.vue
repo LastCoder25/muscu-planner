@@ -993,6 +993,7 @@ import {
   championAscentOffer,
   emptySeals,
   gearAscentOffer,
+  gearAscensionPossible,
   readyAscensionIds,
 } from '@/lib/ascension';
 import {
@@ -1331,9 +1332,12 @@ const stockTab = ref<'free' | 'worn' | 'asc' | null>('worn');
 // « Disponibles » tout en l'y affichant « portée par X » avec son bouton vendre grisé.
 const stockWorn = computed(() => stockSorted.value.filter((g) => !!ownerOf(g)));
 const stockFree = computed(() => stockSorted.value.filter((g) => !ownerOf(g)));
-/** ⬆️ Les pièces à ★5 de leur rang, payables ou non — la MÊME condition que le bouton ⬆️
- *  de la tuile (`gearAscent`), jamais une seconde règle. */
-const stockAsc = computed(() => stockSorted.value.filter((g) => gearAscent(g) != null));
+/** ⬆️ Les pièces qui PEUVENT monter de rang, payables ou non : à ★5 de leur rang ET dont le
+ *  porteur (sinon le meilleur de la lignée) sait porter le rang suivant — demandé par
+ *  l'utilisateur. Même règle que la boule du Panthéon (`gearAscensionPossible`). */
+const stockAsc = computed(() =>
+  stockSorted.value.filter((g) => gearAscensionPossible(g, char.advList, char.advGearStock)),
+);
 const stockShown = computed(() => {
   if (stockTab.value === null) return stockSorted.value;
   return { worn: stockWorn, free: stockFree, asc: stockAsc }[stockTab.value].value;
@@ -1467,8 +1471,6 @@ const pantheonLevel = computed(() => char.pantheonLevel);
 const ascReady = computed(() =>
   readyAscensionIds(char.advList, char.advGearStock, {
     pantheonLevel: pantheonLevel.value,
-    seals: char.row?.seals ?? emptySeals(),
-    gold: char.row?.gold ?? 0,
   }),
 );
 const ascChampions = computed(() => roster.value.filter((a) => ascReady.value.champions.has(a.id)));
