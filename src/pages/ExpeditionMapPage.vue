@@ -1755,6 +1755,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import {
   attackReservedIds,
+  attackHeroWaitingAt,
   attackWingVoyages,
   combinedColors,
   combinedKey,
@@ -4790,6 +4791,7 @@ const ctlRoster = computed(() =>
     coarseNow.value,
     heroLevel.value,
     attackReservedIds(char.attackList),
+    attackHeroWaitingAt(char.attackList),
   ),
 );
 /** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */

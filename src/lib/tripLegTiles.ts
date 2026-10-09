@@ -136,6 +136,50 @@ export function toggleLeg(
 export const legPillOn = (sel: LegSelection, leg: TripLeg, present: readonly TripLeg[]): boolean =>
   !allLegsOn(sel, present) && sel.has(leg);
 
+/**
+ * ➡️↩️ LA PASTILLE DES ÉTAPES N'A QUE DEUX BOUTONS : l'ALLER (attente, trajet aller, fouille —
+ * tout ce qui précède le retour) et le RETOUR (2026-10-09, demandé : « dans la pastille, ce sont
+ * les deux icônes aller et retour »). Le ⏳ et le ⚔️ y faisaient doublon avec les catégories
+ * de gauche (Programmés, Ennemis). Le filtre reste par étape : un bouton allume ou éteint
+ * toutes les étapes de son groupe.
+ */
+export type LegGroup = 'out' | 'back';
+export const LEG_GROUPS: Record<LegGroup, readonly TripLeg[]> = {
+  out: ['wait', 'go', 'dwell'],
+  back: ['back'],
+};
+export const LEG_GROUP_PILL: Record<LegGroup, { icon: string; label: string }> = {
+  out: { icon: '➡️', label: 'Aller' },
+  back: { icon: '↩️', label: 'Retour' },
+};
+const groupLegs = (g: LegGroup, present: readonly TripLeg[]) =>
+  LEG_GROUPS[g].filter((l) => present.includes(l));
+/** Les groupes qui ont au moins une étape présente, dans l'ordre aller → retour. */
+export const presentLegGroups = (present: readonly TripLeg[]): LegGroup[] =>
+  (['out', 'back'] as const).filter((g) => groupLegs(g, present).length > 0);
+/** Allumé seulement quand il FILTRE (même règle que `legPillOn`). */
+export const legGroupPillOn = (
+  sel: LegSelection,
+  g: LegGroup,
+  present: readonly TripLeg[],
+): boolean => !allLegsOn(sel, present) && groupLegs(g, present).some((l) => sel.has(l));
+/** 🎯 Toucher un groupe : tout affiché → lui seul ; allumé → on l'éteint ; sans rien de choisi,
+ *  tout revient (`toggleLeg`, appliqué au groupe). */
+export function toggleLegGroup(
+  sel: LegSelection,
+  g: LegGroup,
+  present: readonly TripLeg[],
+): LegSelection {
+  const legs = groupLegs(g, present);
+  if (!legs.length) return sel;
+  if (presentLegGroups(present).length > 1 && allLegsOn(sel, present)) return new Set(legs);
+  const next = new Set(sel);
+  if (legs.some((l) => next.has(l))) for (const l of legs) next.delete(l);
+  else for (const l of legs) next.add(l);
+  return present.some((l) => next.has(l)) ? next : new Set(present);
+}
+
+
 /** ⚠️ Une étape choisie qui n'a plus rien (le dernier aller est arrivé) retombe sur toutes,
  *  au lieu d'une rangée vide qui se lirait comme « aucun voyage » (même règle que les
  *  catégories, `shownTripCats`). Une rangée vidée par le joueur (rien de coché) reste vide. */

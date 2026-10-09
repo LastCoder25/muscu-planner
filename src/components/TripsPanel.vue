@@ -43,7 +43,7 @@
         :aria-pressed="o.on"
         :title="o.label"
         :aria-label="`${o.label} (${o.n})`"
-        @click="pick(o.id)"
+        @click="pickGroup(o.id)"
       >
         {{ o.icon }} <b>{{ o.n }}</b>
       </button>
@@ -311,8 +311,12 @@ export interface MapTrip {
 import { computed, nextTick, ref, watch } from 'vue';
 import { toggleAllTrips, toggleTripCat, tripCatPillOn, type TripFilter } from '@/lib/tripFilter';
 import {
-  legPillOn,
-  toggleLeg,
+  LEG_GROUP_PILL,
+  legGroupPillOn,
+  presentLegGroups,
+  toggleLegGroup,
+  LEG_GROUPS,
+  type LegGroup,
   STEP_ICON,
   TRIP_LEGS,
   type LegTile,
@@ -413,13 +417,10 @@ const present = computed(() => ctx.value.present);
 const shown = computed(() => ctx.value.shown);
 const legCounts = computed(() => ctx.value.legCounts);
 const presentLegs = computed(() => ctx.value.presentLegs);
-const isLeg = (id: TripFilter | TripLeg): id is TripLeg =>
-  (TRIP_LEGS as readonly string[]).includes(id);
-function pick(id: TripFilter | TripLeg) {
-  if (isLeg(id)) {
-    legSel.value = toggleLeg(legSel.value, id, presentLegs.value);
-    return;
-  }
+function pickGroup(g: LegGroup) {
+  legSel.value = toggleLegGroup(legSel.value, g, presentLegs.value);
+}
+function pick(id: TripFilter) {
   if (id === 'all') {
     // « Tout » ne touche qu'aux catégories : le filtre d'étape vit dans sa propre pastille.
     selection.value = toggleAllTrips(selection.value, present.value);
@@ -453,7 +454,7 @@ const filterOpts = computed<
           : tripCatPillOn(selection.value, o.id, present.value),
     }));
 });
-/** ⏳→🔍↩ Les étapes, dans leur pastille à part — proposées seulement s'il y en a au moins
+/** ➡️↩️ Les étapes, dans leur pastille à part (aller / retour) — proposées seulement s'il y en a au moins
  *  deux à séparer, et seulement celles qui ont des tuiles. Allumée = elle filtre
  *  (`legPillOn`). */
 const LEG_LABEL: Record<TripLeg, string> = {
@@ -466,16 +467,18 @@ const LEG_LABEL: Record<TripLeg, string> = {
 const LEG_PILL = Object.fromEntries(
   TRIP_LEGS.map((l) => [l, { icon: STEP_ICON[l], label: LEG_LABEL[l] }]),
 ) as Record<TripLeg, { icon: string; label: string }>;
-const legOpts = computed(() =>
-  presentLegs.value.length < 2
+// ➡️↩️ Deux boutons seulement, aller et retour (`LEG_GROUPS`) : proposés s'il y a les deux.
+const legOpts = computed(() => {
+  const groups = presentLegGroups(presentLegs.value);
+  return groups.length < 2
     ? []
-    : presentLegs.value.map((id) => ({
+    : groups.map((id) => ({
         id,
-        ...LEG_PILL[id],
-        n: legCounts.value[id],
-        on: legPillOn(legSel.value, id, presentLegs.value),
-      })),
-);
+        ...LEG_GROUP_PILL[id],
+        n: LEG_GROUPS[id].reduce((s, l) => s + legCounts.value[l], 0),
+        on: legGroupPillOn(legSel.value, id, presentLegs.value),
+      }));
+});
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
     x.attack

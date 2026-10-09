@@ -266,7 +266,11 @@ describe('🪺 routes dangereuses autour des nids', () => {
       const m = tick(tick(islandMap(2, seed), NOW + 3600_000), NOW + 3 * DAY);
       const zones = nestZones(m.pois, 2, islandPacified(m));
       expect(zones.length).toBeGreaterThan(0);
-      expect(zones.map((z) => z.id).sort()).toEqual(nests(m).map((n) => n.id).sort());
+      expect(zones.map((z) => z.id).sort()).toEqual(
+        nests(m)
+          .map((n) => n.id)
+          .sort(),
+      );
       for (const p of m.pois) {
         if (p.id.startsWith('isl_')) continue;
         const inside = zones.some((z) => Math.hypot(p.x - z.x, p.y - z.y) <= z.radius);
@@ -296,7 +300,9 @@ describe('🪺 routes dangereuses autour des nids', () => {
         (p) =>
           !p.id.startsWith('isl_') &&
           Math.hypot(p.x - target!.x, p.y - target!.y) <= NEST.radius &&
-          !nests(m).some((o) => o.id !== target!.id && Math.hypot(p.x - o.x, p.y - o.y) <= NEST.radius),
+          !nests(m).some(
+            (o) => o.id !== target!.id && Math.hypot(p.x - o.x, p.y - o.y) <= NEST.radius,
+          ),
       );
       expect(freed.every((p) => p.nestPeril)).toBe(true);
       m = takeObjective(m, target!.id, ['a'], NOW + 4 * DAY);
@@ -365,6 +371,8 @@ describe('🪺 un nid pris est abattu, jamais tenu', () => {
       all.map((n) => ({ poiId: n.id, midAt: NOW + DAY, ids: ['a', 'b', 'c'] })),
       NOW,
       LV,
+      new Set(),
+      null,
     ).filter((r) => r.kind === 'objective');
     expect(rows).toHaveLength(all.length);
     for (const r of rows) {

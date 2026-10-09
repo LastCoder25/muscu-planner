@@ -3666,8 +3666,9 @@ export interface ControlRosterRow {
    *  mais engagés (dessinés comme en expédition). */
   engaged: string[];
   assault: { ids: string[]; inMs: number } | null;
-  /** 🧝 Le héros sur ce point : `posted` (en garnison) ou `coming` (en route) — 2 places. */
-  hero: 'posted' | 'coming' | 'away' | null;
+  /** 🧝 Le héros sur ce point : `posted` (en garnison), `coming` (en route), `away` (en sortie)
+   *  ou `engaged` (encore là, réservé par une attaque combinée en attente) — 2 places. */
+  hero: 'posted' | 'coming' | 'away' | 'engaged' | null;
   /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
   progress: ControlProgress | null;
 }
@@ -3679,6 +3680,9 @@ export function controlRoster(
   /** ⚔️⏳ Les champions réservés par une attaque combinée en attente (`waitingFrom`).
    *  ⚠️ REQUIS : oublier ce paramètre les dessinerait libres. */
   engagedIds: ReadonlySet<string>,
+  /** 🧝⏳ Le point d'où le héros attend une attaque combinée (`attackHeroWaitingAt`).
+   *  ⚠️ REQUIS, comme `engagedIds` : l'oublier le dessinerait posté (bleu). */
+  heroEngagedAt: string | null,
 ): ControlRosterRow[] {
   if (!map) return [];
   const order = (k: ControlKind) => ALL_CONTROL_KINDS.indexOf(k);
@@ -3726,7 +3730,9 @@ export function controlRoster(
           assault,
           hero:
             held && c.hero
-              ? 'posted'
+              ? heroEngagedAt === p.id
+                ? 'engaged'
+                : 'posted'
               : held && c.heroComing
                 ? 'coming'
                 : held && c.heroAway

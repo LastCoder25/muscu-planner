@@ -1263,16 +1263,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="tr-who"[^>]*>⚔️/g)?.length).toBe(2);
     expect(out.match(/class="tr-who"[^>]*>↩️/g)?.length).toBe(2);
     expect(out).not.toMatch(/class="tr-who"[^>]*>🔍/);
-    // 🎴 Les pastilles de filtre portent les mêmes icônes que les tuiles.
-    expect(out).toMatch(/aria-label="Aller \(1\)"[^>]*>\s*⚔️/);
+    // ➡️↩️ La pastille d'étapes : aller (attente, trajet, fouille) et retour, rien d'autre.
+    expect(out).toMatch(/aria-label="Aller \(2\)"[^>]*>\s*➡️/);
     expect(out).toMatch(/aria-label="Retour \(2\)"[^>]*>\s*↩️/);
     expect(out).toContain('↩️ 53 min');
     expect(out).toContain('↩️ 20 min');
     // ⏱️ Seul le temps de l'étape : ni le temps total du voyage, ni de sous-titre.
     expect(out).not.toContain('9 h 59');
     expect(out).not.toContain('↩ 53 min');
-    expect(out).toContain('aria-label="Aller (1)"');
-    expect(out).toContain('aria-label="Sur place (1)"');
+    expect(out).not.toContain('aria-label="Sur place');
     expect(out).toContain('aria-label="Retour (2)"');
   }, 30_000);
 
@@ -3449,7 +3448,7 @@ describe('🔀 FusionPanel', () => {
         ControlPointsSheet,
         {
           modelValue: true,
-          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          rows: controlRoster(map, [], 3600_000, 30, new Set(), null),
           advs: ROW.adventurers,
         },
         ROW,
@@ -3480,7 +3479,7 @@ describe('🔀 FusionPanel', () => {
         ControlPointsSheet,
         {
           modelValue: true,
-          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          rows: controlRoster(map, [], 3600_000, 30, new Set(), null),
           advs: ROW.adventurers,
         },
         ROW,
@@ -3532,7 +3531,7 @@ describe('🔀 FusionPanel', () => {
         ControlPointsSheet,
         {
           modelValue: true,
-          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          rows: controlRoster(map, [], 3600_000, 30, new Set(), null),
           advs: ROW.adventurers,
         },
         ROW,
@@ -3580,7 +3579,7 @@ describe('🔀 FusionPanel', () => {
         ControlPointsSheet,
         {
           modelValue: true,
-          rows: controlRoster(map, [], 3600_000, 30, new Set()),
+          rows: controlRoster(map, [], 3600_000, 30, new Set(), null),
           advs: ROW.adventurers,
           onOpen: (p: { id: string }) => opened.push(p.id),
         },
@@ -3625,7 +3624,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     const { createMap } = await import('@/lib/expedition');
     const id = controlIdOf('mine');
     const map = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), id, ['a1'], 0, 7);
-    return { id, map, rows: controlRoster(map, [], 3600_000, 30, new Set()) };
+    return { id, map, rows: controlRoster(map, [], 3600_000, 30, new Set(), null) };
   };
   it('une place libre devient un bouton qui ENVOIE, sans ouvrir la gestion du lieu', async () => {
     const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
@@ -4147,6 +4146,12 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(legs).toContain('class="trf-legs"');
     expect(legs).not.toMatch(/class="trf trf-(go|back)/);
     expect(legs.match(/class="trl on"/g)?.length).toBe(1);
+    // ➡️↩️ Deux boutons, aller et retour : ni ⏳ ni ⚔️ (en doublon avec les catégories).
+    const pill = legs.slice(legs.indexOf('class="trf-legs"'), legs.indexOf('class="trips"'));
+    expect(pill.match(/class="trl/g)?.length).toBe(2);
+    expect(pill).toContain('➡️');
+    expect(pill).toContain('↩️');
+    expect(pill).not.toMatch(/⚔️|⏳/);
   }, 30_000);
 });
 

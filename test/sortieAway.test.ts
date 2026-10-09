@@ -56,7 +56,7 @@ describe('⚔️🏰 sortieLeaves : la place reste prise', () => {
   });
   it('la liste des places fortes montre le sortant, pas une place libre', () => {
     const m = sortieLeaves(world(['a', 'b']), MINE, ['a'], H, L);
-    const row = controlRoster(m, [], 2 * H, L, new Set()).find((r) => r.poi.id === MINE)!;
+    const row = controlRoster(m, [], 2 * H, L, new Set(), null).find((r) => r.poi.id === MINE)!;
     expect(row.away).toEqual(['a']);
     expect(row.garrison).toEqual(['b']);
   });
@@ -116,7 +116,12 @@ describe('⚔️🏰 syncAway : une sortie partie avant la règle reprend sa pla
   const advs = (ids: string[], until: number) => ids.map((id) => ({ id, busyUntil: until }));
   it('garnison vide, trois sortants en route : trois places gardées', () => {
     const m = world(['a', 'b', 'c']);
-    const gone = { ...m, pois: m.pois.map((p) => (p.id === MINE ? { ...p, control: { ...p.control!, garrison: [] } } : p)) };
+    const gone = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === MINE ? { ...p, control: { ...p.control!, garrison: [] } } : p,
+      ),
+    };
     const out = syncAway(gone, [trip(9 * H, ['a', 'b', 'c'])], [], advs(['a', 'b', 'c'], 9 * H));
     expect(ctl(out).away).toEqual(['a', 'b', 'c']);
   });

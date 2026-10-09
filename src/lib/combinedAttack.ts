@@ -295,6 +295,17 @@ export function attackReservedIds(
   return out;
 }
 
+/** 🧝⏳ Le point d'où le HÉROS attend de partir pour une attaque combinée (son poste), sinon
+ *  null. Il y est encore, mais pris : la carte le dessine comme parti, pas comme posté
+ *  (signalé : « mon héros attend une attaque combinée et il est en bleu »). */
+export function attackHeroWaitingAt(
+  attacks: readonly CombinedAttack[] | null | undefined,
+): string | null {
+  for (const a of attacks ?? [])
+    for (const w of a.wings) if (w.state === 'waiting' && w.hero && w.originId) return w.originId;
+  return null;
+}
+
 /** ⏳ Les champions qu'une attaque combinée ATTEND encore : ils restent dans la garnison de
  *  leur point (ou à la base) jusqu'à leur départ, mais ils sont pris — on ne les transfère,
  *  ne les échange ni ne les ramène, comme un membre d'un départ programmé. */

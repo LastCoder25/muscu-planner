@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_LEGS,
   legPillOn,
+  legGroupPillOn,
+  presentLegGroups,
+  toggleLegGroup,
   shownLegs,
   toggleLeg,
   tripLegTiles,
@@ -123,5 +126,23 @@ describe('🔎 filtre des étapes', () => {
     expect([...shownLegs(new Set(['go']), ['back'])]).toEqual(['back']);
     expect(shownLegs(new Set(), ['go', 'back']).size).toBe(0);
     expect([...shownLegs(new Set(['back']), ['go', 'back'])]).toEqual(['back']);
+  });
+});
+
+describe('➡️↩️ la pastille aller / retour', () => {
+  const present = ['wait', 'go', 'dwell', 'back'] as const;
+  it('deux groupes, l’aller couvre attente, trajet et fouille', () => {
+    expect(presentLegGroups(present)).toEqual(['out', 'back']);
+    expect(presentLegGroups(['back'])).toEqual(['back']);
+    const out = toggleLegGroup(ALL_LEGS, 'out', present);
+    expect([...out].sort()).toEqual(['dwell', 'go', 'wait']);
+    expect(legGroupPillOn(out, 'out', present)).toBe(true);
+    expect(legGroupPillOn(out, 'back', present)).toBe(false);
+    expect(legGroupPillOn(ALL_LEGS, 'out', present)).toBe(false);
+  });
+  it('rallumer l’autre rend tout ; éteindre le seul allumé aussi', () => {
+    const out = toggleLegGroup(ALL_LEGS, 'out', present);
+    expect([...toggleLegGroup(out, 'back', present)].sort()).toEqual([...present].sort());
+    expect([...toggleLegGroup(out, 'out', present)].sort()).toEqual([...present].sort());
   });
 });

@@ -1,5 +1,6 @@
 // 🧝 Le héros en garnison sur un lieu fixe prend 2 places sur les 5 (2026-10-05, demandé :
 // « permettre au héros d'être en garnison sur les lieux fixes. il prend 2 places sur les 5 »).
+import { attackHeroWaitingAt, type CombinedAttack } from '@/lib/combinedAttack';
 import { describe, expect, it } from 'vitest';
 import {
   baseSendBlocker,
@@ -217,7 +218,7 @@ describe('🏠 envoyer le héros depuis la base (avec champions et miliciens)', 
 
 describe('⚫ les points sous le fort comptent le héros pour 2 places', () => {
   const dotsAt = (m: ExpeditionMap, now: number) =>
-    garrisonDots(controlRoster(m, [], now, 30, new Set()).find((r) => r.poi.id === id)!);
+    garrisonDots(controlRoster(m, [], now, 30, new Set(), null).find((r) => r.poi.id === id)!);
   it('posté : 2 points héros, et le total reste celui des places', () => {
     const dots = dotsAt(held(['a'], true), 0);
     expect(dots).toBe('hhc' + 'f'.repeat(MILITIA.perPoint - 3));
@@ -226,6 +227,16 @@ describe('⚫ les points sous le fort comptent le héros pour 2 places', () => {
   it('en route : 2 points « en route »', () => {
     const m = sendHeroToControl(held(['a']), id, 0, 2 * H, unit);
     expect(dotsAt(m, H)).toBe('ggc' + 'f'.repeat(MILITIA.perPoint - 3));
+  });
+  it('réservé par une attaque combinée en attente : dessiné « parti », pas posté (signalé)', () => {
+    const at = (engagedAt: string | null) =>
+      controlRoster(held(['a'], true), [], 0, 30, new Set(), engagedAt).find(
+        (r) => r.poi.id === id,
+      )!;
+    expect(at(id).hero).toBe('engaged');
+    expect(garrisonDots(at(id))).toBe('ggc' + 'f'.repeat(MILITIA.perPoint - 3));
+    // Une attaque qui l'attend AILLEURS ne change rien ici.
+    expect(at('autre').hero).toBe('posted');
   });
 });
 
@@ -236,5 +247,19 @@ describe('🧝 heroDotLinks — les 2 places du héros reliées', () => {
     expect(heroDotLinks('ccrrf')).toEqual([]);
     expect(heroDotLinks('')).toEqual([]);
     expect(heroDotLinks('hgc')).toEqual([]);
+  });
+});
+
+describe('🧝⏳ attackHeroWaitingAt — d’où le héros attend son départ', () => {
+  const wing = (state: string, hero: boolean, originId: string | null) =>
+    ({ state, hero, originId, members: [] }) as unknown as CombinedAttack['wings'][number];
+  const atk = (...wings: CombinedAttack['wings']) => ({ wings }) as unknown as CombinedAttack;
+  it('le poste du groupe qui l’attend encore, sinon rien', () => {
+    expect(
+      attackHeroWaitingAt([atk(wing('waiting', false, 'x'), wing('waiting', true, 'p'))]),
+    ).toBe('p');
+    expect(attackHeroWaitingAt([atk(wing('gone', true, 'p'))])).toBeNull();
+    expect(attackHeroWaitingAt([atk(wing('waiting', true, null))])).toBeNull();
+    expect(attackHeroWaitingAt(null)).toBeNull();
   });
 });

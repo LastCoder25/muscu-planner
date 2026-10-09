@@ -11,7 +11,7 @@
 import { isMilitiaId } from './militia';
 
 type ChampCell =
-  | { kind: 'hero'; coming: boolean; away: boolean }
+  | { kind: 'hero'; coming: boolean; away: boolean; engaged: boolean }
   | { kind: 'adv'; id: string }
   | { kind: 'route'; id: string }
   | { kind: 'away'; id: string }
@@ -24,7 +24,7 @@ export interface GarrisonCells {
 }
 
 export interface GarrisonCellInput {
-  hero: 'posted' | 'coming' | 'away' | null;
+  hero: 'posted' | 'coming' | 'away' | 'engaged' | null;
   /** Les places que prend le héros (2). */
   heroSeats: number;
   garrison: readonly string[];
@@ -40,7 +40,13 @@ export interface GarrisonCellInput {
 export function garrisonCells(i: GarrisonCellInput): GarrisonCells {
   const champ: ChampCell[] = [];
   const mil: MilCell[] = [];
-  if (i.hero) champ.push({ kind: 'hero', coming: i.hero === 'coming', away: i.hero === 'away' });
+  if (i.hero)
+    champ.push({
+      kind: 'hero',
+      coming: i.hero === 'coming',
+      away: i.hero === 'away',
+      engaged: i.hero === 'engaged',
+    });
   for (const id of i.garrison) {
     if (isMilitiaId(id)) mil.push({ kind: 'mil', id });
     else champ.push({ kind: 'adv', id });

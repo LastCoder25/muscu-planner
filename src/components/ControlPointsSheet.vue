@@ -104,16 +104,20 @@
               <span
                 v-else-if="s.kind === 'hero'"
                 class="mini hero"
-                :class="{ route: s.coming, away: s.away }"
+                :class="{ route: s.coming, away: s.away || s.engaged }"
                 :title="
                   s.coming
                     ? 'Le héros est en route (2 places)'
                     : s.away
                       ? 'Le héros est en sortie, ses 2 places l’attendent'
-                      : 'Le héros (2 places)'
+                      : s.engaged
+                        ? 'Le héros attend son départ pour une attaque combinée'
+                        : 'Le héros (2 places)'
                 "
                 ><span>{{ s.coming ? '🧭' : '🦸' }}</span
-                ><i v-if="s.away" class="away-mark" aria-hidden="true">⚔️</i></span
+                ><i v-if="s.away || s.engaged" class="away-mark" aria-hidden="true">{{
+                  s.engaged ? '⏳' : '⚔️'
+                }}</i></span
               >
               <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME"
                 ><MilitiaPortrait
@@ -250,7 +254,7 @@ const byId = computed(() => new Map(props.advs.map((a) => [a.id, a])));
 type Slot =
   | { kind: 'adv'; adv: Adventurer }
   | { kind: 'mil' }
-  | { kind: 'hero'; coming: boolean; away: boolean }
+  | { kind: 'hero'; coming: boolean; away: boolean; engaged: boolean }
   | { kind: 'route'; mil: boolean }
   | { kind: 'away'; adv: Adventurer }
   | { kind: 'free'; mil: boolean }
