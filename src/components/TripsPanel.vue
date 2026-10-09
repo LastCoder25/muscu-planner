@@ -414,8 +414,8 @@ const emit = defineEmits<{
   cancelPlan: [id: string];
 }>();
 
-/** ⏱️ Une seule rangée, dans l'ordre d'arrivée : la prochaine étape d'un voyage (`endsAt` :
- *  résolution à l'aller, puis retour) et l'heure de frappe d'une armée se comparent sur la même horloge. Tri
+/** ⏱️ Une seule rangée, dans l'ordre d'arrivée : le retour en ville d'un voyage (`homeAt`, cf.
+ *  `tripOrder`) et l'heure de frappe d'une armée se comparent sur la même horloge. Tri
  *  STABLE : à égalité, les voyages d'abord, dans l'ordre reçu. Un voyage sans heure connue
  *  reste en tête, dans l'ordre reçu (il n'a rien à comparer). */
 const tiles = computed(() => {
@@ -428,8 +428,8 @@ const tiles = computed(() => {
     line?: ReturnType<typeof tripTimeline>;
     attack?: ActiveAttack;
   }[] = [
-    // 🧭 UNE TUILE PAR VOYAGE (concept B, choisi le 2026-10-09), rangée à la fin de son étape
-    // en cours (`tripOrder`) ; ses étapes sont sur sa frise.
+    // 🧭 UNE TUILE PAR VOYAGE (concept B, choisi le 2026-10-09), rangée par son retour en ville
+    // (`tripOrder`) ; ses étapes sont sur sa frise.
     ...tripOrder(props.trips).map((x) => {
       const line = x.leg.phased ? tripTimeline(x.trip.legs?.steps) : null;
       return {
@@ -956,6 +956,8 @@ const crew = computed(() => {
   color: var(--d3, #ffb23f);
   margin-left: 4px;
 }
+/* 🧭 LA FRISE, VERSION « NÉON » (2026-10-09, choisie parmi trois au banc) : des barres en
+   creux, le remplissage en dégradé, l'étape en cours qui brille avec un reflet qui passe. */
 .tl-frise {
   flex-basis: 100%;
   display: flex;
@@ -964,47 +966,89 @@ const crew = computed(() => {
   align-items: center;
   height: 24px;
 }
-/* Même règle de largeur pour les segments et leurs libellés : ils restent alignés. Le
-   plancher vit dans la lib (`segWidths`) : une largeur minimale en px ici faisait déborder la
-   frise, et le dernier temps sortait de la tuile (signalé le 2026-10-09). */
+/* La largeur vient de la lib (`segWidths`, plancher compris) : une largeur minimale en px ici
+   faisait déborder la frise, et le dernier temps sortait de la tuile (signalé le 2026-10-09). */
 .tl-seg {
   flex: var(--w) 1 0;
   min-width: 0;
   position: relative;
-  height: 22px;
-  border-radius: 11px;
-  background: var(--line, #3a332a);
+  height: 20px;
+  border-radius: 10px;
+  /* Une rainure : plus sombre en haut, ombre intérieure. Dérivée de --line, pour suivre le thème. */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--line, #3a332a) 45%, #000),
+    var(--line, #3a332a)
+  );
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.6),
+    0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .tl-seg > i {
   position: absolute;
   inset: 0 auto 0 0;
   border-radius: inherit;
-  background: var(--tc);
+  overflow: hidden;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tc) 45%, #000), var(--tc));
+  /* Une étape finie reste lisible, mais en retrait de celle qui se joue. */
+  opacity: 0.55;
+}
+.tl-seg.cur > i {
+  opacity: 1;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tc) 55%, transparent);
+}
+/* ✨ Le reflet qui passe sur l'étape en cours : elle avance, ça se voit. */
+.tl-seg.cur > i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 65%
+  );
+  background-size: 250% 100%;
+  animation: tl-sheen 2.6s linear infinite;
+}
+@keyframes tl-sheen {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tl-seg.cur > i::after {
+    animation: none;
+    display: none;
+  }
 }
 /* ⏳ L'attente : des pointillés, rien n'a commencé. */
 .tl-seg.tl-wait {
   background: transparent;
+  box-shadow: none;
   border: 1px dashed color-mix(in srgb, var(--tc) 60%, transparent);
 }
 /* 🔍 Sur place : des tirets épais — on ne voyage pas, on travaille. */
 .tl-seg.tl-dwell {
-  height: 22px;
-  border-radius: 11px;
   background: repeating-linear-gradient(90deg, var(--line, #3a332a) 0 6px, transparent 6px 9px);
+  box-shadow: none;
 }
 .tl-seg.tl-dwell > i {
   background: repeating-linear-gradient(90deg, var(--tc) 0 6px, transparent 6px 9px);
 }
-/* Le curseur : un trait au bout de la part remplie (la barre est assez épaisse pour qu'un
-   rond y masque la pastille). */
+/* Le curseur : un trait lumineux au bout de la part remplie (un rond masquerait la pastille). */
 .tl-cursor {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  width: 3px;
-  margin-left: -1.5px;
+  width: 4px;
+  margin-left: -2px;
   border-radius: 2px;
-  background: var(--text);
+  background: #fff;
+  box-shadow: 0 0 8px #fff;
 }
 .tl-pill {
   position: absolute;
@@ -1023,17 +1067,20 @@ const crew = computed(() => {
   font-size: 10px;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
-  background: var(--surface-2, #1b1712);
-  border: 1px solid var(--line, #3a332a);
+  /* Verre fumé : les étapes à venir restent en retrait. */
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--dim);
 }
 .tl-pill.cur {
   background: var(--tc);
-  border-color: var(--tc);
+  border-color: transparent;
   color: #15120e;
   font-weight: 700;
-  /* Un liseré sombre la détache du remplissage, de la même couleur qu'elle. */
-  box-shadow: 0 0 0 2px var(--surface, #211c16);
+  /* Un liseré sombre la détache du remplissage de même couleur, et un halo la fait briller. */
+  box-shadow:
+    0 0 0 2px var(--bg, #15120e),
+    0 0 14px color-mix(in srgb, var(--tc) 75%, transparent);
 }
 .tl-pill.done {
   opacity: 0.6;

@@ -53,16 +53,33 @@ describe('🧭 tripNav : la rangée des voyages, sa règle de filtre et son ordr
         ],
       },
     });
-  it('une tuile par voyage, rangée à la fin de son étape EN COURS (concept B)', () => {
-    const order = tripOrder([phased(), trip('y', 20, { cat: 'trips' })]).map(
+  it('une tuile par voyage, celle de son étape EN COURS, rangée par son retour en ville', () => {
+    // x finit son étape en cours AVANT y (10 contre 20) mais rentre APRÈS lui (500 contre 400).
+    const order = tripOrder([phased(), trip('y', 20, { cat: 'trips', homeAt: 400 })]).map(
       (t) => `${t.trip.key}:${t.leg.leg}`,
     );
-    expect(order).toEqual(['x:go', 'y:go']);
+    expect(order).toEqual(['y:go', 'x:go']);
   });
   it('le filtre d’étape lit l’étape EN COURS : « Retour » seul écarte un voyage encore à l’aller', () => {
     const two = phased();
     expect(
       shown([two, trip('y', 20, { cat: 'trips', back: true })], ALL_TRIPS, new Set(['back'])),
     ).toEqual(['y']);
+  });
+});
+
+describe('⏱️ ordre des tuiles : le temps total avant le retour (demandé le 2026-10-09)', () => {
+  it('un voyage qui rentre plus tôt passe devant, même si son étape en cours finit plus tard', () => {
+    const order = tripOrder([
+      trip('long', 10, { homeAt: 900 }),
+      trip('court', 50, { homeAt: 200 }),
+    ]).map((t) => t.trip.key);
+    expect(order).toEqual(['court', 'long']);
+  });
+  it('sans retour connu (renfort qui va se poster), il se range à son arrivée', () => {
+    const order = tripOrder([trip('home', 10, { homeAt: 400 }), trip('poste', 300)]).map(
+      (t) => t.trip.key,
+    );
+    expect(order).toEqual(['poste', 'home']);
   });
 });

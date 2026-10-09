@@ -73,14 +73,16 @@ export const currentLegTile = (t: LegSource): LegTile => {
   return legs.find((l) => !l.future) ?? legs[0]!;
 };
 
-/** Une tuile par voyage, rangée à la fin de son étape en cours (tri STABLE). */
+/** Une tuile par voyage, rangée par TEMPS TOTAL AVANT SON RETOUR (2026-10-09, demandé :
+ *  « ordonne-les par temps total avant leur retour ») : `homeAt`. Un voyage sans retour connu
+ *  (renfort qui va se poster) se range à la fin de son étape en cours. Tri STABLE. */
 export function tripOrder<T extends NavTrip>(
   trips: readonly T[],
 ): { key: string; at: number; trip: T; leg: LegTile }[] {
   return trips
     .map((t) => {
       const leg = currentLegTile(t);
-      return { key: t.key, at: leg.at ?? t.endsAt ?? -Infinity, trip: t, leg };
+      return { key: t.key, at: t.homeAt ?? leg.at ?? t.endsAt ?? -Infinity, trip: t, leg };
     })
     .sort((x, y) => x.at - y.at);
 }
