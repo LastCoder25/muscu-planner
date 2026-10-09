@@ -770,166 +770,30 @@
                 </p>
               </template>
             </div>
-            <!-- 🏰 QUI L'OCCUPE, EN DEUX BLOCS (2026-10-08, demandé : « séparer la partie
-               champions/héros des miliciens qui sont là en remplacement ou en bouche-trou ») :
-               les TITULAIRES d'abord, puis la MILICE, comptée d'un bloc (les miliciens n'ont ni
-               nom ni niveau : une tuile ×N au lieu de N tuiles identiques). -->
-            <p class="ctl-line">
-              🏰
-              <template v-if="unlimitedGarrison">
-                <b>⚔️ {{ controlMembers.length + controlAway.length }}</b
-                ><span class="ctl-dim"
-                  >{{ liveControl.hero ? ' + ton héros' : '' }} · sans limite</span
-                >
-              </template>
-              <template v-else>
-                <b
-                  >⚔️ {{ controlMembers.length + controlAway.length + heroSeatsIn(liveControl) }}/{{
-                    seatsOf(liveControl.kind)
-                  }}</b
-                >
-                <b v-if="acceptsMilitia(liveControl)">
-                  · 🛡️ {{ controlMilitia.length }}/{{ militiaSeatsOf(liveControl.kind) }}</b
-                >
-              </template>
-            </p>
-            <p class="gar-head">
-              ⚔️ Titulaires
-              <span class="ctl-dim"
-                >·
-                {{
-                  champsDefend(liveControl.kind)
-                    ? 'ils défendent le lieu'
-                    : 'ils produisent et interceptent, sans défendre'
-                }}
-                · touche-en un pour le ramener ou le remplacer</span
-              >
-            </p>
-            <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
-            <div class="car-pick">
-              <!-- 🏰 Le héros posté (ou en route) : il prend 2 places sur les 5 — sa tuile
-                 couvre donc deux cases de la grille (2026-10-05). -->
-              <div
-                v-if="liveControl.hero || liveControl.heroComing || liveControl.heroAway"
-                class="mil-tile hero-tile"
-                :class="{ away: liveControl.heroAway }"
-              >
-                <span class="mil-emo">🦸</span>
-                <span class="mil-name">Ton héros</span>
-                <span class="mil-sub"
-                  >{{
-                    liveControl.heroComing
-                      ? `🧭 en route · ${formatDuration(Math.max(0, liveControl.heroComing.at - now))}`
-                      : liveControl.heroAway
-                        ? '⚔️ en sortie, revient ici'
-                        : 'posté ici'
-                  }}
-                  · 2 places</span
-                >
-              </div>
-              <AdvPickTile
-                v-for="m in controlMembers"
-                :key="m.adv.id"
-                :adv="m.adv"
-                :on="ctlRecallSel.includes(m.adv.id)"
-                :reason="
-                  m.arriveIn > 0
-                    ? `🧭 en route · ${formatDuration(m.arriveIn)}`
-                    : (ctlReservedLabel.get(m.adv.id) ?? null)
-                "
-                :gain="occupantLoss[m.adv.id]?.loss ? -occupantLoss[m.adv.id]!.loss : null"
-                :gain-title="lossTitle(m.adv.id)"
-                @toggle="toggleRecall(m.adv.id)"
-              />
-              <!-- ⚔️🏰 En SORTIE (demandé) : ils reviendront, leur place les attend — la tuile le
-                 dit au lieu de laisser croire la place libre. Pas sélectionnables : ils ne sont
-                 pas là. -->
-              <AdvPickTile
-                v-for="m in controlAway"
-                :key="'away' + m.adv.id"
-                class="away-tile"
-                :adv="m.adv"
-                :on="false"
-                :reason="`⚔️ en sortie · revient ${m.backIn > 0 ? 'dans ' + formatDuration(m.backIn) : 'bientôt'}`"
-              />
-              <!-- ➕ LES PLACES DE CHAMPION VIDES : toucher une case amène au renfort. -->
-              <button
-                v-for="slot in champSlots"
-                :key="'slot' + slot.i"
-                type="button"
-                class="slot-tile"
-                :class="{ reserved: slot.kind === 'reserved' }"
-                :aria-label="slot.label"
-                @click="openQuick"
-              >
-                <span class="slot-plus">{{ slot.kind === 'reserved' ? '⏳' : '＋' }}</span>
-                <span class="slot-name">{{ slot.label }}</span>
-              </button>
-            </div>
-            <!-- 🛡️ LA MILICE, BOUCHE-TROU : une tuile ×N, sa part de la tenue pour le GROUPE
-               entier (demandé), et le nombre à ramener. -->
-            <template v-if="acceptsMilitia(liveControl)">
-              <p class="gar-head mil">
-                🛡️ Milice <span class="ctl-dim">· seule à défendre le lieu</span>
-              </p>
-              <div class="mil-group">
-                <div v-if="controlMilitia.length" class="mil-stack">
-                  <span class="mil-emo"><MilitiaPortrait /></span>
-                  <span class="mil-stack-main">
-                    <b>{{ MILITIA_NAME }} ×{{ milHere.length }}</b>
-                    <span v-if="milComing.length" class="mil-sub">
-                      🧭 +{{ milComing.length }} en route ·
-                      {{ formatDuration(milComing[0]!.arriveIn) }}</span
-                    >
-                    <span
-                      v-if="militiaLoss"
-                      class="mil-loss"
-                      :class="{ zero: militiaLoss.loss === 0 }"
-                      :title="`Sans tes miliciens, la tenue tombe à ${militiaLoss.without} % (au lieu de ${defenseNow?.pct} %).`"
-                      >🎯 −{{ militiaLoss.loss }} % sans eux</span
-                    >
-                  </span>
-                  <span v-if="milRecallable.length" class="mil-step">
-                    <span class="mil-step-lab">🔙 Ramener</span>
-                    <button
-                      type="button"
-                      class="mil-step-btn"
-                      :disabled="!milSelected"
-                      aria-label="Un milicien de moins à ramener"
-                      @click="stepMilitia(-1)"
-                    >
-                      −
-                    </button>
-                    <b class="mil-step-n">{{ milSelected }}</b>
-                    <button
-                      type="button"
-                      class="mil-step-btn"
-                      :disabled="milSelected >= milRecallable.length"
-                      aria-label="Un milicien de plus à ramener"
-                      @click="stepMilitia(1)"
-                    >
-                      +
-                    </button>
-                  </span>
-                </div>
-                <div v-if="milSlots.length" class="mil-slots">
-                  <button
-                    v-for="slot in milSlots"
-                    :key="'mslot' + slot.i"
-                    type="button"
-                    class="slot-tile mil"
-                    :aria-label="slot.label"
-                    @click="openQuick"
-                  >
-                    <span class="slot-plus">＋</span>
-                    <span class="slot-name">{{ slot.label }}</span>
-                  </button>
-                </div>
-                <p v-if="!controlMilitia.length" class="mil-note">
-                  ⚠️ Aucun milicien : le lieu tombera à la prochaine attaque.
-                </p>
-              </div>
-            </template>
+            <!-- 🏰 QUI L'OCCUPE, EN FRISE (2026-10-09, demandé : « les tuiles de garnison me gênent »)
+               : une case par place, dans le langage des frises de voyage — les TITULAIRES
+               d'abord, puis la MILICE (deux réserves de places séparées). Toucher un occupant le
+               choisit pour les actions dessous, toucher une place libre ouvre le renfort. -->
+            <GarrisonStrip
+              :cells="champStrip"
+              :title="champStripTitle"
+              :note="champsDefend(liveControl.kind) ? null : 'produisent et interceptent, sans défendre'"
+              note-tone="dim"
+              :advs="advById"
+              @toggle="toggleRecall"
+              @add="openQuick"
+            />
+            <GarrisonStrip
+              v-if="acceptsMilitia(liveControl)"
+              militia
+              :cells="milStrip"
+              :title="`🛡️ Milice · ${controlMilitia.length}/${militiaSeatsOf(liveControl.kind)}`"
+              :note="milStripNote.text"
+              :note-tone="milStripNote.tone"
+              @toggle="toggleRecall"
+              @add="openQuick"
+            />
+            <p class="gs-hint ctl-dim">Touche un membre pour le ramener ou le remplacer · ＋ pour renforcer</p>
             <!-- ⚔️⏳ UNE ATTAQUE COMBINÉE PART D'ICI (signalé : « des troupes attendent leur départ
                sur un lieu fixe mais je n'ai pas d'indication ») : combien, quand, vers quoi. -->
             <div v-for="w in ctlAttackWaits" :key="'atk' + w.key" class="ctl-plan">
@@ -1791,6 +1655,8 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import GarrisonStrip from '@/components/GarrisonStrip.vue';
+import { garrisonStrip, type StripMember } from '@/lib/garrisonStrip';
 import HeroPickTile from '@/components/HeroPickTile.vue';
 import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
 import RecallHomeSheet from '@/components/RecallHomeSheet.vue';
@@ -2052,7 +1918,6 @@ import {
   militiaIn,
   militiaOnMap,
 } from '@/lib/militia';
-import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -3087,32 +2952,65 @@ const garrisonSlots = computed<GarrisonSlot[]>(() => {
 const champSlots = computed(() => garrisonSlots.value.filter((s) => s.kind !== 'mil'));
 /** 🛡️ Les cases vides du bloc de la MILICE : celles qu'un milicien seul peut prendre. */
 const milSlots = computed(() => garrisonSlots.value.filter((s) => s.kind === 'mil'));
-/** 🛡️ Les miliciens arrivés, puis ceux en route (le plus proche d'abord). */
-const milHere = computed(() => controlMilitia.value.filter((m) => m.arriveIn <= 0));
-const milComing = computed(() =>
-  controlMilitia.value.filter((m) => m.arriveIn > 0).sort((x, y) => x.arriveIn - y.arriveIn),
+/** 🏰 LA FRISE DES TITULAIRES : héros, champions présents / en route / en sortie, places
+ *  réservées et libres (`garrisonStrip` range, les places viennent de `garrisonSlots`). */
+const advById = computed(() => new Map(char.advList.map((a) => [a.id, a])));
+const champStrip = computed(() => {
+  const c = liveControl.value;
+  if (!c) return [];
+  const hero =
+    c.hero || c.heroComing || c.heroAway
+      ? {
+          state: c.heroComing ? ('coming' as const) : c.heroAway ? ('away' as const) : ('here' as const),
+          inMs: c.heroComing ? c.heroComing.at - now.value : 0,
+        }
+      : null;
+  const members: StripMember[] = [
+    ...controlMembers.value.map((m) => ({
+      id: m.adv.id,
+      state: m.arriveIn > 0 ? ('coming' as const) : ('here' as const),
+      inMs: m.arriveIn,
+      reserved: ctlReservedLabel.value.get(m.adv.id) ?? null,
+      loss: occupantLoss.value[m.adv.id]?.loss ?? null,
+    })),
+    ...controlAway.value.map((m) => ({ id: m.adv.id, state: 'away' as const, inMs: m.backIn })),
+  ];
+  return garrisonStrip({
+    hero,
+    members,
+    reserved: champSlots.value.filter((s) => s.kind === 'reserved').length,
+    free: champSlots.value.filter((s) => s.kind === 'champ').length,
+    unlimited: unlimitedGarrison.value,
+    selected: ctlRecallSel.value,
+  });
+});
+const champStripTitle = computed(() => {
+  const c = liveControl.value;
+  if (!c) return '';
+  const n = controlMembers.value.length + controlAway.value.length + heroSeatsIn(c);
+  return unlimitedGarrison.value ? `⚔️ Titulaires · ${n} · sans limite` : `⚔️ Titulaires · ${n}/${seatsOf(c.kind)}`;
+});
+/** 🛡️ LA FRISE DE LA MILICE : un milicien par case (ils sont anonymes, mais chacun se ramène). */
+const milStrip = computed(() =>
+  garrisonStrip({
+    members: controlMilitia.value.map((m) => ({
+      id: m.id,
+      state: m.arriveIn > 0 ? ('coming' as const) : ('here' as const),
+      inMs: m.arriveIn,
+      reserved: ctlReservedLabel.value.get(m.id) ?? null,
+    })),
+    reserved: 0,
+    free: milSlots.value.length,
+    selected: ctlRecallSel.value,
+  }),
 );
-/** 🔙 Ceux qu'on peut ramener : arrivés d'abord, puis en route (demi-tour), jamais un réservé. */
-const milRecallable = computed(() =>
-  [...milHere.value, ...milComing.value]
-    .map((m) => m.id)
-    .filter((id) => !ctlReservedLabel.value.has(id)),
-);
-const milSelected = computed(
-  () => ctlRecallSel.value.filter((id) => milRecallable.value.includes(id)).length,
-);
-/** 🔙 Le nombre de miliciens à ramener : on ajoute (ou retire) le suivant de la liste. */
-function stepMilitia(d: 1 | -1) {
-  const pool = milRecallable.value;
-  const sel = ctlRecallSel.value;
-  if (d > 0) {
-    const next = pool.find((id) => !sel.includes(id));
-    if (next) ctlRecallSel.value = [...sel, next];
-  } else {
-    const last = [...pool].reverse().find((id) => sel.includes(id));
-    if (last) ctlRecallSel.value = sel.filter((x) => x !== last);
-  }
-}
+const milStripNote = computed<{ text: string | null; tone: 'warn' | 'dim' | null }>(() => {
+  if (!controlMilitia.value.length)
+    return { text: '⚠️ aucun milicien : le lieu tombera à la prochaine attaque', tone: 'warn' };
+  const l = militiaLoss.value;
+  if (l) return { text: `🎯 −${l.loss} % sans eux`, tone: 'dim' };
+  return { text: null, tone: null };
+});
 /** 🧝 Envoyer le héros en garnison ici : la raison d'un refus (la MÊME que le store,
  *  `heroPostBlocker`), sinon la durée du trajet. `null` : rien à proposer (pas un point tenu,
  *  ou un lieu sans 2 places). */
@@ -3337,12 +3235,6 @@ const militiaLoss = computed(() => {
   const without = holdAfter(p, ids, []);
   return { loss: base - without, without };
 });
-const lossTitle = (id: string) => {
-  const l = occupantLoss.value[id];
-  return l
-    ? `Sans lui, la tenue tombe à ${l.without} % (au lieu de ${defenseNow.value?.pct} %).`
-    : null;
-};
 /** Le trajet (minutes) d'un membre depuis la ville vers `p` — champion au pas de son équipe,
  *  milicien au pas d'une équipe sans rôle (la règle du store). */
 function legOfMember(adv: Adventurer | null | undefined) {
@@ -6951,13 +6843,6 @@ onUnmounted(() => {
   color: var(--text);
   padding-bottom: 72px; /* la place du bouton fixe ↕️ */
 }
-/* ⚔️🏰 Un champion en SORTIE : sa place l'attend. Contour pointillé à l'accent (la place est
-   PRISE, pas bloquée) et moins estompé qu'une tuile indisponible : il fait partie du point. */
-.away-tile.car-adv {
-  border-color: var(--accent);
-  opacity: 0.8;
-}
-/* 🛡️ Un milicien dans la garnison : une tuile anonyme, sélectionnable pour le ramener. */
 /* 🛡️⚔️ Miliciens à l’avance vers un lieu ennemi : une tuile pleine largeur. */
 .slot-tile.enemy-mil {
   width: 100%;
@@ -6966,6 +6851,11 @@ onUnmounted(() => {
 .slot-tile.enemy-mil:disabled {
   opacity: 0.5;
   cursor: default;
+}
+/* 🏰 Sous les frises de la garnison : comment s’en servir, en petit. */
+.gs-hint {
+  margin: 4px 0 8px;
+  font-size: 11px;
 }
 .slot-tile {
   display: flex;
@@ -6982,145 +6872,12 @@ onUnmounted(() => {
   cursor: pointer;
   font: inherit;
 }
-.slot-tile.reserved {
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--d3) 55%, transparent);
-  color: var(--d3);
-}
 .slot-plus {
   font-size: 22px;
   line-height: 1;
 }
 .slot-name {
   font-size: 11px;
-}
-.mil-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 64px;
-  padding: 6px 4px;
-  border-radius: 12px;
-  border: 1px dashed var(--line);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-}
-.mil-tile.on {
-  border: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-}
-.mil-emo {
-  display: inline-flex;
-  font-size: 28px;
-  line-height: 1;
-}
-.mil-name {
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.mil-sub {
-  font-size: 10.5px;
-  color: var(--dim);
-}
-/* 🎯 Ce qu'un milicien posté apporte à la tenue : la teinte de la perte d'`AdvPickTile`. */
-.mil-loss {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--d4);
-}
-.mil-loss.zero {
-  color: var(--dim);
-}
-/* 🏰 Les deux blocs de la garnison : titulaires, puis la milice (bouche-trou). */
-.gar-head {
-  margin: 6px 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.gar-head.mil {
-  margin-top: 2px;
-  color: var(--d1);
-}
-.mil-group {
-  margin-bottom: 8px;
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px dashed color-mix(in srgb, var(--d1) 45%, var(--line));
-  background: color-mix(in srgb, var(--d1) 6%, transparent);
-}
-/* 🛡️ La milice en UNE tuile ×N : portrait, compte, part de la tenue, nombre à ramener. */
-.mil-stack {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.mil-stack .mil-emo {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.mil-stack .mil-emo :deep(.mil-portrait) {
-  width: 100%;
-  height: 100%;
-}
-.mil-stack-main {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1 1 120px;
-  min-width: 0;
-  font-size: 13px;
-}
-.mil-step {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.mil-step-lab {
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.mil-step-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-}
-.mil-step-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.mil-step-n {
-  min-width: 16px;
-  text-align: center;
-  font-family: Oswald, sans-serif;
-  font-size: 16px;
-}
-.mil-note {
-  margin: 6px 0 0;
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.mil-slots {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 8px;
-}
-.slot-tile.mil {
-  border-color: color-mix(in srgb, var(--d1) 55%, transparent);
-  color: var(--d1);
 }
 /* ⇄ Les remplaçants : une ligne chacun, la tenue obtenue à droite. */
 .swap {
@@ -7234,36 +6991,6 @@ onUnmounted(() => {
 }
 .swap-delta.down {
   color: var(--d4);
-}
-.hero-tile {
-  /* 🧝 Le héros prend 2 places sur les 5 : sa tuile couvre deux cases. */
-  grid-column: span 2;
-  cursor: default;
-  border-style: solid;
-  border-color: var(--accent);
-}
-/* ⚔️ En sortie : sa place l'attend (pointillé, estompé), comme un champion en sortie. */
-.hero-tile.away {
-  border-style: dashed;
-}
-.hero-tile.away .mil-emo {
-  opacity: 0.45;
-}
-.mil-tile {
-  position: relative;
-  min-height: 48px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: #1d1913;
-  color: var(--text);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.mil-tile.on {
-  border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
 }
 .ei-rift {
   display: inline-block;

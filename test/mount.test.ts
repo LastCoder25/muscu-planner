@@ -4373,3 +4373,33 @@ describe('✨ apparition d’un objectif ennemi', () => {
     expect(html.match(/class="egg"/g)).toHaveLength(3);
   }, 30_000);
 });
+
+describe('🏰 frise de la garnison', () => {
+  it('une case par place, le héros sur deux colonnes, les libres en « ＋ »', async () => {
+    const { default: GarrisonStrip } = await import('@/components/GarrisonStrip.vue');
+    const { garrisonStrip } = await import('@/lib/garrisonStrip');
+    const adv = { id: 'a1', name: 'Lyra', path: ['guerrier'], level: 3, xp: 0, seed: 1 };
+    const cells = garrisonStrip({
+      hero: { state: 'here' },
+      members: [{ id: 'a1', state: 'here', loss: 12 }],
+      reserved: 0,
+      free: 2,
+      selected: ['a1'],
+    });
+    let html = '';
+    await mountIt(
+      GarrisonStrip,
+      { cells, title: '⚔️ Titulaires · 3/5', advs: new Map([['a1', adv]]) },
+      undefined,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
+    expect(html).toContain('--cols: 5');
+    expect(html).toContain('grid-column: span 2');
+    expect(html).toContain('Lyra');
+    expect(html).toContain('−12 %');
+    expect(html).toContain('gs-cell member here on');
+    expect(html.match(/gs-cell free/g)).toHaveLength(2);
+  }, 30_000);
+});
