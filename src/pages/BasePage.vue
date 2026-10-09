@@ -2672,15 +2672,24 @@ function doHarvest() {
   stroke: #fff;
   stroke-width: 0.4;
   filter: drop-shadow(0 0 1.6px var(--dot));
-  animation: pan-dot 2.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  /* Un vrai clignotement (demandé : « clignotantes pour bien les voir ») : la boule
+     s'éteint presque, puis revient plus grosse avec un halo — l'ancienne respiration
+     (0,75 → 1) ne se voyait pas sur une boule de 2 unités. */
+  animation: pan-dot 1.1s ease-in-out infinite;
 }
 @keyframes pan-dot {
   0%,
   100% {
-    opacity: 0.75;
+    opacity: 1;
+    transform: scale(1.25);
+    filter: drop-shadow(0 0 2.6px var(--dot));
   }
   50% {
-    opacity: 1;
+    opacity: 0.15;
+    transform: scale(0.85);
+    filter: drop-shadow(0 0 0 var(--dot));
   }
 }
 @media (prefers-reduced-motion: reduce) {
