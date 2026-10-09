@@ -53,7 +53,10 @@
     Aucune catégorie choisie — touche « Tout » ou une catégorie.
   </p>
   <div v-if="tiles.length" ref="tilesEl" class="trips">
-    <template v-for="{ key, trip: t, leg: lt, ends: e, attack: r } in shownTiles" :key="key">
+    <template
+      v-for="{ key, trip: t, leg: lt, ends: e, line: tl, attack: r } in shownTiles"
+      :key="key"
+    >
       <button
         v-if="t && lt && e"
         type="button"
@@ -63,11 +66,11 @@
           'leg-' + lt.leg,
           {
             back: lt.back,
-            future: lt.future,
+            line: !!tl,
             focus: focus === t.key,
             pending: t.pending,
             failed: !!t.failed,
-            'has-total': !!bannerOf(lt),
+            'has-total': !tl && !!bannerOf(lt),
             sea: !!t.sea,
             combo: !!t.combo,
           },
@@ -125,8 +128,9 @@
           <template v-else>{{ poiEmo(endPoi(e.right)) }}</template>
         </span>
         <!-- ⏱️ TOUS LES TEMPS EN BAS DE TUILE (demandé), dans le même bandeau : celui de
-             l'étape de la tuile (`bannerOf`). -->
-        <span v-if="bannerOf(lt)" class="tr-total" :title="bannerOf(lt)!.title">{{
+             l'étape de la tuile (`bannerOf`). Pas sur une tuile à frise : ses libellés portent
+             déjà chaque temps, celui de l'étape en cours en gras. -->
+        <span v-if="!tl && bannerOf(lt)" class="tr-total" :title="bannerOf(lt)!.title">{{
           bannerOf(lt)!.text
         }}</span>
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
@@ -144,7 +148,33 @@
             >{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span
           >
         </template>
-        <i class="tr-bar" :style="{ width: lt.pct + '%' }" />
+        <!-- 🧭 LA FRISE DU VOYAGE (concept B) : un segment par étape, large comme sa durée —
+             pointillés pour l'attente, ligne pour un trajet, tirets épais sur place. Le curseur
+             est posé dans l'étape en cours, là où on en est. -->
+        <template v-if="tl">
+          <span class="tl-frise" :title="`Voyage fait à ${Math.round(tl.cursor)} %`">
+            <span
+              v-for="(s, i) in tl.segs"
+              :key="i"
+              class="tl-seg"
+              :class="['tl-' + s.leg, { cur: s.current }]"
+              :style="{ '--w': s.weight }"
+            >
+              <i :style="{ width: s.fill + '%' }" />
+              <b v-if="s.current" class="tl-cursor" :style="{ left: s.fill + '%' }" />
+            </span>
+          </span>
+          <span class="tl-labs">
+            <span
+              v-for="(s, i) in tl.segs"
+              :key="i"
+              :class="{ cur: s.current, done: s.done }"
+              :style="{ '--w': s.weight }"
+              >{{ s.label }}</span
+            >
+          </span>
+        </template>
+        <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
       </button>
       <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
          haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
@@ -259,7 +289,7 @@
 </template>
 
 <script lang="ts">
-import type { HaulPill, Poi, TripPhase, VoyageFailure } from '@/lib/expedition';
+import type { HaulPill, Poi, TripPhase, TripStep, VoyageFailure } from '@/lib/expedition';
 import type { ActiveAttack } from '@/lib/fieldArmy';
 import type { TripCategory } from '@/lib/tripFilter';
 /** Un voyage en cours, tel que la rangée le montre. */
@@ -282,7 +312,13 @@ export interface MapTrip {
   /** 🏠 La troupe rentre à la BASE (un retour d'un point fixe) : l'objectif est 🏰. */
   toBase?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
-  legs?: { go: string | null; back: string; detail: string; phases?: TripPhase[] } | null;
+  legs?: {
+    go: string | null;
+    back: string;
+    detail: string;
+    phases?: TripPhase[];
+    steps?: TripStep[];
+  } | null;
   /** ⏱️ L'heure (ms) de la prochaine étape du voyage (`nextStepAt`) — l'ordre de la rangée. */
   endsAt?: number;
   /** 🏠 L'heure (ms) du retour en ville : l'ordre de sa tuile « ↩ Retour » à venir. */
@@ -320,6 +356,7 @@ import {
   STEP_ICON,
   TRIP_LEGS,
   type LegTile,
+  tripTimeline,
   type TripLeg,
 } from '@/lib/tripLegTiles';
 import RiftPortal from '@/components/RiftPortal.vue';
@@ -327,7 +364,7 @@ import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { useCharacterStore } from '@/stores/character';
 import { useTripFilters } from '@/composables/useTripFilters';
-import { legTileShown, tripCatOf, tripFilterCtx, tripLegOrder } from '@/lib/tripNav';
+import { legTileShown, tripCatOf, tripFilterCtx, tripOrder } from '@/lib/tripNav';
 import { isRiftPoi, poiEmo, poiLabel } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { tripEnds, type TripEnd } from '@/lib/tripEnds';
@@ -387,17 +424,23 @@ const tiles = computed(() => {
     trip?: MapTrip;
     leg?: LegTile;
     ends?: ReturnType<typeof tripEnds>;
+    line?: ReturnType<typeof tripTimeline>;
     attack?: ActiveAttack;
   }[] = [
-    // 🚶↩️ Une tuile par ÉTAPE, rangée à l'heure de son étape (`tripLegOrder`, la règle des
-    // flèches ‹ › de la fiche d'un voyage).
-    ...tripLegOrder(props.trips).map((x) => ({
-      key: x.key,
-      at: x.at,
-      trip: x.trip,
-      leg: x.leg,
-      ends: tripEnds({ ...x.trip, back: x.leg.back }),
-    })),
+    // 🧭 UNE TUILE PAR VOYAGE (concept B, choisi le 2026-10-09), rangée à la fin de son étape
+    // en cours (`tripOrder`) ; ses étapes sont sur sa frise.
+    ...tripOrder(props.trips).map((x) => {
+      const line = x.leg.phased ? tripTimeline(x.trip.legs?.steps) : null;
+      return {
+        key: x.key,
+        at: x.at,
+        trip: x.trip,
+        leg: x.leg,
+        // La frise montre le voyage ENTIER : départ à gauche, objectif à droite, même au retour.
+        ends: tripEnds({ ...x.trip, back: line ? false : x.leg.back }),
+        line,
+      };
+    }),
     ...(props.attacks ?? []).map((r) => ({
       key: 'atk' + r.army.id,
       at: r.army.army?.at ?? Infinity,
@@ -855,6 +898,107 @@ const crew = computed(() => {
 .trips > .trip.sea {
   flex-basis: 100%;
 }
+/* 🧭 UNE TUILE PAR VOYAGE, pleine largeur, avec sa FRISE (concept B, choisi le 2026-10-09) :
+   toutes les étapes d'un coup d'œil, chacune large comme sa durée, et le curseur dit où on en
+   est. Les voyages sans étapes connues (renfort, traversée, rappel) gardent leur tuile de tiers. */
+.trips > .trip.line {
+  flex-basis: 100%;
+  --tc: var(--accent);
+}
+.trips > .trip.line.van {
+  --tc: #b57bff;
+}
+.trips > .trip.line.back {
+  --tc: #7bc86c;
+}
+.trips > .trip.line.combo {
+  --tc: var(--combo);
+}
+.trips > .trip.line.failed {
+  --tc: var(--d3);
+}
+/* Icône et portraits sur la même ligne : la tuile a la place. */
+.trip.line .tr-faces {
+  flex-basis: auto;
+}
+.tl-frise,
+.tl-labs {
+  flex-basis: 100%;
+  display: flex;
+  gap: 3px;
+  margin: 0 8px;
+}
+.tl-frise {
+  align-items: center;
+  height: 14px;
+  margin-top: 4px;
+}
+/* Même règle de largeur pour les segments et leurs libellés : ils restent alignés. Un
+   plancher garde lisible une étape courte (une attente qui finit). */
+.tl-seg,
+.tl-labs > span {
+  flex: var(--w) 1 0;
+  min-width: 38px;
+}
+/* L'étape EN COURS ne se coupe jamais : c'est son temps qu'on vient lire. */
+.tl-seg.cur,
+.tl-labs > .cur {
+  min-width: 68px;
+}
+.tl-seg {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line, #3a332a);
+}
+.tl-seg > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--tc);
+}
+/* ⏳ L'attente : des pointillés, rien n'a commencé. */
+.tl-seg.tl-wait {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--tc) 60%, transparent);
+}
+/* 🔍 Sur place : des tirets épais — on ne voyage pas, on travaille. */
+.tl-seg.tl-dwell {
+  height: 10px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(90deg, var(--line, #3a332a) 0 6px, transparent 6px 9px);
+}
+.tl-seg.tl-dwell > i {
+  background: repeating-linear-gradient(90deg, var(--tc) 0 6px, transparent 6px 9px);
+}
+.tl-cursor {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--text);
+  border: 2px solid var(--tc);
+}
+.tl-labs > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tl-labs > .cur {
+  color: var(--text);
+  font-weight: 700;
+}
+.tl-labs > .done {
+  opacity: 0.7;
+}
 .trip {
   position: relative;
   min-width: 0;
@@ -892,12 +1036,6 @@ const crew = computed(() => {
 /* ⏳ Programmé, pas encore parti : contour en pointillés, comme un départ qui attend. */
 .trip.pending {
   border-style: dashed;
-}
-/* ↩ Le retour d'un voyage encore à l'aller (`tripLegTiles`) : à venir, donc estompé et en
-   pointillés, dans la teinte du retour. */
-.trip.future {
-  border-style: dashed;
-  opacity: 0.72;
 }
 .tr-who {
   font-size: 17px;

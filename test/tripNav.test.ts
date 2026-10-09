@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legTileShown, tripCatOf, tripFilterCtx, tripLegOrder, type NavTrip } from '@/lib/tripNav';
+import { legTileShown, tripCatOf, tripFilterCtx, tripOrder, type NavTrip } from '@/lib/tripNav';
 import { ALL_TRIPS, type TripSelection } from '@/lib/tripFilter';
 import { ALL_LEGS } from '@/lib/tripLegTiles';
 
@@ -21,7 +21,7 @@ const TRIPS: NavTrip[] = [
 const shown = (trips: NavTrip[], sel: TripSelection, legs = ALL_LEGS) => {
   const ctx = tripFilterCtx(trips, 0, sel, legs);
   const out: string[] = [];
-  for (const x of tripLegOrder(trips))
+  for (const x of tripOrder(trips))
     if (legTileShown(x.trip, x.leg.leg, ctx) && !out.includes(x.trip.key)) out.push(x.trip.key);
   return out;
 };
@@ -53,16 +53,16 @@ describe('🧭 tripNav : la rangée des voyages, sa règle de filtre et son ordr
         ],
       },
     });
-  it('chaque tuile d’étape se range à la fin de SON étape', () => {
-    const order = tripLegOrder([phased(), trip('y', 20, { cat: 'trips' })]).map(
+  it('une tuile par voyage, rangée à la fin de son étape EN COURS (concept B)', () => {
+    const order = tripOrder([phased(), trip('y', 20, { cat: 'trips' })]).map(
       (t) => `${t.trip.key}:${t.leg.leg}`,
     );
-    expect(order).toEqual(['x:go', 'y:go', 'x:dwell', 'x:back']);
+    expect(order).toEqual(['x:go', 'y:go']);
   });
-  it('le filtre d’étape s’applique : « Retour » seul garde ceux dont le retour est à venir', () => {
+  it('le filtre d’étape lit l’étape EN COURS : « Retour » seul écarte un voyage encore à l’aller', () => {
     const two = phased();
-    expect(shown([two, trip('y', 20, { cat: 'trips' })], ALL_TRIPS, new Set(['back']))).toEqual([
-      'x',
-    ]);
+    expect(
+      shown([two, trip('y', 20, { cat: 'trips', back: true })], ALL_TRIPS, new Set(['back'])),
+    ).toEqual(['y']);
   });
 });

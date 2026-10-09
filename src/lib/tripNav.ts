@@ -49,7 +49,8 @@ export function tripFilterCtx(
   for (const t of trips) counts[tripCatOf(t)]++;
   const present = CAT_ORDER.filter((c) => counts[c] > 0);
   const legCounts: Record<TripLeg, number> = { wait: 0, go: 0, dwell: 0, back: 0 };
-  for (const t of trips) for (const l of tripLegTiles(t)) legCounts[l.leg]++;
+  // Le filtre d'étape lit l'étape EN COURS : c'est elle que la tuile du voyage montre.
+  for (const t of trips) legCounts[currentLegTile(t).leg]++;
   const presentLegs = TRIP_LEGS.filter((l) => legCounts[l] > 0);
   return {
     counts,
@@ -65,20 +66,21 @@ export function tripFilterCtx(
 export const legTileShown = (t: NavTrip, leg: TripLeg, ctx: TripFilterCtx): boolean =>
   ctx.shown.has(tripCatOf(t)) && (ctx.presentLegs.length < 2 || ctx.legsShown.has(leg));
 
-/** Les tuiles d'étape des voyages, rangées à l'heure de leur étape (tri STABLE). */
-export function tripLegOrder<T extends NavTrip>(
+/** 🧭 L'étape EN COURS d'un voyage : la seule qui fait sa tuile (concept B, choisi le
+ *  2026-10-09 : « une tuile par voyage, avec une frise » — les autres étapes sont sur la frise). */
+export const currentLegTile = (t: LegSource): LegTile => {
+  const legs = tripLegTiles(t);
+  return legs.find((l) => !l.future) ?? legs[0]!;
+};
+
+/** Une tuile par voyage, rangée à la fin de son étape en cours (tri STABLE). */
+export function tripOrder<T extends NavTrip>(
   trips: readonly T[],
 ): { key: string; at: number; trip: T; leg: LegTile }[] {
   return trips
-    .flatMap((t) =>
-      tripLegTiles(t).map((leg) => ({
-        key: leg.key,
-        // 🚶↩️ La tuile « ↩ Retour » encore à venir se range à l'heure du retour en ville.
-        // ⏳→🔍↩ Une tuile d'étape se range à la fin de SON étape.
-        at: leg.at ?? (leg.future ? (t.homeAt ?? t.endsAt ?? Infinity) : (t.endsAt ?? -Infinity)),
-        trip: t,
-        leg,
-      })),
-    )
+    .map((t) => {
+      const leg = currentLegTile(t);
+      return { key: t.key, at: leg.at ?? t.endsAt ?? -Infinity, trip: t, leg };
+    })
     .sort((x, y) => x.at - y.at);
 }

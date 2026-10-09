@@ -15,7 +15,7 @@
  * ⚠️ Les tuiles d'un voyage partagent sa `key` de voyage (`tripKey`) : toucher l'une ou
  * l'autre montre la même équipe et allume le même lieu. Leur clé d'AFFICHAGE (`key`) diffère.
  */
-import type { TripPhase, TripPhaseId } from './expedition';
+import type { TripPhase, TripPhaseId, TripStep } from './expedition';
 
 export type TripLeg = TripPhaseId;
 /** Les étapes, dans l'ordre d'un voyage (filtres, comptes). */
@@ -32,7 +32,14 @@ export interface LegSource {
   total?: string | null;
   totalIcon?: string;
   pct: number;
-  legs?: { go: string | null; back: string; detail: string; phases?: TripPhase[] } | null;
+  legs?: {
+    go: string | null;
+    back: string;
+    detail: string;
+    phases?: TripPhase[];
+    /** 🧭 Toutes les étapes, faites comprises, avec leur durée : la frise de la tuile. */
+    steps?: TripStep[];
+  } | null;
 }
 
 /** Une tuile d'étape : ce qu'elle affiche à la place des champs du voyage. */
@@ -64,6 +71,43 @@ export interface LegTile {
  *  avec la flèche retour arrière ») : la MÊME au centre des tuiles, dans leur bandeau du bas
  *  et sur les pastilles de filtre (« que ce soit cohérent »). */
 export const STEP_ICON: Record<TripLeg, string> = { wait: '⏳', go: '⚔️', dwell: '🔍', back: '↩️' };
+
+/**
+ * 🧭 LA FRISE D'UN VOYAGE (concept B, choisi le 2026-10-09 : « une tuile par voyage, avec une
+ * frise ») : un segment par étape, sa LARGEUR proportionnelle à sa durée, rempli de ce qui est
+ * fait ; le CURSEUR dit où on en est sur le voyage entier. Le libellé d'une étape faite est ✓,
+ * celui des autres le temps d'ici sa fin (le même que la tuile).
+ * `null` sans étapes connues (renfort, traversée, rappel) : la tuile garde sa simple barre.
+ */
+export interface TimelineSeg {
+  leg: TripLeg;
+  /** Poids sur la frise (la durée de l'étape, ms). */
+  weight: number;
+  /** Part remplie (0..100). */
+  fill: number;
+  current: boolean;
+  done: boolean;
+  label: string;
+}
+export function tripTimeline(
+  steps: readonly TripStep[] | undefined,
+): { segs: TimelineSeg[]; cursor: number } | null {
+  if (!steps?.length) return null;
+  const total = steps.reduce((s, x) => s + x.ms, 0);
+  // Durées inconnues (toutes nulles) : des segments égaux, pour garder une frise lisible.
+  const w = (x: TripStep) => (total > 0 ? x.ms : 1);
+  const sum = total > 0 ? total : steps.length;
+  const segs = steps.map((x) => ({
+    leg: x.leg,
+    weight: w(x),
+    fill: x.pct,
+    current: x.current,
+    done: x.pct >= 100,
+    label: `${STEP_ICON[x.leg]} ${x.pct >= 100 ? '✓' : x.time}`,
+  }));
+  const doneW = steps.reduce((s, x) => s + (w(x) * x.pct) / 100, 0);
+  return { segs, cursor: Math.max(0, Math.min(100, (doneW / sum) * 100)) };
+}
 
 export function tripLegTiles(t: LegSource): LegTile[] {
   const base = {
@@ -178,7 +222,6 @@ export function toggleLegGroup(
   else for (const l of legs) next.add(l);
   return present.some((l) => next.has(l)) ? next : new Set(present);
 }
-
 
 /** ⚠️ Une étape choisie qui n'a plus rien (le dernier aller est arrivé) retombe sur toutes,
  *  au lieu d'une rangée vide qui se lirait comme « aucun voyage » (même règle que les

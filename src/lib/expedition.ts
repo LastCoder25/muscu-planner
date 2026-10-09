@@ -3653,13 +3653,20 @@ export function tripLegs(
   voyage: Pick<ActiveExpedition, 'midAt' | 'returnAt' | 'returnLegs'> &
     Partial<Pick<ActiveExpedition, 'sentAt' | 'turnBack' | 'dwellMs'>>,
   now: number,
-): { go: string | null; back: string; detail: string; phases: TripPhase[] } | null {
+): {
+  go: string | null;
+  back: string;
+  detail: string;
+  phases: TripPhase[];
+  steps: TripStep[];
+} | null {
   const v = shownVoyage(voyage, now);
   if (now >= v.returnAt) return null;
   const phases = tripPhases(v, now);
+  const steps = tripSteps(v, now, phases);
   if (now >= v.midAt) {
     const back = formatCountdown(v.returnAt - now);
-    return { go: null, back, detail: `Sur le retour : encore ${back}`, phases };
+    return { go: null, back, detail: `Sur le retour : encore ${back}`, phases, steps };
   }
   const go = formatCountdown(v.midAt - now);
   const legs = v.returnLegs;
@@ -3670,6 +3677,7 @@ export function tripLegs(
       go,
       back: `${won}/${lost}`,
       phases,
+      steps,
       detail: `Arrivée dans ${go} · retour : ${
         legs.won > 0
           ? `${won} si le point est pris (le héros et les champions en trop)`
@@ -3678,7 +3686,7 @@ export function tripLegs(
     };
   }
   const back = formatDuration(v.returnAt - v.midAt);
-  return { go, back, detail: `Arrivée dans ${go} · retour en ${back}`, phases };
+  return { go, back, detail: `Arrivée dans ${go} · retour en ${back}`, phases, steps };
 }
 
 /** ⏳→🔍↩ Les ÉTAPES d'un voyage, une tuile chacune (demandé : « sépare dans plusieurs tuiles
@@ -3731,6 +3739,58 @@ function tripPhases(
         ? Math.max(0, Math.min(100, ((now - sp.start) / span) * 100))
         : 0;
     return { leg: sp.leg, time, endsAt: sp.end, current, pct };
+  });
+}
+
+/**
+ * 🧭 TOUTES LES ÉTAPES D'UN VOYAGE, faites comprises, avec leur DURÉE (concept B, choisi le
+ * 2026-10-09 : « une tuile par voyage, avec une frise ») — la frise montre l'histoire entière et
+ * le curseur dit où on en est. Les étapes restantes reprennent le temps de `tripPhases` (d'ici
+ * la FIN de l'étape, deux retours pour un assaut de point fixe) ; une étape faite n'en a pas.
+ *
+ * ⚠️ L'ATTENTE n'existe que tant qu'on n'est pas parti, et sa durée est le temps RESTANT : on ne
+ * sait pas quand le départ a été programmé. Un aller dont le départ est inconnu (voyage d'avant
+ * `sentAt`) ne compte que ce qu'il reste, et disparaît une fois fait.
+ */
+export interface TripStep {
+  leg: TripPhaseId;
+  /** Durée de l'étape (ms) : son poids sur la frise. */
+  ms: number;
+  /** Avancement DANS l'étape (0..100) : 100 faite, 0 à venir. */
+  pct: number;
+  /** L'étape en cours (une seule). */
+  current: boolean;
+  /** Temps d'ici la fin de l'étape (`TripPhase.time`) ; vide pour une étape faite. */
+  time: string;
+}
+function tripSteps(
+  v: Pick<ActiveExpedition, 'midAt' | 'returnAt'> &
+    Partial<Pick<ActiveExpedition, 'sentAt' | 'dwellMs'>>,
+  now: number,
+  phases: readonly TripPhase[],
+): TripStep[] {
+  const dwell = Math.max(0, v.dwellMs ?? 0);
+  const arrive = v.midAt - dwell;
+  const spans: { leg: TripPhaseId; start: number; end: number }[] = [];
+  if (v.sentAt !== undefined && now < v.sentAt)
+    spans.push({ leg: 'wait', start: now, end: v.sentAt });
+  if (v.sentAt !== undefined) spans.push({ leg: 'go', start: v.sentAt, end: arrive });
+  else if (now < arrive) spans.push({ leg: 'go', start: now, end: arrive });
+  if (dwell > 0) spans.push({ leg: 'dwell', start: arrive, end: v.midAt });
+  spans.push({ leg: 'back', start: v.midAt, end: v.returnAt });
+  const timeOf = new Map(phases.map((p) => [p.leg, p.time]));
+  const cur = spans.findIndex((sp) => now < sp.end);
+  return spans.map((sp, i) => {
+    const ms = Math.max(0, sp.end - sp.start);
+    const pct =
+      now >= sp.end ? 100 : now <= sp.start || ms <= 0 ? 0 : ((now - sp.start) / ms) * 100;
+    return {
+      leg: sp.leg,
+      ms,
+      pct,
+      current: i === cur,
+      time: now < sp.end ? (timeOf.get(sp.leg) ?? '') : '',
+    };
   });
 }
 

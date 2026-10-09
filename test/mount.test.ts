@@ -1206,8 +1206,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="trip van[^"]*combo/g)?.length).toBe(2);
   }, 30_000);
 
-  // 🚶↩️ Demandé : une tuile par étape (attente, aller, sur place, retour), et leurs filtres.
-  it('🚶↩️ TripsPanel : une tuile par étape, chacune avec SON seul temps', async () => {
+  // 🧭 Concept B (choisi le 2026-10-09) : UNE tuile par voyage, avec une frise de ses étapes.
+  it('🧭 TripsPanel : une tuile par voyage, avec la frise de ses étapes', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     let out = '';
     const ph = (leg: string, time: string, current: boolean) => ({
@@ -1216,6 +1216,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       endsAt: 1,
       current,
       pct: current ? 20 : 0,
+    });
+    const st = (leg: string, min: number, pct: number, current: boolean, time: string) => ({
+      leg,
+      ms: min * 60_000,
+      pct,
+      current,
+      time,
     });
     const trip = {
       key: 'g1',
@@ -1241,6 +1248,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           ph('dwell', '1 h 00', false),
           ph('back', '53 min', false),
         ],
+        steps: [
+          st('go', 15, 20, true, '12 min'),
+          st('dwell', 48, 0, false, '1 h 00'),
+          st('back', 15, 0, false, '53 min'),
+        ],
       },
     };
     const backTrip = {
@@ -1248,7 +1260,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       key: 'g2',
       back: true,
       time: '',
-      legs: { go: null, back: '20 min', detail: '', phases: [ph('back', '20 min', true)] },
+      legs: {
+        go: null,
+        back: '20 min',
+        detail: '',
+        phases: [ph('back', '20 min', true)],
+        steps: [st('go', 30, 100, false, ''), st('back', 30, 33, true, '20 min')],
+      },
     };
     expect(
       await mountIt(
@@ -1260,32 +1278,28 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    expect(out.match(/class="trip van leg-go/g)?.length).toBe(1);
-    expect(out.match(/class="trip van leg-back/g)?.length).toBe(2);
-    expect(out.match(/class="trip van leg-dwell/g)?.length).toBe(1);
-    expect(out).toMatch(/leg-back[^"]*future/);
-    expect(out).toMatch(/leg-dwell[^"]*future/);
-    expect(out).toContain('⚔️ 12 min');
+    // Une tuile par voyage, pleine largeur, celle de son étape en cours — plus de tuiles à venir.
+    expect(out.match(/class="trip van /g)?.length).toBe(2);
+    expect(out.match(/class="trip van leg-go[^"]*line/g)?.length).toBe(1);
+    expect(out.match(/class="trip van leg-back[^"]*line/g)?.length).toBe(1);
+    expect(out).not.toMatch(/class="trip[^"]*future/);
+    // La frise : un segment par étape (3 + 2), large comme sa durée, un curseur par voyage.
+    expect(out.match(/class="tl-seg /g)?.length).toBe(5);
+    expect(out).toMatch(/class="tl-seg tl-dwell"[^>]*--w: ?2880000/);
+    expect(out.match(/class="tl-cursor"/g)?.length).toBe(2);
+    // Les libellés : le temps d'ici la fin de chaque étape, ✓ pour une étape faite.
     expect(out).toContain('🔍 1 h 00');
-    // ⏱️ Tous les temps dans le bandeau du bas, aucun en tête de tuile.
-    expect(out).toMatch(/class="tr-total"[^>]*>⚔️ 12 min/);
-    expect(out).toMatch(/class="tr-total"[^>]*>🔍 1 h 00/);
-    expect(out).not.toContain('tr-time');
-    // 🎴 L'icône centrale dit l'étape EN COURS, sur toutes les tuiles du voyage : g1 est à
-    // l'aller (⚔️ sur l'aller et la fouille à venir, ↩️ sur son retour), g2 sur le retour (↩️).
-    expect(out.match(/class="tr-who"[^>]*>⚔️/g)?.length).toBe(2);
-    expect(out.match(/class="tr-who"[^>]*>↩️/g)?.length).toBe(2);
-    expect(out).not.toMatch(/class="tr-who"[^>]*>🔍/);
-    // ➡️↩️ La pastille d'étapes : aller (attente, trajet, fouille) et retour, rien d'autre.
-    expect(out).toMatch(/aria-label="Aller \(2\)"[^>]*>\s*➡️/);
-    expect(out).toMatch(/aria-label="Retour \(2\)"[^>]*>\s*↩️/);
     expect(out).toContain('↩️ 53 min');
-    expect(out).toContain('↩️ 20 min');
-    // ⏱️ Seul le temps de l'étape : ni le temps total du voyage, ni de sous-titre.
+    expect(out).toContain('⚔️ ✓');
+    // ⏱️ Le temps de l'étape en cours est en gras sur la frise, sans bandeau qui le répète.
+    expect(out).toMatch(/class="cur"[^>]*>⚔️ 12 min/);
+    expect(out).not.toContain('class="tr-total"');
     expect(out).not.toContain('9 h 59');
-    expect(out).not.toContain('↩ 53 min');
-    expect(out).not.toContain('aria-label="Sur place');
-    expect(out).toContain('aria-label="Retour (2)"');
+    // Sur la frise, le voyage se lit de gauche à droite : le départ reste à gauche au retour.
+    expect(out.match(/class="tr-from" title="La base"/g)?.length).toBe(2);
+    // ➡️↩️ La pastille d'étapes lit l'étape EN COURS de chaque voyage.
+    expect(out).toMatch(/aria-label="Aller \(1\)"[^>]*>\s*➡️/);
+    expect(out).toMatch(/aria-label="Retour \(1\)"[^>]*>\s*↩️/);
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
@@ -4146,10 +4160,23 @@ describe('🔮 GameFxOverlay — rune posée', () => {
         ],
       },
     };
+    const homeward = {
+      ...trip,
+      key: 'g2',
+      back: true,
+      legs: {
+        go: null,
+        back: '20 min',
+        detail: '',
+        phases: [{ leg: 'back', time: '20 min', endsAt: 3, current: true, pct: 50 }],
+      },
+    };
     let legs = '';
     await mountIt(
       TripsPanel,
-      { trips: [legged], focus: null, heroProfile: 'polyvalent', attacks: [] },
+      // Une tuile par voyage (concept B) : la pastille n'apparaît qu'avec un voyage à l'aller
+      // ET un sur le retour (elle lit l'étape EN COURS de chacun).
+      { trips: [legged, homeward], focus: null, heroProfile: 'polyvalent', attacks: [] },
       ROW,
       undefined,
       '/',
