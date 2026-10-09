@@ -121,7 +121,7 @@
           </g>
 
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
-          <template v-if="active && hero">
+          <template v-if="active && hero && !hero.searching">
             <line
               :x1="heroEnd.x"
               :y1="heroEnd.y"
@@ -160,7 +160,7 @@
              violet et en pointillés — la couleur seule ne suffit pas à distinguer deux routes.
              ⚠️ Un groupe (⚔️) a son PROPRE motif (tiret-point) : même violet qu'un convoi, sans
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
-          <template v-for="v in shownTravelers" :key="'vt' + v.id">
+          <template v-for="v in movingTravelers" :key="'vt' + v.id">
             <line
               :x1="lineEnd(v).x"
               :y1="lineEnd(v).y"
@@ -250,10 +250,37 @@
           <!-- ✨ Un objectif ennemi qui vient d'apparaître (nid, cimetière, brèche…). -->
           <PoiAppearFx v-if="appearing.length" :items="appearing" />
 
+          <!-- 🔍 ON FOUILLE SUR PLACE (filon, ruines d'un héros tombé…) : plus de tracé, un
+               anneau qui se remplit au rythme de la fouille (trait PLEIN : les cercles de
+               détection sont en pointillé) et la loupe au coin du lieu avec le nombre de
+               chercheurs. Aucun chrono : le temps restant se lit sur la tuile du voyage. -->
+          <g
+            v-for="s in fouilles"
+            :key="'fo' + s.poiId"
+            class="fouille"
+            :class="{ 'trail-focus': !!traceKey && s.keys.includes(traceKey) }"
+          >
+            <title>Fouille en cours · {{ s.count }} sur place</title>
+            <circle :cx="s.x" :cy="s.y" :r="SEARCH_R" class="fouille-track" />
+            <circle
+              :cx="s.x"
+              :cy="s.y"
+              :r="SEARCH_R"
+              pathLength="1"
+              class="fouille-ring"
+              :stroke-dasharray="`${s.frac} 1`"
+              :transform="`rotate(-90 ${s.x} ${s.y})`"
+            />
+            <g class="fouille-badge">
+              <rect :x="s.x + 3.4" :y="s.y - 8.6" width="8.6" height="3.6" rx="1.8" />
+              <text :x="s.x + 7.7" :y="s.y - 6.75">🔍×{{ s.count }}</text>
+            </g>
+          </g>
+
           <!-- Héros -->
           <!-- 🔙 Une troupe encore en route se touche pour la faire rebrousser chemin : une cible
                élargie (transparente) sous le marqueur, qui est trop petit pour un doigt. -->
-          <g v-for="v in shownTravelers" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
+          <g v-for="v in movingTravelers" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
             <circle
               v-if="v.recall"
               :cx="v.at.x"
@@ -294,7 +321,7 @@
             </g>
           </g>
 
-          <g v-if="active && hero" :class="{ recallable: heroRecallable }">
+          <g v-if="active && hero && !hero.searching" :class="{ recallable: heroRecallable }">
             <circle
               v-if="heroRecallable"
               :cx="hero.x"
@@ -1804,6 +1831,7 @@ import {
   travelPosition,
   voyageHome,
   mapTravelPoint,
+  searchSites,
   voyageDrawnEnd,
   warbandAt,
   tripTimeLabel,
@@ -2466,7 +2494,7 @@ const ARROW_STEP = 0.16; // décalage d'allumage entre 2 chevrons (s)
 const travelArrows = computed(() => {
   const h = hero.value;
   const a = active.value;
-  if (!h || !a || h.phase === 'done') return [];
+  if (!h || !a || h.phase === 'done' || h.searching) return [];
   const target = h.phase === 'return' ? voyageHome(a) : a.poi;
   const dx = target.x - h.x;
   const dy = target.y - h.y;
@@ -4109,6 +4137,32 @@ const travelersOnMap = computed(() =>
   })),
 );
 const shownTravelers = travelersOnMap;
+/** 🔍 Les voyageurs EN CHEMIN : pendant une fouille, ni tracé ni marqueur — le lieu porte
+ *  l'anneau de progression (`fouilles`), le trajet aller disparaît à l'arrivée. */
+const movingTravelers = computed(() => shownTravelers.value.filter((v) => !v.at.searching));
+/** 🔍 Les lieux où l'on fouille (héros et équipes), cumulés par lieu. */
+const fouilles = computed(() =>
+  searchSites([
+    ...(active.value && hero.value
+      ? [
+          {
+            key: 'hero',
+            poi: active.value.poi,
+            pos: hero.value,
+            count: tripCrew(active.value).length + 1,
+          },
+        ]
+      : []),
+    ...shownTravelers.value.map((v) => ({
+      key: v.tripKey,
+      poi: v.poi,
+      pos: v.at,
+      count: 'members' in v && Array.isArray(v.members) ? Math.max(1, v.members.length) : 1,
+    })),
+  ]),
+);
+/** Rayon de l'anneau de fouille (autour du disque d'un lieu, 4,8). */
+const SEARCH_R = 6.6;
 /** 🗡️🛡️ La classe de composition d'un renfort (préfixée : `.militia` et consorts pourraient
  *  croiser un utilitaire Quasar). Vide pour tout autre voyage. */
 function crewClass(v: object): string {
@@ -7792,6 +7846,61 @@ onUnmounted(() => {
   fill: var(--surface);
   stroke: #b57bff;
   stroke-width: 0.8;
+}
+/* 🔍 Une fouille sur place : anneau violet PLEIN (les cercles de détection sont en pointillé),
+   loupe qui respire au coin du lieu. Le clic passe au lieu, dessous. */
+.fouille {
+  pointer-events: none;
+}
+.fouille-track {
+  fill: none;
+  stroke: rgba(181, 123, 255, 0.25);
+  stroke-width: 1.1;
+}
+.fouille-ring {
+  fill: none;
+  stroke: #b57bff;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 1px rgba(181, 123, 255, 0.7));
+  transition: stroke-dasharray 0.6s linear;
+}
+.fouille.trail-focus .fouille-ring {
+  stroke: #ff4d4d;
+  filter: drop-shadow(0 0 1.2px rgba(255, 77, 77, 0.8));
+}
+.fouille-badge {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fouille-pulse 2.2s ease-in-out infinite;
+}
+.fouille-badge rect {
+  fill: var(--surface);
+  stroke: #b57bff;
+  stroke-width: 0.5;
+}
+.fouille-badge text {
+  font-size: 2.4px;
+  font-weight: 700;
+  fill: var(--text);
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+@keyframes fouille-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fouille-badge {
+    animation: none;
+  }
 }
 /* 🖱️ Les pions des troupes laissent passer le clic (signalé : une troupe qui RENTRE d'un
    objectif part de sa position, son pion le recouvrait et l'objectif ne s'ouvrait plus). Une

@@ -3495,6 +3495,8 @@ export function travelPosition(
   remainTotalMs: number;
   /** 🔍 Arrivé sur place, en train de fouiller (`Voyage.dwellMs`). */
   searching?: boolean;
+  /** 🔍 Part de la fouille déjà faite (0..1), seulement pendant qu'elle dure. */
+  searchFrac?: number;
 } {
   // 🔙 Un demi-tour forcé encore à venir ne se voit pas (`shownVoyage`).
   const exp = shownVoyage(voyage, now);
@@ -3515,6 +3517,9 @@ export function travelPosition(
       remainToObjectiveMs: Math.max(0, exp.midAt - now),
       remainTotalMs,
       searching: now >= arriveAt,
+      ...(now >= arriveAt
+        ? { searchFrac: clamp01((now - arriveAt) / Math.max(1, exp.midAt - arriveAt)) }
+        : {}),
     };
   }
   if (now < exp.returnAt) {
@@ -3529,6 +3534,53 @@ export function travelPosition(
     };
   }
   return { x: town.x, y: town.y, phase: 'done', frac: 1, remainToObjectiveMs: 0, remainTotalMs: 0 };
+}
+
+/**
+ * 🔍 LES LIEUX EN COURS DE FOUILLE, pour la carte (demandé : « montrer qu'ils sont sur place en
+ * train de chercher, et enlever le trajet aller »). Une entrée par LIEU : plusieurs voyages au
+ * même endroit se cumulent (champions additionnés), la progression est celle du plus avancé.
+ * Aucun chrono : le temps restant se lit sur la tuile du voyage.
+ */
+export interface SearchSite {
+  poiId: string;
+  x: number;
+  y: number;
+  /** Part de la fouille déjà faite (0..1). */
+  frac: number;
+  /** Combien cherchent sur place. */
+  count: number;
+  /** Les clés de tuile des voyages, pour la mise en avant du toucher. */
+  keys: string[];
+}
+export function searchSites(
+  list: {
+    key: string;
+    poi: { id: string; x: number; y: number };
+    pos: { searching?: boolean; searchFrac?: number };
+    count: number;
+  }[],
+): SearchSite[] {
+  const by = new Map<string, SearchSite>();
+  for (const v of list) {
+    if (!v.pos.searching) continue;
+    const frac = v.pos.searchFrac ?? 0;
+    const cur = by.get(v.poi.id);
+    if (cur) {
+      cur.count += v.count;
+      cur.frac = Math.max(cur.frac, frac);
+      cur.keys.push(v.key);
+    } else
+      by.set(v.poi.id, {
+        poiId: v.poi.id,
+        x: v.poi.x,
+        y: v.poi.y,
+        frac,
+        count: v.count,
+        keys: [v.key],
+      });
+  }
+  return [...by.values()];
 }
 
 /** Rayons DESSINÉS aux deux bouts d'un trajet sur la carte : la ville (terre battue,
