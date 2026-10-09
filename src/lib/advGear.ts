@@ -859,7 +859,7 @@ function keepIndex(copies: AdvGear[]): number {
  * à fusionner.
  *
  * La pièce GARDÉE est l'exemplaire le plus avancé qui n'est PAS encore au maximum
- * (v1.106.9, demandé : « un autre champion a la même dague »). Avant, seul le tout premier
+ * (v1.106.10, demandé : « un autre champion a la même dague »). Avant, seul le tout premier
  * exemplaire pouvait s'éveiller : une fois à ✨5, le modèle était figé, et un second
  * champion portant la même pièce ne pouvait jamais éveiller la sienne. On ne fond que ce
  * qui vient APRÈS elle dans l'ordre d'avancement — jamais une pièce déjà au maximum placée
