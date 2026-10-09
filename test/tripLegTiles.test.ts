@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALL_LEGS,
-  LEG_GAUGE,
-  TRIP_LEGS,
   legPillOn,
   legGroupPillOn,
   presentLegGroups,
@@ -146,23 +144,5 @@ describe('➡️↩️ la pastille aller / retour', () => {
     const out = toggleLegGroup(ALL_LEGS, 'out', present);
     expect([...toggleLegGroup(out, 'back', present)].sort()).toEqual([...present].sort());
     expect([...toggleLegGroup(out, 'out', present)].sort()).toEqual([...present].sort());
-  });
-});
-
-// 📏 Concept A (choisi le 2026-10-09) : la FORME de la jauge dit l'étape, pas sa couleur.
-describe('📏 LEG_GAUGE — la forme de la jauge dit l’étape', () => {
-  it('pointillés à l’attente, ligne en trajet, cercle sur place', () => {
-    expect(LEG_GAUGE.wait.shape).toBe('dots');
-    expect(LEG_GAUGE.go.shape).toBe('line');
-    expect(LEG_GAUGE.back.shape).toBe('line');
-    expect(LEG_GAUGE.dwell.shape).toBe('ring');
-  });
-  it('seul le retour part de la droite : aller et retour se distinguent sans couleur', () => {
-    expect(TRIP_LEGS.filter((l) => LEG_GAUGE[l].home)).toEqual(['back']);
-  });
-  it('deux étapes voisines n’ont jamais la même jauge (sens compris)', () => {
-    const sig = (l: (typeof TRIP_LEGS)[number]) => LEG_GAUGE[l].shape + LEG_GAUGE[l].home;
-    for (let i = 1; i < TRIP_LEGS.length; i++)
-      expect(sig(TRIP_LEGS[i]!)).not.toBe(sig(TRIP_LEGS[i - 1]!));
   });
 });

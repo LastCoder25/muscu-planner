@@ -94,22 +94,9 @@
           <template v-else>{{ poiEmo(endPoi(e.left)) }}</template>
         </span>
         <!-- 🎴 L'icône de l'ÉTAPE (⏳ ⚔️ 🔍 ↩️, demandé) ; sans étapes, celle du voyageur. -->
-        <!-- 📏 Sur place (fouille, filon), la jauge est un ANNEAU autour de l'icône : on ne
-             voyage pas, on travaille (`LEG_GAUGE`, concept A). -->
-        <span
-          class="tr-who"
-          :class="{ 'tr-ring': LEG_GAUGE[lt.leg].shape === 'ring' }"
-          :style="LEG_GAUGE[lt.leg].shape === 'ring' ? { '--p': lt.pct } : undefined"
-          :title="lt.icon ? LEG_PILL[lt.leg].label : undefined"
-          >{{ lt.icon ?? t.who }}</span
-        >
-        <!-- 🎒 Au retour, on voit qu'on rapporte quelque chose. -->
-        <span
-          v-if="lt.leg === 'back' && !lt.future && t.haul.length"
-          class="tr-bag"
-          title="Butin à bord"
-          >🎒</span
-        >
+        <span class="tr-who" :title="lt.icon ? LEG_PILL[lt.leg].label : undefined">{{
+          lt.icon ?? t.who
+        }}</span>
         <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
            expéditions) : leurs portraits sous l'icône, sur une ligne centrée. Champions et
            miliciens ; le héros aussi quand l'icône du haut dit l'étape, pas le voyageur. -->
@@ -157,16 +144,7 @@
             >{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span
           >
         </template>
-        <!-- 📏 Pointillés à l'attente, ligne en trajet (de la droite au retour). Sur place,
-             pas de barre : l'anneau autour de l'icône la remplace. -->
-        <i
-          v-if="LEG_GAUGE[lt.leg].shape !== 'ring'"
-          class="tr-bar"
-          :class="['g-' + LEG_GAUGE[lt.leg].shape, { home: LEG_GAUGE[lt.leg].home }]"
-          :style="
-            LEG_GAUGE[lt.leg].shape === 'dots' ? { '--p': lt.pct + '%' } : { width: lt.pct + '%' }
-          "
-        />
+        <i class="tr-bar" :style="{ width: lt.pct + '%' }" />
       </button>
       <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
          haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
@@ -340,7 +318,6 @@ import {
   LEG_GROUPS,
   type LegGroup,
   STEP_ICON,
-  LEG_GAUGE,
   TRIP_LEGS,
   type LegTile,
   type TripLeg,
@@ -888,10 +865,7 @@ const crew = computed(() => {
   gap: 1px 4px;
   min-height: 44px; /* cible tactile */
   padding: 7px 7px 9px;
-  /* 🎨 LA COULEUR DIT QUI VOYAGE (`--tc`), jamais l'étape : l'étape se lit à la forme de la
-     jauge (`LEG_GAUGE`, concept A choisi le 2026-10-09). Le retour ne vire plus au vert. */
-  --tc: var(--accent);
-  border: 1px solid var(--tc);
+  border: 1px solid var(--accent);
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);
@@ -900,80 +874,33 @@ const crew = computed(() => {
   cursor: pointer;
 }
 .trip.van {
-  --tc: #b57bff;
+  border-color: #b57bff;
+}
+/* Au RETOUR la teinte change : on rentre, on ne va plus. */
+.trip.back {
+  border-color: #7bc86c;
 }
 /* 🎨 Attaque combinée : chaque attaque a SA couleur, portée par tous ses groupes (en attente,
    à l'aller comme au retour) — on voit d'un coup d'œil quelles tuiles vont ensemble. */
 .trip.combo {
-  --tc: var(--combo);
+  border-color: var(--combo);
   border-width: 2px;
 }
-/* ⏳ Programmé, ou en attente de départ : contour en pointillés et portraits assoupis — la
-   tuile « dort », rien n'a commencé. */
-.trip.pending,
-.trip.leg-wait {
+.trip.combo .tr-bar {
+  background: var(--combo);
+}
+/* ⏳ Programmé, pas encore parti : contour en pointillés, comme un départ qui attend. */
+.trip.pending {
   border-style: dashed;
 }
-.trip.leg-wait .tr-faces {
-  filter: grayscale(0.7);
-  opacity: 0.6;
-}
-/* ↩ Une étape encore À VENIR (`tripLegTiles`) : estompée, en pointillés et PLUS PETITE —
-   c'est une prévision, pas encore un voyage. */
+/* ↩ Le retour d'un voyage encore à l'aller (`tripLegTiles`) : à venir, donc estompé et en
+   pointillés, dans la teinte du retour. */
 .trip.future {
   border-style: dashed;
-  opacity: 0.6;
-  transform: scale(0.86);
+  opacity: 0.72;
 }
 .tr-who {
   font-size: 17px;
-}
-/* 📏 SUR PLACE : un anneau autour de l'icône, qui se remplit (`--p`, 0..100) et respire —
-   c'est la seule tuile qui bouge, parce que c'est là qu'il se passe quelque chose. */
-.tr-who.tr-ring {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  font-size: 15px;
-  background: conic-gradient(var(--tc) calc(var(--p, 0) * 1%), var(--line, #3a332a) 0);
-}
-.tr-who.tr-ring::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  z-index: -1;
-  border-radius: 50%;
-  background: var(--surface);
-}
-.trip.leg-dwell:not(.future) .tr-ring {
-  animation: tr-breathe 2.4s ease-in-out infinite;
-}
-@keyframes tr-breathe {
-  50% {
-    transform: scale(1.07);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .trip.leg-dwell .tr-ring {
-    animation: none;
-  }
-}
-/* 🎒 Le butin à bord, au retour. */
-.tr-bag {
-  position: absolute;
-  right: 5px;
-  top: 38%;
-  font-size: 12px;
-  line-height: 1;
-  padding: 2px 3px;
-  border-radius: 999px;
-  border: 1px solid var(--line, #3a332a);
-  background: var(--surface-2, #2a241c);
-  pointer-events: none;
 }
 /* 🛡️ Les portraits du renfort : une ligne pleine largeur, centrée, sous l'icône. */
 .tr-faces {
@@ -1071,7 +998,7 @@ const crew = computed(() => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 0 4px 4px; /* 4 px : la jauge passe dessous */
+  padding: 0 4px 3px; /* 3 px : la barre d'avancement passe dessous */
   box-sizing: border-box;
   pointer-events: none;
   white-space: nowrap;
@@ -1098,50 +1025,25 @@ const crew = computed(() => {
   position: absolute;
   left: 0;
   bottom: 0;
-  height: 4px;
-  background: var(--tc);
+  height: 3px;
+  background: var(--accent);
   transition: width 0.6s linear;
 }
-/* 📏 EN TRAJET, une ligne avec une POINTE qui dit le sens : vers la droite à l'aller, vers la
-   gauche au retour (la barre part alors de la droite). Visible même à 0 %, pour le sens. */
-.tr-bar.g-line::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: -6px;
-  transform: translateY(-50%);
-  border: 4px solid transparent;
-  border-left: 6px solid var(--tc);
-  border-right: 0;
+.trip.van .tr-bar {
+  background: #b57bff;
 }
-.tr-bar.home {
-  left: auto;
-  right: 0;
-}
-.tr-bar.home.g-line::after {
-  right: auto;
-  left: -6px;
-  border-left: 0;
-  border-right: 6px solid var(--tc);
-}
-/* ⏳ EN ATTENTE, des segments en pointillés sur toute la largeur ; l'attente écoulée (`--p`)
-   les colore à moitié. Rien n'avance encore. */
-.tr-bar.g-dots {
-  width: 100%;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--tc) 70%, transparent) var(--p, 0%),
-    color-mix(in srgb, var(--tc) 25%, transparent) var(--p, 0%)
-  );
-  -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 11px);
-  mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 11px);
+.trip.back .tr-bar {
+  background: #7bc86c;
 }
 /* ✖ Mission ratée : orange (d3), pas le rouge des attaques ennemies ; contour épais, fond
-   teinté et bandeau — la tuile ressort parmi les autres. */
+   teinté et bandeau — la tuile ressort parmi les retours verts. */
 .trip.failed {
-  --tc: var(--d3);
+  border-color: var(--d3);
   border-width: 2px;
   background: color-mix(in srgb, var(--d3) 14%, var(--surface));
+}
+.trip.failed .tr-bar {
+  background: var(--d3);
 }
 .tr-fail {
   flex-basis: 100%;
@@ -1154,7 +1056,6 @@ const crew = computed(() => {
 }
 /* ⚔️ Une attaque ennemie : même tuile, en rouge (danger), fond teinté quand elle frappe bientôt. */
 .trip.attack {
-  --tc: var(--d4);
   border-color: color-mix(in srgb, var(--d4) 70%, transparent);
 }
 .trip.attack.soon {
@@ -1163,6 +1064,9 @@ const crew = computed(() => {
 }
 .trip.attack.soon .tr-total {
   color: var(--d4);
+}
+.trip.attack .tr-bar {
+  background: var(--d4);
 }
 .tr-hold.tenu {
   color: var(--d1);

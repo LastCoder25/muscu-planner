@@ -1231,8 +1231,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       title: 'Groupe',
       withHero: false,
       members: [],
-      // 🎒 Butin tiré au départ : son retour À VENIR ne montre pas encore de sac.
-      haul: [{ emoji: '🪙', n: 1200, name: 'Or' }],
+      haul: [],
       legs: {
         go: '12 min',
         back: '53 min',
@@ -1250,7 +1249,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       back: true,
       time: '',
       legs: { go: null, back: '20 min', detail: '', phases: [ph('back', '20 min', true)] },
-      haul: [{ emoji: '🪙', n: 1200, name: 'Or' }],
     };
     expect(
       await mountIt(
@@ -1275,39 +1273,19 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('tr-time');
     // 🎴 L'icône centrale dit l'étape EN COURS, sur toutes les tuiles du voyage : g1 est à
     // l'aller (⚔️ sur l'aller et la fouille à venir, ↩️ sur son retour), g2 sur le retour (↩️).
-    expect(out.match(/class="tr-who[^"]*"[^>]*>⚔️/g)?.length).toBe(2);
-    expect(out.match(/class="tr-who[^"]*"[^>]*>↩️/g)?.length).toBe(2);
-    expect(out).not.toMatch(/class="tr-who[^"]*"[^>]*>🔍/);
+    expect(out.match(/class="tr-who"[^>]*>⚔️/g)?.length).toBe(2);
+    expect(out.match(/class="tr-who"[^>]*>↩️/g)?.length).toBe(2);
+    expect(out).not.toMatch(/class="tr-who"[^>]*>🔍/);
     // ➡️↩️ La pastille d'étapes : aller (attente, trajet, fouille) et retour, rien d'autre.
     expect(out).toMatch(/aria-label="Aller \(2\)"[^>]*>\s*➡️/);
     expect(out).toMatch(/aria-label="Retour \(2\)"[^>]*>\s*↩️/);
     expect(out).toContain('↩️ 53 min');
     expect(out).toContain('↩️ 20 min');
-    // 📏 Concept A : la FORME de la jauge dit l'étape. Ligne vers la droite à l'aller, vers la
-    // gauche au retour, anneau sur place (pas de barre), et le butin à bord au retour.
-    expect(out.match(/class="tr-bar g-line"/g)?.length).toBe(1);
-    expect(out.match(/class="tr-bar g-line home"/g)?.length).toBe(2);
-    expect(out.match(/tr-who tr-ring/g)?.length).toBe(1);
-    // Sur place, l'anneau REMPLACE la barre : 3 barres pour 4 tuiles.
-    expect(out.match(/class="tr-bar/g)?.length).toBe(3);
-    expect(out).toMatch(/tr-ring"[^>]*--p: ?0/);
-    expect(out.match(/class="tr-bag"/g)?.length).toBe(1);
     // ⏱️ Seul le temps de l'étape : ni le temps total du voyage, ni de sous-titre.
     expect(out).not.toContain('9 h 59');
     expect(out).not.toContain('↩ 53 min');
     expect(out).not.toContain('aria-label="Sur place');
     expect(out).toContain('aria-label="Retour (2)"');
-    // …et un retour en cours qui ne rapporte rien n'a pas de sac.
-    await mountIt(
-      TripsPanel,
-      { trips: [{ ...backTrip, haul: [] }], focus: null, heroProfile: 'polyvalent' },
-      ROW,
-      undefined,
-      '/',
-      (h) => (out = h),
-    );
-    expect(out).toContain('tr-bar g-line home');
-    expect(out).not.toContain('tr-bag');
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
