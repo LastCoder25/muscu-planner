@@ -3558,6 +3558,37 @@ export function freeAway(map: ExpeditionMap, id: string, ids: readonly string[])
 }
 
 /**
+ * 🩹 LES POSTES FANTÔMES (signalé, 2026-10-09 : trois champions « postés » au Scriptorium
+ * n'étaient ni dans sa garnison, ni en route, ni en voyage — indisponibles et invisibles sur
+ * la carte). Rend les champions marqués postés sur un point de la carte active qui ne les
+ * porte NULLE PART (garnison, renfort, retour). ⚠️ Prudente : jamais un champion occupé
+ * (`busyUntil` à venir : en route, réservé pour une attaque combinée), jamais un champion
+ * resté sur une autre île (`elsewhere`), jamais un poste sur un point absent de la carte
+ * active (il peut être sur une île rangée).
+ */
+export function orphanPosts(
+  advs: readonly { id: string; posted?: string; busyUntil?: number; elsewhere?: number }[],
+  map: ExpeditionMap | null,
+  now: number,
+): string[] {
+  if (!map) return [];
+  const byId = new Map(map.pois.map((p) => [p.id, p.control]));
+  return advs
+    .filter((a) => {
+      if (!a.posted || a.elsewhere !== undefined || (a.busyUntil ?? 0) > now) return false;
+      if (!byId.has(a.posted)) return false;
+      const c = byId.get(a.posted);
+      if (!c) return true;
+      return (
+        !c.garrison.includes(a.id) &&
+        !(c.reinforcing ?? []).some((r) => r.id === a.id) &&
+        !(c.returning ?? []).some((r) => r.id === a.id)
+      );
+    })
+    .map((a) => a.id);
+}
+
+/**
  * ⚔️🏰 Ne garde que les places dont le sortant revient VRAIMENT ici. `stillAway(point, id)`
  * est la vérité du store (un voyage en cours revient sur ce point avec lui) : un blessé
  * renvoyé à la base, un champion posté ailleurs par la mission, un voyage disparu libèrent
