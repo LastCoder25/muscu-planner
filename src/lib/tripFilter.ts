@@ -1,4 +1,5 @@
 import type { PoiType } from '@/lib/expedition';
+import { TRIP_LEGS, type TripLeg } from '@/lib/tripLegTiles';
 
 /**
  * 🧭⚔️ LE FILTRE DE LA TUILE « EXPÉDITIONS » (demandé : « fusionne la tuile expéditions et
@@ -124,14 +125,14 @@ export function shownTripCats(sel: TripSelection, present: readonly TripCat[]): 
  *  illisible ou d'une ancienne version retombe sur « tout afficher », jamais sur une rangée
  *  vide qui se lirait comme « aucun voyage ». */
 const TRIP_CATS: readonly TripCat[] = ['trips', 'reinf', 'raids', 'planned', 'attacks'];
-const LEGS = ['go', 'back'] as const;
+const LEGS = TRIP_LEGS;
 export interface SavedTripFilters {
   sel: TripSelection;
-  legs: ('go' | 'back')[];
+  legs: TripLeg[];
 }
 export const tripFiltersKey = (uid: string | null | undefined): string =>
   `muscu:trips:filter:${uid ?? 'anon'}`;
-export function serializeTripFilters(sel: TripSelection, legs: Iterable<'go' | 'back'>): string {
+export function serializeTripFilters(sel: TripSelection, legs: Iterable<TripLeg>): string {
   return JSON.stringify({ sel: { mode: sel.mode, cats: [...sel.cats] }, legs: [...legs] });
 }
 export function parseTripFilters(raw: string | null | undefined): SavedTripFilters {
@@ -144,9 +145,16 @@ export function parseTripFilters(raw: string | null | undefined): SavedTripFilte
     const cats = Array.isArray(v.sel?.cats)
       ? TRIP_CATS.filter((c) => (v.sel!.cats as unknown[]).includes(c))
       : [];
-    const legs = Array.isArray(v.legs)
-      ? LEGS.filter((l) => (v.legs as unknown[]).includes(l))
-      : [...LEGS];
+    const saved = Array.isArray(v.legs) ? (v.legs as unknown[]) : null;
+    // ⏳🔍 Une sauvegarde d'avant les étapes « attente » et « sur place » : « aller + retour »
+    // y voulait dire « tout » — la relire telle quelle masquerait les deux nouvelles étapes.
+    const legacyAll =
+      !!saved &&
+      saved.includes('go') &&
+      saved.includes('back') &&
+      !saved.includes('wait') &&
+      !saved.includes('dwell');
+    const legs = saved && !legacyAll ? LEGS.filter((l) => saved.includes(l)) : [...LEGS];
     return { sel: { mode, cats }, legs };
   } catch {
     return fallback;

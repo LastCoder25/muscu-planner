@@ -263,7 +263,7 @@
 </template>
 
 <script lang="ts">
-import type { HaulPill, Poi, VoyageFailure } from '@/lib/expedition';
+import type { HaulPill, Poi, TripPhase, VoyageFailure } from '@/lib/expedition';
 import type { ActiveAttack } from '@/lib/fieldArmy';
 import type { TripCategory } from '@/lib/tripFilter';
 /** Un voyage en cours, tel que la rangée le montre. */
@@ -286,7 +286,7 @@ export interface MapTrip {
   /** 🏠 La troupe rentre à la BASE (un retour d'un point fixe) : l'objectif est 🏰. */
   toBase?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
-  legs?: { go: string | null; back: string; detail: string } | null;
+  legs?: { go: string | null; back: string; detail: string; phases?: TripPhase[] } | null;
   /** ⏱️ L'heure (ms) de la prochaine étape du voyage (`nextStepAt`) — l'ordre de la rangée. */
   endsAt?: number;
   /** 🏠 L'heure (ms) du retour en ville : l'ordre de sa tuile « ↩ Retour » à venir. */
@@ -314,7 +314,7 @@ export interface MapTrip {
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { toggleAllTrips, toggleTripCat, tripCatPillOn, type TripFilter } from '@/lib/tripFilter';
-import { legPillOn, toggleLeg, type LegTile, type TripLeg } from '@/lib/tripLegTiles';
+import { legPillOn, toggleLeg, TRIP_LEGS, type LegTile, type TripLeg } from '@/lib/tripLegTiles';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -410,8 +410,10 @@ const present = computed(() => ctx.value.present);
 const shown = computed(() => ctx.value.shown);
 const legCounts = computed(() => ctx.value.legCounts);
 const presentLegs = computed(() => ctx.value.presentLegs);
+const isLeg = (id: TripFilter | TripLeg): id is TripLeg =>
+  (TRIP_LEGS as readonly string[]).includes(id);
 function pick(id: TripFilter | TripLeg) {
-  if (id === 'go' || id === 'back') {
+  if (isLeg(id)) {
     legSel.value = toggleLeg(legSel.value, id, presentLegs.value);
     return;
   }
@@ -448,17 +450,24 @@ const filterOpts = computed<
           : tripCatPillOn(selection.value, o.id, present.value),
     }));
 });
-/** 🚶↩️ Les deux étapes, dans leur pastille à part — proposées seulement s'il y a les deux à
- *  séparer. Allumée = elle filtre (`legPillOn`). */
+/** ⏳→🔍↩ Les étapes, dans leur pastille à part — proposées seulement s'il y en a au moins
+ *  deux à séparer, et seulement celles qui ont des tuiles. Allumée = elle filtre
+ *  (`legPillOn`). */
+const LEG_PILL: Record<TripLeg, { icon: string; label: string }> = {
+  wait: { icon: '⏳', label: 'Attente du départ' },
+  go: { icon: '→', label: 'Aller' },
+  dwell: { icon: '🔍', label: 'Sur place' },
+  back: { icon: '↩', label: 'Retour' },
+};
 const legOpts = computed(() =>
   presentLegs.value.length < 2
     ? []
-    : (
-        [
-          { id: 'go', icon: '→', label: 'Aller', n: legCounts.value.go },
-          { id: 'back', icon: '↩', label: 'Retour', n: legCounts.value.back },
-        ] as const
-      ).map((o) => ({ ...o, on: legPillOn(legSel.value, o.id, presentLegs.value) })),
+    : presentLegs.value.map((id) => ({
+        id,
+        ...LEG_PILL[id],
+        n: legCounts.value[id],
+        on: legPillOn(legSel.value, id, presentLegs.value),
+      })),
 );
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>

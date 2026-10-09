@@ -7,6 +7,7 @@ import { shownTripCats, type TripCat, type TripSelection } from './tripFilter';
 import {
   shownLegs,
   tripLegTiles,
+  TRIP_LEGS,
   type LegSelection,
   type LegSource,
   type LegTile,
@@ -47,9 +48,9 @@ export function tripFilterCtx(
   const counts: Record<TripCat, number> = { trips: 0, reinf: 0, raids: 0, planned: 0, attacks };
   for (const t of trips) counts[tripCatOf(t)]++;
   const present = CAT_ORDER.filter((c) => counts[c] > 0);
-  const legCounts: Record<TripLeg, number> = { go: 0, back: 0 };
+  const legCounts: Record<TripLeg, number> = { wait: 0, go: 0, dwell: 0, back: 0 };
   for (const t of trips) for (const l of tripLegTiles(t)) legCounts[l.leg]++;
-  const presentLegs = (['go', 'back'] as const).filter((l) => legCounts[l] > 0);
+  const presentLegs = TRIP_LEGS.filter((l) => legCounts[l] > 0);
   return {
     counts,
     present,
@@ -73,7 +74,8 @@ export function tripLegOrder<T extends NavTrip>(
       tripLegTiles(t).map((leg) => ({
         key: leg.key,
         // 🚶↩️ La tuile « ↩ Retour » encore à venir se range à l'heure du retour en ville.
-        at: leg.future ? (t.homeAt ?? t.endsAt ?? Infinity) : (t.endsAt ?? -Infinity),
+        // ⏳→🔍↩ Une tuile d'étape se range à la fin de SON étape.
+        at: leg.at ?? (leg.future ? (t.homeAt ?? t.endsAt ?? Infinity) : (t.endsAt ?? -Infinity)),
         trip: t,
         leg,
       })),

@@ -37,23 +37,30 @@ describe('🧭 tripNav : la rangée des voyages, sa règle de filtre et son ordr
     expect(tripCatOf(TRIPS[2]!)).toBe('planned');
     expect(shown(TRIPS, { mode: 'except', cats: ['planned'] })).toEqual(['a', 'b', 'c']);
   });
-  it('la tuile « ↩ Retour » encore à venir se range à l’heure du retour en ville', () => {
-    const two = trip('x', 10, {
+  // Un voyage en route : arrivée à 10, fouille jusqu'à 300, retour à 500.
+  const phased = (): NavTrip =>
+    trip('x', 10, {
       cat: 'trips',
       homeAt: 500,
-      legs: { go: '→', back: '↩', detail: '' },
+      legs: {
+        go: '→',
+        back: '↩',
+        detail: '',
+        phases: [
+          { leg: 'go', time: '', endsAt: 10, current: true, pct: 0 },
+          { leg: 'dwell', time: '', endsAt: 300, current: false, pct: 0 },
+          { leg: 'back', time: '', endsAt: 500, current: false, pct: 0 },
+        ],
+      },
     });
-    const order = tripLegOrder([two, trip('y', 20, { cat: 'trips' })]).map(
+  it('chaque tuile d’étape se range à la fin de SON étape', () => {
+    const order = tripLegOrder([phased(), trip('y', 20, { cat: 'trips' })]).map(
       (t) => `${t.trip.key}:${t.leg.leg}`,
     );
-    expect(order).toEqual(['x:go', 'y:go', 'x:back']);
+    expect(order).toEqual(['x:go', 'y:go', 'x:dwell', 'x:back']);
   });
   it('le filtre d’étape s’applique : « Retour » seul garde ceux dont le retour est à venir', () => {
-    const two = trip('x', 10, {
-      cat: 'trips',
-      homeAt: 500,
-      legs: { go: '→', back: '↩', detail: '' },
-    });
+    const two = phased();
     expect(shown([two, trip('y', 20, { cat: 'trips' })], ALL_TRIPS, new Set(['back']))).toEqual([
       'x',
     ]);

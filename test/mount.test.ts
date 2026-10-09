@@ -1193,10 +1193,17 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="trip van[^"]*combo/g)?.length).toBe(2);
   }, 30_000);
 
-  // 🚶↩️ Demandé : une tuile par étape, et les filtres Aller / Retour.
-  it('🚶↩️ TripsPanel : un voyage à l’aller donne une tuile Aller et une tuile Retour', async () => {
+  // 🚶↩️ Demandé : une tuile par étape (attente, aller, sur place, retour), et leurs filtres.
+  it('🚶↩️ TripsPanel : une tuile par étape, chacune avec SON seul temps', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     let out = '';
+    const ph = (leg: string, time: string, current: boolean) => ({
+      leg,
+      time,
+      endsAt: 1,
+      current,
+      pct: current ? 20 : 0,
+    });
     const trip = {
       key: 'g1',
       kind: 'van',
@@ -1205,21 +1212,30 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       poi: MAP_POIS[0],
       from: null,
       time: '→ 12 min',
-      total: '1 h 05',
+      total: '9 h 59',
       pct: 20,
       back: false,
       title: 'Groupe',
       withHero: false,
       members: [],
       haul: [],
-      legs: { go: '12 min', back: '53 min', detail: '' },
+      legs: {
+        go: '12 min',
+        back: '53 min',
+        detail: '',
+        phases: [
+          ph('go', '12 min', true),
+          ph('dwell', '1 h 00', false),
+          ph('back', '53 min', false),
+        ],
+      },
     };
     const backTrip = {
       ...trip,
       key: 'g2',
       back: true,
       time: '',
-      legs: { go: null, back: '20 min', detail: '' },
+      legs: { go: null, back: '20 min', detail: '', phases: [ph('back', '20 min', true)] },
     };
     expect(
       await mountIt(
@@ -1233,9 +1249,18 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     expect(out.match(/class="trip van leg-go/g)?.length).toBe(1);
     expect(out.match(/class="trip van leg-back/g)?.length).toBe(2);
+    expect(out.match(/class="trip van leg-dwell/g)?.length).toBe(1);
     expect(out).toMatch(/leg-back[^"]*future/);
-    expect(out).toContain('↩ 53 min');
+    expect(out).toMatch(/leg-dwell[^"]*future/);
+    expect(out).toContain('→ 12 min');
+    expect(out).toContain('🔍 1 h 00');
+    expect(out).toContain('🏠 53 min');
+    expect(out).toContain('🏠 20 min');
+    // ⏱️ Seul le temps de l'étape : ni le temps total du voyage, ni de sous-titre.
+    expect(out).not.toContain('9 h 59');
+    expect(out).not.toContain('↩ 53 min');
     expect(out).toContain('aria-label="Aller (1)"');
+    expect(out).toContain('aria-label="Sur place (1)"');
     expect(out).toContain('aria-label="Retour (2)"');
   }, 30_000);
 
@@ -4084,7 +4109,18 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(combo).toMatch(/class="trf trf-all on"/);
     // 🚶↩️ Aller / Retour : une pastille À PART (`trf-legs`), pas deux catégories de plus ;
     // éteintes tant qu'elles ne filtrent pas, l'étape touchée s'allume seule.
-    const legged = { ...trip, legs: { go: '1 h 20', back: '1 h 30', detail: '' } };
+    const legged = {
+      ...trip,
+      legs: {
+        go: '1 h 20',
+        back: '1 h 30',
+        detail: '',
+        phases: [
+          { leg: 'go', time: '1 h 20', endsAt: 1, current: true, pct: 40 },
+          { leg: 'back', time: '1 h 30', endsAt: 2, current: false, pct: 0 },
+        ],
+      },
+    };
     let legs = '';
     await mountIt(
       TripsPanel,

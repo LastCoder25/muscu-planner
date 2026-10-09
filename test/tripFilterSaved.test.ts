@@ -20,7 +20,17 @@ describe('filtres de voyages mémorisés', () => {
   });
   it('rien d’enregistré ou illisible → tout afficher', () => {
     for (const raw of [null, '', '{', '"x"', '{"sel":{"mode":"bof"}}'])
-      expect(parseTripFilters(raw)).toEqual({ sel: ALL_TRIPS, legs: ['go', 'back'] });
+      expect(parseTripFilters(raw)).toEqual({
+        sel: ALL_TRIPS,
+        legs: ['wait', 'go', 'dwell', 'back'],
+      });
+  });
+  it('⏳🔍 une sauvegarde d’avant les étapes « attente » et « sur place » : aller + retour = tout', () => {
+    const old = JSON.stringify({ sel: { mode: 'except', cats: [] }, legs: ['go', 'back'] });
+    expect(parseTripFilters(old).legs).toEqual(['wait', 'go', 'dwell', 'back']);
+    // Un filtre d'étape choisi à l'époque (une seule étape) reste ce filtre.
+    const one = JSON.stringify({ sel: { mode: 'except', cats: [] }, legs: ['back'] });
+    expect(parseTripFilters(one).legs).toEqual(['back']);
   });
   it('les catégories et étapes inconnues sont écartées', () => {
     const raw = JSON.stringify({
