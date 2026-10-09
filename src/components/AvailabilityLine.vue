@@ -53,7 +53,6 @@ import { formatDuration } from '@/lib/duration';
 import { heroAttackReturnAt } from '@/lib/combinedAttack';
 import { heroWalk } from '@/lib/islandConquest';
 import { readyGarrisons } from '@/lib/controlRoutes';
-import { plannedTransferIds } from '@/lib/plannedMoves';
 
 const props = defineProps<{
   /** L'horloge de l'écran hôte (il en a déjà une, on ne double pas le tick). */
@@ -101,12 +100,7 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
  *  disponibles au même titre que ceux de la base (demandé). */
 const readyPosted = computed(() => {
   const ids = new Set<string>();
-  const ready = readyGarrisons(
-    char.row?.expedition_map,
-    char.advList,
-    props.now,
-    plannedTransferIds(char.plannedList),
-  );
+  const ready = readyGarrisons(char.row?.expedition_map, char.advList, props.now);
   for (const list of ready.values()) for (const a of list) ids.add(a.id);
   return ids;
 });

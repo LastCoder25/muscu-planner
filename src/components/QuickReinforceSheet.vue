@@ -33,29 +33,17 @@
           >{{ milFree }} place{{ milFree > 1 ? 's' : '' }} libre{{ milFree > 1 ? 's' : '' }}, dont
           {{ champFree }} de champion</template
         >
-        · coche tes renforts, puis envoie-les ou programme leur départ
+        · coche tes renforts, puis envoie-les
       </p>
       <!-- 🛡️ La tenue À L'ATTAQUE, et ce que la sélection y change (arrivées comprises). -->
       <p v-if="hold" class="qr-hold">
         🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b>
         {{ hold.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
       </p>
-      <!-- ⏳ Les départs déjà programmés vers ce lieu : ils occupent déjà leurs places. -->
-      <div v-for="m in planned" :key="m.id" class="qr-plan">
-        <span class="qr-plan-main"
-          >⏳ <b>{{ m.count }}</b> renfort{{ m.count > 1 ? 's' : '' }} programmé{{
-            m.count > 1 ? 's' : ''
-          }}
-          · départ dans {{ m.departIn }} ({{ m.departAt }})</span
-        >
-        <button type="button" class="qr-plan-x" :disabled="busy" @click="emit('cancel', m.id)">
-          Annuler
-        </button>
-      </div>
       <!-- 🦸 LE HÉROS (2026-10-05, demandé : « je n'ai pas la possibilité d'envoyer le héros sur
            un lieu fixe qui a 2 places ») : il tient garnison et prend 2 places sur les 5.
-           Depuis le 2026-10-08 (demandé) il se COCHE avec la sélection : il part avec elle, se
-           programme comme elle et compte dans la tenue. Grisé AVEC la raison. -->
+           Depuis le 2026-10-08 (demandé) il se COCHE avec la sélection : il part avec elle et
+           compte dans la tenue. Grisé AVEC la raison. -->
       <button
         v-if="heroOffer"
         type="button"
@@ -182,7 +170,7 @@
           toujours plein à l’arrivée
         </p>
         <p v-if="hold && selHold" class="qr-with">
-          🛡️ Avec ces renforts<template v-if="delayMin > 0"> (départ différé)</template> :
+          🛡️ Avec ces renforts :
           <b>{{ selHold.pct }} %</b>
           <span class="qr-delta" :class="{ up: selHold.pct > hold.pct }"
             >({{ sign(selHold.pct - hold.pct) }})</span
@@ -192,24 +180,13 @@
           >
         </p>
         <!-- 🧭 LE TRAJET DE LA SÉLECTION, avant de valider (demandé) : les champions de la base
-             partent ensemble, au pas du plus lent ; l'arrivée tient compte d'un départ différé. -->
+             partent ensemble, au pas du plus lent. -->
         <p v-if="arrival" class="qr-trip">
           🧭 Trajet <b>{{ formatDurationMin(arrival.min) }}</b> · arrivée vers
           <b>{{ arrival.at }}</b>
         </p>
-        <!-- ⏳ LE DÉPART (demandé : « dans combien de temps, heures/minutes — si une attaque
-             arrive dans 1 h 30 on les envoie dans 1 h 25 », ou tout de suite). -->
-        <DepartDelayPicker
-          :model-value="delayMin"
-          :max-delay-min="maxDelayMin"
-          :at="departLabel"
-          @update:model-value="emit('delay', $event)"
-        />
         <button type="button" class="qr-go" :disabled="busy" @click="emit('send')">
-          <template v-if="delayMin > 0"
-            >⏳ Programmer {{ count }} renfort{{ count > 1 ? 's' : '' }}</template
-          >
-          <template v-else>➕ Envoyer {{ count }} renfort{{ count > 1 ? 's' : '' }}</template>
+          ➕ Envoyer {{ count }} renfort{{ count > 1 ? 's' : '' }}
         </button>
       </div>
     </div>
@@ -219,7 +196,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { CONTROL_EMO, CONTROL_LABEL, champsDefend } from '@/lib/controlPoints';
@@ -271,17 +247,10 @@ const props = defineProps<{
   } | null;
   /** La tenue AVEC toute la sélection, et combien arriveraient après l'attaque. */
   selHold: { pct: number; late: number } | null;
-  /** ⏳ Dans combien de minutes la sélection part (0 = tout de suite). */
-  delayMin: number;
-  maxDelayMin: number;
-  /** L'heure de départ, lisible (« 21 h 40 »), quand elle est programmée. */
-  departLabel: string | null;
   /** 🧭 Le trajet de chaque champion de la base jusqu'au lieu, en minutes. */
   champMin: Record<string, number>;
   /** 🧭 Le trajet le plus long de la sélection et l'heure d'arrivée (null = rien coché). */
   arrival: { min: number; at: string } | null;
-  /** ⏳ Les départs déjà programmés vers ce lieu. */
-  planned: { id: string; count: number; departIn: string; departAt: string }[];
   /** 🦸 Le héros peut-il venir : son trajet, ou la raison d'un refus ; `null` = pas proposé. */
   heroOffer: { why: string | null; min: number } | null;
 }>();
@@ -319,8 +288,6 @@ const emit = defineEmits<{
   militia: [number];
   transfer: [string, string];
   send: [];
-  delay: [number];
-  cancel: [string];
 }>();
 </script>
 
@@ -592,29 +559,5 @@ const emit = defineEmits<{
 }
 .qr-go:disabled {
   opacity: 0.5;
-}
-.qr-plan {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 6px 6px 6px 10px;
-  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
-  border-radius: 12px;
-  font-size: 12.5px;
-}
-.qr-plan-main {
-  flex: 1;
-  min-width: 0;
-}
-.qr-plan-x {
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
 }
 </style>

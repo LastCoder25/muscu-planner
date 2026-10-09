@@ -270,10 +270,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           militiaMin: 45,
           sources: [],
           busy: false,
-          delayMin: 0,
-          maxDelayMin: 2880,
-          departLabel: null,
-          planned: [],
           sel: { champs: [], militia: 0, transfers: [] },
           champMin: {},
           arrival: null,
@@ -1369,13 +1365,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(ko).toContain('✖ Échec');
     expect(ko).toContain('🔙 Demi-tour');
     expect(ko).toMatch(/class="trip van leg-back back failed( has-total)?"/);
-    // ⏳ Un départ PROGRAMMÉ : le filtre « Programmés » apparaît avec son compte, la tuile est
-    // en pointillés, et l'équipe propose de l'annuler.
+    // ⏳ Un départ EN ATTENTE (groupe d'attaque combinée, traversée réservée) : le filtre
+    // « Programmés » apparaît avec son compte, la tuile est en pointillés.
     let pl = '';
     await mountIt(
       TripsPanel,
       {
-        trips: [trip, { ...trip, key: 'pplan_1', pending: true, cancelPlan: 'plan_1' }],
+        trips: [trip, { ...trip, key: 'pplan_1', pending: true }],
         focus: 'pplan_1',
         heroProfile: 'polyvalent',
       },
@@ -1387,9 +1383,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(pl).toMatch(/⏳ <b[^>]*>1</);
     expect(pl).toMatch(/🧭 <b[^>]*>1</);
     expect(pl).toMatch(/class="trip van[^"]*pending/);
-    expect(pl).toContain('Annuler ce départ programmé');
+    expect(pl).not.toContain('Annuler ce départ programmé');
     expect(pl).toContain('Partira vers');
-    // 🛡️ Renfort programmé : compté dans « Programmés », pas dans « Renforts » (vide → absent).
+    // 🛡️ En attente : compté dans « Programmés », pas dans « Renforts » (vide → absent).
     expect(pl).not.toContain('aria-label="Renforts');
     // 🛡️🗡️ Renforts et attaques du joueur ont leur filtre ; une catégorie vide n'est pas proposée.
     let cats = '';
@@ -3732,10 +3728,6 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
             },
           ],
           busy: false,
-          delayMin: 0,
-          maxDelayMin: 2880,
-          departLabel: null,
-          planned: [],
           sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
           champMin: { [ROW.adventurers[0].id]: 80 },
           arrival: { min: 80, at: '21:40' },
@@ -3786,57 +3778,6 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(out).toContain('🎯 +4 %');
     expect(out).toContain('🎯 +11 %');
     expect(out).toContain('🎯 −3 %');
-  }, 30_000);
-  it('⏳ programmer : le délai se règle, le bouton le dit, un départ programmé s’annule', async () => {
-    const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
-    const { id, map } = await held();
-    const poi = map.pois.find((p) => p.id === id)!;
-    const delays: number[] = [];
-    const cancelled: string[] = [];
-    let out = '';
-    expect(
-      await mountIt(
-        QuickReinforceSheet,
-        {
-          poi,
-          champs: ROW.adventurers,
-          champFree: 4,
-          milFree: 4,
-          milRoom: 4,
-          milHome: 2,
-          militiaMin: 45,
-          sources: [],
-          busy: false,
-          delayMin: 85,
-          maxDelayMin: 2880,
-          departLabel: '22:45',
-          planned: [{ id: 'plan_1', count: 3, departIn: '2 h 10', departAt: '23:30' }],
-          sel: { champs: [ROW.adventurers[0].id], militia: 1, transfers: [] },
-          champMin: {},
-          arrival: null,
-          selHold: { pct: 78, late: 0 },
-          hold: null,
-          onDelay: (n: number) => delays.push(n),
-          onCancel: (x: string) => cancelled.push(x),
-        },
-        ROW,
-        undefined,
-        '/',
-        (h) => (out = h),
-        (host) => {
-          host.querySelectorAll<HTMLElement>('.dd-when-b')[0]?.click();
-          host.querySelectorAll<HTMLElement>('.dd-delay .dd-step-b')[0]?.click();
-          host.querySelector<HTMLElement>('.qr-plan-x')?.click();
-        },
-      ),
-    ).toBeNull();
-    expect(out).toContain('1 h');
-    expect(out).toContain('25 min');
-    expect(out).toContain('départ à 22:45');
-    expect(out).toContain('Programmer 2 renforts');
-    expect(out).toContain('départ dans 2 h 10');
-    expect(delays).toEqual([0, 25]);
-    expect(cancelled).toEqual(['plan_1']);
   }, 30_000);
 });
 

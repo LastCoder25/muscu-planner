@@ -20,7 +20,6 @@
 import { advAvailable, type Adventurer } from '@/lib/adventurers';
 import type { ActiveExpedition } from '@/lib/expedition';
 import { attackOutings, type CombinedAttack } from '@/lib/combinedAttack';
-import { plannedOutings, type PlannedMove } from '@/lib/plannedMoves';
 
 /** Un voyage, réduit à ce qui dit QUI était dehors et QUAND. */
 export interface Outing {
@@ -73,11 +72,8 @@ export function outingsOf(s: {
    *  jusqu'à son départ (il défend), puis dehors. ⚠️ REQUIS : oublié, un groupe parti
    *  serait compté présent au siège. */
   attacks: readonly CombinedAttack[];
-  /** ⏳ Les renforts programmés : réservés mais À LA MAISON jusqu'à leur départ (ils
-   *  défendent). ⚠️ REQUIS, pour la même raison que `attacks`. */
-  planned: readonly PlannedMove[];
 }): Outing[] {
-  const out: Outing[] = [...attackOutings(s.attacks), ...plannedOutings(s.planned)];
+  const out: Outing[] = attackOutings(s.attacks);
   if (s.expedition)
     out.push({
       sentAt: s.expedition.sentAt,

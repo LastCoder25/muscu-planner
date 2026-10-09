@@ -1,11 +1,10 @@
 /**
  * 🏰 LA FRISE DES PLACES D'UNE GARNISON (2026-10-09, demandé : « les tuiles de garnison me
  * gênent, intègre-les au nouveau système ») — le langage des frises de voyage : UNE ligne de
- * cases, une case par place. Plein = présent, pointillé = en route ou en sortie, ⏳ = réservée
- * par un départ programmé, ＋ = libre. Le héros prend deux cases (il vaut deux places).
+ * cases, une case par place. Plein = présent, pointillé = en route ou en sortie, ＋ = libre. Le héros prend deux cases (il vaut deux places).
  *
- * ⚠️ AUCUNE RÈGLE DE PLACES ICI : le nombre de cases libres et réservées vient de la fiche
- * (`controlFreeSeats`, `militiaFreeSeats`, `plannedSeatsTo`), cette fonction ne fait que les
+ * ⚠️ AUCUNE RÈGLE DE PLACES ICI : le nombre de cases libres vient de la fiche
+ * (`controlFreeSeats`, `militiaFreeSeats`), cette fonction ne fait que les
  * RANGER. Deux règles pour « combien de places reste-t-il ? » finiraient par se contredire.
  */
 
@@ -17,7 +16,7 @@ export interface StripMember {
   state: StripState;
   /** Temps avant son arrivée (`coming`) ou son retour (`away`), en ms. */
   inMs?: number;
-  /** Un départ programmé l'attend : on ne peut plus le choisir (le libellé dit pourquoi). */
+  /** Une attaque combinée l'attend : on ne peut plus le choisir (le libellé dit pourquoi). */
   reserved?: string | null;
   /** Ce que la tenue perdrait sans lui, en points (`occupantLoss`). */
   loss?: number | null;
@@ -38,13 +37,11 @@ export type StripCell =
       /** Peut-on le toucher pour le ramener / le remplacer ? (pas en sortie, pas réservé). */
       selectable: boolean;
     }
-  | { key: string; kind: 'reserved'; span: 1 }
   | { key: string; kind: 'free'; span: 1; unlimited: boolean };
 
 export interface StripInput {
   hero?: { state: StripState; inMs?: number } | null;
   members: readonly StripMember[];
-  reserved: number;
   free: number;
   selected: readonly string[];
   /** La forteresse prise : pas de limite, une seule case « ＋ » qui le dit. */
@@ -54,7 +51,7 @@ export interface StripInput {
 const ORDER: Record<StripState, number> = { here: 0, coming: 1, away: 2 };
 
 /** Les cases d'une rangée, dans l'ordre de lecture : le héros, les présents, ceux qui
- *  arrivent (le plus proche d'abord), ceux en sortie, puis les places réservées et libres. */
+ *  arrivent (le plus proche d'abord), ceux en sortie, puis les places libres. */
 export function garrisonStrip(input: StripInput): StripCell[] {
   const cells: StripCell[] = [];
   if (input.hero)
@@ -84,8 +81,6 @@ export function garrisonStrip(input: StripInput): StripCell[] {
       selectable: m.state !== 'away' && !reserved,
     });
   }
-  for (let k = 0; k < input.reserved; k++)
-    cells.push({ key: 'r' + k, kind: 'reserved', span: 1 });
   if (input.unlimited) cells.push({ key: 'f0', kind: 'free', span: 1, unlimited: true });
   else
     for (let k = 0; k < input.free; k++)

@@ -18,8 +18,7 @@ export interface ReinfSelection {
   /** Membres d'autres lieux tenus (champions ou miliciens). */
   transfers: { fromId: string; id: string }[];
   /** 🦸 Le héros part AVEC la sélection (2026-10-08, demandé : il partait seul et tout de
-   *  suite, par son propre bouton) : il prend 2 places de champion (`MILITIA.heroSeats`), et
-   *  se programme comme les autres. */
+   *  suite, par son propre bouton) : il prend 2 places de champion (`MILITIA.heroSeats`). */
   hero?: boolean;
 }
 
