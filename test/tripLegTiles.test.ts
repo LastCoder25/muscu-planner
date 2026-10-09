@@ -25,13 +25,18 @@ const trip = (now: number, o: Partial<LegSource> = {}): LegSource => ({
 const show = (now: number) =>
   tripLegTiles(trip(now)).map((t) => ({ leg: t.leg, time: t.time || t.total, future: t.future }));
 
-describe('⏳→🔍↩ une tuile par étape, chacune son seul temps', () => {
-  it('avant le départ : attente, aller, sur place, retour — l’attente décompte, les autres durent', () => {
+describe('⏳→🔍↩ une tuile par étape, chacune le temps d’ici sa fin', () => {
+  it('⏱️ l’exemple demandé : aller 10, fouille 10, retour 10 → 10, 20 et 30 (jamais 10, 10, 10)', () => {
+    const v = { sentAt: 0, midAt: 20 * MIN, returnAt: 30 * MIN, dwellMs: 10 * MIN };
+    const tiles = tripLegTiles(trip(0, { legs: tripLegs(v, 0) }));
+    expect(tiles.map((t) => t.time || t.total)).toEqual(['⚔️ 10 min', '🔍 20 min', '30 min']);
+  });
+  it('avant le départ : chaque étape affiche le temps d’ici SA fin, étapes précédentes comprises', () => {
     expect(show(0)).toEqual([
       { leg: 'wait', time: '⏳ 10 min', future: false },
-      { leg: 'go', time: '⚔️ 30 min', future: true },
-      { leg: 'dwell', time: '🔍 1 h 00', future: true },
-      { leg: 'back', time: '30 min', future: true },
+      { leg: 'go', time: '⚔️ 40 min', future: true },
+      { leg: 'dwell', time: '🔍 1 h 40', future: true },
+      { leg: 'back', time: '2 h 10', future: true },
     ]);
   });
   it('🎴 l’icône centrale est celle de l’étape EN COURS, sur toutes les tuiles sauf le retour (toujours ↩️)', () => {
@@ -48,22 +53,18 @@ describe('⏳→🔍↩ une tuile par étape, chacune son seul temps', () => {
   it('à l’aller : l’aller décompte, l’attente a disparu', () => {
     expect(show(25 * MIN)).toEqual([
       { leg: 'go', time: '⚔️ 15 min', future: false },
-      { leg: 'dwell', time: '🔍 1 h 00', future: true },
-      { leg: 'back', time: '30 min', future: true },
+      { leg: 'dwell', time: '🔍 1 h 15', future: true },
+      { leg: 'back', time: '1 h 45', future: true },
     ]);
   });
-  it('⏱️ moins d’une minute avant la fin de l’étape : en secondes (les étapes à venir non)', () => {
-    expect(show(40 * MIN - 30_000)).toEqual([
-      { leg: 'go', time: '⚔️ 30 s', future: false },
-      { leg: 'dwell', time: '🔍 1 h 00', future: true },
-      { leg: 'back', time: '30 min', future: true },
-    ]);
+  it('⏱️ moins d’une minute avant la fin d’une étape : en secondes', () => {
+    expect(show(40 * MIN - 30_000).map((t) => t.time)).toEqual(['⚔️ 30 s', '🔍 1 h 01', '1 h 31']);
     expect(show(130 * MIN - 12_000)).toEqual([{ leg: 'back', time: '12 s', future: false }]);
   });
   it('sur place puis sur le retour : il ne reste que les étapes à venir', () => {
     expect(show(70 * MIN)).toEqual([
       { leg: 'dwell', time: '🔍 30 min', future: false },
-      { leg: 'back', time: '30 min', future: true },
+      { leg: 'back', time: '1 h 00', future: true },
     ]);
     expect(show(110 * MIN)).toEqual([{ leg: 'back', time: '20 min', future: false }]);
   });
@@ -89,10 +90,15 @@ describe('⏳→🔍↩ une tuile par étape, chacune son seul temps', () => {
     expect(tripLegTiles(trip(25 * MIN))[0]!.pct).toBe(50);
     expect(tripLegTiles(trip(25 * MIN))[1]!.pct).toBe(0);
   });
-  it('🏰 assaut de point fixe : le retour garde ses deux durées « pris/raté »', () => {
+  it('🏰 assaut de point fixe : le retour garde ses deux temps « pris/raté », aller compris', () => {
+    // Arrivée dans 1 h 20, puis 20 min (pris) ou 1 h (raté) de retour.
     const v = { ...VOY, dwellMs: 0, returnLegs: { won: 20, lost: 60 } };
     const back = tripLegTiles(trip(20 * MIN, { legs: tripLegs(v, 20 * MIN) })).at(-1)!;
-    expect(back.total).toBe('20 min/1 h 00');
+    expect(back.total).toBe('1 h 40/2 h 20');
+    const none = { ...v, returnLegs: { won: 0, lost: 60 } };
+    expect(tripLegTiles(trip(20 * MIN, { legs: tripLegs(none, 20 * MIN) })).at(-1)!.total).toBe(
+      '—/2 h 20',
+    );
   });
 
   it('mer, programmé, rappel, sans étapes : une seule tuile', () => {

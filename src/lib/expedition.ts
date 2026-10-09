@@ -3635,8 +3635,8 @@ export function tripLegs(
 export type TripPhaseId = 'wait' | 'go' | 'dwell' | 'back';
 export interface TripPhase {
   leg: TripPhaseId;
-  /** Ce que la tuile affiche : le temps RESTANT de l'étape en cours, la DURÉE d'une étape à
-   *  venir. Le retour d'un assaut de point fixe garde ses deux durées « pris/raté ». */
+  /** Ce que la tuile affiche : le temps d'ici la FIN de l'étape, étapes précédentes
+   *  comprises. Le retour d'un assaut de point fixe garde ses deux temps « pris/raté ». */
   time: string;
   /** Fin de l'étape (ms) : l'heure où se range sa tuile. */
   endsAt: number;
@@ -3664,12 +3664,15 @@ function tripPhases(
   const legs = v.returnLegs;
   return spans.map((sp, i) => {
     const current = i === 0;
-    const from = current ? now : (sp.start ?? now);
-    // ⏱️ Le temps RESTANT de l'étape en cours passe en secondes sous la minute.
-    let time = (current ? formatCountdown : formatDuration)(Math.max(0, sp.end - from));
+    // ⏱️ Le temps jusqu'à la FIN de l'étape, compté depuis MAINTENANT (demandé : « prends en
+    // compte les délais des étapes précédentes » — aller 10, fouille 10, retour 10
+    // s'affichent 10, 20 et 30, pas 10, 10, 10). En secondes sous la minute.
+    let time = formatCountdown(sp.end - now);
     // 🏰 Assaut de point fixe pas encore arrivé : deux retours possibles, sans trahir l'issue.
-    if (sp.leg === 'back' && now < v.midAt && legs && legs.won < legs.lost)
-      time = `${legs.won > 0 ? formatDurationMin(legs.won) : '—'}/${formatDurationMin(legs.lost)}`;
+    if (sp.leg === 'back' && now < v.midAt && legs && legs.won < legs.lost) {
+      const until = (min: number) => formatCountdown(v.midAt - now + min * 60_000);
+      time = `${legs.won > 0 ? until(legs.won) : '—'}/${until(legs.lost)}`;
+    }
     const span = sp.start !== undefined ? sp.end - sp.start : 0;
     const pct =
       current && sp.start !== undefined && span > 0
