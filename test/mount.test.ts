@@ -4173,9 +4173,8 @@ describe('🔮 GameFxOverlay — rune posée', () => {
         phases: [{ leg: 'back', time: '20 min', endsAt: 3, current: true, pct: 50 }],
       },
     };
-    const { serializeTripFilters, tripFiltersKey, parseTripFilters } = await import(
-      '@/lib/tripFilter'
-    );
+    const { serializeTripFilters, tripFiltersKey, parseTripFilters } =
+      await import('@/lib/tripFilter');
     localStorage.setItem(
       tripFiltersKey(null),
       serializeTripFilters(parseTripFilters(null).sel, ['go']),
@@ -4446,5 +4445,48 @@ describe('🛡️ tuile d’un renfort vers un lieu fixe', () => {
     expect(html.match(/class="ts-c mine"/g)).toHaveLength(1);
     expect(html.match(/class="ts-c other"/g)).toHaveLength(1);
     expect(html.match(/class="ts-c free"/g)).toHaveLength(1);
+  }, 30_000);
+});
+
+describe('💰 la récompense sur la tuile d’un voyage', () => {
+  const poi = { id: 'p1', type: 'mine', x: 50, y: 50, level: 10 };
+  const base = {
+    kind: 'van',
+    who: '⚔️',
+    cat: 'trips',
+    poi,
+    time: '',
+    pct: 40,
+    withHero: false,
+    from: null,
+    members: [],
+    title: 'Groupe',
+    // Le butin réel (tiré au départ) et l'estimation « si pris » : deux chiffres DIFFÉRENTS.
+    haul: [{ emoji: '🪙', n: 777 }],
+    expected: '300 🪙',
+  };
+  async function render(trip: Record<string, unknown>) {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let html = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [trip], focus: null, heroProfile: 'polyvalent', attacks: [] },
+      ROW,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
+    return html;
+  }
+  it('à l’aller : ce que le lieu rapporte s’il est pris, jamais le butin réel', async () => {
+    const html = await render({ ...base, key: 'g1', back: false });
+    expect(html).toContain('si pris');
+    expect(html).toContain('300 🪙');
+    expect(html).not.toContain('777');
+  }, 30_000);
+  it('au retour : le butin ramené', async () => {
+    const html = await render({ ...base, key: 'g2', back: true });
+    expect(html).toContain('777');
+    expect(html).not.toContain('si pris');
   }, 30_000);
 });

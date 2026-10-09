@@ -777,7 +777,9 @@
             <GarrisonStrip
               :cells="champStrip"
               :title="champStripTitle"
-              :note="champsDefend(liveControl.kind) ? null : 'produisent et interceptent, sans défendre'"
+              :note="
+                champsDefend(liveControl.kind) ? null : 'produisent et interceptent, sans défendre'
+              "
               note-tone="dim"
               :advs="advById"
               @toggle="toggleRecall"
@@ -793,7 +795,9 @@
               @toggle="toggleRecall"
               @add="openQuick"
             />
-            <p class="gs-hint ctl-dim">Touche un membre pour le ramener ou le remplacer · ＋ pour renforcer</p>
+            <p class="gs-hint ctl-dim">
+              Touche un membre pour le ramener ou le remplacer · ＋ pour renforcer
+            </p>
             <!-- ⚔️⏳ UNE ATTAQUE COMBINÉE PART D'ICI (signalé : « des troupes attendent leur départ
                sur un lieu fixe mais je n'ai pas d'indication ») : combien, quand, vers quoi. -->
             <div v-for="w in ctlAttackWaits" :key="'atk' + w.key" class="ctl-plan">
@@ -2963,7 +2967,11 @@ const champStrip = computed(() => {
   const hero =
     c.hero || c.heroComing || c.heroAway
       ? {
-          state: c.heroComing ? ('coming' as const) : c.heroAway ? ('away' as const) : ('here' as const),
+          state: c.heroComing
+            ? ('coming' as const)
+            : c.heroAway
+              ? ('away' as const)
+              : ('here' as const),
           inMs: c.heroComing ? c.heroComing.at - now.value : 0,
         }
       : null;
@@ -2990,7 +2998,9 @@ const champStripTitle = computed(() => {
   const c = liveControl.value;
   if (!c) return '';
   const n = controlMembers.value.length + controlAway.value.length + heroSeatsIn(c);
-  return unlimitedGarrison.value ? `⚔️ Titulaires · ${n} · sans limite` : `⚔️ Titulaires · ${n}/${seatsOf(c.kind)}`;
+  return unlimitedGarrison.value
+    ? `⚔️ Titulaires · ${n} · sans limite`
+    : `⚔️ Titulaires · ${n}/${seatsOf(c.kind)}`;
 });
 /** 🛡️ LA FRISE DE LA MILICE : un milicien par case (ils sont anonymes, mais chacun se ramène). */
 const milStrip = computed(() =>
@@ -4079,6 +4089,19 @@ watch(mapPois, (list) => {
  *  liste, sinon la rangée se lirait comme plusieurs rangées collées. `ends` = la prochaine
  *  étape de la tuile (`nextStepAt`) : le départ s'il attend, la résolution sur place à
  *  l'aller, puis le retour ; l'arrivée pour un renfort (aller simple, il reste sur le point). */
+/** 💰 CE QUE LE LIEU RAPPORTE S'IL EST PRIS, sur la tuile d'un voyage à l'aller (2026-10-09,
+ *  demandé : « intègre les récompenses de l'expédition ») : la quantité que la fiche du lieu
+ *  annonce (`poiHaulPreview`, même niveau que la récolte) — jamais le butin réel, tiré au départ,
+ *  qui révélerait l'issue d'un combat pas encore livré. `null` sans récompense à annoncer. */
+function expectedHaul(p: Poi, heroGoes: boolean): string | null {
+  const txt = formatHaul(
+    poiHaulPreview(p, {
+      playerLevel: heroGoes ? progressionLevel.value : heroLevel.value,
+      heroGoes,
+    }),
+  );
+  return txt || null;
+}
 const trips = computed(() => {
   const out: MapTrip[] = [];
   const ends = new Map<string, number>();
@@ -4108,6 +4131,7 @@ const trips = computed(() => {
       from: tripOriginPoi(pois.value, a.origin),
       members: tripCrew(a),
       haul: expeHaul(a.outcome),
+      expected: expectedHaul(a.poi, true),
       legs: tripLegs(a, now.value),
       failed: voyageFailure(a, now.value),
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${tripCrew(a).length ? ` · avec ${tripCrew(a).length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
@@ -4132,6 +4156,8 @@ const trips = computed(() => {
       from: tripOriginPoi(pois.value, g.origin),
       members: g.members,
       haul: g.haul,
+      // Un groupe d'attaque combinée n'annonce rien : chaque groupe répéterait la même prise.
+      expected: g.combined ? null : expectedHaul(g.poi, g.hero),
       legs: g.legs,
       failed: g.failed,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
@@ -4208,7 +4234,13 @@ const trips = computed(() => {
       ...(w.back ? { toBase: true } : {}),
       members: [],
       haul: [],
-      legs: oneWayLegs(w.sentAt, w.arriveAt, now.value, w.back ? 'back' : 'go', w.back ? '🏠' : '🧭'),
+      legs: oneWayLegs(
+        w.sentAt,
+        w.arriveAt,
+        now.value,
+        w.back ? 'back' : 'go',
+        w.back ? '🏠' : '🧭',
+      ),
       ...(w.back ? {} : { seats: arrivalSeats(w.poi.control, [], true) }),
       title: w.back
         ? `Ton héros rentre à pied · à la base dans ${formatCountdown(Math.max(0, w.arriveIn))}`

@@ -158,6 +158,21 @@
           </span>
         </template>
         <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
+        <!-- 💰 LA RÉCOMPENSE SUR LA TUILE (2026-10-09, demandé) : au retour, ce que le voyage
+             RAMÈNE (le butin réel, comme dans le détail de l'équipe) ; à l'aller, seulement ce
+             que le lieu rapporte s'il est pris — le butin réel révélerait l'issue. -->
+        <!-- ⚠️ Du TEXTE, pas `HaulPills` : la tuile est un <button>, et des boutons imbriqués
+             ne sont pas du HTML valide (vu au banc : le navigateur referme la tuile avant les
+             pastilles). Le détail de l'équipe, lui, garde les pastilles touchables. -->
+        <span v-if="t.back && t.haul.length" class="tr-loot" title="Ce que le voyage ramène"
+          ><span class="tr-loot-lab">🎁</span> {{ haulText(t.haul) }}</span
+        >
+        <span
+          v-else-if="!t.back && t.expected"
+          class="tr-loot est"
+          title="Ce que le lieu rapporte s'il est pris (hors aléas de la route)"
+          ><span class="tr-loot-lab">💰 si pris</span> {{ t.expected }}</span
+        >
         <!-- 🛡️ LES PLACES DU LIEU À SON ARRIVÉE (2026-10-09, demandé) : tenues (pleines), les
              siennes (accent), celles d'autres renforts en route (pointillé), libres (vides). -->
         <span v-if="t.seats" class="tr-seats">
@@ -301,6 +316,8 @@ export interface MapTrip {
   members: string[];
   /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
   haul: HaulPill[];
+  /** 💰 À l'aller : ce que le lieu rapporte s'il est pris (« 300 🪙 · 2 🔮 », `formatHaul`). */
+  expected?: string | null;
   /** 🧭 D'où part la troupe : un point fixe, ou `null` = la base. */
   from: Poi | null;
   /** 🏠 La troupe rentre à la BASE (un retour d'un point fixe) : l'objectif est 🏰. */
@@ -343,13 +360,7 @@ export interface MapTrip {
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { toggleAllTrips, toggleTripCat, tripCatPillOn, type TripFilter } from '@/lib/tripFilter';
-import {
-  STEP_ICON,
-  TRIP_LEGS,
-  type LegTile,
-  tripTimeline,
-  type TripLeg,
-} from '@/lib/tripLegTiles';
+import { STEP_ICON, TRIP_LEGS, type LegTile, tripTimeline, type TripLeg } from '@/lib/tripLegTiles';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -372,6 +383,11 @@ import { revealBlock } from '@/lib/reveal';
 import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { BOOST_BLOCK_LABEL, type BoostBlock, type BoostChoice } from '@/lib/speedBoost';
 import type { BoostId } from '@/lib/supplies';
+
+/** 🎁 Le butin ramené, en une ligne (« 12 480 🪙 · 35 ⚡ ») : la forme de l'estimation « si pris ». */
+function haulText(pills: HaulPill[]): string {
+  return pills.map((g) => `${g.n.toLocaleString('fr-FR')} ${g.emoji}`).join(' · ');
+}
 
 /** Le lieu d'un encart (appelé seulement quand il en porte un). */
 function endPoi(e: TripEnd): Poi {
@@ -887,6 +903,24 @@ const crew = computed(() => {
 /* Icône et portraits sur la même ligne : la tuile a la place. */
 .trip.line .tr-faces {
   flex-basis: auto;
+}
+/* 💰 La récompense : le butin ramené (pastilles), ou l'estimation « si pris » à l'aller. */
+.tr-loot {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin: 5px 8px 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.tr-loot.est {
+  color: var(--dim);
+}
+.tr-loot-lab {
+  font-size: 11px;
+  font-weight: 600;
 }
 /* 🛡️ Les places du lieu à l'arrivée d'un renfort : une rangée de mini-cases par réserve. */
 .tr-seats {
