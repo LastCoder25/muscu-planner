@@ -3704,6 +3704,9 @@ export interface TripPhase {
   current: boolean;
   /** Avancement DANS l'étape (0..100), 0 pour une étape à venir. */
   pct: number;
+  /** 🎴 L'icône de l'étape sur la tuile, quand ce n'est pas celle de son type (`STEP_ICON`) :
+   *  un renfort marche 🛡️, pas ⚔️ (`oneWayLegs`). */
+  icon?: string;
 }
 
 /** Les étapes restantes d'un voyage déjà ramené à ce qu'on montre (`shownVoyage`). Le lieu est
@@ -3762,6 +3765,8 @@ export interface TripStep {
   current: boolean;
   /** Temps d'ici la fin de l'étape (`TripPhase.time`) ; vide pour une étape faite. */
   time: string;
+  /** 🎴 Son icône sur la frise (cf. `TripPhase.icon`). */
+  icon?: string;
 }
 function tripSteps(
   v: Pick<ActiveExpedition, 'midAt' | 'returnAt'> &

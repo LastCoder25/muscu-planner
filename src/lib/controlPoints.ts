@@ -2907,6 +2907,66 @@ export function militiaFreeSeats(c: ControlState | undefined | null): number {
   return militiaRoom(c);
 }
 
+/** 🏰 Une réserve de places d'un lieu vue depuis un renfort en route (`arrivalSeats`). */
+export interface SeatRow {
+  /** Places de la réserve sur le lieu. */
+  total: number;
+  /** Déjà tenues : garnison, places gardées des sortants, héros posté. */
+  held: number;
+  /** Celles que CE renfort va prendre. */
+  mine: number;
+  /** Celles que d'AUTRES renforts en route vont prendre. */
+  other: number;
+  /** Ce renfort en trop pour la réserve : ils feront demi-tour (miliciens) à l'arrivée. */
+  over: number;
+}
+/**
+ * 🛡️ CE QUE CE RENFORT DONNERA AU LIEU (2026-10-09, demandé : intégrer les tuiles des troupes
+ * qui partent en garnison) : par réserve (champions, milice), les places tenues, les siennes,
+ * celles d'autres renforts en route, et celles qui resteront libres. Seules les réserves qu'il
+ * occupe sont rendues ; `null` sans réserve limitée à montrer (forteresse sans limite, lieu
+ * qui n'est pas à nous).
+ *
+ * ⚠️ MÊME COMPTE QUE LE JEU (`occupants`) : garnison, renforts en route, places gardées des
+ * sortants, le héros pour deux. Le renfort lui-même est retiré des « autres ».
+ */
+export function arrivalSeats(
+  c: ControlState | undefined | null,
+  /** Les ids du renfort (champions et miliciens) ; vide pour le héros seul. */
+  ids: readonly string[],
+  /** C'est le HÉROS qui part se poster (il prend deux places de champion). */
+  hero = false,
+): { champ?: SeatRow; mil?: SeatRow } | null {
+  if (!c || c.owner !== 'player') return null;
+  const mine = new Set(ids);
+  const route = (c.reinforcing ?? []).map((r) => r.id).filter((id) => !mine.has(id));
+  const champTotal = seatsOf(c.kind);
+  const out: { champ?: SeatRow; mil?: SeatRow } = {};
+  const myChamps = ids.filter((id) => !isMilitiaId(id)).length + (hero ? MILITIA.heroSeats : 0);
+  if (myChamps > 0 && Number.isFinite(champTotal)) {
+    const heroHere = c.hero || c.heroAway ? MILITIA.heroSeats : 0;
+    const heroOther = c.heroComing && !hero ? MILITIA.heroSeats : 0;
+    const held =
+      c.garrison.filter((id) => !isMilitiaId(id)).length + (c.away ?? []).length + heroHere;
+    const other = route.filter((id) => !isMilitiaId(id)).length + heroOther;
+    out.champ = row(champTotal, held, myChamps, other);
+  }
+  const myMil = ids.filter(isMilitiaId).length;
+  const milTotal = militiaSeatsOf(c.kind);
+  if (myMil > 0 && milTotal > 0) {
+    const held = c.garrison.filter(isMilitiaId).length;
+    const other = route.filter(isMilitiaId).length;
+    out.mil = row(milTotal, held, myMil, other);
+  }
+  return out.champ || out.mil ? out : null;
+}
+function row(total: number, held: number, mine: number, other: number): SeatRow {
+  const h = Math.min(held, total);
+  const o = Math.min(other, total - h);
+  const m = Math.min(mine, total - h - o);
+  return { total, held: h, mine: m, other: o, over: mine - m };
+}
+
 /** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
  *  raison, le store refuse avec elle. */
 export type ReinforceBlock = 'notHeld' | 'empty' | 'full' | 'heroHere' | 'heroNoSeat' | 'noMilitia';

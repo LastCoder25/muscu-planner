@@ -158,6 +158,15 @@
           </span>
         </template>
         <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
+        <!-- 🛡️ LES PLACES DU LIEU À SON ARRIVÉE (2026-10-09, demandé) : tenues (pleines), les
+             siennes (accent), celles d'autres renforts en route (pointillé), libres (vides). -->
+        <span v-if="t.seats" class="tr-seats">
+          <span v-for="r in seatRows(t.seats)" :key="r.key" class="ts-row" :title="r.title">
+            <span class="ts-lab">{{ r.icon }}</span>
+            <i v-for="(c, i) in r.cells" :key="i" class="ts-c" :class="c" />
+            <span v-if="r.over" class="ts-over">+{{ r.over }} demi-tour</span>
+          </span>
+        </span>
       </button>
       <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
          haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
@@ -275,6 +284,8 @@
 import type { HaulPill, Poi, TripPhase, TripStep, VoyageFailure } from '@/lib/expedition';
 import type { ActiveAttack } from '@/lib/fieldArmy';
 import type { TripCategory } from '@/lib/tripFilter';
+import type { arrivalSeats } from '@/lib/controlPoints';
+type ArrivalSeats = ReturnType<typeof arrivalSeats>;
 /** Un voyage en cours, tel que la rangée le montre. */
 export interface MapTrip {
   key: string;
@@ -323,6 +334,9 @@ export interface MapTrip {
   sea?: { from: number; to: number };
   /** 🎨 Groupe d'une attaque combinée : la couleur de SON attaque (contour de la tuile). */
   combo?: string;
+  /** 🛡️ Un renfort (ou le héros qui va se poster) : les places du lieu à son arrivée
+   *  (`arrivalSeats`) — tenues, les siennes, celles d'autres renforts, libres. */
+  seats?: ArrivalSeats | null;
 }
 </script>
 
@@ -472,6 +486,39 @@ const filterOpts = computed<
 /** ➡️↩️ Les étapes, dans leur pastille à part (aller / retour) — proposées seulement s'il y en a au moins
  *  deux à séparer, et seulement celles qui ont des tuiles. Allumée = elle filtre
  *  (`legPillOn`). */
+/** 🛡️ Les mini-cases d'un renfort : une par place de la réserve, dans l'ordre tenues → les
+ *  siennes → d'autres en route → libres (`arrivalSeats`). */
+type SeatCell = 'held' | 'mine' | 'other' | 'free';
+function seatRows(a: NonNullable<ArrivalSeats>) {
+  const rows: { key: string; icon: string; cells: SeatCell[]; over: number; title: string }[] = [];
+  for (const [key, icon, name, r] of [
+    ['champ', '⚔️', 'champion', a.champ],
+    ['mil', '🛡️', 'milicien', a.mil],
+  ] as const) {
+    if (!r) continue;
+    const free = Math.max(0, r.total - r.held - r.mine - r.other);
+    const cells: SeatCell[] = [
+      ...Array<SeatCell>(r.held).fill('held'),
+      ...Array<SeatCell>(r.mine).fill('mine'),
+      ...Array<SeatCell>(r.other).fill('other'),
+      ...Array<SeatCell>(free).fill('free'),
+    ];
+    const parts = [
+      `${r.held} tenue${r.held > 1 ? 's' : ''}`,
+      `${r.mine} avec ce renfort`,
+      r.other ? `${r.other} pour d'autres renforts en route` : '',
+      `${free} libre${free > 1 ? 's' : ''}`,
+    ].filter(Boolean);
+    rows.push({
+      key,
+      icon,
+      cells,
+      over: r.over,
+      title: `Places de ${name} à l'arrivée : ${parts.join(', ')}${r.over ? ` — ${r.over} en trop feront demi-tour` : ''}`,
+    });
+  }
+  return rows;
+}
 const LEG_LABEL: Record<TripLeg, string> = {
   wait: 'Attente du départ',
   go: 'Aller',
@@ -840,6 +887,46 @@ const crew = computed(() => {
 /* Icône et portraits sur la même ligne : la tuile a la place. */
 .trip.line .tr-faces {
   flex-basis: auto;
+}
+/* 🛡️ Les places du lieu à l'arrivée d'un renfort : une rangée de mini-cases par réserve. */
+.tr-seats {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 5px 8px 0;
+}
+.ts-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ts-lab {
+  font-size: 11px;
+  margin-right: 2px;
+}
+.ts-c {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1.5px solid var(--line, #3a332a);
+}
+.ts-c.held {
+  background: var(--dim);
+  border-color: var(--dim);
+}
+.ts-c.mine {
+  background: var(--tc, var(--accent));
+  border-color: var(--tc, var(--accent));
+}
+.ts-c.other {
+  border-style: dashed;
+  border-color: var(--dim);
+}
+.ts-over {
+  font-size: 10.5px;
+  color: var(--d3, #ffb23f);
+  margin-left: 4px;
 }
 .tl-frise,
 .tl-labs {

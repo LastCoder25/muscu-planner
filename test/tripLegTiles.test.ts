@@ -108,7 +108,11 @@ describe('⏳→🔍↩ une tuile par étape, chacune le temps d’ici sa fin', 
     expect(tripLegTiles(trip(0, { legs: null }))).toMatchObject([{ leg: 'go', key: 'g1' }]);
     expect(tripLegTiles(trip(0, { legs: null, pending: true }))).toMatchObject([{ leg: 'wait' }]);
     expect(tripLegTiles(trip(0, { sea: { from: 1, to: 2 } }))).toMatchObject([{ leg: 'go' }]);
-    expect(tripLegTiles(trip(0, { toBase: true }))).toMatchObject([{ leg: 'back', back: true }]);
+    // 🏠 Un retour SANS étapes connues : une seule tuile. (Avec ses étapes, il prend la frise
+    // depuis le 2026-10-09 : cf. reinforcementTile.test.)
+    expect(tripLegTiles(trip(0, { toBase: true, legs: null }))).toMatchObject([
+      { leg: 'back', back: true },
+    ]);
   });
 });
 

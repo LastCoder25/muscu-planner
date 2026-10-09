@@ -4406,3 +4406,45 @@ describe('🏰 frise de la garnison', () => {
     expect(html.match(/gs-cell free/g)).toHaveLength(2);
   }, 30_000);
 });
+
+describe('🛡️ tuile d’un renfort vers un lieu fixe', () => {
+  it('pleine largeur avec sa frise, et les places du lieu à son arrivée', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    const { oneWayLegs } = await import('@/lib/oneWayTrip');
+    const now = Date.now();
+    const poi = { id: 'ctl_mine', type: 'control', x: 50, y: 50, level: 10 };
+    const trip = {
+      key: 'r1',
+      kind: 'van',
+      who: '🛡️',
+      cat: 'reinf',
+      poi,
+      time: '',
+      pct: 50,
+      back: false,
+      withHero: false,
+      from: null,
+      members: [],
+      haul: [],
+      title: 'Renfort',
+      legs: oneWayLegs(now - 3_600_000, now + 3_600_000, now, 'go', '🛡️'),
+      seats: { champ: { total: 5, held: 2, mine: 1, other: 1, over: 0 } },
+    };
+    let html = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [trip], focus: null, heroProfile: 'polyvalent', attacks: [] },
+      ROW,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
+    expect(html).toMatch(/class="trip van leg-go line/);
+    expect(html).toContain('class="tl-frise"');
+    expect(html).toContain('class="tr-seats"');
+    expect(html.match(/class="ts-c held"/g)).toHaveLength(2);
+    expect(html.match(/class="ts-c mine"/g)).toHaveLength(1);
+    expect(html.match(/class="ts-c other"/g)).toHaveLength(1);
+    expect(html.match(/class="ts-c free"/g)).toHaveLength(1);
+  }, 30_000);
+});

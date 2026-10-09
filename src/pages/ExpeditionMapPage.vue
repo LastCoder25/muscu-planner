@@ -1656,6 +1656,7 @@ import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import GarrisonStrip from '@/components/GarrisonStrip.vue';
+import { oneWayLegs } from '@/lib/oneWayTrip';
 import { garrisonStrip, type StripMember } from '@/lib/garrisonStrip';
 import HeroPickTile from '@/components/HeroPickTile.vue';
 import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
@@ -1855,6 +1856,7 @@ import {
   recallIsWhole,
   garrisonFreeSeats,
   acceptsMilitia,
+  arrivalSeats,
   militiaMayHead,
   champsDefend,
   militiaSeatsOf,
@@ -3850,6 +3852,7 @@ const heroWalkOnMap = computed(() => {
     origin: v.origin,
     at: drawnAt(v),
     pct: voyageProgress(v, now.value).overall * 100,
+    sentAt: v.sentAt,
     arriveAt: v.back ? v.returnAt : v.midAt,
     arriveIn: (v.back ? v.returnAt : v.midAt) - now.value,
   };
@@ -4179,6 +4182,10 @@ const trips = computed(() => {
       from: tripOriginPoi(pois.value, r.origin),
       members: r.members,
       haul: [],
+      // 🛡️ LA FRISE ET LES PLACES À L'ARRIVÉE (2026-10-09, demandé) : un renfort a ses étapes
+      // comme une expédition (`oneWayLegs`), et dit ce qu'il donnera au lieu (`arrivalSeats`).
+      legs: oneWayLegs(r.sentAt, r.arriveAt, now.value, 'go', CREW_WHO[r.crew]),
+      seats: arrivalSeats(r.poi.control, r.members),
       title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${who} · arrivée dans ${formatCountdown(r.arriveIn)}`,
     });
   }
@@ -4201,6 +4208,8 @@ const trips = computed(() => {
       ...(w.back ? { toBase: true } : {}),
       members: [],
       haul: [],
+      legs: oneWayLegs(w.sentAt, w.arriveAt, now.value, w.back ? 'back' : 'go', w.back ? '🏠' : '🧭'),
+      ...(w.back ? {} : { seats: arrivalSeats(w.poi.control, [], true) }),
       title: w.back
         ? `Ton héros rentre à pied · à la base dans ${formatCountdown(Math.max(0, w.arriveIn))}`
         : `Ton héros va se poster sur ${poiLabel(w.poi)} · arrivée dans ${formatCountdown(Math.max(0, w.arriveIn))}`,
@@ -4224,6 +4233,7 @@ const trips = computed(() => {
       toBase: true,
       members: r.members,
       haul: [],
+      legs: oneWayLegs(r.sentAt, r.returnAt, now.value, 'back', '🏠'),
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatCountdown(r.arriveIn)}`,
     });
   }
