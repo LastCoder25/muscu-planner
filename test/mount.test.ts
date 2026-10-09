@@ -681,6 +681,19 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await rendu(null)).not.toContain('ca-gain');
   }, 30_000);
 
+  // 🏅 Le RANG d'un champion s'écrit sur sa tuile (demandé : « je vois la rareté mais pas le
+  // rang ») : nom ET étoiles, lus sur `advRank` — jamais recalculés à côté.
+  it('AdvPickTile écrit le rang et les étoiles du champion', async () => {
+    const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
+    const { advRank } = await import('@/lib/adventurers');
+    const adv = ROW.adventurers[0];
+    const r = advRank(adv);
+    let out = '';
+    await mountIt(AdvPickTile, { adv, on: false }, ROW, undefined, '/', (h) => (out = h));
+    expect(out).toContain(`class="ca-rk-name">${r.name}<`);
+    expect(out).toContain(`class="ca-rk-star">${r.star}★<`);
+  }, 30_000);
+
   // 💰 Le plateau de ressources, partagé par l'Aventure et la carte (demandé 2026-09-30).
   it('ResourceTray affiche les ressources du personnage, et une partie seulement si demandé', async () => {
     const { default: ResourceTray } = await import('@/components/ResourceTray.vue');
