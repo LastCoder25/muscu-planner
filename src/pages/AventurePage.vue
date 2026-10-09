@@ -66,15 +66,6 @@
         <div class="tb-right">
           <ResourceTray part="rest" :energy="c.energy" interactive @pick="pickResource" />
         </div>
-        <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
-        <!-- Carte ouverte : la ligne passe en colonne SUR la carte (à gauche), pas en double ici. -->
-        <AvailabilityLine
-          v-if="!mapView"
-          :now="expeNow"
-          interactive
-          by-rank
-          @open="mapView = true"
-        />
       </div>
 
       <!-- 🗺️ LA CARTE VIT ICI (demandé : « switcher juste cette partie, sans perdre le haut
@@ -3123,7 +3114,6 @@ const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionM
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import ResourceTray from '@/components/ResourceTray.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import FusionPanel from '@/components/FusionPanel.vue';
