@@ -65,6 +65,21 @@ export interface LegTile {
  *  et sur les pastilles de filtre (« que ce soit cohérent »). */
 export const STEP_ICON: Record<TripLeg, string> = { wait: '⏳', go: '⚔️', dwell: '🔍', back: '↩️' };
 
+/**
+ * 📏 LA FORME DE LA JAUGE DIT L'ÉTAPE (concept A, choisi le 2026-10-09) : des POINTILLÉS tant
+ * que rien n'a commencé, une LIGNE quand on se déplace, un CERCLE quand on reste sur place
+ * (fouille, extraction d'un filon). Le retour est une ligne qui part de la droite (`home`).
+ * ⚠️ La couleur de la tuile reste à celui qui voyage (héros, convoi, attaque combinée) : l'étape
+ * se lit sans elle.
+ */
+export type LegGaugeShape = 'dots' | 'line' | 'ring';
+export const LEG_GAUGE: Record<TripLeg, { shape: LegGaugeShape; home: boolean }> = {
+  wait: { shape: 'dots', home: false },
+  go: { shape: 'line', home: false },
+  dwell: { shape: 'ring', home: false },
+  back: { shape: 'line', home: true },
+};
+
 export function tripLegTiles(t: LegSource): LegTile[] {
   const base = {
     tripKey: t.key,
@@ -178,7 +193,6 @@ export function toggleLegGroup(
   else for (const l of legs) next.add(l);
   return present.some((l) => next.has(l)) ? next : new Set(present);
 }
-
 
 /** ⚠️ Une étape choisie qui n'a plus rien (le dernier aller est arrivé) retombe sur toutes,
  *  au lieu d'une rangée vide qui se lirait comme « aucun voyage » (même règle que les
