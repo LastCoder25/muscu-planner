@@ -32,7 +32,17 @@
     <span class="ca-body">
       <span class="ca-name">{{ adv.name }}</span>
       <span class="ca-line">
-        <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
+        <!-- 🏅 SON RANG, écrit en toutes lettres dans sa couleur, avec ses étoiles (demandé :
+             « je vois la rareté mais pas le rang »). « N★ » comme sur le portrait de la Guilde :
+             cinq étoiles ne tiennent pas à côté de « Divin ancestral » à 344 px. Le NOM se
+             tronque, jamais les étoiles. -->
+        <span
+          class="ca-rank"
+          :style="{ '--rk': rank.color }"
+          :title="`Rang ${rank.name} · ${rank.star}/5 ★`"
+          ><span class="ca-rk-name">{{ rank.name }}</span
+          ><span class="ca-rk-star">{{ rank.star }}★</span></span
+        >
         <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se
          lisait qu'au tirage et dans le Codex. Compact (deux tuiles par ligne) : la fiche
          de la Guilde donne le /6. -->
@@ -94,7 +104,6 @@ import {
   advTitle,
   type Adventurer,
 } from '@/lib/adventurers';
-import { rankStarStr } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
 import type { MissionXpPreview } from '@/lib/caravan';
 
@@ -237,10 +246,34 @@ const rar = computed(() => advGradeBadge(props.adv));
   line-height: 1;
   color: var(--accent);
 }
+/* Le rang en pastille à CONTOUR : même langage que la rareté du coin, mais sans fond, pour
+   ne pas faire deux étiquettes pleines qui se disputent l'œil. */
 .ca-rank {
-  font-size: 12px;
-  letter-spacing: -0.5px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--rk) 60%, transparent);
+  color: var(--rk);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.ca-rk-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Les étoiles, séparées du nom par un filet, dans les chiffres de la charte. */
+.ca-rk-star {
+  flex: none;
+  padding-left: 4px;
+  border-left: 1px solid color-mix(in srgb, var(--rk) 45%, transparent);
+  font-family: 'Oswald', sans-serif;
+  font-weight: 600;
 }
 /* Les compétences en icônes : à 344 px, seule l’icône tient. Le libellé complet reste
    au survol, et la fiche de la Guilde le donne en toutes lettres. */
