@@ -81,13 +81,40 @@ export const STEP_ICON: Record<TripLeg, string> = { wait: '⏳', go: '⚔️', d
  */
 export interface TimelineSeg {
   leg: TripLeg;
-  /** Poids sur la frise (la durée de l'étape, ms). */
+  /** La durée de l'étape (ms) : son poids réel. */
   weight: number;
+  /** 📐 Sa LARGEUR sur la frise, en part (somme = 1) : la durée, avec un plancher
+   *  (`SEG_MIN_SHARE`). Sans lui, une longue attente écrasait les autres étapes et le
+   *  dernier temps (le retour) sortait de la tuile, coupé (signalé le 2026-10-09). */
+  width: number;
   /** Part remplie (0..100). */
   fill: number;
   current: boolean;
   done: boolean;
   label: string;
+}
+/** 📐 La part minimale d'une étape sur la frise : de quoi lire « ↩️ 2 h 05 » à 344 px. */
+export const SEG_MIN_SHARE = 0.22;
+/** Les largeurs d'affichage : chaque part au moins `SEG_MIN_SHARE` (ou 1/n s'il y a trop
+ *  d'étapes), le reste réparti au prorata des durées entre les étapes qui le dépassent.
+ *  Somme = 1. ⚠️ Itéré : en se partageant le reste, une étape peut repasser sous le plancher. */
+export function segWidths(weights: readonly number[]): number[] {
+  const n = weights.length;
+  if (!n) return [];
+  const floor = Math.min(SEG_MIN_SHARE, 1 / n);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const raw = weights.map((w) => (sum > 0 ? w / sum : 1 / n));
+  const fixed = new Set<number>();
+  for (;;) {
+    const free = 1 - fixed.size * floor;
+    const rest = raw.reduce((a, x, i) => (fixed.has(i) ? a : a + x), 0);
+    const share = raw.map((x, i) =>
+      fixed.has(i) ? floor : rest > 0 ? (x / rest) * free : free / (n - fixed.size),
+    );
+    const under = share.findIndex((x, i) => !fixed.has(i) && x < floor);
+    if (under < 0) return share;
+    fixed.add(under);
+  }
 }
 export function tripTimeline(
   steps: readonly TripStep[] | undefined,
@@ -97,9 +124,11 @@ export function tripTimeline(
   // Durées inconnues (toutes nulles) : des segments égaux, pour garder une frise lisible.
   const w = (x: TripStep) => (total > 0 ? x.ms : 1);
   const sum = total > 0 ? total : steps.length;
-  const segs = steps.map((x) => ({
+  const widths = segWidths(steps.map(w));
+  const segs = steps.map((x, i) => ({
     leg: x.leg,
     weight: w(x),
+    width: widths[i]!,
     fill: x.pct,
     current: x.current,
     done: x.pct >= 100,

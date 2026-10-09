@@ -1285,7 +1285,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toMatch(/class="trip[^"]*future/);
     // La frise : un segment par étape (3 + 2), large comme sa durée, un curseur par voyage.
     expect(out.match(/class="tl-seg /g)?.length).toBe(5);
-    expect(out).toMatch(/class="tl-seg tl-dwell"[^>]*--w: ?2880000/);
+    // 📐 La largeur est une PART de la frise (`segWidths`, plancher compris), plus des ms.
+    const dwellW = Number(/class="tl-seg tl-dwell"[^>]*--w: ?([\d.]+)/.exec(out)?.[1]);
+    expect(dwellW).toBeGreaterThan(0.22);
+    expect(dwellW).toBeLessThan(1);
     expect(out.match(/class="tl-cursor"/g)?.length).toBe(2);
     // Les libellés : le temps d'ici la fin de chaque étape, ✓ pour une étape faite.
     expect(out).toContain('🔍 1 h 00');
@@ -1297,9 +1300,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('9 h 59');
     // Sur la frise, le voyage se lit de gauche à droite : le départ reste à gauche au retour.
     expect(out.match(/class="tr-from" title="La base"/g)?.length).toBe(2);
-    // ➡️↩️ La pastille d'étapes lit l'étape EN COURS de chaque voyage.
-    expect(out).toMatch(/aria-label="Aller \(1\)"[^>]*>\s*➡️/);
-    expect(out).toMatch(/aria-label="Retour \(1\)"[^>]*>\s*↩️/);
+    // ➡️↩️ Plus de pastille d'étapes (retirée le 2026-10-09).
+    expect(out).not.toContain('aria-label="Aller (1)"');
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
@@ -4146,8 +4148,8 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(combo).toContain('→ 1 h 20');
     expect(combo).toContain('trip attack');
     expect(combo).toMatch(/class="trf trf-all on"/);
-    // 🚶↩️ Aller / Retour : une pastille À PART (`trf-legs`), pas deux catégories de plus ;
-    // éteintes tant qu'elles ne filtrent pas, l'étape touchée s'allume seule.
+    // ➡️↩️ Plus de filtre aller / retour (retiré le 2026-10-09, demandé) : aucune pastille, et
+    // un ancien choix « aller seul » mémorisé ne masque plus le voyage du retour.
     const legged = {
       ...trip,
       legs: {
@@ -4171,27 +4173,28 @@ describe('🔮 GameFxOverlay — rune posée', () => {
         phases: [{ leg: 'back', time: '20 min', endsAt: 3, current: true, pct: 50 }],
       },
     };
+    const { serializeTripFilters, tripFiltersKey, parseTripFilters } = await import(
+      '@/lib/tripFilter'
+    );
+    localStorage.setItem(
+      tripFiltersKey(null),
+      serializeTripFilters(parseTripFilters(null).sel, ['go']),
+    );
     let legs = '';
     await mountIt(
       TripsPanel,
-      // Une tuile par voyage (concept B) : la pastille n'apparaît qu'avec un voyage à l'aller
-      // ET un sur le retour (elle lit l'étape EN COURS de chacun).
       { trips: [legged, homeward], focus: null, heroProfile: 'polyvalent', attacks: [] },
       ROW,
       undefined,
       '/',
       (h) => (legs = h),
-      (host) => host.querySelector<HTMLElement>('.trf-legs .trl')?.click(),
+      undefined,
+      true,
     );
-    expect(legs).toContain('class="trf-legs"');
-    expect(legs).not.toMatch(/class="trf trf-(go|back)/);
-    expect(legs.match(/class="trl on"/g)?.length).toBe(1);
-    // ➡️↩️ Deux boutons, aller et retour : ni ⏳ ni ⚔️ (en doublon avec les catégories).
-    const pill = legs.slice(legs.indexOf('class="trf-legs"'), legs.indexOf('class="trips"'));
-    expect(pill.match(/class="trl/g)?.length).toBe(2);
-    expect(pill).toContain('➡️');
-    expect(pill).toContain('↩️');
-    expect(pill).not.toMatch(/⚔️|⏳/);
+    expect(legs).not.toContain('trf-legs');
+    expect(legs).not.toContain('class="trl');
+    expect(legs).toContain('1 h 20');
+    expect(legs).toContain('20 min');
   }, 30_000);
 });
 

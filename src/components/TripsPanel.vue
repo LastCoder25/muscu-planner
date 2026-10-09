@@ -31,23 +31,6 @@
         >{{ o.icon }} <b>{{ o.n }}</b></template
       >
     </button>
-    <!-- 🚶↩️ ALLER / RETOUR dans une pastille À PART, d'une autre couleur (v1.82.5, demandé) :
-         ce filtre s'applique PAR-DESSUS les catégories, il n'en est pas une. -->
-    <span v-if="legOpts.length" class="trf-legs" role="group" aria-label="Étape">
-      <button
-        v-for="o in legOpts"
-        :key="o.id"
-        type="button"
-        class="trl"
-        :class="{ on: o.on }"
-        :aria-pressed="o.on"
-        :title="o.label"
-        :aria-label="`${o.label} (${o.n})`"
-        @click="pickGroup(o.id)"
-      >
-        {{ o.icon }} <b>{{ o.n }}</b>
-      </button>
-    </span>
   </div>
   <p v-if="tiles.length && !shownTiles.length" class="tr-none">
     Aucune catégorie choisie — touche « Tout » ou une catégorie.
@@ -158,7 +141,7 @@
               :key="i"
               class="tl-seg"
               :class="['tl-' + s.leg, { cur: s.current }]"
-              :style="{ '--w': s.weight }"
+              :style="{ '--w': s.width }"
             >
               <i :style="{ width: s.fill + '%' }" />
               <b v-if="s.current" class="tl-cursor" :style="{ left: s.fill + '%' }" />
@@ -169,7 +152,7 @@
               v-for="(s, i) in tl.segs"
               :key="i"
               :class="{ cur: s.current, done: s.done }"
-              :style="{ '--w': s.weight }"
+              :style="{ '--w': s.width }"
               >{{ s.label }}</span
             >
           </span>
@@ -347,12 +330,6 @@ export interface MapTrip {
 import { computed, nextTick, ref, watch } from 'vue';
 import { toggleAllTrips, toggleTripCat, tripCatPillOn, type TripFilter } from '@/lib/tripFilter';
 import {
-  LEG_GROUP_PILL,
-  legGroupPillOn,
-  presentLegGroups,
-  toggleLegGroup,
-  LEG_GROUPS,
-  type LegGroup,
   STEP_ICON,
   TRIP_LEGS,
   type LegTile,
@@ -458,11 +435,6 @@ const ctx = computed(() =>
 const counts = computed(() => ctx.value.counts);
 const present = computed(() => ctx.value.present);
 const shown = computed(() => ctx.value.shown);
-const legCounts = computed(() => ctx.value.legCounts);
-const presentLegs = computed(() => ctx.value.presentLegs);
-function pickGroup(g: LegGroup) {
-  legSel.value = toggleLegGroup(legSel.value, g, presentLegs.value);
-}
 function pick(id: TripFilter) {
   if (id === 'all') {
     // « Tout » ne touche qu'aux catégories : le filtre d'étape vit dans sa propre pastille.
@@ -510,18 +482,6 @@ const LEG_LABEL: Record<TripLeg, string> = {
 const LEG_PILL = Object.fromEntries(
   TRIP_LEGS.map((l) => [l, { icon: STEP_ICON[l], label: LEG_LABEL[l] }]),
 ) as Record<TripLeg, { icon: string; label: string }>;
-// ➡️↩️ Deux boutons seulement, aller et retour (`LEG_GROUPS`) : proposés s'il y a les deux.
-const legOpts = computed(() => {
-  const groups = presentLegGroups(presentLegs.value);
-  return groups.length < 2
-    ? []
-    : groups.map((id) => ({
-        id,
-        ...LEG_GROUP_PILL[id],
-        n: LEG_GROUPS[id].reduce((s, l) => s + legCounts.value[l], 0),
-        on: legGroupPillOn(legSel.value, id, presentLegs.value),
-      }));
-});
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
     x.attack
@@ -714,46 +674,6 @@ const crew = computed(() => {
     cursor: default;
   }
 }
-/* 🚶↩️ Aller / Retour : UNE pastille à deux moitiés, en bleu (la couleur du trajet de la
-   carte), pour qu'on ne la lise pas comme une catégorie de plus. */
-.trf-legs {
-  --leg: #6cb8ff;
-  display: inline-flex;
-  flex: none;
-  margin-left: 4px;
-  border: 1px solid color-mix(in srgb, var(--leg) 55%, var(--line));
-  border-radius: 999px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--leg) 8%, var(--surface));
-}
-.trl {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-height: 34px;
-  min-width: 44px;
-  padding: 0 9px;
-  border: 0;
-  background: transparent;
-  color: var(--leg);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  b {
-    color: var(--dim);
-  }
-  & + & {
-    border-left: 1px solid color-mix(in srgb, var(--leg) 40%, var(--line));
-  }
-  &.on {
-    background: color-mix(in srgb, var(--leg) 30%, var(--surface));
-    color: var(--text);
-    b {
-      color: var(--leg);
-    }
-  }
-}
 .trips {
   display: flex;
   flex-wrap: wrap;
@@ -933,17 +853,13 @@ const crew = computed(() => {
   height: 14px;
   margin-top: 4px;
 }
-/* Même règle de largeur pour les segments et leurs libellés : ils restent alignés. Un
-   plancher garde lisible une étape courte (une attente qui finit). */
+/* Même règle de largeur pour les segments et leurs libellés : ils restent alignés. Le
+   plancher vit dans la lib (`segWidths`) : une largeur minimale en px ici faisait déborder la
+   frise, et le dernier temps sortait de la tuile (signalé le 2026-10-09). */
 .tl-seg,
 .tl-labs > span {
   flex: var(--w) 1 0;
-  min-width: 38px;
-}
-/* L'étape EN COURS ne se coupe jamais : c'est son temps qu'on vient lire. */
-.tl-seg.cur,
-.tl-labs > .cur {
-  min-width: 68px;
+  min-width: 0;
 }
 .tl-seg {
   position: relative;

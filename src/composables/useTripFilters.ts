@@ -38,7 +38,10 @@ export function useTripFilters(): { selection: Ref<TripSelection>; legSel: Ref<L
     /* stockage indisponible : « tout » */
   }
   const selection = ref<TripSelection>(saved.sel);
-  const legSel = ref<LegSelection>(new Set<TripLeg>(saved.legs));
+  // ➡️↩️ Le filtre aller / retour est RETIRÉ de l'écran (2026-10-09, demandé) : on montre
+  // toujours toutes les étapes — un ancien choix mémorisé masquerait sinon des tuiles sans
+  // plus aucun bouton pour le défaire.
+  const legSel = ref<LegSelection>(new Set<TripLeg>(parseTripFilters(null).legs));
   // ⚠️ Hors de tout composant (portée détachée) : sinon fermer le premier panneau monté
   // arrêterait la sauvegarde pour toute la session.
   effectScope(true).run(() =>

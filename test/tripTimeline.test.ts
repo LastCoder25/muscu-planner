@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { tripLegs } from '@/lib/expedition';
-import { tripTimeline } from '@/lib/tripLegTiles';
+import { tripTimeline, segWidths, SEG_MIN_SHARE } from '@/lib/tripLegTiles';
 import { currentLegTile, tripFilterCtx, tripOrder, type NavTrip } from '@/lib/tripNav';
 import { ALL_TRIPS } from '@/lib/tripFilter';
 
@@ -82,5 +82,29 @@ describe('🧭 une tuile par voyage', () => {
     const ctx = tripFilterCtx([at('x', 30 * MIN), at('y', 130 * MIN)], 0, ALL_TRIPS, new Set());
     expect(ctx.legCounts).toEqual({ wait: 0, go: 1, dwell: 0, back: 1 });
     expect(currentLegTile(at('z', 80 * MIN)).leg).toBe('dwell');
+  });
+});
+
+describe('📐 largeur des étapes sur la frise (signalé : le dernier temps sortait de la tuile)', () => {
+  it('une longue attente n’écrase plus les autres étapes : chacune garde sa part minimale', () => {
+    const w = segWidths([10 * 3600, 600, 600, 600]);
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+    for (const x of w) expect(x).toBeGreaterThanOrEqual(SEG_MIN_SHARE - 1e-9);
+    // la longue garde le reste, et reste la plus large
+    expect(w[0]).toBeCloseTo(1 - 3 * SEG_MIN_SHARE, 9);
+  });
+  it('sans étape trop courte, la largeur suit la durée', () => {
+    expect(segWidths([60, 40])).toEqual([0.6, 0.4]);
+  });
+  it('trop d’étapes pour le plancher : parts égales, jamais plus que la frise', () => {
+    const w = segWidths([1, 1, 1, 1, 1, 1]);
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+    for (const x of w) expect(x).toBeCloseTo(1 / 6, 9);
+  });
+  it('une étape repassée sous le plancher en partageant le reste le prend aussi', () => {
+    // 0,5 % et 20 % : la première prend le plancher, la seconde tomberait à 0,78 × 20/99,5.
+    const w = segWidths([0.5, 20, 79.5]);
+    for (const x of w) expect(x).toBeGreaterThanOrEqual(SEG_MIN_SHARE - 1e-9);
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
   });
 });
