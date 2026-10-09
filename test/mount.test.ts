@@ -1259,9 +1259,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toMatch(/class="tr-total"[^>]*>🔍 1 h 00/);
     expect(out).not.toContain('tr-time');
     // 🎴 L'icône centrale dit l'étape EN COURS, sur toutes les tuiles du voyage : g1 est à
-    // l'aller (⚔️ sur ses 3 tuiles), g2 sur le retour (↩️).
-    expect(out.match(/class="tr-who"[^>]*>⚔️/g)?.length).toBe(3);
-    expect(out.match(/class="tr-who"[^>]*>↩️/g)?.length).toBe(1);
+    // l'aller (⚔️ sur l'aller et la fouille à venir, ↩️ sur son retour), g2 sur le retour (↩️).
+    expect(out.match(/class="tr-who"[^>]*>⚔️/g)?.length).toBe(2);
+    expect(out.match(/class="tr-who"[^>]*>↩️/g)?.length).toBe(2);
     expect(out).not.toMatch(/class="tr-who"[^>]*>🔍/);
     // 🎴 Les pastilles de filtre portent les mêmes icônes que les tuiles.
     expect(out).toMatch(/aria-label="Aller \(1\)"[^>]*>\s*⚔️/);

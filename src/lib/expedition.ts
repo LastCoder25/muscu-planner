@@ -15,7 +15,7 @@ import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import type { MilitiaState } from './militia';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
-import { formatDuration, formatDurationMin } from './duration';
+import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { islandSpan, islandVia, islandView, onIsland, LAND_MARGIN } from './islandShape';
@@ -3576,12 +3576,12 @@ export function tripTimeLabel(
   >,
 ): { time: string; total: string | null; untilHome: string } {
   if (pos.phase === 'done') return { time: 'rentré', total: null, untilHome: 'rentré en ville' };
-  const total = formatDuration(pos.remainTotalMs);
+  const total = formatCountdown(pos.remainTotalMs);
   const home = `retour en ville dans ${total}`;
   // Sur le retour, la prochaine étape EST le retour : le temps vit dans le bandeau du bas
   // (demandé), sans chiffre en tête qui le répéterait.
   if (pos.phase === 'return') return { time: '', total, untilHome: home };
-  const step = formatDuration(pos.remainToObjectiveMs);
+  const step = formatCountdown(pos.remainToObjectiveMs);
   // 🔍 Sur place, en train de fouiller : on le DIT, sinon l'équipe semble arrêtée.
   if (pos.searching)
     return { time: `🔍 ${step}`, total, untilHome: `fouille encore ${step} · ${home}` };
@@ -3606,10 +3606,10 @@ export function tripLegs(
   if (now >= v.returnAt) return null;
   const phases = tripPhases(v, now);
   if (now >= v.midAt) {
-    const back = formatDuration(v.returnAt - now);
+    const back = formatCountdown(v.returnAt - now);
     return { go: null, back, detail: `Sur le retour : encore ${back}`, phases };
   }
-  const go = formatDuration(v.midAt - now);
+  const go = formatCountdown(v.midAt - now);
   const legs = v.returnLegs;
   if (legs && legs.won < legs.lost) {
     const lost = formatDurationMin(legs.lost);
@@ -3665,7 +3665,8 @@ function tripPhases(
   return spans.map((sp, i) => {
     const current = i === 0;
     const from = current ? now : (sp.start ?? now);
-    let time = formatDuration(Math.max(0, sp.end - from));
+    // ⏱️ Le temps RESTANT de l'étape en cours passe en secondes sous la minute.
+    let time = (current ? formatCountdown : formatDuration)(Math.max(0, sp.end - from));
     // 🏰 Assaut de point fixe pas encore arrivé : deux retours possibles, sans trahir l'issue.
     if (sp.leg === 'back' && now < v.midAt && legs && legs.won < legs.lost)
       time = `${legs.won > 0 ? formatDurationMin(legs.won) : '—'}/${formatDurationMin(legs.lost)}`;

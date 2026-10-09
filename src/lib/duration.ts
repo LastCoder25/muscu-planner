@@ -42,6 +42,17 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
 
+/**
+ * ⏱️ Un TEMPS RESTANT qui défile (tuiles de voyage) : « 42 s » sous la minute, sinon
+ * `formatDuration` (demandé : « quand il reste moins d'une minute de trajet, on affiche le
+ * temps en secondes »). Sans ça, les dernières secondes se lisaient « 1 min » puis « 0 min ».
+ * On arrondit les secondes au-dessus : « 0 s » ne s'affiche qu'une fois l'étape finie.
+ */
+export function formatCountdown(ms: number): string {
+  const total = Math.max(0, ms);
+  return total < MIN ? `${Math.ceil(total / 1000)} s` : formatDuration(total);
+}
+
 /** La même, pour une durée déjà exprimée en minutes. */
 export function formatDurationMin(min: number): string {
   return formatDuration(min * MIN);

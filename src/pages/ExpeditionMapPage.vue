@@ -1951,7 +1951,7 @@ import {
   sortByGradeThenRank,
   type Adventurer,
 } from '@/lib/adventurers';
-import { formatDuration, formatDurationMin } from '@/lib/duration';
+import { formatCountdown, formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   CONTROL_EMO,
   CONTROL_LABEL,
@@ -4198,9 +4198,9 @@ const trips = computed(() => {
       pending: w.waiting,
       poi: w.poi,
       time: w.waiting
-        ? `⏳ ${formatDuration(w.departIn)}`
-        : `→ ${formatDuration(Math.max(0, w.arriveIn))}`,
-      total: formatDuration(Math.max(0, w.returnAt - now.value)),
+        ? `⏳ ${formatCountdown(w.departIn)}`
+        : `→ ${formatCountdown(Math.max(0, w.arriveIn))}`,
+      total: formatCountdown(Math.max(0, w.returnAt - now.value)),
       pct: w.prog.overall * 100,
       homeAt: w.returnAt,
       back: false,
@@ -4210,8 +4210,8 @@ const trips = computed(() => {
       haul: [],
       legs: w.legs,
       title: w.waiting
-        ? `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · part dans ${formatDuration(w.departIn)}`
-        : `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · arrivée dans ${formatDuration(Math.max(0, w.arriveIn))}`,
+        ? `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · part dans ${formatCountdown(w.departIn)}`
+        : `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · arrivée dans ${formatCountdown(Math.max(0, w.arriveIn))}`,
     });
   }
   for (const r of reinforcementsOnMap.value) {
@@ -4224,7 +4224,7 @@ const trips = computed(() => {
       cat: 'reinf',
       poi: r.poi,
       time: '',
-      total: formatDuration(r.arriveIn),
+      total: formatCountdown(r.arriveIn),
       totalIcon: '📍',
       pct: r.prog.overall * 100,
       back: false,
@@ -4232,7 +4232,7 @@ const trips = computed(() => {
       from: tripOriginPoi(pois.value, r.origin),
       members: r.members,
       haul: [],
-      title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${who} · arrivée dans ${formatDuration(r.arriveIn)}`,
+      title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${who} · arrivée dans ${formatCountdown(r.arriveIn)}`,
     });
   }
   const w = heroWalkOnMap.value;
@@ -4245,7 +4245,7 @@ const trips = computed(() => {
       cat: 'reinf',
       poi: w.poi,
       time: '',
-      total: formatDuration(Math.max(0, w.arriveIn)),
+      total: formatCountdown(Math.max(0, w.arriveIn)),
       totalIcon: w.back ? '🏠' : '📍',
       pct: w.pct,
       back: w.back,
@@ -4255,8 +4255,8 @@ const trips = computed(() => {
       members: [],
       haul: [],
       title: w.back
-        ? `Ton héros rentre à pied · à la base dans ${formatDuration(Math.max(0, w.arriveIn))}`
-        : `Ton héros va se poster sur ${poiLabel(w.poi)} · arrivée dans ${formatDuration(Math.max(0, w.arriveIn))}`,
+        ? `Ton héros rentre à pied · à la base dans ${formatCountdown(Math.max(0, w.arriveIn))}`
+        : `Ton héros va se poster sur ${poiLabel(w.poi)} · arrivée dans ${formatCountdown(Math.max(0, w.arriveIn))}`,
     });
   }
   for (const r of returnsOnMap.value) {
@@ -4268,7 +4268,7 @@ const trips = computed(() => {
       cat: 'reinf',
       poi: r.poi,
       time: '',
-      total: formatDuration(r.arriveIn),
+      total: formatCountdown(r.arriveIn),
       pct: r.pct,
       back: true,
       withHero: false,
@@ -4277,7 +4277,7 @@ const trips = computed(() => {
       toBase: true,
       members: r.members,
       haul: [],
-      title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,
+      title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatCountdown(r.arriveIn)}`,
     });
   }
   // ⏳ LES DÉPARTS PROGRAMMÉS (demandé : « un filtre pour les déplacements programmés en
@@ -4316,7 +4316,7 @@ const trips = computed(() => {
       pending: true,
       cancelPlan: m.id,
       poi,
-      time: `⏳ ${formatDuration(inMs)}`,
+      time: `⏳ ${formatCountdown(inMs)}`,
       pct: 0,
       back: !!m.recall,
       withHero: false,
@@ -4348,8 +4348,8 @@ const trips = computed(() => {
       pending: s.waiting,
       sea: { from: c.from, to: c.to },
       poi: port,
-      time: s.waiting ? `⏳ ${formatDuration(c.departAt - now.value)}` : '',
-      total: formatDuration(c.arriveAt - now.value),
+      time: s.waiting ? `⏳ ${formatCountdown(c.departAt - now.value)}` : '',
+      total: formatCountdown(c.arriveAt - now.value),
       totalIcon: '⚓',
       pct: s.pct * 100,
       back: false,

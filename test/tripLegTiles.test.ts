@@ -34,10 +34,13 @@ describe('⏳→🔍↩ une tuile par étape, chacune son seul temps', () => {
       { leg: 'back', time: '30 min', future: true },
     ]);
   });
-  it('🎴 l’icône centrale est celle de l’étape EN COURS, sur toutes les tuiles', () => {
-    expect(tripLegTiles(trip(0)).map((t) => t.icon)).toEqual(['⏳', '⏳', '⏳', '⏳']);
-    expect(tripLegTiles(trip(25 * MIN)).map((t) => t.icon)).toEqual(['⚔️', '⚔️', '⚔️']);
-    expect(tripLegTiles(trip(70 * MIN)).map((t) => t.icon)).toEqual(['🔍', '🔍']);
+  it('🎴 l’icône centrale est celle de l’étape EN COURS, sur toutes les tuiles sauf le retour (toujours ↩️)', () => {
+    expect(tripLegTiles(trip(0)).map((t) => t.icon)).toEqual(['⏳', '⏳', '⏳', '↩️']);
+    expect(tripLegTiles(trip(25 * MIN)).map((t) => t.icon)).toEqual(['⚔️', '⚔️', '↩️']);
+    expect(tripLegTiles(trip(70 * MIN)).map((t) => t.icon)).toEqual(['🔍', '↩️']);
+    // 🔍 La loupe n'est QUE sur la tuile de fouille, pendant la fouille.
+    for (const at of [0, 25 * MIN, 110 * MIN])
+      expect(tripLegTiles(trip(at)).some((t) => t.icon === '🔍')).toBe(false);
     expect(tripLegTiles(trip(110 * MIN)).map((t) => t.icon)).toEqual(['↩️']);
     // Le bandeau du retour porte la même icône que sa pastille de filtre.
     expect(tripLegTiles(trip(110 * MIN))[0]!.totalIcon).toBe('↩️');
@@ -48,6 +51,14 @@ describe('⏳→🔍↩ une tuile par étape, chacune son seul temps', () => {
       { leg: 'dwell', time: '🔍 1 h 00', future: true },
       { leg: 'back', time: '30 min', future: true },
     ]);
+  });
+  it('⏱️ moins d’une minute avant la fin de l’étape : en secondes (les étapes à venir non)', () => {
+    expect(show(40 * MIN - 30_000)).toEqual([
+      { leg: 'go', time: '⚔️ 30 s', future: false },
+      { leg: 'dwell', time: '🔍 1 h 00', future: true },
+      { leg: 'back', time: '30 min', future: true },
+    ]);
+    expect(show(130 * MIN - 12_000)).toEqual([{ leg: 'back', time: '12 s', future: false }]);
   });
   it('sur place puis sur le retour : il ne reste que les étapes à venir', () => {
     expect(show(70 * MIN)).toEqual([

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatClock, formatDuration, formatDurationMin } from '@/lib/duration';
+import { formatClock, formatCountdown, formatDuration, formatDurationMin } from '@/lib/duration';
 import { EXPE, travelOneWayMin } from '@/lib/expedition';
 
 const MIN = 60_000;
@@ -117,5 +117,20 @@ describe('⏱️ saisie en heures + minutes', async () => {
   it('des minutes au-delà de 59 sont gardées, un nombre négatif est ignoré', () => {
     expect(hoursMinutesToMin(0, 95)).toBe(95);
     expect(hoursMinutesToMin(-1, 20)).toBe(20);
+  });
+});
+
+describe('⏱️ formatCountdown — les dernières secondes d’un trajet', () => {
+  it('sous la minute : en secondes, arrondies au-dessus', () => {
+    expect(formatCountdown(42_000)).toBe('42 s');
+    expect(formatCountdown(41_200)).toBe('42 s');
+    expect(formatCountdown(59_999)).toBe('60 s');
+    expect(formatCountdown(500)).toBe('1 s');
+    expect(formatCountdown(0)).toBe('0 s');
+    expect(formatCountdown(-5)).toBe('0 s');
+  });
+  it('à partir d’une minute : le format habituel', () => {
+    expect(formatCountdown(MIN)).toBe(formatDuration(MIN));
+    expect(formatCountdown(90 * MIN)).toBe('1 h 30');
   });
 });

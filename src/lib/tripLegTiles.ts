@@ -80,6 +80,9 @@ export function tripLegTiles(t: LegSource): LegTile[] {
     // 🎴 L'icône centrale est celle de l'étape EN COURS, sur toutes les tuiles du voyage
     // (demandé : « mets l'icône de l'étape en cours en avant ») : une attaque combinée qui
     // attend reste ⏳ partout. Chaque tuile dit SA propre étape dans son bandeau du bas.
+    // ↩️ Sauf la tuile du RETOUR, toujours ↩️ (demandé : « la loupe ne doit y être que
+    // pendant le temps de recherche ; sur le trajet du retour, la flèche de retour ») : la
+    // loupe ne s'affiche ainsi que sur la tuile de fouille, pendant la fouille.
     const now = STEP_ICON[(phases.find((p) => p.current) ?? phases[0]!).leg];
     return phases.map((ph) => ({
       key: `${t.key}:${ph.leg}`,
@@ -96,7 +99,7 @@ export function tripLegTiles(t: LegSource): LegTile[] {
       pct: ph.pct,
       at: ph.endsAt,
       phased: true,
-      icon: now,
+      icon: ph.leg === 'back' ? STEP_ICON.back : now,
     }));
   }
   // 🏠 Sur le retour (ou un trajet qui rentre à la base) : une seule tuile, le retour.

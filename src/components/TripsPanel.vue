@@ -162,7 +162,7 @@
         <span class="tr-from">⚔️</span>
         <span class="tr-who">{{ FACTION_EMOJI[r.faction] }}</span>
         <span class="tr-poi">{{ r.target ? poiEmo(r.target) : '🏰' }}</span>
-        <span class="tr-total" title="Frappe dans">⚔️ {{ formatDuration(r.inMs) }}</span>
+        <span class="tr-total" title="Frappe dans">⚔️ {{ formatCountdown(r.inMs) }}</span>
         <span v-if="holdOf(r) !== null" class="tr-legs tr-hold" :class="siegeOdds(holdOf(r)! / 100)"
           >🛡️ {{ holdOf(r) }} %</span
         >
@@ -335,7 +335,7 @@ import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle } from '@/lib/adventurers';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import HaulPills from '@/components/HaulPills.vue';
-import { formatDuration } from '@/lib/duration';
+import { formatCountdown, formatDuration } from '@/lib/duration';
 import { revealBlock } from '@/lib/reveal';
 import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { BOOST_BLOCK_LABEL, type BoostBlock, type BoostChoice } from '@/lib/speedBoost';
