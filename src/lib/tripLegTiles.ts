@@ -93,8 +93,9 @@ export interface TimelineSeg {
   done: boolean;
   label: string;
 }
-/** 📐 La part minimale d'une étape sur la frise : de quoi lire « ↩️ 2 h 05 » à 344 px. */
-export const SEG_MIN_SHARE = 0.22;
+/** 📐 La part minimale d'une étape sur la frise : de quoi loger sa pastille « ⚔️ 24 min » DANS
+ *  la barre à 344 px (0,22 la coupait, vu au banc le 2026-10-09). */
+export const SEG_MIN_SHARE = 0.25;
 /** Les largeurs d'affichage : chaque part au moins `SEG_MIN_SHARE` (ou 1/n s'il y a trop
  *  d'étapes), le reste réparti au prorata des durées entre les étapes qui le dépassent.
  *  Somme = 1. ⚠️ Itéré : en se partageant le reste, une étape peut repasser sous le plancher. */
