@@ -29,14 +29,22 @@ describe('⏳→🔍↩ une tuile par étape, chacune son seul temps', () => {
   it('avant le départ : attente, aller, sur place, retour — l’attente décompte, les autres durent', () => {
     expect(show(0)).toEqual([
       { leg: 'wait', time: '⏳ 10 min', future: false },
-      { leg: 'go', time: '→ 30 min', future: true },
+      { leg: 'go', time: '⚔️ 30 min', future: true },
       { leg: 'dwell', time: '🔍 1 h 00', future: true },
       { leg: 'back', time: '30 min', future: true },
     ]);
   });
+  it('🎴 l’icône centrale est celle de l’étape EN COURS, sur toutes les tuiles', () => {
+    expect(tripLegTiles(trip(0)).map((t) => t.icon)).toEqual(['⏳', '⏳', '⏳', '⏳']);
+    expect(tripLegTiles(trip(25 * MIN)).map((t) => t.icon)).toEqual(['⚔️', '⚔️', '⚔️']);
+    expect(tripLegTiles(trip(70 * MIN)).map((t) => t.icon)).toEqual(['🔍', '🔍']);
+    expect(tripLegTiles(trip(110 * MIN)).map((t) => t.icon)).toEqual(['↩️']);
+    // Le bandeau du retour porte la même icône que sa pastille de filtre.
+    expect(tripLegTiles(trip(110 * MIN))[0]!.totalIcon).toBe('↩️');
+  });
   it('à l’aller : l’aller décompte, l’attente a disparu', () => {
     expect(show(25 * MIN)).toEqual([
-      { leg: 'go', time: '→ 15 min', future: false },
+      { leg: 'go', time: '⚔️ 15 min', future: false },
       { leg: 'dwell', time: '🔍 1 h 00', future: true },
       { leg: 'back', time: '30 min', future: true },
     ]);

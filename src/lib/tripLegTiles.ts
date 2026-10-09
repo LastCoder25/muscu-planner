@@ -56,14 +56,13 @@ export interface LegTile {
   at?: number;
   /** La tuile vient des étapes du voyage : elle ne porte que son temps. */
   phased?: boolean;
-  /** L'icône centrale de la tuile : celle de son étape (`STEP_ICON`). */
+  /** L'icône centrale de la tuile : celle de l'étape EN COURS du voyage (`STEP_ICON`). */
   icon?: string;
 }
 
-/** Le préfixe du temps d'une étape (le retour, lui, vit dans le bandeau du bas : 🏠). */
-const PHASE_ICON: Record<Exclude<TripLeg, 'back'>, string> = { wait: '⏳', go: '→', dwell: '🔍' };
-/** 🎴 L'icône centrale selon l'étape (demandé : « aller avec les épées, attente avec le
- *  sablier, retour avec la flèche retour arrière ») : on lit l'étape d'un coup d'œil. */
+/** 🎴 L'icône d'une étape (demandé : « aller avec les épées, attente avec le sablier, retour
+ *  avec la flèche retour arrière ») : la MÊME au centre des tuiles, dans leur bandeau du bas
+ *  et sur les pastilles de filtre (« que ce soit cohérent »). */
 export const STEP_ICON: Record<TripLeg, string> = { wait: '⏳', go: '⚔️', dwell: '🔍', back: '↩️' };
 
 export function tripLegTiles(t: LegSource): LegTile[] {
@@ -77,7 +76,11 @@ export function tripLegTiles(t: LegSource): LegTile[] {
     future: false,
   };
   const phases = t.legs?.phases;
-  if (!t.sea && !t.toBase && phases?.length)
+  if (!t.sea && !t.toBase && phases?.length) {
+    // 🎴 L'icône centrale est celle de l'étape EN COURS, sur toutes les tuiles du voyage
+    // (demandé : « mets l'icône de l'étape en cours en avant ») : une attaque combinée qui
+    // attend reste ⏳ partout. Chaque tuile dit SA propre étape dans son bandeau du bas.
+    const now = STEP_ICON[(phases.find((p) => p.current) ?? phases[0]!).leg];
     return phases.map((ph) => ({
       key: `${t.key}:${ph.leg}`,
       tripKey: t.key,
@@ -85,15 +88,17 @@ export function tripLegTiles(t: LegSource): LegTile[] {
       future: !ph.current,
       back: ph.leg === 'back',
       // ⏱️ Seul le temps de SON étape : ni temps total, ni sous-titre.
-      time: ph.leg === 'back' ? '' : `${PHASE_ICON[ph.leg]} ${ph.time}`,
+      // 🎴 Même icône que la pastille de filtre de l'étape (`STEP_ICON`), par cohérence.
+      time: ph.leg === 'back' ? '' : `${STEP_ICON[ph.leg]} ${ph.time}`,
       total: ph.leg === 'back' ? ph.time : null,
-      ...(ph.leg === 'back' ? { totalIcon: '🏠' } : {}),
+      ...(ph.leg === 'back' ? { totalIcon: STEP_ICON.back } : {}),
       line: null,
       pct: ph.pct,
       at: ph.endsAt,
       phased: true,
-      icon: STEP_ICON[ph.leg],
+      icon: now,
     }));
+  }
   // 🏠 Sur le retour (ou un trajet qui rentre à la base) : une seule tuile, le retour.
   if (t.back || t.toBase) return [{ ...base, key: t.key, leg: 'back', back: true }];
   // Aller simple, départ programmé, mer ou trajet sans étapes connues : une seule tuile.

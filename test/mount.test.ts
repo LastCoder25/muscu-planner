@@ -1252,17 +1252,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="trip van leg-dwell/g)?.length).toBe(1);
     expect(out).toMatch(/leg-back[^"]*future/);
     expect(out).toMatch(/leg-dwell[^"]*future/);
-    expect(out).toContain('→ 12 min');
+    expect(out).toContain('⚔️ 12 min');
     expect(out).toContain('🔍 1 h 00');
     // ⏱️ Tous les temps dans le bandeau du bas, aucun en tête de tuile.
-    expect(out).toMatch(/class="tr-total"[^>]*>→ 12 min/);
+    expect(out).toMatch(/class="tr-total"[^>]*>⚔️ 12 min/);
     expect(out).toMatch(/class="tr-total"[^>]*>🔍 1 h 00/);
     expect(out).not.toContain('tr-time');
-    // 🎴 L'icône centrale dit l'étape.
-    for (const ic of ['⚔️', '🔍', '↩️'])
-      expect(out).toMatch(new RegExp('class="tr-who"[^>]*>' + ic));
-    expect(out).toContain('🏠 53 min');
-    expect(out).toContain('🏠 20 min');
+    // 🎴 L'icône centrale dit l'étape EN COURS, sur toutes les tuiles du voyage : g1 est à
+    // l'aller (⚔️ sur ses 3 tuiles), g2 sur le retour (↩️).
+    expect(out.match(/class="tr-who"[^>]*>⚔️/g)?.length).toBe(3);
+    expect(out.match(/class="tr-who"[^>]*>↩️/g)?.length).toBe(1);
+    expect(out).not.toMatch(/class="tr-who"[^>]*>🔍/);
+    // 🎴 Les pastilles de filtre portent les mêmes icônes que les tuiles.
+    expect(out).toMatch(/aria-label="Aller \(1\)"[^>]*>\s*⚔️/);
+    expect(out).toMatch(/aria-label="Retour \(2\)"[^>]*>\s*↩️/);
+    expect(out).toContain('↩️ 53 min');
+    expect(out).toContain('↩️ 20 min');
     // ⏱️ Seul le temps de l'étape : ni le temps total du voyage, ni de sous-titre.
     expect(out).not.toContain('9 h 59');
     expect(out).not.toContain('↩ 53 min');

@@ -310,7 +310,14 @@ export interface MapTrip {
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { toggleAllTrips, toggleTripCat, tripCatPillOn, type TripFilter } from '@/lib/tripFilter';
-import { legPillOn, toggleLeg, TRIP_LEGS, type LegTile, type TripLeg } from '@/lib/tripLegTiles';
+import {
+  legPillOn,
+  toggleLeg,
+  STEP_ICON,
+  TRIP_LEGS,
+  type LegTile,
+  type TripLeg,
+} from '@/lib/tripLegTiles';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -449,12 +456,16 @@ const filterOpts = computed<
 /** ⏳→🔍↩ Les étapes, dans leur pastille à part — proposées seulement s'il y en a au moins
  *  deux à séparer, et seulement celles qui ont des tuiles. Allumée = elle filtre
  *  (`legPillOn`). */
-const LEG_PILL: Record<TripLeg, { icon: string; label: string }> = {
-  wait: { icon: '⏳', label: 'Attente du départ' },
-  go: { icon: '→', label: 'Aller' },
-  dwell: { icon: '🔍', label: 'Sur place' },
-  back: { icon: '↩', label: 'Retour' },
+const LEG_LABEL: Record<TripLeg, string> = {
+  wait: 'Attente du départ',
+  go: 'Aller',
+  dwell: 'Sur place',
+  back: 'Retour',
 };
+/** 🎴 Les icônes des tuiles (`STEP_ICON`), pour que filtre et tuiles parlent pareil. */
+const LEG_PILL = Object.fromEntries(
+  TRIP_LEGS.map((l) => [l, { icon: STEP_ICON[l], label: LEG_LABEL[l] }]),
+) as Record<TripLeg, { icon: string; label: string }>;
 const legOpts = computed(() =>
   presentLegs.value.length < 2
     ? []
