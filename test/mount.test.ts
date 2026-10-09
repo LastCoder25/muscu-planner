@@ -1254,6 +1254,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toMatch(/leg-dwell[^"]*future/);
     expect(out).toContain('→ 12 min');
     expect(out).toContain('🔍 1 h 00');
+    // ⏱️ Tous les temps dans le bandeau du bas, aucun en tête de tuile.
+    expect(out).toMatch(/class="tr-total"[^>]*>→ 12 min/);
+    expect(out).toMatch(/class="tr-total"[^>]*>🔍 1 h 00/);
+    expect(out).not.toContain('tr-time');
+    // 🎴 L'icône centrale dit l'étape.
+    for (const ic of ['⚔️', '🔍', '↩️'])
+      expect(out).toMatch(new RegExp('class="tr-who"[^>]*>' + ic));
     expect(out).toContain('🏠 53 min');
     expect(out).toContain('🏠 20 min');
     // ⏱️ Seul le temps de l'étape : ni le temps total du voyage, ni de sous-titre.
@@ -1328,7 +1335,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(ko).toContain('✖ Échec');
     expect(ko).toContain('🔙 Demi-tour');
-    expect(ko).toMatch(/class="trip van leg-back back failed"/);
+    expect(ko).toMatch(/class="trip van leg-back back failed( has-total)?"/);
     // ⏳ Un départ PROGRAMMÉ : le filtre « Programmés » apparaît avec son compte, la tuile est
     // en pointillés, et l'équipe propose de l'annuler.
     let pl = '';
@@ -1448,9 +1455,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (atk = h),
     );
-    expect(atk).toMatch(/class="trip attack soon"/);
+    expect(atk).toMatch(/class="trip attack has-total soon"/);
     expect(atk).toMatch(/class="tr-poi"[^>]*>⛏️</);
     expect(atk).toContain('🛡️ 82 %');
+    expect(atk).toMatch(/class="tr-total"[^>]*>⚔️ 30 min/);
     expect(atk).toContain('width: 50%');
     // ⏱️ Voyages et attaques mêlés dans l'ORDRE D'ARRIVÉE : l'armée qui frappe à 100 passe
     // entre le voyage qui finit à 50 et celui qui finit à 200.
@@ -4018,7 +4026,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     // comme un filtre, et la toucher doit l'éteindre, jamais l'isoler.
     expect(out).toMatch(/class="trf trf-attacks"/);
     expect(out).toMatch(/class="trf trf-all on"/);
-    expect(out).toContain('trip attack soon');
+    expect(out).toContain('trip attack has-total soon');
     expect(out).toContain('🛡️ 82 %');
     // 🧩 « Tout » allumé, touché, vide la rangée ; vidée par le joueur, elle le DIT au lieu
     // de paraître sans voyage.

@@ -56,10 +56,15 @@ export interface LegTile {
   at?: number;
   /** La tuile vient des étapes du voyage : elle ne porte que son temps. */
   phased?: boolean;
+  /** L'icône centrale de la tuile : celle de son étape (`STEP_ICON`). */
+  icon?: string;
 }
 
 /** Le préfixe du temps d'une étape (le retour, lui, vit dans le bandeau du bas : 🏠). */
 const PHASE_ICON: Record<Exclude<TripLeg, 'back'>, string> = { wait: '⏳', go: '→', dwell: '🔍' };
+/** 🎴 L'icône centrale selon l'étape (demandé : « aller avec les épées, attente avec le
+ *  sablier, retour avec la flèche retour arrière ») : on lit l'étape d'un coup d'œil. */
+export const STEP_ICON: Record<TripLeg, string> = { wait: '⏳', go: '⚔️', dwell: '🔍', back: '↩️' };
 
 export function tripLegTiles(t: LegSource): LegTile[] {
   const base = {
@@ -87,6 +92,7 @@ export function tripLegTiles(t: LegSource): LegTile[] {
       pct: ph.pct,
       at: ph.endsAt,
       phased: true,
+      icon: STEP_ICON[ph.leg],
     }));
   // 🏠 Sur le retour (ou un trajet qui rentre à la base) : une seule tuile, le retour.
   if (t.back || t.toBase) return [{ ...base, key: t.key, leg: 'back', back: true }];

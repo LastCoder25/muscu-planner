@@ -67,7 +67,7 @@
             focus: focus === t.key,
             pending: t.pending,
             failed: !!t.failed,
-            'has-total': !!lt.total,
+            'has-total': !!bannerOf(lt),
             sea: !!t.sea,
             combo: !!t.combo,
           },
@@ -93,11 +93,15 @@
           </span>
           <template v-else>{{ poiEmo(endPoi(e.left)) }}</template>
         </span>
-        <span class="tr-who">{{ t.who }}</span>
+        <!-- 🎴 L'icône de l'ÉTAPE (⏳ ⚔️ 🔍 ↩️, demandé) ; sans étapes, celle du voyageur. -->
+        <span class="tr-who" :title="lt.icon ? LEG_PILL[lt.leg].label : undefined">{{
+          lt.icon ?? t.who
+        }}</span>
         <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
            expéditions) : leurs portraits sous l'icône, sur une ligne centrée. Champions et
-           miliciens ; le héros, lui, est déjà l'icône 🧝 au-dessus. -->
-        <span v-if="t.members.length" class="tr-faces">
+           miliciens ; le héros aussi quand l'icône du haut dit l'étape, pas le voyageur. -->
+        <span v-if="t.members.length || (lt.icon && t.withHero)" class="tr-faces">
+          <span v-if="lt.icon && t.withHero" class="tr-face" title="Ton héros">🧝</span>
           <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
             <MilitiaPortrait v-if="f.militia" />
             <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
@@ -120,19 +124,11 @@
           </span>
           <template v-else>{{ poiEmo(endPoi(e.right)) }}</template>
         </span>
-        <span v-if="lt.time" class="tr-time">{{ lt.time }}</span>
-        <span
-          v-if="lt.total"
-          class="tr-total"
-          :title="
-            lt.totalIcon === '📍'
-              ? 'Arrivée'
-              : lt.totalIcon === '⚓'
-                ? 'Arrivée au port'
-                : 'Temps total avant le retour'
-          "
-          >{{ lt.totalIcon ?? '🏠' }} {{ lt.total }}</span
-        >
+        <!-- ⏱️ TOUS LES TEMPS EN BAS DE TUILE (demandé), dans le même bandeau : celui de
+             l'étape de la tuile (`bannerOf`). -->
+        <span v-if="bannerOf(lt)" class="tr-total" :title="bannerOf(lt)!.title">{{
+          bannerOf(lt)!.text
+        }}</span>
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
         <span v-if="t.failed" class="tr-fail">{{
           t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
@@ -140,7 +136,7 @@
         <!-- ↩ Retour encore à venir (le voyage est à l'aller) : sa durée en sous-titre. -->
         <span v-if="lt.line" class="tr-legs">{{ lt.line }}</span>
         <template v-else-if="t.legs && lt.key === lt.tripKey">
-          <!-- ⏱️ La prochaine étape est EN TÊTE (`tr-time`) : l'aller n'est redit que pour un
+          <!-- ⏱️ La prochaine étape est dans le bandeau du bas : l'aller n'est redit que pour un
                départ programmé, dont la tête décompte le départ. -->
           <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
           <!-- Sur le retour, le bandeau du bas DIT déjà ce temps : pas de seconde ligne. -->
@@ -158,7 +154,7 @@
         v-else-if="r"
         type="button"
         class="trip attack"
-        :class="{ soon: r.inMs < ATTACK_SOON_MS }"
+        :class="['has-total', { soon: r.inMs < ATTACK_SOON_MS }]"
         :title="attackTitle(r)"
         :aria-label="attackTitle(r)"
         @click="emit('attack', r.army)"
@@ -166,7 +162,7 @@
         <span class="tr-from">⚔️</span>
         <span class="tr-who">{{ FACTION_EMOJI[r.faction] }}</span>
         <span class="tr-poi">{{ r.target ? poiEmo(r.target) : '🏰' }}</span>
-        <span class="tr-time">{{ formatDuration(r.inMs) }}</span>
+        <span class="tr-total" title="Frappe dans">⚔️ {{ formatDuration(r.inMs) }}</span>
         <span v-if="holdOf(r) !== null" class="tr-legs tr-hold" :class="siegeOdds(holdOf(r)! / 100)"
           >🛡️ {{ holdOf(r) }} %</span
         >
@@ -476,6 +472,22 @@ const shownTiles = computed(() =>
       : !!x.trip && !!x.leg && legTileShown(x.trip, x.leg.leg, ctx.value),
   ),
 );
+/** ⏱️ Le bandeau du bas d'une tuile : le temps de son étape (⏳ → 🔍), sinon le temps avant
+ *  d'arriver (🏠 📍 ⚓). Une seule ligne de temps par tuile, toujours au même endroit. */
+const BANNER_TITLE: Record<string, string> = {
+  wait: 'Départ dans',
+  go: 'Arrivée sur le lieu dans',
+  dwell: 'Encore sur place',
+};
+function bannerOf(lt: LegTile): { text: string; title: string } | null {
+  if (lt.time) return { text: lt.time, title: BANNER_TITLE[lt.leg] ?? 'Prochaine étape dans' };
+  if (!lt.total) return null;
+  const icon = lt.totalIcon ?? '🏠';
+  return {
+    text: `${icon} ${lt.total}`,
+    title: icon === '📍' ? 'Arrivée' : icon === '⚓' ? 'Arrivée au port' : 'Retour en ville dans',
+  };
+}
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
 const ATTACK_SOON_MS = 3_600_000;
 const holdOf = (r: ActiveAttack): number | null => props.holds?.[r.army.id] ?? null;
@@ -992,14 +1004,6 @@ const crew = computed(() => {
   font-size: 12px;
   color: var(--dim);
 }
-.tr-time {
-  flex-basis: 100%;
-  text-align: center;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
 /* L'avancement du voyage, en sous-lignage : la même information que le temps, sans
    une ligne de plus. ⚠️ `voyageProgress` (durée TOTALE) et non la fraction de phase,
    qui repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. */
@@ -1044,7 +1048,7 @@ const crew = computed(() => {
   border-color: var(--d4);
   background: color-mix(in srgb, var(--d4) 12%, var(--surface));
 }
-.trip.attack.soon .tr-time {
+.trip.attack.soon .tr-total {
   color: var(--d4);
 }
 .trip.attack .tr-bar {
