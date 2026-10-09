@@ -483,7 +483,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyRoute = computed(() => {
     const p = selected.value;
     if (!p || !partySize.value) return null;
-    return partyRoadOdds(p, partyAdvs.value, partyRoad.value, heroForParty.value, FORECAST_SAMPLES);
+    return partyRoadOdds(
+      p,
+      partyAdvs.value,
+      partyRoad.value,
+      heroForParty.value,
+      FORECAST_SAMPLES,
+      combined.value,
+    );
   });
   /** 🧭 Trajet ALLER (minutes) vers la cible depuis un lieu de départ (`null` = la base),
    *  pour un groupe donné — la MÊME règle que le store (`partyLegMin`, `legFromSpot`). */

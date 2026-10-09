@@ -102,13 +102,17 @@ export function partyRoadOdds(
   road: EscortKit,
   hero: PartyHero | null,
   samples = 40,
+  /** 🔙⚔️ Attaque combinée : aucun demi-tour (la règle de la résolution, `noTurnBack`). */
+  combined = false,
 ): { clear: number; turnBack: number } | null {
   if (hero || !escort.length || !HARVEST_TYPES.has(poi.type)) return null;
   const n = Math.max(1, samples);
   let clear = 0;
   let back = 0;
   for (let s = 0; s < n; s++) {
-    const o = resolveCaravan(poi, escort, partyForecastSeed(s), road, 1, undefined);
+    const o = resolveCaravan(poi, escort, partyForecastSeed(s), road, 1, undefined, {
+      noTurnBack: combined,
+    });
     if (o.turnBack !== undefined) back++;
     if (!o.events.some((e) => e.kind === 'bandits' && !e.won)) clear++;
   }

@@ -153,3 +153,50 @@ describe('🛣️ la route à part des gardes (`partyRoadOdds`)', () => {
     expect(trio.clear).toBeGreaterThan(seul.clear);
   });
 });
+
+// 🔙⚔️ UNE ATTAQUE COMBINÉE NE FAIT PAS DEMI-TOUR (signalé : « un demi-tour en rouge du filon
+// alors qu'ils le récoltaient depuis un moment »). Ses groupes partent de lieux différents et
+// ne se réunissent qu'AU LIEU, à une heure figée au départ : l'écran les montrait arrivés et
+// récoltant pendant que le rapport disait « rentrés sans atteindre le lieu ».
+describe('🔙⚔️ une attaque combinée ne fait jamais demi-tour sur la route', () => {
+  const p = poi();
+  const esc = team(1).map((a) => ({
+    ...a,
+    skills: (a.skills ?? []).filter((s) => s.id !== 'care'),
+  }));
+  it('la même route, sans demi-tour : l’embuscade de l’aller ne coûte qu’une part du butin', () => {
+    let seen = 0;
+    for (let s = 1; s <= 400; s++) {
+      const seed = s * 7919;
+      const seule = resolveCaravan(p, esc, seed, NUS, 20, undefined);
+      if (seule.turnBack === undefined) continue;
+      seen++;
+      const combinee = resolveCaravan(p, esc, seed, NUS, 20, undefined, { noTurnBack: true });
+      expect(combinee.turnBack).toBeUndefined();
+      expect(combinee.events.some((e) => e.kind === 'demitour')).toBe(false);
+      // Le lieu est atteint : la cargaison rentre (réduite par la défaite).
+      expect(combinee.energy).toBeGreaterThan(0);
+    }
+    expect(seen, 'aucun demi-tour à l’aller : le test ne prouve rien').toBeGreaterThan(20);
+  });
+  it('la récolte en attaque combinée ne rend jamais un demi-tour', () => {
+    let seen = 0;
+    for (let s = 1; s <= 300; s++) {
+      const input = {
+        poi: p,
+        escort: esc,
+        road: NUS,
+        hero: null,
+        seed: s,
+        playerLevel: 20,
+        pantheonLevel: 20,
+      };
+      if (resolveHarvestParty(input).turnBack === undefined) continue;
+      seen++;
+      const c = resolveHarvestParty({ ...input, combined: true });
+      expect(c.turnBack).toBeUndefined();
+      expect(c.party?.turnedBack).toBeFalsy();
+    }
+    expect(seen, 'aucun demi-tour : le test ne prouve rien').toBeGreaterThan(10);
+  });
+});

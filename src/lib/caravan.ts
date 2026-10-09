@@ -1403,6 +1403,13 @@ export function resolveCaravan(
   /** ⚠️ REQUIS (même indéfini) : le plancher de début de partie de l'or d'une mine
    *  (`harvestGold`) — le MÊME que pour le héros, sinon l'or différerait selon qu'il y va. */
   playerLevel: number | undefined,
+  /** 🔙 `noTurnBack` : une embuscade perdue à l'ALLER ne fait PAS rebrousser chemin, elle
+   *  coûte une part de la cargaison comme au retour. Pour une ATTAQUE COMBINÉE (signalé : « un
+   *  demi-tour en rouge alors qu'ils récoltaient depuis un moment ») : ses groupes partent de
+   *  lieux différents et ne se réunissent qu'AU LIEU, à une heure fixée au départ — le
+   *  demi-tour de l'équipe réunie n'a pas de chemin où se produire, et l'écran les montrait
+   *  arrivés et récoltant pendant que le rapport disait « rentrés sans atteindre le lieu ». */
+  opts: { noTurnBack?: boolean } = {},
 ): CaravanOutcome {
   // ⚠️ Plus aucun équipement de champion sur la route (v0.1012) : il ne vient QUE du tirage.
   // Le générateur dédié qui le tirait a disparu avec lui — il ne lisait rien du flux `rng`,
@@ -1466,7 +1473,7 @@ export function resolveCaravan(
         down: [...d.down],
         text: r.win
           ? 'Une embuscade repoussée.'
-          : i < outLegs
+          : i < outLegs && !opts.noTurnBack
             ? 'Une embuscade à l’aller tourne mal.'
             : 'Des bandits emportent une part de la cargaison.',
       });
@@ -1485,7 +1492,7 @@ export function resolveCaravan(
       } else {
         lost = true;
         mult *= CARAVAN.lossKeep;
-        if (i < outLegs) {
+        if (i < outLegs && !opts.noTurnBack) {
           // Les rencontres de l'aller se répartissent régulièrement sur le chemin.
           turnBack = (i + 1) / (outLegs + 1);
           events.push({

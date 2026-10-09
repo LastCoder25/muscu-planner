@@ -5744,7 +5744,11 @@ const poiFacts = computed<PoiFact[]>(() => {
         label: p.perilous || p.riftPeril || p.nestPeril ? 'Route dangereuse' : 'Route',
         value: `${clear} % sûre`,
         go: true,
-        title: `${clear} % des trajets sans embuscade perdue · ${back} % font demi-tour à l’aller (lieu jamais atteint, blessés à l’infirmerie) · au retour, une embuscade perdue coûte une part du butin. Plus de champions, mieux la route tient.`,
+        // 🔙⚔️ Une attaque combinée ne fait jamais demi-tour : ses groupes ne se réunissent qu'au
+        // lieu. Une embuscade perdue en chemin ne coûte qu'une part du butin.
+        title: combined.value
+          ? `${clear} % des trajets sans embuscade perdue · attaque combinée : jamais de demi-tour, une embuscade perdue en chemin coûte une part du butin.`
+          : `${clear} % des trajets sans embuscade perdue · ${back} % font demi-tour à l’aller (lieu jamais atteint, blessés à l’infirmerie) · au retour, une embuscade perdue coûte une part du butin. Plus de champions, mieux la route tient.`,
         cls: winClass(clear),
       });
       if (back > 0)

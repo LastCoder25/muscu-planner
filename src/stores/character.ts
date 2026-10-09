@@ -4199,6 +4199,7 @@ export const useCharacterStore = defineStore('character', () => {
       arriveAt: now + leg * 60000,
       playerLevel: opts.playerLevel,
       stayIds: opts.stayIds,
+      combined: false,
     });
     if (!withSupplies) return PARTY_SEND_BLOCK_LABEL.notTarget;
     // 🧝 Le héros reste-t-il en garnison si le point est pris ? Son instantané de combat part
@@ -4324,6 +4325,9 @@ export const useCharacterStore = defineStore('character', () => {
     arriveAt: number;
     playerLevel: number;
     stayIds?: string[];
+    /** ⚠️ REQUIS : attaque COMBINÉE → aucun demi-tour sur la route (`noTurnBack`). Ses
+     *  groupes ne se réunissent qu'au lieu, et leurs trajets sont figés au départ. */
+    combined: boolean;
   }): ExpeditionOutcome | null {
     const { poi, escort, road, hero, seed, now } = a;
     const supplies = road.supplies ?? [];
@@ -4387,6 +4391,7 @@ export const useCharacterStore = defineStore('character', () => {
                     seed,
                     playerLevel: opts.playerLevel,
                     pantheonLevel: pantheonLevel.value,
+                    combined: a.combined,
                   })
                 : null;
     if (!outcome) return null;
@@ -4751,6 +4756,8 @@ export const useCharacterStore = defineStore('character', () => {
         arriveAt: a.arriveAt,
         playerLevel: a.playerLevel,
         stayIds: a.stayIds,
+        // 🔙 Les groupes ne se réunissent qu'au lieu : aucun demi-tour sur la route.
+        combined: true,
       });
       if (!outcome0) {
         out.cancelled++;

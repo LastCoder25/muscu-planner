@@ -76,6 +76,8 @@ export interface HarvestPartyInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+  /** 🔙 Attaque COMBINÉE : pas de demi-tour sur la route (`resolveCaravan`, `noTurnBack`). */
+  combined?: boolean;
 }
 
 /** 💰 Ajoute à une récolte ce que portaient les gardes (`forceHaul` : bourses des bandits,
@@ -207,7 +209,9 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
   // à son issue, ni à celle des gardes.
   const road0 = hero
     ? null
-    : resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel);
+    : resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel, {
+        noTurnBack: input.combined,
+      });
   if (road0?.turnBack !== undefined) return turnedBack(input, road0, spec);
   const g: CampFight = spec
     ? fightCampForce({
