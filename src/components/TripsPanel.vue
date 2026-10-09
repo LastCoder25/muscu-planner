@@ -145,16 +145,10 @@
             >
               <i :style="{ width: s.fill + '%' }" />
               <b v-if="s.current" class="tl-cursor" :style="{ left: s.fill + '%' }" />
+              <!-- ⏱️ LE TEMPS DANS LA BARRE, EN PASTILLE (2026-10-09, demandé) : l'étape en cours
+                   en couleur, les suivantes en grisé, les étapes finies estompées. -->
+              <em class="tl-pill" :class="{ cur: s.current, done: s.done }">{{ s.label }}</em>
             </span>
-          </span>
-          <span class="tl-labs">
-            <span
-              v-for="(s, i) in tl.segs"
-              :key="i"
-              :class="{ cur: s.current, done: s.done }"
-              :style="{ '--w': s.width }"
-              >{{ s.label }}</span
-            >
           </span>
         </template>
         <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
@@ -962,30 +956,23 @@ const crew = computed(() => {
   color: var(--d3, #ffb23f);
   margin-left: 4px;
 }
-.tl-frise,
-.tl-labs {
+.tl-frise {
   flex-basis: 100%;
   display: flex;
   gap: 3px;
-  margin: 0 8px;
-}
-.tl-frise {
+  margin: 6px 8px 0;
   align-items: center;
-  height: 14px;
-  margin-top: 4px;
+  height: 24px;
 }
 /* Même règle de largeur pour les segments et leurs libellés : ils restent alignés. Le
    plancher vit dans la lib (`segWidths`) : une largeur minimale en px ici faisait déborder la
    frise, et le dernier temps sortait de la tuile (signalé le 2026-10-09). */
-.tl-seg,
-.tl-labs > span {
+.tl-seg {
   flex: var(--w) 1 0;
   min-width: 0;
-}
-.tl-seg {
   position: relative;
-  height: 6px;
-  border-radius: 3px;
+  height: 22px;
+  border-radius: 11px;
   background: var(--line, #3a332a);
 }
 .tl-seg > i {
@@ -1001,40 +988,55 @@ const crew = computed(() => {
 }
 /* 🔍 Sur place : des tirets épais — on ne voyage pas, on travaille. */
 .tl-seg.tl-dwell {
-  height: 10px;
-  border-radius: 5px;
+  height: 22px;
+  border-radius: 11px;
   background: repeating-linear-gradient(90deg, var(--line, #3a332a) 0 6px, transparent 6px 9px);
 }
 .tl-seg.tl-dwell > i {
   background: repeating-linear-gradient(90deg, var(--tc) 0 6px, transparent 6px 9px);
 }
+/* Le curseur : un trait au bout de la part remplie (la barre est assez épaisse pour qu'un
+   rond y masque la pastille). */
 .tl-cursor {
   position: absolute;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
-  transform: translateY(-50%);
-  border-radius: 50%;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
   background: var(--text);
-  border: 2px solid var(--tc);
 }
-.tl-labs > span {
+.tl-pill {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: calc(100% - 4px);
+  box-sizing: border-box;
+  padding: 1px 5px;
+  border-radius: 999px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
-  font-size: 10.5px;
-  line-height: 1.3;
-  color: var(--dim);
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
+  background: var(--surface-2, #1b1712);
+  border: 1px solid var(--line, #3a332a);
+  color: var(--dim);
 }
-.tl-labs > .cur {
-  color: var(--text);
+.tl-pill.cur {
+  background: var(--tc);
+  border-color: var(--tc);
+  color: #15120e;
   font-weight: 700;
+  /* Un liseré sombre la détache du remplissage, de la même couleur qu'elle. */
+  box-shadow: 0 0 0 2px var(--surface, #211c16);
 }
-.tl-labs > .done {
-  opacity: 0.7;
+.tl-pill.done {
+  opacity: 0.6;
 }
 .trip {
   position: relative;

@@ -1287,15 +1287,17 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="tl-seg /g)?.length).toBe(5);
     // 📐 La largeur est une PART de la frise (`segWidths`, plancher compris), plus des ms.
     const dwellW = Number(/class="tl-seg tl-dwell"[^>]*--w: ?([\d.]+)/.exec(out)?.[1]);
-    expect(dwellW).toBeGreaterThan(0.22);
+    expect(dwellW).toBeGreaterThan(0.25);
     expect(dwellW).toBeLessThan(1);
     expect(out.match(/class="tl-cursor"/g)?.length).toBe(2);
     // Les libellés : le temps d'ici la fin de chaque étape, ✓ pour une étape faite.
     expect(out).toContain('🔍 1 h 00');
     expect(out).toContain('↩️ 53 min');
     expect(out).toContain('⚔️ ✓');
-    // ⏱️ Le temps de l'étape en cours est en gras sur la frise, sans bandeau qui le répète.
-    expect(out).toMatch(/class="cur"[^>]*>⚔️ 12 min/);
+    // ⏱️ Le temps est DANS la barre, en pastille : l’étape en cours en couleur, les autres grisées.
+    expect(out).toMatch(/class="tl-pill cur"[^>]*>⚔️ 12 min/);
+    expect(out).toMatch(/class="tl-pill"[^>]*>↩️ 53 min/);
+    expect(out).not.toContain('tl-labs');
     expect(out).not.toContain('class="tr-total"');
     expect(out).not.toContain('9 h 59');
     // Sur la frise, le voyage se lit de gauche à droite : le départ reste à gauche au retour.
