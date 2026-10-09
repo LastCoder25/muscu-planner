@@ -57,8 +57,41 @@ describe('le plan d’éveil', () => {
     expect(advGearAwakenPlan(stock[0]!, stock, [])).toBeNull();
   });
 
-  it('rien au maximum', () => {
-    const stock = [piece('a', { awaken: ADV_GEAR_AWAKEN.max }), piece('b')];
+  it('rien quand tous les exemplaires sont au maximum', () => {
+    const max = ADV_GEAR_AWAKEN.max;
+    const stock = [piece('a', { level: 7, awaken: max }), piece('b', { awaken: max })];
+    expect(advGearAwakenPlan(stock[0]!, stock, [])).toBeNull();
+  });
+
+  it('le premier au maximum, l’éveil passe au SUIVANT — même porté par un autre champion', () => {
+    const max = ADV_GEAR_AWAKEN.max;
+    const stock = [
+      piece('zeph', { level: 31, awaken: max }),
+      piece('selven', { level: 19 }),
+      piece('libre', { level: 1 }),
+    ];
+    const advs = [champ('z', { weapon: 'zeph' }), champ('s', { weapon: 'selven' })];
+    const plan = advGearAwakenPlan(stock[0]!, stock, advs)!;
+    expect(plan.keep.id).toBe('selven');
+    expect(plan.consume.id).toBe('libre');
+  });
+
+  it('tous les portés au maximum : on PRÉPARE la meilleure pièce libre', () => {
+    const max = ADV_GEAR_AWAKEN.max;
+    const stock = [
+      piece('porte', { level: 31, awaken: max }),
+      piece('libre1', { level: 3 }),
+      piece('libre2', { level: 1 }),
+    ];
+    const plan = advGearAwakenPlan(stock[0]!, stock, [champ('z', { weapon: 'porte' })])!;
+    expect(plan.keep.id).toBe('libre1');
+    expect(plan.consume.id).toBe('libre2');
+  });
+
+  it('ne fond jamais un exemplaire au maximum placé DEVANT la pièce gardée', () => {
+    const max = ADV_GEAR_AWAKEN.max;
+    const stock = [piece('top', { level: 31, awaken: max }), piece('b', { level: 5 })];
+    // Seuls `top` (devant, au max) et `b` (gardée) : rien à fondre.
     expect(advGearAwakenPlan(stock[0]!, stock, [])).toBeNull();
   });
 });
@@ -131,12 +164,14 @@ describe('tout fusionner', () => {
     expect(out.stock.every((g) => g.awaken === 1)).toBe(true);
   });
 
-  it('s’arrête au plafond et laisse le surplus', () => {
-    const stock = Array.from({ length: ADV_GEAR_AWAKEN.max + 3 }, (_, i) => piece(`p${i}`));
+  it('le premier plafonne, le surplus éveille le suivant', () => {
+    const max = ADV_GEAR_AWAKEN.max;
+    const stock = Array.from({ length: max + 3 }, (_, i) => piece(`p${i}`));
     const out = awakenAllAdvGear(stock, []);
-    expect(out.merged).toBe(ADV_GEAR_AWAKEN.max);
-    expect(out.stock).toHaveLength(3);
-    expect(Math.max(...out.stock.map((g) => g.awaken ?? 0))).toBe(ADV_GEAR_AWAKEN.max);
+    // 8 copies : 5 fondues dans la 1re (✨5), puis 1 dans la 2e (✨1).
+    expect(out.merged).toBe(max + 1);
+    expect(out.stock).toHaveLength(2);
+    expect(out.stock.map((g) => g.awaken ?? 0).sort()).toEqual([1, max]);
   });
 
   it('ne fond jamais une pièce PORTÉE ni 🔒, et DIT combien sont bloquées', () => {
@@ -160,15 +195,26 @@ describe('tout fusionner', () => {
     expect(out.worn).toBe(1);
   });
 
-  it('un doublon dont le gardé est au maximum n’est pas « bloqué »', () => {
+  it('le premier au maximum : le suivant (porté) devient la pièce gardée', () => {
     const stock = [
       piece('keep', { level: 9, awaken: ADV_GEAR_AWAKEN.max }),
-      piece('porte'),
+      piece('porte', { level: 5 }),
       piece('verrou', { locked: true }),
     ];
     const out = awakenAllAdvGear(stock, [champ('x', { weapon: 'porte' })]);
     expect(out.merged).toBe(0);
     expect(out.worn).toBe(0);
+    expect(out.locked).toBe(1);
+  });
+
+  it('rien de bloqué quand TOUS les exemplaires sont au maximum', () => {
+    const max = ADV_GEAR_AWAKEN.max;
+    const stock = [
+      piece('a', { level: 9, awaken: max }),
+      piece('b', { awaken: max, locked: true }),
+    ];
+    const out = awakenAllAdvGear(stock, []);
+    expect(out.merged).toBe(0);
     expect(out.locked).toBe(0);
   });
 

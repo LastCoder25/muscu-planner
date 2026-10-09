@@ -378,7 +378,7 @@
                   <div class="gear-actions-row">
                     <!-- ⬆️ Ascension : proposée seulement quand la pièce BUTE sur son ★5 ; la
                        raison d'un refus est dans le titre, et redite avant de payer. -->
-                    <!-- ✨ Éveil : sur la pièce GARDÉE seulement (la plus avancée du modèle) ;
+                    <!-- ✨ Éveil : sur la pièce GARDÉE seulement (la plus avancée du modèle encore sous le maximum) ;
                        le nombre dit combien de doublons libres attendent. -->
                     <button
                       v-if="awakenOf(g)"
@@ -1038,6 +1038,7 @@ import {
   pendingAdvGear,
   lineageOf,
   wornGear,
+  ADV_GEAR_AWAKEN,
   advGearAwakenPlan,
   awakenAllAdvGear,
   countAssignedGear,
@@ -1684,7 +1685,7 @@ function doMergeGear() {
   if (!m.merged) return;
   $q.dialog({
     title: '✨ Tout fusionner',
-    message: `${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé de chaque modèle : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
+    message: `${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé encore sous ✨${ADV_GEAR_AWAKEN.max} de chaque modèle (porté ou non) : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
     cancel: true,
   }).onOk(() => {
     void pair(async (uid) => {

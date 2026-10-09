@@ -846,10 +846,24 @@ function modelCopies(stock: AdvGear[], model: string): AdvGear[] {
   return stock.filter((x) => advGearModelOf(x) === model).sort(gearAhead);
 }
 
+/** L'exemplaire qui reçoit l'éveil : le plus avancé encore sous le maximum (-1 si tous y
+ *  sont, ou si le modèle est vide). ⚠️ SOURCE UNIQUE du plan d'une ligne ET du décompte
+ *  des doublons bloqués du geste de masse. */
+function keepIndex(copies: AdvGear[]): number {
+  return copies.findIndex((x) => (x.awaken ?? 0) < ADV_GEAR_AWAKEN.max);
+}
+
 /**
  * ✨ Ce qu'un éveil ferait dans ce MODÈLE (lignée × emplacement × lettre) : quelle pièce on
  * GARDE, laquelle on FOND, et combien de doublons restent disponibles. `null` s'il n'y a rien
- * à fusionner, ou que la pièce gardée est déjà au maximum.
+ * à fusionner.
+ *
+ * La pièce GARDÉE est l'exemplaire le plus avancé qui n'est PAS encore au maximum
+ * (v1.106.9, demandé : « un autre champion a la même dague »). Avant, seul le tout premier
+ * exemplaire pouvait s'éveiller : une fois à ✨5, le modèle était figé, et un second
+ * champion portant la même pièce ne pouvait jamais éveiller la sienne. On ne fond que ce
+ * qui vient APRÈS elle dans l'ordre d'avancement — jamais une pièce déjà au maximum placée
+ * devant, qu'on détruirait pour rien.
  *
  * ⚠️ On ne fond JAMAIS une pièce PORTÉE (`wornGear`, la règle du combat) ni 🔒 — la pièce
  * GARDÉE, elle, peut très bien être portée : c'est même le cas courant.
@@ -867,10 +881,10 @@ export function advGearAwakenPlan(
   const model = advGearModelOf(g);
   if (!model) return null;
   const copies = modelCopies(stock, model);
-  const keep = copies[0];
-  // ⚠️ `!keep` est ATTEIGNABLE ici : `g` peut ne pas appartenir à `stock`.
-  if (!keep || (keep.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) return null;
-  const free = copies.slice(1).filter((x) => !worn.has(x.id) && !x.locked);
+  const at = keepIndex(copies);
+  if (at < 0) return null;
+  const keep = copies[at]!;
+  const free = copies.slice(at + 1).filter((x) => !worn.has(x.id) && !x.locked);
   const consume = free[free.length - 1];
   return consume ? { keep, consume, spare: free.length } : null;
 }
@@ -938,8 +952,9 @@ export function awakenAllAdvGear(
   let locked = 0;
   for (const m of reps.keys()) {
     const copies = modelCopies(cur, m);
-    if ((copies[0]!.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) continue;
-    for (const x of copies.slice(1)) {
+    const at = keepIndex(copies);
+    if (at < 0) continue;
+    for (const x of copies.slice(at + 1)) {
       if (wornIds.has(x.id)) worn++;
       else locked++;
     }
