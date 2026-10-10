@@ -75,7 +75,7 @@ describe('🧭 une tuile par voyage', () => {
     ...extra,
   });
   it('un voyage donne UNE tuile, celle de son étape en cours', () => {
-    const order = tripOrder([at('x', 30 * MIN), at('y', 130 * MIN, { back: true })]);
+    const order = tripOrder([at('x', 30 * MIN), at('y', 130 * MIN, { back: true })], 'home');
     expect(order.map((o) => `${o.trip.key}:${o.leg.leg}`)).toEqual(['x:go', 'y:back']);
   });
   it('le filtre « Retour » ne compte que les voyages qui sont SUR le retour', () => {

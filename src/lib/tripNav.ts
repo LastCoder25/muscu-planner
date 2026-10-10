@@ -73,16 +73,27 @@ export const currentLegTile = (t: LegSource): LegTile => {
   return legs.find((l) => !l.future) ?? legs[0]!;
 };
 
-/** Une tuile par voyage, rangée par TEMPS TOTAL AVANT SON RETOUR (2026-10-09, demandé :
- *  « ordonne-les par temps total avant leur retour ») : `homeAt`. Un voyage sans retour connu
- *  (renfort qui va se poster) se range à la fin de son étape en cours. Tri STABLE. */
+/** ⏱️ LES DEUX ORDRES DE LA RANGÉE (2026-10-10, demandé : un choix à droite des filtres).
+ *  `home` = temps TOTAL avant le retour en ville (croissant) — ce qui libère ses champions le
+ *  plus tôt passe devant ; `step` = temps avant la PROCHAINE ÉTAPE (arrivée, fin de fouille,
+ *  retour) — ce qui va bouger le plus tôt passe devant. */
+export type TripSort = 'home' | 'step';
+export const TRIP_SORTS: readonly TripSort[] = ['home', 'step'];
+
+/** Une tuile par voyage (son étape EN COURS), rangée selon `sort`. Un voyage sans retour connu
+ *  (renfort qui va se poster) se range à la fin de son étape en cours sous `home`. Tri STABLE.
+ *  ⚠️ `sort` est REQUIS : un ordre qu'on peut oublier de passer finit par ne plus suivre le
+ *  choix affiché. */
 export function tripOrder<T extends NavTrip>(
   trips: readonly T[],
+  sort: TripSort,
 ): { key: string; at: number; trip: T; leg: LegTile }[] {
   return trips
     .map((t) => {
       const leg = currentLegTile(t);
-      return { key: t.key, at: t.homeAt ?? leg.at ?? t.endsAt ?? -Infinity, trip: t, leg };
+      const step = leg.at ?? t.endsAt;
+      const at = sort === 'home' ? (t.homeAt ?? step) : (step ?? t.homeAt);
+      return { key: t.key, at: at ?? -Infinity, trip: t, leg };
     })
     .sort((x, y) => x.at - y.at);
 }
