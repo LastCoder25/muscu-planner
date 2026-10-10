@@ -732,7 +732,11 @@ function facesOf(t: MapTrip) {
   /* Une étape finie reste lisible, mais en retrait de celle qui se joue. */
   opacity: 0.55;
 }
+/* La part remplie de l'étape en cours s'arrête NET sur le curseur : bout carré, sinon
+   l'arrondi grignote la couleur juste avant le trait blanc et la démarcation se lit floue. */
 .tl-seg.cur > i {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
   opacity: 1;
   box-shadow: 0 0 12px color-mix(in srgb, var(--tc) 55%, transparent);
 }
@@ -785,7 +789,6 @@ function facesOf(t: MapTrip) {
   bottom: 2px;
   width: 4px;
   margin-left: -2px;
-  border-radius: 2px;
   background: #fff;
   box-shadow: 0 0 8px #fff;
 }
