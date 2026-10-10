@@ -1209,6 +1209,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="tr-boost[ "]/g)?.length).toBe(2);
     expect(out).toMatch(/class="tr-boost lossy"/);
     expect(out).toMatch(/⚡1h/);
+    // Dans la tuile (demandé : sans prendre de place), plus dans une cellule à part.
+    expect(out).not.toContain('trip-cell');
+    const tile = out.indexOf('class="trip van');
+    const end = out.indexOf('class="trip van', tile + 1);
+    const inside = out.slice(tile, end);
+    expect(inside).toContain('class="tr-boosts"');
+    expect(out.slice(0, tile).lastIndexOf('<div')).toBeGreaterThan(
+      out.slice(0, tile).lastIndexOf('<button'),
+    );
   }, 30_000);
 
   it('🎨 TripsPanel : un groupe d’attaque combinée porte la couleur de son attaque', async () => {
