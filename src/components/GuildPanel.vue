@@ -37,53 +37,6 @@
             <b>{{ maxRoster }}</b> à la fois : c’est la taille d’un groupe, et le nombre de
             défenseurs qui tiennent le rempart. <b>Monte le Panthéon</b> pour en engager un de plus.
           </div>
-          <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : les pièces d'équipement de chacun,
-             selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
-             faire avant qu'on touche (gain de puissance, nombre de changements) et se tait
-             quand il n'y a rien à gagner : il remplace les choix faits à la main, on ne
-             doit pas le découvrir après coup. -->
-          <template v-if="roster.length">
-            <!-- 🎨 UN BOUTON QUI SE LIT EN TROIS TEMPS (demandé : « plus design ») : l’action
-               (pastille ✨ + titre), ce qu’elle touche (sous-titre), ce qu’elle rapporte
-               (le gain, en vert, là où l’œil finit). Au repos il se calme — contour
-               neutre, coche verte — pour ne pas appeler un geste qui ne sert à rien. -->
-            <button
-              type="button"
-              class="g-auto"
-              :class="{ idle: !autoPreview.changes }"
-              :disabled="busy || !autoPreview.changes"
-              @click="autoPair"
-            >
-              <span class="ga-ico" aria-hidden="true">{{ autoPreview.changes ? '✨' : '✓' }}</span>
-              <span class="ga-txt">
-                <span class="ga-title">{{
-                  autoPreview.changes ? 'Confier au mieux' : 'Tout est déjà au mieux'
-                }}</span>
-                <span class="ga-sub">
-                  <template v-if="autoPreview.pending"
-                    >{{ autoPreview.pending }} emplacement{{ autoPreview.pending > 1 ? 's' : '' }} à
-                    armer</template
-                  ><template v-else>🗡️ équipement du vivier</template
-                  ><template v-if="autoPreview.changes">
-                    · {{ autoPreview.changes }} champion{{
-                      autoPreview.changes > 1 ? 's' : ''
-                    }}</template
-                  >
-                </span>
-              </span>
-              <!-- Un emplacement VIDE qu'on peut remplir passe DEVANT le gain : c'est plus
-                   parlant qu'un nombre de puissance, et c'est ce qu'on voit sur le portrait. -->
-              <span v-if="autoPreview.pending" class="ga-gain pend">
-                {{ autoPreview.pending }}<small>🗡️</small>
-              </span>
-              <span v-else-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
-                +{{ fmtChampPow(autoPreview.gain, showK) }}<small>⚔️</small>
-              </span>
-            </button>
-            <div v-if="autoPreview.changes" class="g-note dim ga-note">
-              Remplace les choix faits à la main.
-            </div>
-          </template>
           <!-- ⬆️ QUI PEUT MONTER DE RANG, EN TÊTE (signalé : « je vois le Panthéon en vert
                mais quand je clique dessus ça ne me dit rien de plus »). Chaque nom ouvre la
                fiche, où vit le bouton d'ascension. -->
@@ -194,6 +147,37 @@
                le vivier — un seul dispositif de filtre dans la Guilde, mêmes teintes
                (vert = disponible, jaune = confié) que les cadres des tuiles. -->
           <template v-else>
+            <!-- ✨ UN SEUL BOUTON (v1.117, demandé) : « Confier au mieux » et « Tout fusionner »
+                 fondus. Il équipe d'abord chaque champion au mieux, puis fond les doublons
+                 restés libres (`equipThenMerge`, la même règle que le geste). ⚠️ Il ANNONCE ce
+                 qu'il va faire avant qu'on touche, et s'allume dès qu'il y a QUELQUE CHOSE à
+                 faire — équiper seul suffit, il n'attend pas un doublon à fondre. -->
+            <button
+              type="button"
+              class="g-auto"
+              :class="{ idle: !gearAll.can }"
+              :disabled="busy || !gearAll.can"
+              @click="doEquipMerge"
+            >
+              <span class="ga-ico" aria-hidden="true">{{ gearAll.can ? '✨' : '✓' }}</span>
+              <span class="ga-txt">
+                <span class="ga-title">{{
+                  gearAll.can ? 'Équiper et fusionner' : 'Tout est déjà au mieux'
+                }}</span>
+                <span class="ga-sub">{{ gearAll.sub }}</span>
+              </span>
+              <!-- Un emplacement VIDE qu'on peut remplir passe DEVANT le gain : c'est plus
+                   parlant qu'un nombre de puissance, et c'est ce qu'on voit sur le portrait. -->
+              <span v-if="gearAll.pending" class="ga-gain pend">
+                {{ gearAll.pending }}<small>🗡️</small>
+              </span>
+              <span v-else-if="gearAll.can && gearAll.gain > 0" class="ga-gain">
+                +{{ fmtChampPow(gearAll.gain, showK) }}<small>⚔️</small>
+              </span>
+            </button>
+            <div v-if="gearAll.can" class="g-note dim ga-note">
+              Remplace les choix faits à la main.
+            </div>
             <p class="g-note dim">
               Dégâts et PV en valeur réelle : pour son porteur, ou pour un champion de ton niveau si
               personne ne la porte.
@@ -244,11 +228,9 @@
                 ⬆️ Ascension <span class="g-tab-n">{{ stockAsc.length }}</span>
               </button>
             </div>
-            <!-- 🗡️✨ LES DEUX GESTES DE MASSE (demandés). ⚠️ Chacun ANNONCE ce qu'il va faire
-                 AVANT qu'on touche, et se grise en DISANT pourquoi quand il ne peut rien :
-                 un bouton muet se lit comme une panne. C'est d'autant plus vrai pour la
-                 fusion — le cas COURANT est que les doublons soient portés, donc qu'il n'y
-                 ait rien à fondre tant qu'on ne les a pas retirés. -->
+            <!-- 🗡️ TOUT RETIRER. ⚠️ Il ANNONCE ce qu'il va faire AVANT qu'on touche, et se
+                 grise en DISANT pourquoi quand il ne peut rien : un bouton muet se lit comme
+                 une panne. (« Équiper et fusionner » vit en tête du stock.) -->
             <div class="stock-acts">
               <button
                 type="button"
@@ -264,19 +246,6 @@
                       ? `${stockWornCount} pièce${stockWornCount > 1 ? 's reviennent' : ' revient'} au stock`
                       : 'personne ne porte rien'
                   }}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                class="sa-btn"
-                :class="{ ready: mergePreview.merged > 0 }"
-                :disabled="busy || !mergePreview.merged"
-                @click="doMergeGear"
-              >
-                <span class="sa-ico" aria-hidden="true">✨</span>
-                <span class="sa-txt">
-                  <span class="sa-title">Tout fusionner</span>
-                  <span class="sa-sub">{{ mergeSub }}</span>
                 </span>
               </button>
             </div>
@@ -360,6 +329,11 @@
                            déjà « confiée », la flèche dit à QUI. Il garde sa couleur
                            d'état : un empêchement n'est pas une métadonnée. -->
                       <span v-if="ownerOf(g)" class="warn">→ {{ ownerOf(g)?.name }}</span>
+                      <!-- 🧩 Une copie libre GARDÉE pour un champion à l'emplacement vide : elle
+                           n'a pas de ✨, et on DIT pourquoi au lieu de laisser deviner. -->
+                      <span v-else-if="reservedFor.get(g.id)" class="resv"
+                        >🧩 réservée pour {{ reservedFor.get(g.id) }}</span
+                      >
                     </span>
                     <!-- Les effets en pleine couleur, un par ligne : c'est ce qui départage
                          deux pièces. Jamais un « · » entre deux textes, qui resterait orphelin
@@ -1040,6 +1014,8 @@ import {
   wornGear,
   ADV_GEAR_AWAKEN,
   advGearAwakenPlan,
+  advGearReservedFor,
+  wornGearIds,
   countAssignedGear,
   advGearNextRank,
   type AdvGear,
@@ -1100,7 +1076,7 @@ async function pair(fn: (uid: string) => Promise<unknown>) {
     busy.value = false;
   }
 }
-/** Ce que « Confier au mieux » ferait, AVANT de toucher : le MÊME plan que le store
+/** Ce que l'équipement au mieux ferait, AVANT de toucher : le MÊME plan que le store
  *  (`autoAdvGear`) sur le même contexte, et le gain de puissance du vivier. ⚠️ Un plan,
  *  jamais deux calculs : si l'aperçu recalculait à sa façon, il pourrait finir par
  *  annoncer autre chose que ce que le bouton fait. */
@@ -1109,34 +1085,19 @@ const autoPreview = computed(() => {
   const ctx = compCtx.value;
   const gearPlan = autoAdvGear(advs, ctx);
   let changes = 0;
-  const after = advs.map((a) => {
+  for (const a of advs) {
     const g = gearPlan.get(a.id) ?? {};
     if (ADV_GEAR_SLOTS.some((s) => (g[s] ?? null) !== (a.gear?.[s] ?? null))) changes++;
-    return { ...a, gear: g };
-  });
-  const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
-  const gain = sum(adventurerPowers(after, ctx)) - sum(powers.value);
+  }
   // ⚠️ CE QUI MANQUAIT : « il y a du monde à ARMER ». Le gain seul ne le dit pas — une
   // pièce peut attendre pendant que le gain reste modeste, et un emplacement vide se lisait
   // alors comme une panne de l'auto-équipement.
   const pending = [...gearPending.value.values()].reduce((n, slots) => n + slots.length, 0);
-  return { changes, gain, pending };
+  return { changes, pending };
 });
 /** Puissance totale du vivier — la somme de ce que chaque portrait affiche. */
 const rosterPower = () =>
   [...adventurerPowers(char.advList, compCtx.value).values()].reduce((s, p) => s + p, 0);
-function autoPair() {
-  void pair(async (uid) => {
-    const before = rosterPower();
-    const r = await char.autoAssignGear(uid);
-    if (!r) return;
-    const after = rosterPower();
-    $q.notify({
-      type: 'positive',
-      message: `✨ ${r.gear} pièce(s) confiée(s) · puissance du vivier ${fmtChampPow(before, showK.value)} → ${fmtChampPow(after, showK.value)}`,
-    });
-  });
-}
 
 // ── 🗡️ SON ÉQUIPEMENT : 4 emplacements (arme/armure/accessoire/relique), propres à SON métier ──
 // ⚠️ Distinct du compagnon et du talent : ces pièces vivent dans un STOCK séparé
@@ -1650,46 +1611,87 @@ function doAwaken(g: AdvGear) {
  *  compte les pièces DU STOCK ayant un porteur : un id qui ne désigne plus rien est compté
  *  ici et pas là-bas. Les deux sont justes, ils ne répondent pas à la même question. */
 const stockWornCount = computed(() => countAssignedGear(char.advList));
-/** ✨ Ce que « Tout fusionner » ferait. ⚠️ La MÊME fonction que le geste : l'aperçu ne peut
- *  pas promettre autre chose que ce que le bouton fait. Ne dépend pas de l'horloge du
- *  panneau — il ne se recalcule qu'au changement du stock ou du vivier. */
+/** ✨ Ce que « Équiper et fusionner » ferait. ⚠️ La MÊME fonction que le geste : l'aperçu
+ *  ne peut pas promettre autre chose que ce que le bouton fait. Ne dépend pas de l'horloge
+ *  du panneau — il ne se recalcule qu'au changement du stock ou du vivier. */
 const mergePreview = computed(() => equipThenMerge(char.advList, compCtx.value));
-/** ⚠️ Un bouton grisé DIT pourquoi : sans ça, « rien ne se passe » se lit comme une panne —
- *  et le cas courant est que les doublons soient portés. */
-const mergeSub = computed(() => {
+/** Le bouton unique : s'allume s'il y a quelqu'un à rééquiper OU un doublon à fondre, et
+ *  son sous-titre DIT ce qui va se passer — ou pourquoi rien ne se passe. ⚠️ Les doublons
+ *  restés « portés » le sont APRÈS l'équipement au mieux : ce sont des pièces que le
+ *  meilleur build garde sur le dos d'un champion, pas des pièces à retirer — l'ancien
+ *  « retire-les d'abord » était faux, le bouton les aurait aussitôt remises. */
+const gearAll = computed(() => {
+  const a = autoPreview.value;
   const m = mergePreview.value;
-  if (m.merged)
-    return `${m.merged} doublon${m.merged > 1 ? 's' : ''} fondu${m.merged > 1 ? 's' : ''}`;
-  if (m.worn)
-    return `${m.worn} doublon${m.worn > 1 ? 's sont portés' : ' est porté'} — retire-les d’abord`;
-  if (m.locked) return `${m.locked} doublon${m.locked > 1 ? 's' : ''} 🔒 — déverrouille-les`;
-  return 'aucun doublon à fondre';
+  const can = a.changes > 0 || m.merged > 0;
+  const sum = (x: Map<string, number>) => [...x.values()].reduce((t, v) => t + v, 0);
+  // Le gain COMPTE la fusion : l'après se mesure sur le vivier équipé ET le stock éveillé.
+  const gain =
+    sum(adventurerPowers(m.advs, { ...compCtx.value, advGear: m.stock })) - sum(powers.value);
+  const parts: string[] = [];
+  const pl = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+  if (a.pending) parts.push(pl(a.pending, 'emplacement à armer', 'emplacements à armer'));
+  else if (a.changes) parts.push(pl(a.changes, 'champion rééquipé', 'champions rééquipés'));
+  if (m.merged) parts.push(pl(m.merged, 'doublon fondu', 'doublons fondus'));
+  else if (m.locked) parts.push(`${pl(m.locked, 'doublon', 'doublons')} 🔒 — déverrouille-les`);
+  else if (m.worn)
+    parts.push(pl(m.worn, 'doublon porté par un champion', 'doublons portés par tes champions'));
+  if (!parts.length) parts.push('aucun doublon à fondre');
+  return { can, gain, pending: a.pending, sub: parts.join(' · ') };
 });
+/** 🧩 Pour qui chaque copie libre est gardée (`advGearReservedFor`, la réserve du plan
+ *  d'éveil) : id de la pièce → noms. Calculé une fois pour tout le stock. */
+const reservedFor = computed(() => {
+  const stock = char.advGearStock;
+  const advs = char.advList;
+  const worn = wornGearIds(advs, stock);
+  const out = new Map<string, string>();
+  for (const g of stock) {
+    const who = advGearReservedFor(g, stock, advs, worn);
+    if (who.length) out.set(g.id, who.map((x) => x.name).join(', '));
+  }
+  return out;
+});
+function doEquipMerge() {
+  const m = mergePreview.value;
+  if (!gearAll.value.can) return;
+  const run = () =>
+    void pair(async (uid) => {
+      const before = rosterPower();
+      let what: string;
+      if (m.merged) {
+        const out = await char.awakenAllGear(uid);
+        what = `${out.merged} doublon(s) fondu(s)`;
+      } else {
+        const r = await char.autoAssignGear(uid);
+        if (!r) return;
+        what = `${r.gear} pièce(s) confiée(s)`;
+      }
+      const after = rosterPower();
+      $q.notify({
+        type: 'positive',
+        message: `✨ ${what} · puissance du vivier ${fmtChampPow(before, showK.value)} → ${fmtChampPow(after, showK.value)}`,
+      });
+    });
+  // Fondre détruit des pièces : on confirme. Équiper seul est réversible, il part directement.
+  if (!m.merged) return run();
+  $q.dialog({
+    title: '✨ Équiper et fusionner',
+    message: `Tes champions sont d’abord équipés au mieux (les choix faits à la main sont remplacés), puis ${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé encore sous ✨${ADV_GEAR_AWAKEN.max} de chaque modèle (porté ou non) : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
+    cancel: true,
+  }).onOk(run);
+}
 function doStripGear() {
   if (!stockWornCount.value) return;
   const n = stockWornCount.value;
   $q.dialog({
     title: '🗡️ Tout retirer',
-    message: `${n} pièce${n > 1 ? 's' : ''} ${n > 1 ? 'reviennent' : 'revient'} au stock. Rien n’est vendu ni perdu, et « Confier au mieux » les redistribue d’un geste.`,
+    message: `${n} pièce${n > 1 ? 's' : ''} ${n > 1 ? 'reviennent' : 'revient'} au stock. Rien n’est vendu ni perdu, et « Équiper et fusionner » les redistribue d’un geste.`,
     cancel: true,
   }).onOk(() => {
     void pair(async (uid) => {
       const removed = await char.stripAllAdvGear(uid);
       $q.notify({ type: 'positive', message: `🗡️ ${removed} pièce(s) de retour au stock` });
-    });
-  });
-}
-function doMergeGear() {
-  const m = mergePreview.value;
-  if (!m.merged) return;
-  $q.dialog({
-    title: '✨ Tout fusionner',
-    message: `Tes champions sont d’abord équipés au mieux (comme « Confier au mieux » : les choix faits à la main sont remplacés), puis ${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé encore sous ✨${ADV_GEAR_AWAKEN.max} de chaque modèle (porté ou non) : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
-    cancel: true,
-  }).onOk(() => {
-    void pair(async (uid) => {
-      const out = await char.awakenAllGear(uid);
-      $q.notify({ type: 'positive', message: `✨ ${out.merged} doublon(s) fondu(s)` });
     });
   });
 }
@@ -2565,7 +2567,7 @@ function leftOf(at: number): string {
   opacity: 0.5;
 }
 /* Le gain de puissance d'une pièce PEUT être négatif (le sélecteur ne filtre pas sur le
-   gain, contrairement à « Confier au mieux ») — il se lit alors dans le ton d'alerte. */
+   gain, contrairement à « Équiper et fusionner ») — il se lit alors dans le ton d'alerte. */
 .d-gain.neg {
   color: var(--d4, #ff6a45);
 }
@@ -2769,6 +2771,10 @@ function leftOf(at: number): string {
 .gear-meta .warn {
   color: var(--d3, #ffb23f);
 }
+/* 🧩 Réservée : une information, pas une alerte — le vert « disponible » des tuiles libres. */
+.gear-meta .resv {
+  color: var(--d1, #7bc86c);
+}
 .gear-btn {
   flex: 1;
   min-width: 0;
@@ -2875,12 +2881,11 @@ function leftOf(at: number): string {
   cursor: default;
 }
 
-/* 🗡️✨ Les deux gestes de masse du stock. Deux colonnes égales : ils se comparent, et à
-   344 px chacun garde une cible de 48 px de haut. Plus discrets que « Confier au mieux »
-   (contour neutre) — ce ne sont pas eux qu’on vient chercher en ouvrant l’onglet. */
+/* 🗡️ « Tout retirer », discret (contour neutre) sous « Équiper et fusionner » : ce n’est
+   pas lui qu’on vient chercher en ouvrant l’onglet. */
 .stock-acts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin: 10px 0 6px;
 }
@@ -2896,11 +2901,6 @@ function leftOf(at: number): string {
   color: var(--text);
   text-align: left;
   cursor: pointer;
-}
-/* Seule la fusion s’allume, et seulement quand elle a quelque chose à fondre : l’accent
-   dit « il y a à faire » partout ailleurs dans l’app. */
-.sa-btn.ready {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .sa-btn:not(:disabled):active {
   transform: scale(0.985);
@@ -2918,10 +2918,6 @@ function leftOf(at: number): string {
   border-radius: 50%;
   font-size: 15px;
   background: color-mix(in srgb, var(--line) 70%, transparent);
-}
-.sa-btn.ready .sa-ico {
-  background: var(--accent);
-  color: #15120e;
 }
 .sa-txt {
   display: flex;

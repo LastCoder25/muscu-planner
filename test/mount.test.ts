@@ -2224,6 +2224,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(gear).toContain('Équipements');
     expect(gear).not.toContain('Collection');
     expect(gear).not.toContain('Mes champions');
+    // ✨ UN SEUL BOUTON (v1.117) : il vit dans les Équipements, plus dans le vivier, et les
+    // deux anciens libellés ont disparu.
+    expect(champ).not.toContain('Équiper et fusionner');
+    for (const h of [champ, gear]) {
+      expect(h).not.toContain('Confier au mieux');
+      expect(h).not.toContain('Tout fusionner');
+    }
   }, 30_000);
 
   it('GuildPanel s’ouvre aussi sur un vivier VIDE', async () => {
@@ -2329,6 +2336,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // suivante (niveau 3 d'une Bronze = début de ★2, donc 0 %).
     expect(stockHtml).toContain('role="progressbar"');
     expect(stockHtml).toMatch(/class="gsb-pct[^"]*">0 %</);
+    // ✨ v1.117 : l’épée libre attend Léa, donc le bouton unique s’allume et le DIT.
+    expect(stockHtml).toMatch(/class="ga-title">Équiper et fusionner</);
+    expect(stockHtml).toContain('1 emplacement à armer');
   }, 30_000);
 
   it('VillagePlots se monte, Équipementier ouvert sur un aventurier', async () => {

@@ -893,7 +893,7 @@ function gearAhead(a: AdvGear, b: AdvGear): number {
 /** Les ids RÉELLEMENT portés, en un seul ensemble. ⚠️ La dérivation « Map de `wornGear`
  *  → Set d'ids » était écrite trois fois : le jour où `wornGear` change de forme de
  *  retour, un seul oubli donnerait un Set d'`undefined`, donc un compteur muet. */
-function wornGearIds(advs: Adventurer[], stock: AdvGear[]): Set<string> {
+export function wornGearIds(advs: Adventurer[], stock: AdvGear[]): Set<string> {
   return new Set([...wornGear(advs, stock).values()].flat().map((x) => x.id));
 }
 
@@ -946,12 +946,7 @@ export function advGearAwakenPlan(
   // 🧩 RÉSERVE (v1.106.11) : un champion de la lignée dont cet emplacement est VIDE a droit
   // à une copie avant qu'on la fonde — équiper passe avant éveiller. Les mieux placées
   // sont gardées ; si la pièce gardée est elle-même libre, c'est elle qui sert la 1re place.
-  const want = advs.filter(
-    (a) =>
-      lineageOf(a) === keep.lineage &&
-      !(a.gear?.[keep.slot] && worn.has(a.gear[keep.slot]!)) &&
-      canWearAdvGear(a, keep),
-  ).length;
+  const want = gearWanters(keep, advs, worn).length;
   const reserve = Math.max(0, want - (worn.has(keep.id) ? 0 : 1));
   const free = copies
     .slice(at + 1)
@@ -959,6 +954,51 @@ export function advGearAwakenPlan(
     .slice(reserve);
   const consume = free[free.length - 1];
   return consume ? { keep, consume, spare: free.length } : null;
+}
+
+/** 🧩 Les champions qui attendent une pièce de ce MODÈLE : même lignée, emplacement VIDE
+ *  (ou tenant une pièce qui ne compte pas au combat), et capables de la porter. ⚠️ SOURCE
+ *  UNIQUE de la réserve du plan d'éveil ET de la mention « réservée pour X » du stock. */
+function gearWanters(keep: AdvGear, advs: Adventurer[], worn: Set<string>): Adventurer[] {
+  return advs.filter(
+    (a) =>
+      lineageOf(a) === keep.lineage &&
+      !(a.gear?.[keep.slot] && worn.has(a.gear[keep.slot]!)) &&
+      canWearAdvGear(a, keep),
+  );
+}
+
+/**
+ * 🧩 POUR QUI CETTE PIÈCE LIBRE EST GARDÉE — les champions à qui la réserve du plan d'éveil
+ * la destine (v1.117, signalé : une pièce perdait son bouton ✨ sans un mot). Vide si elle
+ * est portée, si personne ne l'attend, ou si elle n'est pas dans la réserve (elle se fond
+ * alors normalement). ⚠️ La MÊME réserve que `advGearAwakenPlan` : la pièce gardée d'abord
+ * si elle est libre, puis les copies libres non 🔒 qui la suivent, autant que de preneurs.
+ */
+export function advGearReservedFor(
+  g: AdvGear,
+  stock: AdvGear[],
+  advs: Adventurer[],
+  worn = wornGearIds(advs, stock),
+): Adventurer[] {
+  if (worn.has(g.id)) return [];
+  const model = advGearModelOf(g);
+  if (!model) return [];
+  const copies = modelCopies(stock, model);
+  const at = keepIndex(copies);
+  if (at < 0) return [];
+  const keep = copies[at]!;
+  const wanters = gearWanters(keep, advs, worn);
+  if (!wanters.length) return [];
+  const kept = worn.has(keep.id) ? [] : [keep];
+  const reserved = [
+    ...kept,
+    ...copies
+      .slice(at + 1)
+      .filter((x) => !worn.has(x.id) && !x.locked)
+      .slice(0, wanters.length - kept.length),
+  ];
+  return reserved.some((x) => x.id === g.id) ? wanters : [];
 }
 
 /** Applique un éveil : la pièce gardée prend `max(éveils) + 1` (on ne perd jamais un cran

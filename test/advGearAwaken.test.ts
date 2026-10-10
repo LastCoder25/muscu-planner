@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ADV_GEAR_AWAKEN,
   advGearAwakenPlan,
+  advGearReservedFor,
   advGearEffectTexts,
   advGearEffects,
   ascendAdvGear,
@@ -271,5 +272,34 @@ describe('tout retirer', () => {
     const out = stripAdvGear(advs);
     expect(out.removed).toBe(0);
     expect(out.advs).toBe(advs);
+  });
+});
+
+describe('🧩 pour qui une pièce libre est gardée', () => {
+  it('un champion à l’emplacement vide : la copie libre lui est réservée, sans ✨', () => {
+    const stock = [piece('a', { level: 7 }), piece('b', { level: 3 })];
+    const advs = [champ('Porteur', { weapon: 'a' }), champ('Vide')];
+    expect(advGearAwakenPlan(stock[0]!, stock, advs)).toBeNull();
+    expect(advGearReservedFor(stock[1]!, stock, advs).map((x) => x.id)).toEqual(['Vide']);
+    // La pièce portée n'est réservée pour personne.
+    expect(advGearReservedFor(stock[0]!, stock, advs)).toEqual([]);
+  });
+  it('personne n’attend : aucune réserve, la copie se fond', () => {
+    const stock = [piece('a', { level: 7 }), piece('b', { level: 3 })];
+    const advs = [champ('Porteur', { weapon: 'a' })];
+    expect(advGearReservedFor(stock[1]!, stock, advs)).toEqual([]);
+    expect(advGearAwakenPlan(stock[0]!, stock, advs)?.consume.id).toBe('b');
+  });
+  it('une copie AU-DELÀ de la réserve n’est pas annoncée réservée', () => {
+    const stock = [piece('a', { level: 7 }), piece('b', { level: 5 }), piece('c', { level: 1 })];
+    const advs = [champ('Porteur', { weapon: 'a' }), champ('Vide')];
+    expect(advGearReservedFor(stock[1]!, stock, advs).map((x) => x.id)).toEqual(['Vide']);
+    expect(advGearReservedFor(stock[2]!, stock, advs)).toEqual([]);
+    expect(advGearAwakenPlan(stock[0]!, stock, advs)?.consume.id).toBe('c');
+  });
+  it('une autre lignée ne réserve rien', () => {
+    const stock = [piece('a', { level: 7 }), piece('b', { level: 3 })];
+    const advs = [champ('Porteur', { weapon: 'a' }), champ('Mage', undefined, ['mage'])];
+    expect(advGearReservedFor(stock[1]!, stock, advs)).toEqual([]);
   });
 });
