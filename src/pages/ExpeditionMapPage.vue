@@ -460,6 +460,7 @@
           :advs="char.advList"
           :reinforceable="reinforceable"
           :islands="storedProd"
+          :here="island"
           @open="(p: Poi) => ((overlay = null), openFromList(p))"
           @reinforce="(p: Poi) => ((overlay = null), (quickId = p.id))"
         />

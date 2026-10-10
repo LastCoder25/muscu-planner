@@ -13,7 +13,7 @@
     <div class="cps" :class="{ inline }">
       <div class="cps-head">
         <span class="cps-title">🏰 Places fortes</span>
-        <span class="cps-sum">{{ heldCount }}/{{ rows.length }} tenus</span>
+        <span class="cps-sum">{{ framed ? '' : `${heldCount}/${rows.length} tenus` }}</span>
         <button
           v-if="!inline"
           type="button"
@@ -24,165 +24,179 @@
           ✕
         </button>
       </div>
-      <p v-if="!rows.length" class="cps-empty">Aucune place forte sur ta carte pour l’instant.</p>
-      <!-- 🔎 Filtres par statut (demandé : « tenu, pas tenu, vide »), avec leur nombre. Une
+      <!-- 🏝️ UN BLOC PAR ÎLE (2026-10-10, demandé : « pour que ce soit lisible »). L'île où l'on
+           est d'abord — c'est là qu'on agit —, avec son nom, son compte de lieux tenus, ses
+           filtres et ses tuiles ; puis les îles précédentes, chacune dans le même cadre. Hors
+           de l'archipel (aucune île), la liste reste nue : un cadre unique n'apporterait rien. -->
+      <section class="cps-block" :class="{ framed }">
+        <div v-if="framed" class="cps-bhead">
+          <span aria-hidden="true">{{ here?.emoji ?? '🏝️' }}</span>
+          <span class="cps-bname">{{ here?.name ?? 'Île actuelle' }}</span>
+          <span class="cps-here">📍 ici</span>
+          <span class="cps-bsub">{{ heldCount }}/{{ rows.length }} tenus</span>
+        </div>
+        <p v-if="!rows.length" class="cps-empty">Aucune place forte sur ta carte pour l’instant.</p>
+        <!-- 🔎 Filtres par statut (demandé : « tenu, pas tenu, vide »), avec leur nombre. Une
            catégorie vide n'est pas proposée : une pastille « 0 » n'apprend rien. -->
-      <div v-if="filterChips.length > 1" class="cps-filters" role="group" aria-label="Filtrer">
-        <button
-          type="button"
-          class="cps-chip"
-          :class="{ on: activeFilter === null }"
-          :aria-pressed="activeFilter === null"
-          @click="filter = null"
-        >
-          Toutes · {{ rows.length }}
-        </button>
-        <button
-          v-for="c in filterChips"
-          :key="c.id"
-          type="button"
-          class="cps-chip"
-          :class="['f-' + c.id, { on: activeFilter === c.id }]"
-          :aria-pressed="activeFilter === c.id"
-          @click="filter = activeFilter === c.id ? null : c.id"
-        >
-          {{ CONTROL_FILTER_LABEL[c.id] }} · {{ c.n }}
-        </button>
-      </div>
-      <!-- 👆 Toucher une tuile ouvre DIRECTEMENT la gestion du lieu (demandé) : elle ne se
+        <div v-if="filterChips.length > 1" class="cps-filters" role="group" aria-label="Filtrer">
+          <button
+            type="button"
+            class="cps-chip"
+            :class="{ on: activeFilter === null }"
+            :aria-pressed="activeFilter === null"
+            @click="filter = null"
+          >
+            Toutes · {{ rows.length }}
+          </button>
+          <button
+            v-for="c in filterChips"
+            :key="c.id"
+            type="button"
+            class="cps-chip"
+            :class="['f-' + c.id, { on: activeFilter === c.id }]"
+            :aria-pressed="activeFilter === c.id"
+            @click="filter = activeFilter === c.id ? null : c.id"
+          >
+            {{ CONTROL_FILTER_LABEL[c.id] }} · {{ c.n }}
+          </button>
+        </div>
+        <!-- 👆 Toucher une tuile ouvre DIRECTEMENT la gestion du lieu (demandé) : elle ne se
            déplie plus. Ce qu'on y lisait (faction, assaut, renforts, garnison en détail) vit
            sur la fiche du lieu, qui porte aussi les actions — un seul endroit.
            ⚠️ Une `div` au rôle de bouton, plus un `<button>` : une case libre de la garnison
            EST un bouton (renfort direct), et un bouton ne peut pas en contenir un autre. -->
-      <div
-        v-for="r in shownRows"
-        :key="r.poi.id"
-        role="button"
-        tabindex="0"
-        class="cps-tile cps-row"
-        :class="'st-' + r.status"
-        :style="{ '--rk': isHeldControl(r.poi) ? HELD_COLOR : rankOf(r).color }"
-        :aria-label="`${CONTROL_LABEL[r.kind]} — ouvrir la gestion`"
-        @click="emit('open', r.poi)"
-        @keydown.enter.self.prevent="emit('open', r.poi)"
-        @keydown.space.self.prevent="emit('open', r.poi)"
-      >
-        <!-- 📐 Rangée 1 : icône, nom et statut sur la MÊME ligne médiane — l'icône n'est plus
+        <div
+          v-for="r in shownRows"
+          :key="r.poi.id"
+          role="button"
+          tabindex="0"
+          class="cps-tile cps-row"
+          :class="'st-' + r.status"
+          :style="{ '--rk': isHeldControl(r.poi) ? HELD_COLOR : rankOf(r).color }"
+          :aria-label="`${CONTROL_LABEL[r.kind]} — ouvrir la gestion`"
+          @click="emit('open', r.poi)"
+          @keydown.enter.self.prevent="emit('open', r.poi)"
+          @keydown.space.self.prevent="emit('open', r.poi)"
+        >
+          <!-- 📐 Rangée 1 : icône, nom et statut sur la MÊME ligne médiane — l'icône n'est plus
              centrée sur toute la tuile (elle décrochait du titre dès que la colonne de droite
              grandissait). Le statut reste en haut à droite (demandé). -->
-        <span class="cps-emo" aria-hidden="true">{{ CONTROL_EMO[r.kind] }}</span>
-        <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
-        <span class="pill st">{{ STATUS[r.status] }}</span>
-        <!-- 🧾 Rangée 2 : rang/renforts, garnison, puis ce que le lieu rapporte, calé à droite.
+          <span class="cps-emo" aria-hidden="true">{{ CONTROL_EMO[r.kind] }}</span>
+          <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
+          <span class="pill st">{{ STATUS[r.status] }}</span>
+          <!-- 🧾 Rangée 2 : rang/renforts, garnison, puis ce que le lieu rapporte, calé à droite.
              UNE rangée (qui démarre sous l'icône) et ne passe à la ligne que si la place
              manque — une rangée par bloc laissait un grand vide à gauche du rendement. -->
-        <span class="cps-foot">
-          <span v-if="!isHeldControl(r.poi) || r.reinforcing.length" class="cps-pills">
-            <span v-if="!isHeldControl(r.poi)" class="pill rk"
-              >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
-            >
-            <span v-if="r.reinforcing.length" class="pill"
-              >🧭 +{{ r.reinforcing.length }} en route</span
-            >
-          </span>
-          <!-- 🖼️ La GARNISON, dans sa pastille (demandé : « pour distinguer cette partie-là ») :
+          <span class="cps-foot">
+            <span v-if="!isHeldControl(r.poi) || r.reinforcing.length" class="cps-pills">
+              <span v-if="!isHeldControl(r.poi)" class="pill rk"
+                >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
+              >
+              <span v-if="r.reinforcing.length" class="pill"
+                >🧭 +{{ r.reinforcing.length }} en route</span
+              >
+            </span>
+            <!-- 🖼️ La GARNISON, dans sa pastille (demandé : « pour distinguer cette partie-là ») :
                une case par place (1 à N), remplie d'une miniature par champion ou milicien
                posté, numérotée si libre — elle remplace la pastille « 🛡️ 2/5 ». Cases à taille
                FIXE (elles rétrécissaient selon la largeur du texte voisin, signalé sur la tour
                de guet). -->
-          <span
-            v-if="r.status !== 'enemy' && r.status !== 'assault'"
-            class="cps-minis"
-            :aria-label="`Garnison ${r.garrison.length} sur ${Number.isFinite(r.seats) ? garrisonCap(r.kind) : 'sans limite'}`"
-          >
-            <template v-for="(s, i) in slotsOf(r)" :key="i">
-              <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
-                ><ChampionPortrait :champion-id="s.adv.championId">{{
-                  advTitle(s.adv)?.emoji ?? '🧑'
-                }}</ChampionPortrait></span
-              >
-              <span
-                v-else-if="s.kind === 'hero'"
-                class="mini hero"
-                :class="{ route: s.coming, away: s.away || s.engaged }"
-                :title="
-                  s.coming
-                    ? 'Le héros est en route (2 places)'
-                    : s.away
-                      ? 'Le héros est en sortie, ses 2 places l’attendent'
-                      : s.engaged
-                        ? 'Le héros attend son départ pour une attaque combinée'
-                        : 'Le héros (2 places)'
-                "
-                ><span>{{ s.coming ? '🧭' : '🦸' }}</span
-                ><i v-if="s.away || s.engaged" class="away-mark" aria-hidden="true">{{
-                  s.engaged ? '⏳' : '⚔️'
-                }}</i></span
-              >
-              <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME"
-                ><MilitiaPortrait
-              /></span>
-              <!-- 🧭 Un renfort en route occupe déjà sa place : la montrer libre inviterait à
+            <span
+              v-if="r.status !== 'enemy' && r.status !== 'assault'"
+              class="cps-minis"
+              :aria-label="`Garnison ${r.garrison.length} sur ${Number.isFinite(r.seats) ? garrisonCap(r.kind) : 'sans limite'}`"
+            >
+              <template v-for="(s, i) in slotsOf(r)" :key="i">
+                <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
+                  ><ChampionPortrait :champion-id="s.adv.championId">{{
+                    advTitle(s.adv)?.emoji ?? '🧑'
+                  }}</ChampionPortrait></span
+                >
+                <span
+                  v-else-if="s.kind === 'hero'"
+                  class="mini hero"
+                  :class="{ route: s.coming, away: s.away || s.engaged }"
+                  :title="
+                    s.coming
+                      ? 'Le héros est en route (2 places)'
+                      : s.away
+                        ? 'Le héros est en sortie, ses 2 places l’attendent'
+                        : s.engaged
+                          ? 'Le héros attend son départ pour une attaque combinée'
+                          : 'Le héros (2 places)'
+                  "
+                  ><span>{{ s.coming ? '🧭' : '🦸' }}</span
+                  ><i v-if="s.away || s.engaged" class="away-mark" aria-hidden="true">{{
+                    s.engaged ? '⏳' : '⚔️'
+                  }}</i></span
+                >
+                <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME"
+                  ><MilitiaPortrait
+                /></span>
+                <!-- 🧭 Un renfort en route occupe déjà sa place : la montrer libre inviterait à
                    en envoyer un second. -->
-              <span
-                v-else-if="s.kind === 'route'"
-                class="mini route"
-                :class="{ mil: s.mil }"
-                :title="s.mil ? 'Milicien en route' : 'Champion en route'"
-                >🧭</span
-              >
-              <!-- 🛡️ Le trait entre les titulaires et la milice (bouche-trou). -->
-              <span v-else-if="s.kind === 'sep'" class="mini-sep" aria-hidden="true"></span>
-              <!-- ⚔️ En SORTIE : son portrait, estompé, marqué ⚔️ — sa place l'attend, elle
+                <span
+                  v-else-if="s.kind === 'route'"
+                  class="mini route"
+                  :class="{ mil: s.mil }"
+                  :title="s.mil ? 'Milicien en route' : 'Champion en route'"
+                  >🧭</span
+                >
+                <!-- 🛡️ Le trait entre les titulaires et la milice (bouche-trou). -->
+                <span v-else-if="s.kind === 'sep'" class="mini-sep" aria-hidden="true"></span>
+                <!-- ⚔️ En SORTIE : son portrait, estompé, marqué ⚔️ — sa place l'attend, elle
                    n'est pas libre. -->
-              <span
-                v-else-if="s.kind === 'away'"
-                class="mini away"
-                :title="`${s.adv.name} — en sortie, revient sur ce point`"
-                ><ChampionPortrait :champion-id="s.adv.championId">{{
-                  advTitle(s.adv)?.emoji ?? '🧑'
-                }}</ChampionPortrait
-                ><i class="away-mark" aria-hidden="true">⚔️</i></span
-              >
-              <!-- ➕ Une place libre ENVOIE un renfort, sans passer par la gestion du lieu
+                <span
+                  v-else-if="s.kind === 'away'"
+                  class="mini away"
+                  :title="`${s.adv.name} — en sortie, revient sur ce point`"
+                  ><ChampionPortrait :champion-id="s.adv.championId">{{
+                    advTitle(s.adv)?.emoji ?? '🧑'
+                  }}</ChampionPortrait
+                  ><i class="away-mark" aria-hidden="true">⚔️</i></span
+                >
+                <!-- ➕ Une place libre ENVOIE un renfort, sans passer par la gestion du lieu
                    (demandé). Grisée si personne ne peut partir (ni champion ni milicien). -->
-              <button
-                v-else-if="canReinforce(r)"
-                type="button"
-                class="mini free go"
-                :class="{ mil: s.mil }"
-                :title="freeTitle(s.mil) + ' — envoyer un renfort'"
-                :aria-label="`Envoyer un renfort : ${CONTROL_LABEL[r.kind]}, ${freeTitle(s.mil)}`"
-                @click.stop="emit('reinforce', r.poi)"
-                @keydown.stop
-              >
-                ＋
-              </button>
-              <span v-else class="mini free" :class="{ mil: s.mil }" :title="freeTitle(s.mil)"
-                >＋</span
-              >
-            </template>
+                <button
+                  v-else-if="canReinforce(r)"
+                  type="button"
+                  class="mini free go"
+                  :class="{ mil: s.mil }"
+                  :title="freeTitle(s.mil) + ' — envoyer un renfort'"
+                  :aria-label="`Envoyer un renfort : ${CONTROL_LABEL[r.kind]}, ${freeTitle(s.mil)}`"
+                  @click.stop="emit('reinforce', r.poi)"
+                  @keydown.stop
+                >
+                  ＋
+                </button>
+                <span v-else class="mini free" :class="{ mil: s.mil }" :title="freeTitle(s.mil)"
+                  >＋</span
+                >
+              </template>
+            </span>
+            <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
+            <span v-if="r.progress" class="cps-yield prog" :class="{ full: isFull(r) }">
+              <span>{{ r.progress.text }}</span>
+              <span v-if="r.progress.pct !== null" class="cps-gauge"
+                ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
+              /></span>
+            </span>
+            <span v-else class="cps-yield">{{ CONTROL_YIELD[r.kind] }}</span>
           </span>
-          <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
-          <span v-if="r.progress" class="cps-yield prog" :class="{ full: isFull(r) }">
-            <span>{{ r.progress.text }}</span>
-            <span v-if="r.progress.pct !== null" class="cps-gauge"
-              ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
-            /></span>
-          </span>
-          <span v-else class="cps-yield">{{ CONTROL_YIELD[r.kind] }}</span>
-        </span>
-        <span class="cps-chev" aria-hidden="true">›</span>
-      </div>
+          <span class="cps-chev" aria-hidden="true">›</span>
+        </div>
+      </section>
       <!-- 🏝️ LES ÎLES PRÉCÉDENTES, une par bloc (2026-10-10, demandé). Pacifiées : rien ne
            s'y attaque ni ne s'y prend, donc ni statut, ni garnison, ni action — le lieu et ce
            qu'il produit (débit, ou % et temps avant la prochaine unité). Leur production est
            récoltée toute seule, à distance. -->
-      <section v-for="b in islands ?? []" :key="b.island" class="cps-isl">
-        <div class="cps-isl-head">
+      <section v-for="b in islands ?? []" :key="b.island" class="cps-block framed cps-isl">
+        <div class="cps-bhead">
           <span aria-hidden="true">{{ b.emoji }}</span>
-          <span class="cps-isl-name">{{ b.name }}</span>
-          <span class="cps-isl-sub">récolte auto</span>
+          <span class="cps-bname">{{ b.name }}</span>
+          <span class="cps-bsub"
+            >{{ b.points.length }} lieu{{ b.points.length > 1 ? 'x' : '' }} · récolte auto</span
+          >
         </div>
         <div v-for="p in b.points" :key="p.id" class="cps-isl-row">
           <span class="cps-isl-emo" aria-hidden="true">{{ p.emoji }}</span>
@@ -239,12 +253,16 @@ const props = defineProps<{
   inline?: boolean;
   /** 🏝️ La production des îles rangées (`storedIslandProduction`), un bloc par île. */
   islands?: readonly StoredIslandProduction[];
+  /** 🏝️ L'île où l'on est (mode archipel) : titre de son bloc. */
+  here?: { name: string; emoji: string } | null;
 }>();
 const emit = defineEmits<{
   'update:modelValue': [boolean];
   open: [Poi];
   reinforce: [Poi];
 }>();
+/** Un cadre par île dès qu'on est dans l'archipel (une île active, ou des îles rangées). */
+const framed = computed(() => !!props.here || !!props.islands?.length);
 const canReinforce = (r: ControlRosterRow) => !!props.reinforceable?.includes(r.poi.id);
 
 const STATUS: Record<ControlRosterStatus, string> = {
@@ -327,27 +345,47 @@ const isFull = (r: ControlRosterRow) =>
 </script>
 
 <style scoped>
-/* 🏝️ Les îles précédentes : des lignes simples, sans tuile cliquable (rien à y gérer). */
-.cps-isl {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
+/* 🏝️ Un cadre par île : bordure, fond léger, en-tête au nom de l'île. */
+.cps-block.framed {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 8px 2px;
+  margin-bottom: 12px;
+  background: color-mix(in srgb, var(--surface-2, var(--bg)) 55%, transparent);
 }
-.cps-isl-head {
+.cps-block.framed:not(.cps-isl) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.cps-isl {
+  padding-bottom: 6px;
+}
+.cps-bhead {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0 2px 8px;
   font-family: Oswald, sans-serif;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 700;
 }
-.cps-isl-name {
-  flex: 1;
+.cps-bname {
   min-width: 0;
 }
-.cps-isl-sub {
+.cps-here {
   font-family: Inter, sans-serif;
   font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.cps-bsub {
+  margin-left: auto;
+  font-family: Inter, sans-serif;
+  font-size: 11.5px;
+  font-weight: 400;
   color: var(--dim);
 }
 .cps-isl-row {

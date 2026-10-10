@@ -3438,6 +3438,7 @@ describe('🔀 FusionPanel', () => {
           modelValue: true,
           rows: [],
           advs: ROW.adventurers,
+          here: { name: 'Île des Bêtes', emoji: '🐺' },
           islands: [
             {
               island: 1,
@@ -3457,6 +3458,10 @@ describe('🔀 FusionPanel', () => {
       ),
     ).toBeNull();
     expect(out).toContain('Île des Brigands');
+    // 🏝️ Un bloc par île : l'île active (marquée « ici ») puis chaque île rangée.
+    expect(out.match(/class="cps-bhead"/g)?.length).toBe(2);
+    expect(out).toContain('📍 ici');
+    expect(out.indexOf('Île des Bêtes')).toBeLessThan(out.indexOf('Île des Brigands'));
     expect(out.match(/class="cps-isl-row"/g)?.length).toBe(2);
     expect(out).toContain('🎒 40 % · 3 h 00');
     // Rien à gérer : ni statut, ni garnison, ni bouton sur ces lignes.
