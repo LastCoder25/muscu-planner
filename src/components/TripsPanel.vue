@@ -32,6 +32,17 @@
         >{{ o.icon }} <b>{{ o.n }}</b></template
       >
     </button>
+    <!-- ⏱️ L'ORDRE DE LA RANGÉE (2026-10-10, demandé), à droite des filtres : temps total
+         avant le retour en ville, ou temps avant la prochaine étape. Un toucher bascule. -->
+    <button
+      type="button"
+      class="trf trf-sort"
+      :title="SORT_LABEL[sort].title"
+      :aria-label="`Ordre : ${SORT_LABEL[sort].title} — toucher pour changer`"
+      @click="sort = sort === 'home' ? 'step' : 'home'"
+    >
+      ⇅ {{ SORT_LABEL[sort].short }}
+    </button>
   </div>
   <p v-if="tiles.length && !shownTiles.length" class="tr-none">
     Aucune catégorie choisie — touche « Tout » ou une catégorie.
@@ -273,7 +284,7 @@ import { STEP_ICON, TRIP_LEGS, type LegTile, tripTimeline, type TripLeg } from '
 import RiftPortal from '@/components/RiftPortal.vue';
 import { useCharacterStore } from '@/stores/character';
 import { useTripFilters } from '@/composables/useTripFilters';
-import { legTileShown, tripFilterCtx, tripOrder } from '@/lib/tripNav';
+import { legTileShown, tripFilterCtx, tripOrder, type TripSort } from '@/lib/tripNav';
 import { isRiftPoi, poiEmo, poiLabel } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { tripEnds, type TripEnd } from '@/lib/tripEnds';
@@ -331,7 +342,7 @@ const tiles = computed(() => {
   }[] = [
     // 🧭 UNE TUILE PAR VOYAGE (concept B, choisi le 2026-10-09), rangée par son retour en ville
     // (`tripOrder`) ; ses étapes sont sur sa frise.
-    ...tripOrder(props.trips).map((x) => {
+    ...tripOrder(props.trips, sort.value).map((x) => {
       const line = x.leg.phased ? tripTimeline(x.trip.legs?.steps) : null;
       return {
         key: x.key,
@@ -353,7 +364,11 @@ const tiles = computed(() => {
 });
 /** 🧭⚔️ Le filtre (cf. `TripSelection`), PARTAGÉ avec l'autre rangée et les flèches de la
  *  fiche d'un voyage (`useTripFilters`). Ce qu'il laisse voir : `tripFilterCtx` (lib). */
-const { selection, legSel } = useTripFilters();
+const { selection, legSel, sort } = useTripFilters();
+const SORT_LABEL: Record<TripSort, { short: string; title: string }> = {
+  home: { short: '↩ Retour', title: 'Rangé par temps total avant le retour en ville' },
+  step: { short: '⏭ Étape', title: 'Rangé par temps avant la prochaine étape' },
+};
 const ctx = computed(() =>
   tripFilterCtx(props.trips, props.attacks?.length ?? 0, selection.value, legSel.value),
 );
@@ -575,6 +590,11 @@ function facesOf(t: MapTrip) {
   &:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  /* Poussé tout à droite : ce n'est pas un filtre, c'est l'ordre. */
+  &.trf-sort {
+    margin-left: auto;
+    color: var(--dim);
   }
 }
 .trips {
