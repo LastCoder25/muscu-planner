@@ -62,7 +62,7 @@ const ECRANS = [
   {
     route: '/challenges',
     nom: 'defis',
-    // ⚖️ L'équilibre du corps a son propre onglet (v1.127.0).
+    // ⚖️ L'équilibre du corps a son propre onglet (v1.128.0).
     gestes: [{ nom: 'equilibre', clic: '.seg2-b:has-text("Équilibre")', attendu: '.bb' }],
   },
   { route: '/muscu', nom: 'muscu' },

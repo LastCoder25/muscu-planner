@@ -7,15 +7,13 @@ describe('advUnlocks — calendrier des déblocages', () => {
       expect(ADV_SCHEDULE[i]!.level).toBeGreaterThanOrEqual(ADV_SCHEDULE[i - 1]!.level);
   });
 
-  it('niveau 5 : boss (Golem) — l’emplacement de talent est ouvert dès le niveau 1 (v0.1078)', () => {
-    const kinds = new Set(unlocksAtLevel(5).map((u) => u.kind));
-    expect(kinds.has('boss')).toBe(true);
-    expect(kinds.has('talent')).toBe(false);
-    // Plus de palier de rang au niveau 5 depuis la v0.875 : les objets suivent le rang du joueur.
-    expect(kinds.has('rarity')).toBe(false);
-    const boss = unlocksAtLevel(5).find((u) => u.kind === 'boss');
-    expect(boss?.title).toContain('Golem');
-    expect(boss?.detail).toContain('set');
+  it('aucun boss annoncé : un boss de palier n’est gaté par aucun niveau', () => {
+    // La chaîne des boss ne dépend que du boss précédent : l'annoncer à un passage de niveau
+    // laisserait croire qu'il vient de s'ouvrir.
+    expect(ADV_SCHEDULE.some((u) => (u.kind as string) === 'boss')).toBe(false);
+    expect(ADV_SCHEDULE.some((u) => /boss\s*:/i.test(u.title))).toBe(false);
+    // Niveau 5 (ancien palier du Golem) : plus rien à annoncer.
+    expect(unlocksAtLevel(5)).toHaveLength(0);
   });
 
   it('emplacement de talent = un SLOT (drop-based), pas un choix 1-parmi-3', () => {
@@ -31,11 +29,9 @@ describe('advUnlocks — calendrier des déblocages', () => {
     expect(at9[0]!.title).toContain('Épines');
   });
 
-  it('niveau 20 : boss (Titan) — plus d’emplacement de talent', () => {
-    const at20 = unlocksAtLevel(20);
-    expect(at20.some((u) => u.kind === 'boss' && u.title.includes('Titan'))).toBe(true);
-    // Un seul talent (v0.845) : l'emplacement ne s'annonce qu'une fois, au niveau 5.
-    expect(at20.some((u) => u.kind === 'talent')).toBe(false);
+  it('niveau 20 : plus d’emplacement de talent', () => {
+    // Un seul talent : l'emplacement ne s'annonce qu'une fois, au niveau 1.
+    expect(unlocksAtLevel(20).some((u) => u.kind === 'talent')).toBe(false);
   });
 
   it('rang des objets : un palier tous les 10 niveaux, le rang du joueur (v0.875)', () => {
@@ -79,7 +75,7 @@ describe('advUnlocks — calendrier des déblocages', () => {
     for (const u of up) expect(u.level).toBeGreaterThan(4);
   });
 
-  it('upcomingUnlocks tease le contenu procédural (boss jusqu’au niv.100)', () => {
+  it('upcomingUnlocks tease la suite (rangs d’objets)', () => {
     expect(upcomingUnlocks(25).length).toBeGreaterThan(0);
     for (const u of upcomingUnlocks(25)) expect(u.level).toBeGreaterThan(25);
   });
