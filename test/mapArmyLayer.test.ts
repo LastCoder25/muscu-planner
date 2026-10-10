@@ -18,9 +18,9 @@ describe('carte : les armées au premier plan', () => {
     expect(tpl.indexOf('army-focus-halo')).toBeGreaterThan(town);
   });
   it('une armée ne se dessine qu’une fois', () => {
-    expect(src).toMatch(
-      /placePois = computed\(\(\) => mapPois\.value\.filter\(\(p\) => !isMarching\(p\)\)\)/,
-    );
-    expect(src).toMatch(/armyPois = computed\(\(\) => mapPois\.value\.filter\(isMarching\)\)/);
+    // Le calque des lieux écarte les armées, celui des armées ne prend qu’elles (les lieux
+    // terrassés sortent des deux, v1.123).
+    expect(src).toMatch(/placePois = computed\(\(\) =>\s*mapPois\.value\.filter\(\(p\) => !isMarching\(p\)/);
+    expect(src).toMatch(/armyPois = computed\(\(\) =>\s*mapPois\.value\.filter\(\(p\) => isMarching\(p\)/);
   });
 });

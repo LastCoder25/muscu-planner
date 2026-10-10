@@ -19,7 +19,6 @@
         sel: selectedId === p.id,
         dim: dimmed.has(p.id),
         veiled: veiled.has(p.id),
-        down: down.has(p.id),
       }"
       :style="{ '--rk': isHeldControl(p) ? HELD_COLOR : rankOf(p).color }"
       @click="emit('select', p)"
@@ -146,7 +145,7 @@
     <g
       v-if="target"
       class="poi target"
-      :class="{ 'rift-target': isRiftPoi(target), down: targetDown, sel: selectedId === target.id }"
+      :class="{ 'rift-target': isRiftPoi(target), sel: selectedId === target.id }"
       @click="emit('select', target)"
     >
       <!-- ⚔️ Un lieu qu'on attaque reste TOUCHABLE : on y voit ce qu'il rapporte (la fiche
@@ -169,7 +168,6 @@
         <circle :cx="target.x" :cy="target.y" r="4.8" class="poi-bg" />
         <text :x="target.x" :y="target.y + 1.4" class="poi-emo">{{ poiEmo(target) }}</text>
       </template>
-      <path v-if="targetDown" :d="slash(target)" class="down-x" />
     </g>
 
     <!-- ⚠️ Destination d'une ÉQUIPE. Le lieu est retiré de la carte au départ — il est
@@ -182,7 +180,7 @@
       class="poi target van-target"
       :class="[
         v.kind,
-        { 'rift-target': isRiftPoi(v.poi), down: v.down, sel: selectedId === v.poi.id },
+        { 'rift-target': isRiftPoi(v.poi), sel: selectedId === v.poi.id },
       ]"
       @click="emit('select', v.poi)"
     >
@@ -204,7 +202,6 @@
         <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
         <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ poiEmo(v.poi) }}</text>
       </template>
-      <path v-if="v.down" :d="slash(v.poi)" class="down-x" />
     </g>
   </g>
 </template>
@@ -219,10 +216,6 @@ import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import { RIFT_MAP_ICON, riftMapBox } from '@/lib/riftPortal';
 
-/** 💀 La croix posée sur un lieu terrassé (deux traits en X sur la pastille). */
-const slash = (p: { x: number; y: number }) =>
-  `M${p.x - 3.4} ${p.y - 3.4}L${p.x + 3.4} ${p.y + 3.4}M${p.x + 3.4} ${p.y - 3.4}L${p.x - 3.4} ${p.y + 3.4}`;
-
 const props = defineProps<{
   pois: Poi[];
   selectedId: string | null;
@@ -231,8 +224,6 @@ const props = defineProps<{
   dimmedKey: string;
   /** Ids des lieux encore sous le brouillard qui recule, même forme que `dimmedKey`. */
   veiledKey: string;
-  /** 💀 Ids des lieux terrassés encore sur la carte (armées en campagne), même forme. */
-  downKey?: string;
   /** Ids des points de contrôle sous attaque imminente, même forme que `dimmedKey`. */
   imminentKey: string;
   /** 🔴 Ids des lieux sur lesquels une de nos troupes marche (`underAttackKey`), même forme. */
@@ -244,16 +235,13 @@ const props = defineProps<{
   /** La cible du héros en voyage. */
   target: Poi | null;
   /** Les cibles des équipes en route. */
-  travelTargets: { id: string; poi: Poi; kind: string; down: boolean }[];
-  /** 💀 La cible du héros est terrassée (grisée jusqu'à son retour). */
-  targetDown?: boolean;
+  travelTargets: { id: string; poi: Poi; kind: string }[];
 }>();
 const emit = defineEmits<{ select: [p: Poi] }>();
 
 const toSet = (k: string) => new Set(k ? k.split('|') : []);
 const dimmed = computed(() => toSet(props.dimmedKey));
 const veiled = computed(() => toSet(props.veiledKey));
-const down = computed(() => toSet(props.downKey ?? ''));
 const imminent = computed(() => toSet(props.imminentKey));
 const attacked = computed(() => toSet(props.attackedKey ?? ''));
 /** 🏰 Agrandissement d'un lieu fixe (citadelle encore plus) ; 1 pour un lieu ordinaire. */
@@ -499,24 +487,6 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 }
 .van-target {
   opacity: 0.75;
-}
-/* 💀 Lieu ou armée TERRASSÉ : grisé et barré d'une croix, jusqu'au retour de ceux qui l'ont
-   vaincu (le voyage s'achève, le lieu cesse d'être dessiné). Deux indices en plus de la
-   couleur — l'opacité et la croix — pour que ça se lise sans elle. */
-.poi.down {
-  opacity: 0.6;
-  filter: grayscale(1);
-}
-.poi.down .poi-bg {
-  stroke: var(--dim);
-  stroke-dasharray: none;
-}
-.down-x {
-  stroke: var(--text);
-  stroke-width: 0.6;
-  stroke-linecap: round;
-  fill: none;
-  pointer-events: none;
 }
 .van-target .poi-bg {
   stroke: #b57bff;

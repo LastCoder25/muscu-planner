@@ -3455,13 +3455,16 @@ export function restoreUnvanquished(
 }
 
 /** 🗺️ La carte dessine-t-elle encore la CIBLE de ce voyage ? Oui tant que son sort n'est pas
- *  connu, et s'il l'a terrassée (grisée jusqu'au retour). Non dès qu'un lieu non terrassé est
- *  revenu sur la carte (`restoreUnvanquished`) : il serait dessiné deux fois. */
+ *  connu. Non dès qu'il est tranché : un lieu TERRASSÉ disparaît aussitôt (demandé, v1.123 :
+ *  « on n'affiche pas les lieux détruits » — il était grisé et barré jusqu'au retour, la carte
+ *  en était encombrée) ; un lieu non terrassé est revenu sur la carte (`restoreUnvanquished`)
+ *  et serait dessiné deux fois. */
 export function voyageTargetShown(v: RestoreVoyage, now: number): boolean {
+  if (voyageVanquished(v, now)) return false;
   if (!leavesMapOnDeparture(v.poi)) return true;
-  // ⚔️ Resté sur la carte pendant l'assaut : il n'est dessiné à part qu'une fois TERRASSÉ.
-  if (staysUnderAttack(v.poi)) return voyageVanquished(v, now);
-  return now < v.midAt || voyageVanquished(v, now);
+  // ⚔️ Resté sur la carte pendant l'assaut : il se dessine lui-même, jamais à part.
+  if (staysUnderAttack(v.poi)) return false;
+  return now < v.midAt;
 }
 
 export function voyageProgress(voyage: Voyage, now: number): { overall: number; mid: number } {

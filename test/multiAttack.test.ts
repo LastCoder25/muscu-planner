@@ -102,10 +102,10 @@ describe('restoreUnvanquished — le lieu gardé ne quitte la carte qu’à sa c
     expect(restoreUnvanquished(m0, [trip(p, true, 1000)], 500)).toBe(m0);
     expect(voyageTargetShown(trip(p, true, 1000), 500)).toBe(false);
   });
-  it('au rapport d’une victoire, il tombe (et se dessine grisé jusqu’au retour)', () => {
+  it('au rapport d’une victoire, il tombe — et n’est plus dessiné du tout', () => {
     const m = restoreUnvanquished(map([p, poi('b')]), [trip(p, true, 1000)], 1000);
     expect(m!.pois.map((q) => q.id)).toEqual(['b']);
-    expect(voyageTargetShown(trip(p, true, 1000), 1500)).toBe(true);
+    expect(voyageTargetShown(trip(p, true, 1000), 1500)).toBe(false);
   });
   it('une attaque lancée AVANT la mise à jour (lieu retiré au départ) le rend après sa défaite', () => {
     const m = restoreUnvanquished(map([]), [trip(p, false, 1000)], 1500);

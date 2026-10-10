@@ -87,11 +87,13 @@ describe('voyageTargetShown — la carte ne dessine pas deux fois un lieu revenu
     expect(voyageTargetShown(trip(poi('a'), false), 1000)).toBe(false);
     expect(voyageTargetShown(trip(poi('a'), true, { outTurn: 0.4 }), 1500)).toBe(false);
   });
-  it('terrassé : grisé jusqu’au retour', () => {
-    expect(voyageTargetShown(trip(poi('a'), true), 1500)).toBe(true);
+  it('terrassé : effacé dès le rapport (plus grisé jusqu’au retour)', () => {
+    expect(voyageTargetShown(trip(poi('a'), true), 999)).toBe(true);
+    expect(voyageTargetShown(trip(poi('a'), true), 1500)).toBe(false);
   });
-  it('arène et point fixe : inchangés (ils ne reviennent pas par ce chemin)', () => {
+  it('arène et point fixe : inchangés tant qu’ils ne sont pas terrassés', () => {
     expect(voyageTargetShown(trip(poi('ar', 'arena'), false), 1500)).toBe(true);
     expect(voyageTargetShown(trip(poi('c', 'control'), false), 1500)).toBe(true);
+    expect(voyageTargetShown(trip(poi('c', 'control'), true), 1500)).toBe(false);
   });
 });

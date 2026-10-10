@@ -120,18 +120,18 @@
             <text x="90" y="4" class="comp-n">N</text>
           </g>
 
-          <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
+          <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant). 🧹 Au RETOUR, la part
+               déjà refaite n'est plus tracée (demandé, v1.123 : la carte croulait sous les traits) :
+               il ne reste que le chemin jusqu'à la ville. -->
           <template v-if="active && hero && !hero.searching">
             <line
+              v-if="hero.phase !== 'return'"
               :x1="heroEnd.x"
               :y1="heroEnd.y"
               :x2="hero.x"
               :y2="hero.y"
-              class="trail"
-              :class="[
-                hero.phase === 'return' ? 'done' : 'todo',
-                { 'trail-focus': traceKey === 'hero' },
-              ]"
+              class="trail todo"
+              :class="{ 'trail-focus': traceKey === 'hero' }"
             />
             <line
               :x1="heroHome.x"
@@ -161,14 +161,16 @@
              ⚠️ Un groupe (⚔️) a son PROPRE motif (tiret-point) : même violet qu'un convoi, sans
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
           <template v-for="v in movingTravelers" :key="'vt' + v.id">
+            <!-- 🧹 Comme le héros : au retour, la part déjà refaite s'efface. -->
             <line
+              v-if="v.at.phase !== 'return'"
               :x1="lineEnd(v).x"
               :y1="lineEnd(v).y"
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
               :class="[
-                v.at.phase === 'return' ? 'done' : 'todo',
+                'todo',
                 v.kind,
                 crewClass(v),
                 { 'trail-focus': v.tripKey === traceKey, 'hero-wing': isHeroWing(v) },
@@ -233,7 +235,6 @@
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
-            :down-key="downKey"
             :imminent-key="imminentKey"
             :attacked-key="attackedKey"
             :tier-key="tierKey"
@@ -243,7 +244,6 @@
                 ? active.poi
                 : null
             "
-            :target-down="heroTargetDown"
             :travel-targets="travelTargets"
             @select="selectPoi"
           />
@@ -387,7 +387,6 @@
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
-            :down-key="downKey"
             :imminent-key="imminentKey"
             :attacked-key="attackedKey"
             :target="null"
@@ -2202,8 +2201,20 @@ const heroRecallable = computed(
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
 }
-/** 💀 La cible du héros, terrassée : grisée jusqu'à son retour (`voyageVanquished`). */
-const heroTargetDown = computed(() => !!active.value && voyageVanquished(active.value, now.value));
+/** 💀 LES LIEUX TERRASSÉS NE SE DESSINENT PLUS (demandé, v1.123 : « on n'affiche pas les lieux
+ *  détruits ») : grisés et barrés jusqu'au retour des vainqueurs, ils encombraient la carte.
+ *  La cible d'un voyage s'efface dès le rapport (`voyageTargetShown`) ; ici, ce qui resterait
+ *  SUR la carte (une armée en campagne n'en est pas retirée au départ). En chaîne d'ids, pour
+ *  que les listes qui en dépendent ne changent qu'à un rapport. */
+const vanquishedKey = computed(() =>
+  [
+    ...(active.value && voyageVanquished(active.value, now.value) ? [active.value.poi.id] : []),
+    ...char.partyList.filter((g) => voyageVanquished(g, now.value)).map((g) => g.poi.id),
+  ]
+    .sort()
+    .join('|'),
+);
+const vanquished = computed(() => new Set(vanquishedKey.value ? vanquishedKey.value.split('|') : []));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -2392,11 +2403,18 @@ const isMarching = (p: Poi) => p.type === 'warband' || !!p.army;
  *  état (tenu, en assaut), on ne le redouble pas d'une cible de voyage. */
 const livePoiIds = computed(() => new Set(mapPois.value.map((p) => p.id)));
 const fixedOnMap = (p: Poi) => !!p.control && livePoiIds.value.has(p.id);
-const placePois = computed(() => mapPois.value.filter((p) => !isMarching(p)));
-const armyPois = computed(() => mapPois.value.filter(isMarching));
+const placePois = computed(() =>
+  mapPois.value.filter((p) => !isMarching(p) && !vanquished.value.has(p.id)),
+);
+const armyPois = computed(() =>
+  mapPois.value.filter((p) => isMarching(p) && !vanquished.value.has(p.id)),
+);
 /** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
 const armyPaths = computed(() =>
-  mapPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
+  mapPois.value
+    .filter((p) => !vanquished.value.has(p.id))
+    .map(armyTrajectory)
+    .filter((a): a is ArmyPath => !!a),
 );
 const sheetEl = ref<HTMLElement | null>(null);
 
@@ -5375,16 +5393,6 @@ const dimmedKey = computed(() =>
     .map((p) => p.id)
     .join('|'),
 );
-/** 💀 Les lieux terrassés ENCORE sur la carte : une armée en campagne n'est pas retirée au
- *  départ (elle continue sa marche) — elle se grise elle aussi, jusqu'au retour des vainqueurs. */
-const downKey = computed(() =>
-  [
-    ...(heroTargetDown.value && active.value && !fixedOnMap(active.value.poi)
-      ? [active.value.poi.id]
-      : []),
-    ...travelTargets.value.filter((v) => v.down).map((v) => v.poi.id),
-  ].join('|'),
-);
 const veiledKey = computed(() =>
   fogPlan.value
     ? mapPois.value
@@ -5442,8 +5450,8 @@ const travelTargets = stableBy(
       .filter((v) => !fixedOnMap(v.poi))
       // 🗺️ Un lieu non terrassé est REVENU sur la carte dès le rapport : ne pas le redessiner.
       .filter((v) => !hiddenTargets.value.has(v.id))
-      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind, down: 'down' in v && v.down })),
-  (l) => l.map((v) => v.id + (v.down ? '†' : '')).join('|'),
+      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind })),
+  (l) => l.map((v) => v.id).join('|'),
 );
 
 // Avant-poste : débloque les expéditions + réduit les trajets.
