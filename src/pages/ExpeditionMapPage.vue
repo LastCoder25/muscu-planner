@@ -460,6 +460,7 @@
           :rows="ctlRoster"
           :advs="char.advList"
           :reinforceable="reinforceable"
+          :islands="storedProd"
           @open="(p: Poi) => ((overlay = null), openFromList(p))"
           @reinforce="(p: Poi) => ((overlay = null), (quickId = p.id))"
         />
@@ -494,6 +495,7 @@
       :rows="ctlRoster"
       :advs="char.advList"
       :reinforceable="reinforceable"
+      :islands="storedProd"
       @open="openFromList"
       @reinforce="(p) => (quickId = p.id)"
     />
@@ -1706,6 +1708,7 @@ import {
   nextCrossingDeparture,
   openIslands,
   remotePoints,
+  storedIslandProduction,
   seaTrips,
   visitedIslands,
   type RemotePoint,
@@ -4489,6 +4492,10 @@ const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; 
     },
     { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
   ],
+);
+/** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */
+const storedProd = computed(() =>
+  storedIslandProduction(char.row?.expedition_map, coarseNow.value, heroLevel.value),
 );
 const ctlRoster = computed(() =>
   controlRoster(

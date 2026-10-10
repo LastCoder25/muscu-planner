@@ -3547,6 +3547,44 @@ describe('🔀 FusionPanel', () => {
     expect(out).not.toContain('⚠️ Vides');
     // 🏳️ La place TENUE est neutre : pas de pastille de rang (les quatre ennemies gardent la leur).
     expect(out.match(/class="pill rk"/g)?.length).toBe(4);
+    // 🏝️ Sans île rangée, aucun bloc d'île.
+    expect(out).not.toContain('cps-isl');
+  }, 30_000);
+
+  it('🏝️ ControlPointsSheet : un bloc simple par île rangée (lieu + production)', async () => {
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        {
+          modelValue: true,
+          rows: [],
+          advs: ROW.adventurers,
+          islands: [
+            {
+              island: 1,
+              name: 'Île des Brigands',
+              emoji: '🗡️',
+              points: [
+                { id: 'm', label: 'Mine fortifiée', emoji: '⛏️', text: '🪙 +120/h', pct: null },
+                { id: 'g', label: 'Jardin', emoji: '🌿', text: '🎒 40 % · 3 h 00', pct: 0.4 },
+              ],
+            },
+          ],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Île des Brigands');
+    expect(out.match(/class="cps-isl-row"/g)?.length).toBe(2);
+    expect(out).toContain('🎒 40 % · 3 h 00');
+    // Rien à gérer : ni statut, ni garnison, ni bouton sur ces lignes.
+    expect(out).not.toContain('cps-minis');
+    expect(out).toMatch(/cps-gauge/);
   }, 30_000);
 
   it('⚔️🏰 un champion en sortie garde sa case, marquée « en sortie »', async () => {

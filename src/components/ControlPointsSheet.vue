@@ -174,6 +174,27 @@
         </span>
         <span class="cps-chev" aria-hidden="true">›</span>
       </div>
+      <!-- 🏝️ LES ÎLES PRÉCÉDENTES, une par bloc (2026-10-10, demandé). Pacifiées : rien ne
+           s'y attaque ni ne s'y prend, donc ni statut, ni garnison, ni action — le lieu et ce
+           qu'il produit (débit, ou % et temps avant la prochaine unité). Leur production est
+           récoltée toute seule, à distance. -->
+      <section v-for="b in islands ?? []" :key="b.island" class="cps-isl">
+        <div class="cps-isl-head">
+          <span aria-hidden="true">{{ b.emoji }}</span>
+          <span class="cps-isl-name">{{ b.name }}</span>
+          <span class="cps-isl-sub">récolte auto</span>
+        </div>
+        <div v-for="p in b.points" :key="p.id" class="cps-isl-row">
+          <span class="cps-isl-emo" aria-hidden="true">{{ p.emoji }}</span>
+          <span class="cps-isl-label">{{ p.label }}</span>
+          <span class="cps-yield prog" :class="{ full: p.pct !== null && p.pct >= 0.999 }">
+            <span>{{ p.text }}</span>
+            <span v-if="p.pct !== null" class="cps-gauge"
+              ><span :style="{ width: Math.round(p.pct * 100) + '%' }"
+            /></span>
+          </span>
+        </div>
+      </section>
     </div>
   </SheetShell>
 </template>
@@ -203,6 +224,7 @@ import { MILITIA, MILITIA_NAME } from '@/lib/militia';
 import { garrisonCells } from '@/lib/garrisonView';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Poi } from '@/lib/expedition';
+import type { StoredIslandProduction } from '@/lib/crossing';
 import { poiRank } from '@/lib/poiRank';
 
 const props = defineProps<{
@@ -215,6 +237,8 @@ const props = defineProps<{
   reinforceable?: readonly string[];
   /** Posée dans la page (sous la carte) plutôt qu'en dialogue. */
   inline?: boolean;
+  /** 🏝️ La production des îles rangées (`storedIslandProduction`), un bloc par île. */
+  islands?: readonly StoredIslandProduction[];
 }>();
 const emit = defineEmits<{
   'update:modelValue': [boolean];
@@ -303,6 +327,51 @@ const isFull = (r: ControlRosterRow) =>
 </script>
 
 <style scoped>
+/* 🏝️ Les îles précédentes : des lignes simples, sans tuile cliquable (rien à y gérer). */
+.cps-isl {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.cps-isl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-family: Oswald, sans-serif;
+  font-size: 14px;
+}
+.cps-isl-name {
+  flex: 1;
+  min-width: 0;
+}
+.cps-isl-sub {
+  font-family: Inter, sans-serif;
+  font-size: 11px;
+  color: var(--dim);
+}
+.cps-isl-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 6px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.cps-isl-row:last-child {
+  border-bottom: none;
+}
+.cps-isl-emo {
+  font-size: 16px;
+}
+.cps-isl-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.cps-isl-row .cps-yield {
+  margin-left: auto;
+}
 .cps.inline {
   width: auto;
   box-sizing: border-box;

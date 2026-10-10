@@ -45,7 +45,13 @@ import {
   takeMilitia,
   type MilitiaState,
 } from './militia';
-import { bankAt, controlKindsOf, militiaFreeSeats, islandMilitiaOf } from './controlPoints';
+import {
+  bankAt,
+  controlKindsOf,
+  controlProgress,
+  militiaFreeSeats,
+  islandMilitiaOf,
+} from './controlPoints';
 
 export const CROSSING = {
   /** ~2 h de mer (règle 3 de la roadmap). */
@@ -557,6 +563,44 @@ export function produceIslandMilitia(
     if (m !== im.militia) islands = { ...islands, [k]: { ...im, militia: m } };
   }
   return islands === map.islands ? map : { ...map, islands };
+}
+
+/**
+ * 🏝️ LA PRODUCTION DES ÎLES RANGÉES, île par île (2026-10-10, demandé : « voir la production
+ * des lieux fixes des îles précédentes »). Une île quittée est pacifiée : rien ne s'y attaque
+ * ni ne s'y prend, donc on n'en montre que le lieu et ce qu'il produit — le texte de
+ * `controlProgress`, le MÊME que la liste de l'île active (débit, % et temps avant la
+ * prochaine unité), au niveau que la carte de cette île voit (`mapPlayerLevel`).
+ * ⚠️ Lit les mêmes lieux que la récolte automatique des îles rangées (tenus par le joueur) :
+ * un lieu qui ne produit rien de lisible (`controlProgress` → null) n'est pas listé.
+ */
+export interface StoredIslandProduction {
+  island: number;
+  name: string;
+  emoji: string;
+  points: { id: string; label: string; emoji: string; text: string; pct: number | null }[];
+}
+export function storedIslandProduction(
+  map: ExpeditionMap | null | undefined,
+  now: number,
+  playerLevel: number,
+): StoredIslandProduction[] {
+  const out: StoredIslandProduction[] = [];
+  for (const [k, im] of Object.entries(map?.islands ?? {})) {
+    const id = Number(k);
+    if (id === map?.archipel?.island) continue;
+    const lvl = mapPlayerLevel(im, playerLevel);
+    const points = im.pois.flatMap((p) => {
+      const pr = controlProgress(p, now, lvl);
+      return pr
+        ? [{ id: p.id, label: poiLabel(p), emoji: poiEmo(p), text: pr.text, pct: pr.pct }]
+        : [];
+    });
+    if (!points.length) continue;
+    const isl = islandById(id);
+    out.push({ island: id, name: isl?.name ?? `Île ${id}`, emoji: isl?.emoji ?? '🏝️', points });
+  }
+  return out.sort((a, b) => a.island - b.island);
 }
 
 /** 🛡️ Un lieu fixe tenu d'une île RANGÉE, vu pour gérer sa milice à distance. */

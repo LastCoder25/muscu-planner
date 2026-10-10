@@ -14,6 +14,7 @@ import {
   openIslands,
   produceIslandMilitia,
   remotePoints,
+  storedIslandProduction,
   startCrossing,
   visitedIslands,
 } from '@/lib/crossing';
@@ -397,5 +398,59 @@ describe('🎁 récompenses', () => {
     ]);
     expect(r.msg.runes).toBe(CROSSING.fortressRunesBase + 1);
     expect(fortressReward(r.map, T0 + 1)).toBeNull();
+  });
+});
+
+describe('🏝️ la production des îles rangées, île par île', () => {
+  const held = (id: string, kind: ControlState['kind'], garrison: string[]): Poi =>
+    ({
+      id,
+      type: 'control',
+      level: 10,
+      x: 50,
+      y: 50,
+      distNorm: 0.3,
+      spawnedAt: T0,
+      expiresAt: 9e15,
+      control: {
+        kind,
+        owner: 'player',
+        faction: 'bandits',
+        size: 1,
+        garrison,
+        retakes: 0,
+        since: T0,
+        collectedAt: T0,
+      },
+    }) as Poi;
+  const stash = (pois: Poi[]): ExpeditionMap => ({ ...island1([FORTRESS_ID]), pois });
+  const active = (islands: Record<string, ExpeditionMap>): ExpeditionMap => ({
+    ...createMap(7, T0, 30, 3, undefined, archipelOn(3)),
+    islands,
+  });
+  it('un bloc par île rangée, trié, avec ses lieux tenus et leur production', () => {
+    const map = active({
+      '2': stash([held('ctl_garden', 'garden', ['mil:1', 'mil:2'])]),
+      '1': stash([held('ctl_mine', 'mine', ['mil:3'])]),
+    });
+    const out = storedIslandProduction(map, T0 + 2 * H, 30);
+    expect(out.map((b) => b.island)).toEqual([1, 2]);
+    expect(out[0]!.name).toBe(islandById(1)!.name);
+    expect(out[0]!.points[0]).toEqual(
+      expect.objectContaining({ id: 'ctl_mine', text: expect.stringContaining('/h') }),
+    );
+    // Le jardin dit son avancement ET le temps avant la prochaine unité.
+    const g = out[1]!.points[0]!;
+    expect(g.pct).toBeGreaterThan(0);
+    expect(g.text).toMatch(/%.*·/);
+  });
+  it('n’affiche ni l’île active, ni un lieu ennemi, ni une île sans lieu tenu', () => {
+    const enemy = held('ctl_x', 'mine', []);
+    const map = active({
+      '1': stash([{ ...enemy, control: { ...enemy.control!, owner: 'enemy' } }]),
+      '3': stash([held('ctl_mine', 'mine', ['mil:1'])]),
+    });
+    expect(storedIslandProduction(map, T0 + H, 30)).toEqual([]);
+    expect(storedIslandProduction(null, T0, 30)).toEqual([]);
   });
 });
