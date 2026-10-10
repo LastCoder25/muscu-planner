@@ -107,10 +107,13 @@
     <section class="fx">
       <div class="fx-h"><span class="fx-emo">🔄</span> XP Défi 360 (combiné)</div>
       <div class="formula">
-        XP = Σ (reps × {{ REP_XP }} × poids_rep) + tonnage ÷ 500 + prime bouclage
+        XP = séries comptées × 3,5 min × 3 + Σ (éq-reps × {{ REP_XP }} × poids_rep) + tonnage ÷ 500 +
+        prime bouclage (le tout × 2)
       </div>
       <ul class="notes">
-        <li>tonnage = reps × charge si renseignée (sinon 0).</li>
+        <li>séries comptées : jusqu’à l’objectif de chaque exo (3,5 min de séance par série).</li>
+        <li>éq-reps = 10 × √(reps ÷ 10) : 10 reps valent 10, 6 en valent 7,7, 20 en valent 14,1 (au temps : les secondes telles quelles).</li>
+        <li>tonnage = reps × (charge + part du poids du corps : traction 100 %, dips 90 %, pompes 65 %…).</li>
         <li>prime = 0,25 × volume × (1 + fraction d'avance), versée au bouclage.</li>
         <li>Alimente la piste <b>Muscu</b>.</li>
       </ul>

@@ -100,15 +100,14 @@ import { useMyBossDays } from '@/composables/useMyBossDays';
 import { groupBySource } from '@/lib/agendaGroups';
 import { localDayIso } from '@/lib/volume';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
-import { legSets, legMode, setOrigin, setWork, type ComboSet } from '@/lib/combo';
+import { comboXpByExoDay } from '@/lib/combo';
+import { useProfileStore } from '@/stores/profile';
 import {
   sessionXp,
   otherSportXp,
   cardioSessionXp,
   drillSessionXp,
   estimateKm,
-  REP_XP,
-  assistMult,
 } from '@/lib/athlete';
 import { ACTIVITY_LABELS, ACTIVITY_ICONS, paceLabel, isCardioOutingChallenge } from '@/data/cardio';
 
@@ -122,6 +121,7 @@ const tennis = useTennisStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
 const combo = useComboStore();
+const profile = useProfileStore();
 const friendBoss = useFriendBossStore();
 const bossDays = useMyBossDays();
 const loading = ref(true);
@@ -302,55 +302,33 @@ const entries = computed<Entry[]>(() => {
   // Défi 360 (combo) : les séries/reps de CHAQUE exo, jour par jour → visibles dans
   // l'agenda et cliquables vers le détail du 360.
   for (const c of combo.list) {
-    for (const leg of c.legs) {
-      const sets = legSets(leg);
-      if (!sets.length) continue;
-      const mode = legMode(leg);
-      // Par (exo d'ORIGINE, jour) : une série basculée d'un autre exo s'affiche sous l'exo
-      // sur lequel elle a été faite, avec la valeur de celui-ci.
-      const byDay = new Map<string, ComboSet[]>();
-      for (const s of sets) {
-        if (!s.date) continue;
-        const k = setOrigin(leg, s).exercise_id + '|' + s.date;
-        (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(s);
-      }
-      for (const found of byDay.values()) {
-        // Ce qui a VRAIMENT été fait : une série convertie à la bascule garde ses valeurs.
-        const daySets = found.map((s) => ({ ...s, ...setWork(leg, s) }));
-        const date = daySets[0]!.date;
-        const origin = setOrigin(leg, daySets[0]!);
-        const [y, m, dd] = date.split('-').map(Number);
-        const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
-        const reps = daySets.reduce((a, s) => a + (s.reps || 0), 0);
-        // XP « détail » du jour (façon séance) : reps × poids-de-rep (assisté ×0,6) + tonnage.
-        let xp = 0;
-        for (const s of daySets) {
-          const r = s.reps || 0;
-          xp += r * REP_XP * (origin.rep_weight || 1) * assistMult(s.assisted);
-          if (s.weight) xp += (r * s.weight) / 500;
-        }
-        xp = Math.round(xp);
-        const repsList = daySets.map((s) => s.reps).filter((r) => r > 0);
-        const meta =
-          mode === 'time'
-            ? `${reps} s`
-            : mode === 'reps'
-              ? `${reps} reps`
-              : `${daySets.length} série${daySets.length > 1 ? 's' : ''}${
-                  repsList.length ? ' · ' + numList(repsList) + ' reps' : ''
-                }`;
-        out.push({
-          ts,
-          kind: 'combo',
-          icon: 'track_changes',
-          title: origin.exercise_name,
-          meta,
-          xp,
-          energy: xp, // le Défi 360 alimente la piste Muscu → énergie
-          source: 'Défi 360',
-          link: `/combo/${c.id}`,
-        });
-      }
+    // ⚠️ L'XP vient de la lib (`comboXpByExoDay`) : elle compte la DURÉE créditée, les reps
+    // et le tonnage comme le total. L'ancien calcul local n'en gardait que les reps, sans
+    // × XP_MULT — une série de tractions s'affichait « 1 XP » pour ~24 réellement gagnés.
+    for (const g of comboXpByExoDay(c, profile.bodyKg)) {
+      const [y, m, dd] = g.date.split('-').map(Number);
+      const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
+      const reps = g.sets.reduce((acc, s) => acc + (s.reps || 0), 0);
+      const repsList = g.sets.map((s) => s.reps).filter((r) => r > 0);
+      const meta =
+        g.mode === 'time'
+          ? `${reps} s`
+          : g.mode === 'reps'
+            ? `${reps} reps`
+            : `${g.sets.length} série${g.sets.length > 1 ? 's' : ''}${
+                repsList.length ? ' · ' + numList(repsList) + ' reps' : ''
+              }`;
+      out.push({
+        ts,
+        kind: 'combo',
+        icon: 'track_changes',
+        title: g.exerciseName,
+        meta,
+        xp: g.xp,
+        energy: g.xp, // le Défi 360 alimente la piste Muscu → énergie
+        source: 'Défi 360',
+        link: `/combo/${c.id}`,
+      });
     }
   }
   // Boss entre amis : les reps de MES frappes, jour par jour. La règle (qui compte, quelle

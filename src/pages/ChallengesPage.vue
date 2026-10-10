@@ -612,6 +612,8 @@ import {
   comboProgressPct,
   fmtPct,
   comboXpBreakdown,
+  comboXpPoints,
+  removeSetAt,
   legSetsDone,
   legDone,
   legComplete,
@@ -648,7 +650,6 @@ import {
   CHALLENGE_TOKEN_BUDGET,
   type LaneChallenge,
 } from '@/lib/challengeLimits';
-import { REP_XP, assistMult } from '@/lib/athlete';
 import { useProgress } from '@/composables/useProgress';
 import { useCharacterStore } from '@/stores/character';
 import { useLibraryStore } from '@/stores/library';
@@ -953,10 +954,17 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
   const sets = legSets(leg);
   const last = sets[index];
   if (!last) return;
-  // Énergie que cette série a rapportée (≈ son XP, ENERGY_PER_XP=1).
-  const setEnergy = last
-    ? Math.round((last.reps || 0) * REP_XP * (leg.rep_weight ?? 1) * assistMult(last.assisted))
-    : 0;
+  // Énergie que cette série a rapportée (= son XP, ENERGY_PER_XP=1) : la différence du
+  // total du défi avec et sans elle — durée, reps, poids du corps, prime : la règle de la lib.
+  const c = activeCombo.value;
+  const without = {
+    ...c,
+    legs: c.legs.map((l) => (l === leg ? { ...l, sets: removeSetAt(sets, index) } : l)),
+  };
+  const setEnergy = Math.max(
+    0,
+    comboXpPoints([c], profileStore.bodyKg) - comboXpPoints([without], profileStore.bodyKg),
+  );
   const wouldDeficit = availableEnergy.value - setEnergy < 0;
   const doRemove = () => comboStore.removeSet(activeCombo.value!.id, leg.exercise_id, index);
   // Confirmation SYSTÉMATIQUE (évite les retraits par fausse manipulation).
@@ -995,7 +1003,7 @@ const unlockedCount = computed(() => ACHIEVEMENTS.filter((a) => unlocked.value.h
 const xpInfo = computed(() => computeLevel(challengeXpPoints(store.list)));
 // Décomposition XP (reps vs prime) affichée sur les défis terminés.
 const xpb = (c: Challenge) => challengeXpBreakdown(c);
-const comboXpb = (c: ComboChallenge) => comboXpBreakdown(c);
+const comboXpb = (c: ComboChallenge) => comboXpBreakdown(c, profileStore.bodyKg);
 
 // Capacité (jetons) par voie, pour que l'utilisateur s'organise.
 function laneChallenges(lane: ChallengeLane): LaneChallenge[] {

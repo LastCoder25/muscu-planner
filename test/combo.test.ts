@@ -215,8 +215,11 @@ describe('comboXpPoints', () => {
     expect(comboXpPoints([heavy])).toBeGreaterThan(comboXpPoints([light]));
     const effL = comboXpBreakdown(light).reps + comboXpBreakdown(light).bonus;
     const effH = comboXpBreakdown(heavy).reps + comboXpBreakdown(heavy).bonus;
-    // L'effort par rep ne régresse pas : le double de reps ≈ le double d'effort-XP.
-    expect(effH / 60).toBeGreaterThanOrEqual((effL / 30) * 0.98);
+    // ⚖️ Depuis le 2026-10-10 les reps d'une série comptent en ÉQUIVALENT-REPS (racine) :
+    // une série dure à reps basses ne doit plus être écrasée par une série facile à 20.
+    // Doubler les reps par série multiplie donc l'effort-XP par √2, ni 1 (le plan figé du
+    // défaut 135fa252), ni 2 (l'ancien barème linéaire).
+    expect(effH / effL).toBeCloseTo(Math.SQRT2, 1);
   });
   it('une série assistée vaut moins qu’une série stricte', () => {
     const strict = combo([leg({ target: 1, sets: [{ date: '2026-01-05', reps: 10 }] })]);

@@ -1,7 +1,7 @@
 // Store profile — la ligne `profiles` de l'utilisateur courant.
 // payload = objet Profile complet (contrat v1.0) ; level_config dérivé.
 import { defineStore, acceptHMRUpdate } from 'pinia';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { Profile, LevelConfig } from '@/lib/types';
 import { deriveLevelConfig } from '@/lib/levelConfig';
 import { supabase } from '@/lib/supabase';
@@ -10,6 +10,8 @@ export const useProfileStore = defineStore('profile', () => {
   const profile = ref<Profile | null>(null);
   const levelConfig = ref<LevelConfig | null>(null);
   const loaded = ref(false);
+  /** Poids du joueur (kg) : la charge des exos au poids du corps dans l'XP du Défi 360. */
+  const bodyKg = computed(() => profile.value?.identity?.weight_kg ?? null);
 
   async function fetch(userId: string) {
     const { data, error } = await supabase
@@ -67,7 +69,7 @@ export const useProfileStore = defineStore('profile', () => {
     loaded.value = false;
   }
 
-  return { profile, levelConfig, loaded, fetch, save, update, reset };
+  return { profile, levelConfig, loaded, bodyKg, fetch, save, update, reset };
 });
 
 if (import.meta.hot) {

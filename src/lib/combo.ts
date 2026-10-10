@@ -10,6 +10,7 @@ import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
 import { localDayIso } from './localDay';
 import { mulberry32 } from './combat';
+import { bodyweightLoad } from './bodyweightLoad';
 import { addDaysUtcIso } from './startDate';
 import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
@@ -168,15 +169,39 @@ export function setWork(leg: ComboLeg, s: ComboSet): ComboSetWork {
 function setLoad(leg: ComboLeg, s: ComboSet): number {
   return setWork(leg, s).weight ?? setOrigin(leg, s).weight_kg ?? 0;
 }
-/** XP « reps » d'une série (pré-XP_MULT), sur ce qui a VRAIMENT été fait : reps × poids de
- *  rep de son exo d'origine × assistance. */
+/**
+ * 💪 LES REPS D'UNE SÉRIE EN « ÉQUIVALENT-REPS » (2026-10-10, demandé : « ma série de 5
+ * tractions, très dure, rapporte bien moins que des séries faciles de 20 reps »).
+ *
+ * La part reps de l'XP payait le NOMBRE de reps : 20 ponts fessiers valaient plus de trois
+ * fois 6 tractions, alors qu'une série menée près de l'échec est un stimulus comparable
+ * qu'elle compte 6 ou 20 reps. On compresse donc en RACINE autour de la série de référence
+ * (`COMBO_PLAN_REPS`, 10 reps) : 10 reps valent toujours 10, 6 en valent 7,7, 20 en valent
+ * 14,1. Faire plus de reps paie encore, mais un exercice dur à reps basses n'est plus écrasé.
+ * ⚠️ Pas pour les exos au TEMPS : leurs « reps » sont des secondes, barème à part.
+ */
+export function repsEquivalent(reps: number): number {
+  if (!(reps > 0)) return 0;
+  return COMBO_PLAN_REPS * Math.sqrt(reps / COMBO_PLAN_REPS);
+}
+/** Reps d'une série telles que l'XP les compte : compressées, sauf au temps. */
+function setRepUnits(leg: ComboLeg, reps: number): number {
+  return legMode(leg) === 'time' ? Math.max(0, reps) : repsEquivalent(reps);
+}
+/** XP « reps » d'une série (pré-XP_MULT), sur ce qui a VRAIMENT été fait : reps (en
+ *  équivalent-reps) × poids de rep de son exo d'origine × assistance. */
 function setRepXp(leg: ComboLeg, s: ComboSet): number {
   const w = setWork(leg, s);
-  return (w.reps || 0) * REP_XP * setOrigin(leg, s).rep_weight * assistMult(w.assisted);
+  return (
+    setRepUnits(leg, w.reps || 0) * REP_XP * setOrigin(leg, s).rep_weight * assistMult(w.assisted)
+  );
 }
-/** Tonnage d'une série (reps × charge), sur ce qui a vraiment été fait. */
-function setTonnage(leg: ComboLeg, s: ComboSet): number {
-  return (setWork(leg, s).reps || 0) * setLoad(leg, s);
+/** Tonnage d'une série (reps × charge), sur ce qui a vraiment été fait. La charge comprend
+ *  la part du POIDS DU CORPS des polyarticulaires sans matériel (`bodyweightLoad`). */
+function setTonnage(leg: ComboLeg, s: ComboSet, bodyKg?: number | null): number {
+  const w = setWork(leg, s);
+  const body = bodyweightLoad(setOrigin(leg, s).exercise_id, bodyKg, assistMult(w.assisted));
+  return (w.reps || 0) * (setLoad(leg, s) + body);
 }
 /** Part de travail réel par unité comptée : 12 dips posés comme 5 reps de développé couché
  *  valent 12/5. 1 pour une série qui n'a pas été convertie. */
@@ -692,13 +717,17 @@ function legPlannedEffort(l: ComboLeg): number {
       const take = Math.min(s.reps || 0, left);
       // Une série convertie compte dans l'unité de la cible, mais son effort est celui qu'elle
       // a vraiment coûté (12 dips posés comme 5 reps valent 12 dips).
-      effort += take * workRatio(l, s) * w(s);
+      // ⚠️ Compressé comme l'XP des séries (`setRepUnits`) : la prime suit le même barème.
+      effort += setRepUnits(l, take * workRatio(l, s)) * w(s);
       left -= take;
     }
     return effort;
   }
   const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
-  const done = counted.reduce((a, s) => a + (setWork(l, s).reps || COMBO_PLAN_REPS) * w(s), 0);
+  const done = counted.reduce(
+    (a, s) => a + (repsEquivalent(setWork(l, s).reps || 0) || COMBO_PLAN_REPS) * w(s),
+    0,
+  );
   const missing = Math.max(0, l.target - counted.length);
   return done + missing * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
 }
@@ -759,28 +788,42 @@ export function comboTieredBonus(
 // rapporte que ses reps.
 export const COMBO_SET_MIN = 3.5;
 
+/** Séries d'UN exo comptées vers son objectif (mode-aware), plafonnées à sa cible. */
+function legCountedSets(l: ComboLeg): number {
+  if (legMode(l) !== 'sets') {
+    // Reps ou durée → « séries » équivalentes, plafonnées à l'objectif. Le plafond se lit
+    // dans l'unité de la cible, le crédit sur le travail réel (série convertie comprise).
+    const work = legCountedWork(l).reduce((a, w) => a + w, 0);
+    return Math.ceil(work / COMBO_PLAN_REPS - 1e-9);
+  }
+  const done = legSetsDone(l);
+  return l.target > 0 ? Math.min(done, l.target) : done;
+}
+/** Mode reps/durée : le travail de chaque série retenu vers l'objectif (0 au-delà). */
+function legCountedWork(l: ComboLeg): number[] {
+  let left = l.target > 0 ? l.target : Infinity;
+  return legSets(l).map((s) => {
+    if (left <= 0) return 0;
+    const take = Math.min(s.reps || 0, left);
+    left -= take;
+    return take * workRatio(l, s);
+  });
+}
+/** La part de « série comptée » de CHAQUE série d'un exo (même ordre que `legSets`) : leur
+ *  somme vaut exactement `legCountedSets(l)`. Sert à attribuer le terme de durée série par
+ *  série, sans seconde règle de plafond. */
+function legSetDurationShares(l: ComboLeg): number[] {
+  const sets = legSets(l);
+  const counted = legCountedSets(l);
+  if (legMode(l) === 'sets') return sets.map((_, i) => (i < counted ? 1 : 0));
+  const work = legCountedWork(l);
+  const total = work.reduce((a, w) => a + w, 0);
+  return work.map((w) => (total > 0 ? (w / total) * counted : 0));
+}
+
 /** Séries comptées vers l'objectif (mode-aware), plafonnées à la cible par exo. */
 export function comboCountedSets(c: ComboChallenge): number {
-  let n = 0;
-  for (const l of c.legs) {
-    if (legMode(l) !== 'sets') {
-      // Reps ou durée → « séries » équivalentes, plafonnées à l'objectif. Le plafond se lit
-      // dans l'unité de la cible, le crédit sur le travail réel (série convertie comprise).
-      let left = l.target > 0 ? l.target : Infinity;
-      let work = 0;
-      for (const s of legSets(l)) {
-        if (left <= 0) break;
-        const take = Math.min(s.reps || 0, left);
-        work += take * workRatio(l, s);
-        left -= take;
-      }
-      n += Math.ceil(work / COMBO_PLAN_REPS - 1e-9);
-      continue;
-    }
-    const done = legSetsDone(l);
-    n += l.target > 0 ? Math.min(done, l.target) : done;
-  }
-  return n;
+  return c.legs.reduce((n, l) => n + legCountedSets(l), 0);
 }
 
 /** Minutes de séance équivalentes au volume bouclé (terme de durée de l'XP). */
@@ -788,9 +831,6 @@ export function comboImpliedMinutes(c: ComboChallenge): number {
   return comboCountedSets(c) * COMBO_SET_MIN;
 }
 
-/** Décompose l'XP d'UN Défi 360 : durée (volume bouclé), reps (+ tonnage), prime de
- *  bouclage (pour l'affichage sur les défis terminés). Mêmes formules que
- *  comboXpPoints. */
 /** Prime de bouclage (paliers) en XP — la MÊME valeur que celle déjà incluse dans
  *  comboXpPoints, isolée pour pouvoir l'AFFICHER (célébration de fin, historique
  *  d'énergie) au lieu de la noyer dans le total. */
@@ -820,7 +860,7 @@ function comboUpTo(c: ComboChallenge, date: string): ComboChallenge {
  *  donc exactement comboXpPoints([c]).
  *  NB : un delta peut être négatif (une série sous les reps supposées baisse l'effort
  *  planifié) — l'appelant filtre les valeurs ≤ 0 à l'affichage. */
-export function comboXpByDay(c: ComboChallenge): ComboDayXp[] {
+export function comboXpByDay(c: ComboChallenge, bodyKg?: number | null): ComboDayXp[] {
   const dates = [...new Set(c.legs.flatMap((l) => legSets(l).map((s) => s.date))).values()]
     .filter(Boolean)
     .sort();
@@ -830,7 +870,7 @@ export function comboXpByDay(c: ComboChallenge): ComboDayXp[] {
   let prevBonus = 0;
   for (const date of dates) {
     const upTo = comboUpTo(c, date);
-    const total = comboXpPoints([upTo]);
+    const total = comboXpPoints([upTo], bodyKg);
     const bonus = comboBonusXp(upTo);
     out.push({ date, effort: total - prevTotal - (bonus - prevBonus), bonus: bonus - prevBonus });
     prevTotal = total;
@@ -839,22 +879,33 @@ export function comboXpByDay(c: ComboChallenge): ComboDayXp[] {
   return out;
 }
 
-export function comboXpBreakdown(c: ComboChallenge): {
-  reps: number;
-  duration: number;
-  bonus: number;
-  total: number;
-} {
+/** Points BRUTS (pré-XP_MULT) des séries d'un défi : reps (équivalent-reps) et tonnage. */
+function comboWorkPoints(c: ComboChallenge, bodyKg?: number | null): number {
   let reps = 0;
   let tonnage = 0;
   for (const l of c.legs) {
     for (const s of legSets(l)) {
       reps += setRepXp(l, s);
-      tonnage += setTonnage(l, s);
+      tonnage += setTonnage(l, s, bodyKg);
     }
   }
+  return reps + tonnage / 500;
+}
+
+/** Décompose l'XP d'UN Défi 360 : durée (volume bouclé), reps (+ tonnage), prime de
+ *  bouclage (pour l'affichage sur les défis terminés). Mêmes formules que
+ *  comboXpPoints. */
+export function comboXpBreakdown(
+  c: ComboChallenge,
+  bodyKg?: number | null,
+): {
+  reps: number;
+  duration: number;
+  bonus: number;
+  total: number;
+} {
   const durationXp = Math.round(comboImpliedMinutes(c) * MUSCU_MIN_XP * XP_MULT);
-  const repsXp = Math.round((reps + tonnage / 500) * XP_MULT);
+  const repsXp = Math.round(comboWorkPoints(c, bodyKg) * XP_MULT);
   const bonusXp = comboBonusXp(c);
   return {
     reps: repsXp,
@@ -864,22 +915,65 @@ export function comboXpBreakdown(c: ComboChallenge): {
   };
 }
 
-/** XP d'un ensemble de Défis 360 (façon séance : durée + reps + prime de bouclage). */
-export function comboXpPoints(combos: ComboChallenge[]): number {
+/** XP d'un ensemble de Défis 360 (façon séance : durée + reps + prime de bouclage).
+ *  `bodyKg` : poids du joueur, pour la charge des exos au poids du corps (sans lui, rien). */
+export function comboXpPoints(combos: ComboChallenge[], bodyKg?: number | null): number {
   return combos.reduce((a, c) => {
-    let reps = 0;
-    let tonnage = 0;
-    for (const l of c.legs) {
-      for (const s of legSets(l)) {
-        reps += setRepXp(l, s);
-        tonnage += setTonnage(l, s);
-      }
-    }
     const duration = comboImpliedMinutes(c) * MUSCU_MIN_XP;
     // Prime À PALIERS (bouclage partiel récompensé).
     const bonus = comboTieredBonus(c);
-    return a + Math.round((reps + tonnage / 500 + duration + bonus) * XP_MULT);
+    return a + Math.round((comboWorkPoints(c, bodyKg) + duration + bonus) * XP_MULT);
   }, 0);
+}
+
+/** Une ligne de l'Agenda : les séries d'UN exo (celui où elles ont été FAITES) un jour. */
+export interface ComboExoDayXp {
+  exerciseId: string;
+  exerciseName: string;
+  date: string;
+  mode: ComboCountMode;
+  /** Ce qui a vraiment été fait (série convertie : ses valeurs d'origine). */
+  sets: ComboSet[];
+  /** XP d'EFFORT de ces séries : durée créditée + reps + tonnage — hors prime de fin. */
+  xp: number;
+}
+
+/**
+ * 📅 L'XP d'un Défi 360 PAR EXO ET PAR JOUR (2026-10-10, signalé : l'Agenda annonçait
+ * « 1 XP » pour une série de tractions qui en rapporte ~24). L'Agenda refaisait son propre
+ * calcul, amputé du terme de DURÉE (l'essentiel de l'XP d'une série) et du ×XP_MULT.
+ * ⚠️ Mêmes briques que `comboXpPoints` (`setRepXp`, `setTonnage`, `legSetDurationShares`) :
+ * la somme des lignes vaut l'XP du défi hors prime, à l'arrondi de chaque ligne près.
+ */
+export function comboXpByExoDay(c: ComboChallenge, bodyKg?: number | null): ComboExoDayXp[] {
+  const groups = new Map<string, ComboExoDayXp & { raw: number }>();
+  for (const l of c.legs) {
+    const shares = legSetDurationShares(l);
+    legSets(l).forEach((s, i) => {
+      if (!s.date) return;
+      const o = setOrigin(l, s);
+      const key = o.exercise_id + '|' + s.date;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          exerciseId: o.exercise_id,
+          exerciseName: o.exercise_name,
+          date: s.date,
+          mode: legMode(l),
+          sets: [],
+          xp: 0,
+          raw: 0,
+        };
+        groups.set(key, g);
+      }
+      g.sets.push({ ...s, ...setWork(l, s) });
+      g.raw +=
+        setRepXp(l, s) +
+        setTonnage(l, s, bodyKg) / 500 +
+        (shares[i] ?? 0) * COMBO_SET_MIN * MUSCU_MIN_XP;
+    });
+  }
+  return [...groups.values()].map(({ raw, ...g }) => ({ ...g, xp: Math.round(raw * XP_MULT) }));
 }
 
 export interface ComboSessionExo {

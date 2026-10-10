@@ -10,6 +10,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
 import { useFriendBossStore } from '@/stores/friendBoss';
 import { useAuthStore } from '@/stores/auth';
+import { useProfileStore } from '@/stores/profile';
 import {
   sessionXp,
   drillSessionXp,
@@ -56,6 +57,7 @@ export function useProgress() {
   const sessions = useSessionsStore();
   const cardio = useCardioStore();
   const combo = useComboStore();
+  const profileStore = useProfileStore();
   const friendBoss = useFriendBossStore();
   const auth = useAuthStore();
 
@@ -156,7 +158,8 @@ export function useProgress() {
   );
 
   // Défi 360 (défi combiné) → piste Muscu (XP façon séance : reps + tonnage + prime).
-  const comboXp = computed(() => comboXpPoints(combo.list));
+  // Le poids du joueur donne sa charge aux exos au poids du corps (tractions, dips…).
+  const comboXp = computed(() => comboXpPoints(combo.list, profileStore.bodyKg));
   // Piste Tennis = court (drills) + prépa physique + challenges tennis + sorties « Tennis »
   // saisies en autre sport.
   const tennisXp = computed(

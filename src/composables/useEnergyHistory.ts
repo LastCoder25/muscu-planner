@@ -5,6 +5,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import { useCharacterStore } from '@/stores/character';
+import { useProfileStore } from '@/stores/profile';
 import { sessionXp, otherSportXp, cardioSessionXp } from '@/lib/athlete';
 import { challengeBonusDate, challengeDayXp, challengeXpBreakdown } from '@/lib/challenges';
 import { comboXpByDay } from '@/lib/combo';
@@ -38,6 +39,7 @@ export function useEnergyHistory(nDays = 3) {
   const cardio = useCardioStore();
   const challenges = useChallengesStore();
   const combo = useComboStore();
+  const profileStore = useProfileStore();
   const char = useCharacterStore();
 
   return computed<EnergyDay[]>(() => {
@@ -88,7 +90,7 @@ export function useEnergyHistory(nDays = 3) {
     // de bouclage isolée sur le dernier jour). La somme colle à comboXpPoints — l'ancien
     // calcul local oubliait × XP_MULT, la durée impliquée ET la prime (≈ 10× trop bas).
     for (const c of combo.list) {
-      for (const d of comboXpByDay(c)) {
+      for (const d of comboXpByDay(c, profileStore.bodyKg)) {
         push(d.date, '🎯', 'Défi 360', d.effort);
         push(d.date, '🏅', 'Défi 360 — prime de bouclage', d.bonus);
       }
