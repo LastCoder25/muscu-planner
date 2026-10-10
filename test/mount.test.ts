@@ -1167,6 +1167,50 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('trip-crew');
   }, 30_000);
 
+  it('⚡ TripsPanel : chaque voyage porte ses boosts, un bouton par durée en stock', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let out = '';
+    const base = {
+      kind: 'van',
+      who: '⚔️',
+      cat: 'trips',
+      poi: MAP_POIS[0],
+      from: null,
+      time: '1 h',
+      pct: 10,
+      back: false,
+      title: 'Équipe',
+      withHero: false,
+      members: [],
+      haul: [],
+    };
+    const trips = [
+      { ...base, key: 'g1' },
+      { ...base, key: 'g2' },
+    ];
+    const boosts = {
+      g1: [
+        { id: 'boost5', count: 2, minutes: 5, gainMs: 300_000, lostMs: 0 },
+        { id: 'boost60', count: 1, minutes: 60, gainMs: 1_200_000, lostMs: 2_400_000 },
+      ],
+    };
+    expect(
+      await mountIt(
+        TripsPanel,
+        { trips, focus: null, heroProfile: 'polyvalent', boosts },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    // Une seule rangée (g2 n'a rien), deux boutons ; celui qui perd des minutes est marqué.
+    expect(out.match(/class="tr-boosts"/g)?.length).toBe(1);
+    expect(out.match(/class="tr-boost[ "]/g)?.length).toBe(2);
+    expect(out).toMatch(/class="tr-boost lossy"/);
+    expect(out).toMatch(/⚡1h/);
+  }, 30_000);
+
   it('🎨 TripsPanel : un groupe d’attaque combinée porte la couleur de son attaque', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     let out = '';

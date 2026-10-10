@@ -448,7 +448,10 @@
             :attacks="attacks"
             :holds="attackHolds"
             :now="coarseNow"
+            :boosts="tripBoosts"
+            :busy="boostBusy"
             @update:focus="pickOverlayTrip"
+            @boost="boostTrip"
             @attack="(p: Poi) => ((overlay = null), openAttack(p))"
           />
         </template>
@@ -552,7 +555,6 @@
       "
       @send="quickSend"
     />
-
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -1393,17 +1395,9 @@
     <!-- ⚡🔙 LE VOYAGE TOUCHÉ, QUAND SON DÉTAIL N'EST PAS AFFICHÉ (signalé : depuis les tuiles
          par-dessus la carte, toucher une expédition ferme le panneau pour montrer le tracé, et
          les boosts n'étaient plus accessibles). Une barre en bas à gauche, à côté des boutons
-         ronds : accélérer, faire demi-tour, ou refermer. -->
+         ronds : faire demi-tour, ou refermer. Les boosts ⚡ vivent sur chaque tuile de la liste
+         des expéditions (demandé : accélérer d'un toucher, sans ouvrir de fenêtre). -->
     <div v-if="tripBar" class="trip-bar" role="group" :aria-label="tripBar.title">
-      <button
-        v-if="tripBar.boost"
-        type="button"
-        class="tb-btn tb-boost"
-        aria-label="Accélérer ce voyage"
-        @click="boostAskOpen = true"
-      >
-        ⚡
-      </button>
       <button
         v-if="tripBar.recall"
         type="button"
@@ -1417,30 +1411,6 @@
         ✕
       </button>
     </div>
-    <q-dialog v-model="boostAskOpen">
-      <q-card class="boost-ask">
-        <div class="ba-title">⚡ Accélérer ce voyage</div>
-        <p v-if="focusActions?.boost?.block" class="ba-note">{{ focusActions.boost.block }}</p>
-        <div v-else-if="focusActions?.boost" class="ba-row">
-          <button
-            v-for="b in focusActions.boost.choices"
-            :key="b.id"
-            type="button"
-            class="ba-btn"
-            :class="{ lossy: b.lostMs > 0 }"
-            @click="((boostAskOpen = false), boostTrip(focusActions.key, b.id))"
-          >
-            <b>⚡ {{ b.minutes >= 60 ? b.minutes / 60 + ' h' : b.minutes + ' min' }}</b>
-            <span class="ba-n">×{{ b.count }}</span>
-            <small
-              >−{{ formatDuration(b.gainMs)
-              }}{{ b.lostMs > 0 ? ` · ${formatDuration(b.lostMs)} perdues` : '' }}</small
-            >
-          </button>
-        </div>
-        <q-btn flat label="Fermer" class="ba-close" @click="boostAskOpen = false" />
-      </q-card>
-    </q-dialog>
 
     <!-- 🏠 En bas à droite : la base de l'île 1, en un geste. La carte
          vit dans l'Aventure, qui lit `?tab=` : elle bascule sur l'onglet Base et quitte la carte.
@@ -1501,7 +1471,7 @@ import {
 } from '@/lib/combinedAttack';
 import {
   attackBoostPlan,
-  BOOST_BLOCK_LABEL,
+  type BoostChoice,
   boostChoices,
   combinedSiblings,
   voyageBoostPlan,
@@ -2215,7 +2185,9 @@ const vanquishedKey = computed(() =>
     .sort()
     .join('|'),
 );
-const vanquished = computed(() => new Set(vanquishedKey.value ? vanquishedKey.value.split('|') : []));
+const vanquished = computed(
+  () => new Set(vanquishedKey.value ? vanquishedKey.value.split('|') : []),
+);
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -4715,53 +4687,42 @@ function boostTarget(key: string):
   }
   return null;
 }
-const focusBoosts = computed(() => {
-  const key = focusTrip.value;
+/** ⚡ LES BOOSTS DE CHAQUE VOYAGE (demandé : sur chaque tuile de la liste, un toucher). Un
+ *  voyage bloqué (armée en marche, sur place…) ou sans boost en stock n'en a pas. */
+const tripBoosts = computed(() => {
   const stock = char.row?.supplies ?? {};
-  if (!key || !BOOST_IDS.some((id) => (stock[id] ?? 0) > 0)) return null;
-  const t = boostTarget(key);
-  if (!t) return null;
+  const out: Record<string, BoostChoice[]> = {};
+  if (!BOOST_IDS.some((id) => (stock[id] ?? 0) > 0)) return out;
   const at = now.value;
-  return {
-    key,
-    plan: boostChoices(stock, (min) =>
+  for (const tr of trips.value) {
+    const t = boostTarget(tr.key);
+    if (!t) continue;
+    const plan = boostChoices(stock, (min) =>
       t.kind === 'attack' ? attackBoostPlan(t.a, min, at) : voyageBoostPlan(t.v, min, at),
-    ),
-  };
+    );
+    if ('choices' in plan && plan.choices.length) out[tr.key] = plan.choices;
+  }
+  return out;
 });
 /** ⚡🔙 La barre du voyage touché (cf. le gabarit) : seulement quand son détail sous la carte
  *  n'est pas affiché (panneau Expéditions replié) et que le panneau par-dessus est fermé. */
-const boostAskOpen = ref(false);
 const focusActions = computed(() => {
   const key = focusTrip.value;
   if (!key) return null;
   const t = trips.value.find((x) => x.key === key);
   if (!t) return null;
-  const b = focusBoosts.value;
-  const boost =
-    b && b.key === key
-      ? 'block' in b.plan
-        ? { block: BOOST_BLOCK_LABEL[b.plan.block], choices: [] }
-        : b.plan.choices.length
-          ? { block: null, choices: b.plan.choices }
-          : null
-      : null;
   const recall = recallableTrips.value.has(key);
-  return { key, title: t.title, boost, recall };
+  return { key, title: t.title, recall };
 });
 const tripBar = computed(() => {
   const f = focusActions.value;
   if (!f || overlay.value) return null;
   return f;
 });
-watch(focusActions, (b) => {
-  if (!b?.boost) boostAskOpen.value = false;
-});
 const boostBusy = ref(false);
 function boostTrip(key: string, id: BoostId) {
   const t = boostTarget(key);
-  const b = focusBoosts.value;
-  const choice = b && 'choices' in b.plan ? b.plan.choices.find((c) => c.id === id) : undefined;
+  const choice = tripBoosts.value[key]?.find((c) => c.id === id);
   if (!t || !choice) return;
   const run = async () => {
     const uid = auth.user?.id;
@@ -4788,7 +4749,7 @@ function boostTrip(key: string, id: BoostId) {
           const next = trips.value.find(
             (x) => x.key[0] === key[0] && x.poi.id === t.pointId && same(x.members),
           );
-          if (next) focusTrip.value = next.key;
+          if (next && focusTrip.value === key) focusTrip.value = next.key;
         }
         $q.notify({
           type: 'positive',
@@ -6804,68 +6765,9 @@ onUnmounted(() => {
   font-size: 18px;
   cursor: pointer;
 }
-.tb-boost {
-  background: var(--accent);
-  color: #15120e;
-}
 .tb-x {
   color: var(--dim);
   font-size: 15px;
-}
-.boost-ask {
-  width: min(92vw, 380px);
-  padding: 14px;
-}
-.ba-title {
-  font-weight: 800;
-  font-size: 15px;
-  margin-bottom: 8px;
-}
-.ba-note {
-  margin: 0 0 8px;
-  color: var(--dim);
-  font-size: 13px;
-}
-.ba-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 6px;
-}
-.ba-btn {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  min-height: 52px;
-  padding: 6px 4px;
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-.ba-btn small {
-  font-size: 11px;
-  color: var(--dim);
-}
-.ba-btn.lossy {
-  border-color: var(--d3);
-  border-style: dashed;
-}
-.ba-btn.lossy small {
-  color: var(--d3);
-}
-.ba-n {
-  position: absolute;
-  top: 2px;
-  right: 5px;
-  font-size: 10px;
-  color: var(--dim);
-}
-.ba-close {
-  display: block;
-  margin: 10px 0 0 auto;
 }
 
 /* Décor de carte */

@@ -184,6 +184,8 @@ await rest('characters', {
   cleared_dungeons: ['laby:novice'],
   summon_stones: 12,
   mana: 660,
+  // ⚡ Des boosts de vitesse, pour que les tuiles de voyage montrent leurs boutons.
+  supplies: { boost5: 3, boost15: 1, boost60: 1 },
   buildings: g.buildings.map((b) => ({ ...b, collectedAt: t(b.collectedAt) })),
   adventurers: g.adventurers,
   expedition: {

@@ -112,7 +112,8 @@ const ECRANS = [
       {
         nom: 'tuiles-expe',
         clic: '.tile-fab[aria-label="Expéditions"]',
-        attendu: '.map-overlay .trip',
+        // ⚡ Le compte de test a des boosts : chaque voyage les porte sous sa tuile.
+        attendu: '.map-overlay .trip-cell .tr-boost',
       },
       // 🧭 …et toucher un voyage de la liste ouvre sa fiche, le tracé en avant sur la carte.
       {

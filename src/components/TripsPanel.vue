@@ -52,143 +52,168 @@
       v-for="{ key, trip: t, leg: lt, ends: e, line: tl, attack: r } in shownTiles"
       :key="key"
     >
-      <button
-        v-if="t && lt && e"
-        type="button"
-        class="trip"
-        :class="[
-          t.kind,
-          'leg-' + lt.leg,
-          {
-            back: lt.back,
-            line: !!tl,
-            focus: focus === t.key,
-            pending: t.pending,
-            failed: !!t.failed,
-            'has-total': !tl && !!bannerOf(lt),
-            sea: !!t.sea,
-            combo: !!t.combo,
-          },
-        ]"
-        :style="t.combo ? { '--combo': t.combo } : undefined"
-        :title="t.title"
-        :aria-pressed="focus === t.key"
-        @click="emit('update:focus', focus === t.key ? null : t.key)"
-      >
-        <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, et OÙ ELLE VA en
+      <div v-if="t && lt && e" class="trip-cell" :class="{ sea: !!t.sea, line: !!tl }">
+        <button
+          type="button"
+          class="trip"
+          :class="[
+            t.kind,
+            'leg-' + lt.leg,
+            {
+              back: lt.back,
+              line: !!tl,
+              focus: focus === t.key,
+              pending: t.pending,
+              failed: !!t.failed,
+              'has-total': !tl && !!bannerOf(lt),
+              sea: !!t.sea,
+              combo: !!t.combo,
+            },
+          ]"
+          :style="t.combo ? { '--combo': t.combo } : undefined"
+          :title="t.title"
+          :aria-pressed="focus === t.key"
+          @click="emit('update:focus', focus === t.key ? null : t.key)"
+        >
+          <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, et OÙ ELLE VA en
            haut-droit. Sur le retour, les deux s'inversent (`tripEnds`). -->
-        <span :class="'tr-from'" :title="endTitle(e.left)">
-          <template v-if="e.left.kind === 'isle'"
-            >🏝️<sub>{{ (e.left as { n: number }).n }}</sub></template
-          >
-          <template v-else-if="e.left.kind === 'base'">🏰</template>
-          <span v-else-if="isRiftPoi(endPoi(e.left))" class="tr-rift">
-            <RiftPortal
-              :color="poiRank(endPoi(e.left)).color"
-              :seed="seedOf(endPoi(e.left).id)"
-              still
-            />
+          <span :class="'tr-from'" :title="endTitle(e.left)">
+            <template v-if="e.left.kind === 'isle'"
+              >🏝️<sub>{{ (e.left as { n: number }).n }}</sub></template
+            >
+            <template v-else-if="e.left.kind === 'base'">🏰</template>
+            <span v-else-if="isRiftPoi(endPoi(e.left))" class="tr-rift">
+              <RiftPortal
+                :color="poiRank(endPoi(e.left)).color"
+                :seed="seedOf(endPoi(e.left).id)"
+                still
+              />
+            </span>
+            <template v-else>{{ poiEmo(endPoi(e.left)) }}</template>
           </span>
-          <template v-else>{{ poiEmo(endPoi(e.left)) }}</template>
-        </span>
-        <!-- 🎴 L'icône de l'ÉTAPE (⏳ ⚔️ 🔍 ↩️, demandé) ; sans étapes, celle du voyageur. -->
-        <span class="tr-who" :title="lt.icon ? LEG_PILL[lt.leg].label : undefined">{{
-          lt.icon ?? t.who
-        }}</span>
-        <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
+          <!-- 🎴 L'icône de l'ÉTAPE (⏳ ⚔️ 🔍 ↩️, demandé) ; sans étapes, celle du voyageur. -->
+          <span class="tr-who" :title="lt.icon ? LEG_PILL[lt.leg].label : undefined">{{
+            lt.icon ?? t.who
+          }}</span>
+          <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
            expéditions) : leurs portraits sous l'icône, sur une ligne centrée. Champions et
            miliciens ; le héros aussi quand l'icône du haut dit l'étape, pas le voyageur. -->
-        <span v-if="t.members.length || (lt.icon && t.withHero)" class="tr-faces">
-          <span v-if="lt.icon && t.withHero" class="tr-face" title="Ton héros">🧝</span>
-          <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
-            <MilitiaPortrait v-if="f.militia" />
-            <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
+          <span v-if="t.members.length || (lt.icon && t.withHero)" class="tr-faces">
+            <span v-if="lt.icon && t.withHero" class="tr-face" title="Ton héros">🧝</span>
+            <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
+              <MilitiaPortrait v-if="f.militia" />
+              <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
+            </span>
+            <span v-if="t.members.length > facesMax(t)" class="tr-face-more"
+              >+{{ t.members.length - facesMax(t) }}</span
+            >
           </span>
-          <span v-if="t.members.length > facesMax(t)" class="tr-face-more"
-            >+{{ t.members.length - facesMax(t) }}</span
-          >
-        </span>
-        <span :class="'tr-poi'" :title="endTitle(e.right)">
-          <template v-if="e.right.kind === 'isle'"
-            >🏝️<sub>{{ (e.right as { n: number }).n }}</sub></template
-          >
-          <template v-else-if="e.right.kind === 'base'">🏰</template>
-          <span v-else-if="isRiftPoi(endPoi(e.right))" class="tr-rift">
-            <RiftPortal
-              :color="poiRank(endPoi(e.right)).color"
-              :seed="seedOf(endPoi(e.right).id)"
-              still
-            />
+          <span :class="'tr-poi'" :title="endTitle(e.right)">
+            <template v-if="e.right.kind === 'isle'"
+              >🏝️<sub>{{ (e.right as { n: number }).n }}</sub></template
+            >
+            <template v-else-if="e.right.kind === 'base'">🏰</template>
+            <span v-else-if="isRiftPoi(endPoi(e.right))" class="tr-rift">
+              <RiftPortal
+                :color="poiRank(endPoi(e.right)).color"
+                :seed="seedOf(endPoi(e.right).id)"
+                still
+              />
+            </span>
+            <template v-else>{{ poiEmo(endPoi(e.right)) }}</template>
           </span>
-          <template v-else>{{ poiEmo(endPoi(e.right)) }}</template>
-        </span>
-        <!-- ⏱️ TOUS LES TEMPS EN BAS DE TUILE (demandé), dans le même bandeau : celui de
+          <!-- ⏱️ TOUS LES TEMPS EN BAS DE TUILE (demandé), dans le même bandeau : celui de
              l'étape de la tuile (`bannerOf`). Pas sur une tuile à frise : ses libellés portent
              déjà chaque temps, celui de l'étape en cours en gras. -->
-        <span v-if="!tl && bannerOf(lt)" class="tr-total" :title="bannerOf(lt)!.title">{{
-          bannerOf(lt)!.text
-        }}</span>
-        <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
-        <span v-if="t.failed" class="tr-fail">{{
-          t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
-        }}</span>
-        <!-- ↩ Retour encore à venir (le voyage est à l'aller) : sa durée en sous-titre. -->
-        <span v-if="lt.line" class="tr-legs">{{ lt.line }}</span>
-        <template v-else-if="t.legs && lt.key === lt.tripKey">
-          <!-- ⏱️ La prochaine étape est dans le bandeau du bas : l'aller n'est redit que pour un
+          <span v-if="!tl && bannerOf(lt)" class="tr-total" :title="bannerOf(lt)!.title">{{
+            bannerOf(lt)!.text
+          }}</span>
+          <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
+          <span v-if="t.failed" class="tr-fail">{{
+            t.failed === 'turned' ? '🔙 Demi-tour' : '✖ Échec'
+          }}</span>
+          <!-- ↩ Retour encore à venir (le voyage est à l'aller) : sa durée en sous-titre. -->
+          <span v-if="lt.line" class="tr-legs">{{ lt.line }}</span>
+          <template v-else-if="t.legs && lt.key === lt.tripKey">
+            <!-- ⏱️ La prochaine étape est dans le bandeau du bas : l'aller n'est redit que pour un
                départ en attente, dont la tête décompte le départ. -->
-          <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
-          <!-- Sur le retour, le bandeau du bas DIT déjà ce temps : pas de seconde ligne. -->
-          <span v-if="t.legs.go || t.sea || !t.back || !t.total" class="tr-legs"
-            >{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span
-          >
-        </template>
-        <!-- 🧭 LA FRISE DU VOYAGE (concept B) : un segment par étape, large comme sa durée —
+            <span v-if="t.legs.go && t.pending" class="tr-legs">→ {{ t.legs.go }}</span>
+            <!-- Sur le retour, le bandeau du bas DIT déjà ce temps : pas de seconde ligne. -->
+            <span v-if="t.legs.go || t.sea || !t.back || !t.total" class="tr-legs"
+              >{{ t.sea ? '' : '↩ ' }}{{ t.legs.back }}</span
+            >
+          </template>
+          <!-- 🧭 LA FRISE DU VOYAGE (concept B) : un segment par étape, large comme sa durée —
              pointillés pour l'attente, ligne pour un trajet, tirets épais sur place. Le curseur
              est posé dans l'étape en cours, là où on en est. -->
-        <template v-if="tl">
-          <span class="tl-frise" :title="`Voyage fait à ${Math.round(tl.cursor)} %`">
-            <span
-              v-for="(s, i) in tl.segs"
-              :key="i"
-              class="tl-seg"
-              :class="['tl-' + s.leg, { cur: s.current }]"
-              :style="{ '--w': s.width }"
-            >
-              <i :style="{ width: s.fill + '%' }" />
-              <b v-if="s.current" class="tl-cursor" :style="{ left: s.fill + '%' }" />
-              <!-- ⏱️ LE TEMPS DANS LA BARRE, EN PASTILLE (2026-10-09, demandé) : l'étape en cours
+          <template v-if="tl">
+            <span class="tl-frise" :title="`Voyage fait à ${Math.round(tl.cursor)} %`">
+              <span
+                v-for="(s, i) in tl.segs"
+                :key="i"
+                class="tl-seg"
+                :class="['tl-' + s.leg, { cur: s.current }]"
+                :style="{ '--w': s.width }"
+              >
+                <i :style="{ width: s.fill + '%' }" />
+                <b v-if="s.current" class="tl-cursor" :style="{ left: s.fill + '%' }" />
+                <!-- ⏱️ LE TEMPS DANS LA BARRE, EN PASTILLE (2026-10-09, demandé) : l'étape en cours
                    en couleur, les suivantes en grisé, les étapes finies estompées. -->
-              <em class="tl-pill" :class="{ cur: s.current, done: s.done }">{{ s.label }}</em>
+                <em class="tl-pill" :class="{ cur: s.current, done: s.done }">{{ s.label }}</em>
+              </span>
             </span>
-          </span>
-        </template>
-        <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
-        <!-- 💰 LA RÉCOMPENSE SUR LA TUILE (2026-10-09, demandé) : au retour, ce que le voyage
+          </template>
+          <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
+          <!-- 💰 LA RÉCOMPENSE SUR LA TUILE (2026-10-09, demandé) : au retour, ce que le voyage
              RAMÈNE (le butin réel, comme dans le détail de l'équipe) ; à l'aller, seulement ce
              que le lieu rapporte s'il est pris — le butin réel révélerait l'issue. -->
-        <!-- ⚠️ Du TEXTE, pas `HaulPills` : la tuile est un <button>, et des boutons imbriqués
+          <!-- ⚠️ Du TEXTE, pas `HaulPills` : la tuile est un <button>, et des boutons imbriqués
              ne sont pas du HTML valide (vu au banc : le navigateur referme la tuile avant les
              pastilles). Le détail de l'équipe, lui, garde les pastilles touchables. -->
-        <span v-if="t.back && t.haul.length" class="tr-loot" title="Ce que le voyage ramène"
-          ><span class="tr-loot-lab">🎁</span> {{ haulText(t.haul) }}</span
-        >
-        <span
-          v-else-if="!t.back && t.expected"
-          class="tr-loot est"
-          title="Ce que le lieu rapporte s'il est pris (hors aléas de la route)"
-          ><span class="tr-loot-lab">💰 si pris</span> {{ t.expected }}</span
-        >
-        <!-- 🛡️ LES PLACES DU LIEU À SON ARRIVÉE (2026-10-09, demandé) : tenues (pleines), les
+          <span v-if="t.back && t.haul.length" class="tr-loot" title="Ce que le voyage ramène"
+            ><span class="tr-loot-lab">🎁</span> {{ haulText(t.haul) }}</span
+          >
+          <span
+            v-else-if="!t.back && t.expected"
+            class="tr-loot est"
+            title="Ce que le lieu rapporte s'il est pris (hors aléas de la route)"
+            ><span class="tr-loot-lab">💰 si pris</span> {{ t.expected }}</span
+          >
+          <!-- 🛡️ LES PLACES DU LIEU À SON ARRIVÉE (2026-10-09, demandé) : tenues (pleines), les
              siennes (accent), celles d'autres renforts en route (pointillé), libres (vides). -->
-        <span v-if="t.seats" class="tr-seats">
-          <span v-for="r in seatRows(t.seats)" :key="r.key" class="ts-row" :title="r.title">
-            <span class="ts-lab">{{ r.icon }}</span>
-            <i v-for="(c, i) in r.cells" :key="i" class="ts-c" :class="c" />
-            <span v-if="r.over" class="ts-over">+{{ r.over }} demi-tour</span>
+          <span v-if="t.seats" class="tr-seats">
+            <span v-for="r in seatRows(t.seats)" :key="r.key" class="ts-row" :title="r.title">
+              <span class="ts-lab">{{ r.icon }}</span>
+              <i v-for="(c, i) in r.cells" :key="i" class="ts-c" :class="c" />
+              <span v-if="r.over" class="ts-over">+{{ r.over }} demi-tour</span>
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+        <!-- ⚡ LES BOOSTS SUR CHAQUE TUILE (demandé) : un bouton par durée en stock, sous la tuile
+           (pas dedans : des boutons imbriqués ne sont pas du HTML valide). Un toucher = le
+           boost est utilisé ; seuls ceux qui feraient perdre des minutes demandent confirmation
+           (la page). Une seule rangée par voyage, sur sa première tuile affichée. -->
+        <div
+          v-if="boostsOf(key, t.key)"
+          class="tr-boosts"
+          role="group"
+          :aria-label="`Accélérer : ${t.title}`"
+        >
+          <button
+            v-for="b in boostsOf(key, t.key)"
+            :key="b.id"
+            type="button"
+            class="tr-boost"
+            :class="{ lossy: b.lostMs > 0 }"
+            :disabled="busy"
+            :title="boostTitle(b)"
+            :aria-label="boostTitle(b)"
+            @click="emit('boost', t.key, b.id)"
+          >
+            ⚡{{ b.minutes >= 60 ? b.minutes / 60 + 'h' : b.minutes }}<sup>×{{ b.count }}</sup>
+          </button>
+        </div>
+      </div>
       <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
          haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
          (🏰 la base), le temps avant la frappe, la tenue de ta défense, et sa marche en
@@ -214,7 +239,6 @@
       </button>
     </template>
   </div>
-
 </template>
 
 <script lang="ts">
@@ -295,6 +319,8 @@ import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle } from '@/lib/adventurers';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { formatCountdown, formatDuration } from '@/lib/duration';
+import type { BoostChoice } from '@/lib/speedBoost';
+import type { BoostId } from '@/lib/supplies';
 import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 
 /** 🎁 Le butin ramené, en une ligne (« 12 480 🪙 · 35 ⚡ ») : la forme de l'estimation « si pris ». */
@@ -320,10 +346,15 @@ const props = defineProps<{
   holds?: Record<string, number | null>;
   /** Horloge (ms) pour l'avancement de leur marche. */
   now?: number;
+  /** ⚡ Les boosts utilisables, par clé de voyage (absent = rien à proposer). */
+  boosts?: Record<string, BoostChoice[]>;
+  /** Un boost est en cours d'application : les boutons attendent. */
+  busy?: boolean;
 }>();
 const emit = defineEmits<{
   'update:focus': [key: string | null];
   attack: [army: Poi];
+  boost: [key: string, id: BoostId];
 }>();
 
 /** ⏱️ Une seule rangée, dans l'ordre d'arrivée : le retour en ville d'un voyage (`homeAt`, cf.
@@ -462,6 +493,25 @@ const shownTiles = computed(() =>
       : !!x.trip && !!x.leg && legTileShown(x.trip, x.leg.leg, ctx.value),
   ),
 );
+/** ⚡ La tuile qui porte les boosts d'un voyage : sa PREMIÈRE tuile affichée (un voyage peut en
+ *  avoir une par étape ; une seule rangée de boutons suffit). */
+const boostTileOf = computed(() => {
+  const m = new Map<string, string>();
+  for (const x of shownTiles.value) if (x.trip && !m.has(x.trip.key)) m.set(x.trip.key, x.key);
+  return m;
+});
+function boostsOf(tileKey: string, tripKey: string): BoostChoice[] | null {
+  if (boostTileOf.value.get(tripKey) !== tileKey) return null;
+  const list = props.boosts?.[tripKey];
+  return list?.length ? list : null;
+}
+function boostTitle(b: BoostChoice): string {
+  const n = b.minutes >= 60 ? `${b.minutes / 60} h` : `${b.minutes} min`;
+  return (
+    `Boost ${n} (×${b.count}) : −${formatDuration(b.gainMs)}` +
+    (b.lostMs > 0 ? `, ${formatDuration(b.lostMs)} perdues` : '')
+  );
+}
 /** ⏱️ Le bandeau du bas d'une tuile : le temps de son étape (⏳ → 🔍), sinon le temps avant
  *  d'arriver (🏠 📍 ⚓). Une seule ligne de temps par tuile, toujours au même endroit. */
 const BANNER_TITLE: Record<string, string> = {
@@ -604,34 +654,85 @@ function facesOf(t: MapTrip) {
   gap: 8px;
   padding: 2px 2px 6px;
 }
-.trips > .trip {
+.trips > .trip,
+.trips > .trip-cell {
   /* border-box : sans lui padding et bordure s'ajoutaient au tiers, et il n'en tenait que deux. */
   box-sizing: border-box;
   flex: 0 0 calc((100% - 16px) / 3);
 }
 /* ⛵ Une traversée en bateau prend TOUTE la ligne (demandé) : île de départ et d'arrivée aux
    deux coins, l'équipage entier au milieu. */
-.trips > .trip.sea {
+.trips > .trip-cell.sea {
   flex-basis: 100%;
 }
 /* 🧭 UNE TUILE PAR VOYAGE, pleine largeur, avec sa FRISE (concept B, choisi le 2026-10-09) :
    toutes les étapes d'un coup d'œil, chacune large comme sa durée, et le curseur dit où on en
    est. Les voyages sans étapes connues (renfort, traversée, rappel) gardent leur tuile de tiers. */
-.trips > .trip.line {
+.trips > .trip-cell.line {
   flex-basis: 100%;
+}
+.trips .trip.line {
   --tc: var(--accent);
 }
-.trips > .trip.line.van {
+.trips .trip.line.van {
   --tc: #b57bff;
 }
-.trips > .trip.line.back {
+.trips .trip.line.back {
   --tc: #7bc86c;
 }
-.trips > .trip.line.combo {
+.trips .trip.line.combo {
   --tc: var(--combo);
 }
-.trips > .trip.line.failed {
+.trips .trip.line.failed {
   --tc: var(--d3);
+}
+/* La tuile remplit sa cellule ; les boosts se rangent dessous. */
+.trip-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.trip-cell > .trip {
+  width: 100%;
+  box-sizing: border-box;
+}
+/* ⚡ Les boosts d'un voyage : petites touches, assez grandes pour ne pas se tromper. */
+.tr-boosts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+.tr-boost {
+  min-width: 40px;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tr-boost sup {
+  margin-left: 1px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--dim);
+}
+/* Des minutes seraient perdues : pointillé orange (la page demande confirmation). */
+.tr-boost.lossy {
+  border: 1px dashed var(--d3);
+  background: var(--surface);
+}
+.tr-boost:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 /* Icône et portraits sur la même ligne : la tuile a la place. */
 .trip.line .tr-faces {
