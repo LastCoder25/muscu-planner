@@ -1271,10 +1271,27 @@ export function keepMessages(
 ): ExpeditionMessage[] {
   let reports = 0;
   let notes = 0;
-  return list.filter((m) => {
-    const fits = isMessageNote(m) ? notes++ < notesCap : reports++ < cap;
-    return fits || m.claimed === false;
-  });
+  let rank = 0;
+  return list
+    .filter((m) => {
+      const fits = isMessageNote(m) ? notes++ < notesCap : reports++ < cap;
+      return fits || m.claimed === false;
+    })
+    .map((m) => (isMessageNote(m) || rank++ < REPLAY_KEEP ? m : withoutDuel(m)));
+}
+
+/** 📉 Les rapports au-delà des `REPLAY_KEEP` plus récents perdent le DÉTAIL DU DUEL contre le
+ *  gardien d'une faille (`party.rift.boss`, jusqu'à ~5 Ko chacun : l'essentiel du poids de la
+ *  boîte, relue à chaque chargement — mesuré le 2026-10-11). Le rapport reste entier (texte,
+ *  journal, butin, verdict) et se rejoue encore : le gardien s'y joue en un coup, comme pour
+ *  un rapport d'avant la v0.998. */
+export const REPLAY_KEEP = 10;
+function withoutDuel(m: ExpeditionMessage): ExpeditionMessage {
+  const rift = m.party?.rift;
+  if (!m.party || !rift?.boss) return m;
+  const rest = { ...rift };
+  delete rest.boss;
+  return { ...m, party: { ...m.party, rift: rest } };
 }
 
 /**
@@ -1315,7 +1332,10 @@ export function depositMessages(
   // (30 avant la v0.1127) redescend au prochain passage (lecture, encaissement) au lieu
   // d'attendre le prochain rapport. Rien à tailler → la même référence, comme avant.
   const kept = keepMessages(added.length ? [...added, ...base] : base, cap);
-  if (!added.length && !marked && kept.length === box.length) return box;
+  // ⚠️ Comparé élément par élément : une taille identique ne dit pas qu'aucun rapport n'a été
+  // allégé (`keepMessages`).
+  if (!added.length && !marked && kept.length === box.length && kept.every((m, i) => m === box[i]))
+    return box;
   return kept;
 }
 

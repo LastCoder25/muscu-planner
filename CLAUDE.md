@@ -3254,6 +3254,18 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
 
 ## Garde-fous
 
+### 📉 TRAFIC SORTANT SUPABASE — on n'écrit plus en relisant la ligne (v1.134, mesuré)
+
+Le compte gratuit dépassait son quota de trafic sortant (5 Go/mois) alors que la base ne pèse
+que 21 Mo. Cause : `persist` relisait la ligne `characters` ENTIÈRE après chaque écriture
+(`.select(COLS)`, jusqu'à 200 Ko de JSON), et la table compte ~5 000 écritures par jour
+(528 000 depuis juin) — ~0,5 Go/jour estimé. `persist` ne relit plus que `updated_at` et
+fusionne le patch (`writtenEcho`/`mergeWritten`, `src/lib/characterWrite.ts`). ⚠️ Ne jamais
+remettre `.select(COLS)` sur une écriture fréquente. ⚠️ Ce qu'un autre appareil écrit entre-temps
+n'arrive plus qu'au prochain `fetchMine`. La boîte 📬 ne garde le détail du duel de gardien
+(`party.rift.boss`) que sur les `REPLAY_KEEP` (10) rapports les plus récents ; au-delà le
+gardien se rejoue en un coup.
+
 ### 🧹 CODE MORT — `npm run dead` (knip, v0.747)
 
 `knip.json` + script `dead` (`node node_modules/knip/bin/knip.js`, AppLocker-safe). **Doit rendre

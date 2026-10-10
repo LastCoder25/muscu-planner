@@ -542,6 +542,7 @@ import { useGameFx } from '@/composables/useGameFx';
 import { CHARACTER_RANKS, characterRank } from '@/lib/characterRank';
 import { useGoldFx } from '@/composables/useGoldFx';
 import { PRICE_REFUND_VERSION, priceRefund } from '@/lib/priceRefund';
+import { mergeWritten, writtenEcho } from '@/lib/characterWrite';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 
 export interface CharacterRow {
@@ -1336,13 +1337,25 @@ export const useCharacterStore = defineStore('character', () => {
   function tickMayWrite(snap: CharacterRow): boolean {
     return inFlight.size === 0 && row.value === snap;
   }
+  /**
+   * 📉 ÉCRIT SANS RELIRE LA LIGNE (v1.134, mesuré) : chaque écriture relisait la ligne ENTIÈRE
+   * (`.select(COLS)`, jusqu'à 200 Ko de JSON pour un compte avancé), soit ~5 000 lignes
+   * complètes par jour — le trafic sortant qui dépassait le quota gratuit de Supabase. Le
+   * serveur ne transforme rien de ce qu'on écrit (son seul trigger interdit de changer le
+   * pseudo), donc ce qu'il renverrait EST le patch : on relit seulement `updated_at` (la
+   * preuve que la ligne existe et a été écrite) et on fusionne le patch tel que la base l'a
+   * stocké (`writtenEcho`), puis on normalise comme avant.
+   * ⚠️ Ce qu'un AUTRE appareil a écrit entre-temps n'est plus relu à chaque écriture : il
+   * arrive au prochain chargement (`fetchMine`).
+   */
   async function persist(userId: string, patch: Record<string, unknown>) {
+    const echo = writtenEcho({ ...patch, updated_at: new Date().toISOString() });
     const req = Promise.resolve(
       supabase
         .from('characters')
-        .update({ ...patch, updated_at: new Date().toISOString() })
+        .update(echo)
         .eq('user_id', userId)
-        .select(COLS)
+        .select('updated_at')
         .single(),
     );
     inFlight.add(req);
@@ -1352,13 +1365,12 @@ export const useCharacterStore = defineStore('character', () => {
     } finally {
       inFlight.delete(req);
     }
-    const { data, error } = res;
-    if (error) throw error;
-    // NORMALISE comme fetchMine (migration rangs/enchant/roll) : sans ça, la ligne relue
-    // après un write repartait BRUTE → valeurs (rang/qualité/puissance) potentiellement
-    // différentes de l'état chargé → chiffres qui « bougent » (cf. tickets combat).
-    row.value = normalizeRow(data);
-    return data;
+    if (res.error) throw res.error;
+    // NORMALISE comme fetchMine (migration rangs/enchant/roll) : sans ça, la ligne
+    // repartait BRUTE → valeurs (rang/qualité/puissance) potentiellement différentes de
+    // l'état chargé → chiffres qui « bougent » (cf. tickets combat).
+    row.value = normalizeRow(mergeWritten(row.value, echo));
+    return row.value;
   }
 
   // MAJ optimiste : reflète le patch localement TOUT DE SUITE (l'or/les bâtiments
