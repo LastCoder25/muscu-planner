@@ -1,14 +1,13 @@
 // advUnlocks.ts — CALENDRIER DES DÉBLOCAGES de l'Aventure par niveau (pur/testé).
 // But : rendre VISIBLE ce que monter d'un niveau apporte. Alimente l'écran de level-up
 // (« ce que tu débloques ») et la timeline « À venir » de l'onglet Perso. Dérivé des
-// données/règles ACTUELLES : BOSSES (data), talentsEarned (un seul emplacement, dès le niv. 1), la rareté
+// données/règles ACTUELLES : talentsEarned (un seul emplacement, dès le niv. 1), la rareté
 // des objets (prestigeRankIndex, un rang tous les 10 niveaux) et EFFECT_MIN_LEVEL (effets/
 // signatures gatés en profondeur). Aucune dépendance Vue/Supabase.
-import { BOSSES } from '@/data/bosses';
 import { prestigeRankIndex, RANK_ORDER, rarityRank } from '@/lib/items';
 import { TALENT_SLOT_LEVEL } from '@/lib/talents';
 
-type AdvUnlockKind = 'boss' | 'talent' | 'effect' | 'rarity';
+type AdvUnlockKind = 'talent' | 'effect' | 'rarity';
 
 export interface AdvUnlock {
   level: number;
@@ -21,16 +20,9 @@ export interface AdvUnlock {
 function buildSchedule(): AdvUnlock[] {
   const out: AdvUnlock[] = [];
 
-  // Boss de palier — src/data/bosses.ts. Les boss lâchent des pièces de set (de voie).
-  for (const b of BOSSES) {
-    out.push({
-      level: b.unlockLevel,
-      kind: 'boss',
-      emoji: b.emoji,
-      title: `Boss : ${b.name}`,
-      detail: 'Nouveau boss de palier — bats-le pour des pièces de set (de voie).',
-    });
-  }
+  // ⚠️ PAS DE BOSS ICI : un boss de palier n'est gaté par AUCUN niveau (la chaîne des boss ne
+  // dépend que du boss précédent ; son unlockLevel n'est qu'indicatif). L'annoncer à un passage
+  // de niveau laisserait croire qu'il vient de s'ouvrir alors qu'il était déjà accessible.
 
   // L'emplacement de TALENT, UNIQUE (talents.ts TALENT_SLOT_LEVEL / talentsEarned).
   // Les talents se DROPPENT (donjons/boss) ; on en garde le meilleur équipé.
