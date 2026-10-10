@@ -27,22 +27,29 @@ function combo(
     rep_weight: 1,
     target: 10,
     count_mode: 'sets',
-    sets: Array.from({ length: k }, () => ({ date: '2026-10-08', reps, weight, assisted: false })),
+    sets: Array.from({ length: k }, () => ({ date: '2026-10-12', reps, weight, assisted: false })),
     ...opts,
   } as ComboLeg;
   return {
     id: 'c',
     user_id: 'u',
     status: 'active',
-    start_date: '2026-10-05',
+    start_date: '2026-10-11',
     duration_days: 7,
     legs: [leg],
     config: {},
   } as unknown as ComboChallenge;
 }
 /** XP d'une série de plus. */
-const oneSet = (id: string, reps: number, opts: Partial<ComboLeg> = {}, kg?: number, w: number | null = null) =>
-  comboXpPoints([combo(id, reps, 2, opts, w)], kg) - comboXpPoints([combo(id, reps, 1, opts, w)], kg);
+const oneSet = (
+  id: string,
+  reps: number,
+  opts: Partial<ComboLeg> = {},
+  kg?: number,
+  w: number | null = null,
+) =>
+  comboXpPoints([combo(id, reps, 2, opts, w)], kg) -
+  comboXpPoints([combo(id, reps, 1, opts, w)], kg);
 
 describe('💪 équivalent-reps : une série dure à reps basses n’est plus écrasée', () => {
   it('10 reps valent 10, moins compte plus, plus compte moins que proportionnellement', () => {
@@ -64,6 +71,14 @@ describe('💪 équivalent-reps : une série dure à reps basses n’est plus é
     const c = combo('ex_plank', 120, 1, { count_mode: 'time', target: 600 });
     expect(comboXpBreakdown(c).reps).toBe(48);
   });
+
+  it('PAS RÉTROACTIF : une série faite avant la règle garde le barème linéaire', () => {
+    // 20 reps × 0,2 × poids 1 × 2 = 8 avant ; en racine ce serait 14,1 × 0,4 ≈ 5,7.
+    const old = combo('ex_glute_bridge', 20, 1);
+    old.legs[0]!.sets = old.legs[0]!.sets!.map((s) => ({ ...s, date: '2026-10-09' }));
+    expect(comboXpBreakdown(old).reps).toBe(8);
+    expect(comboXpBreakdown(combo('ex_glute_bridge', 20, 1)).reps).toBe(6);
+  });
 });
 
 describe('🏋️ charge du poids du corps dans le tonnage', () => {
@@ -82,7 +97,9 @@ describe('🏋️ charge du poids du corps dans le tonnage', () => {
 
   it('avec le poids du joueur, une série de tractions rapporte plus ; sans, rien ne change', () => {
     expect(oneSet('ex_pullup', 6, {}, 80)).toBeGreaterThan(oneSet('ex_pullup', 6));
-    expect(oneSet('ex_row_barbell', 12, {}, 80, 60)).toBe(oneSet('ex_row_barbell', 12, {}, undefined, 60));
+    expect(oneSet('ex_row_barbell', 12, {}, 80, 60)).toBe(
+      oneSet('ex_row_barbell', 12, {}, undefined, 60),
+    );
   });
 
   it('le lest s’ajoute au poids du corps', () => {
@@ -94,7 +111,13 @@ describe('🎯 tractions et dips valent un vrai polyarticulaire', () => {
   it('3 muscles → poids de rep 1,3 ; à l’élastique 0,78', () => {
     expect(repWeightFromExercise(['biceps', 'avant-bras'], ['pullup_bar'], 'Tractions')).toBe(1.3);
     expect(repWeightFromExercise(['triceps', 'épaules'], ['dip_station'], 'Dips')).toBe(1.3);
-    expect(repWeightFromExercise(['biceps', 'avant-bras'], ['pullup_bar', 'bands'], 'Tractions assistées (élastique)')).toBe(0.78);
+    expect(
+      repWeightFromExercise(
+        ['biceps', 'avant-bras'],
+        ['pullup_bar', 'bands'],
+        'Tractions assistées (élastique)',
+      ),
+    ).toBe(0.78);
   });
 
   it('une série de 6 tractions vaut au moins autant que 20 ponts fessiers', () => {
@@ -114,14 +137,21 @@ describe('📅 l’XP par exo et par jour (Agenda) = l’XP du défi hors prime'
   it('la somme des lignes vaut le total moins la prime, sur un 360 varié et plusieurs jours', () => {
     const c = combo('ex_pullup', 6, 0) as ComboChallenge;
     c.legs = [
-      { ...c.legs[0]!, sets: [6, 5, 7, 6, 5].map((r, i) => ({ date: `2026-10-0${5 + (i % 3)}`, reps: r, weight: null })) },
+      {
+        ...c.legs[0]!,
+        sets: [6, 5, 7, 6, 5].map((r, i) => ({
+          date: `2026-10-1${2 + (i % 3)}`,
+          reps: r,
+          weight: null,
+        })),
+      },
       {
         ...c.legs[0]!,
         exercise_id: 'ex_row_barbell',
         exercise_name: 'Rowing',
         rep_weight: 1.25,
         target: 3,
-        sets: [12, 12, 10, 8].map((r) => ({ date: '2026-10-06', reps: r, weight: 60 })),
+        sets: [12, 12, 10, 8].map((r) => ({ date: '2026-10-13', reps: r, weight: 60 })),
       },
       {
         ...c.legs[0]!,
@@ -129,7 +159,7 @@ describe('📅 l’XP par exo et par jour (Agenda) = l’XP du défi hors prime'
         exercise_name: 'Pompes',
         count_mode: 'reps',
         target: 50,
-        sets: [20, 18, 15].map((r) => ({ date: '2026-10-07', reps: r, weight: null })),
+        sets: [20, 18, 15].map((r) => ({ date: '2026-10-14', reps: r, weight: null })),
       },
       {
         ...c.legs[0]!,
@@ -151,7 +181,10 @@ describe('📅 l’XP par exo et par jour (Agenda) = l’XP du défi hors prime'
 
   it('au-delà de l’objectif, une série ne rapporte plus la durée (même plafond que le total)', () => {
     const c = combo('ex_pullup', 6, 4, { target: 2 });
-    c.legs[0]!.sets = c.legs[0]!.sets!.map((s, i) => ({ ...s, date: i < 2 ? '2026-10-06' : '2026-10-07' }));
+    c.legs[0]!.sets = c.legs[0]!.sets!.map((s, i) => ({
+      ...s,
+      date: i < 2 ? '2026-10-13' : '2026-10-14',
+    }));
     const [a, b] = comboXpByExoDay(c).sort((x, y) => x.date.localeCompare(y.date));
     expect(a!.xp).toBeGreaterThan(b!.xp * 3);
   });

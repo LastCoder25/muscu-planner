@@ -200,7 +200,17 @@ describe('comboXpPoints', () => {
     expect(comboXpPoints([c])).toBeGreaterThan(0);
   });
   it('le poids par série augmente l’XP (tonnage)', () => {
-    const light = combo([leg({ target: 3, sets: [set(10), set(10), set(10)] })]);
+    const light = combo(
+      [
+        leg({
+          target: 3,
+          sets: [set(10, 0, '2026-10-11'), set(10, 0, '2026-10-11'), set(10, 0, '2026-10-11')],
+        }),
+      ],
+      {
+        start_date: '2026-10-11',
+      },
+    );
     const loaded = combo([leg({ target: 3, sets: [set(10, 40), set(10, 40), set(10, 40)] })]);
     expect(comboXpPoints([loaded])).toBeGreaterThan(comboXpPoints([light]));
   });
@@ -211,7 +221,17 @@ describe('comboXpPoints', () => {
     // DURÉE est par-série (comme la durée wall-clock de sessionXp) → elle dilue l'XP/rep
     // totale quand on entasse les reps, exactement comme une vraie séance. On l'exclut ici.
     const light = combo([leg({ target: 3, sets: [set(10), set(10), set(10)] })]);
-    const heavy = combo([leg({ target: 3, sets: [set(20), set(20), set(20)] })]);
+    const heavy = combo(
+      [
+        leg({
+          target: 3,
+          sets: [set(20, 0, '2026-10-11'), set(20, 0, '2026-10-11'), set(20, 0, '2026-10-11')],
+        }),
+      ],
+      {
+        start_date: '2026-10-11',
+      },
+    );
     expect(comboXpPoints([heavy])).toBeGreaterThan(comboXpPoints([light]));
     const effL = comboXpBreakdown(light).reps + comboXpBreakdown(light).bonus;
     const effH = comboXpBreakdown(heavy).reps + comboXpBreakdown(heavy).bonus;

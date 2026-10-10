@@ -184,16 +184,30 @@ export function repsEquivalent(reps: number): number {
   if (!(reps > 0)) return 0;
   return COMBO_PLAN_REPS * Math.sqrt(reps / COMBO_PLAN_REPS);
 }
-/** Reps d'une série telles que l'XP les compte : compressées, sauf au temps. */
-function setRepUnits(leg: ComboLeg, reps: number): number {
-  return legMode(leg) === 'time' ? Math.max(0, reps) : repsEquivalent(reps);
+/**
+ * ⚠️ PAS RÉTROACTIF (2026-10-10, signalé : « mon niveau a baissé »). Appliquée à tout
+ * l'historique, la racine retirait ~1 450 XP au compte (beaucoup de séries à 12-18 reps) et
+ * le faisait redescendre d'un niveau. Seules les séries faites à partir de cette date
+ * comptent en équivalent-reps ; les séries d'avant gardent le barème linéaire avec lequel
+ * elles ont été jouées. Une date absente (série très ancienne) = barème d'avant.
+ */
+export const REPS_EQUIVALENT_FROM = '2026-10-11';
+/** Reps d'une série telles que l'XP les compte : compressées (séries récentes), sauf au
+ *  temps. */
+function setRepUnits(leg: ComboLeg, reps: number, date?: string | null): number {
+  if (legMode(leg) === 'time') return Math.max(0, reps);
+  if (!date || date < REPS_EQUIVALENT_FROM) return Math.max(0, reps);
+  return repsEquivalent(reps);
 }
 /** XP « reps » d'une série (pré-XP_MULT), sur ce qui a VRAIMENT été fait : reps (en
  *  équivalent-reps) × poids de rep de son exo d'origine × assistance. */
 function setRepXp(leg: ComboLeg, s: ComboSet): number {
   const w = setWork(leg, s);
   return (
-    setRepUnits(leg, w.reps || 0) * REP_XP * setOrigin(leg, s).rep_weight * assistMult(w.assisted)
+    setRepUnits(leg, w.reps || 0, s.date) *
+    REP_XP *
+    setOrigin(leg, s).rep_weight *
+    assistMult(w.assisted)
   );
 }
 /** Tonnage d'une série (reps × charge), sur ce qui a vraiment été fait. La charge comprend
@@ -718,14 +732,14 @@ function legPlannedEffort(l: ComboLeg): number {
       // Une série convertie compte dans l'unité de la cible, mais son effort est celui qu'elle
       // a vraiment coûté (12 dips posés comme 5 reps valent 12 dips).
       // ⚠️ Compressé comme l'XP des séries (`setRepUnits`) : la prime suit le même barème.
-      effort += setRepUnits(l, take * workRatio(l, s)) * w(s);
+      effort += setRepUnits(l, take * workRatio(l, s), s.date) * w(s);
       left -= take;
     }
     return effort;
   }
   const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
   const done = counted.reduce(
-    (a, s) => a + (repsEquivalent(setWork(l, s).reps || 0) || COMBO_PLAN_REPS) * w(s),
+    (a, s) => a + (setRepUnits(l, setWork(l, s).reps || 0, s.date) || COMBO_PLAN_REPS) * w(s),
     0,
   );
   const missing = Math.max(0, l.target - counted.length);
