@@ -590,7 +590,7 @@ export function storedIslandProduction(
     const id = Number(k);
     if (id === map?.archipel?.island) continue;
     const lvl = mapPlayerLevel(im, playerLevel);
-    const points = im.pois.flatMap((p) => {
+    const points = heldRemote(im).flatMap((p) => {
       const pr = controlProgress(p, now, lvl);
       return pr
         ? [{ id: p.id, label: poiLabel(p), emoji: poiEmo(p), text: pr.text, pct: pr.pct }]
@@ -616,18 +616,27 @@ export interface RemotePoint {
 /** 🛡️ Les lieux fixes tenus d'une île rangée, avec leur milice (pour l'écran de l'archipel).
  *  Un lieu d'un type RETIRÉ de l'île (le camp d'entraînement, le 2026-10-03) n'est montré que
  *  s'il garde des miliciens : il faut pouvoir les ramener, mais un lieu vide n'existe plus. */
-export function remotePoints(im: ExpeditionMap): RemotePoint[] {
+/** 🛡️ Les lieux fixes TENUS d'une île rangée, sans les types RETIRÉS de l'île restés vides.
+ *  ⚠️ SOURCE UNIQUE de la gestion de la milice à distance ET de la production affichée : le
+ *  nettoyage des types retirés (`ensureControls`) ne tourne que sur l'île active, donc une île
+ *  rangée avant le retrait garde son lieu (2026-10-10, constaté : un camp d'entraînement vide
+ *  sur l'île 1, listé à « +0 XP/h »). */
+function heldRemote(im: ExpeditionMap) {
   const kinds = controlKindsOf(im);
-  return im.pois
-    .filter((p) => p.control?.owner === 'player')
-    .filter((p) => kinds.includes(p.control!.kind) || militiaIn(p.control!.garrison).length > 0)
-    .map((p) => ({
-      id: p.id,
-      label: poiLabel(p),
-      emoji: poiEmo(p),
-      militia: militiaIn(p.control!.garrison).length,
-      room: militiaFreeSeats(p.control),
-    }));
+  return im.pois.filter(
+    (p) =>
+      p.control?.owner === 'player' &&
+      (kinds.includes(p.control.kind) || militiaIn(p.control.garrison).length > 0),
+  );
+}
+export function remotePoints(im: ExpeditionMap): RemotePoint[] {
+  return heldRemote(im).map((p) => ({
+    id: p.id,
+    label: poiLabel(p),
+    emoji: poiEmo(p),
+    militia: militiaIn(p.control!.garrison).length,
+    room: militiaFreeSeats(p.control),
+  }));
 }
 
 /**

@@ -453,4 +453,12 @@ describe('🏝️ la production des îles rangées, île par île', () => {
     expect(storedIslandProduction(map, T0 + H, 30)).toEqual([]);
     expect(storedIslandProduction(null, T0, 30)).toEqual([]);
   });
+  it('un lieu d’un type RETIRÉ de l’île, resté vide, n’est pas listé (le camp de l’île 1)', () => {
+    const map = active({
+      '1': stash([held('ctl_mine', 'mine', ['mil:1']), held('ctl_training', 'training', [])]),
+    });
+    expect(storedIslandProduction(map, T0 + H, 30)[0]!.points.map((p) => p.id)).toEqual([
+      'ctl_mine',
+    ]);
+  });
 });

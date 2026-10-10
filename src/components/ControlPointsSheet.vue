@@ -557,11 +557,17 @@ const isFull = (r: ControlRosterRow) =>
   border: 1px solid color-mix(in srgb, var(--rk) 45%, var(--line));
   background: color-mix(in srgb, var(--rk) 8%, var(--surface));
 }
+/* 📐 Les cases RÉTRÉCISSENT (en restant carrées) quand la place manque (2026-10-10, signalé :
+   « l'affichage de la garnison déborde »). Une mine compte 5 places de champion, un trait et
+   5 de milice : 11 cases de 28 px demandaient 329 px pour 275 dans une tuile à 344 px, et
+   sortaient de la tuile. Elles gardent 28 px tant que ça tient, jamais moins de 18. */
 .mini {
   display: grid;
   place-items: center;
-  flex: 0 0 28px;
-  height: 28px;
+  flex: 0 1 auto;
+  width: 28px;
+  min-width: 18px;
+  aspect-ratio: 1 / 1;
   font-size: 17px;
   line-height: 1;
   border-radius: 7px;
@@ -582,7 +588,9 @@ const isFull = (r: ControlRosterRow) =>
 }
 /* 🧝 Le héros vaut 2 places : une case de deux largeurs (2 × 28 + l'écart de 4). */
 .mini.hero {
-  flex-basis: 60px;
+  width: 60px;
+  min-width: 40px;
+  aspect-ratio: 60 / 28;
   border-color: color-mix(in srgb, #2f6bff 80%, transparent);
 }
 .mini.free {
