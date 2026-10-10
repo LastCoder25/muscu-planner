@@ -32,7 +32,7 @@ import { chromium } from 'playwright-core';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SPA = path.join(ROOT, 'dist', 'spa');
 const OUT = path.join(ROOT, 'dist', 'smoke');
-const PORT = 4599;
+const PORT = Number(process.env.SMOKE_PORT) || 4599; // SMOKE_PORT : plusieurs instances en parallèle
 // Le projet est mobile-first et documente ses seuils : Z Fold plié, téléphone, et le
 // basculement « cockpit » à 600. On vérifie qu'aucun ne déborde horizontalement.
 const WIDTHS = [344, 390, 600];
@@ -59,7 +59,12 @@ const ECRANS = [
   { route: '/stats', nom: 'stats' },
   { route: '/trophies', nom: 'trophees' },
   { route: '/agenda', nom: 'agenda' },
-  { route: '/challenges', nom: 'defis' },
+  {
+    route: '/challenges',
+    nom: 'defis',
+    // ⚖️ L'équilibre du corps a son propre onglet (v1.127.0).
+    gestes: [{ nom: 'equilibre', clic: '.seg2-b:has-text("Équilibre")', attendu: '.bb' }],
+  },
   { route: '/muscu', nom: 'muscu' },
   { route: '/cardio', nom: 'cardio' },
   { route: '/tennis', nom: 'tennis' },

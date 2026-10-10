@@ -44,6 +44,9 @@
       <button class="seg2-b" :class="{ on: mode === 'combo' }" @click="mode = 'combo'">
         🎯 Défi 360
       </button>
+      <button class="seg2-b" :class="{ on: mode === 'balance' }" @click="mode = 'balance'">
+        ⚖️ Équilibre
+      </button>
     </div>
 
     <div v-if="mode === 'solo' && LIST_TABS.includes(tab)" class="tabs">
@@ -304,6 +307,13 @@
       </template>
     </template>
 
+    <!-- ⚖️ ÉQUILIBRE : le corps entier, toutes sources confondues (séances, 360, challenges).
+         Son propre onglet (demandé) : il servait au 360 ET aux challenges, et vivait en bas
+         de l'onglet 360, hors écran. Toucher un muscle en déficit lance un challenge. -->
+    <template v-else-if="mode === 'balance'">
+      <BodyBalance />
+    </template>
+
     <!-- DÉFI 360 -->
     <template v-else>
       <div class="tabs">
@@ -520,10 +530,6 @@
             </div>
           </div>
         </template>
-        <!-- Le corps entier, toutes sources confondues : ce qui reste en déficit MÊME en
-             tenant son 360 se comble par un challenge (toucher le muscle). Affiché aussi
-             sans 360 en cours : il aide à composer le prochain. -->
-        <BodyBalance />
       </template>
     </template>
 
@@ -697,7 +703,7 @@ const availableEnergy = computed(
     (character.row?.energy_spent ?? 0),
 );
 
-const mode = ref<'solo' | 'combo'>('solo');
+const mode = ref<'solo' | 'combo' | 'balance'>('solo');
 /** 🎯 `?mode=combo` ouvre directement l'onglet Défi 360 — c'est par là que la grande tuile
  *  de l'accueil y mène (v0.961).
  *  ⚠️ IMMÉDIAT : l'écran peut déjà être monté quand la query change (on revient d'un
@@ -706,7 +712,7 @@ const mode = ref<'solo' | 'combo'>('solo');
 watch(
   () => route.query.mode,
   (m) => {
-    if (m !== 'combo' && m !== 'solo') return;
+    if (m !== 'combo' && m !== 'solo' && m !== 'balance') return;
     mode.value = m;
     const q = { ...route.query };
     delete q.mode;
