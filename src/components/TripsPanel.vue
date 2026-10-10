@@ -785,12 +785,12 @@ function facesOf(t: MapTrip) {
 /* Le curseur : un trait lumineux au bout de la part remplie (un rond masquerait la pastille). */
 .tl-cursor {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  width: 4px;
-  margin-left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
   background: #fff;
-  box-shadow: 0 0 8px #fff;
+  box-shadow: 0 0 5px #fff;
 }
 .tl-pill {
   position: absolute;
