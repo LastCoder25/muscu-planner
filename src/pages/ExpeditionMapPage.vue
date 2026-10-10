@@ -467,38 +467,6 @@
       </div>
     </div>
 
-    <!-- 🗂️ TROIS TUILES SOUS LA CARTE (2026-09-29, demandé : « les lieux fixes et les attaques
-         ennemies dans des tuiles, avec une tuile expéditions, et au clic ça déplie la partie
-         correspondante »). Une seule partie ouverte à la fois ; retoucher sa tuile la replie.
-         La pastille dit ce qui appelle : voyages en cours, points qui appellent, armées. -->
-    <div v-show="!viewed" ref="tabsEl" class="map-tabs" role="tablist">
-      <button
-        v-for="t in underTabs"
-        :key="t.id"
-        type="button"
-        role="tab"
-        class="map-tab"
-        :class="[t.id, { on: mapPanel === t.id, alert: t.alert }]"
-        :aria-selected="mapPanel === t.id"
-        @click="toggleMapPanel(t.id)"
-      >
-        <span class="mt-emo">{{ t.emo }}</span>
-        <span class="mt-lab">{{ t.label }}</span>
-        <span v-if="t.n" class="mt-dot">{{ t.n }}</span>
-        <span class="mt-chev" aria-hidden="true">{{ mapPanel === t.id ? '▾' : '▸' }}</span>
-      </button>
-    </div>
-    <ControlPointsSheet
-      v-if="mapPanel === 'ctl'"
-      :model-value="true"
-      inline
-      :rows="ctlRoster"
-      :advs="char.advList"
-      :reinforceable="reinforceable"
-      :islands="storedProd"
-      @open="openFromList"
-      @reinforce="(p) => (quickId = p.id)"
-    />
     <!-- 🏠 La base, comme un lieu fixe : qui y est, et où les envoyer. -->
     <BaseGarrisonSheet
       v-model="baseOpen"
@@ -1474,22 +1442,22 @@
       </q-card>
     </q-dialog>
 
-    <!-- 🏠 Juste à gauche du ↕️ (demandé) : la base de l'île 1, en un geste. La carte
+    <!-- 🏠 En bas à droite : la base de l'île 1, en un geste. La carte
          vit dans l'Aventure, qui lit `?tab=` : elle bascule sur l'onglet Base et quitte la carte.
          ⚠️ Masqué pendant la barre d'un voyage (en bas à gauche) : à 344 px ils se chevauchent. -->
     <button
       v-show="!viewed && !tripBar"
       type="button"
       class="slide-fab tile-fab"
-      :style="{ right: 16 + 56 + 'px' }"
+      :style="{ right: '16px' }"
       aria-label="Ma base (île 1)"
       title="Ma base (île 1)"
       @click="goBase"
     >
       <span class="tf-emo">🏠</span>
     </button>
-    <!-- 🧭🏰 À gauche du 🏠 (du ↕️ quand il est masqué) : les tuiles des expéditions et des places fortes, par-dessus la
-         carte (essai). La pastille reprend celle des tuiles sous la carte. -->
+    <!-- 🧭🏰 À gauche du 🏠 (tout à droite quand il est masqué) : les expéditions et les places
+         fortes, par-dessus la carte. Plus rien ne s'affiche sous la carte (demandé). -->
     <button
       v-for="(t, i) in mapTabs"
       v-show="!viewed"
@@ -1497,7 +1465,7 @@
       type="button"
       class="slide-fab tile-fab"
       :class="{ on: overlay === t.id, alert: t.alert }"
-      :style="{ right: 16 + 56 * (mapTabs.length - i + (tripBar ? 0 : 1)) + 'px' }"
+      :style="{ right: 16 + 56 * (mapTabs.length - i - (tripBar ? 1 : 0)) + 'px' }"
       :aria-label="t.label"
       :title="t.label"
       :aria-pressed="overlay === t.id"
@@ -1505,20 +1473,6 @@
     >
       <span class="tf-emo">{{ t.emo }}</span>
       <span v-if="t.n" class="tf-dot">{{ t.n }}</span>
-    </button>
-    <!-- ↕️ FIXE EN BAS DE L'ÉCRAN (demandé) : ↓ ouvre le détail des expéditions et le cale en
-         bas, ↑ remonte en haut. Le sens suit la place des tuiles à l'écran (`mapSlide.ts`). -->
-    <button
-      type="button"
-      class="slide-fab"
-      :aria-label="slideDir === 'down' ? 'Voir les expéditions' : 'Remonter en haut'"
-      :title="slideDir === 'down' ? 'Voir les expéditions' : 'Remonter en haut'"
-      @click="slideMap"
-    >
-      <q-icon
-        :name="slideDir === 'down' ? 'keyboard_arrow_down' : 'keyboard_arrow_up'"
-        size="28px"
-      />
     </button>
   </div>
 </template>
@@ -1703,13 +1657,7 @@ import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { groupSwapRows, SWAP_BASE_KEY } from '@/lib/swapGroups';
 import { poiTripCategory } from '@/lib/tripFilter';
-import {
-  lockPageScroll,
-  mapScrollLocked,
-  mapSlideDirection,
-  scrollContainerOf,
-  type MapSlide,
-} from '@/lib/mapSlide';
+import { lockPageScroll, mapScrollLocked, scrollContainerOf } from '@/lib/mapSlide';
 import { revealBlock } from '@/lib/reveal';
 import {
   emptyReinfSelection,
@@ -1980,10 +1928,7 @@ function goBase() {
 function viewIslandMap(id: number | null) {
   viewIsland.value = id;
   // Les panneaux de la carte active n'ont rien à faire sous une île rangée.
-  if (id !== null) {
-    mapPanel.value = null;
-    selected.value = null;
-  }
+  if (id !== null) selected.value = null;
 }
 /** 🏝️ Le panneau de l'archipel, posé en haut à droite de la carte AFFICHÉE (active ou île
  *  rangée) : une seule liaison pour les deux emplacements. La pastille nomme l'île affichée. */
@@ -4171,11 +4116,9 @@ watch(focusTrip, (k) => {
  *  il fallait remonter à la main). Quand le DERNIER affichage se ferme, on remonte juste sous
  *  la carte : la rangée des bas de la carte en bas de l'écran (demandé).
  *  Rien si un autre affichage vient de s'ouvrir à la place. */
-/** Vrai le temps d'un tick pendant la remontée en haut (cf. `slideMap`) : on ne recale rien. */
-let goingTop = false;
 watch([focusTrip, selected], ([k, s], [k0, s0]) => {
   const closed = (k0 && !k) || (s0 && !s);
-  if (closed && !k && !s && !goingTop) void nextTick(revealTabs);
+  if (closed && !k && !s) void nextTick(revealTabs);
 });
 /** Le BAS de la carte tombe tout en bas de l'écran (précisé par l'utilisateur), les onglets
  *  juste en dessous, hors écran. `revealBlock` garde le haut de la carte visible s'il le faut. */
@@ -4307,12 +4250,9 @@ function dimmed(p: Poi): boolean {
   return !o.hero && !o.party;
 }
 
-/** 🗂️ La partie dépliée sous la carte (une seule à la fois ; `null` = tout replié). Les
- *  équipes en marche pour prendre un point viennent des groupes (`partyList`) : elles
- *  restent en garnison à l'arrivée (`midAt`). */
+/** 🗂️ Les tuiles affichées PAR-DESSUS la carte (cf. le gabarit) : expéditions ou places
+ *  fortes. Plus rien ne s'affiche sous la carte (demandé). */
 type MapPanel = 'trips' | 'ctl';
-const mapPanel = ref<MapPanel | null>(null);
-/** 🗂️ Les tuiles affichées PAR-DESSUS la carte (essai, cf. le gabarit). */
 const overlay = ref<MapPanel | null>(null);
 const overlayTitle = computed(() =>
   overlay.value === 'ctl' ? '🏰 Places fortes' : '🧭 Expéditions',
@@ -4322,7 +4262,6 @@ function toggleOverlay(id: MapPanel) {
   if (!overlay.value) return;
   // Un seul affichage ouvert à la fois, et la carte ramenée à l'écran (elle porte les tuiles).
   selected.value = null;
-  mapPanel.value = null;
   void nextTick(revealTabs);
 }
 /** Toucher un voyage ferme les tuiles et centre la carte sur son tracé (`frameTrip`, via le
@@ -4334,68 +4273,6 @@ function pickOverlayTrip(key: string | null) {
   if (focusTrip.value === k) frameTrip(k);
   else focusTrip.value = k;
 }
-/** 📜 Ouvrir une tuile (Expéditions, Places fortes) cale la DERNIÈRE tuile de la partie
- *  dépliée en bas de l'écran (demandé : toutes les tuiles visibles, rien de vide dessous, le
- *  maximum de carte au-dessus). Si la partie est plus haute que l'écran, la rangée des onglets
- *  reste visible en haut (`revealBlock`). Après le rendu du panneau déplié, sinon il n'a pas
- *  encore de hauteur. Suit aussi le volet droit du cockpit. */
-const tabsEl = ref<HTMLElement | null>(null);
-function toggleMapPanel(id: MapPanel) {
-  mapPanel.value = mapPanel.value === id ? null : id;
-  // Un seul affichage ouvert à la fois : ouvrir un onglet referme la fiche d'un lieu.
-  if (mapPanel.value) selected.value = null;
-  // Ouvrir cale les tuiles en bas ; RE-toucher l'onglet le replie et cale le bas de la
-  // carte en bas de l'écran (demandé : sinon il fallait remonter à la main).
-  void nextTick(mapPanel.value ? revealTiles : revealTabs);
-}
-/** Cale en bas de l'écran la dernière tuile affichée sous la carte : celle de la partie
- *  dépliée, sinon la rangée des onglets elle-même. */
-function revealTiles() {
-  const tabs = tabsEl.value;
-  if (!tabs) return;
-  const root = tabs.parentElement ?? tabs;
-  const last =
-    mapPanel.value === 'ctl' ? root.querySelector('.cps') : null;
-  revealBlock(tabs, last ?? tabs);
-}
-/** ↕️ Le bouton à gauche du zoom (cf. `mapSlide.ts`) : le sens suit la place de la rangée de
- *  tuiles à l'écran, relue à chaque défilement (en capture : le volet du cockpit défile seul). */
-const slideDir = ref<MapSlide>('down');
-let slideRaf = 0;
-function updateSlideDir() {
-  if (slideRaf) return;
-  slideRaf = requestAnimationFrame(() => {
-    slideRaf = 0;
-    const el = tabsEl.value;
-    if (el) slideDir.value = mapSlideDirection(el.getBoundingClientRect().top, window.innerHeight);
-  });
-}
-function slideMap() {
-  if (slideDir.value === 'down') {
-    // ↓ cale les tuiles sous la carte en bas de l'écran. Les expéditions ne s'affichent plus
-    // sous la carte (demandé) : seulement par-dessus, via le bouton 🧭.
-    void nextTick(revealTiles);
-  } else {
-    // ↑ referme aussi la partie dépliée sous la carte (demandé), sans recaler le bas de la
-    // carte ensuite (`goingTop`) : le recalage contrarierait la remontée.
-    goingTop = true;
-    mapPanel.value = null;
-    void nextTick(() => {
-      goingTop = false;
-    });
-    scrollContainerOf(tabsEl.value)?.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}
-onMounted(() => {
-  window.addEventListener('scroll', updateSlideDir, { capture: true, passive: true });
-  window.addEventListener('resize', updateSlideDir, { passive: true });
-  updateSlideDir();
-});
-onUnmounted(() => {
-  window.removeEventListener('scroll', updateSlideDir, { capture: true });
-  window.removeEventListener('resize', updateSlideDir);
-  if (slideRaf) cancelAnimationFrame(slideRaf);
-});
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
@@ -4480,9 +4357,6 @@ const ctlRoster = computed(() =>
     attackHeroWaitingAt(char.attackList),
   ),
 );
-/** 🗂️ Sous la carte, seules les places fortes (demandé : les expéditions ne s'affichent plus
- *  que par-dessus la carte, via le bouton 🧭). */
-const underTabs = computed(() => mapTabs.value.filter((t) => t.id === 'ctl'));
 /** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */
 const ctlCalls = computed(
   () => ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty').length,
@@ -5004,7 +4878,6 @@ const baseChamps = computed(() => freeSorted.value);
 const mapLocked = computed(() =>
   mapScrollLocked({
     viewed: !!viewed.value,
-    panel: mapPanel.value !== null,
     selected: !!selected.value,
     focusTrip: focusTrip.value !== null,
     baseOpen: baseOpen.value,
@@ -5016,7 +4889,7 @@ const mapLocked = computed(() =>
 let unlockScroll: (() => void) | null = null;
 function applyScrollLock(on: boolean) {
   unlockScroll?.();
-  unlockScroll = on && tabsEl.value ? lockPageScroll(tabsEl.value) : null;
+  unlockScroll = on && scrollEl.value ? lockPageScroll(scrollEl.value) : null;
 }
 watch(mapLocked, applyScrollLock, { flush: 'post' });
 onMounted(() => applyScrollLock(mapLocked.value));
@@ -5141,7 +5014,6 @@ function openAttack(p: Poi) {
   focusArmy.value = p.id;
 }
 function openFromList(p: Poi) {
-  mapPanel.value = null;
   panToPoi(p);
   selectPoi(p);
 }
@@ -5152,8 +5024,7 @@ function selectPoi(p: Poi) {
   // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
   // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
   selected.value = p;
-  // Un seul affichage ouvert à la fois : le lieu referme l'onglet déplié et le voyage touché.
-  mapPanel.value = null;
+  // Un seul affichage ouvert à la fois : le lieu referme les tuiles et le voyage touché.
   overlay.value = null;
   focusTrip.value = null;
   // ⚠️ La carte occupe 62vh et la feuille vit SOUS elle, dans le flux : sur un téléphone
@@ -6729,69 +6600,6 @@ onUnmounted(() => {
   height: calc(100dvh - 172px);
 }
 /* 🗂️ Les trois tuiles sous la carte : une ligne, trois colonnes égales, cibles ≥ 44 px. */
-.map-tabs {
-  scroll-margin-top: 8px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin: 8px 8px;
-}
-.map-tab {
-  position: relative;
-  min-width: 0;
-  min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 6px 4px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.map-tab.on {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-.mt-emo {
-  font-size: 17px;
-  line-height: 1;
-}
-.mt-lab {
-  max-width: 100%;
-  white-space: nowrap;
-  line-height: 1.1;
-}
-.mt-chev {
-  position: absolute;
-  left: 6px;
-  top: 4px;
-  color: var(--dim);
-  font-size: 10px;
-}
-.mt-dot {
-  position: absolute;
-  top: -6px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #15120e;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 18px;
-}
-.map-tab.alert .mt-dot {
-  background: var(--d4);
-  color: #fff;
-}
 .map-tab-empty {
   margin: 0 4px 8px;
   color: var(--dim);

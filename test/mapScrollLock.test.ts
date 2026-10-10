@@ -7,7 +7,6 @@ import { lockPageScroll, mapScrollLocked, scrollContainerOf } from '@/lib/mapSli
 // les troupes doit pouvoir défiler. »
 const bare = {
   viewed: false,
-  panel: false,
   selected: false,
   focusTrip: false,
   baseOpen: false,
@@ -24,7 +23,6 @@ describe('🔒 quand la page de la carte est verrouillée', () => {
     expect(mapScrollLocked({ ...bare, focusTrip: true })).toBe(false);
     expect(mapScrollLocked({ ...bare, baseOpen: true })).toBe(false);
     expect(mapScrollLocked({ ...bare, quick: true })).toBe(false);
-    expect(mapScrollLocked({ ...bare, panel: true })).toBe(false);
   });
   it('la vue d’une autre île (pas de carte) : déverrouillée', () => {
     expect(mapScrollLocked({ ...bare, viewed: true })).toBe(false);

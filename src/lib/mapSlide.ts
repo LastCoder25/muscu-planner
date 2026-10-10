@@ -1,23 +1,7 @@
 /**
- * ↕️ LE BOUTON DE GLISSEMENT DE LA CARTE (v1.8.3, demandé : « un bouton à gauche du zoom pour
- * slider jusqu'aux tuiles des expéditions, et remonter tout en haut si on les voit »).
- *
- * Une seule règle : si la rangée de tuiles sous la carte est à l'écran, le bouton REMONTE en
- * haut de la page (ressources, effectifs) ; sinon il DESCEND jusqu'aux tuiles. `margin` évite
- * de dire « visible » pour une rangée dont seul un liseré dépasse du bas de l'écran.
+ * 🔒 Le défilement de la page de la carte : le conteneur qui défile, et son verrou.
+ * (La flèche ↕️ qui menait aux tuiles sous la carte est retirée : il n'y a plus rien dessous.)
  */
-export type MapSlide = 'down' | 'up';
-
-export const MAP_SLIDE_MARGIN = 40;
-
-export function mapSlideDirection(
-  tilesTop: number,
-  viewportHeight: number,
-  margin = MAP_SLIDE_MARGIN,
-): MapSlide {
-  return tilesTop < viewportHeight - margin ? 'up' : 'down';
-}
-
 /** Le conteneur qui fait défiler `el` : le premier parent qui défile vraiment, sinon la page.
  *  ⚠️ En cockpit (Z Fold déplié), le volet droit est son propre conteneur : remonter la
  *  fenêtre n'y ferait rien. */
@@ -34,12 +18,11 @@ export function scrollContainerOf(el: HTMLElement | null): HTMLElement | null {
  *  peux pas glisser l'écran ; je n'ai accès au dessous que par la flèche. Par contre, quand je
  *  touche un lieu, la fenêtre pour choisir les troupes doit pouvoir défiler ») ? Oui sur la
  *  carte seule ; non dès qu'une fenêtre s'ouvre depuis elle (fiche d'un lieu, équipe d'un
- *  voyage, base, renfort, partie dépliée sous la carte) ou qu'une autre île la remplace.
+ *  voyage, base, renfort) ou qu'une autre île la remplace.
  *  Non plus quand la carte ne tient pas à l'écran (`fits` : une récompense du jour ou le guide
  *  au-dessus la poussent en bas) : on y descend alors au doigt. */
 export function mapScrollLocked(s: {
   viewed: boolean;
-  panel: boolean;
   selected: boolean;
   focusTrip: boolean;
   baseOpen: boolean;
@@ -47,7 +30,7 @@ export function mapScrollLocked(s: {
   fits: boolean;
 }): boolean {
   if (!s.fits) return false;
-  return !(s.viewed || s.panel || s.selected || s.focusTrip || s.baseOpen || s.quick);
+  return !(s.viewed || s.selected || s.focusTrip || s.baseOpen || s.quick);
 }
 
 /** 🔒 Coupe le défilement du conteneur qui fait défiler `el` (la page, ou le volet du

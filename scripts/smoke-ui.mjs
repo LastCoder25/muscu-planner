@@ -93,11 +93,9 @@ const ECRANS = [
     route: '/expedition-map',
     nom: 'carte',
     gestes: [
-      // 🧭 Les voyages ne s'affichent plus sous la carte, seulement par-dessus (gestes plus bas).
+      // 🧭 Rien sous la carte : voyages et places fortes s'ouvrent par-dessus (gestes plus bas).
       // 📍 Un lieu de la carte ouvre sa fiche.
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
-      // 🗂️ Les places fortes, dépliées par leur tuile.
-      { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
       // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est.
       { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
       // 🔙 De la base, rappeler ceux qui sont dehors (le voyage du compte de test).
