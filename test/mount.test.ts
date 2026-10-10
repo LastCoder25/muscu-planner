@@ -1340,15 +1340,20 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(dwellW).toBeGreaterThan(0.25);
     expect(dwellW).toBeLessThan(1);
     expect(out.match(/class="tl-cursor"/g)?.length).toBe(2);
-    // Les libellés : le temps d'ici la fin de chaque étape, ✓ pour une étape faite.
-    expect(out).toContain('🔍 1 h 00');
-    expect(out).toContain('↩️ 53 min');
+    // ⏱️ Les libellés : la DURÉE de chaque étape (2026-10-10, demandé) — ce qu'il reste de
+    // l'étape en cours (15 min à 20 % → 12 min), la durée entière des suivantes (48 et 15 min),
+    // ✓ pour une étape faite. Plus jamais un temps cumulé (« ↩️ 53 min »).
+    expect(out).toContain('🔍 48 min');
     expect(out).toContain('⚔️ ✓');
+    expect(out).not.toContain('↩️ 53 min');
     // ⏱️ Le temps est DANS la barre, en pastille : l’étape en cours en couleur, les autres grisées.
     expect(out).toMatch(/class="tl-pill cur"[^>]*>⚔️ 12 min/);
-    expect(out).toMatch(/class="tl-pill"[^>]*>↩️ 53 min/);
+    expect(out).toMatch(/class="tl-pill"[^>]*>↩️ 15 min/);
     expect(out).not.toContain('tl-labs');
-    expect(out).not.toContain('class="tr-total"');
+    // 🏠 Le temps d'ici la fin du voyage, en bas de tuile : 12 + 48 + 15 = 1 h 15. Le voyage sur
+    // le retour n'a plus qu'une étape, que son segment dit déjà : pas de bandeau.
+    expect(out.match(/class="tr-total"/g)?.length).toBe(1);
+    expect(out).toMatch(/class="tr-total"[^>]*>🏠 1 h 15/);
     expect(out).not.toContain('9 h 59');
     // Sur la frise, le voyage se lit de gauche à droite : le départ reste à gauche au retour.
     expect(out.match(/class="tr-from" title="La base"/g)?.length).toBe(2);

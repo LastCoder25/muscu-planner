@@ -66,7 +66,7 @@
             focus: focus === t.key,
             pending: t.pending,
             failed: !!t.failed,
-            'has-total': !tl && !!bannerOf(lt),
+            'has-total': !!bannerFor(lt, tl),
             sea: !!t.sea,
             combo: !!t.combo,
           },
@@ -152,10 +152,10 @@
           <template v-else>{{ poiEmo(endPoi(e.right)) }}</template>
         </span>
         <!-- ⏱️ TOUS LES TEMPS EN BAS DE TUILE (demandé), dans le même bandeau : celui de
-             l'étape de la tuile (`bannerOf`). Pas sur une tuile à frise : ses libellés portent
-             déjà chaque temps, celui de l'étape en cours en gras. -->
-        <span v-if="!tl && bannerOf(lt)" class="tr-total" :title="bannerOf(lt)!.title">{{
-          bannerOf(lt)!.text
+             l'étape de la tuile (`bannerOf`) ; sur une tuile à frise, le temps d'ici la fin du
+             voyage (`bannerFor`) : ses segments ne portent que la DURÉE de leur étape. -->
+        <span v-if="bannerFor(lt, tl)" class="tr-total" :title="bannerFor(lt, tl)!.title">{{
+          bannerFor(lt, tl)!.text
         }}</span>
         <!-- ✖ MISSION RATÉE (demandé) : ce qu'il faudra refaire se voit d'un coup d'œil. -->
         <span v-if="t.failed" class="tr-fail">{{
@@ -534,6 +534,24 @@ function bannerOf(lt: LegTile): { text: string; title: string } | null {
     text: `${icon} ${lt.total}`,
     title: icon === '📍' ? 'Arrivée' : icon === '⚓' ? 'Arrivée au port' : 'Retour en ville dans',
   };
+}
+/** ⏱️ Le bandeau d'une tuile à frise : le temps d'ici la FIN du voyage (`tripTimeline`), les
+ *  segments ne disant plus que la durée de chaque étape (2026-10-10, demandé). Sans frise, celui
+ *  de l'étape (`bannerOf`). */
+function bannerFor(
+  lt: LegTile,
+  tl: ReturnType<typeof tripTimeline> | null | undefined,
+): { text: string; title: string } | null {
+  if (!tl) return bannerOf(lt);
+  if (!tl.total) return null;
+  const icon = lt.totalIcon ?? '🏠';
+  const title =
+    icon === '📍'
+      ? 'Arrivée dans'
+      : icon === '⚓'
+        ? 'Arrivée au port dans'
+        : 'Retour en ville dans';
+  return { text: `${icon} ${tl.total}`, title };
 }
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
 const ATTACK_SOON_MS = 3_600_000;

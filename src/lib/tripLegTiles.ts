@@ -15,6 +15,7 @@
  * ⚠️ Les tuiles d'un voyage partagent sa `key` de voyage (`tripKey`) : toucher l'une ou
  * l'autre montre la même équipe et allume le même lieu. Leur clé d'AFFICHAGE (`key`) diffère.
  */
+import { formatCountdown } from './duration';
 import type { TripPhase, TripPhaseId, TripStep } from './expedition';
 
 export type TripLeg = TripPhaseId;
@@ -76,7 +77,8 @@ export const STEP_ICON: Record<TripLeg, string> = { wait: '⏳', go: '⚔️', d
  * 🧭 LA FRISE D'UN VOYAGE (concept B, choisi le 2026-10-09 : « une tuile par voyage, avec une
  * frise ») : un segment par étape, sa LARGEUR proportionnelle à sa durée, rempli de ce qui est
  * fait ; le CURSEUR dit où on en est sur le voyage entier. Le libellé d'une étape faite est ✓,
- * celui des autres le temps d'ici sa fin (le même que la tuile).
+ * celui des autres la DURÉE de l'étape (ce qu'il en reste pour celle en cours) ; le temps
+ * d'ici la fin du voyage est `total`.
  * `null` sans étapes connues (renfort, traversée, rappel) : la tuile garde sa simple barre.
  */
 export interface TimelineSeg {
@@ -117,9 +119,24 @@ export function segWidths(weights: readonly number[]): number[] {
     fixed.add(under);
   }
 }
+/** ⏱️ Ce qu'il reste d'une étape (ms) : toute sa durée si elle est à venir, rien si elle est faite. */
+const stepLeftMs = (x: TripStep): number => (x.ms * (100 - Math.min(100, x.pct))) / 100;
+
+/**
+ * ⏱️ LE LIBELLÉ D'UN SEGMENT = SA DURÉE (2026-10-10, demandé) : ce qu'il reste de l'étape en
+ * cours, la durée entière d'une étape à venir. Il était CUMULÉ (« d'ici la fin de l'étape »)
+ * alors que la largeur du segment est une durée : « ↩️ 49 min » se lisait « le retour dure
+ * 49 min » quand il en durait 16 après 33 min d'attente et d'aller. Le temps jusqu'au retour
+ * est `total`, à part en bout de frise. Durée inconnue (0) : on garde le temps de l'étape.
+ */
+function segLabel(x: TripStep): string {
+  if (x.pct >= 100) return '✓';
+  return x.ms > 0 ? formatCountdown(stepLeftMs(x)) : x.time;
+}
+
 export function tripTimeline(
   steps: readonly TripStep[] | undefined,
-): { segs: TimelineSeg[]; cursor: number } | null {
+): { segs: TimelineSeg[]; cursor: number; total: string | null } | null {
   if (!steps?.length) return null;
   const total = steps.reduce((s, x) => s + x.ms, 0);
   // Durées inconnues (toutes nulles) : des segments égaux, pour garder une frise lisible.
@@ -133,10 +150,18 @@ export function tripTimeline(
     fill: x.pct,
     current: x.current,
     done: x.pct >= 100,
-    label: `${x.icon ?? STEP_ICON[x.leg]} ${x.pct >= 100 ? '✓' : x.time}`,
+    label: `${x.icon ?? STEP_ICON[x.leg]} ${segLabel(x)}`,
   }));
   const doneW = steps.reduce((s, x) => s + (w(x) * x.pct) / 100, 0);
-  return { segs, cursor: Math.max(0, Math.min(100, (doneW / sum) * 100)) };
+  // 🏠 Le temps d'ici la fin du voyage, seulement s'il reste PLUS d'une étape : avec une
+  // seule, son segment le dit déjà. Durées inconnues : rien (on ne sait pas les additionner).
+  const left = steps.filter((x) => x.pct < 100);
+  const remain = left.reduce((s, x) => s + stepLeftMs(x), 0);
+  return {
+    segs,
+    cursor: Math.max(0, Math.min(100, (doneW / sum) * 100)),
+    total: left.length > 1 && total > 0 ? formatCountdown(remain) : null,
+  };
 }
 
 export function tripLegTiles(t: LegSource): LegTile[] {

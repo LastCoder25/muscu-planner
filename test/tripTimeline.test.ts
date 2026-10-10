@@ -108,3 +108,36 @@ describe('📐 largeur des étapes sur la frise (signalé : le dernier temps sor
     expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
   });
 });
+
+describe('⏱️ tripTimeline — chaque segment dit SA durée, le total est à part', () => {
+  // Départ dans 20 min, 60 min d'aller, 40 min de fouille, 60 min de retour.
+  const W = { sentAt: 20 * MIN, midAt: 120 * MIN, dwellMs: 40 * MIN, returnAt: 180 * MIN };
+  it('avant le départ : attente restante, puis la durée entière de chaque étape à venir', () => {
+    const t = tripTimeline(tripLegs(W, 0)!.steps)!;
+    expect(t.segs.map((x) => x.label)).toEqual([
+      '⏳ 20 min',
+      '⚔️ 1 h 00',
+      '🔍 40 min',
+      '↩️ 1 h 00',
+    ]);
+    expect(t.total).toBe('3 h 00');
+  });
+  it('en cours d’aller : ce qu’il reste de l’aller, les autres étapes à leur durée', () => {
+    const t = tripTimeline(tripLegs(V, 30 * MIN)!.steps)!;
+    expect(t.segs.map((x) => x.label)).toEqual(['⚔️ 30 min', '🔍 40 min', '↩️ 1 h 00']);
+    expect(t.total).toBe('2 h 10');
+  });
+  it('une seule étape restante : pas de total, son segment le dit', () => {
+    const t = tripTimeline(tripLegs(V, 130 * MIN)!.steps)!;
+    expect(t.segs.at(-1)!.label).toBe('↩️ 30 min');
+    expect(t.total).toBeNull();
+  });
+  it('durées inconnues : le temps de l’étape, et aucun total inventé', () => {
+    const t = tripTimeline([
+      { leg: 'go', ms: 0, pct: 0, current: true, time: '5 min' },
+      { leg: 'back', ms: 0, pct: 0, current: false, time: '12 min' },
+    ])!;
+    expect(t.segs.map((x) => x.label)).toEqual(['⚔️ 5 min', '↩️ 12 min']);
+    expect(t.total).toBeNull();
+  });
+});
