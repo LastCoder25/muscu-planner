@@ -431,8 +431,8 @@
 
       <!-- 🗂️ LES TUILES PAR-DESSUS LA CARTE (essai, demandé : un bouton à côté de ↕️ pour les
            expéditions et un pour les places fortes ; toucher une tuile ferme l'affichage et
-           centre la carte sur son tracé ou son lieu). Les tuiles sous la carte restent le temps
-           de l'essai. -->
+           centre la carte sur son tracé ou son lieu). Les expéditions ne s'affichent plus que là
+           (demandé) ; sous la carte ne restent que les places fortes. -->
       <div v-if="overlay && !viewed" class="map-overlay" role="dialog" :aria-label="overlayTitle">
         <div class="mo-head" :class="{ bare: overlay === 'ctl' }">
           <span v-if="overlay !== 'ctl'" class="mo-title">{{ overlayTitle }}</span>
@@ -473,7 +473,7 @@
          La pastille dit ce qui appelle : voyages en cours, points qui appellent, armées. -->
     <div v-show="!viewed" ref="tabsEl" class="map-tabs" role="tablist">
       <button
-        v-for="t in mapTabs"
+        v-for="t in underTabs"
         :key="t.id"
         type="button"
         role="tab"
@@ -585,25 +585,6 @@
       @send="quickSend"
     />
 
-    <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
-    <p v-if="mapPanel === 'trips' && !trips.length && !attacks.length" class="map-tab-empty">
-      Aucune expédition en cours ni armée en marche : touche un lieu de la carte pour envoyer une
-      équipe.
-    </p>
-    <TripsPanel
-      v-if="mapPanel === 'trips'"
-      v-model:focus="focusTrip"
-      :trips="trips"
-      :hero-profile="character.profile"
-      :recallable="recallableTrips"
-      :boosts="focusBoosts"
-      :attacks="attacks"
-      :holds="attackHolds"
-      :now="coarseNow"
-      @recall="recallTripByKey"
-      @boost="boostTrip"
-      @attack="openAttack"
-    />
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -4353,11 +4334,6 @@ function pickOverlayTrip(key: string | null) {
   if (focusTrip.value === k) frameTrip(k);
   else focusTrip.value = k;
 }
-/** Refermer la partie Expéditions (ou passer aux Places fortes) désélectionne le voyage
- *  touché : sinon son halo restait sur la carte sans sa tuile (signalé). */
-watch(mapPanel, (p) => {
-  if (p !== 'trips') focusTrip.value = null;
-});
 /** 📜 Ouvrir une tuile (Expéditions, Places fortes) cale la DERNIÈRE tuile de la partie
  *  dépliée en bas de l'écran (demandé : toutes les tuiles visibles, rien de vide dessous, le
  *  maximum de carte au-dessus). Si la partie est plus haute que l'écran, la rangée des onglets
@@ -4379,11 +4355,7 @@ function revealTiles() {
   if (!tabs) return;
   const root = tabs.parentElement ?? tabs;
   const last =
-    mapPanel.value === 'ctl'
-      ? root.querySelector('.cps')
-      : mapPanel.value === 'trips'
-        ? (root.querySelector('.trips:not(.map-tab)') ?? root.querySelector('.map-tab-empty'))
-        : null;
+    mapPanel.value === 'ctl' ? root.querySelector('.cps') : null;
   revealBlock(tabs, last ?? tabs);
 }
 /** ↕️ Le bouton à gauche du zoom (cf. `mapSlide.ts`) : le sens suit la place de la rangée de
@@ -4400,11 +4372,8 @@ function updateSlideDir() {
 }
 function slideMap() {
   if (slideDir.value === 'down') {
-    // ↓ ouvre aussi la tuile des expéditions (demandé), puis cale ses dernières tuiles en bas.
-    if (mapPanel.value !== 'trips') {
-      mapPanel.value = 'trips';
-      selected.value = null;
-    }
+    // ↓ cale les tuiles sous la carte en bas de l'écran. Les expéditions ne s'affichent plus
+    // sous la carte (demandé) : seulement par-dessus, via le bouton 🧭.
     void nextTick(revealTiles);
   } else {
     // ↑ referme aussi la partie dépliée sous la carte (demandé), sans recaler le bas de la
@@ -4511,6 +4480,9 @@ const ctlRoster = computed(() =>
     attackHeroWaitingAt(char.attackList),
   ),
 );
+/** 🗂️ Sous la carte, seules les places fortes (demandé : les expéditions ne s'affichent plus
+ *  que par-dessus la carte, via le bouton 🧭). */
+const underTabs = computed(() => mapTabs.value.filter((t) => t.id === 'ctl'));
 /** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */
 const ctlCalls = computed(
   () => ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty').length,
@@ -4886,7 +4858,7 @@ const focusActions = computed(() => {
 });
 const tripBar = computed(() => {
   const f = focusActions.value;
-  if (!f || overlay.value || mapPanel.value === 'trips') return null;
+  if (!f || overlay.value) return null;
   return f;
 });
 watch(focusActions, (b) => {

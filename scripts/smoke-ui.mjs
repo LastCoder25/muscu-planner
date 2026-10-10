@@ -93,13 +93,8 @@ const ECRANS = [
     route: '/expedition-map',
     nom: 'carte',
     gestes: [
-      // 🗂️ Sous la carte, deux tuiles qui déplient leur partie : voyages et attaques (filtre
-      // au-dessus des tuiles), puis les places fortes. Les voyages
-      // d'abord, puis l'équipe de l'un d'eux.
-      { nom: 'expeditions', clic: '.map-tab.trips', attendu: '.tr-filter' },
-      { nom: 'voyage', clic: '.trip', attendu: '.trip-crew' },
-      // 🧭 La carte est centrée sur ce voyage : toucher l'icône de la troupe, puis son tracé,
-      // ouvre la fiche du voyage (qui voyage, heures d'arrivée et de retour de chaque groupe).
+      // 🧭 Les voyages ne s'affichent plus sous la carte, seulement par-dessus (gestes plus bas).
+      // 📍 Un lieu de la carte ouvre sa fiche.
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
       // 🗂️ Les places fortes, dépliées par leur tuile.
       { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },

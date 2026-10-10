@@ -1163,7 +1163,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('⚓ 00:00');
     // ⛵ Demandé : une traversée prend toute la ligne (classe sea, flex-basis 100 %).
     expect(out).toMatch(/class="trip hero[^"]*sea/);
-    expect(out).toMatch(/Partira vers\s+l(&#39;|')île 2/);
+    // 🗺️ Plus de détail d'équipe sous les tuiles (demandé) : toucher une tuile montre le tracé.
+    expect(out).not.toContain('trip-crew');
   }, 30_000);
 
   it('🎨 TripsPanel : un groupe d’attaque combinée porte la couleur de son attaque', async () => {
@@ -1302,7 +1303,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('aria-label="Aller (1)"');
   }, 30_000);
 
-  it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
+  it('🧭 TripsPanel : la rangée des voyages, sans détail sous la tuile touchée', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     let out = '';
     const trip = {
@@ -1331,22 +1332,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('→ 1 h 20');
     // 🧭 En haut à gauche, d'où part la troupe : la base 🏰 sans point de départ.
     expect(out).toMatch(/class="tr-from"[^>]*>🏰</);
-    expect(out).toContain('Léa'); // l'équipe du voyage touché
-    expect(out).toContain('plus dans ton vivier'); // le champion renvoyé depuis
+    // 🗺️ Toucher une tuile montre son tracé sur la carte (la page) : plus de détail dessous.
+    expect(out).not.toContain('trip-crew');
+    expect(out).not.toContain('plus dans ton vivier');
     // ⚠️ À l'ALLER le butin n'est pas montré : il révélerait l'issue d'un combat à venir.
-    expect(out).not.toContain('Ramène');
-    // 🔙 Sans `recallable`, pas de bouton ; avec, la tuile propose le demi-tour.
-    expect(out).not.toContain('Faire demi-tour');
-    let rc = '';
-    await mountIt(
-      TripsPanel,
-      { trips: [trip], focus: 'g1', heroProfile: 'polyvalent', recallable: new Set(['g1']) },
-      ROW,
-      undefined,
-      '/',
-      (h) => (rc = h),
-    );
-    expect(rc).toContain('Faire demi-tour');
+    expect(out).not.toContain('tr-loot');
     // ✖ Une mission ratée se voit sur la tuile, une réussite non.
     expect(out).not.toContain('tr-fail');
     let ko = '';
@@ -1386,7 +1376,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(pl).toMatch(/🧭 <b[^>]*>1</);
     expect(pl).toMatch(/class="trip van[^"]*pending/);
     expect(pl).not.toContain('Annuler ce départ programmé');
-    expect(pl).toContain('Partira vers');
     // 🛡️ En attente : compté dans « Programmés », pas dans « Renforts » (vide → absent).
     expect(pl).not.toContain('aria-label="Renforts');
     // 🛡️🗡️ Renforts et attaques du joueur ont leur filtre ; une catégorie vide n'est pas proposée.
@@ -1517,129 +1506,17 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(iTot).toBeGreaterThan(-1);
     expect(iTot).toBeLessThan(iAtk);
     expect(iAtk).toBeLessThan(iTard);
-    // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
-    let tip = '';
+    // 🎁 Au RETOUR, ce que le voyage ramène se lit sur la tuile.
+    let back = '';
     await mountIt(
       TripsPanel,
       { trips: [{ ...trip, back: true }], focus: 'g1', heroProfile: 'polyvalent' },
       ROW,
       undefined,
       '/',
-      (h) => (tip = h),
-      (host) => host.querySelector<HTMLElement>('.tc-haul .hp')?.click(),
+      (h) => (back = h),
     );
-    expect(tip).toContain('Ramène');
-    expect(tip).toContain('🪙 Or');
-    expect(tip).toContain('Construire et améliorer les bâtiments');
-    // ⚡ Les boosts possédés, chiffrés : les minutes perdues sont dites AVANT de toucher.
-    let bst = '';
-    await mountIt(
-      TripsPanel,
-      {
-        trips: [trip],
-        focus: 'g1',
-        heroProfile: 'polyvalent',
-        boosts: {
-          key: 'g1',
-          plan: {
-            choices: [
-              { id: 'boost10', count: 2, minutes: 10, gainMs: 600_000, lostMs: 0 },
-              { id: 'boost60', count: 1, minutes: 60, gainMs: 600_000, lostMs: 3_000_000 },
-            ],
-          },
-        },
-      },
-      ROW,
-      undefined,
-      '/',
-      (h) => (bst = h),
-    );
-    expect(bst).toContain('⚡ 10 min');
-    expect(bst).toContain('⚡ 1 h');
-    expect(bst).toContain('perdues');
-    let blk = '';
-    await mountIt(
-      TripsPanel,
-      {
-        trips: [trip],
-        focus: 'g1',
-        heroProfile: 'polyvalent',
-        boosts: { key: 'g1', plan: { block: 'intercept' } },
-      },
-      ROW,
-      undefined,
-      '/',
-      (h) => (blk = h),
-    );
-    expect(blk).toContain('on ne presse pas une interception');
-  }, 30_000);
-
-  // 📜 Demandé : toucher une tuile cale la DERNIÈRE tuile en bas de l'écran (toutes les tuiles
-  // visibles, le maximum de carte au-dessus). On mesure la RANGÉE, jamais le détail dessous.
-  it('🧭 TripsPanel : toucher une tuile cale la dernière tuile en bas de l’écran', async () => {
-    const { revealScrollDelta } = await import('@/lib/reveal');
-    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
-    const { reactive } = await import('vue');
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    const { useCharacterStore } = await import('@/stores/character');
-    (useCharacterStore() as unknown as { row: unknown }).row = ROW;
-    // La rangée sous l'écran, les filtres au-dessus ; le reste (dont le détail) à 0.
-    const RECT: Record<string, { top: number; bottom: number }> = {
-      trips: { top: 900, bottom: 1100 },
-      'tr-filter': { top: 860, bottom: 890 },
-    };
-    const rectProto = Element.prototype as unknown as { getBoundingClientRect: () => unknown };
-    const beforeRect = rectProto.getBoundingClientRect;
-    rectProto.getBoundingClientRect = function (this: Element) {
-      const r = RECT[this.className.split(' ')[0] ?? ''] ?? { top: 0, bottom: 0 };
-      return { ...r, left: 0, right: 0, width: 0, height: r.bottom - r.top, x: 0, y: r.top };
-    };
-    const scrolled: number[] = [];
-    const beforeScroll = window.scrollBy;
-    window.scrollBy = ((o: ScrollToOptions) => scrolled.push(o.top ?? 0)) as typeof window.scrollBy;
-    const state = reactive({
-      trips: [
-        {
-          key: 'g1',
-          kind: 'van',
-          who: '⚔️',
-          poi: MAP_POIS[0],
-          time: '1 h',
-          pct: 10,
-          back: false,
-          title: 'Groupe',
-          withHero: false,
-          members: ['a1'],
-          haul: [],
-        },
-      ],
-      focus: null as string | null,
-      heroProfile: 'polyvalent',
-      'onUpdate:focus': (k: string | null) => (state.focus = k),
-    });
-    const app = createApp({ render: () => h(TripsPanel, state) });
-    app.use(pinia);
-    app.config.warnHandler = () => {};
-    const host = document.createElement('div');
-    try {
-      app.mount(host);
-      await nextTick();
-      expect(scrolled).toHaveLength(0); // rien au montage
-      host.querySelector<HTMLElement>('.trip')!.click();
-      for (let i = 0; i < 4; i++) await nextTick();
-      expect(scrolled).toEqual([
-        revealScrollDelta({ top: 860, bottom: 1100, viewTop: 0, viewBottom: window.innerHeight }),
-      ]);
-      // Retoucher la tuile referme l'équipe : on ne fait rien défiler.
-      host.querySelector<HTMLElement>('.trip')!.click();
-      for (let i = 0; i < 4; i++) await nextTick();
-      expect(scrolled).toHaveLength(1);
-    } finally {
-      app.unmount();
-      rectProto.getBoundingClientRect = beforeRect;
-      window.scrollBy = beforeScroll;
-    }
+    expect(back).toMatch(/class="tr-loot"[^>]*>.*50 🪙/s);
   }, 30_000);
 
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
