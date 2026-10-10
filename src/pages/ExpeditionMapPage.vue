@@ -121,7 +121,7 @@
           </g>
 
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant). 🧹 Au RETOUR, la part
-               déjà refaite n'est plus tracée (demandé, v1.123 : la carte croulait sous les traits) :
+               déjà refaite n'est plus tracée (demandé, v1.124 : la carte croulait sous les traits) :
                il ne reste que le chemin jusqu'à la ville. -->
           <template v-if="active && hero && !hero.searching">
             <line
@@ -2201,7 +2201,7 @@ const heroRecallable = computed(
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
 }
-/** 💀 LES LIEUX TERRASSÉS NE SE DESSINENT PLUS (demandé, v1.123 : « on n'affiche pas les lieux
+/** 💀 LES LIEUX TERRASSÉS NE SE DESSINENT PLUS (demandé, v1.124 : « on n'affiche pas les lieux
  *  détruits ») : grisés et barrés jusqu'au retour des vainqueurs, ils encombraient la carte.
  *  La cible d'un voyage s'efface dès le rapport (`voyageTargetShown`) ; ici, ce qui resterait
  *  SUR la carte (une armée en campagne n'en est pas retirée au départ). En chaîne d'ids, pour

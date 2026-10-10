@@ -3455,7 +3455,7 @@ export function restoreUnvanquished(
 }
 
 /** 🗺️ La carte dessine-t-elle encore la CIBLE de ce voyage ? Oui tant que son sort n'est pas
- *  connu. Non dès qu'il est tranché : un lieu TERRASSÉ disparaît aussitôt (demandé, v1.123 :
+ *  connu. Non dès qu'il est tranché : un lieu TERRASSÉ disparaît aussitôt (demandé, v1.124 :
  *  « on n'affiche pas les lieux détruits » — il était grisé et barré jusqu'au retour, la carte
  *  en était encombrée) ; un lieu non terrassé est revenu sur la carte (`restoreUnvanquished`)
  *  et serait dessiné deux fois. */

@@ -19,7 +19,7 @@ describe('carte : les armées au premier plan', () => {
   });
   it('une armée ne se dessine qu’une fois', () => {
     // Le calque des lieux écarte les armées, celui des armées ne prend qu’elles (les lieux
-    // terrassés sortent des deux, v1.123).
+    // terrassés sortent des deux, v1.124).
     expect(src).toMatch(/placePois = computed\(\(\) =>\s*mapPois\.value\.filter\(\(p\) => !isMarching\(p\)/);
     expect(src).toMatch(/armyPois = computed\(\(\) =>\s*mapPois\.value\.filter\(\(p\) => isMarching\(p\)/);
   });
