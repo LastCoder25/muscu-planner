@@ -30,10 +30,12 @@
            de l'archipel (aucune île), la liste reste nue : un cadre unique n'apporterait rien. -->
       <section class="cps-block" :class="{ framed }">
         <div v-if="framed" class="cps-bhead">
-          <span aria-hidden="true">{{ here?.emoji ?? '🏝️' }}</span>
+          <span class="cps-bemo" aria-hidden="true">{{ here?.emoji ?? '🏝️' }}</span>
           <span class="cps-bname">{{ here?.name ?? 'Île actuelle' }}</span>
-          <span class="cps-here">📍 ici</span>
-          <span class="cps-bsub">{{ heldCount }}/{{ rows.length }} tenus</span>
+          <span class="cps-bmeta">
+            <span class="cps-here">📍 ici</span>
+            <span class="cps-bsub">{{ heldCount }}/{{ rows.length }} tenus</span>
+          </span>
         </div>
         <p v-if="!rows.length" class="cps-empty">Aucune place forte sur ta carte pour l’instant.</p>
         <!-- 🔎 Filtres par statut (demandé : « tenu, pas tenu, vide »), avec leur nombre. Une
@@ -192,10 +194,12 @@
            récoltée toute seule, à distance. -->
       <section v-for="b in islands ?? []" :key="b.island" class="cps-block framed cps-isl">
         <div class="cps-bhead">
-          <span aria-hidden="true">{{ b.emoji }}</span>
+          <span class="cps-bemo" aria-hidden="true">{{ b.emoji }}</span>
           <span class="cps-bname">{{ b.name }}</span>
-          <span class="cps-bsub"
-            >{{ b.points.length }} lieu{{ b.points.length > 1 ? 'x' : '' }} · récolte auto</span
+          <span class="cps-bmeta"
+            ><span class="cps-bsub"
+              >{{ b.points.length }} lieu{{ b.points.length > 1 ? 'x' : '' }} · récolte auto</span
+            ></span
           >
         </div>
         <div v-for="p in b.points" :key="p.id" class="cps-isl-row">
@@ -345,35 +349,59 @@ const isFull = (r: ControlRosterRow) =>
 </script>
 
 <style scoped>
-/* 🏝️ Un cadre par île : bordure, fond léger, en-tête au nom de l'île. */
+/* 🏝️ Un cadre par île : bordure, fond léger, et le NOM DE L'ÎLE dans un bandeau isolé en
+   tête du cadre (2026-10-10, demandé : « qu'il soit visible ») — bord à bord, teinté, séparé du
+   contenu par un trait, nom en gros. */
 .cps-block.framed {
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 8px 8px 2px;
-  margin-bottom: 12px;
+  padding: 0 8px 2px;
+  margin-bottom: 14px;
+  overflow: hidden;
   background: color-mix(in srgb, var(--surface-2, var(--bg)) 55%, transparent);
 }
 .cps-block.framed:not(.cps-isl) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 .cps-isl {
   padding-bottom: 6px;
 }
 .cps-bhead {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  margin: 0 2px 8px;
-  font-family: Oswald, sans-serif;
-  font-size: 15px;
-  font-weight: 700;
+  gap: 2px 10px;
+  margin: 0 -8px 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.cps-block.framed:not(.cps-isl) > .cps-bhead {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.cps-bemo {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
 }
 .cps-bname {
   min-width: 0;
+  font-family: Oswald, sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+.cps-block.framed:not(.cps-isl) .cps-bname {
+  color: var(--accent);
 }
 .cps-here {
-  font-family: Inter, sans-serif;
   font-size: 11px;
   font-weight: 700;
   padding: 1px 8px;
@@ -381,11 +409,14 @@ const isFull = (r: ControlRosterRow) =>
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
+.cps-bmeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
 .cps-bsub {
-  margin-left: auto;
-  font-family: Inter, sans-serif;
   font-size: 11.5px;
-  font-weight: 400;
   color: var(--dim);
 }
 .cps-isl-row {
