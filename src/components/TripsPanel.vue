@@ -806,20 +806,22 @@ function facesOf(t: MapTrip) {
   font-size: 10px;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
-  /* Verre fumé : les étapes à venir restent en retrait. */
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--dim);
+  /* Plus de pastille autour du temps (demandé) : le texte est posé sur la barre, une ombre
+     sombre le garde lisible sur le remplissage comme sur le vide. Les étapes à venir restent
+     en retrait. */
+  background: none;
+  border: 0;
+  color: var(--text);
+  opacity: 0.75;
+  text-shadow:
+    0 0 3px #000,
+    0 0 2px #000,
+    0 1px 1px #000;
 }
 .tl-pill.cur {
-  background: var(--tc);
-  border-color: transparent;
-  color: #15120e;
   font-weight: 700;
-  /* Un liseré sombre la détache du remplissage de même couleur, et un halo la fait briller. */
-  box-shadow:
-    0 0 0 2px var(--bg, #15120e),
-    0 0 14px color-mix(in srgb, var(--tc) 75%, transparent);
+  color: #fff;
+  opacity: 1;
 }
 .tl-pill.done {
   opacity: 0.6;
@@ -882,7 +884,7 @@ function facesOf(t: MapTrip) {
   font-size: 10.5px;
   color: var(--dim);
 }
-/* 🎯 L'objectif du voyage, en encart dans le coin haut-droit : collé au bord EXTÉRIEUR
+/* 🎯 L'objectif du voyage, en encart dans le coin haut-droit (agrandi, demandé : 31×29 px) : collé au bord EXTÉRIEUR
    de la tuile (top/right 0), seuls ses côtés intérieurs sont tracés, dans la couleur
    de la tuile (`inherit` suit aller / convoi / retour). */
 .tr-poi {
@@ -892,9 +894,9 @@ function facesOf(t: MapTrip) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 22px;
-  font-size: 13px;
+  width: 31px;
+  height: 29px;
+  font-size: 19px;
   line-height: 1;
   border-left: 1px solid;
   border-bottom: 1px solid;
@@ -906,7 +908,7 @@ function facesOf(t: MapTrip) {
 /* 🧭 La provenance, en encart haut-gauche : le miroir exact de l'objectif. */
 .tr-from sub,
 .tr-poi sub {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
@@ -917,9 +919,9 @@ function facesOf(t: MapTrip) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 22px;
-  font-size: 13px;
+  width: 31px;
+  height: 29px;
+  font-size: 19px;
   line-height: 1;
   border-right: 1px solid;
   border-bottom: 1px solid;
@@ -931,8 +933,8 @@ function facesOf(t: MapTrip) {
 /* 🌀 La faille garde son portail sous la carte aussi, à la taille de l'emoji. */
 .tr-rift {
   display: inline-block;
-  width: 10px;
-  height: 16px;
+  width: 15px;
+  height: 23px;
 }
 .tr-legs {
   flex-basis: 100%;
