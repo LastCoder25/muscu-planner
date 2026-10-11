@@ -455,7 +455,12 @@
             @attack="(p: Poi) => ((overlay = null), openAttack(p))"
           />
         </template>
-        <ExpeditionPlanner v-else-if="overlay === 'plan'" :planner="planner" />
+        <ExpeditionPlanner
+          v-else-if="overlay === 'plan' || overlay === 'repart'"
+          :key="overlay"
+          :planner="planner"
+          :section="overlay"
+        />
         <ControlPointsSheet
           v-else
           :model-value="true"
@@ -4248,14 +4253,16 @@ function dimmed(p: Poi): boolean {
 
 /** 🗂️ Les tuiles affichées PAR-DESSUS la carte (cf. le gabarit) : expéditions ou places
  *  fortes. Plus rien ne s'affiche sous la carte (demandé). */
-type MapPanel = 'trips' | 'ctl' | 'plan';
+type MapPanel = 'trips' | 'ctl' | 'plan' | 'repart';
 const overlay = ref<MapPanel | null>(null);
 const overlayTitle = computed(() =>
   overlay.value === 'ctl'
     ? '🏰 Places fortes'
     : overlay.value === 'plan'
       ? '🪄 Planifier des expéditions'
-      : '🧭 Expéditions',
+      : overlay.value === 'repart'
+        ? '👥 Répartir l’effectif'
+        : '🧭 Expéditions',
 );
 function toggleOverlay(id: MapPanel) {
   overlay.value = overlay.value === id ? null : id;
@@ -4339,6 +4346,8 @@ const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; 
     { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
     // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
     { id: 'plan', emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false },
+    // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
+    { id: 'repart', emo: '👥', label: 'Répartir l’effectif', n: 0, alert: false },
   ],
 );
 /** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */

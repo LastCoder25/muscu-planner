@@ -1,9 +1,16 @@
 <template>
   <!-- 🪄 LE PLANIFICATEUR D'EXPÉDITIONS (2026-10-11, demandé) : on règle la chance de réussite
        voulue et ce qu'on optimise, il propose les départs possibles avec les effectifs libres ;
-       on en lance un, ou tous. Le calcul est fait par `useExpeditionPlanner`. -->
+       on en lance un, ou tous. Le calcul est fait par `useExpeditionPlanner`.
+       ⚠️ DEUX PANNEAUX (2026-10-11, demandé) : `section="plan"` propose les expéditions,
+       `section="repart"` répartit l'effectif sur la base et les lieux tenus. Même composable
+       (réglages partagés : réussite visée, héros), deux calculs et deux résultats distincts. -->
   <div class="xp-plan">
-    <div class="pl-modes" role="radiogroup" aria-label="Optimiser">
+    <p v-if="section === 'repart'" class="pl-note">
+      Place tout ton effectif (base, lieux tenus, forteresse) pour couvrir l’île : chaque équipe
+      reçoit une zone qu’elle peut tenir au taux visé.
+    </p>
+    <div v-if="section === 'plan'" class="pl-modes" role="radiogroup" aria-label="Optimiser">
       <button
         v-for="m in MODES"
         :key="m.id"
@@ -49,6 +56,7 @@
           🧝 Héros{{ heroFree ? '' : ' (pris)' }}
         </button>
         <button
+          v-if="section === 'plan'"
           type="button"
           class="pl-chip"
           :class="{ on: withGarrisons }"
@@ -60,7 +68,7 @@
       </div>
     </div>
 
-    <p class="pl-pool">
+    <p v-if="section === 'plan'" class="pl-pool">
       👥 {{ poolInfo.base }} champion{{ poolInfo.base > 1 ? 's' : '' }} libre{{
         poolInfo.base > 1 ? 's' : ''
       }}
@@ -69,28 +77,35 @@
       ><template v-if="withHero && heroFree"> · 🧝 héros</template>
     </p>
     <div class="pl-gos">
-      <button type="button" class="pl-go" :disabled="running || repoRunning" @click="compute">
+      <button
+        v-if="section === 'plan'"
+        type="button"
+        class="pl-go"
+        :disabled="running"
+        @click="compute"
+      >
         <span v-if="running">⏳ Calcul… {{ Math.round(progress * 100) }} %</span>
         <span v-else>🪄 {{ rows ? 'Recalculer' : 'Proposer des expéditions' }}</span>
       </button>
-      <!-- 🧭 RÉPARTIR (2026-10-11, demandé) : placer tout l’effectif (base, lieux tenus,
-           forteresse) pour couvrir l’île ; le 🪄 part ensuite de ces garnisons. -->
+      <!-- 🧭 RÉPARTIR : placer tout l’effectif (base, lieux tenus, forteresse) pour couvrir
+           l’île ; le 🪄 part ensuite de ces garnisons. -->
       <button
+        v-else
         type="button"
-        class="pl-go alt"
-        :disabled="running || repoRunning"
+        class="pl-go"
+        :disabled="repoRunning"
         title="Répartir tout ton effectif sur la base et tes lieux tenus pour couvrir l’île"
         @click="repartir"
       >
         <span v-if="repoRunning">⏳ Calcul…</span>
-        <span v-else>🧭 Répartir l’effectif</span>
+        <span v-else>👥 {{ repoTeams ? 'Recalculer' : 'Répartir l’effectif' }}</span>
       </button>
     </div>
-    <div v-if="running" class="pl-bar">
+    <div v-if="section === 'plan' && running" class="pl-bar">
       <div class="pl-fill" :style="{ width: Math.round(progress * 100) + '%' }" />
     </div>
 
-    <template v-if="rows && !running">
+    <template v-if="section === 'plan' && rows && !running">
       <p v-if="!rows.length" class="pl-empty">
         Aucune expédition n’atteint {{ threshold }} % avec les effectifs libres.
       </p>
@@ -155,14 +170,14 @@
         {{ threshold }} % avec ce qui reste.
       </p>
     </template>
-    <p v-if="repoMissing.hero || repoMissing.advs.length" class="pl-miss">
+    <p v-if="section === 'repart' && (repoMissing.hero || repoMissing.advs.length)" class="pl-miss">
       ⏳ Pas encore disponibles :
       <template v-if="repoMissing.hero"
         >🧝 héros<template v-if="repoMissing.advs.length">, </template></template
       >{{ repoMissing.advs.map((a) => a.name).join(', ') }} — « Répartir » les laisse de côté :
       attends leur retour pour placer tout l’effectif.
     </p>
-    <template v-if="repoTeams && !repoRunning">
+    <template v-if="section === 'repart' && repoTeams && !repoRunning">
       <p v-if="!repoTeams.length" class="pl-empty">Personne n’est disponible à répartir.</p>
       <template v-else>
         <div class="pl-sum">
@@ -240,11 +255,12 @@
           </div>
         </template>
         <p class="pl-note">
-          Une fois en place, lance 🪄 avec 🏰 Garnisons : les expéditions partiront de ces endroits.
+          Une fois en place, ouvre 🪄 et coche 🏰 Garnisons : les expéditions partiront de ces
+          endroits.
         </p>
       </template>
     </template>
-    <p class="pl-note">
+    <p v-if="section === 'plan'" class="pl-note">
       Lieux fixes ennemis et armées en marche ne sont pas proposés : ce sont des choix à faire lieu
       par lieu.
     </p>
@@ -262,7 +278,11 @@ import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import type { PlanMode } from '@/lib/expeditionPlanner';
 
-const props = defineProps<{ planner: ReturnType<typeof useExpeditionPlanner> }>();
+const props = defineProps<{
+  planner: ReturnType<typeof useExpeditionPlanner>;
+  /** Le panneau affiché : proposer des expéditions, ou répartir l'effectif. */
+  section: 'plan' | 'repart';
+}>();
 const {
   threshold,
   mode,
@@ -577,13 +597,8 @@ const avgTrip = computed(
 }
 .pl-gos {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-}
-.pl-go.alt {
-  background: color-mix(in srgb, #5fd0ff 22%, var(--surface));
-  color: var(--text);
-  border: 1.5px solid #5fd0ff;
 }
 .pl-tile.mv {
   border-color: color-mix(in srgb, #5fd0ff 55%, var(--line));

@@ -335,14 +335,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       launchAllMoves: () => undefined,
     };
     let html = '';
-    await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'plan' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
     expect(html).toContain('Tout lancer (1)');
     expect(html).toContain('Argus');
     expect(html).toContain('🎯 94 %');
     expect(html).toContain('3 champions libres');
     expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
     expect(html).toContain('1 lieu hors de portée');
-    expect(html).toContain('🧭 Répartir');
+    // 👥 La répartition vit dans son propre panneau (demandé) : pas ici.
+    expect(html).not.toContain('Répartir l’effectif');
 
     // ⚔️ Une proposition combinée : un groupe par point de départ.
     planner.rows.value = [
@@ -363,7 +371,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         ],
       },
     ] as never;
-    await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'plan' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
     expect(html).toContain('Attaque combinée');
     expect(html).toContain('Fila');
 
@@ -390,8 +405,18 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       hero: false,
       advs: [{ ...argus, id: 'b', name: 'Fila' }],
     } as never;
-    await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'repart' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
     expect(html).toContain('Valider : tout le monde part');
+    expect(html).toContain('👥 Recalculer');
+    expect(html).not.toContain('Proposer des expéditions');
+    expect(html).not.toContain('Événements');
     expect(html).toContain('🏠 Base');
     expect(html).toContain('couvre 60 % de l’île');
     expect(html).toContain('2 équipes');

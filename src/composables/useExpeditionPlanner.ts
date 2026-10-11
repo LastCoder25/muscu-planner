@@ -172,7 +172,9 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   const rows = ref<PlannerRow[] | null>(null);
   const unreachable = ref<Poi[]>([]);
   const launching = ref<string | null>(null);
+  // Deux calculs indépendants (deux panneaux sur la carte) : chacun son compteur.
   let run = 0;
+  let repoRun = 0;
 
   const heroObj = (): PartyHero => ({
     name: char.row?.pseudo ?? 'Toi',
@@ -208,8 +210,6 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     progress.value = 0;
     rows.value = null;
     unreachable.value = [];
-    repoTeams.value = null;
-    repoMoves.value = [];
     try {
       const now = ctx.coarseNow.value;
       const map = char.row?.expedition_map;
@@ -363,17 +363,15 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   });
 
   async function repartir() {
-    const me = ++run;
+    const me = ++repoRun;
     repoRunning.value = true;
-    rows.value = null;
-    unreachable.value = [];
     repoTeams.value = null;
     repoMoves.value = [];
     repoBelow.value = false;
     try {
       // Le navigateur garde la main avant un calcul de quelques centaines de combats.
       await new Promise((r) => setTimeout(r, 0));
-      if (me !== run) return;
+      if (me !== repoRun) return;
       const map = char.row?.expedition_map;
       const road = ctx.roadCtx.value;
       const byId = new Map<string, Adventurer>();
@@ -505,7 +503,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         threshold: threshold.value / 100,
         deps: { win, trip },
       });
-      if (me !== run) return;
+      if (me !== repoRun) return;
       repoBelow.value = plan.belowThreshold;
       repoTeams.value = plan.teams.map((t) => ({
         key: t.units.map((u) => u.id).join(','),
@@ -546,7 +544,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       }
       repoMoves.value = [...groups.values()].sort((a, b) => a.min - b.min);
     } finally {
-      if (me === run) repoRunning.value = false;
+      if (me === repoRun) repoRunning.value = false;
     }
   }
 
@@ -591,11 +589,16 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     running.value = false;
     rows.value = null;
     unreachable.value = [];
+  }
+  /** Oublie la répartition proposée (un de SES réglages a changé). */
+  function resetRepo() {
+    repoRun++;
     repoRunning.value = false;
     repoTeams.value = null;
     repoMoves.value = [];
   }
   watch([threshold, mode, withGarrisons, withHero], reset);
+  watch([threshold, withHero], resetRepo);
 
   /** Lance UNE proposition. Rend la raison d'un refus (`null` = parti). */
   async function sendRow(r: PlannerRow): Promise<string | null> {

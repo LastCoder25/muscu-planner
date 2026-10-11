@@ -126,6 +126,17 @@ const ECRANS = [
         clic: '.tile-fab[aria-label="Places fortes"]',
         attendu: '.map-overlay .cps-tile',
       },
+      // 🪄 Le planificateur et 👥 la répartition de l'effectif : deux panneaux distincts.
+      {
+        nom: 'tuiles-plan',
+        clic: '.tile-fab[aria-label="Planifier des expéditions"]',
+        attendu: '.map-overlay .xp-plan .pl-modes',
+      },
+      {
+        nom: 'tuiles-repart',
+        clic: '.tile-fab[aria-label="Répartir l’effectif"]',
+        attendu: '.map-overlay .xp-plan:not(:has(.pl-modes))',
+      },
       // 🏠 Le rond tout à gauche mène à la base de l'île 1 (l'onglet Base de l'Aventure).
       // ⚠️ En DERNIER : il quitte la carte.
       {
