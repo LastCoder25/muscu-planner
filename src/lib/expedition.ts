@@ -3161,6 +3161,16 @@ export function shownVoyage<
   return out;
 }
 
+/** ↩ L'heure du RETOUR EN VILLE d'un voyage, TELLE QU'AFFICHÉE (`shownVoyage`) : c'est elle qui
+ *  range les tuiles sous l'ordre « ↩ Retour ». ⚠️ Jamais le `returnAt` stocké : un demi-tour
+ *  forcé (embuscade perdue à l'aller, tirée au départ) l'a déjà raccourci — trier dessus
+ *  plaçait en tête une tuile qui annonce encore l'aller ET le retour complets (signalé :
+ *  « 13 min d'aller et 18 de retour, devant une tuile à 13 min du retour »), et trahissait
+ *  l'issue avant l'embuscade. */
+export function shownReturnAt(voyage: Voyage, now: number): number {
+  return shownVoyage(voyage, now).returnAt;
+}
+
 /** ⏱️ L'heure de la PROCHAINE ÉTAPE d'un voyage (demandé : « ordonne les tuiles par délai de
  *  la prochaine étape ») : son départ s'il attend, sa résolution sur place (`midAt`) à
  *  l'aller, puis son retour. Un demi-tour forcé à venir ne se voit pas (`shownVoyage`). */
