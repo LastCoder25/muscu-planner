@@ -4368,7 +4368,10 @@ const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; 
     },
     { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
     // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
-    { id: 'plan', emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false },
+    // ⚠️ Seulement si au moins un effectif hors milicien est disponible (demandé).
+    ...(planner.anyForceFree.value
+      ? [{ id: 'plan' as const, emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false }]
+      : []),
     // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
     // ⚠️ Seulement quand TOUT l'effectif est disponible (demandé) : la répartition laisse de
     // côté qui est en route ou à l'infirmerie, donc elle ne placerait pas tout le monde.
@@ -5735,6 +5738,9 @@ const allForcesFree = computed(
 // Le panneau ouvert se referme si quelqu'un part entre-temps (son rond a disparu).
 watch(allForcesFree, (ok) => {
   if (!ok && overlay.value === 'repart') overlay.value = null;
+});
+watch(planner.anyForceFree, (ok) => {
+  if (!ok && overlay.value === 'plan') overlay.value = null;
 });
 /** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */
 const controlReturnNote = computed(() =>

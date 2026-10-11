@@ -203,6 +203,12 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       garrison += ready.length;
     return { base: ctx.freeStable.value.length, garrison };
   });
+  /** 🪄 Au moins un effectif hors milicien disponible (2026-10-11, demandé) : le héros, un
+   *  champion à la base ou dans une garnison prête. Sinon le planificateur n'a personne à
+   *  envoyer. ⚠️ Compte les garnisons même si l'option est décochée : on peut la cocher. */
+  const anyForceFree = computed(
+    () => heroFree.value || poolInfo.value.base + poolInfo.value.garrison > 0,
+  );
 
   async function compute() {
     const me = ++run;
@@ -674,6 +680,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     withHero,
     heroFree,
     poolInfo,
+    anyForceFree,
     running,
     progress,
     rows,
