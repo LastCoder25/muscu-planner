@@ -402,7 +402,7 @@
 
         <!-- Calendrier -->
         <div class="sec-h">Calendrier</div>
-        <div class="cal">
+        <div class="cal" :class="{ week: weekCal }">
           <div v-for="(t, d) in ch.daily_targets" :key="d" class="cell" :class="dayState(d)">
             <span class="c-d">J{{ d + 1 }}</span>
             <!-- Jour passé/en cours (hors repos) → fait/cible « x/y » ; jour à venir → la
@@ -565,6 +565,8 @@ const isCardioOuting = computed(
 );
 // TEMPS au CHRONO (secondes) : gainage (planche…) ET conditionnement (corde, burpees…).
 // Seules les vraies sorties cardio restent en minutes/km (isCardioOuting → saisie de sortie).
+// Sortie cardio d'un mois ou plus : calendrier en semaines (7 cases par ligne).
+const weekCal = computed(() => isCardioOuting.value && (ch.value?.duration_days ?? 0) >= 28);
 const isGainageTime = computed(() => isTime.value && !isCardioOuting.value);
 // ⚠️ L'unité vient de la LIB : cette copie écrivait « sec » en dur sur un défi en
 // `time`, donc « 25 sec » sur une marche de 25 MINUTES (cf. `challengeUnitLabel`).
@@ -2102,6 +2104,21 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
   gap: 6px;
+}
+.cal.week {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  .cell {
+    padding: 6px 1px;
+    min-width: 0;
+  }
+  .c-t {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .c-xp {
+    font-size: 8px;
+  }
 }
 .cell {
   border-radius: 10px;
