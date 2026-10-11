@@ -1,7 +1,8 @@
 <template>
   <!-- ⇄ Changer d'exo en cours de Défi 360. Deux destinations, un seul geste : un exo déjà
-       dans le défi (même groupe), ou un exo neuf du même groupe. L'exo quitté disparaît ;
-       son objectif et ses séries déjà faites passent sur la cible (cf. transferComboLeg). -->
+       dans le défi (même groupe), ou un exo neuf du même groupe. Deux portées : TOUT (l'exo
+       quitté disparaît, son objectif et ses séries passent sur la cible) ou SEULEMENT LE RESTE
+       (l'exo reste avec ses séries faites, ce qui manquait passe sur la cible). -->
   <q-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
     <q-card v-if="leg && c" class="sw-card">
       <div class="sw-head">
@@ -10,7 +11,41 @@
       </div>
       <!-- 🔁 Correction des séries basculées : chacune prend des valeurs de l'exo cible
            (dernière série, sinon milieu de sa fourchette), corrigeables une par une. -->
-      <template v-if="pending && plan">
+      <template v-if="pending && plan && plan.scope === 'rest'">
+        <p class="sw-note">
+          <b>{{ restCount }} {{ unitWord }}</b> de {{ leg.exercise_name }} passent sur
+          <b>{{ pending.name }}</b
+          >. {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }}
+          déjà faites (objectif atteint).
+        </p>
+        <div v-if="!isSets" class="sw-row sw-target">
+          <div class="sw-row-from">À faire sur {{ pending.name }}</div>
+          <div class="sw-row-ctl">
+            <div class="sw-step">
+              <q-btn flat round dense icon="remove" aria-label="Moins" @click="stepTarget(-1)" />
+              <span class="sw-val"
+                ><b>{{ plan.target }}</b
+                ><small>{{ unitShort }}</small></span
+              >
+              <q-btn flat round dense icon="add" aria-label="Plus" @click="stepTarget(1)" />
+            </div>
+          </div>
+        </div>
+        <p v-if="pending.warn" class="sw-note sw-warn">{{ pending.warn }}</p>
+        <div class="sw-actions">
+          <q-btn flat no-caps label="‹ Retour" :disabled="busy" @click="cancelPending" />
+          <q-btn
+            unelevated
+            no-caps
+            color="primary"
+            text-color="dark"
+            label="Basculer le reste"
+            :loading="busy"
+            @click="confirmPending"
+          />
+        </div>
+      </template>
+      <template v-else-if="pending && plan">
         <p class="sw-note">
           Vers <b>{{ pending.name }}</b
           >. Chaque série prend des valeurs de cet exo : corrige-les si besoin. Ton XP reste celle
@@ -134,7 +169,35 @@
         </div>
       </template>
       <template v-else>
-        <p class="sw-note">
+        <div v-if="canRest" class="sw-scope" role="radiogroup" aria-label="Ce qui bascule">
+          <button
+            type="button"
+            class="sw-scope-b"
+            :class="{ on: scope === 'rest' }"
+            role="radio"
+            :aria-checked="scope === 'rest'"
+            @click="scope = 'rest'"
+          >
+            <b>Seulement le reste</b>
+            <span>{{ restCount }} {{ unitWord }} · {{ leg.exercise_name }} reste</span>
+          </button>
+          <button
+            type="button"
+            class="sw-scope-b"
+            :class="{ on: scope === 'all' }"
+            role="radio"
+            :aria-checked="scope === 'all'"
+            @click="scope = 'all'"
+          >
+            <b>Tout l'exo</b>
+            <span>{{ leg.exercise_name }} quitte le défi</span>
+          </button>
+        </div>
+        <p v-if="scope === 'rest'" class="sw-note">
+          Les {{ restCount }} {{ unitWord }} qui te manquent passent sur l'exo choisi.
+          {{ leg.exercise_name }} garde ses {{ doneCount }} {{ unitWord }} déjà faites.
+        </p>
+        <p v-else class="sw-note">
           <template v-if="doneCount">
             Tes {{ doneCount }} {{ unitWord }} déjà faites et ton objectif de {{ leg.target }}
             passent sur l'exo choisi. Elles gardent la valeur de l'exo sur lequel tu les as faites.
@@ -172,9 +235,16 @@
             <div class="sw-name">{{ l.exercise_name }}</div>
             <div v-if="groupOf(l.slot)" class="sw-grp-tag">{{ groupOf(l.slot) }}</div>
             <div class="sw-sub">
-              {{ legDone(l) }}/{{ l.target }} → {{ legDone(l) + doneCount }}/{{
-                l.target + leg.target
-              }}
+              <template v-if="scope === 'rest'"
+                >{{ legDone(l) }}/{{ l.target }} → {{ legDone(l) }}/{{
+                  l.target + restCount
+                }}</template
+              >
+              <template v-else
+                >{{ legDone(l) }}/{{ l.target }} → {{ legDone(l) + doneCount }}/{{
+                  l.target + leg.target
+                }}</template
+              >
             </div>
           </button>
         </div>
@@ -227,6 +297,7 @@ import {
   comboTransferBlocker,
   comboTransferPlan,
   legDone,
+  legRemaining,
   legSets,
   legMode,
   COMBO_TRANSFER_BLOCK_LABEL,
@@ -236,6 +307,7 @@ import {
   type ComboNewExercise,
   type ComboSetWork,
   type ComboTransferPlan,
+  type ComboTransferScope,
   type ComboTransferTarget,
 } from '@/lib/combo';
 import { repRangeForExercise, DEFAULT_OBJECTIVE } from '@/lib/repScheme';
@@ -272,6 +344,20 @@ const leg = computed<ComboLeg | null>(
   () => c.value?.legs.find((l) => l.exercise_id === props.exerciseId) ?? null,
 );
 const doneCount = computed(() => (leg.value ? legDone(leg.value) : 0));
+const restCount = computed(() => (leg.value ? legRemaining(leg.value) : 0));
+/** Ne basculer que le reste n'a de sens que s'il y a du fait ET du restant. */
+const canRest = computed(() => doneCount.value > 0 && restCount.value > 0);
+/** Portée choisie : le reste par défaut dès qu'il a un sens (le cas courant : finir ses
+ *  séries manquantes sur un autre exo), sinon tout. Remise à chaque ouverture. */
+const scope = ref<ComboTransferScope>('all');
+watch(
+  () => [props.modelValue, props.exerciseId] as const,
+  ([open]) => {
+    if (open) scope.value = canRest.value ? 'rest' : 'all';
+  },
+  { immediate: true },
+);
+const effScope = computed<ComboTransferScope>(() => (canRest.value ? scope.value : 'all'));
 const unitWord = computed(() => {
   const m = leg.value ? legMode(leg.value) : 'sets';
   return m === 'sets' ? 'séries' : m === 'time' ? 'secondes' : 'reps';
@@ -321,7 +407,9 @@ const inCombo = computed(() => {
   const l = leg.value;
   if (!cc || !l) return [];
   return cc.legs.filter(
-    (x) => x !== l && comboTransferBlocker(cc, l.exercise_id, { leg: x.exercise_id }) === null,
+    (x) =>
+      x !== l &&
+      comboTransferBlocker(cc, l.exercise_id, { leg: x.exercise_id }, effScope.value) === null,
   );
 });
 
@@ -342,7 +430,8 @@ const fresh = computed(() => {
       (e) =>
         !isTennisExercise(e) &&
         !taken.has(variantFamilyKey(e.id)) &&
-        comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }) === null,
+        comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }, effScope.value) ===
+          null,
     )
     .sort((a, b) => (fav.has(b.id) ? 1 : 0) - (fav.has(a.id) ? 1 : 0));
 });
@@ -369,7 +458,7 @@ function pick(to: ComboTransferTarget, name: string) {
   const cc = c.value;
   const l = leg.value;
   if (!cc || !l) return;
-  const block = comboTransferBlocker(cc, l.exercise_id, to);
+  const block = comboTransferBlocker(cc, l.exercise_id, to, effScope.value);
   if (block) {
     $q.notify({ type: 'warning', message: COMBO_TRANSFER_BLOCK_LABEL[block] });
     return;
@@ -383,7 +472,13 @@ function pick(to: ComboTransferTarget, name: string) {
     fromG && toG && fromG.key !== toG.key
       ? `Le volume passe du groupe ${fromG.label} (${fromG.muscles.join(', ')}) au groupe ${toG.label} (${toG.muscles.join(', ')}).`
       : null;
-  plan.value = comboTransferPlan(cc, l.exercise_id, to, profile.profile?.objective ?? null);
+  plan.value = comboTransferPlan(
+    cc,
+    l.exercise_id,
+    to,
+    profile.profile?.objective ?? null,
+    effScope.value,
+  );
   pending.value = { to, name, warn };
 }
 
@@ -467,6 +562,35 @@ async function apply(
 </script>
 
 <style scoped>
+.sw-scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.sw-scope-b {
+  min-height: 52px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  min-width: 0;
+}
+.sw-scope-b span {
+  font-size: 11.5px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.sw-scope-b.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .sw-card {
   width: min(520px, 94vw);
   max-height: 86vh;

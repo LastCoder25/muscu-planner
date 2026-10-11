@@ -1507,13 +1507,22 @@ export interface ComboNewExercise {
 /** Vers quoi basculer : un exo déjà dans le défi (son id), ou un exo neuf. */
 export type ComboTransferTarget = { leg: string } | { exercise: ComboNewExercise };
 
+/** Ce qui bascule (demandé par l'utilisateur) :
+ *  - `all` : l'exo quitté disparaît, son objectif ET ses séries faites passent sur la cible ;
+ *  - `rest` : l'exo RESTE avec ses séries faites, son objectif descend à ce qui est fait,
+ *    et SEUL LE RESTE (ce qui manquait) passe sur la cible — « les 2 séries de développé
+ *    couché qui me manquent, je les fais en pompes ». */
+export type ComboTransferScope = 'all' | 'rest';
+
 type ComboTransferBlock =
   | 'notActive'
   | 'noLeg'
   | 'sameLeg'
   | 'otherSlot'
   | 'modeMismatch'
-  | 'alreadyIn';
+  | 'alreadyIn'
+  | 'nothingDone'
+  | 'nothingLeft';
 
 export const COMBO_TRANSFER_BLOCK_LABEL: Record<ComboTransferBlock, string> = {
   notActive: 'Le défi n’est plus en cours.',
@@ -1522,6 +1531,8 @@ export const COMBO_TRANSFER_BLOCK_LABEL: Record<ComboTransferBlock, string> = {
   otherSlot: 'Seulement vers un exo du même groupe musculaire (ou des jambes entre elles).',
   modeMismatch: 'Les deux exos ne se comptent pas pareil (séries, reps ou durée).',
   alreadyIn: 'Ce mouvement est déjà dans ton défi.',
+  nothingDone: 'Rien n’est encore fait sur cet exo : bascule-le en entier.',
+  nothingLeft: 'Cet exo a déjà atteint son objectif : il ne reste rien à basculer.',
 };
 
 /** L'exo neuf appartient-il au groupe de l'exo quitté ? */
@@ -1541,10 +1552,16 @@ export function comboTransferBlocker(
   c: ComboChallenge,
   fromId: string,
   to: ComboTransferTarget,
+  scope: ComboTransferScope = 'all',
 ): ComboTransferBlock | null {
   if (c.status !== 'active') return 'notActive';
   const from = c.legs.find((l) => l.exercise_id === fromId);
   if (!from) return 'noLeg';
+  if (scope === 'rest') {
+    // Sans rien de fait, l'exo resterait avec un objectif nul ; sans reste, rien à basculer.
+    if (legDone(from) <= 0) return 'nothingDone';
+    if (legRemaining(from) <= 0) return 'nothingLeft';
+  }
   if ('leg' in to) {
     if (to.leg === fromId) return 'sameLeg';
     const dest = c.legs.find((l) => l.exercise_id === to.leg);
@@ -1558,9 +1575,10 @@ export function comboTransferBlocker(
   if (!transferSlotFor(from, e.muscle_primary)) return 'otherSlot';
   if (e.time !== (legMode(from) === 'time')) return 'modeMismatch';
   // Le même mouvement déjà présent AILLEURS dans le défi (l'exo quitté, lui, s'en va : on
-  // peut passer des dips aux dips assistés).
+  // peut passer des dips aux dips assistés — sauf s'il RESTE, en ne basculant que le reste).
   const fam = variantFamilyKey(e.exercise_id);
-  if (c.legs.some((l) => l !== from && variantFamilyKey(l.exercise_id) === fam)) return 'alreadyIn';
+  if (c.legs.some((l) => (scope === 'rest' || l !== from) && variantFamilyKey(l.exercise_id) === fam))
+    return 'alreadyIn';
   return null;
 }
 
@@ -1595,6 +1613,8 @@ export interface ComboTransferPlan {
   sets: ComboSetWork[];
   /** Objectif ajouté à la cible, dans son unité. */
   target: number;
+  /** Tout basculer (défaut) ou seulement le reste (`sets` est alors vide). */
+  scope?: ComboTransferScope;
 }
 
 const midOf = (min: number, max: number) => Math.max(1, Math.round((min + max) / 2));
@@ -1605,8 +1625,9 @@ export function comboTransferPlan(
   fromId: string,
   to: ComboTransferTarget,
   objective?: Objective | null,
+  scope: ComboTransferScope = 'all',
 ): ComboTransferPlan {
-  const block = comboTransferBlocker(c, fromId, to);
+  const block = comboTransferBlocker(c, fromId, to, scope);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
   let base: ComboSetWork;
@@ -1624,15 +1645,51 @@ export function comboTransferPlan(
   } else {
     base = { reps: midOf(to.exercise.rep_min, to.exercise.rep_max), weight: null, assisted: false };
   }
-  let target = from.target;
-  if (legMode(from) !== 'sets' && from.target > 0) {
+  // Tout : l'objectif entier part ; le reste : seulement ce qui manquait.
+  const moving = scope === 'rest' ? legRemaining(from) : from.target;
+  let target = moving;
+  if (legMode(from) !== 'sets' && moving > 0) {
     const r = legRepRange(from, objective);
-    target = Math.max(1, Math.round((from.target / midOf(r.min, r.max)) * base.reps));
+    target = Math.max(1, Math.round((moving / midOf(r.min, r.max)) * base.reps));
   }
+  if (scope === 'rest') return { sets: [], target, scope };
   return { sets: legSets(from).map(() => ({ ...base })), target };
 }
 
-/** Les exos du défi après la bascule. L'exo quitté disparaît ; la cible porte son objectif
+/** Bascule du RESTE : l'exo quitté garde ses séries et son objectif descend à ce qui est
+ *  fait ; la cible (existante ou neuve, posée juste après lui) reçoit l'objectif restant. */
+function transferRest(
+  c: ComboChallenge,
+  from: ComboLeg,
+  to: ComboTransferTarget,
+  plan: ComboTransferPlan,
+): ComboLeg[] {
+  const addTarget = Math.max(1, Math.round(plan.target));
+  const kept: ComboLeg = { ...from, target: legDone(from) };
+  if ('leg' in to) {
+    return c.legs.map((l) =>
+      l === from ? kept : l.exercise_id === to.leg ? { ...l, target: l.target + addTarget } : l,
+    );
+  }
+  const e = to.exercise;
+  const fresh: ComboLeg = {
+    slot: transferSlotFor(from, e.muscle_primary) ?? from.slot,
+    exercise_id: e.exercise_id,
+    exercise_name: e.exercise_name,
+    muscle_primary: e.muscle_primary ?? null,
+    rep_weight: e.rep_weight,
+    target: addTarget,
+    count_mode: from.count_mode ?? 'sets',
+    weight_kg: null,
+    assistable: e.assistable,
+    rep_min: e.rep_min,
+    rep_max: e.rep_max,
+    sets: [],
+  };
+  return c.legs.flatMap((l) => (l === from ? [kept, fresh] : [l]));
+}
+
+/** Les exos du défi après la bascule (`plan.scope` = `rest` : cf. `transferRest`). L'exo quitté disparaît ; la cible porte son objectif
  *  en plus du sien et toutes ses séries, converties selon `plan` (par défaut les valeurs
  *  proposées) et marquées de leur origine. Lève si c'est bloqué. */
 export function transferComboLeg(
@@ -1641,9 +1698,11 @@ export function transferComboLeg(
   to: ComboTransferTarget,
   plan: ComboTransferPlan = comboTransferPlan(c, fromId, to),
 ): ComboLeg[] {
-  const block = comboTransferBlocker(c, fromId, to);
+  const scope = plan.scope ?? 'all';
+  const block = comboTransferBlocker(c, fromId, to, scope);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
+  if (scope === 'rest') return transferRest(c, from, to, plan);
   const fromSets = legSets(from);
   if (plan.sets.length !== fromSets.length)
     throw new Error('Les séries à basculer ne correspondent plus : rouvre le changement d’exo.');

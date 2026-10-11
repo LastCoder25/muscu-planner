@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   transferComboLeg,
+  comboTransferPlan,
   comboTransferBlocker,
   comboXpPoints,
   comboTieredBonus,
@@ -315,5 +316,63 @@ describe('les jambes entre elles : Squat ↔ Charnière', () => {
     expect(comboTransferBlocker(c, 'ex_bench_barbell', { leg: 'ex_squat_jump' })).toBe('otherSlot');
     expect(comboTransferBlocker(c, 'ex_squat_jump', { leg: 'ex_bench_barbell' })).toBe('otherSlot');
     expect(comboTransferBlocker(c, 'ex_squat_jump', { exercise: pompes })).toBe('otherSlot');
+  });
+});
+
+describe('bascule du RESTE seulement (l’exo reste, ce qui manquait part)', () => {
+  // Développé couché : 2 séries faites sur 6 → il en manque 4.
+  const c = combo([bench(), dips()]);
+  const plan = comboTransferPlan(c, 'ex_bench_barbell', { leg: 'ex_dips' }, null, 'rest');
+
+  it('vers un exo déjà présent : le quitté garde ses séries, son objectif tombe au fait', () => {
+    const legs = transferComboLeg(c, 'ex_bench_barbell', { leg: 'ex_dips' }, plan);
+    const b = legs.find((l) => l.exercise_id === 'ex_bench_barbell')!;
+    const d = legs.find((l) => l.exercise_id === 'ex_dips')!;
+    expect(legs.map((l) => l.exercise_id)).toEqual(['ex_bench_barbell', 'ex_dips']);
+    expect(b.target).toBe(2);
+    expect(legSets(b)).toHaveLength(2);
+    expect(d.target).toBe(6 + 4);
+    expect(legSets(d).some((s) => s.origin)).toBe(false);
+  });
+
+  it('l’objectif du groupe est conservé', () => {
+    const legs = transferComboLeg(c, 'ex_bench_barbell', { leg: 'ex_dips' }, plan);
+    expect(legs.reduce((a, l) => a + l.target, 0)).toBe(12);
+  });
+
+  it('vers un exo neuf : posé juste après, avec le reste pour objectif et aucune série', () => {
+    const p = comboTransferPlan(c, 'ex_bench_barbell', { exercise: pompes }, null, 'rest');
+    const legs = transferComboLeg(c, 'ex_bench_barbell', { exercise: pompes }, p);
+    expect(legs.map((l) => l.exercise_id)).toEqual(['ex_bench_barbell', 'ex_pushup', 'ex_dips']);
+    const pu = legs.find((l) => l.exercise_id === 'ex_pushup')!;
+    expect(pu.target).toBe(4);
+    expect(legSets(pu)).toHaveLength(0);
+  });
+
+  it('refusé sans rien de fait, sans reste, ou vers une variante du même mouvement', () => {
+    expect(
+      comboTransferBlocker(combo([leg({}), dips()]), 'ex_bench_barbell', { leg: 'ex_dips' }, 'rest'),
+    ).toBe('nothingDone');
+    const done = leg({ target: 2, sets: bench().sets });
+    expect(
+      comboTransferBlocker(combo([done, dips()]), 'ex_bench_barbell', { leg: 'ex_dips' }, 'rest'),
+    ).toBe('nothingLeft');
+    const d = combo([dips(), bench()]);
+    const assist = { ...pompes, exercise_id: 'ex_dips_assisted', exercise_name: 'Dips assistés' };
+    expect(comboTransferBlocker(d, 'ex_dips', { exercise: assist }, 'rest')).toBe('alreadyIn');
+  });
+
+  it('en mode reps, le reste est converti dans l’unité de la cible', () => {
+    const r = leg({ count_mode: 'reps', target: 60, rep_min: 8, rep_max: 12, sets: [{ date: D1, reps: 20 }] });
+    const p = comboTransferPlan(
+      combo([r, dips()].map((l) => ({ ...l, count_mode: 'reps' as const }))),
+      'ex_bench_barbell',
+      { exercise: { ...pompes, rep_min: 18, rep_max: 22 } },
+      null,
+      'rest',
+    );
+    // 40 reps restantes à ~10/série = 4 séries × 20 reps de pompes.
+    expect(p.target).toBe(80);
+    expect(p.sets).toHaveLength(0);
   });
 });

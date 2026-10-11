@@ -4276,10 +4276,12 @@ describe('⇄ ComboSwapSheet — changer d’exo en cours de Défi 360', () => {
     );
     expect(err).toBeNull();
     expect(out).toContain('Changer « Développé couché »');
-    expect(out).toContain('Tes 2 séries déjà faites');
+    // Par défaut, seulement le RESTE (4 séries) : le développé couché garde ses 2 séries.
+    expect(out).toContain('Seulement le reste');
+    expect(out).toContain('Les 4 séries qui te manquent');
     expect(out).toContain('Déjà dans ton défi');
     expect(out).toContain('Dips');
-    expect(out).toContain('3/6 → 5/12');
+    expect(out).toContain('3/6 → 3/10');
   }, 30_000);
 
   it('choisir une cible ouvre la correction des séries basculées', async () => {
@@ -4323,7 +4325,11 @@ describe('⇄ ComboSwapSheet — changer d’exo en cours de Défi 360', () => {
       },
       '/',
       (h) => (out = h),
-      (host) => (host.querySelector('button.sw-tile') as HTMLButtonElement).click(),
+      (host) => {
+        // « Tout l'exo » : les séries faites basculent et se corrigent une par une.
+        (host.querySelectorAll('button.sw-scope-b')[1] as HTMLButtonElement).click();
+        (host.querySelector('button.sw-tile') as HTMLButtonElement).click();
+      },
     );
     expect(err).toBeNull();
     expect(out).toContain('Toutes les séries');
@@ -4331,6 +4337,50 @@ describe('⇄ ComboSwapSheet — changer d’exo en cours de Défi 360', () => {
     expect(out).toContain('Développé couché · 6 reps · 60 kg');
     expect(out).toMatch(/<b[^>]*>11<\/b><small[^>]*>reps/);
     expect(out).toContain('quitte le défi');
+  }, 30_000);
+
+  it('seulement le reste : rien à corriger, l’exo quitté reste dans le défi', async () => {
+    const { default: ComboSwapSheet } = await import('@/components/ComboSwapSheet.vue');
+    const leg = (id: string, name: string, n: number) => ({
+      slot: 'push',
+      exercise_id: id,
+      exercise_name: name,
+      muscle_primary: 'pectoraux',
+      rep_weight: 1,
+      target: 6,
+      count_mode: 'sets',
+      sets: Array.from({ length: n }, () => ({ date: '2099-01-05', reps: 10 })),
+    });
+    let out = '';
+    const err = await mountIt(
+      ComboSwapSheet,
+      { modelValue: true, comboId: 'c1', exerciseId: 'ex_bench_barbell' },
+      undefined,
+      async () => {
+        const { useComboStore } = await import('@/stores/combo');
+        const { useChallengesStore } = await import('@/stores/challenges');
+        const { useLibraryStore } = await import('@/stores/library');
+        useComboStore().list = [
+          {
+            id: 'c1',
+            name: '360',
+            start_date: '2099-01-05',
+            duration_days: 7,
+            status: 'active',
+            legs: [leg('ex_bench_barbell', 'Développé couché', 4), leg('ex_dips', 'Dips', 1)],
+          },
+        ] as never;
+        useChallengesStore().list = [{ status: 'done', exercise_id: 'x' }] as never;
+        useLibraryStore().fetchAll = () => Promise.resolve([]);
+      },
+      '/',
+      (h) => (out = h),
+      (host) => (host.querySelector('button.sw-tile') as HTMLButtonElement).click(),
+    );
+    expect(err).toBeNull();
+    expect(out).toContain('Basculer le reste');
+    expect(out).toContain('reste dans ton défi avec ses 4 séries');
+    expect(out).not.toContain('Toutes les séries');
   }, 30_000);
 });
 
