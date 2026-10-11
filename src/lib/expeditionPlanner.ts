@@ -16,8 +16,11 @@
  * `partySendBlocker`). Un planificateur qui aurait sa propre idée du 🎯 % proposerait des
  * départs que le bouton « Lancer » refuse.
  *
- * Une équipe part d'UN seul endroit (la base, ou la garnison d'un point tenu — une sortie) :
- * un planificateur ne propose jamais d'attaque combinée.
+ * Une équipe part d'un endroit (la base, ou la garnison d'un point tenu — une sortie), ou de
+ * PLUSIEURS : une ATTAQUE COMBINÉE (2026-10-11, demandé : « la simulation propose de très longs
+ * trajets »), où chaque groupe part de chez lui et tous arrivent ensemble. Elle sert quand un lieu
+ * dur demande plus de monde qu'un seul endroit proche n'en a : sans elle, seule la base
+ * (souvent loin) pouvait fournir l'équipe. Son aller-retour vaut celui du groupe le plus lent.
  *
  * La recherche est GLOUTONNE, et c'est assumé : le vrai optimum (affectation d'un vivier à
  * des lieux sous contrainte de pronostic simulé) est combinatoire, et chaque pronostic coûte
@@ -43,7 +46,8 @@ export interface PlanDeps<T> {
   fits(target: T, units: PlanUnit[]): boolean;
   /** Chance de victoire 0..1, `null` = rien à combattre (sûr). */
   win(target: T, units: PlanUnit[]): number | null;
-  /** Aller-retour en minutes. */
+  /** Aller-retour en minutes. Plusieurs points de départ (attaque combinée) : celui du groupe
+   *  le plus lent — tout le monde arrive ensemble. */
   tripMin(target: T, units: PlanUnit[]): number;
   /** XP totale des champions de l'équipe en cas de victoire. */
   xp(target: T, units: PlanUnit[]): number;
@@ -76,6 +80,8 @@ export interface PlanOptions<T> {
   pause?: () => Promise<void>;
   /** Un nouveau calcul a démarré : celui-ci s'arrête. */
   cancelled?: () => boolean;
+  /** ⚔️ Proposer aussi des attaques combinées (équipe venue de plusieurs endroits). */
+  combined?: boolean;
 }
 
 /** Combien de remplaçants plus faibles on essaie, au plus, pour chaque membre. */
@@ -95,8 +101,11 @@ function score<T>(c: Candidate<T>, mode: PlanMode): number {
     const champs = c.units.filter((u) => !u.hero).length || 1;
     return c.xp / champs / Math.max(1 / 60, c.tripMin / 60);
   }
-  // Moins de membres d'abord (un vivier fait plus d'événements), puis le trajet le plus court.
-  return -(c.units.length * 1e6 + c.tripMin);
+  // ⏱️ Le TEMPS OCCUPÉ : champions × aller-retour (2026-10-11, signalé : « de très longs trajets
+  // proposés »). Avant, une équipe plus petite passait toujours devant, quel que soit son trajet :
+  // un champion seul 5 h battait deux champions 1 h. Un champion occupé moins longtemps est un
+  // champion de nouveau libre pour l'événement suivant.
+  return -(Math.max(1, c.units.length) * c.tripMin);
 }
 
 export async function planExpeditions<T extends { id: string }>(
@@ -178,6 +187,35 @@ export async function planExpeditions<T extends { id: string }>(
           xp: deps.xp(t, picked) * win,
         };
         if (!best || score(c, mode) > score(best, mode)) best = c;
+      }
+    }
+    // ⚔️ L'ATTAQUE COMBINÉE : les plus PROCHES d'abord (chacun mesuré depuis chez lui), à égalité
+    // les plus forts ; on ajoute du monde jusqu'à passer le seuil. Une équipe venue d'un seul
+    // endroit a déjà été essayée plus haut : on ne garde ici que celles de deux endroits ou plus.
+    if (opts.combined && origins.length > 1) {
+      const leg = new Map(pool.map((u) => [u.id, deps.tripMin(t, [u])]));
+      const near = [...pool].sort((a, b) => leg.get(a.id)! - leg.get(b.id)! || b.power - a.power);
+      const tries = near.some((u) => u.hero) ? [near, near.filter((u) => !u.hero)] : [near];
+      for (const order of tries) {
+        const kMax = Math.min(opts.maxTeam, order.length);
+        for (let k = 2; k <= kMax; k++) {
+          if (opts.cancelled?.()) return null;
+          const team = order.slice(0, k);
+          if (new Set(team.map((u) => u.origin)).size < 2) continue;
+          if (!deps.fits(t, team)) continue;
+          const tw = await winOf(t, team);
+          if (!passes(tw)) continue;
+          const win = tw ?? 1;
+          const c: Candidate<T> = {
+            target: t,
+            units: team,
+            win,
+            tripMin: deps.tripMin(t, team),
+            xp: deps.xp(t, team) * win,
+          };
+          if (!best || score(c, mode) > score(best, mode)) best = c;
+          break;
+        }
       }
     }
     return best;
@@ -264,7 +302,8 @@ export async function planExpeditions<T extends { id: string }>(
     [...firstPass].sort((x, y) => score(y, m) - score(x, m)),
   );
   const totalXp = (r: { trips: PlannedTrip<T>[] }) => r.trips.reduce((s, t) => s + t.xp, 0);
-  const totalMin = (r: { trips: PlannedTrip<T>[] }) => r.trips.reduce((s, t) => s + t.tripMin, 0);
+  const totalMin = (r: { trips: PlannedTrip<T>[] }) =>
+    r.trips.reduce((s, t) => s + t.tripMin * Math.max(1, t.units.length), 0);
   let pick: { trips: PlannedTrip<T>[]; missed: T[] } | null = null;
   for (const order of orders) {
     const r = await assign(order, mode === 'xp');

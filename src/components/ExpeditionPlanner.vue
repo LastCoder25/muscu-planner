@@ -113,7 +113,21 @@
                 {{ rankOf(r.poi).name }} ★{{ rankOf(r.poi).star }}
               </span>
             </div>
-            <div class="pt-team">
+            <!-- ⚔️ Attaque combinée : un groupe par point de départ, tous arrivent ensemble. -->
+            <template v-if="r.wings">
+              <span class="pt-comb">⚔️ Attaque combinée — tout le monde arrive ensemble</span>
+              <div v-for="(w, i) in r.wings" :key="i" class="pt-team">
+                <span class="pt-from">{{ placeOf(w.from) }}</span>
+                <span v-if="w.hero" class="pt-mem hero">🧝 Héros</span>
+                <span v-for="a in w.advs" :key="a.id" class="pt-mem">
+                  {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+                  <span v-if="skillsOf(a)" class="pt-sk" :title="skillsTitle(a)">{{
+                    skillsOf(a)
+                  }}</span>
+                </span>
+              </div>
+            </template>
+            <div v-else class="pt-team">
               <span v-if="r.from" class="pt-from">🏰 depuis {{ poiLabel(r.from) }}</span>
               <span v-if="r.hero" class="pt-mem hero">🧝 Héros</span>
               <span v-for="a in r.advs" :key="a.id" class="pt-mem">
@@ -497,6 +511,11 @@ const avgTrip = computed(
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+.pt-comb {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5fd0ff;
 }
 .pt-sk {
   margin-left: 3px;

@@ -174,3 +174,38 @@ describe('planificateur d’expéditions', () => {
     expect(r).toBeNull();
   });
 });
+
+describe('planificateur — attaque combinée et temps occupé', () => {
+  // Trajet selon le point de départ : A et B sont près du lieu, la base est loin.
+  const near: Record<string, number> = { base: 300, A: 30, B: 40 };
+  const geo: PlanDeps<T> = {
+    ...deps,
+    tripMin: (_t, us) => Math.max(...us.map((x) => near[x.origin]!)),
+  };
+  const run = (units: PlanUnit[], combined: boolean) =>
+    planExpeditions([{ id: 'dur', need: 10, min: 0, xp: 1 }], units, {
+      threshold: 0.9,
+      mode: 'events',
+      maxTeam: 6,
+      deps: geo,
+      combined,
+    });
+
+  it('réunit une équipe de deux endroits proches plutôt que de partir de loin', async () => {
+    // La base en tête de liste : seul l'ordre « plus proche d'abord » trouve A + B.
+    const units = [u('x', 5, 'base'), u('y', 5, 'base'), u('a', 5, 'A'), u('b', 5, 'B')];
+    const r = (await run(units, true))!;
+    expect(r.trips[0]!.units.map((x) => x.origin).sort()).toEqual(['A', 'B']);
+    expect(r.trips[0]!.tripMin).toBe(40);
+    // Sans attaque combinée, seule la base a deux champions : 300 min.
+    const solo = (await run(units, false))!;
+    expect(solo.trips[0]!.tripMin).toBe(300);
+  });
+
+  it('juge sur le temps occupé (champions × trajet), pas sur le nombre seul', async () => {
+    // Un champion seul de la base (300 min) contre deux de A (30 min) : 300 > 60.
+    const units = [u('x', 10, 'base'), u('a', 5, 'A'), u('b', 5, 'A')];
+    const r = (await run(units, false))!;
+    expect(r.trips[0]!.units.map((x) => x.id).sort()).toEqual(['a', 'b']);
+  });
+});

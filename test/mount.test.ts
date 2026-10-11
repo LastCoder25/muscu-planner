@@ -314,6 +314,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           advs: [{ id: 'a', name: 'Argus', path: [], level: 5, xp: 0 }],
           hero: true,
           from: null,
+          wings: null,
           win: 0.94,
           tripMin: 75,
           xp: 120,
@@ -343,6 +344,29 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
     expect(html).toContain('1 lieu hors de portée');
     expect(html).toContain('🧭 Répartir');
+
+    // ⚔️ Une proposition combinée : un groupe par point de départ.
+    planner.rows.value = [
+      {
+        ...planner.rows.value![0]!,
+        key: 'p1|c',
+        wings: [
+          {
+            from: null,
+            advs: [{ id: 'a', name: 'Argus', path: [], level: 5, xp: 0 }],
+            hero: false,
+          },
+          {
+            from: { ...poi, id: 'f9', type: 'control' },
+            advs: [{ id: 'b', name: 'Fila', path: [], level: 5, xp: 0 }],
+            hero: false,
+          },
+        ],
+      },
+    ] as never;
+    await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
+    expect(html).toContain('Attaque combinée');
+    expect(html).toContain('Fila');
 
     // 🧭 La répartition : les déplacements, puis les équipes qui en profitent.
     const fort = {

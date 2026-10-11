@@ -141,6 +141,8 @@ export interface PlannerRow {
   hero: boolean;
   /** `null` = la base ; sinon le point tenu d'où part la sortie. */
   from: Poi | null;
+  /** ⚔️ Attaque COMBINÉE : un groupe par point de départ (`null` = un seul endroit, `from`). */
+  wings: { from: Poi | null; advs: Adventurer[]; hero: boolean }[] | null;
   win: number;
   tripMin: number;
   xp: number;
@@ -244,6 +246,12 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       }
       const advsOf = (us: PlanUnit[]) => us.filter((u) => !u.hero).map((u) => byId.get(u.id)!);
       const hasHero = (us: PlanUnit[]) => us.some((u) => u.hero);
+      /** L'équipe, groupe par groupe (un par point de départ). */
+      const groupsOf = (us: PlanUnit[]) => {
+        const by = new Map<string, PlanUnit[]>();
+        for (const u of us) by.set(u.origin, [...(by.get(u.origin) ?? []), u]);
+        return [...by];
+      };
       const targets = ctx.targets.value;
       const total = Math.max(1, targets.length * 6);
       let done = 0;
@@ -252,6 +260,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         mode: mode.value,
         maxTeam: MAX_TEAM,
         cancelled: () => me !== run,
+        // ⚔️ Des garnisons en jeu : une équipe peut se réunir de plusieurs endroits.
+        combined: withGarrisons.value,
         pause: async () => {
           done++;
           progress.value = Math.min(0.95, done / total);
@@ -280,17 +290,22 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
               now,
               FORECAST_SAMPLES,
             ),
-          tripMin: (t, us) => {
-            const advs = advsOf(us);
-            const legOf = (p: Poi) =>
-              partyLegMin(p, advs, {
-                hero: hasHero(us),
-                travelMult: ctx.travelMult.value,
-                gearSpeed: advGearRoles(advs, road.advGear).speed,
-              });
-            const from = points.get(us[0]!.origin);
-            return 2 * (from ? legFromSpot(t, from, legOf) : legOf(t));
-          },
+          // ⚔️ Plusieurs points de départ (attaque combinée) : chaque groupe à son pas, depuis
+          // chez lui ; tout le monde arrive ensemble, donc l'aller-retour du plus lent.
+          tripMin: (t, us) =>
+            Math.max(
+              ...groupsOf(us).map(([origin, g]) => {
+                const advs = advsOf(g);
+                const legOf = (p: Poi) =>
+                  partyLegMin(p, advs, {
+                    hero: hasHero(g),
+                    travelMult: ctx.travelMult.value,
+                    gearSpeed: advGearRoles(advs, road.advGear).speed,
+                  });
+                const from = points.get(origin);
+                return 2 * (from ? legFromSpot(t, from, legOf) : legOf(t));
+              }),
+            ),
           xp: (t, us) =>
             Object.values(
               missionXpFor(advsOf(us), t, true, {}, char.pantheonLevel, hasHero(us), null),
@@ -304,6 +319,14 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         advs: advsOf(tr.units),
         hero: hasHero(tr.units),
         from: points.get(tr.units[0]!.origin) ?? null,
+        wings:
+          groupsOf(tr.units).length > 1
+            ? groupsOf(tr.units).map(([origin, g]) => ({
+                from: points.get(origin) ?? null,
+                advs: advsOf(g),
+                hero: hasHero(g),
+              }))
+            : null,
         win: tr.win,
         tripMin: tr.tripMin,
         xp: Math.round(tr.xp),
@@ -615,6 +638,18 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   async function sendRow(r: PlannerRow): Promise<string | null> {
     const uid = auth.user?.id;
     if (!uid) return 'non connecté';
+    // ⚔️ Une attaque combinée part par le MÊME chemin que l'écran (`sendCombinedAttack`) :
+    // chaque groupe part à son heure pour que tous arrivent ensemble.
+    if (r.wings)
+      return char.sendCombinedAttack(uid, r.poi, {
+        wings: r.wings.map((w) => ({
+          originId: w.from?.id ?? null,
+          escortIds: w.advs.map((a) => a.id),
+          hero: w.hero ? heroObj() : null,
+        })),
+        playerLevel: r.hero ? ctx.progressionLevel.value : ctx.heroLevel.value,
+        now: Date.now(),
+      });
     return char.sendParty(uid, r.poi, {
       hero: r.hero ? heroObj() : null,
       escortIds: r.advs.map((a) => a.id),
