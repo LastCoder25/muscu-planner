@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DETECT_FLOOR,
   detectionCircles,
+  drawnDetectionCircles,
   islandDetectRadius,
   islandDetectShare,
   islandPerception,
@@ -120,5 +121,18 @@ describe('👁️ les cercles de détection', () => {
     const guard = { id: 'g', x: T.x + 130, y: T.y, r: DETECT_FLOOR };
     const a = retakeArmyPoi(p, { seed: 1 }, [big, guard], 200, at - H, 30, cit)!;
     expect(Math.hypot(a.from!.x - p.x, a.from!.y - p.y)).toBeCloseTo(80, 6);
+  });
+});
+
+describe('drawnDetectionCircles — rien à guetter sur une île pacifiée (2026-10-11)', () => {
+  const pois = [held('ctl_a', T.x + 30, T.y)];
+  it('île pacifiée : aucun cercle dessiné', () => {
+    const map = { pois, archipel: { island: 2, levelCap: 40, pacifiedAt: at } };
+    expect(drawnDetectionCircles(map as never, 20, 80)).toEqual([]);
+  });
+  it('île pas encore pacifiée, ou carte ordinaire : les cercles de la règle', () => {
+    const map = { pois, archipel: { island: 2, levelCap: 40 } };
+    expect(drawnDetectionCircles(map as never, 20, 80)).toEqual(detectionCircles(map, 20, 80));
+    expect(drawnDetectionCircles({ pois }, 20, 80)).toHaveLength(2);
   });
 });

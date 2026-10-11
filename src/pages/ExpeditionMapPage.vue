@@ -1510,7 +1510,7 @@ import {
   activeAttacks,
   armyTrajectory,
   controlAttackHold,
-  detectionCircles,
+  drawnDetectionCircles,
   fieldArmySpec,
   type ArmyPath,
 } from '@/lib/fieldArmy';
@@ -2430,11 +2430,11 @@ const attackedKey = computed(() =>
 // 🕳️ Les auréoles d'EMBUSCADE — les monstres restés autour d'une faille qui a débordé
 // (v0.1009). ⚠️ Horloge GROSSIÈRE : une embuscade dure deux jours, la recalculer à la
 // seconde re-diffuserait ces cercles à chaque tick pour rien.
-/** 👁️ Les cercles de détection (`detectionCircles`, la règle que suivent les armées). */
+/** 👁️ Les cercles de détection (`drawnDetectionCircles` : aucun sur une île pacifiée). */
 const detectCircles = computed(() => {
   const m = char.row?.expedition_map;
   if (!m) return [];
-  return detectionCircles(m, char.detectRadiusOf(char.row?.base, m), reveal.value);
+  return drawnDetectionCircles(m, char.detectRadiusOf(char.row?.base, m), reveal.value);
 });
 // 🪺 Et les zones des NIDS (île 2) : mêmes routes dangereuses, même auréole rouge — la règle
 // vit dans `nestZones`, celle qui pose `nestPeril` sur les lieux.

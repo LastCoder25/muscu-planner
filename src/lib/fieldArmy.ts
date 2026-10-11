@@ -46,7 +46,7 @@ import {
 } from './raid';
 import { BATTLE } from './siegeBattle';
 import { islandCenter, islandSpan, islandVia, onIsland } from './islandShape';
-import { ISLANDS, islandById } from './archipelago';
+import { ISLANDS, islandById, islandPacified } from './archipelago';
 import {
   CONTROL,
   attackerLevel,
@@ -195,6 +195,18 @@ export function detectionCircles(
     out.push({ id: p.id, x: p.x, y: p.y, r: DETECT_FLOOR });
   }
   return out;
+}
+
+/** 👁️ Les cercles de détection que la CARTE dessine (2026-10-11, demandé : « une fois l'île
+ *  pacifiée, il n'y a plus d'ennemis sur l'île ») : aucun sur une île pacifiée — plus aucune
+ *  armée ne s'y lève, un cercle qui guette n'y dirait plus rien. La règle des armées garde
+ *  `detectionCircles`. */
+export function drawnDetectionCircles(
+  map: Pick<ExpeditionMap, 'pois' | 'archipel'>,
+  detectR: number,
+  reach: number,
+): DetectCircle[] {
+  return islandPacified(map) ? [] : detectionCircles(map, detectR, reach);
 }
 
 function marching(
