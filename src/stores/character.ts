@@ -90,6 +90,7 @@ import { normalizeRunStats, runAttempt, type RunStats } from '@/lib/runStats';
 import { bossKeyDrop, dungeonKeyDrop } from '@/lib/keyDrops';
 import {
   PARTY_TARGETS,
+  poiLabel,
   HARVEST_TYPES,
   isRiftPoi,
   isWarbandPoi,
@@ -480,6 +481,8 @@ import {
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
   routeFromSpot,
+  redeployMap,
+  type RedeployMove,
   rejoinHome,
   syncAway,
   sortieBlocker,
@@ -1351,12 +1354,7 @@ export const useCharacterStore = defineStore('character', () => {
   async function persist(userId: string, patch: Record<string, unknown>) {
     const echo = writtenEcho({ ...patch, updated_at: new Date().toISOString() });
     const req = Promise.resolve(
-      supabase
-        .from('characters')
-        .update(echo)
-        .eq('user_id', userId)
-        .select('updated_at')
-        .single(),
+      supabase.from('characters').update(echo).eq('user_id', userId).select('updated_at').single(),
     );
     inFlight.add(req);
     let res: Awaited<typeof req>;
@@ -6633,6 +6631,103 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
+   * 🧭 LA RÉPARTITION, D'UN BLOC (2026-10-11, demandé : « tu pars du principe que tous les lieux
+   * sont vides, vu que tu vas faire bouger tous les effectifs d'un coup »). Tous ceux qui
+   * changent d'endroit QUITTENT d'abord leur lieu, puis PARTENT vers le nouveau — une seule
+   * écriture. Lancés un par un, deux lieux pleins qui s'échangent des champions se bloquaient
+   * (« plus assez de places » : chacun attendait la place que l'autre libère). Les places se
+   * vérifient sur l'état FINAL. Chacun marche à son pas : depuis la base comme un renfort,
+   * d'un lieu à l'autre comme un transfert, vers la base comme un rappel. Rend la RAISON d'un
+   * refus (rien n'est parti), `null` si tout le monde est en route.
+   */
+  async function redeployGarrisons(
+    userId: string,
+    moves: readonly { fromId: string | null; toId: string | null; ids: string[]; hero: boolean }[],
+    now: number,
+    playerLevel: number,
+    heroUnit: PostedHero,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    let map = cur?.expedition_map;
+    if (!cur || !map) return 'la carte n’est pas chargée';
+    const reserved = reservedIds.value;
+    const champMoves = moves.filter((m) => !m.hero && m.ids.length);
+    const heroMove = moves.find((m) => m.hero);
+    for (const m of champMoves) {
+      if (m.ids.some((x) => reserved.has(x))) return 'un membre attend une attaque combinée';
+      for (const x of m.ids) {
+        const a = advList.value.find((q) => q.id === x);
+        if (!a) return 'un champion choisi n’existe plus';
+        // Au départ : soit libre à la base, soit ARRIVÉ dans la garnison de son lieu.
+        const there = m.fromId
+          ? a.posted === m.fromId &&
+            !!map.pois.find((p) => p.id === m.fromId)?.control?.garrison.includes(x)
+          : !a.posted && advAvailable(a, now);
+        if (!there) return `${a.name} n’est pas disponible là où il est`;
+      }
+    }
+    if (heroMove) {
+      if (woundRemainingMs(cur.base, now) > 0) return 'le héros est à l’infirmerie';
+      if (heroEngaged.value || heroComing(map)) return 'le héros est déjà en route ailleurs';
+    }
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map, now);
+    const legOfTeam = (team: Adventurer[]) => (p: Poi) =>
+      partyLegMin(p, team, {
+        hero: false,
+        travelMult: mult,
+        gearSpeed: advGearRoles(team, escortKitOf(cur).advGear).speed,
+      });
+    const poiOf = (id: string) => map!.pois.find((p) => p.id === id);
+    // Chacun à son pas : depuis la base comme un renfort, d'un lieu à l'autre comme un
+    // transfert (ligne directe ou détour par la ville), vers la base comme un rappel.
+    const arrive = new Map<string, number>();
+    const legs: RedeployMove[] = [];
+    for (const m of champMoves) {
+      const legOf = legOfTeam(m.ids.map((x) => advList.value.find((a) => a.id === x)!));
+      const from = m.fromId ? poiOf(m.fromId) : undefined;
+      const to = m.toId ? poiOf(m.toId) : undefined;
+      if (m.toId && !to) return 'un lieu de destination n’existe plus';
+      if (!to && !from) continue;
+      const min = to ? (from ? legFromSpot(to, from, legOf) : legOf(to)) : legOf(from!);
+      const at = now + min * 60_000;
+      legs.push({ fromId: m.fromId, toId: m.toId, ids: m.ids, at });
+      for (const x of m.ids) arrive.set(x, at);
+    }
+    let heroLeg: Parameters<typeof redeployMap>[2] = null;
+    if (heroMove) {
+      const here = map;
+      const legOf = (p: Poi) => heroHomeLegMin(cur, here, p, now);
+      const post = heroPostOf(map);
+      const to = heroMove.toId ? poiOf(heroMove.toId) : undefined;
+      const route = to
+        ? post
+          ? routeFromSpot(to, post, legOf)
+          : { min: legOf(to), direct: false }
+        : { min: post ? legOf(post) : 0, direct: false };
+      heroLeg = {
+        toId: to?.id ?? null,
+        at: now + route.min * 60_000,
+        unit: heroUnit,
+        direct: route.direct,
+      };
+    }
+    const done = redeployMap(map, legs, heroLeg, now, playerLevel);
+    if ('full' in done) return `plus assez de places : ${poiLabel(done.full)}`;
+    map = done.map;
+    await persist(userId, {
+      expedition_map: map,
+      adventurers: advList.value.map((a) => {
+        const at = arrive.get(a.id);
+        if (at === undefined) return a;
+        const to = champMoves.find((m) => m.ids.includes(a.id))!.toId;
+        return { ...a, posted: to ?? undefined, busyUntil: at };
+      }),
+    });
+    return null;
+  }
+
+  /**
    * ⇄ ÉCHANGE (2026-09-29, demandé) : `outId`, arrivé sur `pointId`, et `inId` échangent leur
    * place — `inId` vient de la base (`fromId` absent ; `SWAP_MILITIA_FROM_BASE` = un milicien
    * de la Caserne) ou d'un autre point tenu `fromId`. Chacun marche à son pas vers la place de
@@ -6721,6 +6816,7 @@ export const useCharacterStore = defineStore('character', () => {
     detectRadiusOf,
     fortSightOf,
     transferControlGarrison,
+    redeployGarrisons,
     settleGearRefonte,
     claimWeeklyQuests,
     openRuneBatch,

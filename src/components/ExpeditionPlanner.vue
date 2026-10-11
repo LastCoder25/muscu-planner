@@ -213,10 +213,13 @@
         </p>
         <p v-if="!repoMoves.length" class="pl-empty">✅ Tout le monde est déjà à sa place.</p>
         <template v-else>
-          <p class="pl-lab">Les déplacements à faire</p>
+          <p class="pl-lab">Les trajets à faire</p>
           <button type="button" class="pl-all" :disabled="!!launching" @click="launchAllMoves">
-            {{ launching === '*' ? '⏳ Déplacements…' : `🧭 Tout déplacer (${repoMoves.length})` }}
+            {{ launching === '*' ? '⏳ En route…' : '✅ Valider : tout le monde part' }}
           </button>
+          <p class="pl-note">
+            Tout le monde part d’un coup : les lieux se libèrent avant que les autres arrivent.
+          </p>
           <div class="pl-list">
             <div v-for="m in repoMoves" :key="m.key" class="pl-tile mv">
               <div class="pt-head">
@@ -232,9 +235,6 @@
               </div>
               <div class="pt-foot">
                 <span class="pt-stat">🚶 {{ fmt(m.min) }}</span>
-                <button type="button" class="pt-go" :disabled="!!launching" @click="launchMove(m)">
-                  {{ launching === m.key ? '⏳' : 'Déplacer' }}
-                </button>
               </div>
             </div>
           </div>
@@ -284,7 +284,6 @@ const {
   repoBelow,
   repoMissing,
   repartir,
-  launchMove,
   launchAllMoves,
 } = props.planner;
 

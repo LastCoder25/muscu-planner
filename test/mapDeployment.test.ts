@@ -6,6 +6,7 @@ import {
   formTeams,
   placeTeams,
   planDeployment,
+  trimMoves,
   type DeployUnit,
 } from '../src/lib/mapDeployment';
 import { islandSpan, onIsland, LAND_MARGIN } from '../src/lib/islandShape';
@@ -186,5 +187,50 @@ describe('deployRefLevel — le niveau des lieux de référence', () => {
     expect(deployRefLevel(33, 21, 35)).toBe(35); // plafond de l'île
     expect(deployRefLevel(3, 21, 40)).toBe(21); // plancher de l'île
     expect(deployRefLevel(41, 1, Infinity)).toBe(50);
+  });
+});
+
+describe('trimMoves — le moins de déplacements possible', () => {
+  const ok = () => true;
+  it('deux lieux qui s’échangeraient deux membres équivalents ne bougent personne', () => {
+    // A est à X mais affecté à l'équipe de Y, B est à Y mais affecté à l'équipe de X.
+    const a = u('a', 10, [], 'X');
+    const b = u('b', 10, [], 'Y');
+    const t = trimMoves([[b], [a]], ['X', 'Y'], ok);
+    expect(t[0]!.map((x) => x.id)).toEqual(['a']);
+    expect(t[1]!.map((x) => x.id)).toEqual(['b']);
+  });
+  it('n’échange pas si une équipe passerait sous le seuil', () => {
+    const a = u('a', 10, [], 'X');
+    const b = u('b', 2, [], 'Y');
+    const strongEnough = (team: readonly DeployUnit[]) => sum([...team]) >= 5;
+    const t = trimMoves([[b, u('c', 9, [], 'X')], [a]], ['X', 'Y'], strongEnough);
+    expect(t[1]!.map((x) => x.id)).toEqual(['a']);
+  });
+  it('ne met pas une compétence de soutien en double et ne touche jamais au héros', () => {
+    const a = u('a', 10, ['care'], 'X');
+    const b = u('b', 10, [], 'Y');
+    const t = trimMoves([[b, u('c', 5, ['care'], 'X')], [a]], ['X', 'Y'], ok);
+    expect(t[1]!.map((x) => x.id)).toEqual(['a']);
+    const h = u('h', 30, [], 'X', true);
+    const t2 = trimMoves([[u('d', 10, [], 'Y')], [h]], ['X', 'Y'], ok);
+    expect(t2[1]!.map((x) => x.id)).toEqual(['h']);
+  });
+});
+
+describe('planDeployment — sans déplacement inutile', () => {
+  it('l’équilibrage mélange deux lieux, la répartition finale ne déplace personne', () => {
+    // Équilibrées, les équipes sont [a1, b2] et [b1, a2] : chacune a un membre de chaque lieu.
+    const us = [u('a1', 10, [], 'X'), u('b1', 9, [], 'Y'), u('a2', 8, [], 'X'), u('b2', 7, [], 'Y')];
+    const spots = [
+      { id: 'X', seats: 2, heroOk: true },
+      { id: 'Y', seats: 2, heroOk: true },
+    ];
+    const p = planDeployment(us, spots, 4, {
+      threshold: 0.5,
+      deps: { win: (t) => (t.length >= 2 ? 1 : 0), trip: () => 10 },
+    });
+    expect(p.teams).toHaveLength(2);
+    expect(p.moves).toEqual([]);
   });
 });

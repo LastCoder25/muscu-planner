@@ -17,6 +17,7 @@ import {
   transferBlocker,
   transferGarrison,
   transferSourcesFor,
+  redeployMap,
 } from '@/lib/controlRoutes';
 import {
   EXPE,
@@ -232,5 +233,45 @@ describe('🛡️⚔️ des miliciens d’un autre point vers un lieu ennemi', (
     ]);
     const back = settleReinforcements(m, 4 * H, L, () => 2 * H);
     expect(pt(back, CAMP).control!.returning?.map((r) => r.id)).toEqual(['mil:1']);
+  });
+});
+
+describe('🧭 redeployMap — toute la répartition d’un bloc', () => {
+  const full = ['a1', 'a2', 'a3', 'a4', 'a5'];
+  const fullB = ['b1', 'b2', 'b3', 'b4', 'b5'];
+  it('deux lieux pleins s’échangent des champions : impossible un par un, possible d’un bloc', () => {
+    const m = world(full, fullB);
+    expect(seatsOf(pt(m, MINE).control!.kind)).toBe(5);
+    // Un par un, chaque transfert attend la place que l'autre libère.
+    expect(transferBlocker(m, MINE, CAMP, ['a1'])).not.toBeNull();
+    const r = redeployMap(
+      m,
+      [
+        { fromId: MINE, toId: CAMP, ids: ['a1'], at: H },
+        { fromId: CAMP, toId: MINE, ids: ['b1'], at: H },
+      ],
+      null,
+      0,
+      L,
+    );
+    expect('map' in r).toBe(true);
+    if (!('map' in r)) return;
+    const mine = pt(r.map, MINE).control!;
+    expect(mine.garrison).not.toContain('a1');
+    expect(mine.reinforcing?.map((x) => x.id)).toEqual(['b1']);
+    expect(pt(r.map, CAMP).control!.reinforcing?.map((x) => x.id)).toEqual(['a1']);
+  });
+  it('les places se vérifient sur l’état FINAL : un lieu trop plein est refusé', () => {
+    const m = world(full, fullB);
+    const r = redeployMap(m, [{ fromId: null, toId: CAMP, ids: ['z'], at: H }], null, 0, L);
+    expect('full' in r && r.full.id).toBe(CAMP);
+  });
+  it('vers la base : il quitte la garnison et rentre à pied', () => {
+    const m = world(full);
+    const r = redeployMap(m, [{ fromId: MINE, toId: null, ids: ['a1', 'a2'], at: H }], null, 0, L);
+    if (!('map' in r)) throw new Error('refusé');
+    const mine = pt(r.map, MINE).control!;
+    expect(mine.garrison.filter((x) => x.startsWith('a'))).toEqual(['a3', 'a4', 'a5']);
+    expect((mine.returning ?? []).map((x) => x.id).sort()).toEqual(['a1', 'a2']);
   });
 });

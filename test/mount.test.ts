@@ -332,7 +332,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       repoBelow: ref(false),
       repoMissing: ref({ hero: false, advs: [] }),
       repartir: () => undefined,
-      launchMove: () => undefined,
       launchAllMoves: () => undefined,
     };
     let html = '';
@@ -392,7 +391,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       advs: [{ ...argus, id: 'b', name: 'Fila' }],
     } as never;
     await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
-    expect(html).toContain('Tout déplacer (1)');
+    expect(html).toContain('Valider : tout le monde part');
     expect(html).toContain('🏠 Base');
     expect(html).toContain('couvre 60 % de l’île');
     expect(html).toContain('2 équipes');

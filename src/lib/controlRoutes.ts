@@ -16,7 +16,14 @@
  *
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
-import { distNormAt, type ControlState, type ExpeditionMap, type Poi } from './expedition';
+import {
+  distNormAt,
+  type ControlState,
+  type ExpeditionMap,
+  type Poi,
+  type PostedHero,
+} from './expedition';
+import { heroPostOf, recallPostedHero, unpostHero } from './islandConquest';
 import { isMilitiaId } from './militia';
 import {
   controlFreeSeats,
@@ -31,6 +38,8 @@ import {
   militiaSeatsOf,
   heroSeatsIn,
   sendHomeFromControl,
+  sendHeroToControl,
+  controlSeats,
 } from './controlPoints';
 
 type Spot = Pick<Poi, 'x' | 'y'>;
@@ -417,4 +426,58 @@ export function syncAway(
     if (add.length) out = holdAway(out, v.homeId, add);
   }
   return out;
+}
+
+/** 🧭 Un trajet de la répartition : `null` = la base. `at` = l'arrivée. */
+export interface RedeployMove {
+  fromId: string | null;
+  toId: string | null;
+  ids: readonly string[];
+  at: number;
+}
+
+/**
+ * 🧭 LA RÉPARTITION, D'UN BLOC (2026-10-11, demandé : « tu pars du principe que tous les lieux
+ * sont vides, vu que tu vas faire bouger tous les effectifs d'un coup »). Tous ceux qui
+ * changent d'endroit QUITTENT d'abord leur lieu (une libération par lieu : la production est
+ * mise de côté une fois), puis PARTENT : vers un lieu comme un renfort (`via` = le lieu quitté),
+ * vers la base comme un rappel. Le héros quitte son poste et part de même. Les places se
+ * vérifient sur l'état FINAL : rend le lieu trop plein, ou la nouvelle carte.
+ *
+ * ⚠️ Lancés un par un, deux lieux pleins qui s'échangent des champions se bloquaient (« plus
+ * assez de places » : chacun attendait la place que l'autre libère).
+ */
+export function redeployMap(
+  map: ExpeditionMap,
+  moves: readonly RedeployMove[],
+  hero: { toId: string | null; at: number; unit: PostedHero; direct: boolean } | null,
+  now: number,
+  playerLevel: number,
+): { map: ExpeditionMap } | { full: Poi } {
+  const leaving = new Map<string, string[]>();
+  for (const m of moves)
+    if (m.fromId) leaving.set(m.fromId, [...(leaving.get(m.fromId) ?? []), ...m.ids]);
+  let out = map;
+  for (const [id, ids] of leaving) out = releaseFromControl(out, id, ids, now, playerLevel);
+  const post = heroPostOf(map);
+  for (const m of moves) {
+    if (m.toId) out = reinforceControl(out, m.toId, m.ids, m.at, now, m.fromId ?? undefined);
+    else if (m.fromId) out = sendHomeFromControl(out, m.fromId, m.ids, now, m.at);
+  }
+  if (hero) {
+    if (hero.toId) {
+      out = sendHeroToControl(
+        post ? unpostHero(out, now) : out,
+        hero.toId,
+        now,
+        hero.at,
+        hero.unit,
+        post && hero.direct ? post : undefined,
+      );
+    } else if (post) out = recallPostedHero(out, now, (hero.at - now) / 60_000);
+  }
+  for (const p of out.pois)
+    if (p.control?.owner === 'player' && controlSeats(p.control) > seatsOf(p.control.kind))
+      return { full: p };
+  return { map: out };
 }

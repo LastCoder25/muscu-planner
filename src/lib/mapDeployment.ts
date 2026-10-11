@@ -209,6 +209,57 @@ export function placeTeams(
   return { spotOf, load: e.load, count, makespan: e.max };
 }
 
+/** Combien de compétences de soutien sont en double dans l'équipe. */
+const dupRoles = (t: readonly DeployUnit[]): number => {
+  const seen = new Set<string>();
+  let n = 0;
+  for (const u of t)
+    for (const r of u.roles) {
+      if (seen.has(r)) n++;
+      seen.add(r);
+    }
+  return n;
+};
+
+/**
+ * 🔁 LE MOINS DE DÉPLACEMENTS POSSIBLE (2026-10-11, signalé : « pas assez de place sur les lieux
+ * en question »). Les équipes sont équilibrées sans regarder où chacun se trouve : deux lieux
+ * pleins pouvaient s'ÉCHANGER des champions, et aucun des deux transferts ne pouvait partir
+ * (chacun attend une place que l'autre libère). On échange donc deux membres de deux équipes
+ * quand ça fait rester plus de monde sur place — jamais le héros (il pèse 2 places), jamais au
+ * prix d'une équipe sous le seuil ni d'une compétence de soutien en double de plus.
+ */
+export function trimMoves(
+  teams: readonly DeployUnit[][],
+  spotOf: readonly string[],
+  ok: (team: readonly DeployUnit[]) => boolean,
+): DeployUnit[][] {
+  const out = teams.map((t) => [...t]);
+  const stay = (u: DeployUnit, i: number) => (u.loc === spotOf[i] ? 1 : 0);
+  for (let round = 0; round < 200; round++) {
+    let swapped = false;
+    search: for (let i = 0; i < out.length; i++)
+      for (let j = i + 1; j < out.length; j++) {
+        if (spotOf[i] === spotOf[j]) continue;
+        for (const a of out[i]!)
+          for (const b of out[j]!) {
+            if (a.hero || b.hero) continue;
+            if (stay(b, i) + stay(a, j) <= stay(a, i) + stay(b, j)) continue;
+            const ti = out[i]!.map((x) => (x === a ? b : x));
+            const tj = out[j]!.map((x) => (x === b ? a : x));
+            if (dupRoles(ti) + dupRoles(tj) > dupRoles(out[i]!) + dupRoles(out[j]!)) continue;
+            if (!ok(ti) || !ok(tj)) continue;
+            out[i] = ti;
+            out[j] = tj;
+            swapped = true;
+            break search;
+          }
+      }
+    if (!swapped) break;
+  }
+  return out;
+}
+
 /** 🧭 La répartition complète : équipes, endroits, et déplacements à faire. */
 export function planDeployment(
   units: readonly DeployUnit[],
@@ -216,8 +267,14 @@ export function planDeployment(
   points: number,
   opts: { threshold: number; deps: DeployDeps },
 ): DeployResult {
-  const { teams, below } = formTeams(units, opts.threshold, opts.deps.win);
-  const placed = placeTeams(teams, spots, Math.max(1, points), opts.deps.trip);
+  const formed = formTeams(units, opts.threshold, opts.deps.win);
+  const below = formed.below;
+  const placed = placeTeams(formed.teams, spots, Math.max(1, points), opts.deps.trip);
+  const teams = trimMoves(
+    formed.teams,
+    placed.spotOf,
+    (t) => below || opts.deps.win(t) >= opts.threshold,
+  );
   const total = Math.max(1, points);
   // Les points de chaque endroit, pour le trajet moyen.
   const zone = new Map<string, number>();

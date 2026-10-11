@@ -550,64 +550,39 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     }
   }
 
-  /** Exécute UN déplacement. Rend la raison d'un refus (`null` = parti). */
-  async function moveOne(m: RepoMoveRow): Promise<string | null> {
-    const uid = auth.user?.id;
-    if (!uid) return 'non connecté';
-    const now = Date.now();
-    const ids = m.advs.map((a) => a.id);
-    if (m.hero) {
-      if (m.to) return char.sendHeroToPost(uid, m.to.id, now, heroObj());
-      await char.recallHeroFromPost(uid, now);
-      return null;
-    }
-    if (!m.from) return m.to ? char.reinforceControlPoint(uid, m.to.id, ids, now) : null;
-    if (!m.to) {
-      await char.releaseControlChampions(uid, m.from.id, ids, now, ctx.heroLevel.value);
-      return null;
-    }
-    return char.transferControlGarrison(uid, m.from.id, m.to.id, ids, now, ctx.heroLevel.value);
-  }
-
-  async function launchMove(m: RepoMoveRow) {
-    if (launching.value) return;
-    launching.value = m.key;
-    try {
-      const refused = await moveOne(m);
-      if (refused) $q.notify({ type: 'negative', message: `Déplacement impossible : ${refused}.` });
-      else repoMoves.value = repoMoves.value.filter((x) => x.key !== m.key);
-    } finally {
-      launching.value = null;
-    }
-  }
-
+  /**
+   * ✅ VALIDER LA RÉPARTITION : tout le monde part d'un coup (`char.redeployGarrisons`, une
+   * seule écriture). ⚠️ Plus de déplacements un par un (2026-10-11, signalé : « pas assez de
+   * place sur les lieux ») : deux lieux pleins qui s'échangent des champions se bloquaient.
+   */
   async function launchAllMoves() {
-    if (launching.value || !repoMoves.value.length) return;
+    const uid = auth.user?.id;
+    if (!uid || launching.value || !repoMoves.value.length) return;
     launching.value = '*';
-    let ok = 0;
-    const refusals: string[] = [];
+    let refused: string | null;
     try {
-      // ⚠️ Les départs d'un lieu d'abord : ils y libèrent les places que les arrivées prendront.
-      const order = [...repoMoves.value].sort((a, b) => Number(!a.from) - Number(!b.from));
-      for (const m of order) {
-        const refused = await moveOne(m);
-        if (refused) refusals.push(refused);
-        else {
-          ok++;
-          repoMoves.value = repoMoves.value.filter((x) => x.key !== m.key);
-        }
-      }
+      refused = await char.redeployGarrisons(
+        uid,
+        repoMoves.value.map((m) => ({
+          fromId: m.from?.id ?? null,
+          toId: m.to?.id ?? null,
+          ids: m.advs.map((a) => a.id),
+          hero: m.hero,
+        })),
+        Date.now(),
+        ctx.heroLevel.value,
+        heroObj(),
+      );
     } finally {
       launching.value = null;
     }
-    $q.notify(
-      refusals.length
-        ? {
-            type: ok ? 'warning' : 'negative',
-            message: `${ok} déplacement(s), ${refusals.length} refusé(s) : ${refusals[0]}.`,
-          }
-        : { type: 'positive', message: `🧭 ${ok} déplacement(s) lancé(s).` },
-    );
+    if (refused) {
+      $q.notify({ type: 'negative', message: `Répartition impossible : ${refused}.` });
+      return;
+    }
+    const n = repoMoves.value.reduce((k, m) => k + m.advs.length + (m.hero ? 1 : 0), 0);
+    repoMoves.value = [];
+    $q.notify({ type: 'positive', message: `🧭 ${n} en route vers leur nouvel endroit.` });
   }
 
   /** Oublie la proposition (la carte a bougé, ou un réglage a changé). */
@@ -711,7 +686,6 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     repoBelow,
     repoMissing,
     repartir,
-    launchMove,
     launchAllMoves,
   };
 }
