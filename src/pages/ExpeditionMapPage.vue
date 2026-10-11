@@ -455,6 +455,7 @@
             @attack="(p: Poi) => ((overlay = null), openAttack(p))"
           />
         </template>
+        <ExpeditionPlanner v-else-if="overlay === 'plan'" :planner="planner" />
         <ControlPointsSheet
           v-else
           :model-value="true"
@@ -1578,6 +1579,7 @@ import {
   type PartyResult,
   veinDwellMs,
   controlWorkforce,
+  PARTY_TARGETS,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
@@ -1621,6 +1623,8 @@ import {
 } from '@/lib/crossing';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
+import { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
@@ -4244,10 +4248,14 @@ function dimmed(p: Poi): boolean {
 
 /** 🗂️ Les tuiles affichées PAR-DESSUS la carte (cf. le gabarit) : expéditions ou places
  *  fortes. Plus rien ne s'affiche sous la carte (demandé). */
-type MapPanel = 'trips' | 'ctl';
+type MapPanel = 'trips' | 'ctl' | 'plan';
 const overlay = ref<MapPanel | null>(null);
 const overlayTitle = computed(() =>
-  overlay.value === 'ctl' ? '🏰 Places fortes' : '🧭 Expéditions',
+  overlay.value === 'ctl'
+    ? '🏰 Places fortes'
+    : overlay.value === 'plan'
+      ? '🪄 Planifier des expéditions'
+      : '🧭 Expéditions',
 );
 function toggleOverlay(id: MapPanel) {
   overlay.value = overlay.value === id ? null : id;
@@ -4329,6 +4337,8 @@ const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; 
       alert: attacks.value.length > 0,
     },
     { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
+    // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
+    { id: 'plan', emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false },
   ],
 );
 /** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */
@@ -5653,6 +5663,32 @@ const {
   teamOnly,
   selectedRift,
   progressReady: progress.ready,
+  settleDueSiege,
+});
+/** 🪄 Les lieux que le planificateur peut proposer : ceux où une ÉQUIPE peut aller (mêmes règles
+ *  que le grisage, `dimmed`), sans voyage déjà en route vers eux. ⚠️ Ni les lieux fixes ennemis
+ *  (les prendre poste des champions : un choix lieu par lieu) ni les armées en marche (rendez-vous
+ *  calculé à l'envoi) : `placePois` exclut déjà les secondes. */
+const plannerTargets = computed(() => {
+  const busy = new Set(travelersOnMap.value.map((v) => v.poi.id));
+  return placePois.value.filter(
+    (p) => PARTY_TARGETS.has(p.type) && p.type !== 'control' && !busy.has(p.id) && !dimmed(p),
+  );
+});
+const planner = useExpeditionPlanner({
+  targets: plannerTargets,
+  freeStable,
+  now,
+  coarseNow,
+  heroLevel,
+  progressionLevel,
+  fighter,
+  heroHealIn,
+  outpostBuilt,
+  travelMult,
+  roadCtx,
+  base,
+  cap,
   settleDueSiege,
 });
 /** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */

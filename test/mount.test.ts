@@ -293,6 +293,49 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   // une île déplie sa fiche.
   // ⚫ Signalé : « je ne vois pas les points de garnison sous la ville portuaire ». Le village
   // (île 2+) comme la base (île 1) dessinent la rangée : héros, champions, miliciens.
+  // 🪄 Le planificateur : réglages, résumé et une tuile par expédition proposée.
+  it('ExpeditionPlanner : les réglages et les propositions', async () => {
+    const { ref } = await import('vue');
+    const { default: ExpeditionPlanner } = await import('@/components/ExpeditionPlanner.vue');
+    const poi = { id: 'p1', type: 'camp', level: 12, x: 0, y: 0, distNorm: 0.4 };
+    const planner = {
+      threshold: ref(90),
+      mode: ref('events'),
+      withGarrisons: ref(false),
+      withHero: ref(true),
+      heroFree: ref(true),
+      poolInfo: ref({ base: 3, garrison: 2 }),
+      running: ref(false),
+      progress: ref(1),
+      rows: ref([
+        {
+          key: 'p1|a',
+          poi,
+          advs: [{ id: 'a', name: 'Argus', path: [], level: 5, xp: 0 }],
+          hero: true,
+          from: null,
+          win: 0.94,
+          tripMin: 75,
+          xp: 120,
+        },
+      ]),
+      unreachable: ref([poi]),
+      launching: ref(null),
+      compute: () => undefined,
+      reset: () => undefined,
+      launch: () => undefined,
+      launchAll: () => undefined,
+    };
+    let html = '';
+    await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
+    expect(html).toContain('Tout lancer (1)');
+    expect(html).toContain('Argus');
+    expect(html).toContain('🎯 94 %');
+    expect(html).toContain('3 champions libres');
+    expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
+    expect(html).toContain('1 lieu hors de portée');
+  });
+
   it('MapTown : les points de qui est là, sous la base comme sous le village du port', async () => {
     const { default: MapTown } = await import('@/components/MapTown.vue');
     const { townDots } = await import('@/lib/townDots');
