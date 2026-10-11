@@ -1431,6 +1431,10 @@
       @click="goBase"
     >
       <span class="tf-emo">🏠</span>
+      <!-- 🛕 Comme les ronds voisins, un chiffre : les voyants ALLUMÉS du Panthéon de la base. -->
+      <span v-if="pantheonLitCount" class="tf-dot" :title="pantheonLitTitle">{{
+        pantheonLitCount
+      }}</span>
     </button>
     <!-- 🧭🏰 À gauche du 🏠 (tout à droite quand il est masqué) : les expéditions et les places
          fortes, par-dessus la carte. Plus rien ne s'affiche sous la carte (demandé). -->
@@ -1629,6 +1633,8 @@ import {
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
+import { pantheonLights } from '@/lib/pantheonLights';
+import { normalizeRuneBank } from '@/lib/runeBank';
 import { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
@@ -1901,6 +1907,23 @@ const viewed = computed(() => {
     reserve: crossInfo.value.militia[isl.id] ?? 0,
   };
 });
+/** 🛕 Les voyants allumés du Panthéon (ascensions, runes, invocation ×10) : la MÊME règle
+ *  que les boules dessinées à côté du Panthéon sur la base (`pantheonLights`), et comme
+ *  elles, rien tant qu'il n'est pas bâti. */
+const pantheonLit = computed(() =>
+  char.pantheonLevel > 0
+    ? pantheonLights({
+        advs: char.advList,
+        stock: char.advGearStock,
+        pantheonLevel: char.pantheonLevel,
+        runes: char.row?.runes ?? normalizeRuneBank(null),
+        tickets: char.row?.gacha_tickets ?? 0,
+        mana: char.row?.mana ?? 0,
+      }).filter((l) => l.on)
+    : [],
+);
+const pantheonLitCount = computed(() => pantheonLit.value.length);
+const pantheonLitTitle = computed(() => pantheonLit.value.map((l) => l.label).join(' · '));
 /** 🏰 Ouvre l'onglet Base de l'Aventure (la base de l'île 1). */
 function goBase() {
   void router.replace({ path: route.path, query: { ...route.query, tab: 'base' } });
