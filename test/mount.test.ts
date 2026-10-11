@@ -308,8 +308,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       );
       // 🤕 Le blessé (`d-w`, rouge) entre les présents et la milice.
       expect(html.match(/class="d-[hcmw]"/g)?.join(' ')).toBe(
-        'class="d-h" class="d-c" class="d-w" class="d-m" class="d-m"',
+        'class="d-h" class="d-h" class="d-c" class="d-w" class="d-m" class="d-m"',
       );
+      // 🧝 Le héros en double boule RELIÉE, comme sous un lieu fixe.
+      expect(html.match(/class="hero-link"/g)?.length).toBe(1);
     }
   });
 

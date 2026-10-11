@@ -3,7 +3,7 @@
  * fixes, sous l'icône sur la carte, les points des champions présents et du héros »).
  *
  * Même langage que la garnison d'un lieu fixe (`garrisonDotRows`) : une lettre par point —
- * `h` le héros (en tête, il est à part), `c` un champion présent, `m` un milicien en réserve
+ * `hh` le héros (en tête, deux points reliés), `c` un champion présent, `m` un milicien en réserve
  * (signalé : « je ne vois pas les points de garnison sous la ville portuaire » — sur une île,
  * la garnison du village, c'est d'abord sa milice).
  *
@@ -12,6 +12,8 @@
  * sous un lieu fixe. La base n'a pas de places : aucune case vide n'est dessinée. Au-delà de
  * `maxRows` lignes, le reste est rendu (`more`), affiché « +N » au bout de la dernière ligne.
  */
+import { HERO_GARRISON_SEATS } from './expedition';
+
 export interface TownDots {
   rows: string[];
   more: number;
@@ -44,7 +46,9 @@ export function townDots(
   maxRows = TOWN_ROWS_MAX,
   hurt: TownHurt = {},
 ): TownDots {
-  const champs = (heroHome ? 'h' : '') + 'c'.repeat(count(champions));
+  // 🧝 Le héros en DEUX points reliés, comme sous un lieu fixe (demandé, 2026-10-11 : « la double
+  // boule plutôt » — un point doré seul se lisait comme un champion).
+  const champs = (heroHome ? 'h'.repeat(HERO_GARRISON_SEATS) : '') + 'c'.repeat(count(champions));
   const sick = 'w'.repeat((hurt.hero ? 1 : 0) + count(hurt.champions ?? 0));
   const mil = 'm'.repeat(count(militia));
   const shown = [
