@@ -68,10 +68,24 @@
         · {{ poolInfo.garrison }} en garnison prêt{{ poolInfo.garrison > 1 ? 's' : '' }}</template
       ><template v-if="withHero && heroFree"> · 🧝 héros</template>
     </p>
-    <button type="button" class="pl-go" :disabled="running" @click="compute">
-      <span v-if="running">⏳ Calcul… {{ Math.round(progress * 100) }} %</span>
-      <span v-else>🪄 {{ rows ? 'Recalculer' : 'Proposer des expéditions' }}</span>
-    </button>
+    <div class="pl-gos">
+      <button type="button" class="pl-go" :disabled="running || repoRunning" @click="compute">
+        <span v-if="running">⏳ Calcul… {{ Math.round(progress * 100) }} %</span>
+        <span v-else>🪄 {{ rows ? 'Recalculer' : 'Proposer des expéditions' }}</span>
+      </button>
+      <!-- 🧭 RÉPARTIR (2026-10-11, demandé) : où placer champions et héros (base ou lieux
+           fixes tenus) pour que les expéditions partent au plus près. -->
+      <button
+        type="button"
+        class="pl-go alt"
+        :disabled="running || repoRunning"
+        title="Proposer où placer tes champions et ton héros pour raccourcir les expéditions"
+        @click="repartir"
+      >
+        <span v-if="repoRunning">⏳ Calcul…</span>
+        <span v-else>🧭 Répartir</span>
+      </button>
+    </div>
     <div v-if="running" class="pl-bar">
       <div class="pl-fill" :style="{ width: Math.round(progress * 100) + '%' }" />
     </div>
@@ -127,6 +141,79 @@
         {{ threshold }} % avec ce qui reste.
       </p>
     </template>
+    <template v-if="repoTeams && !repoRunning">
+      <p v-if="!repoTeams.length" class="pl-empty">
+        Aucune expédition n’atteint {{ threshold }} % : rien à répartir.
+      </p>
+      <template v-else>
+        <p v-if="!repoMoves.length" class="pl-empty">
+          ✅ Tes effectifs sont déjà bien placés : aucun déplacement ne raccourcit assez les
+          trajets.
+        </p>
+        <template v-else>
+          <div class="pl-sum">
+            <span class="pl-pill"
+              >🧭 {{ repoMoves.length }} déplacement{{ repoMoves.length > 1 ? 's' : '' }}</span
+            >
+            <span v-if="savedMin > 0" class="pl-pill"
+              >⏱️ −{{ fmt(savedMin) }} par tour d’expéditions</span
+            >
+          </div>
+          <button type="button" class="pl-all" :disabled="!!launching" @click="launchAllMoves">
+            {{ launching === '*' ? '⏳ Déplacements…' : `🧭 Tout déplacer (${repoMoves.length})` }}
+          </button>
+          <div class="pl-list">
+            <div v-for="m in repoMoves" :key="m.key" class="pl-tile mv">
+              <div class="pt-head">
+                <span class="pt-route">
+                  {{ placeOf(m.from) }} <span class="pt-arrow">→</span> {{ placeOf(m.to) }}
+                </span>
+              </div>
+              <div class="pt-team">
+                <span v-if="m.hero" class="pt-mem hero">🧝 Héros</span>
+                <span v-for="a in m.advs" :key="a.id" class="pt-mem">
+                  {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+                </span>
+              </div>
+              <div class="pt-foot">
+                <span class="pt-stat">🚶 {{ fmt(m.min) }}</span>
+                <button type="button" class="pt-go" :disabled="!!launching" @click="launchMove(m)">
+                  {{ launching === m.key ? '⏳' : 'Déplacer' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <p class="pl-lab">Les expéditions qui en profitent</p>
+        <div class="pl-list">
+          <div v-for="t in repoTeams" :key="t.key" class="pl-tile">
+            <div class="pt-head">
+              <span class="pt-emo" aria-hidden="true">{{ poiEmo(t.poi) }}</span>
+              <span class="pt-name">{{ poiLabel(t.poi) }}</span>
+              <span class="pt-rank" :style="{ '--rk': rankOf(t.poi).color }">
+                {{ rankOf(t.poi).name }} ★{{ rankOf(t.poi).star }}
+              </span>
+            </div>
+            <div class="pt-team">
+              <span class="pt-from">{{ originLine(t) }}</span>
+              <span v-if="t.hero" class="pt-mem hero">🧝 Héros</span>
+              <span v-for="a in t.advs" :key="a.id" class="pt-mem">
+                {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+              </span>
+            </div>
+            <div class="pt-foot">
+              <span class="pt-stat">
+                ⏱️
+                <template v-if="t.nowTripMin !== null && t.nowTripMin > t.tripMin + 0.5"
+                  ><s class="pt-old">{{ fmt(t.nowTripMin) }}</s> → </template
+                >{{ fmt(t.tripMin) }}
+              </span>
+              <span v-if="paybackOf(t)" class="pt-stat">{{ paybackOf(t) }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </template>
     <p class="pl-note">
       Lieux fixes ennemis et armées en marche ne sont pas proposés : ce sont des choix à faire lieu
       par lieu.
@@ -136,7 +223,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
+import type { RepoTeamRow, useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
 import { SKILLS } from '@/lib/skillRunes';
 import { characterRank } from '@/lib/characterRank';
@@ -160,6 +247,12 @@ const {
   compute,
   launch,
   launchAll,
+  repoTeams,
+  repoMoves,
+  repoRunning,
+  repartir,
+  launchMove,
+  launchAllMoves,
 } = props.planner;
 
 const MODES: { id: PlanMode; emo: string; title: string; sub: string }[] = [
@@ -186,6 +279,27 @@ const engaged = computed(() =>
 );
 const longest = computed(() => Math.max(0, ...(rows.value ?? []).map((r) => r.tripMin)));
 const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0));
+
+/** 🧭 Un endroit : la base ou le lieu fixe. */
+const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Base');
+const originLine = (t: RepoTeamRow) =>
+  t.origin ? `🏰 partira de ${poiLabel(t.origin)}` : '🏠 partira de la base';
+/** Au bout de combien d'expéditions le déplacement est rentabilisé. */
+const paybackOf = (t: RepoTeamRow) => {
+  if (!t.moveMin) return '';
+  if (t.nowTripMin === null) return '🔗 équipe réunie';
+  const gain = t.nowTripMin - t.tripMin;
+  if (gain <= 0) return '';
+  const n = Math.max(1, Math.ceil(t.moveMin / gain));
+  return `💡 rentabilisé en ${n} expédition${n > 1 ? 's' : ''}`;
+};
+/** Le temps gagné à chaque tour, sur les équipes déjà réunies (les autres n'ont pas de « avant »). */
+const savedMin = computed(() =>
+  (repoTeams.value ?? []).reduce(
+    (s, t) => s + (t.nowTripMin !== null ? Math.max(0, t.nowTripMin - t.tripMin) : 0),
+    0,
+  ),
+);
 </script>
 
 <style scoped lang="scss">
@@ -410,6 +524,32 @@ const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0))
   &:disabled {
     opacity: 0.6;
   }
+}
+.pl-gos {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.pl-go.alt {
+  background: color-mix(in srgb, #5fd0ff 22%, var(--surface));
+  color: var(--text);
+  border: 1.5px solid #5fd0ff;
+}
+.pl-tile.mv {
+  border-color: color-mix(in srgb, #5fd0ff 55%, var(--line));
+}
+.pt-route {
+  font-weight: 700;
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pt-arrow {
+  color: #5fd0ff;
+}
+.pt-old {
+  color: var(--dim);
+  font-weight: 600;
 }
 .pl-pool,
 .pl-empty,

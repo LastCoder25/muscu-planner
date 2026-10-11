@@ -325,6 +325,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       reset: () => undefined,
       launch: () => undefined,
       launchAll: () => undefined,
+      repoTeams: ref(null),
+      repoMoves: ref([]),
+      repoRunning: ref(false),
+      repartir: () => undefined,
+      launchMove: () => undefined,
+      launchAllMoves: () => undefined,
     };
     let html = '';
     await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
@@ -334,6 +340,40 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).toContain('3 champions libres');
     expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
     expect(html).toContain('1 lieu hors de portée');
+    expect(html).toContain('🧭 Répartir');
+
+    // 🧭 La répartition : les déplacements, puis les équipes qui en profitent.
+    const fort = {
+      id: 'f1',
+      type: 'control',
+      level: 10,
+      x: 0,
+      y: 0,
+      distNorm: 0.3,
+      control: { kind: 'mine', owner: 'player' },
+    };
+    const argus = { id: 'a', name: 'Argus', path: [], level: 5, xp: 0 };
+    planner.rows.value = null as never;
+    planner.repoMoves.value = [
+      { key: 'base>f1', from: null, to: fort, advs: [argus], hero: false, min: 20 },
+    ] as never;
+    planner.repoTeams.value = [
+      {
+        key: 'p1|a',
+        poi,
+        advs: [argus],
+        hero: false,
+        origin: fort,
+        tripMin: 40,
+        nowTripMin: 80,
+        moveMin: 20,
+      },
+    ] as never;
+    await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
+    expect(html).toContain('Tout déplacer (1)');
+    expect(html).toContain('🏠 Base');
+    expect(html).toContain('rentabilisé en 1 expédition');
+    expect(html).toContain('class="pt-old"');
   });
 
   it('MapTown : les points de qui est là, sous la base comme sous le village du port', async () => {

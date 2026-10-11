@@ -12,8 +12,9 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
+import { controlFreeSeats, seatsOf } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import type { Poi } from '@/lib/expedition';
+import { HERO_GARRISON_SEATS, RAZE_KINDS, type Poi } from '@/lib/expedition';
 import {
   planExpeditions,
   type PlanMode,
@@ -21,6 +22,7 @@ import {
   type PlanUnit,
 } from '@/lib/expeditionPlanner';
 import { heroPostOf } from '@/lib/islandConquest';
+import { planReposition, type RepoUnit } from '@/lib/repositionPlanner';
 import { partyHeroBlocker, partyLegMin, partySendBlocker } from '@/lib/party';
 import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import type { BaseState } from '@/lib/raid';
@@ -77,6 +79,34 @@ function save(key: string, v: string) {
     /* navigation privée : sans mémoire */
   }
 }
+
+/** 🧭 Un déplacement proposé : des champions (et/ou le héros) d'un endroit vers un autre. */
+export interface RepoMoveRow {
+  key: string;
+  /** D'où ils partent (null = la base). */
+  from: Poi | null;
+  /** Où ils vont (null = la base). */
+  to: Poi | null;
+  advs: Adventurer[];
+  hero: boolean;
+  /** Le plus long des trajets du groupe (minutes). */
+  min: number;
+}
+/** 🧭 Ce que la répartition change pour une équipe. */
+export interface RepoTeamRow {
+  key: string;
+  poi: Poi;
+  advs: Adventurer[];
+  hero: boolean;
+  /** D'où l'équipe partira (null = la base). */
+  origin: Poi | null;
+  tripMin: number;
+  /** L'aller-retour sans rien changer (null : l'équipe est aujourd'hui dispersée). */
+  nowTripMin: number | null;
+  moveMin: number;
+}
+/** Sur combien d'expéditions un déplacement doit se rentabiliser. */
+const REPO_PAYBACK = 3;
 
 export interface PlannerRow {
   key: string;
@@ -151,6 +181,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     progress.value = 0;
     rows.value = null;
     unreachable.value = [];
+    repoTeams.value = null;
+    repoMoves.value = [];
     try {
       const now = ctx.coarseNow.value;
       const map = char.row?.expedition_map;
@@ -258,12 +290,226 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     }
   }
 
+  /**
+   * 🧭 RÉPARTIR champions et héros sur la base et les lieux fixes tenus pour raccourcir les
+   * expéditions (demandé le 2026-10-11). Les ÉQUIPES viennent du planificateur, en mode
+   * événements, au seuil réglé, tout le monde mis en commun (où qu'il soit) ; puis
+   * `planReposition` cherche d'où chacune partira le plus vite, le déplacement amorti sur
+   * `REPO_PAYBACK` expéditions. Pas de miliciens : ils ne partent pas en expédition.
+   */
+  const repoTeams = ref<RepoTeamRow[] | null>(null);
+  const repoMoves = ref<RepoMoveRow[]>([]);
+  const repoRunning = ref(false);
+  async function repartir() {
+    const me = ++run;
+    repoRunning.value = true;
+    rows.value = null;
+    unreachable.value = [];
+    repoTeams.value = null;
+    repoMoves.value = [];
+    try {
+      const now = ctx.coarseNow.value;
+      const map = char.row?.expedition_map;
+      const road = ctx.roadCtx.value;
+      const base = ctx.base.value;
+      const byId = new Map<string, Adventurer>();
+      const loc = new Map<string, string>();
+      const power = (a: Adventurer) => combatPowerRaw(partyAllies([a], road, null)[0]!.combatant);
+      const units: PlanUnit[] = [];
+      const add = (a: Adventurer, at: string) => {
+        byId.set(a.id, a);
+        loc.set(a.id, at);
+        units.push({ id: a.id, hero: false, origin: 'pool', power: power(a) });
+      };
+      for (const a of ctx.freeStable.value) add(a, 'base');
+      for (const [pid, ready] of readyGarrisons(map, char.advList, ctx.now.value))
+        for (const a of ready) add(a, pid);
+      const hero = withHero.value && heroFree.value ? heroObj() : null;
+      if (hero) {
+        loc.set('__hero', heroPostOf(map)?.id ?? 'base');
+        units.push({
+          id: '__hero',
+          hero: true,
+          origin: 'pool',
+          power: combatPowerRaw(heroPartyCombatant(hero)),
+        });
+      }
+      const held = (map?.pois ?? []).filter(
+        (p) => p.control?.owner === 'player' && !RAZE_KINDS.has(p.control.kind),
+      );
+      const points = new Map(held.map((p) => [p.id, p]));
+      const advsOf = (us: readonly { id: string; hero: boolean }[]) =>
+        us.filter((u) => !u.hero).map((u) => byId.get(u.id)!);
+      const hasHero = (us: readonly { hero: boolean }[]) => us.some((u) => u.hero);
+      const legOf = (advs: Adventurer[], h: boolean) => (p: Poi) =>
+        partyLegMin(p, advs, {
+          hero: h,
+          travelMult: ctx.travelMult.value,
+          gearSpeed: advGearRoles(advs, road.advGear).speed,
+        });
+      const tripFrom = (t: Poi, us: readonly { id: string; hero: boolean }[], origin: string) => {
+        const lo = legOf(advsOf(us), hasHero(us));
+        const from = points.get(origin);
+        return 2 * (from ? legFromSpot(t, from, lo) : lo(t));
+      };
+      const res = await planExpeditions(ctx.targets.value, units, {
+        threshold: threshold.value / 100,
+        mode: 'events',
+        maxTeam: MAX_TEAM,
+        cancelled: () => me !== run,
+        pause: () => new Promise((r) => setTimeout(r, 0)),
+        deps: {
+          fits: (t, us) => {
+            const h = hasHero(us);
+            if (h && partyHeroBlocker({ onExpedition: false, healMs: 0, outpost: true, poi: t }))
+              return false;
+            return !partySendBlocker(
+              withRiftCut(t, base),
+              advsOf(us).length,
+              h,
+              ctx.cap.value,
+              1,
+              now,
+            );
+          },
+          win: (t, us) =>
+            partyWinChance(
+              withRiftCut(t, base),
+              advsOf(us),
+              road,
+              hasHero(us) ? hero : null,
+              now,
+              FORECAST_SAMPLES,
+            ),
+          tripMin: (t, us) => tripFrom(t, us, 'base'),
+          xp: () => 0,
+        },
+      });
+      if (!res || me !== run) return;
+      const teams = res.trips.map((tr) => ({
+        target: tr.target,
+        units: tr.units.map((u): RepoUnit => ({ id: u.id, hero: u.hero, loc: loc.get(u.id)! })),
+      }));
+      const free: Record<string, number> = {};
+      for (const p of held) free[p.id] = controlFreeSeats(p.control);
+      const plan = planReposition(
+        teams,
+        {
+          tripMin: (team, origin) => tripFrom(team.target, team.units, origin),
+          moveMin: (u, to) => {
+            const lo = legOf(u.hero ? [] : [byId.get(u.id)!], u.hero);
+            const from = points.get(u.loc);
+            if (to === 'base') return from ? lo(from) : 0;
+            const dest = points.get(to)!;
+            return from ? legFromSpot(dest, from, lo) : lo(dest);
+          },
+          canHost: (u, to) =>
+            to === 'base' ||
+            seatsOf(points.get(to)!.control!.kind) >= (u.hero ? HERO_GARRISON_SEATS : 1),
+        },
+        { free, payback: REPO_PAYBACK },
+      );
+      repoTeams.value = plan.assignments.map((a) => ({
+        key: `${a.team.target.id}|${a.team.units.map((u) => u.id).join(',')}`,
+        poi: a.team.target,
+        advs: advsOf(a.team.units),
+        hero: hasHero(a.team.units),
+        origin: points.get(a.origin) ?? null,
+        tripMin: a.tripMin,
+        nowTripMin: a.nowTripMin,
+        moveMin: a.moveMin,
+      }));
+      // Un geste par (départ, arrivée) pour tout le groupe ; le héros à part.
+      const groups = new Map<string, RepoMoveRow>();
+      for (const m of plan.moves) {
+        const key = m.unit.hero ? `hero|${m.to}` : `${m.from}>${m.to}`;
+        const g = groups.get(key) ?? {
+          key,
+          from: points.get(m.from) ?? null,
+          to: points.get(m.to) ?? null,
+          advs: [],
+          hero: m.unit.hero,
+          min: 0,
+        };
+        if (!m.unit.hero) g.advs.push(byId.get(m.unit.id)!);
+        g.min = Math.max(g.min, m.min);
+        groups.set(key, g);
+      }
+      repoMoves.value = [...groups.values()].sort((a, b) => a.min - b.min);
+    } finally {
+      if (me === run) repoRunning.value = false;
+    }
+  }
+
+  /** Exécute UN déplacement. Rend la raison d'un refus (`null` = parti). */
+  async function moveOne(m: RepoMoveRow): Promise<string | null> {
+    const uid = auth.user?.id;
+    if (!uid) return 'non connecté';
+    const now = Date.now();
+    const ids = m.advs.map((a) => a.id);
+    if (m.hero) {
+      if (m.to) return char.sendHeroToPost(uid, m.to.id, now, heroObj());
+      await char.recallHeroFromPost(uid, now);
+      return null;
+    }
+    if (!m.from) return m.to ? char.reinforceControlPoint(uid, m.to.id, ids, now) : null;
+    if (!m.to) {
+      await char.releaseControlChampions(uid, m.from.id, ids, now, ctx.heroLevel.value);
+      return null;
+    }
+    return char.transferControlGarrison(uid, m.from.id, m.to.id, ids, now, ctx.heroLevel.value);
+  }
+
+  async function launchMove(m: RepoMoveRow) {
+    if (launching.value) return;
+    launching.value = m.key;
+    try {
+      const refused = await moveOne(m);
+      if (refused) $q.notify({ type: 'negative', message: `Déplacement impossible : ${refused}.` });
+      else repoMoves.value = repoMoves.value.filter((x) => x.key !== m.key);
+    } finally {
+      launching.value = null;
+    }
+  }
+
+  async function launchAllMoves() {
+    if (launching.value || !repoMoves.value.length) return;
+    launching.value = '*';
+    let ok = 0;
+    const refusals: string[] = [];
+    try {
+      // ⚠️ Les départs d'un lieu d'abord : ils y libèrent les places que les arrivées prendront.
+      const order = [...repoMoves.value].sort((a, b) => Number(!a.from) - Number(!b.from));
+      for (const m of order) {
+        const refused = await moveOne(m);
+        if (refused) refusals.push(refused);
+        else {
+          ok++;
+          repoMoves.value = repoMoves.value.filter((x) => x.key !== m.key);
+        }
+      }
+    } finally {
+      launching.value = null;
+    }
+    $q.notify(
+      refusals.length
+        ? {
+            type: ok ? 'warning' : 'negative',
+            message: `${ok} déplacement(s), ${refusals.length} refusé(s) : ${refusals[0]}.`,
+          }
+        : { type: 'positive', message: `🧭 ${ok} déplacement(s) lancé(s).` },
+    );
+  }
+
   /** Oublie la proposition (la carte a bougé, ou un réglage a changé). */
   function reset() {
     run++;
     running.value = false;
     rows.value = null;
     unreachable.value = [];
+    repoRunning.value = false;
+    repoTeams.value = null;
+    repoMoves.value = [];
   }
   watch([threshold, mode, withGarrisons, withHero], reset);
 
@@ -338,5 +584,11 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     reset,
     launch,
     launchAll,
+    repoTeams,
+    repoMoves,
+    repoRunning,
+    repartir,
+    launchMove,
+    launchAllMoves,
   };
 }
