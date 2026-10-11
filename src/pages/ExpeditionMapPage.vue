@@ -4370,7 +4370,11 @@ const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; 
     // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
     { id: 'plan', emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false },
     // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
-    { id: 'repart', emo: '👥', label: 'Répartir l’effectif', n: 0, alert: false },
+    // ⚠️ Seulement quand TOUT l'effectif est disponible (demandé) : la répartition laisse de
+    // côté qui est en route ou à l'infirmerie, donc elle ne placerait pas tout le monde.
+    ...(allForcesFree.value
+      ? [{ id: 'repart' as const, emo: '👥', label: 'Répartir l’effectif', n: 0, alert: false }]
+      : []),
   ],
 );
 /** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */
@@ -5722,6 +5726,15 @@ const planner = useExpeditionPlanner({
   base,
   cap,
   settleDueSiege,
+});
+/** 👥 Héros et champions tous disponibles : la règle exacte de `repoMissing` (qui dit, dans
+ *  le panneau, qui la répartition laisserait de côté). */
+const allForcesFree = computed(
+  () => !planner.repoMissing.value.hero && planner.repoMissing.value.advs.length === 0,
+);
+// Le panneau ouvert se referme si quelqu'un part entre-temps (son rond a disparu).
+watch(allForcesFree, (ok) => {
+  if (!ok && overlay.value === 'repart') overlay.value = null;
 });
 /** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */
 const controlReturnNote = computed(() =>

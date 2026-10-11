@@ -134,6 +134,9 @@ const ECRANS = [
       },
       {
         nom: 'tuiles-repart',
+        // 👥 Seulement quand tout l'effectif est disponible : le compte de test a souvent un
+        // voyage en cours, le rond est alors masqué (et c'est voulu).
+        facultatif: true,
         clic: '.tile-fab[aria-label="Répartir l’effectif"]',
         attendu: '.map-overlay .xp-plan:not(:has(.pl-modes))',
       },
@@ -314,6 +317,12 @@ try {
           }
           const toutes = page.locator(geste.clic);
           if (!(await toutes.count())) {
+            // 🙈 Un geste FACULTATIF dépend de l'état du compte (le rond 👥 n'existe que si tout
+            // l'effectif est libre) : son absence se DIT, elle n'échoue pas.
+            if (geste.facultatif) {
+              console.log(`  · ${width}px ${e.nom} : « ${geste.nom} » absent (facultatif)`);
+              continue;
+            }
             fail.push(`${width}px ${e.nom} : « ${geste.nom} » introuvable (${geste.clic})`);
             continue;
           }
