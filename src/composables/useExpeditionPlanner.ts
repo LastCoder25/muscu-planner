@@ -70,10 +70,10 @@ export interface PlannerCtx {
 
 /** Taille d'équipe au plus essayée : au-delà, une proposition n'a plus de sens (tanière). */
 const MAX_TEAM = 8;
-/** 🧭 La taille du repaire de référence de la répartition : le plus gros des lieux courants. */
-const REF_SIZE = 3;
-/** 🕳️ L'âge de la faille de référence, en part de sa maturation : à mi-chemin. */
-const RIFT_REF_AGE = 0.5;
+/** 🧭 La force du lieu de référence de la répartition, en gardes : un lieu DUR COURANT (le haut
+ *  des lieux de récolte gardés, 1 à 2,5, et des camps). Les repaires pleins et les failles se
+ *  prennent en réunissant des garnisons voisines (attaque combinée). */
+const REF_SIZE = 2.5;
 const THRESHOLD_KEY = 'muscu:planner:threshold';
 const MODE_KEY = 'muscu:planner:mode';
 const GARRISON_KEY = 'muscu:planner:garrisons';
@@ -120,7 +120,7 @@ export interface RepoTeamRow {
   spot: Poi | null;
   advs: Adventurer[];
   hero: boolean;
-  /** Chance contre un lieu de référence parmi les plus durs de l'île. */
+  /** Chance contre le lieu de référence (un lieu dur courant de l'île). */
   win: number;
   /** Part de l'île qu'elle couvre (0..1). */
   share: number;
@@ -374,7 +374,6 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       // Le navigateur garde la main avant un calcul de quelques centaines de combats.
       await new Promise((r) => setTimeout(r, 0));
       if (me !== run) return;
-      const now = ctx.coarseNow.value;
       const map = char.row?.expedition_map;
       const road = ctx.roadCtx.value;
       const byId = new Map<string, Adventurer>();
@@ -428,29 +427,28 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         })),
       ];
 
-      // 🎯 Les lieux de référence, au plus haut rang de l'île (plafonné au héros) : un REPAIRE
-      // plein (le plus gros camp courant) et une FAILLE à mi-maturation, le lieu le plus dur.
-      // ⚠️ Chaque garnison doit pouvoir prendre LES DEUX : le 🪄 la découpe ensuite en petites
-      // équipes pour les camps, mais une faille ne se prend qu'avec toute la garnison d'un
-      // endroit (une expédition part d'un seul endroit).
+      // 🎯 Le lieu de référence, au plus haut rang de l'île (plafonné au héros) : un lieu DUR
+      // COURANT — 2,5 gardes, le haut des lieux de récolte gardés et des camps (`REF_SIZE`).
+      // ⚠️ Pas le repaire plein ni la faille : depuis les attaques combinées (v1.139), les
+      // garnisons voisines se réunissent pour ceux-là. Mesuré sur un vrai vivier (16 champions,
+      // île 2) : exiger le repaire plein ET la faille faisait 3 garnisons de 5-6 qui ne
+      // rentraient pas dans les lieux à 5 places (base et forteresse seulement), contre 4
+      // garnisons, une par lieu tenu, avec cette référence — trajet moyen du 🪄 113 → 70 min,
+      // XP par heure ×2.
       const level = deployRefLevel(
         ctx.heroLevel.value,
         archipelFloor(map),
         map?.archipel?.levelCap ?? Infinity,
       );
-      const base0 = {
+      const refPoi: Poi = {
+        id: 'deploy-ref',
+        type: 'lair',
         level,
         x: EXPE.town.x,
         y: EXPE.town.y - 40,
         distNorm: 0.5,
+        spawnedAt: 0,
         expiresAt: Number.MAX_SAFE_INTEGER,
-      };
-      const lairRef: Poi = { ...base0, id: 'deploy-lair', type: 'lair', spawnedAt: 0 };
-      const riftRef: Poi = {
-        ...base0,
-        id: 'deploy-rift',
-        type: 'rift',
-        spawnedAt: now - EXPE.lifespanMs.rift * RIFT_REF_AGE,
       };
       const advsOf = (us: readonly DeployUnit[]) =>
         us.filter((u) => !u.hero).map((u) => byId.get(u.id)!);
@@ -462,23 +460,13 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
           .join(',');
         let w = winCache.get(key);
         if (w === undefined) {
-          const advs = advsOf(team);
-          const h = team.some((u) => u.hero) ? hero : null;
-          const allies = partyAllies(advs, road, h);
-          const lair = campWinPct(
-            lairRef,
+          const allies = partyAllies(advsOf(team), road, team.some((u) => u.hero) ? hero : null);
+          w = campWinPct(
+            refPoi,
             { faction: 'bandits', size: REF_SIZE },
             allies,
             FORECAST_SAMPLES * CAMP_SAMPLE_MULT,
           );
-          // La faille ne se joue que si le repaire passe : inutile de simuler 13 combats sinon.
-          w =
-            lair < threshold.value / 100
-              ? lair
-              : Math.min(
-                  lair,
-                  partyWinChance(riftRef, advs, road, h, now, FORECAST_SAMPLES, false) ?? 0,
-                );
           winCache.set(key, w);
         }
         return w;

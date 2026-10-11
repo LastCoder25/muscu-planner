@@ -27,6 +27,22 @@ const plan = (targets: T[], units: PlanUnit[], threshold = 0.9, mode: 'events' |
   planExpeditions(targets, units, { threshold, mode, maxTeam: 6, deps });
 
 describe('planificateur d’expéditions', () => {
+  it('mode XP : le héros ne part jamais seul (il n’apprend rien à personne)', async () => {
+    // Le champion part seul sur le lieu facile ; sans la règle, le héros partirait SEUL sur
+    // l'autre (il suffit), pour 0 XP.
+    const t = [
+      { id: 'facile', need: 1, min: 30, xp: 10 },
+      { id: 'dur', need: 5, min: 30, xp: 10 },
+    ];
+    const units = [u('H', 9, 'base', true), u('W', 1)];
+    const xp = (await plan(t, units, 0.9, 'xp'))!;
+    expect(xp.trips.some((tr) => tr.units.every((x) => x.hero))).toBe(false);
+    expect(xp.trips).toHaveLength(1);
+    // En mode Événements, le héros seul reste permis : on prend les deux lieux.
+    const ev = (await plan(t, units, 0.9, 'events'))!;
+    expect(ev.trips).toHaveLength(2);
+  });
+
   it('garde le fort pour le lieu difficile : le faible suffit au facile', async () => {
     const r = (await plan(
       [

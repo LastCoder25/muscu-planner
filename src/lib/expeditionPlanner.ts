@@ -127,6 +127,10 @@ export async function planExpeditions<T extends { id: string }>(
     return w;
   };
   const passes = (w: number | null) => w === null || w >= threshold;
+  // ⭐ Mode XP : le héros seul ne fait apprendre personne (il ne prend aucune part d'XP) — il
+  // part toujours avec au moins un champion (2026-10-11, demandé par l'utilisateur).
+  const allowed = (t: T, team: PlanUnit[]) =>
+    !(mode === 'xp' && team.every((u) => u.hero)) && deps.fits(t, team);
 
   /** La meilleure équipe pour CE lieu, prise dans `pool`. */
   const bestFor = async (t: T, pool: PlanUnit[]): Promise<Candidate<T> | null> => {
@@ -143,7 +147,7 @@ export async function planExpeditions<T extends { id: string }>(
         for (let k = 1; k <= kMax; k++) {
           if (opts.cancelled?.()) return null;
           const tryTeam = order.slice(0, k);
-          if (!deps.fits(t, tryTeam)) continue;
+          if (!allowed(t, tryTeam)) continue;
           const tw = await winOf(t, tryTeam);
           if (passes(tw)) {
             team = tryTeam;
@@ -164,7 +168,7 @@ export async function planExpeditions<T extends { id: string }>(
           for (const s of spare) {
             if (opts.cancelled?.()) return null;
             const alt: PlanUnit[] = picked.map((u, j) => (j === i ? s : u));
-            if (!deps.fits(t, alt)) continue;
+            if (!allowed(t, alt)) continue;
             const aw = await winOf(t, alt);
             // ⭐ Mode XP : on ne cède pas un membre qui fait gagner de l'XP à l'équipe (🎓 Mentor,
             // champion en retard qui touche la prime de rattrapage) contre un plus faible qui en
@@ -202,7 +206,7 @@ export async function planExpeditions<T extends { id: string }>(
           if (opts.cancelled?.()) return null;
           const team = order.slice(0, k);
           if (new Set(team.map((u) => u.origin)).size < 2) continue;
-          if (!deps.fits(t, team)) continue;
+          if (!allowed(t, team)) continue;
           const tw = await winOf(t, team);
           if (!passes(tw)) continue;
           const win = tw ?? 1;

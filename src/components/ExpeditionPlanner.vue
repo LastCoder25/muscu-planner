@@ -207,8 +207,9 @@
           </div>
         </div>
         <p class="pl-note">
-          🎯 la garnison entière contre les lieux les plus durs de l’île (repaire plein, faille à
-          mi-maturation) · ⏱️ aller-retour moyen vers les lieux de sa zone.
+          🎯 la garnison contre un lieu dur courant de l’île (2,5 gardes) — les repaires pleins et
+          les failles se prennent en réunissant des garnisons voisines (⚔️ attaque combinée) · ⏱️
+          aller-retour moyen vers les lieux de sa zone.
         </p>
         <p v-if="!repoMoves.length" class="pl-empty">✅ Tout le monde est déjà à sa place.</p>
         <template v-else>
