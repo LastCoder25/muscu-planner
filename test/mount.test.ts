@@ -328,6 +328,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       repoTeams: ref(null),
       repoMoves: ref([]),
       repoRunning: ref(false),
+      repoBelow: ref(false),
+      repoMissing: ref({ hero: false, advs: [] }),
       repartir: () => undefined,
       launchMove: () => undefined,
       launchAllMoves: () => undefined,
@@ -358,22 +360,19 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       { key: 'base>f1', from: null, to: fort, advs: [argus], hero: false, min: 20 },
     ] as never;
     planner.repoTeams.value = [
-      {
-        key: 'p1|a',
-        poi,
-        advs: [argus],
-        hero: false,
-        origin: fort,
-        tripMin: 40,
-        nowTripMin: 80,
-        moveMin: 20,
-      },
+      { key: 'a', spot: fort, advs: [argus], hero: false, win: 0.95, share: 0.6, avgTripMin: 40 },
+      { key: 'h', spot: null, advs: [], hero: true, win: 0.92, share: 0.4, avgTripMin: 30 },
     ] as never;
+    planner.repoMissing.value = {
+      hero: false,
+      advs: [{ ...argus, id: 'b', name: 'Fila' }],
+    } as never;
     await mountIt(ExpeditionPlanner, { planner }, undefined, undefined, '/', (h) => (html = h));
     expect(html).toContain('Tout déplacer (1)');
     expect(html).toContain('🏠 Base');
-    expect(html).toContain('rentabilisé en 1 expédition');
-    expect(html).toContain('class="pt-old"');
+    expect(html).toContain('couvre 60 % de l’île');
+    expect(html).toContain('2 équipes');
+    expect(html).toContain('Fila');
   });
 
   it('MapTown : les points de qui est là, sous la base comme sous le village du port', async () => {

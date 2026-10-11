@@ -3,7 +3,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { advGearRoles } from '@/lib/advGear';
-import type { Adventurer } from '@/lib/adventurers';
+import { advRuneSkills, type Adventurer } from '@/lib/adventurers';
 import {
   heroPartyCombatant,
   missionXpFor,
@@ -14,7 +14,16 @@ import {
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
 import { controlFreeSeats, seatsOf } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import { HERO_GARRISON_SEATS, RAZE_KINDS, type Poi } from '@/lib/expedition';
+import {
+  ARCHIPEL_TRAVEL_LEVEL,
+  archipelFloor,
+  EXPE,
+  HERO_GARRISON_SEATS,
+  distNormAt,
+  type Poi,
+} from '@/lib/expedition';
+import { mapOutpostLevel } from '@/lib/archipelago';
+import { campWinPct } from '@/lib/camp';
 import {
   planExpeditions,
   type PlanMode,
@@ -22,9 +31,17 @@ import {
   type PlanUnit,
 } from '@/lib/expeditionPlanner';
 import { heroPostOf } from '@/lib/islandConquest';
-import { planReposition, type RepoUnit } from '@/lib/repositionPlanner';
+import {
+  SUPPORT_SKILLS,
+  deployRefLevel,
+  deployWeight,
+  deploymentPoints,
+  planDeployment,
+  type DeploySpot,
+  type DeployUnit,
+} from '@/lib/mapDeployment';
 import { partyHeroBlocker, partyLegMin, partySendBlocker } from '@/lib/party';
-import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
+import { CAMP_SAMPLE_MULT, FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import type { BaseState } from '@/lib/raid';
 import { withRiftCut } from '@/lib/rift';
 
@@ -53,6 +70,10 @@ export interface PlannerCtx {
 
 /** Taille d'équipe au plus essayée : au-delà, une proposition n'a plus de sens (tanière). */
 const MAX_TEAM = 8;
+/** 🧭 La taille du repaire de référence de la répartition : le plus gros des lieux courants. */
+const REF_SIZE = 3;
+/** 🕳️ L'âge de la faille de référence, en part de sa maturation : à mi-chemin. */
+const RIFT_REF_AGE = 0.5;
 const THRESHOLD_KEY = 'muscu:planner:threshold';
 const MODE_KEY = 'muscu:planner:mode';
 const GARRISON_KEY = 'muscu:planner:garrisons';
@@ -92,21 +113,25 @@ export interface RepoMoveRow {
   /** Le plus long des trajets du groupe (minutes). */
   min: number;
 }
-/** 🧭 Ce que la répartition change pour une équipe. */
+/** 🧭 Une équipe de la répartition et l'endroit où elle s'installe. */
 export interface RepoTeamRow {
   key: string;
-  poi: Poi;
+  /** null = la base. */
+  spot: Poi | null;
   advs: Adventurer[];
   hero: boolean;
-  /** D'où l'équipe partira (null = la base). */
-  origin: Poi | null;
-  tripMin: number;
-  /** L'aller-retour sans rien changer (null : l'équipe est aujourd'hui dispersée). */
-  nowTripMin: number | null;
-  moveMin: number;
+  /** Chance contre un lieu de référence parmi les plus durs de l'île. */
+  win: number;
+  /** Part de l'île qu'elle couvre (0..1). */
+  share: number;
+  /** Trajet moyen (aller-retour) vers les lieux de sa zone. */
+  avgTripMin: number;
 }
-/** Sur combien d'expéditions un déplacement doit se rentabiliser. */
-const REPO_PAYBACK = 3;
+/** 🧭 Ce qui manque pour une répartition complète. */
+export interface RepoMissing {
+  hero: boolean;
+  advs: Adventurer[];
+}
 
 export interface PlannerRow {
   key: string;
@@ -291,15 +316,29 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   }
 
   /**
-   * 🧭 RÉPARTIR champions et héros sur la base et les lieux fixes tenus pour raccourcir les
-   * expéditions (demandé le 2026-10-11). Les ÉQUIPES viennent du planificateur, en mode
-   * événements, au seuil réglé, tout le monde mis en commun (où qu'il soit) ; puis
-   * `planReposition` cherche d'où chacune partira le plus vite, le déplacement amorti sur
-   * `REPO_PAYBACK` expéditions. Pas de miliciens : ils ne partent pas en expédition.
+   * 🧭 RÉPARTIR TOUT L'EFFECTIF SUR LA CARTE (2026-10-11, demandé ; cf. `mapDeployment.ts`).
+   * Un placement de fond, fait quand tout le monde est rentré : des équipes ÉQUILIBRÉES
+   * (chacune prend un lieu parmi les plus durs de l'île au seuil réglé, compétences de soutien
+   * réparties), posées sur la base, les lieux tenus et la forteresse pour couvrir l'île au plus
+   * vite. Il n'attaque rien : le 🪄 part ensuite de ces garnisons. Pas de miliciens.
    */
   const repoTeams = ref<RepoTeamRow[] | null>(null);
   const repoMoves = ref<RepoMoveRow[]>([]);
   const repoRunning = ref(false);
+  const repoBelow = ref(false);
+
+  /** Qui n'est pas disponible (en route, à l'infirmerie…) : la répartition l'ignorerait. */
+  const repoMissing = computed<RepoMissing>(() => {
+    const ok = new Set(ctx.freeStable.value.map((a) => a.id));
+    for (const ready of readyGarrisons(
+      char.row?.expedition_map,
+      char.advList,
+      ctx.now.value,
+    ).values())
+      for (const a of ready) ok.add(a.id);
+    return { hero: !heroFree.value, advs: char.advList.filter((a) => !ok.has(a.id)) };
+  });
+
   async function repartir() {
     const me = ++run;
     repoRunning.value = true;
@@ -307,119 +346,178 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     unreachable.value = [];
     repoTeams.value = null;
     repoMoves.value = [];
+    repoBelow.value = false;
     try {
+      // Le navigateur garde la main avant un calcul de quelques centaines de combats.
+      await new Promise((r) => setTimeout(r, 0));
+      if (me !== run) return;
       const now = ctx.coarseNow.value;
       const map = char.row?.expedition_map;
       const road = ctx.roadCtx.value;
-      const base = ctx.base.value;
       const byId = new Map<string, Adventurer>();
-      const loc = new Map<string, string>();
-      const power = (a: Adventurer) => combatPowerRaw(partyAllies([a], road, null)[0]!.combatant);
-      const units: PlanUnit[] = [];
+      const units: DeployUnit[] = [];
+      const roles = (a: Adventurer) => {
+        const ids = new Set(advRuneSkills(a).map((k) => k.id as string));
+        return SUPPORT_SKILLS.filter((r) => ids.has(r));
+      };
       const add = (a: Adventurer, at: string) => {
         byId.set(a.id, a);
-        loc.set(a.id, at);
-        units.push({ id: a.id, hero: false, origin: 'pool', power: power(a) });
+        units.push({
+          id: a.id,
+          hero: false,
+          loc: at,
+          power: combatPowerRaw(partyAllies([a], road, null)[0]!.combatant),
+          roles: roles(a),
+        });
       };
       for (const a of ctx.freeStable.value) add(a, 'base');
       for (const [pid, ready] of readyGarrisons(map, char.advList, ctx.now.value))
         for (const a of ready) add(a, pid);
       const hero = withHero.value && heroFree.value ? heroObj() : null;
-      if (hero) {
-        loc.set('__hero', heroPostOf(map)?.id ?? 'base');
+      if (hero)
         units.push({
           id: '__hero',
           hero: true,
-          origin: 'pool',
+          loc: heroPostOf(map)?.id ?? 'base',
           power: combatPowerRaw(heroPartyCombatant(hero)),
+          roles: [],
         });
+      if (!units.length) {
+        repoTeams.value = [];
+        return;
       }
+
+      // Les endroits : la base, et tout lieu tenu qui reçoit des champions (lieux fixes,
+      // objectifs, forteresse — `seatsOf` > 0). Places = places libres + celles de ceux qui
+      // y sont et repartent avec la répartition.
       const held = (map?.pois ?? []).filter(
-        (p) => p.control?.owner === 'player' && !RAZE_KINDS.has(p.control.kind),
+        (p) => p.control?.owner === 'player' && seatsOf(p.control.kind) > 0,
       );
       const points = new Map(held.map((p) => [p.id, p]));
-      const advsOf = (us: readonly { id: string; hero: boolean }[]) =>
-        us.filter((u) => !u.hero).map((u) => byId.get(u.id)!);
-      const hasHero = (us: readonly { hero: boolean }[]) => us.some((u) => u.hero);
-      const legOf = (advs: Adventurer[], h: boolean) => (p: Poi) =>
-        partyLegMin(p, advs, {
-          hero: h,
-          travelMult: ctx.travelMult.value,
-          gearSpeed: advGearRoles(advs, road.advGear).speed,
-        });
-      const tripFrom = (t: Poi, us: readonly { id: string; hero: boolean }[], origin: string) => {
-        const lo = legOf(advsOf(us), hasHero(us));
-        const from = points.get(origin);
-        return 2 * (from ? legFromSpot(t, from, lo) : lo(t));
-      };
-      const res = await planExpeditions(ctx.targets.value, units, {
-        threshold: threshold.value / 100,
-        mode: 'events',
-        maxTeam: MAX_TEAM,
-        cancelled: () => me !== run,
-        pause: () => new Promise((r) => setTimeout(r, 0)),
-        deps: {
-          fits: (t, us) => {
-            const h = hasHero(us);
-            if (h && partyHeroBlocker({ onExpedition: false, healMs: 0, outpost: true, poi: t }))
-              return false;
-            return !partySendBlocker(
-              withRiftCut(t, base),
-              advsOf(us).length,
-              h,
-              ctx.cap.value,
-              1,
-              now,
-            );
-          },
-          win: (t, us) =>
-            partyWinChance(
-              withRiftCut(t, base),
-              advsOf(us),
-              road,
-              hasHero(us) ? hero : null,
-              now,
-              FORECAST_SAMPLES,
-            ),
-          tripMin: (t, us) => tripFrom(t, us, 'base'),
-          xp: () => 0,
-        },
-      });
-      if (!res || me !== run) return;
-      const teams = res.trips.map((tr) => ({
-        target: tr.target,
-        units: tr.units.map((u): RepoUnit => ({ id: u.id, hero: u.hero, loc: loc.get(u.id)! })),
-      }));
-      const free: Record<string, number> = {};
-      for (const p of held) free[p.id] = controlFreeSeats(p.control);
-      const plan = planReposition(
-        teams,
-        {
-          tripMin: (team, origin) => tripFrom(team.target, team.units, origin),
-          moveMin: (u, to) => {
-            const lo = legOf(u.hero ? [] : [byId.get(u.id)!], u.hero);
-            const from = points.get(u.loc);
-            if (to === 'base') return from ? lo(from) : 0;
-            const dest = points.get(to)!;
-            return from ? legFromSpot(dest, from, lo) : lo(dest);
-          },
-          canHost: (u, to) =>
-            to === 'base' ||
-            seatsOf(points.get(to)!.control!.kind) >= (u.hero ? HERO_GARRISON_SEATS : 1),
-        },
-        { free, payback: REPO_PAYBACK },
+      const weightAt = (id: string) =>
+        units.filter((u) => u.loc === id).reduce((n, u) => n + deployWeight(u), 0);
+      const spots: DeploySpot[] = [
+        { id: 'base', seats: Infinity, heroOk: true },
+        ...held.map((p) => ({
+          id: p.id,
+          seats: controlFreeSeats(p.control) + weightAt(p.id),
+          heroOk: seatsOf(p.control!.kind) >= HERO_GARRISON_SEATS,
+        })),
+      ];
+
+      // 🎯 Les lieux de référence, au plus haut rang de l'île (plafonné au héros) : un REPAIRE
+      // plein (le plus gros camp courant) et une FAILLE à mi-maturation, le lieu le plus dur.
+      // ⚠️ Chaque garnison doit pouvoir prendre LES DEUX : le 🪄 la découpe ensuite en petites
+      // équipes pour les camps, mais une faille ne se prend qu'avec toute la garnison d'un
+      // endroit (une expédition part d'un seul endroit).
+      const level = deployRefLevel(
+        ctx.heroLevel.value,
+        archipelFloor(map),
+        map?.archipel?.levelCap ?? Infinity,
       );
-      repoTeams.value = plan.assignments.map((a) => ({
-        key: `${a.team.target.id}|${a.team.units.map((u) => u.id).join(',')}`,
-        poi: a.team.target,
-        advs: advsOf(a.team.units),
-        hero: hasHero(a.team.units),
-        origin: points.get(a.origin) ?? null,
-        tripMin: a.tripMin,
-        nowTripMin: a.nowTripMin,
-        moveMin: a.moveMin,
+      const base0 = {
+        level,
+        x: EXPE.town.x,
+        y: EXPE.town.y - 40,
+        distNorm: 0.5,
+        expiresAt: Number.MAX_SAFE_INTEGER,
+      };
+      const lairRef: Poi = { ...base0, id: 'deploy-lair', type: 'lair', spawnedAt: 0 };
+      const riftRef: Poi = {
+        ...base0,
+        id: 'deploy-rift',
+        type: 'rift',
+        spawnedAt: now - EXPE.lifespanMs.rift * RIFT_REF_AGE,
+      };
+      const advsOf = (us: readonly DeployUnit[]) =>
+        us.filter((u) => !u.hero).map((u) => byId.get(u.id)!);
+      const winCache = new Map<string, number>();
+      const win = (team: readonly DeployUnit[]) => {
+        const key = team
+          .map((u) => u.id)
+          .sort()
+          .join(',');
+        let w = winCache.get(key);
+        if (w === undefined) {
+          const advs = advsOf(team);
+          const h = team.some((u) => u.hero) ? hero : null;
+          const allies = partyAllies(advs, road, h);
+          const lair = campWinPct(
+            lairRef,
+            { faction: 'bandits', size: REF_SIZE },
+            allies,
+            FORECAST_SAMPLES * CAMP_SAMPLE_MULT,
+          );
+          // La faille ne se joue que si le repaire passe : inutile de simuler 13 combats sinon.
+          w =
+            lair < threshold.value / 100
+              ? lair
+              : Math.min(
+                  lair,
+                  partyWinChance(riftRef, advs, road, h, now, FORECAST_SAMPLES, false) ?? 0,
+                );
+          winCache.set(key, w);
+        }
+        return w;
+      };
+
+      // L'île, échantillonnée : un trajet de chaque endroit vers chaque point.
+      const island = map?.archipel?.island ?? null;
+      const pts = deploymentPoints(island, mapOutpostLevel(map, char.comptoirLevel));
+      const legOf = (p: Poi) =>
+        partyLegMin(p, [], { hero: false, travelMult: ctx.travelMult.value, gearSpeed: 0 });
+      const ptPoi = pts.map(
+        (q, i): Poi => ({
+          id: `deploy-${i}`,
+          type: 'camp',
+          level,
+          x: q.x,
+          y: q.y,
+          distNorm: distNormAt(Math.hypot(q.x - EXPE.town.x, q.y - EXPE.town.y)),
+          travelLevel: map?.archipel ? ARCHIPEL_TRAVEL_LEVEL : level,
+          spawnedAt: 0,
+          expiresAt: Number.MAX_SAFE_INTEGER,
+        }),
+      );
+      const tripCache = new Map<string, number[]>();
+      const trip = (spot: string, p: number) => {
+        let row = tripCache.get(spot);
+        if (!row) {
+          const from = points.get(spot);
+          row = ptPoi.map((q) => (from ? legFromSpot(q, from, legOf) : legOf(q)));
+          tripCache.set(spot, row);
+        }
+        return row[p]!;
+      };
+
+      const plan = planDeployment(units, spots, pts.length, {
+        threshold: threshold.value / 100,
+        deps: { win, trip },
+      });
+      if (me !== run) return;
+      repoBelow.value = plan.belowThreshold;
+      repoTeams.value = plan.teams.map((t) => ({
+        key: t.units.map((u) => u.id).join(','),
+        spot: points.get(t.spot) ?? null,
+        advs: advsOf(t.units),
+        hero: t.units.some((u) => u.hero),
+        win: t.win,
+        share: t.share,
+        avgTripMin: 2 * t.avgTrip,
       }));
       // Un geste par (départ, arrivée) pour tout le groupe ; le héros à part.
+      const moveMin = (u: DeployUnit, to: string) => {
+        const lo = (p: Poi) =>
+          partyLegMin(p, u.hero ? [] : [byId.get(u.id)!], {
+            hero: u.hero,
+            travelMult: ctx.travelMult.value,
+            gearSpeed: u.hero ? 0 : advGearRoles([byId.get(u.id)!], road.advGear).speed,
+          });
+        const from = points.get(u.loc);
+        if (to === 'base') return from ? lo(from) : 0;
+        const dest = points.get(to)!;
+        return from ? legFromSpot(dest, from, lo) : lo(dest);
+      };
       const groups = new Map<string, RepoMoveRow>();
       for (const m of plan.moves) {
         const key = m.unit.hero ? `hero|${m.to}` : `${m.from}>${m.to}`;
@@ -432,7 +530,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
           min: 0,
         };
         if (!m.unit.hero) g.advs.push(byId.get(m.unit.id)!);
-        g.min = Math.max(g.min, m.min);
+        g.min = Math.max(g.min, moveMin(m.unit, m.to));
         groups.set(key, g);
       }
       repoMoves.value = [...groups.values()].sort((a, b) => a.min - b.min);
@@ -587,6 +685,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     repoTeams,
     repoMoves,
     repoRunning,
+    repoBelow,
+    repoMissing,
     repartir,
     launchMove,
     launchAllMoves,

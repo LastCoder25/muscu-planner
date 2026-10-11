@@ -73,17 +73,17 @@
         <span v-if="running">⏳ Calcul… {{ Math.round(progress * 100) }} %</span>
         <span v-else>🪄 {{ rows ? 'Recalculer' : 'Proposer des expéditions' }}</span>
       </button>
-      <!-- 🧭 RÉPARTIR (2026-10-11, demandé) : où placer champions et héros (base ou lieux
-           fixes tenus) pour que les expéditions partent au plus près. -->
+      <!-- 🧭 RÉPARTIR (2026-10-11, demandé) : placer tout l’effectif (base, lieux tenus,
+           forteresse) pour couvrir l’île ; le 🪄 part ensuite de ces garnisons. -->
       <button
         type="button"
         class="pl-go alt"
         :disabled="running || repoRunning"
-        title="Proposer où placer tes champions et ton héros pour raccourcir les expéditions"
+        title="Répartir tout ton effectif sur la base et tes lieux tenus pour couvrir l’île"
         @click="repartir"
       >
         <span v-if="repoRunning">⏳ Calcul…</span>
-        <span v-else>🧭 Répartir</span>
+        <span v-else>🧭 Répartir l’effectif</span>
       </button>
     </div>
     <div v-if="running" class="pl-bar">
@@ -141,24 +141,64 @@
         {{ threshold }} % avec ce qui reste.
       </p>
     </template>
+    <p v-if="repoMissing.hero || repoMissing.advs.length" class="pl-miss">
+      ⏳ Pas encore disponibles :
+      <template v-if="repoMissing.hero"
+        >🧝 héros<template v-if="repoMissing.advs.length">, </template></template
+      >{{ repoMissing.advs.map((a) => a.name).join(', ') }} — « Répartir » les laisse de côté :
+      attends leur retour pour placer tout l’effectif.
+    </p>
     <template v-if="repoTeams && !repoRunning">
-      <p v-if="!repoTeams.length" class="pl-empty">
-        Aucune expédition n’atteint {{ threshold }} % : rien à répartir.
-      </p>
+      <p v-if="!repoTeams.length" class="pl-empty">Personne n’est disponible à répartir.</p>
       <template v-else>
-        <p v-if="!repoMoves.length" class="pl-empty">
-          ✅ Tes effectifs sont déjà bien placés : aucun déplacement ne raccourcit assez les
-          trajets.
+        <div class="pl-sum">
+          <span class="pl-pill"
+            >👥 {{ repoTeams.length }} équipe{{ repoTeams.length > 1 ? 's' : '' }}</span
+          >
+          <span class="pl-pill"
+            >📍 {{ repoSpots.length }} endroit{{ repoSpots.length > 1 ? 's' : '' }}</span
+          >
+          <span class="pl-pill">⏱️ ~{{ fmt(avgTrip) }} par expédition</span>
+        </div>
+        <p v-if="repoBelow" class="pl-miss">
+          ⚠️ Même tous ensemble, ton effectif n’atteint pas {{ threshold }} % contre les lieux les
+          plus durs de l’île : une seule équipe, à la base.
         </p>
-        <template v-else>
-          <div class="pl-sum">
-            <span class="pl-pill"
-              >🧭 {{ repoMoves.length }} déplacement{{ repoMoves.length > 1 ? 's' : '' }}</span
-            >
-            <span v-if="savedMin > 0" class="pl-pill"
-              >⏱️ −{{ fmt(savedMin) }} par tour d’expéditions</span
-            >
+        <div class="pl-list">
+          <div v-for="g in repoSpots" :key="g.key" class="pl-tile spot">
+            <div class="pt-head">
+              <span class="pt-name">{{ placeOf(g.spot) }}</span>
+              <span class="pt-cov">couvre {{ Math.round(g.share * 100) }} % de l’île</span>
+            </div>
+            <div v-for="t in g.teams" :key="t.key" class="pt-squad">
+              <div class="pt-team">
+                <span v-if="t.hero" class="pt-mem hero">🧝 Héros</span>
+                <span v-for="a in t.advs" :key="a.id" class="pt-mem">
+                  {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+                  <span v-if="skillsOf(a)" class="pt-sk" :title="skillsTitle(a)">{{
+                    skillsOf(a)
+                  }}</span>
+                </span>
+              </div>
+              <div class="pt-foot">
+                <span class="pt-stat" :class="winClass(t.win)"
+                  >🎯 {{ Math.round(t.win * 100) }} %</span
+                >
+                <span class="pt-stat">⏱️ ~{{ fmt(t.avgTripMin) }}</span>
+                <span v-if="supportOf(t)" class="pt-stat pt-sup" title="Compétences de soutien">{{
+                  supportOf(t)
+                }}</span>
+              </div>
+            </div>
           </div>
+        </div>
+        <p class="pl-note">
+          🎯 la garnison entière contre les lieux les plus durs de l’île (repaire plein, faille à
+          mi-maturation) · ⏱️ aller-retour moyen vers les lieux de sa zone.
+        </p>
+        <p v-if="!repoMoves.length" class="pl-empty">✅ Tout le monde est déjà à sa place.</p>
+        <template v-else>
+          <p class="pl-lab">Les déplacements à faire</p>
           <button type="button" class="pl-all" :disabled="!!launching" @click="launchAllMoves">
             {{ launching === '*' ? '⏳ Déplacements…' : `🧭 Tout déplacer (${repoMoves.length})` }}
           </button>
@@ -184,34 +224,9 @@
             </div>
           </div>
         </template>
-        <p class="pl-lab">Les expéditions qui en profitent</p>
-        <div class="pl-list">
-          <div v-for="t in repoTeams" :key="t.key" class="pl-tile">
-            <div class="pt-head">
-              <span class="pt-emo" aria-hidden="true">{{ poiEmo(t.poi) }}</span>
-              <span class="pt-name">{{ poiLabel(t.poi) }}</span>
-              <span class="pt-rank" :style="{ '--rk': rankOf(t.poi).color }">
-                {{ rankOf(t.poi).name }} ★{{ rankOf(t.poi).star }}
-              </span>
-            </div>
-            <div class="pt-team">
-              <span class="pt-from">{{ originLine(t) }}</span>
-              <span v-if="t.hero" class="pt-mem hero">🧝 Héros</span>
-              <span v-for="a in t.advs" :key="a.id" class="pt-mem">
-                {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
-              </span>
-            </div>
-            <div class="pt-foot">
-              <span class="pt-stat">
-                ⏱️
-                <template v-if="t.nowTripMin !== null && t.nowTripMin > t.tripMin + 0.5"
-                  ><s class="pt-old">{{ fmt(t.nowTripMin) }}</s> → </template
-                >{{ fmt(t.tripMin) }}
-              </span>
-              <span v-if="paybackOf(t)" class="pt-stat">{{ paybackOf(t) }}</span>
-            </div>
-          </div>
-        </div>
+        <p class="pl-note">
+          Une fois en place, lance 🪄 avec 🏰 Garnisons : les expéditions partiront de ces endroits.
+        </p>
       </template>
     </template>
     <p class="pl-note">
@@ -226,6 +241,7 @@ import { computed } from 'vue';
 import type { RepoTeamRow, useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
 import { SKILLS } from '@/lib/skillRunes';
+import { SUPPORT_SKILLS } from '@/lib/mapDeployment';
 import { characterRank } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
@@ -250,6 +266,8 @@ const {
   repoTeams,
   repoMoves,
   repoRunning,
+  repoBelow,
+  repoMissing,
   repartir,
   launchMove,
   launchAllMoves,
@@ -282,23 +300,36 @@ const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0))
 
 /** 🧭 Un endroit : la base ou le lieu fixe. */
 const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Base');
-const originLine = (t: RepoTeamRow) =>
-  t.origin ? `🏰 partira de ${poiLabel(t.origin)}` : '🏠 partira de la base';
-/** Au bout de combien d'expéditions le déplacement est rentabilisé. */
-const paybackOf = (t: RepoTeamRow) => {
-  if (!t.moveMin) return '';
-  if (t.nowTripMin === null) return '🔗 équipe réunie';
-  const gain = t.nowTripMin - t.tripMin;
-  if (gain <= 0) return '';
-  const n = Math.max(1, Math.ceil(t.moveMin / gain));
-  return `💡 rentabilisé en ${n} expédition${n > 1 ? 's' : ''}`;
+/** Les compétences de soutien d'une équipe (⛑️ 🐫 🧲 👁️ 🧭 🎓), une fois chacune. */
+const supportOf = (t: RepoTeamRow) => {
+  const ids = new Set(t.advs.flatMap((a) => advRuneSkills(a).map((k) => k.id as string)));
+  return SUPPORT_SKILLS.filter((r) => ids.has(r))
+    .map((r) => SKILLS[r].emoji)
+    .join('');
 };
-/** Le temps gagné à chaque tour, sur les équipes déjà réunies (les autres n'ont pas de « avant »). */
-const savedMin = computed(() =>
-  (repoTeams.value ?? []).reduce(
-    (s, t) => s + (t.nowTripMin !== null ? Math.max(0, t.nowTripMin - t.tripMin) : 0),
-    0,
-  ),
+/** Les équipes regroupées par endroit, la base d'abord. */
+const repoSpots = computed(() => {
+  const by = new Map<
+    string,
+    { key: string; spot: Poi | null; share: number; teams: RepoTeamRow[] }
+  >();
+  for (const t of repoTeams.value ?? []) {
+    const key = t.spot?.id ?? 'base';
+    const g = by.get(key) ?? { key, spot: t.spot, share: 0, teams: [] };
+    g.share += t.share;
+    g.teams.push(t);
+    by.set(key, g);
+  }
+  return [...by.values()].sort((a, b) => Number(!!a.spot) - Number(!!b.spot) || b.share - a.share);
+});
+/** Trajet moyen d'une expédition, pondéré par la part d'île couverte. */
+const avgTrip = computed(
+  () =>
+    (repoTeams.value ?? []).reduce((s, t) => s + t.avgTripMin * t.share, 0) /
+    Math.max(
+      1e-9,
+      (repoTeams.value ?? []).reduce((s, t) => s + t.share, 0),
+    ),
 );
 </script>
 
@@ -550,6 +581,32 @@ const savedMin = computed(() =>
 .pt-old {
   color: var(--dim);
   font-weight: 600;
+}
+.pl-miss {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--d3) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--d3) 55%, var(--line));
+}
+.pl-tile.spot {
+  border-color: color-mix(in srgb, #5fd0ff 45%, var(--line));
+}
+.pt-cov {
+  flex: none;
+  font-size: 11px;
+  color: var(--dim);
+}
+.pt-squad {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+.pt-sup {
+  letter-spacing: 1px;
 }
 .pl-pool,
 .pl-empty,
