@@ -142,6 +142,27 @@ describe('planificateur d’expéditions', () => {
     expect(far.trips[0]!.units.map((x) => x.id)).toEqual(['A']);
   });
 
+  it('mode « XP » : un Mentor n’est pas remplacé par un plus faible qui rapporte moins', async () => {
+    // 🎓 « M » double l'XP de son équipe ; « W » suffit pourtant au combat.
+    const mentorDeps: PlanDeps<T> = {
+      ...deps,
+      xp: (t, us) => t.xp * us.length * (us.some((x) => x.id === 'M') ? 2 : 1),
+    };
+    const run = (mode: 'events' | 'xp') =>
+      planExpeditions([{ id: 'camp', need: 3, min: 60, xp: 50, cap: 1 }], [u('M', 5), u('W', 3)], {
+        threshold: 0.9,
+        mode,
+        maxTeam: 6,
+        deps: mentorDeps,
+      });
+    // Événements : le plus faible part, le Mentor reste libre.
+    expect((await run('events'))!.trips[0]!.units.map((x) => x.id)).toEqual(['W']);
+    // XP : le Mentor part (100 XP au lieu de 50).
+    const xp = (await run('xp'))!;
+    expect(xp.trips[0]!.units.map((x) => x.id)).toEqual(['M']);
+    expect(xp.trips[0]!.xp).toBe(100);
+  });
+
   it('s’arrête si un nouveau calcul démarre', async () => {
     const r = await planExpeditions([{ id: 'a', need: 3, min: 30, xp: 1 }], [u('A', 3)], {
       threshold: 0.9,

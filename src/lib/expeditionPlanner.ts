@@ -157,7 +157,12 @@ export async function planExpeditions<T extends { id: string }>(
             const alt: PlanUnit[] = picked.map((u, j) => (j === i ? s : u));
             if (!deps.fits(t, alt)) continue;
             const aw = await winOf(t, alt);
-            if (passes(aw)) {
+            // ⭐ Mode XP : on ne cède pas un membre qui fait gagner de l'XP à l'équipe (🎓 Mentor,
+            // champion en retard qui touche la prime de rattrapage) contre un plus faible qui en
+            // rapporte moins — le remplacement ne doit jamais faire BAISSER l'XP attendue.
+            const keepsXp =
+              mode !== 'xp' || deps.xp(t, alt) * (aw ?? 1) >= deps.xp(t, picked) * (w ?? 1);
+            if (passes(aw) && keepsXp) {
               picked = alt;
               w = aw;
               break;

@@ -104,6 +104,9 @@
               <span v-if="r.hero" class="pt-mem hero">🧝 Héros</span>
               <span v-for="a in r.advs" :key="a.id" class="pt-mem">
                 {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+                <span v-if="skillsOf(a)" class="pt-sk" :title="skillsTitle(a)">{{
+                  skillsOf(a)
+                }}</span>
               </span>
             </div>
             <div class="pt-foot">
@@ -134,7 +137,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
-import { advTitle } from '@/lib/adventurers';
+import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
+import { SKILLS } from '@/lib/skillRunes';
 import { characterRank } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
@@ -164,6 +168,16 @@ const MODES: { id: PlanMode; emo: string; title: string; sub: string }[] = [
 ];
 const THRESHOLDS = [70, 80, 90, 95, 99];
 
+/** 🔮 Ses compétences, en pictogrammes (🎓 Mentor, 🧭 Vitesse…) : elles comptent dans le
+ *  pronostic, le trajet et l'XP proposés — on voit pourquoi il est dans l'équipe. */
+const skillsOf = (a: Adventurer) =>
+  advRuneSkills(a)
+    .map((k) => SKILLS[k.id].emoji)
+    .join('');
+const skillsTitle = (a: Adventurer) =>
+  advRuneSkills(a)
+    .map((k) => `${SKILLS[k.id].name} ${k.level}`)
+    .join(' · ');
 const rankOf = (p: Poi) => characterRank(poiDifficultyLevel(p));
 const fmt = (min: number) => formatDurationMin(min);
 const winClass = (w: number) => (w >= 0.9 ? 'good' : w >= 0.7 ? 'ok' : 'bad');
@@ -338,6 +352,10 @@ const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0))
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+.pt-sk {
+  margin-left: 3px;
+  font-size: 11px;
 }
 .pt-from {
   width: 100%;
