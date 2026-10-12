@@ -1444,12 +1444,12 @@
       :key="'fab-' + t.id"
       type="button"
       class="slide-fab tile-fab"
-      :class="{ on: overlay === t.id, alert: t.alert }"
+      :class="{ on: overlay === t.id, alert: t.alert, off: !!t.blocked }"
       :style="{ right: 16 + 56 * (mapTabs.length - i - (tripBar ? 1 : 0)) + 'px' }"
-      :aria-label="t.label"
-      :title="t.label"
+      :aria-label="t.blocked ? t.label + ' — ' + t.blocked : t.label"
+      :title="t.blocked ? t.label + ' — ' + t.blocked : t.label"
       :aria-pressed="overlay === t.id"
-      @click="toggleOverlay(t.id)"
+      @click="onMapTab(t)"
     >
       <span class="tf-emo">{{ t.emo }}</span>
       <span v-if="t.n" class="tf-dot">{{ t.n }}</span>
@@ -4357,7 +4357,24 @@ const focusArmyPoi = computed(() =>
 /** 🧭⚔️ Voyages et attaques ennemies partagent UNE tuile (demandé : « fusionne la tuile
  *  expéditions et attaques ») ; le filtre vit dans `TripsPanel`. La pastille passe au rouge
  *  dès qu'une armée marche. */
-const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; alert: boolean }[]>(
+/** Un rond de la carte. `blocked` = la raison pour laquelle il est grisé : il reste visible
+ *  (on sait qu'il existe) et le toucher DIT cette raison au lieu d'ouvrir le panneau. */
+interface MapTab {
+  id: MapPanel;
+  emo: string;
+  label: string;
+  n: number;
+  alert: boolean;
+  blocked?: string;
+}
+function onMapTab(t: MapTab) {
+  if (t.blocked) {
+    $q.notify({ type: 'warning', message: t.blocked, timeout: 4000 });
+    return;
+  }
+  toggleOverlay(t.id);
+}
+const mapTabs = computed<MapTab[]>(
   () => [
     {
       id: 'trips',
@@ -4373,11 +4390,17 @@ const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; 
       ? [{ id: 'plan' as const, emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false }]
       : []),
     // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
-    // ⚠️ Seulement quand TOUT l'effectif est disponible (demandé) : la répartition laisse de
-    // côté qui est en route ou à l'infirmerie, donc elle ne placerait pas tout le monde.
-    ...(allForcesFree.value
-      ? [{ id: 'repart' as const, emo: '👥', label: 'Répartir l’effectif', n: 0, alert: false }]
-      : []),
+    // ⚠️ Utilisable seulement quand TOUT l'effectif est disponible (demandé) : la répartition
+    // laisse de côté qui est en route ou à l'infirmerie. Sinon le rond reste VISIBLE mais
+    // grisé, et le toucher dit qui manque (demandé : un rond qui disparaît ne dit rien).
+    {
+      id: 'repart',
+      emo: '👥',
+      label: 'Répartir l’effectif',
+      n: 0,
+      alert: false,
+      ...(allForcesFree.value ? {} : { blocked: repartBlockedWhy.value }),
+    },
   ],
 );
 /** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */
@@ -5735,7 +5758,15 @@ const planner = useExpeditionPlanner({
 const allForcesFree = computed(
   () => !planner.repoMissing.value.hero && planner.repoMissing.value.advs.length === 0,
 );
-// Le panneau ouvert se referme si quelqu'un part entre-temps (son rond a disparu).
+/** Pourquoi la répartition est grisée : qui n'est pas disponible (même liste que `repoMissing`). */
+const repartBlockedWhy = computed(() => {
+  const m = planner.repoMissing.value;
+  const who = [...(m.hero ? ['ton héros'] : []), ...m.advs.map((a) => a.name)];
+  const list =
+    who.length > 4 ? who.slice(0, 4).join(', ') + ` et ${who.length - 4} autre(s)` : who.join(', ');
+  return `Tout ton effectif doit être disponible pour le répartir. Pas encore là (en route, à l’infirmerie…) : ${list}.`;
+});
+// Le panneau ouvert se referme si quelqu'un part entre-temps (son rond passe au gris).
 watch(allForcesFree, (ok) => {
   if (!ok && overlay.value === 'repart') overlay.value = null;
 });
@@ -6788,6 +6819,11 @@ onUnmounted(() => {
 .tile-fab .tf-emo {
   font-size: 20px;
   line-height: 1;
+}
+/* Rond indisponible : visible mais grisé, le toucher dit pourquoi (`onMapTab`). */
+.tile-fab.off {
+  opacity: 0.45;
+  filter: grayscale(1);
 }
 .tile-fab.on {
   background: var(--accent);

@@ -135,10 +135,17 @@ const ECRANS = [
       {
         nom: 'tuiles-repart',
         // 👥 Seulement quand tout l'effectif est disponible : le compte de test a souvent un
-        // voyage en cours, le rond est alors masqué (et c'est voulu).
+        // voyage en cours, le rond est alors grisé (geste suivant).
         facultatif: true,
         clic: '.tile-fab[aria-label="Répartir l’effectif"]',
         attendu: '.map-overlay .xp-plan:not(:has(.pl-modes))',
+      },
+      {
+        nom: 'tuiles-repart-grise',
+        // 👥 Grisé quand quelqu'un n'est pas disponible : le toucher dit qui manque.
+        facultatif: true,
+        clic: '.tile-fab.off[aria-label^="Répartir"]',
+        attendu: '.q-notification',
       },
       // 🏠 Le rond tout à gauche mène à la base de l'île 1 (l'onglet Base de l'Aventure).
       // ⚠️ En DERNIER : il quitte la carte.
