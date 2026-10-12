@@ -747,13 +747,16 @@ function facesOf(t: MapTrip) {
   opacity: 0.5;
   cursor: default;
 }
-/* 📐 TROIS LIGNES, TOUJOURS DANS CET ORDRE (demandé) : 1) l'icône de l'étape et les
-   effectifs · 2) la progression (échec, temps restants, frise) · 3) les ressources
-   récoltées à gauche, les accélérations à DROITE de la même ligne. `order` fixe l'ordre quel
-   que soit le gabarit ; la progression prend toute la largeur, donc passe à la ligne d'elle-même. */
+/* 📐 QUATRE LIGNES, TOUJOURS DANS CET ORDRE (demandé) : 1) l'icône de l'étape et les
+   effectifs · 2) les accélérations · 3) la progression (échec, temps restants, frise) ·
+   4) les ressources récoltées. `order` fixe l'ordre quel que soit le gabarit ; chaque ligne
+   après la première prend toute la largeur, donc passe à la ligne d'elle-même. */
 .tr-who,
 .tr-faces {
   order: 1;
+}
+.tr-boosts {
+  order: 2;
 }
 .tr-fail,
 .tr-legs,
@@ -766,18 +769,9 @@ function facesOf(t: MapTrip) {
 .tr-loot {
   order: 5;
 }
-/* ⚡ À droite de la ligne des ressources ; seuls (pas de ressources), ils restent à droite. */
-.tr-boosts {
-  order: 6;
-  flex-basis: auto;
-  justify-content: flex-end;
-  margin: 5px 4px 0 auto;
-}
-/* 💰 La récompense : le butin ramené (pastilles), ou l'estimation « si pris » à l'aller.
-   Elle prend la place restante de sa ligne, les boosts à sa droite. */
+/* 💰 La récompense : le butin ramené (pastilles), ou l'estimation « si pris » à l'aller. */
 .tr-loot {
-  flex: 1 1 0;
-  min-width: 0;
+  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
