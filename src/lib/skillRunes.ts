@@ -138,8 +138,11 @@ export const SKILLS: Record<SkillId, SkillDef> = {
 
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 
-/** Niveau maximum d'une compétence. */
+/** Niveau maximum d'une compétence PAR LES RUNES (tirage, fusion, don). */
 export const SKILL_MAX_LEVEL = 5;
+/** 💎 Le niveau TAILLÉ : au-delà des runes, seul le LAPIDAIRE (île 3) fait passer une
+ *  compétence du niveau 5 au 6 (décision de l'utilisateur, 2026-10-12). */
+export const SKILL_CUT_LEVEL = 6;
 
 /** La teinte d'une couleur de rune — source unique des écrans (fiche, portraits). */
 export const RUNE_COLOR: Record<RuneTier, string> = {
@@ -150,13 +153,13 @@ export const RUNE_COLOR: Record<RuneTier, string> = {
 };
 
 /** ⚠️ RENDEMENT DÉCROISSANT : multiplicateur de la valeur de base à chaque niveau. Chaque
- *  niveau apporte moins que le précédent (+0,7, +0,5, +0,3, +0,2) — cumuler reste un
+ *  niveau apporte moins que le précédent (+0,7, +0,5, +0,3, +0,2, puis +0,15 au niveau taillé) — cumuler reste un
  *  progrès sans jamais valoir une compétence d'un cran plus haut empilée à l'infini. */
-export const LEVEL_CURVE: readonly number[] = [1, 1.7, 2.2, 2.5, 2.7];
+export const LEVEL_CURVE: readonly number[] = [1, 1.7, 2.2, 2.5, 2.7, 2.85];
 
 /** La valeur d'une compétence à un niveau donné, en %, arrondie au dixième. */
 export function skillValue(id: SkillId, level: number): number {
-  const l = Math.max(1, Math.min(SKILL_MAX_LEVEL, Math.floor(level)));
+  const l = Math.max(1, Math.min(SKILL_CUT_LEVEL, Math.floor(level)));
   return Math.round(SKILLS[id].base * LEVEL_CURVE[l - 1]! * 10) / 10;
 }
 
@@ -486,7 +489,7 @@ export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0
 const isSkill = (s: unknown): s is SkillId => typeof s === 'string' && s in SKILLS;
 
 /** Relecture défensive des compétences d'un champion : ids inconnus, doublons et niveaux
- *  hors bornes écartés ou ramenés dans [1, SKILL_MAX_LEVEL]. */
+ *  hors bornes écartés ou ramenés dans [1, SKILL_CUT_LEVEL] (le 6 vient du lapidaire). */
 export function normalizeChampSkills(raw: unknown): ChampSkill[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<SkillId>();
@@ -497,7 +500,7 @@ export function normalizeChampSkills(raw: unknown): ChampSkill[] {
     const lv = Math.floor(Number(s.level));
     out.push({
       id: s.id,
-      level: Math.max(1, Math.min(SKILL_MAX_LEVEL, Number.isFinite(lv) ? lv : 1)),
+      level: Math.max(1, Math.min(SKILL_CUT_LEVEL, Number.isFinite(lv) ? lv : 1)),
     });
   }
   return out;

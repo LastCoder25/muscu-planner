@@ -104,7 +104,7 @@ describe('🧝 le héros prend 2 places de champion sur les 5', () => {
           size: 1,
         },
       };
-      expect(heroCanStay(poi as never)).toBe(seatsOf(kind) >= MILITIA.heroSeats);
+      expect(heroCanStay(poi as never)).toBe(kind !== 'lapidary' && seatsOf(kind) >= MILITIA.heroSeats);
     }
   });
 });

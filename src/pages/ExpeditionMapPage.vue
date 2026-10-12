@@ -656,27 +656,44 @@
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
-            <!-- 💎 LE LAPIDAIRE : la compétence que son champion polit, et où il en est. -->
+            <!-- 💎 LE LAPIDAIRE : une barre par champion (niveau 5 → 6). -->
             <div v-if="liveControl.kind === 'lapidary'" class="carto-box">
-              <p class="carto-q">💎 Quelle compétence polir ?</p>
+              <p class="carto-q">💎 Taille au niveau 6 — une barre par champion</p>
               <p v-if="!lapisRows.length" class="carto-q">
-                Poste un champion qui porte une compétence sous le niveau 5.
+                Poste jusqu’à 5 champions qui portent une compétence au niveau 5.
               </p>
-              <div v-else class="carto-grid">
-                <button
-                  v-for="r in lapisRows"
-                  :key="r.id"
-                  type="button"
-                  class="carto-tile"
-                  :class="{ on: liveControl.lapis === r.id }"
-                  :aria-pressed="liveControl.lapis === r.id"
-                  :disabled="ctlBusy || r.max"
-                  @click="chooseLapis(r.id)"
-                >
-                  <span class="carto-emo">{{ r.emoji }}</span>
-                  <span class="carto-lab">{{ r.name }} · niv {{ r.level }}</span>
-                  <span class="carto-lab">{{ r.max ? 'au maximum' : r.left }}</span>
-                </button>
+              <div v-for="r in lapisRows" :key="r.adv.id" class="lapis-row">
+                <div class="lapis-head">
+                  <b class="lapis-name">{{ r.adv.name }}</b>
+                  <span v-if="r.sk" class="lapis-skill">{{ r.sk.emoji }} {{ r.sk.name }}</span>
+                </div>
+                <template v-if="r.bar">
+                  <div class="yield-bar">
+                    <i :style="{ width: Math.round(r.bar.pct * 100) + '%' }" />
+                  </div>
+                  <p class="lapis-left">
+                    {{ Math.round(r.bar.pct * 100) }} % · niveau 6 dans {{ r.left }}
+                  </p>
+                  <div v-if="r.choices.length > 1" class="lapis-choices">
+                    <button
+                      v-for="k in r.choices"
+                      :key="k.id"
+                      type="button"
+                      class="carto-tile lapis-pick"
+                      :class="{ on: r.bar.skill === k.id }"
+                      :aria-pressed="r.bar.skill === k.id"
+                      :aria-label="`Tailler ${k.name}`"
+                      :disabled="ctlBusy"
+                      @click="chooseLapis(r.adv.id, k.id)"
+                    >
+                      <span class="carto-emo">{{ k.emoji }}</span>
+                      <span class="carto-lab">{{ k.name }}</span>
+                    </button>
+                  </div>
+                </template>
+                <p v-else class="lapis-left">
+                  Aucune compétence au niveau 5 : rien à tailler pour lui.
+                </p>
               </div>
             </div>
             <!-- 🗺️ LE CARTOGRAPHE : le lieu qu'il fait revenir sur l'île (`CARTO_TYPES`). -->
@@ -1555,7 +1572,7 @@ import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildi
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { SKILLS, SKILL_MAX_LEVEL, type SkillId } from '@/lib/skillRunes';
+import { SKILLS, type SkillId } from '@/lib/skillRunes';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1744,7 +1761,8 @@ import {
   attackerHidden,
   controlDefenseHold,
   defenderCount,
-  lapidaryHours,
+  lapisBar,
+  lapisCandidates,
   vanquishedHidden,
   defendersAtAttack,
   imminentControlKey,
@@ -3401,33 +3419,37 @@ async function transferCtl(toId: string) {
     ctlBusy.value = false;
   }
 }
-/** 💎 Les compétences du champion du lapidaire : niveau, et temps de polissage restant. */
+/** 💎 Le lapidaire : une barre par champion posté — la compétence qu'il taille du niveau 5 au
+ *  6, sa part faite (la progression est gardée sur lui : partie, elle se met en pause), et
+ *  ses autres compétences au niveau 5 parmi lesquelles choisir. */
 const lapisRows = computed(() => {
   const c = liveControl.value;
-  if (c?.kind !== 'lapidary') return [];
-  const adv = char.advList.find((a) => c.garrison.includes(a.id));
-  return (adv?.skills ?? []).map((s) => {
-    const def = SKILLS[s.id];
-    const max = s.level >= SKILL_MAX_LEVEL;
-    const need = max ? 0 : lapidaryHours(s.id, s.level);
-    const done = adv?.lapisHours?.[s.id] ?? 0;
-    return {
-      id: s.id,
-      emoji: def.emoji,
-      name: def.name,
-      level: s.level,
-      max,
-      left: `${formatDuration(Math.max(0, need - done) * 3600_000)} restantes`,
-    };
-  });
+  const p = livePoi.value;
+  if (c?.kind !== 'lapidary' || !p) return [];
+  return char.advList
+    .filter((a) => c.garrison.includes(a.id))
+    .map((a) => {
+      const bar = lapisBar(a, p, now.value);
+      return {
+        adv: a,
+        bar,
+        sk: bar ? SKILLS[bar.skill] : null,
+        left: bar ? formatDuration(bar.leftH * 3600_000) : '',
+        choices: lapisCandidates(a).map((id) => ({
+          id,
+          emoji: SKILLS[id].emoji,
+          name: SKILLS[id].name,
+        })),
+      };
+    });
 });
-async function chooseLapis(skill: SkillId) {
+async function chooseLapis(advId: string, skill: SkillId) {
   const uid = auth.user?.id;
   const p = livePoi.value;
   if (!uid || !p || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    await char.chooseLapisSkill(uid, p.id, skill, Date.now(), heroLevel.value);
+    await char.chooseLapisSkill(uid, p.id, advId, skill, Date.now(), heroLevel.value);
   } finally {
     ctlBusy.value = false;
   }
@@ -6544,6 +6566,48 @@ onUnmounted(() => {
 }
 .carto-box {
   margin-top: 10px;
+}
+.lapis-row {
+  padding: 8px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.lapis-row .yield-bar {
+  margin-top: 6px;
+}
+.lapis-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.lapis-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lapis-skill {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.lapis-left {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--dim);
+}
+.lapis-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.lapis-pick {
+  min-height: 44px;
+  flex: 1 1 88px;
 }
 .carto-q {
   margin: 0 0 6px;

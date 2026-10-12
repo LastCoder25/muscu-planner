@@ -6,6 +6,7 @@ import {
   SKILLS,
   SKILL_IDS,
   SKILL_MAX_LEVEL,
+  SKILL_CUT_LEVEL,
   SKILL_SLOTS,
   skillValue,
   skillsOfTier,
@@ -55,9 +56,10 @@ describe('🔮 le catalogue', () => {
 });
 
 describe('📈 le cumul', () => {
-  it('niveau maximum 5, et au-delà la valeur ne monte plus', () => {
+  it('niveau maximum 5 par les runes, 6 taillé au lapidaire, et au-delà la valeur ne monte plus', () => {
     expect(SKILL_MAX_LEVEL).toBe(5);
-    for (const id of SKILL_IDS) expect(skillValue(id, 9)).toBe(skillValue(id, 5));
+    expect(SKILL_CUT_LEVEL).toBe(6);
+    for (const id of SKILL_IDS) expect(skillValue(id, 9)).toBe(skillValue(id, SKILL_CUT_LEVEL));
   });
 
   it('⚠️ RENDEMENT DÉCROISSANT : chaque niveau apporte moins que le précédent', () => {

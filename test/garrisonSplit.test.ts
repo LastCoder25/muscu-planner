@@ -110,7 +110,7 @@ describe('🏰 (a) deux réserves de places', () => {
       expect(militiaFreeSeats(ctl({ kind }))).toBe(0);
     }
     expect(garrisonCap('objective')).toBe(seatsOf('objective'));
-    expect(garrisonCap('lapidary')).toBe(1);
+    expect(garrisonCap('lapidary')).toBe(seatsOf('lapidary'));
     expect(garrisonCap('fortress')).toBe(Infinity);
   });
   it('la sélection d’un renfort : des champions n’entament pas la place des miliciens', () => {

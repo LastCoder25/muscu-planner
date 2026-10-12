@@ -41,7 +41,13 @@ import {
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
-import { SKILLS, SKILL_MAX_LEVEL, type RuneTier, type SkillId } from './skillRunes';
+import {
+  SKILLS,
+  SKILL_CUT_LEVEL,
+  SKILL_MAX_LEVEL,
+  type RuneTier,
+  type SkillId,
+} from './skillRunes';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { bossSummonCost } from '../data/bosses';
 import type { SkirmishUnit } from './skirmish';
@@ -102,10 +108,9 @@ export const CONTROL = {
    */
   // ⚖️ Au rythme de l'arsenal depuis le 2026-10-08 : même besoin, même offre (cf. RUINS_SEALS).
   ossuaryHoursPerRuin: 144,
-  /** 💎 Lapidaire (île 3, 2026-10-03) : heures de polissage pour passer une compétence du
-   *  niveau 1 au 2, selon sa couleur ; chaque niveau au-dessus en demande la moitié de plus
-   *  (`lapidaryHours`). Une verte 1 → 2 en un jour, une dorée 4 → 5 en vingt. Premier calage. */
-  lapidaryHours: { green: 24, blue: 48, violet: 96, gold: 192 } as Record<RuneTier, number>,
+  /** 💎 Lapidaire (île 3) : heures de taille pour passer une compétence du niveau 5 au 6,
+   *  selon sa couleur (2026-10-12) : 1, 2, 4 et 7 jours. */
+  lapidaryHours: { green: 24, blue: 48, violet: 96, gold: 168 } as Record<RuneTier, number>,
   arsenalHoursPerRuin: 144,
   circleHoursPerAttempt: 48,
   altarHoursPerRune: ALTAR_HOURS_PER_RUNE,
@@ -416,8 +421,9 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   cartographer: PRODUCER_SEATS,
   hospice: PRODUCER_SEATS,
   lab: PRODUCER_SEATS,
-  // 💎 UN seul champion, et personne pour le défendre (pas de milice : `garrisonCap`).
-  lapidary: 1,
+  // 💎 Cinq champions, chacun sa barre (2026-10-12), et personne pour le défendre (pas de
+  // milice : `garrisonCap`).
+  lapidary: PRODUCER_SEATS,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
   citadel: 0,
@@ -525,7 +531,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   distillery: 'boosts de vitesse ⚡',
   fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
   cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
-  lapidary: 'un niveau de plus sur une compétence de son champion 💎',
+  lapidary: 'une compétence niveau 5 de chaque champion taillée au niveau 6 💎',
   hospice: 'des champions blessés de l’île guéris plus vite 🕯️',
   lab: 'runes multicolores violettes ou mieux 🟣',
   tower: 'trajets plus courts 🧭',
@@ -1482,74 +1488,117 @@ function withControl(map: ExpeditionMap, id: string, f: (p: Poi) => Poi): Expedi
   return { ...map, pois: map.pois.map((p) => (p.id === id && p.control ? f(p) : p)) };
 }
 
-/** 💎 Ce que le lapidaire a poli depuis la dernière récolte. */
+/** 💎 Les heures qu'UN champion a passées au lapidaire depuis la dernière récolte, et la
+ *  compétence qu'il y taille si le joueur l'a choisie (sinon `lapisTarget` décide). */
 export interface LapisGain {
   advId: string;
-  skill: SkillId;
   hours: number;
-}
-
-/** 💎 Les heures pour passer `id` de `level` à `level + 1` (`CONTROL.lapidaryHours`). */
-export function lapidaryHours(id: SkillId, level: number): number {
-  return CONTROL.lapidaryHours[SKILLS[id].tier] * (1 + 0.5 * (Math.max(1, level) - 1));
+  skill?: SkillId;
 }
 
 /**
- * 💎 Verse les heures du lapidaire sur la compétence : +1 niveau chaque fois que le temps de
- * son niveau est atteint, 5 au plus. ⚠️ Les heures sont GARDÉES sur le champion
- * (`lapisHours`), pas sur le lieu : perdu ou quitté, le travail fait reste acquis. Une
- * compétence qu'il n'a pas, ou au maximum, ne reçoit rien.
+ * 💎 LE LAPIDAIRE TAILLE LE NIVEAU 6 (décision de l'utilisateur, 2026-10-12) : au-delà des
+ * runes (5 au plus), il fait passer une compétence du niveau 5 au niveau 6. Les heures selon
+ * sa couleur (`CONTROL.lapidaryHours` : 1, 2, 4, 7 jours) — le niveau 6 ne vaut que +0,15
+ * (`LEVEL_CURVE`), d'où des durées courtes.
+ */
+export function lapidaryHours(id: SkillId): number {
+  return CONTROL.lapidaryHours[SKILLS[id].tier];
+}
+
+const TIER_ORDER: Record<RuneTier, number> = { green: 0, blue: 1, violet: 2, gold: 3 };
+
+/** 💎 Ce que le lapidaire peut tailler chez ce champion : ses compétences au niveau 5. */
+export function lapisCandidates(a: Pick<Adventurer, 'skills'>): SkillId[] {
+  return (a.skills ?? []).filter((s) => s.level === SKILL_MAX_LEVEL).map((s) => s.id);
+}
+
+/**
+ * 💎 La compétence qu'un champion taille : celle choisie si elle est encore au niveau 5,
+ * sinon celle qui a le plus avancé, sinon la plus rare. `null` : rien au niveau 5.
+ */
+export function lapisTarget(
+  a: Pick<Adventurer, 'skills' | 'lapisHours'>,
+  pick?: SkillId,
+): SkillId | null {
+  const ok = lapisCandidates(a);
+  if (!ok.length) return null;
+  if (pick && ok.includes(pick)) return pick;
+  const done = (s: SkillId) => a.lapisHours?.[s] ?? 0;
+  return [...ok].sort(
+    (x, y) => done(y) - done(x) || TIER_ORDER[SKILLS[y].tier] - TIER_ORDER[SKILLS[x].tier],
+  )[0]!;
+}
+
+/**
+ * 💎 Verse les heures du lapidaire : chaque champion sur SA compétence (`lapisTarget`), qui
+ * passe au niveau 6 quand son temps est atteint. ⚠️ Les heures sont GARDÉES sur le champion
+ * (`lapisHours`, par compétence), pas sur le lieu : s'il part, sa barre se met en PAUSE et
+ * reprend où elle en était à son retour. Un champion sans compétence au niveau 5 ne reçoit rien.
  */
 export function applyLapis(
   advs: Adventurer[],
-  g: LapisGain | undefined,
+  gains: readonly LapisGain[] | undefined,
 ): { advs: Adventurer[]; up: number } {
   // ⚠️ Rien à verser → le MÊME tableau : le store compare par identité pour ne pas écrire.
-  if (!g || g.hours <= 0) return { advs, up: 0 };
+  if (!gains?.length) return { advs, up: 0 };
   let up = 0;
   let changed = false;
   const next = advs.map((a) => {
-    if (a.id !== g.advId) return a;
-    const skills = a.skills ?? [];
-    const i = skills.findIndex((s) => s.id === g.skill);
-    if (i < 0 || skills[i]!.level >= SKILL_MAX_LEVEL) return a;
+    const g = gains.find((x) => x.advId === a.id && x.hours > 0);
+    if (!g) return a;
+    const skill = lapisTarget(a, g.skill);
+    if (!skill) return a;
     changed = true;
-    let level = skills[i]!.level;
-    let h = (a.lapisHours?.[g.skill] ?? 0) + g.hours;
-    while (level < SKILL_MAX_LEVEL && h + 1e-9 >= lapidaryHours(g.skill, level)) {
-      h -= lapidaryHours(g.skill, level);
-      level++;
-      up++;
-    }
+    const h = (a.lapisHours?.[skill] ?? 0) + g.hours;
     const hours = { ...(a.lapisHours ?? {}) };
-    if (level >= SKILL_MAX_LEVEL) delete hours[g.skill];
-    else hours[g.skill] = h;
+    const cut = h + 1e-9 >= lapidaryHours(skill);
+    if (cut) {
+      delete hours[skill];
+      up++;
+    } else hours[skill] = h;
     return {
       ...a,
-      skills: skills.map((s, k) => (k === i ? { ...s, level } : s)),
+      skills: (a.skills ?? []).map((s) =>
+        cut && s.id === skill ? { ...s, level: SKILL_CUT_LEVEL } : s,
+      ),
       lapisHours: hours,
     };
   });
   return { advs: changed ? next : advs, up };
 }
 
-/** 💎 Le lapidaire tenu change la compétence qu'il polit. Refus (carte inchangée) : pas un
- *  lapidaire, pas à nous, ou une compétence inconnue. */
+/** 💎 Le joueur choisit la compétence qu'un champion du lapidaire taille. Refus (carte
+ *  inchangée) : pas un lapidaire, pas à nous, champion absent, ou compétence inconnue.
+ *  ⚠️ Rien ne repart de zéro : le store verse d'abord les heures sur l'ancienne. */
 export function setLapisSkill(
   map: ExpeditionMap,
   id: string,
+  advId: string,
   skill: SkillId,
-  now: number,
 ): ExpeditionMap {
   const c = map.pois.find((p) => p.id === id)?.control;
   if (!c || c.kind !== 'lapidary' || c.owner !== 'player') return map;
-  if (!(skill in SKILLS) || c.lapis === skill) return map;
-  // ⚠️ Le temps part de MAINTENANT : sans compétence choisie le lieu n'a rien poli, et ce
-  // qui a été poli sur l'ancienne a été récolté juste avant (store).
+  if (!(skill in SKILLS) || !c.garrison.includes(advId) || c.lapisPick?.[advId] === skill)
+    return map;
   return withControl(map, id, (p) => ({
     ...p,
-    control: { ...p.control!, lapis: skill, collectedAt: now, banked: 0 },
+    control: { ...p.control!, lapisPick: { ...(p.control!.lapisPick ?? {}), [advId]: skill } },
   }));
+}
+
+/** 💎 La barre d'un champion au lapidaire : la compétence taillée, et sa part faite (heures
+ *  gardées + celles pas encore versées). `null` : rien au niveau 5. */
+export function lapisBar(
+  a: Pick<Adventurer, 'id' | 'skills' | 'lapisHours'>,
+  p: Poi,
+  now: number,
+): { skill: SkillId; pct: number; leftH: number } | null {
+  const skill = lapisTarget(a, p.control?.lapisPick?.[a.id] as SkillId | undefined);
+  if (!skill) return null;
+  const need = lapidaryHours(skill);
+  const done = (a.lapisHours?.[skill] ?? 0) + (champStockBy(p, now, 1)[a.id] ?? 0);
+  return { skill, pct: Math.min(1, done / need), leftH: Math.max(0, need - done) };
 }
 
 /** 🗺️ Le CARTOGRAPHE tenu change le type qu'il fait revenir. Refus (carte inchangée) : pas un
@@ -2118,8 +2167,10 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   return Math.max(0, need);
 }
 
-/** Le lieu où CHAQUE champion a sa propre réserve d'XP (sa jauge) : le camp. */
-const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k === 'training';
+/** Le lieu où CHAQUE champion a sa propre réserve (sa jauge) : le camp (XP) et le lapidaire
+ *  (heures de taille). */
+const isPerChampKind = (k: ControlKind | undefined): k is 'training' | 'lapidary' =>
+  k === 'training' || k === 'lapidary';
 
 /**
  * 🎯 L'XP accumulée par CHAQUE champion au camp à `now`, non arrondie (ses pièces portées
@@ -2135,9 +2186,13 @@ function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, 
   if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
     return {};
   const until = Math.min(now, c.attackAt ?? now);
+  // 💎 Au lapidaire, des heures de taille : une par heure passée sur place, sans cran.
+  const lapis = c.kind === 'lapidary';
   // 🏅 Chaque heure au cran qu'elle avait (`tierHours`).
-  const hours = tierHours(c, c.collectedAt, until);
-  const rate = trainingXpPerHour(playerLevel);
+  const hours = lapis
+    ? Math.max(0, until - c.collectedAt) / 3600_000
+    : tierHours(c, c.collectedAt, until);
+  const rate = lapis ? 1 : trainingXpPerHour(playerLevel);
   // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
   const out: Record<string, number> = { ...c.perXp };
@@ -2329,8 +2384,8 @@ export function collectControl(
   /** 🗿 Sceaux de champion (l'autel des runes), au rang `champSealRank`. */
   champSeals: number;
   champSealRank: number;
-  /** 💎 Les heures de polissage du lapidaire (`applyLapis`). */
-  lapis?: LapisGain;
+  /** 💎 Les heures de taille du lapidaire, champion par champion (`applyLapis`). */
+  lapis?: LapisGain[];
 } {
   const p = map.pois.find((x) => x.id === id);
   const none = {
@@ -2353,6 +2408,27 @@ export function collectControl(
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
   // entamée (sauf un champion ramené depuis : ce qui lui reste ne compte plus).
+  // 💎 Le lapidaire : CHAQUE champion verse ses heures, fraction comprise (rien ne se perd :
+  // elles s'additionnent sur le champion, `applyLapis`).
+  if (c.kind === 'lapidary') {
+    const by = champStockBy(p, now, playerLevel);
+    const lapis = Object.entries(by)
+      .filter(([, h]) => h > 1e-9)
+      .map(([advId, hours]) => {
+        const skill = c.lapisPick?.[advId] as SkillId | undefined;
+        return skill ? { advId, hours, skill } : { advId, hours };
+      });
+    if (!lapis.length) return none;
+    const until = Math.min(now, c.attackAt ?? now);
+    return {
+      ...none,
+      map: withControl(map, id, (q) => ({
+        ...q,
+        control: { ...q.control!, collectedAt: until, banked: 0, perXp: {} },
+      })),
+      lapis,
+    };
+  }
   if (isPerChampKind(c.kind)) {
     const by = champStockBy(p, now, playerLevel);
     const got: Record<string, number> = {};
@@ -2377,20 +2453,6 @@ export function collectControl(
     };
   }
   const units = stockUnits(p, now, playerLevel);
-  // 💎 Le lapidaire verse des HEURES, fraction comprise : rien ne s'arrondit ni ne se perd.
-  if (c.kind === 'lapidary') {
-    const advId = c.garrison.find((g) => !isMilitiaId(g));
-    if (units <= 0 || !advId || !c.lapis) return none;
-    const until = Math.min(now, c.attackAt ?? now);
-    return {
-      ...none,
-      map: withControl(map, id, (q) => ({
-        ...q,
-        control: { ...q.control!, collectedAt: until, banked: 0 },
-      })),
-      lapis: { advId, skill: c.lapis as SkillId, hours: units },
-    };
-  }
   const whole = Math.floor(units + 1e-9);
   if (whole <= 0) return none;
   const supplies: SupplyStock = {};
@@ -2454,9 +2516,9 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
   if (c.kind === 'lapidary') {
-    const sk = c.lapis ? SKILLS[c.lapis as SkillId] : null;
+    const n = c.garrison.filter((g) => !isMilitiaId(g)).length;
     return {
-      text: sk ? `💎 Polit ${sk.emoji} ${sk.name}` : '💎 Choisis la compétence à polir',
+      text: n ? `💎 ${n} champion${n > 1 ? 's' : ''} en taille` : '💎 Personne ne taille',
       pct: null,
     };
   }
@@ -2602,11 +2664,10 @@ export function controlYieldCard(
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
   if (c.kind === 'lapidary') {
-    const sk = c.lapis ? SKILLS[c.lapis as SkillId] : null;
     return {
       emoji: '💎',
-      value: sk ? `${sk.emoji} ${sk.name}` : '—',
-      what: sk ? 'polie : un niveau de plus au bout du temps' : 'choisis ci-dessous la compétence',
+      value: `${n} en taille`,
+      what: 'chacun fait passer une compétence du niveau 5 au niveau 6',
       pct: null,
       gauge: idle,
       rate: `${crew} · personne ne le défend : intercepte l’armée`,
@@ -2835,13 +2896,14 @@ export type HeroPostBlock = 'notHeld' | 'here' | 'noSeat' | 'full';
 export const HERO_POST_BLOCK_LABEL: Record<HeroPostBlock, string> = {
   notHeld: 'ce point n’est pas à toi',
   here: 'le héros y est déjà (ou en route)',
-  noSeat: 'ce lieu n’a pas la place pour le héros',
+  noSeat: 'le héros ne peut pas rester sur ce lieu',
   full: 'il faut 2 places libres pour le héros',
 };
 export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
   if (c.hero || c.heroComing || c.heroAway) return 'here';
-  if (seatsOf(c.kind) < MILITIA.heroSeats) return 'noSeat';
+  // 💎 Pas au lapidaire : le héros n'a aucune compétence à y tailler.
+  if (c.kind === 'lapidary' || seatsOf(c.kind) < MILITIA.heroSeats) return 'noSeat';
   if (controlFreeSeats(c) < MILITIA.heroSeats) return 'full';
   return null;
 }

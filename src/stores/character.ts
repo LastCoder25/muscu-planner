@@ -6121,10 +6121,12 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
-  /** 💎 Le lapidaire tenu polit une autre compétence : ce qui a été poli est versé d'abord. */
+  /** 💎 Un champion du lapidaire taille une autre compétence : ses heures sont versées d'abord
+   *  sur l'ancienne (gardées sur lui, rien ne se perd). */
   async function chooseLapisSkill(
     userId: string,
     id: string,
+    advId: string,
     skill: SkillId,
     now: number,
     playerLevel: number,
@@ -6140,7 +6142,7 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       playerLevel,
     );
-    const next = setLapisSkill(h.map, id, skill, now);
+    const next = setLapisSkill(h.map, id, advId, skill);
     if (next === h.map && h.map === cur.expedition_map) return;
     await persist(userId, {
       expedition_map: next,

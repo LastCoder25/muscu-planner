@@ -15,7 +15,14 @@
             <span class="srp-name">
               {{ SKILLS[s.id].name }}
               <b class="srp-lvl"
-                >Nv {{ s.level }}{{ s.level >= SKILL_MAX_LEVEL ? ' · max' : '' }}</b
+                >Nv {{ s.level
+                }}{{
+                  s.level > SKILL_MAX_LEVEL
+                    ? ' · taillée 💎'
+                    : s.level === SKILL_MAX_LEVEL
+                      ? ' · max'
+                      : ''
+                }}</b
               >
             </span>
             <span class="srp-what">{{ whatOf(s.id, s.level) }}</span>

@@ -222,8 +222,11 @@ export interface ControlState {
   fortMult?: number;
   /** 🗺️ CARTOGRAPHE : le type de lieu que le joueur fait apparaître plus souvent. */
   favor?: PoiType;
-  /** 💎 LAPIDAIRE : la compétence que son champion polit (un id de `SKILLS`). */
+  /** 💎 LAPIDAIRE (avant le 2026-10-12) : la compétence polie. Ignoré, remplacé par `lapisPick`. */
   lapis?: string;
+  /** 💎 LAPIDAIRE : la compétence que CHAQUE champion taille (id → id de `SKILLS`), choisie
+   *  par le joueur ; absent : `lapisTarget` décide. */
+  lapisPick?: Record<string, string>;
   /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
    *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
    *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */

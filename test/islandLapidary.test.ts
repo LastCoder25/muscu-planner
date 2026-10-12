@@ -12,6 +12,8 @@ import {
   garrisonCap,
   garrisonHold,
   lapidaryHours,
+  lapisCandidates,
+  lapisTarget,
   militiaSeatsOf,
   seatsOf,
   setLapisSkill,
@@ -21,6 +23,7 @@ import { ensureIslandConquest } from '@/lib/islandConquest';
 import { refEscortUnits } from '@/lib/caravan';
 import { refChampionAdv } from '@/lib/caravan';
 import type { Adventurer } from '@/lib/adventurers';
+import { LEVEL_CURVE, SKILL_CUT_LEVEL, skillValue } from '@/lib/skillRunes';
 
 const NOW = Date.UTC(2026, 9, 3, 12);
 const H = 3600_000;
@@ -57,14 +60,14 @@ describe('💎 le lapidaire de l’île 3', () => {
     expect(poiLabel(island3().pois.find((p) => p.id === id)!)).toContain('Lapidaire');
   });
 
-  it('un seul champion, aucun milicien, et personne pour le défendre', () => {
-    expect(seatsOf('lapidary')).toBe(1);
-    expect(garrisonCap('lapidary')).toBe(1);
+  it('cinq champions, aucun milicien, et personne pour le défendre', () => {
+    expect(seatsOf('lapidary')).toBe(5);
+    expect(garrisonCap('lapidary')).toBe(5);
     expect(defendsControl('lapidary')).toBe(false);
     expect(defendsControl('mine')).toBe(true);
     const m = captureControl(island3(), id, ['a', 'b'], NOW, 7);
     const p = m.pois.find((q) => q.id === id)!;
-    expect(p.control!.garrison).toEqual(['a']);
+    expect(p.control!.garrison).toEqual(['a', 'b']);
     expect(militiaSeatsOf('lapidary')).toBe(0);
     expect(garrisonHold(p, refEscortUnits(LV), 1)).toBe(0);
     // Les mêmes défenseurs tiendraient un autre lieu : c'est bien le lapidaire qui ne se défend
@@ -82,39 +85,68 @@ describe('💎 le lapidaire de l’île 3', () => {
     expect(controlAttackHold(m, p, mil, [], kit, LV, 1, null)).toBe(0);
   });
 
-  it('le temps dépend de la couleur et du niveau', () => {
-    expect(lapidaryHours('speed', 1)).toBeLessThan(lapidaryHours('plunder', 1));
-    expect(lapidaryHours('speed', 1)).toBeLessThan(lapidaryHours('speed', 3));
+  it('le temps dépend de la couleur : 1, 2, 4 et 7 jours', () => {
+    expect(lapidaryHours('speed')).toBe(24);
+    expect(lapidaryHours('speed')).toBeLessThan(lapidaryHours('plunder'));
+    expect(lapidaryHours('plunder')).toBe(168);
   });
 
-  it('les heures font monter la compétence d’un niveau, 5 au plus', () => {
-    const need = lapidaryHours('speed', 1);
-    const a = applyLapis([adv()], { advId: 'a', skill: 'speed', hours: need });
+  it('seule une compétence au niveau 5 se taille, et elle passe au niveau 6', () => {
+    expect(lapisCandidates(adv())).toEqual(['care']);
+    const a = applyLapis([adv()], [{ advId: 'a', hours: lapidaryHours('care') }]);
     expect(a.up).toBe(1);
-    expect(a.advs[0]!.skills!.find((s) => s.id === 'speed')!.level).toBe(2);
-    const big = applyLapis([adv()], { advId: 'a', skill: 'plunder', hours: 1e6 });
-    expect(big.advs[0]!.skills!.find((s) => s.id === 'plunder')!.level).toBe(5);
-    const maxed = [adv()];
-    expect(applyLapis(maxed, { advId: 'a', skill: 'care', hours: 1e6 }).advs).toBe(maxed);
+    expect(a.advs[0]!.skills!.find((s) => s.id === 'care')!.level).toBe(SKILL_CUT_LEVEL);
+    // Les autres ne bougent pas, et un niveau 6 ne se taille plus.
+    expect(a.advs[0]!.skills!.find((s) => s.id === 'plunder')!.level).toBe(4);
+    const again = applyLapis(a.advs, [{ advId: 'a', hours: 1e6 }]);
+    expect(again.advs).toBe(a.advs);
+    // Rien au niveau 5 : rien ne change.
+    const none = [adv({ skills: [{ id: 'speed', level: 2 }] })];
+    expect(applyLapis(none, [{ advId: 'a', hours: 1e6 }]).advs).toBe(none);
   });
 
-  it('le travail est GARDÉ sur le champion, et s’additionne', () => {
-    const half = lapidaryHours('speed', 1) / 2;
-    const one = applyLapis([adv()], { advId: 'a', skill: 'speed', hours: half });
+  it('le niveau 6 vaut plus que le 5, sans casser le rendement décroissant', () => {
+    expect(skillValue('care', 6)).toBeGreaterThan(skillValue('care', 5));
+    const steps = LEVEL_CURVE.slice(1).map((v, i) => v - LEVEL_CURVE[i]!);
+    for (let i = 1; i < steps.length; i++) expect(steps[i]!).toBeLessThan(steps[i - 1]!);
+  });
+
+  it('la progression est GARDÉE sur le champion : s’il part, elle se met en pause', () => {
+    const half = lapidaryHours('care') / 2;
+    const one = applyLapis([adv()], [{ advId: 'a', hours: half }]);
     expect(one.up).toBe(0);
-    expect(one.advs[0]!.lapisHours!.speed).toBeCloseTo(half, 6);
-    const two = applyLapis(one.advs, { advId: 'a', skill: 'speed', hours: half });
+    expect(one.advs[0]!.lapisHours!.care).toBeCloseTo(half, 6);
+    const two = applyLapis(one.advs, [{ advId: 'a', hours: half }]);
     expect(two.up).toBe(1);
   });
 
-  it('le lieu polit depuis le choix de la compétence, fraction comprise', () => {
+  it('chaque champion a sa barre, et seul celui qui est sur place avance', () => {
     let m = captureControl(island3(), id, ['a'], NOW, 7);
-    expect(collectControl(m, id, NOW + 10 * H, LV).lapis).toBeUndefined();
-    m = setLapisSkill(m, id, 'speed', NOW + 10 * H);
-    const got = collectControl(m, id, NOW + 15.5 * H, LV).lapis!;
-    expect(got.advId).toBe('a');
-    expect(got.skill).toBe('speed');
-    expect(got.hours).toBeCloseTo(5.5, 6);
+    const got = collectControl(m, id, NOW + 5.5 * H, LV).lapis!;
+    expect(got).toEqual([{ advId: 'a', hours: 5.5 }]);
+    m = collectControl(m, id, NOW + 5.5 * H, LV).map;
+    // Il part : la récolte suivante ne lui verse plus rien.
+    m = { ...m, pois: m.pois.map((p) => (p.id === id ? { ...p, control: { ...p.control!, garrison: [] } } : p)) };
+    expect(collectControl(m, id, NOW + 20 * H, LV).lapis).toBeUndefined();
+  });
+
+  it('le joueur choisit la compétence taillée, sinon celle qui a le plus avancé', () => {
+    const two = adv({
+      skills: [
+        { id: 'speed', level: 5 },
+        { id: 'plunder', level: 5 },
+      ],
+      lapisHours: { speed: 10 },
+    });
+    expect(lapisTarget(two)).toBe('speed');
+    expect(lapisTarget(two, 'plunder')).toBe('plunder');
+    let m = captureControl(island3(), id, ['a'], NOW, 7);
+    m = setLapisSkill(m, id, 'a', 'plunder');
+    expect(collectControl(m, id, NOW + 2 * H, LV).lapis![0]!.skill).toBe('plunder');
+    // Un champion absent ne se choisit pas.
+    expect(setLapisSkill(m, id, 'zz', 'speed')).toBe(m);
+    const got = applyLapis([two], [{ advId: 'a', hours: 1, skill: 'plunder' }]);
+    expect(got.advs[0]!.lapisHours).toEqual({ speed: 10, plunder: 1 });
   });
 });
 
