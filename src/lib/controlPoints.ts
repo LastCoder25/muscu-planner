@@ -215,9 +215,11 @@ export const CONTROL = {
    *  donc son rayon de détection. Cumul ADDITIF entre tours, toujours borné par le plafond
    *  de part d'intervalle (`RAID.scoutLeadIntervalCap`) : jamais « toujours prévenu ». */
   towerDetect: 0.5,
-  /** 🎲 SUSPENSE (demandé par l'utilisateur, 2026-09-27) : une garnison ne repousse JAMAIS
-   *  plus de cette part des attaques. Au-delà, l'ennemi envoie plus de monde (`retakeBoost`),
-   *  juste assez pour y redescendre : on a toujours une vraie chance de perdre le lieu. */
+  /** 🎲 SUSPENSE (demandé par l'utilisateur, 2026-09-27) : face à une attaque de TON rang, une
+   *  garnison ne repousse jamais plus de cette part des attaques. Au-delà, l'ennemi envoie plus
+   *  de monde (`retakeBoost`), juste assez pour y redescendre. ⚠️ Le renfort est calculé contre
+   *  ton rang : une attaque de rang plus bas peut être repoussée à 100 % (2026-10-12,
+   *  `retakeBattle`). */
   maxHold: 0.9,
   /** Combats rejoués par taille de troupe pour estimer la tenue (graines de pronostic). */
   holdSamples: 24,

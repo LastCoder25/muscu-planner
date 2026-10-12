@@ -814,6 +814,14 @@ function retakeRemaining(p: Pick<Poi, 'control'>): number {
  * ⚔️ LA BATAILLE D'UNE REPRISE, telle qu'elle sera livrée : les assaillants à LEUR niveau
  * (`attackerLevel`, tiré pour CETTE attaque), leur troupe grossie si la garnison tiendrait
  * trop bien (`retakeBoost`), amputée de ce que les sorties ont abattu (`retakeRemaining`).
+ * ⚠️ Le renfort de suspense se calcule contre des assaillants de TON rang (le niveau du
+ * joueur, les plus forts possibles), jamais contre ceux qui viennent (2026-10-12, décision de
+ * l'utilisateur : « un lieu fixe doit être défendable à 100 % si l'attaque est de bas rang et
+ * que le lieu est défendu par une force conséquente »). Le plafond de 90 % vaut donc face à
+ * une attaque de ton rang ; une attaque d'un rang plus bas, à troupe égale, peut être
+ * repoussée à coup sûr. Mesuré (5 miliciens + 2-3 champions, niveaux 30-90, 20 attaques par
+ * case) : rang du joueur ~85-91 % (inchangé), un rang plus bas ~83-91 % → 97-100 %, deux rangs
+ * → 100 %.
  * ⚠️ SOURCE UNIQUE de la résolution (store) ET du % affiché : l'un ne peut pas annoncer
  * un ennemi que l'autre ne combat pas.
  */
@@ -827,7 +835,8 @@ export function retakeBattle(
   fort: number,
 ): { foe: Poi; force: CampSpec } {
   const foe = { ...p, level: attackerLevel(map, p, playerLevel) };
-  const f0 = retakeForce(foe, retakeBoost(foe, allies, fort));
+  const strongest = { ...p, level: Math.max(1, playerLevel) };
+  const f0 = retakeForce(foe, retakeBoost(strongest, allies, fort));
   return { foe, force: { ...f0, size: (f0.size * retakeRemaining(p)) / Math.max(1, fort) } };
 }
 

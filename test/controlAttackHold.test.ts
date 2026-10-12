@@ -8,6 +8,8 @@ import { attackerLevel, controlDefenseHold } from '@/lib/controlPoints';
 import { campWinPct } from '@/lib/camp';
 import { militiaUnits } from '@/lib/militia';
 import { EXPE, type Poi } from '@/lib/expedition';
+import { refChampionAdv } from '@/lib/caravan';
+import { characterRank } from '@/lib/characterRank';
 
 const H = 3_600_000;
 const L = 35;
@@ -50,9 +52,7 @@ describe('🎯 la tenue face à l’armée en approche', () => {
   });
 
   it('le % SUIT l’armée réelle, là où le plancher générique restait figé', () => {
-    // ⚠️ Pas « plus faible = mieux repoussé » : face à une garnison trop sûre, l'ennemi
-    // grossit sa troupe (`retakeBoost`) — un assaillant faible vient plus nombreux. Ce qui
-    // doit changer, c'est que chaque attaque est jugée sur SA troupe.
+    // Chaque attaque est jugée sur SA troupe et SON rang.
     const floors = new Set(attacks.map((p) => controlDefenseHold(p, MIL, [], KIT, L, 1, null)));
     const holds = new Set(
       attacks.map((p) => controlAttackHold({ seed: 42 }, p, MIL, [], KIT, L, 1, null)),
@@ -96,6 +96,25 @@ describe('🎯 la tenue face à l’armée en approche', () => {
         attackerLevel({ seed: 42 }, p, L),
       );
     expect(new Set(attacks.map((p) => attackerLevel({ seed: 42 }, p, L))).size).toBeGreaterThan(1);
+  });
+
+  // 🛡️ 2026-10-12 (décision de l'utilisateur) : le renfort de suspense se calcule contre TON
+  // rang — une force conséquente repousse à coup sûr une attaque de rang plus bas, mais pas
+  // celle de ton rang (le plafond de 90 % y tient).
+  it('une force conséquente repousse à 100 % une attaque de deux rangs sous le joueur', () => {
+    const advs = [0, 1, 2].map((k) => ({ ...refChampionAdv(L, k), id: `c${k}` }));
+    const ids = [...advs.map((a) => a.id), ...MIL];
+    const rk = (lv: number) => characterRank(lv).rankIndex;
+    const low = attacks.filter((p) => rk(attackerLevel({ seed: 42 }, p, L)) <= rk(L) - 2);
+    const same = attacks.filter((p) => rk(attackerLevel({ seed: 42 }, p, L)) === rk(L));
+    expect(low.length, 'aucune attaque basse').toBeGreaterThan(2);
+    expect(same.length, 'aucune attaque du rang du joueur').toBeGreaterThan(2);
+    for (const p of low)
+      expect(controlAttackHold({ seed: 42 }, p, ids, advs, KIT, L, 1, null)).toBe(1);
+    const mean =
+      same.reduce((t, p) => t + controlAttackHold({ seed: 42 }, p, ids, advs, KIT, L, 1, null), 0) /
+      same.length;
+    expect(mean).toBeLessThan(0.97);
   });
 
   it('sans défenseur, rien n’est repoussé', () => {
