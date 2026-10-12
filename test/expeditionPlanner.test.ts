@@ -288,13 +288,23 @@ describe('planificateur — consommables autorisés (stock)', () => {
     expect(r.trips[0]!.win).toBe(1);
   });
 
-  it('le trajet compte les rations ; un consommable inutile n’est jamais emporté', async () => {
+  it('l’effectif suffit : aucun consommable, même utile et en stock (on les économise)', async () => {
+    // Avant (v1.169.0) les rations partaient sur tout voyage où elles servaient.
     const r = (await run([{ id: 'a', need: 1, min: 60, xp: 1 }], [u('A', 1)], {
       rations: 2,
+      potion: 3,
       inutile: 5,
     }))!;
-    expect(r.trips[0]!.kit).toEqual(['rations']);
-    expect(r.trips[0]!.tripMin).toBe(30);
+    expect(r.trips[0]!.kit).toEqual([]);
+    expect(r.trips[0]!.tripMin).toBe(60);
+  });
+
+  it('un consommable inutile n’est jamais emporté, même quand il en faut un', async () => {
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], {
+      potion: 1,
+      inutile: 5,
+    }))!;
+    expect(r.trips[0]!.kit).toEqual(['potion']);
   });
 
   it('le stock se partage : jamais plus de voyages avec une potion que de potions', async () => {
@@ -341,5 +351,126 @@ describe('planificateur — consommables autorisés (stock)', () => {
       { threshold: 0.9, mode: 'xp', maxTeam: 6, deps: sdeps, stock: { potion: 1 } },
     ))!;
     expect(r.trips.flatMap((t) => t.kit).filter((k) => k === 'potion').length).toBe(1);
+  });
+});
+
+describe('planificateur — le consommable pallie un manque d’effectif, au minimum', () => {
+  // 🧪 Bonus de puissance par consommable ; « baume » vaut une potion (pour départager au stock).
+  // Un lieu avec `road` a une route : sans assez de puissance (carte : +3 pour la route seule),
+  // une embuscade sur deux est perdue — la « réussite » compte l'attaque ET la route.
+  interface R extends T {
+    road?: number;
+  }
+  const BONUS: Record<string, number> = { potion: 4, baume: 4, pierre: 2, elixir: 1, gemme: 1 };
+  const power = (us: PlanUnit[], kit: readonly string[]) =>
+    us.reduce((s, x) => s + x.power, 0) + kit.reduce((s, id) => s + (BONUS[id] ?? 0), 0);
+  const rdeps: PlanDeps<R> = {
+    ...(deps as unknown as PlanDeps<R>),
+    win: (t, us, kit) => {
+      const attack = Math.min(1, power(us, kit) / t.need);
+      const roadP = power(us, kit) + (kit.includes('carte') ? 3 : 0);
+      const road = t.road === undefined || roadP >= t.road ? 1 : 0.5;
+      return attack * road;
+    },
+    tripMin: (t) => t.min,
+    kit: (_t, _us, avail) => [...avail],
+  };
+  const run = (targets: R[], units: PlanUnit[], stock: Record<string, number>) =>
+    planExpeditions(targets, units, { threshold: 0.9, mode: 'events', maxTeam: 6, deps: rdeps, stock });
+
+  it('l’effectif passe avant : jamais moins de champions grâce à un consommable', async () => {
+    // B seul + potion passerait (8/5), mais A + B passent sans rien : on envoie les deux.
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1), u('B', 4)], {
+      potion: 3,
+    }))!;
+    expect(r.trips[0]!.units.map((x) => x.id).sort()).toEqual(['A', 'B']);
+    expect(r.trips[0]!.kit).toEqual([]);
+  });
+
+  it('le minimum : un seul consommable quand il suffit, pas tout ce qui sert', async () => {
+    // 1 + potion = 5 passe ; pierre et élixir serviraient aussi, mais ne sont pas nécessaires.
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], {
+      potion: 2,
+      pierre: 2,
+      elixir: 2,
+    }))!;
+    expect(r.trips[0]!.kit).toEqual(['potion']);
+  });
+
+  it('le minimum en NOMBRE : deux quand deux suffisent, pas trois', async () => {
+    // Il faut +3 : pierre + élixir (ou gemme) suffisent ; les trois ensemble, non.
+    const r = (await run([{ id: 'a', need: 4, min: 60, xp: 1 }], [u('A', 1)], {
+      pierre: 1,
+      elixir: 2,
+      gemme: 1,
+    }))!;
+    // À deux exemplaires égaux, l'élixir (stock 2) passe devant la gemme (stock 1).
+    expect([...r.trips[0]!.kit].sort()).toEqual(['elixir', 'pierre']);
+  });
+
+  it('à nombre égal, le consommable dont on a le plus de stock (on garde les rares)', async () => {
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], {
+      potion: 1,
+      baume: 6,
+    }))!;
+    expect(r.trips[0]!.kit).toEqual(['baume']);
+    const r2 = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], {
+      potion: 6,
+      baume: 1,
+    }))!;
+    expect(r2.trips[0]!.kit).toEqual(['potion']);
+  });
+
+  it('seuil hors d’atteinte même avec tout le stock : rien n’est emporté ni gaspillé', async () => {
+    const r = (await run([{ id: 'a', need: 100, min: 60, xp: 1 }], [u('A', 1)], {
+      potion: 5,
+      pierre: 5,
+    }))!;
+    expect(r.trips).toEqual([]);
+    expect(r.unreachable.map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('les embuscades comptent : un consommable pour la route, même si l’attaque passe', async () => {
+    // L'attaque passe seule (5/5) ; la route demande 7 : la carte (+3) suffit, la potion aussi
+    // (+4) — à nombre égal, la plus fournie.
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1, road: 7 }], [u('A', 5)], {
+      carte: 4,
+      potion: 1,
+    }))!;
+    expect(r.trips[0]!.kit).toEqual(['carte']);
+    // Sans consommable : la route fait échouer le lieu.
+    const none = (await run([{ id: 'a', need: 5, min: 60, xp: 1, road: 7 }], [u('A', 5)], {}))!;
+    expect(none.trips).toEqual([]);
+  });
+
+  it('jamais un consommable que l’équipe n’a pas le droit d’emporter (`kit` le refuse)', async () => {
+    // « interdit » ferait passer le seuil, mais `kit` ne le rend jamais (le store le refuserait).
+    const strict: PlanDeps<R> = {
+      ...rdeps,
+      win: (t, us, kit) => Math.min(1, (power(us, kit) + (kit.includes('interdit') ? 4 : 0)) / t.need),
+      kit: (_t, _us, avail) => avail.filter((id) => id !== 'interdit'),
+    };
+    const r = (await planExpeditions([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], {
+      threshold: 0.9,
+      mode: 'events',
+      maxTeam: 6,
+      deps: strict,
+      stock: { interdit: 9, potion: 1 },
+    }))!;
+    expect(r.trips[0]!.kit).toEqual(['potion']);
+  });
+
+  it('le stock se partage : le lieu qui n’en a pas besoin n’en prend pas', async () => {
+    const r = (await run(
+      [
+        { id: 'facile', need: 1, min: 30, xp: 1 },
+        { id: 'dur', need: 5, min: 40, xp: 1 },
+      ],
+      [u('A', 1, 'A'), u('B', 1, 'B')],
+      { potion: 1 },
+    ))!;
+    expect(r.trips).toHaveLength(2);
+    expect(r.trips.find((t) => t.target.id === 'facile')!.kit).toEqual([]);
+    expect(r.trips.find((t) => t.target.id === 'dur')!.kit).toEqual(['potion']);
   });
 });

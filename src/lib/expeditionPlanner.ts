@@ -52,8 +52,8 @@ export interface PlanDeps<T> {
   tripMin(target: T, units: PlanUnit[], kit: readonly string[]): number;
   /** XP totale des champions de l'équipe en cas de victoire. */
   xp(target: T, units: PlanUnit[]): number;
-  /** 🎒 Parmi les consommables encore disponibles (`avail`), ceux que CETTE équipe emporterait
-   *  vers ce lieu — ceux qui y servent. Absent = jamais de consommable. */
+  /** 🎒 Parmi les consommables proposés (`avail`), ceux qui SERVENT à cette équipe vers ce lieu ;
+   *  le planificateur n’en retient que le minimum nécessaire. Absent = jamais de consommable. */
   kit?(target: T, units: PlanUnit[], avail: readonly string[]): string[];
 }
 
@@ -89,8 +89,9 @@ export interface PlanOptions<T> {
   /** ⚔️ Proposer aussi des attaques combinées (équipe venue de plusieurs endroits). */
   combined?: boolean;
   /** 🎒 Les consommables que le joueur AUTORISE (demandé : « pouvoir rajouter des consommables
-   *  sur les simulations »), avec leur quantité en stock. Chaque voyage proposé emporte ceux qui
-   *  lui servent (`deps.kit`), un de chaque type, tant qu'il en reste : le stock se partage entre
+   *  sur les simulations »), avec leur quantité en stock. Un voyage n'en emporte QUE si son
+   *  effectif ne suffit pas à passer le seuil, et alors le plus petit kit qui le fait passer
+   *  (cf. `bestFor`), un de chaque type au plus, tant qu'il en reste : le stock se partage entre
    *  les voyages dans l'ordre où le plan les sert — on ne propose jamais d'emporter ce qu'on n'a
    *  pas. Absent ou vide = simulations sans consommable. */
   stock?: Readonly<Record<string, number>>;
@@ -98,6 +99,20 @@ export interface PlanOptions<T> {
 
 /** Combien de remplaçants plus faibles on essaie, au plus, pour chaque membre. */
 const SWAP_TRIES = 4;
+
+/** 🎒 Combien de combinaisons de consommables on essaie, au plus, avant de se rabattre sur une
+ *  réduction gloutonne (en pratique 5 à 6 consommables servent à un lieu : 31 à 63 combinaisons,
+ *  arrêtées à la première taille qui passe). */
+const MAX_KIT_TRIES = 64;
+
+/** Les sous-ensembles de `items` de taille `k`, dans l'ordre de `items`. */
+function subsetsOf<X>(items: readonly X[], k: number): X[][] {
+  if (k === 0) return [[]];
+  const out: X[][] = [];
+  for (let i = 0; i + k <= items.length; i++)
+    for (const rest of subsetsOf(items.slice(i + 1), k - 1)) out.push([items[i]!, ...rest]);
+  return out;
+}
 
 type Candidate<T> = PlannedTrip<T>;
 
@@ -150,14 +165,16 @@ export async function planExpeditions<T extends { id: string }>(
   const allowed = (t: T, team: PlanUnit[]) =>
     !(mode === 'xp' && team.every((u) => u.hero)) && deps.fits(t, team);
 
-  /** La meilleure équipe pour CE lieu, prise dans `pool`, avec les consommables `avail`. */
-  const bestFor = async (
+  /**
+   * La meilleure équipe pour CE lieu, prise dans `pool`, avec les consommables qu'on y emporte
+   * (`kitFor(équipe)`). C'est la recherche gloutonne décrite en tête de fichier ; le kit y est
+   * FIXÉ par l'appelant (`bestFor`), jamais choisi ici.
+   */
+  const searchWith = async (
     t: T,
     pool: PlanUnit[],
-    avail: readonly string[],
+    kitFor: (team: PlanUnit[]) => string[],
   ): Promise<Candidate<T> | null> => {
-    /** 🎒 Ce que cette équipe emporterait : ce qui lui sert, parmi ce qui reste. */
-    const kitOf = (team: PlanUnit[]) => (deps.kit && avail.length ? deps.kit(t, team, avail) : []);
     const origins = [...new Set(pool.map((u) => u.origin))];
     let best: Candidate<T> | null = null;
     for (const origin of origins) {
@@ -172,7 +189,7 @@ export async function planExpeditions<T extends { id: string }>(
           if (opts.cancelled?.()) return null;
           const tryTeam = order.slice(0, k);
           if (!allowed(t, tryTeam)) continue;
-          const tw = await winOf(t, tryTeam, kitOf(tryTeam));
+          const tw = await winOf(t, tryTeam, kitFor(tryTeam));
           if (passes(tw)) {
             team = tryTeam;
             w = tw;
@@ -193,7 +210,7 @@ export async function planExpeditions<T extends { id: string }>(
             if (opts.cancelled?.()) return null;
             const alt: PlanUnit[] = picked.map((u, j) => (j === i ? s : u));
             if (!allowed(t, alt)) continue;
-            const aw = await winOf(t, alt, kitOf(alt));
+            const aw = await winOf(t, alt, kitFor(alt));
             // ⭐ Mode XP : on ne cède pas un membre qui fait gagner de l'XP à l'équipe (🎓 Mentor,
             // champion en retard qui touche la prime de rattrapage) contre un plus faible qui en
             // rapporte moins — le remplacement ne doit jamais faire BAISSER l'XP attendue.
@@ -207,7 +224,7 @@ export async function planExpeditions<T extends { id: string }>(
           }
         }
         const win = w ?? 1;
-        const kit = kitOf(picked);
+        const kit = kitFor(picked);
         const c: Candidate<T> = {
           target: t,
           units: picked,
@@ -223,17 +240,14 @@ export async function planExpeditions<T extends { id: string }>(
     // les plus forts ; on ajoute du monde jusqu'à passer le seuil. Une équipe venue d'un seul
     // endroit a déjà été essayée plus haut : on ne garde ici que celles de deux endroits ou plus.
     if (opts.combined && origins.length > 1) {
-      const leg = new Map(pool.map((u) => [u.id, deps.tripMin(t, [u], kitOf([u]))]));
-      const near = [...pool].sort((a, b) => leg.get(a.id)! - leg.get(b.id)! || b.power - a.power);
-      const tries = near.some((u) => u.hero) ? [near, near.filter((u) => !u.hero)] : [near];
-      for (const order of tries) {
+      for (const order of combinedOrders(t, pool)) {
         const kMax = Math.min(opts.maxTeam, order.length);
         for (let k = 2; k <= kMax; k++) {
           if (opts.cancelled?.()) return null;
           const team = order.slice(0, k);
           if (new Set(team.map((u) => u.origin)).size < 2) continue;
           if (!allowed(t, team)) continue;
-          const kit = kitOf(team);
+          const kit = kitFor(team);
           const tw = await winOf(t, team, kit);
           if (!passes(tw)) continue;
           const win = tw ?? 1;
@@ -253,11 +267,121 @@ export async function planExpeditions<T extends { id: string }>(
     return best;
   };
 
+  /** ⚔️ Les ordres d'essai d'une attaque combinée : les plus proches d'abord (trajet SANS
+   *  consommable : le kit ne doit pas changer qui on appelle), à égalité les plus forts. */
+  const combinedOrders = (t: T, pool: PlanUnit[]): PlanUnit[][] => {
+    const leg = new Map(pool.map((u) => [u.id, deps.tripMin(t, [u], [])]));
+    const near = [...pool].sort((a, b) => leg.get(a.id)! - leg.get(b.id)! || b.power - a.power);
+    return near.some((u) => u.hero) ? [near, near.filter((u) => !u.hero)] : [near];
+  };
+
+  /**
+   * Les PLUS GRANDES équipes que la recherche essaierait (une par point de départ, avec et sans
+   * le héros, et la plus grande attaque combinée). Une chance de victoire ne fait que monter
+   * quand on ajoute quelqu'un : si AUCUNE ne passe avec un kit donné, la recherche complète ne
+   * passera pas non plus ; si l'une passe, elle trouvera une équipe. C'est le test rapide qui
+   * évite de relancer toute la recherche pour chaque combinaison de consommables essayée.
+   */
+  const largestTeams = (t: T, pool: PlanUnit[]): PlanUnit[][] => {
+    const out: PlanUnit[][] = [];
+    const largest = (order: PlanUnit[], minOrigins: number) => {
+      for (let k = Math.min(opts.maxTeam, order.length); k >= 1; k--) {
+        const team = order.slice(0, k);
+        if (new Set(team.map((u) => u.origin)).size < minOrigins) continue;
+        if (allowed(t, team)) return out.push(team);
+      }
+    };
+    const origins = [...new Set(pool.map((u) => u.origin))];
+    for (const origin of origins) {
+      const local = pool.filter((u) => u.origin === origin).sort((a, b) => b.power - a.power);
+      largest(local, 1);
+      if (local.some((u) => u.hero)) largest(local.filter((u) => !u.hero), 1);
+    }
+    if (opts.combined && origins.length > 1)
+      for (const order of combinedOrders(t, pool)) largest(order, 2);
+    return out;
+  };
+
+  /**
+   * La meilleure équipe pour CE lieu, prise dans `pool`, avec le stock `left`.
+   *
+   * 🎒 LE CONSOMMABLE PALLIE UN MANQUE D'EFFECTIF, ET ON L'ÉCONOMISE (2026-10-12, décision de
+   * l'utilisateur : « le consommable est là pour pallier un manque d'effectif pour passer
+   * au-dessus du seuil de réussite de l'attaque et des embuscades ; on essaie de les économiser
+   * autant que possible »). Donc :
+   * 1. l'équipe se forme d'abord SANS consommable — l'effectif passe toujours avant ;
+   * 2. seulement si personne ne passe le seuil, on cherche le PLUS PETIT kit (en nombre
+   *    d'exemplaires) qui le fait passer — `win` compte l'attaque ET les embuscades de route ;
+   * 3. à nombre égal, celui dont le stock est le plus GRAND (on garde les rares) ;
+   * 4. si même tout le stock autorisé ne suffit pas, rien n'est emporté (pas de gaspillage).
+   */
+  const bestFor = async (
+    t: T,
+    pool: PlanUnit[],
+    left: Readonly<Record<string, number>>,
+  ): Promise<Candidate<T> | null> => {
+    const bare = await searchWith(t, pool, () => []);
+    if (bare !== null) return bare;
+    const avail = availOf(left);
+    if (!deps.kit || !avail.length) return null;
+    const kitOf = (team: PlanUnit[], set: readonly string[]) =>
+      set.length ? deps.kit!(t, team, set) : [];
+    const teams = largestTeams(t, pool);
+    // Les candidats : ce qui SERT à au moins une de ces équipes.
+    const useful = [...new Set(teams.flatMap((team) => kitOf(team, avail)))];
+    const quick = async (set: readonly string[]) => {
+      for (const team of teams) {
+        if (opts.cancelled?.()) return false;
+        if (passes(await winOf(t, team, kitOf(team, set)))) return true;
+      }
+      return false;
+    };
+    // 4. Tout le stock autorisé ne suffit pas : on n'en engage aucun.
+    if (!useful.length || !(await quick(useful))) return null;
+    const qty = (id: string) => left[id] ?? 0;
+    // 2-3. Par taille croissante ; à taille égale, le plus petit stock du kit le plus grand,
+    // puis la somme, puis l'ordre alphabétique (déterministe).
+    let chosen: string[] | null = null;
+    let tries = 0;
+    for (let size = 1; size <= useful.length && !chosen; size++) {
+      const sets = subsetsOf(useful, size).sort((a, b) => {
+        const minA = Math.min(...a.map(qty));
+        const minB = Math.min(...b.map(qty));
+        if (minA !== minB) return minB - minA;
+        const sumA = a.reduce((s, id) => s + qty(id), 0);
+        const sumB = b.reduce((s, id) => s + qty(id), 0);
+        return sumB - sumA || a.join(',').localeCompare(b.join(','));
+      });
+      for (const set of sets) {
+        if (++tries > MAX_KIT_TRIES) break;
+        if (await quick(set)) {
+          chosen = set;
+          break;
+        }
+        if (opts.cancelled?.()) return null;
+      }
+      if (tries > MAX_KIT_TRIES) break;
+    }
+    // Trop de combinaisons : on part de tout ce qui sert et on retire, du plus RARE au plus
+    // courant, ce dont on peut se passer.
+    if (!chosen) {
+      let kept: string[] = [...useful];
+      for (const id of [...useful].sort((a, b) => qty(a) - qty(b) || a.localeCompare(b))) {
+        const without: string[] = kept.filter((x) => x !== id);
+        if (without.length && (await quick(without))) kept = without;
+        if (opts.cancelled?.()) return null;
+      }
+      chosen = kept;
+    }
+    const set: string[] = chosen;
+    return searchWith(t, pool, (team) => kitOf(team, set));
+  };
+
   // 1) Ce que chaque lieu demanderait avec TOUT le vivier : l'ordre dans lequel on les sert.
   const firstPass: Candidate<T>[] = [];
   const unreachable: T[] = [];
   for (const t of targets) {
-    const c = await bestFor(t, [...units], availOf(stock));
+    const c = await bestFor(t, [...units], stock);
     if (opts.cancelled?.()) return null;
     if (c) firstPass.push(c);
     else unreachable.push(t);
@@ -282,7 +406,7 @@ export async function planExpeditions<T extends { id: string }>(
       // consommables qu'elle emportait n'est plus en stock (pris par un voyage servi avant).
       const stale =
         first.units.some((u) => used.has(u.id)) || first.kit.some((id) => (left[id] ?? 0) < 1);
-      const c = stale ? await bestFor(first.target, pool, availOf(left)) : first;
+      const c = stale ? await bestFor(first.target, pool, left) : first;
       if (opts.cancelled?.()) return null;
       if (!c) {
         missed.push(first.target);
@@ -297,8 +421,9 @@ export async function planExpeditions<T extends { id: string }>(
     // monter quand on ajoute quelqu'un, mais le partage d'XP et le trajet (au pas du plus lent)
     // peuvent coûter : on ne le prend que si l'XP PAR HEURE de ce voyage MONTE (un voyage long
     // rapporte plus par trajet, mais le court se refait plusieurs fois dans le même temps).
-    // 🎒 Le voyage garde ses consommables (ceux qui servent encore à l'équipe agrandie) : aucun
-    // n'est pris en plus dans le stock.
+    // 🎒 Le voyage garde ses consommables : aucun n'est pris en plus dans le stock. ⚠️ Le
+    // nouveau venu ne les rend pas inutiles : un voyage n'en emporte que si TOUT l'effectif
+    // restant à son point de départ ne suffisait pas (`bestFor`), et le restant, c'est lui.
     if (withSpare) {
       const spare = units
         .filter((u) => !used.has(u.id) && !u.hero)

@@ -329,7 +329,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
               now,
             );
           },
-          // 🎒 Ce que l'équipe emporte : les consommables autorisés qui lui SERVENT là
+          // 🎒 Les consommables autorisés qui SERVENT là (le planificateur n'en retient que le
+          // minimum, et seulement si l'effectif ne passe pas le seuil)
           // (`usefulSupplies`, la règle de la tuile grisée et du refus du store).
           kit: (t, us, avail) =>
             usefulSupplies(

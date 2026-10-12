@@ -69,8 +69,9 @@
     </div>
 
     <!-- 🎒 LES CONSOMMABLES DANS LES SIMULATIONS (demandé) : on coche ceux qu'on accepte
-         d'engager ; chaque expédition proposée emporte ceux qui lui servent, tant qu'il en
-         reste en stock, et son 🎯 % et son trajet les comptent. Rien de coché = aucun. -->
+         d'engager ; une expédition n'en emporte que si son effectif ne passe pas le seuil
+         (attaque et embuscades), et alors le minimum, tant qu'il en reste en stock — son
+         🎯 % et son trajet les comptent. Rien de coché = aucun. -->
     <div v-if="section === 'plan' && supplyStock.length" class="pl-row">
       <span class="pl-lab">🎒 Consommables à engager</span>
       <div class="pl-chips">
