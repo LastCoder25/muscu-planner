@@ -32,10 +32,10 @@ function islandMap(id = 4, L = LV): ExpeditionMap {
 }
 const kinds = (m: ExpeditionMap) => m.pois.flatMap((p) => (p.control ? [p.control.kind] : []));
 
-/** Deux lieux tenus : le cartographe à 3 champions, le fortin à 1, attaques lointaines. */
+/** Deux lieux tenus : le cartographe à 2 miliciens, le fortin à 1 champion, attaques lointaines. */
 function held(m: ExpeditionMap): ExpeditionMap {
   let out = captureControl(m, controlIdOf('cartographer'), ['mil:1', 'mil:2'], NOW, 7);
-  out = captureControl(out, controlIdOf('fort'), ['d', 'e', 'f'], NOW, 7);
+  out = captureControl(out, controlIdOf('fort'), ['d'], NOW, 7);
   const far = NOW + 30 * DAY;
   return {
     ...out,
@@ -63,8 +63,8 @@ describe('🚩 l’île 4 : l’armée mobile du seigneur de guerre, aux sorties
     const o = islandMap().pois.filter((p) => p.control?.kind === 'objective');
     expect(o.map((p) => p.control!.name)).toEqual(Array(3).fill('Camp de guerre'));
   });
-  it('vise le lieu tenu le moins défendu : les champions postés ne comptent pas (2026-10-08)', () => {
-    // Le cartographe a 2 miliciens ; le fortin 3 champions et aucun milicien : c'est lui.
+  it('vise le lieu tenu le moins défendu : champions et miliciens comptent (2026-10-12)', () => {
+    // Le cartographe a 2 miliciens ; le fortin 1 champion : c'est lui.
     const m = held(islandMap());
     expect(weakestHeld(m.pois, NOW, m.seed)!.control!.kind).toBe('fort');
   });

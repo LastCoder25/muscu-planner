@@ -60,7 +60,7 @@
             heroOffer.why ??
             (!sel.hero && !canHero
               ? 'plus assez de places de champion (il en prend 2)'
-              : `🧭 ${formatDurationMin(heroOffer.min)} · ${champsDefend(poi?.control?.kind) ? 'défend à son arrivée' : 'produit et intercepte, sans défendre'}`)
+              : `🧭 ${formatDurationMin(heroOffer.min)} · ${defendsControl(poi?.control?.kind) ? 'défend à son arrivée' : 'ne défend pas ce lieu'}`)
           }}</span>
         </span>
         <span class="qr-hero-mark" aria-hidden="true">{{ sel.hero ? '✓' : '＋' }}</span>
@@ -198,7 +198,7 @@ import { computed } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
-import { CONTROL_EMO, CONTROL_LABEL, champsDefend } from '@/lib/controlPoints';
+import { CONTROL_EMO, CONTROL_LABEL, defendsControl } from '@/lib/controlPoints';
 import type { Poi } from '@/lib/expedition';
 import { MILITIA, MILITIA_NAME } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';

@@ -1,7 +1,6 @@
-// 🧝 Le héros peut tenir garnison sur un lieu fixe. Depuis le 2026-10-08 (décision de
-// l'utilisateur), SEULS LES MILICIENS défendent un lieu de production : le héros y produit
-// sans combattre. Il ne défend que là où aucune milice ne va (objectif tenu, forteresse,
-// `champsDefend`) — et là, le % affiché doit le compter comme la bataille du store.
+// 🧝 Le héros peut tenir garnison sur un lieu fixe. Depuis le 2026-10-12 (décision de
+// l'utilisateur), champions, héros et miliciens défendent ensemble partout sauf au lapidaire
+// (`defendsControl`) — et le % affiché doit le compter comme la bataille du store.
 import { describe, expect, it } from 'vitest';
 import {
   captureControl,
@@ -47,7 +46,7 @@ describe('heroAtAttack', () => {
   });
 });
 
-describe('sur une mine, le héros posté ne défend pas', () => {
+describe('sur une mine, le héros posté défend avec la garnison', () => {
   const m = captureControl(
     ensureControls(createMap(3, 0, L, 1), 0, L),
     controlIdOf('mine'),
@@ -62,21 +61,20 @@ describe('sur une mine, le héros posté ne défend pas', () => {
   const kit = { advGear: [] };
   const ids = ['a0', 'mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'];
 
-  it('le héros n’ajoute rien à la tenue : seuls les miliciens comptent', () => {
-    const without = controlDefenseHold(p, ids, advs, kit, L, 1, null);
-    expect(without).toBeGreaterThan(0);
-    expect(controlDefenseHold(p, ids, advs, kit, L, 1, HERO)).toBe(without);
-    expect(controlDefenseHold(p, ['a0'], advs, kit, L, 1, HERO)).toBe(0);
+  it('plancher : le héros en plus fait monter la tenue', () => {
+    const few = ['mil:1'];
+    const without = controlDefenseHold(p, few, advs, kit, L, 1, null);
+    expect(controlDefenseHold(p, few, advs, kit, L, 1, HERO)).toBeGreaterThan(without);
+    expect(controlDefenseHold(p, [], advs, kit, L, 1, HERO)).toBeGreaterThan(0);
   });
 
-  it('face à l’armée : le % rejoue EXACTEMENT la bataille du store, sur ses miliciens', () => {
-    // La composition du store sur un lieu de production : les miliciens seuls.
-    const allies = militiaUnits(ids, L);
+  it('face à l’armée : le % rejoue EXACTEMENT la bataille du store, héros compris', () => {
+    // La composition du store sur un lieu de production : champions, héros, miliciens.
+    const allies = [...partyAllies(advs, kit, HERO), ...militiaUnits(ids, L)];
     expect(controlAllies('mine', advs, kit, HERO, ids, L)).toEqual(allies);
     const { foe, force } = retakeBattle({ seed: 3 }, p, allies, L, 1);
     const withHero = controlAttackHold({ seed: 3 }, p, ids, advs, kit, L, 1, HERO);
     expect(withHero).toBe(campWinPct(foe, force, allies, 24));
-    expect(withHero).toBe(controlAttackHold({ seed: 3 }, p, ids, advs, kit, L, 1, null));
   });
 });
 

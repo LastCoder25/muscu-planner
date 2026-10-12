@@ -38,7 +38,7 @@ import {
   champSeatsWithHero,
   holdSeats,
   garrisonHold,
-  champsDefend,
+  defendsControl,
 } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { heroPostOf } from '@/lib/islandConquest';
@@ -1030,8 +1030,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     // 🧝 Le héros qui reste défend avec eux (la bataille du store le compte, `heroUnit`).
     const hero = heroStays.value ? heroForParty.value : null;
     if (!p || (!stayCap.value && !hero)) return null;
-    // 🛡️ Sur un lieu de production, ceux qui restent ne défendent pas (`champsDefend`).
-    if (p.control && !champsDefend(p.control.kind)) return null;
+    // 🛡️ Le lapidaire ne se défend pas (`defendsControl`) : pas de tenue à annoncer.
+    if (p.control && !defendsControl(p.control.kind)) return null;
     const ids = new Set(stayIds.value);
     const g = partyAdvs.value.filter((a) => ids.has(a.id));
     return g.length || hero
@@ -1044,17 +1044,17 @@ export function useExpeditionParty(ctx: PartyCtx) {
         )
       : null;
   });
-  /** 🛡️ Ceux qui resteront après la prise ne défendront pas (lieu de production) : l'écran
+  /** 🛡️ Ceux qui resteront après la prise ne défendront pas (le lapidaire) : l'écran
    *  le dit au lieu d'annoncer une tenue qu'ils n'apportent pas. */
   const stayNoDefense = computed(() => {
     const c = selected.value?.control;
-    return !!c && (stayCap.value > 0 || heroStays.value) && !champsDefend(c.kind);
+    return !!c && (stayCap.value > 0 || heroStays.value) && !defendsControl(c.kind);
   });
   /** 🌿 Un point à UNE place : la tenue de chaque candidat, pour choisir qui reste. */
   const stayHoldOf = computed<Record<string, number>>(() => {
     const p = selected.value;
     if (!p || stayCap.value !== 1 || partyAdvs.value.length < 2) return {};
-    if (p.control && !champsDefend(p.control.kind)) return {};
+    if (p.control && !defendsControl(p.control.kind)) return {};
     return Object.fromEntries(
       partyAdvs.value.map((a) => [
         a.id,

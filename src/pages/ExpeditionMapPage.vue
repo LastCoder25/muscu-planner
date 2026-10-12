@@ -729,9 +729,7 @@
             <GarrisonStrip
               :cells="champStrip"
               :title="champStripTitle"
-              :note="
-                champsDefend(liveControl.kind) ? null : 'produisent et interceptent, sans défendre'
-              "
+              :note="defendsControl(liveControl.kind) ? null : 'polit sans défendre le lieu'"
               note-tone="dim"
               :advs="advById"
               @toggle="toggleRecall"
@@ -1126,8 +1124,8 @@
               <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
             </p>
             <p v-else-if="stayNoDefense" class="car-cap stay-hold-line">
-              🛡️ Ceux qui restent produisent et interceptent, mais ne défendent pas : envoie des
-              miliciens pour tenir le lieu.
+              🛡️ Ce lieu ne se défend pas : seule l’interception de l’armée qui marche dessus le
+              protège.
             </p>
             <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
                sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
@@ -1717,7 +1715,7 @@ import {
   acceptsMilitia,
   arrivalSeats,
   militiaMayHead,
-  champsDefend,
+  defendsControl,
   militiaSeatsOf,
   heroPostBlocker,
   heroSeatsIn,
@@ -1738,7 +1736,6 @@ import {
   attackerHidden,
   controlDefenseHold,
   defenderCount,
-  memberDefends,
   lapidaryHours,
   defendersAtAttack,
   imminentControlKey,
@@ -2955,7 +2952,12 @@ const milStrip = computed(() =>
 );
 const milStripNote = computed<{ text: string | null; tone: 'warn' | 'dim' | null }>(() => {
   if (!controlMilitia.value.length)
-    return { text: '⚠️ aucun milicien : le lieu tombera à la prochaine attaque', tone: 'warn' };
+    return defenseNow.value?.count
+      ? { text: null, tone: null }
+      : {
+          text: '⚠️ personne pour le défendre : le lieu tombera à la prochaine attaque',
+          tone: 'warn',
+        };
   const l = militiaLoss.value;
   if (l) return { text: `🎯 −${l.loss} % sans eux`, tone: 'dim' };
   return { text: null, tone: null };
@@ -3124,7 +3126,7 @@ const occupantLoss = computed<Record<string, { loss: number; without: number }>>
   if (!p?.control || p.control.owner !== 'player' || base === undefined) return {};
   const out: Record<string, { loss: number; without: number }> = {};
   for (const id of p.control.garrison) {
-    if (!memberDefends(p.control.kind, id)) continue;
+    if (!defendsControl(p.control.kind)) continue;
     const without = holdAfter(p, [id], []);
     out[id] = { loss: base - without, without };
   }
@@ -4651,8 +4653,7 @@ const quickHold = computed(() => {
   const pctWith = (next: ReinfSelection) => quickDefense(p, next)?.pct ?? cur;
   const free = quickFree.value;
   const champ: Record<string, number> = {};
-  const champsFight = champsDefend(p.control?.kind);
-  if (champsFight)
+  if (defendsControl(p.control?.kind))
     for (const a of freeSorted.value) {
       const on = sel.champs.includes(a.id);
       if (!on && !reinfCanAdd(sel, 'champ', free)) continue;
@@ -4662,7 +4663,7 @@ const quickHold = computed(() => {
   const trans: Record<string, number> = {};
   for (const src of quickSources.value)
     for (const m of src.members) {
-      if (!memberDefends(p.control?.kind, m.id)) continue;
+      if (!defendsControl(p.control?.kind)) continue;
       const on = sel.transfers.some((t) => t.id === m.id);
       if (!on && !reinfCanAdd(sel, isMilitiaId(m.id) ? 'mil' : 'champ', free)) continue;
       const next = toggleReinfTransfer(sel, src.fromId, m.id, free);

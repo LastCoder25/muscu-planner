@@ -10,9 +10,10 @@
  *    de l'île suivante (`campWinPct`, la même troupe que `campSpecOf`) ? ⚠️ Décision de
  *    l'utilisateur : « si on doit utiliser tous ses effectifs pour prendre un lieu, ça ne vaut
  *    pas le coup » — il faut que la MOITIÉ de ce qu'on peut engager suffise.
- * 2. **TENIR** : les champions ne défendent pas un lieu fixe (v1.103), seule la milice le fait.
- *    Sur une île neuve elle vient des îles quittées (`militiaSea`) : on rejoue la reprise avec
- *    ce qu'on peut faire venir (`garrisonHoldChance`, enceinte comprise).
+ * 2. **TENIR** : champions et miliciens défendent ensemble (2026-10-12). Sur une île neuve la
+ *    milice vient des îles quittées (`militiaSea`) : on rejoue la reprise avec ce qu'on peut
+ *    faire venir (`garrisonHoldChance`, enceinte comprise), seule puis avec les champions
+ *    qui ont pris le lieu laissés en garnison — les garder ou non est un choix.
  * 3. **RAPPORTER** : ce que tes champions y apprennent et ce qu'un lieu y produit, comparé à
  *    l'île où tu es. ⚠️ L'île quittée continue de produire (pacifiée) : partir n'y perd rien.
  *
@@ -58,6 +59,10 @@ export interface CrossingAdvice {
   militia: number;
   /** Part des reprises que ces miliciens repousseraient. */
   holdPct: number;
+  /** Champions laissés en garnison avec eux : ceux qui ont pris le lieu (`need`, 3 au plus). */
+  keep: number;
+  /** Part des reprises repoussées si ces champions restent aussi (null : aucun à laisser). */
+  holdKeepPct: number | null;
   /** XP par mission de tes meilleurs champions, ici puis là-bas (même formule de rendement
    *  que `missionXp`). */
   xp: { here: number; there: number };
@@ -168,13 +173,19 @@ export function crossingAdvice(i: CrossingAdviceInput): CrossingAdvice | null {
   const milLevel = Math.min(i.heroLevel, next.maxLevel);
   const ids = Array.from({ length: militia }, (_, k) => `${MILITIA_PREFIX}${k}`);
   const units = militiaUnits(ids, milLevel);
-  let holdPct = 0;
-  if (units.length) {
+  const holdOf = (allies: typeof units): number => {
+    if (!allies.length) return 0;
     let w = 0;
     for (const L of levels)
-      w += garrisonHoldChance(enemyPlace(L, 1, next), units, 1, samples, i.fort);
-    holdPct = w / levels.length;
-  }
+      w += garrisonHoldChance(enemyPlace(L, 1, next), allies, 1, samples, i.fort);
+    return w / levels.length;
+  };
+  const holdPct = holdOf(units);
+  // Les champions qui ont pris le lieu peuvent y rester (3 au plus, la garnison de référence).
+  const keep = need === null ? 0 : Math.min(need, CONTROL.maxGarrison);
+  const holdKeepPct = keep
+    ? holdOf([...partyAllies(best.slice(0, keep), i.kit, null), ...units])
+    : null;
 
   // 3. RAPPORTER — l'XP des meilleurs, l'or d'une mine tenue au complet.
   const top = best.slice(0, Math.max(1, pool));
@@ -207,6 +218,10 @@ export function crossingAdvice(i: CrossingAdviceInput): CrossingAdvice | null {
         `${MILITIA.perPoint - militia} milicien${MILITIA.perPoint - militia > 1 ? 's' : ''} de plus à faire venir pour tenir`,
       );
     else missing.push('tes lieux y tiendront mal : monte muraille et tourelles');
+    if (holdKeepPct !== null && holdKeepPct >= ADVICE.holdOk)
+      missing.push(
+        `ou laisse ${keep} champion${keep > 1 ? 's' : ''} en garnison : ${Math.round(holdKeepPct * 100)} %`,
+      );
   }
   const verdict: AdviceVerdict = !takeOk ? 'train' : holdPct >= ADVICE.holdOk ? 'go' : 'bring';
   return {
@@ -218,6 +233,8 @@ export function crossingAdvice(i: CrossingAdviceInput): CrossingAdvice | null {
     takePct,
     militia,
     holdPct,
+    keep,
+    holdKeepPct,
     xp,
     gold,
     missing,

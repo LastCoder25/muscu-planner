@@ -474,7 +474,6 @@ import {
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
   setCartoFavor,
-  champsDefend,
   defendsControl,
   applyLapis,
   setLapisSkill,
@@ -5475,22 +5474,20 @@ export const useCharacterStore = defineStore('character', () => {
       summonIn += h.summon;
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
-      // 🛡️ SEULS LES MILICIENS DÉFENDENT un lieu fixe (2026-10-08, décision de l'utilisateur) :
-      // champions et héros postés y produisent, interceptent, mais ne combattent pas la reprise
-      // — sauf là où aucune milice ne va (objectif tenu, forteresse, `champsDefend`). Le
-      // lapidaire ne se défend pas du tout. Qui ne combat pas rentre SANS blessure s'il tombe.
+      // 🛡️ CHAMPIONS, HÉROS ET MILICIENS DÉFENDENT ENSEMBLE (2026-10-12, décision de
+      // l'utilisateur ; `controlAllies`). Seul le lapidaire ne se défend pas : ceux qui y sont
+      // postés rentrent SANS blessure s'il tombe.
       const fights = defendsControl(p.control!.kind);
-      const champsFight = champsDefend(p.control!.kind);
       const posted = advs.filter((a) => ids.has(a.id));
-      const escort = champsFight ? posted : [];
-      const militia = fights && !champsFight ? militiaUnits(p.control!.garrison, playerLevel) : [];
+      const escort = fights ? posted : [];
+      const militia = fights ? militiaUnits(p.control!.garrison, playerLevel) : [];
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
-      const heroUnit = champsFight && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
+      const heroUnit = fights && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
@@ -5560,8 +5557,8 @@ export const useCharacterStore = defineStore('character', () => {
               ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}`
               : militia.length
                 ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
-                : `${emo} L’ennemi a repris le lieu, laissé sans milicien pour le défendre.`) +
-          (!held && !champsFight && (posted.length || p.control!.hero)
+                : `${emo} L’ennemi a repris le lieu, laissé sans personne pour le défendre.`) +
+          (!held && !fights && (posted.length || p.control!.hero)
             ? ' Tes champions postés n’ont pas combattu : ils rentrent à pied, sans blessure.'
             : '') +
           turnBackLabel(back.length) +
@@ -5576,8 +5573,7 @@ export const useCharacterStore = defineStore('character', () => {
       const dead = o?.party?.militiaLost ?? [];
       if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
       // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel). BLESSÉ
-      // seulement s'il a COMBATTU (objectif, forteresse : `champsDefend`) — ailleurs il ne
-      // défend pas, il rentre indemne. L'infirmerie commence à son arrivée.
+      // seulement s'il a COMBATTU (partout sauf au lapidaire) — sinon il rentre indemne. L'infirmerie commence à son arrivée.
       if (!held && p.control!.hero) {
         const leg = heroHomeLegMin(cur, map, p, at);
         map = recallPostedHero(map, at, leg);

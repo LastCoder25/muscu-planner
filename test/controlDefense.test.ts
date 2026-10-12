@@ -64,20 +64,24 @@ describe('controlDefenseHold', () => {
   const p = { ...m.pois.find((q) => q.id === controlIdOf('garden'))!, level: 1 };
   const advs = [0, 1].map((i) => ({ ...refChampionAdv(L, i), id: `a${i}` }));
   const kit = { advGear: [] };
-  // 🛡️ 2026-10-08 (décision de l'utilisateur) : sur un lieu de production, SEULS LES
-  // MILICIENS défendent. Champions et héros y restent postés et produisent, sans combattre.
-  it('vaut exactement `garrisonHold` au niveau du héros, sur ses seuls miliciens', () => {
+  // 🛡️ 2026-10-12 (décision de l'utilisateur) : champions, héros ET miliciens défendent
+  // ensemble un lieu de production — garder des champions en garnison est un choix.
+  it('vaut exactement `garrisonHold` au niveau du héros, champions et miliciens compris', () => {
     const ids = ['a0', 'mil:1', 'mil:2'];
-    const want = garrisonHold({ ...p, level: L }, militiaUnits(ids, L), 1);
+    const want = garrisonHold(
+      { ...p, level: L },
+      [...partyAllies([advs[0]!], kit, null), ...militiaUnits(ids, L)],
+      1,
+    );
     expect(want).toBeGreaterThan(0);
     expect(controlDefenseHold(p, ids, advs, kit, L, 1, null)).toBe(want);
   });
-  it('un champion ou le héros posté n’ajoute RIEN à la tenue d’un lieu de production', () => {
+  it('un champion ou le héros posté renforce la tenue d’un lieu de production', () => {
     const mil = controlDefenseHold(p, ['mil:1'], advs, kit, L, 1, null);
-    expect(controlDefenseHold(p, ['a0', 'a1', 'mil:1'], advs, kit, L, 1, null)).toBe(mil);
-    expect(controlDefenseHold(p, ['mil:1'], advs, kit, L, 1, HERO)).toBe(mil);
-    // Sans milicien, personne ne la défend : champions et héros compris.
-    expect(controlDefenseHold(p, ['a0', 'a1'], advs, kit, L, 1, HERO)).toBe(0);
+    expect(controlDefenseHold(p, ['a0', 'mil:1'], advs, kit, L, 1, null)).toBeGreaterThan(mil);
+    expect(controlDefenseHold(p, ['mil:1'], advs, kit, L, 1, HERO)).toBeGreaterThan(mil);
+    // Sans milicien, les champions et le héros le tiennent à eux seuls.
+    expect(controlDefenseHold(p, ['a0', 'a1'], advs, kit, L, 1, HERO)).toBeGreaterThan(0);
   });
   it('un milicien de plus ne fait jamais baisser la tenue, personne = 0', () => {
     const one = controlDefenseHold(p, ['mil:1'], advs, kit, L, 1, null);

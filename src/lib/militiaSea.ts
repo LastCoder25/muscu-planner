@@ -2,7 +2,8 @@
  * ⛵🛡️ LA MILICE TRAVERSE LA MER (2026-10-12, décision de l'utilisateur : « on peut faire venir
  * des miliciens choisis depuis les anciennes îles »).
  *
- * Pourquoi : seuls les miliciens défendent un lieu fixe (v1.103), et sur une île neuve la
+ * Pourquoi : les miliciens défendent un lieu fixe (avec les champions postés depuis le
+ * 2026-10-12), et sur une île neuve la
  * Caserne n'en autorise presque aucun (`militiaCap` suit sa place dans la tranche de l'île :
  * 1 milicien en arrivant sur l'île 2 avec une Caserne 20). Or une île quittée est pacifiée —
  * plus aucune attaque — donc ses miliciens ne défendent plus rien : ils ne font qu'y augmenter

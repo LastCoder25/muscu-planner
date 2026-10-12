@@ -5,10 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   captureControl,
-  champsDefend,
   defenderCount,
-  memberDefends,
   controlAllies,
+  defendsControl,
   controlFreeSeats,
   controlIdOf,
   ensureControls,
@@ -169,34 +168,36 @@ describe('🛡️ (c) qui défend la reprise', () => {
   const allyIds = (kind: ControlKind, hero: PostedHero | null = null) =>
     controlAllies(kind, advs, kit, hero, ids, L).map((u) => u.id);
 
-  it('sur un lieu de production, seuls les miliciens défendent', () => {
+  // 🛡️ 2026-10-12 (décision de l'utilisateur) : champions, héros et miliciens défendent
+  // ENSEMBLE — garder des champions en garnison est un choix (v1.104.0 renversée).
+  it('sur un lieu de production, champions, héros ET miliciens défendent', () => {
     for (const kind of ['mine', 'training', 'garden', 'tower'] as const) {
-      expect(champsDefend(kind)).toBe(false);
-      expect(allyIds(kind, HERO)).toEqual(['mil:a', 'mil:b']);
+      expect(defendsControl(kind)).toBe(true);
+      const got = allyIds(kind, HERO);
+      expect(got).toEqual(
+        expect.arrayContaining([...advs.map((a) => a.id), HERO_UNIT_ID, 'mil:a', 'mil:b']),
+      );
+      expect(got).toHaveLength(advs.length + 3);
     }
   });
   it('sur un objectif et la forteresse, les champions et le héros défendent', () => {
     for (const kind of ['objective', 'fortress'] as const) {
-      expect(champsDefend(kind)).toBe(true);
       const got = allyIds(kind, HERO);
       expect(got).toEqual(expect.arrayContaining([...advs.map((a) => a.id), HERO_UNIT_ID]));
-      expect(got).not.toContain('mil:a');
     }
   });
   it('au lapidaire, personne', () => {
-    expect(champsDefend('lapidary')).toBe(false);
+    expect(defendsControl('lapidary')).toBe(false);
     expect(allyIds('lapidary', HERO)).toEqual([]);
   });
 });
 
-describe('🛡️ qui compte comme défenseur (memberDefends, defenderCount)', () => {
-  it('sur un lieu de production : la milice seule, jamais un champion ni le héros', () => {
-    expect(memberDefends('mine', 'mil:1')).toBe(true);
-    expect(memberDefends('mine', 'a')).toBe(false);
-    expect(defenderCount('mine', ['a', 'b', 'mil:1'], true)).toBe(1);
+describe('🛡️ qui compte comme défenseur (defenderCount)', () => {
+  it('sur un lieu de production : toute la garnison et le héros', () => {
+    expect(defenderCount('mine', ['a', 'b', 'mil:1'], true)).toBe(4);
+    expect(defenderCount('mine', ['mil:1'], false)).toBe(1);
   });
   it('sur un objectif tenu : les champions et le héros', () => {
-    expect(memberDefends('objective', 'a')).toBe(true);
     expect(defenderCount('objective', ['a', 'b'], true)).toBe(3);
   });
   it('au lapidaire : personne', () => {

@@ -81,6 +81,19 @@ describe('🧭 partir ou rester', () => {
     expect(full).toBeGreaterThan(few);
     expect(walls).toBeGreaterThan(few);
   });
+  // 🛡️ 2026-10-12 : champions et miliciens défendent ensemble — garder ceux qui ont pris le
+  // lieu en garnison tient mieux, et c'est un choix (le conseil chiffre les deux).
+  it('laisser en garnison les champions qui ont pris le lieu tient mieux que la milice seule', () => {
+    const a = crossingAdvice(input(1, 25, 6, 0, { militia: 2 }))!;
+    expect(a.keep).toBe(a.need);
+    expect(a.holdKeepPct).not.toBeNull();
+    expect(a.holdKeepPct!).toBeGreaterThan(a.holdPct);
+  });
+  it('sans champion capable de prendre, aucun à laisser', () => {
+    const a = crossingAdvice(input(1, 25, 0))!;
+    expect(a.keep).toBe(0);
+    expect(a.holdKeepPct).toBeNull();
+  });
   it('au-delà d’une garnison pleine, la milice ne compte plus', () => {
     const a = crossingAdvice(input(1, 25, 10, 0, { militia: 40 }))!;
     expect(a.militia).toBe(5);

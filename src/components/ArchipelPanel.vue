@@ -231,6 +231,10 @@
             <div class="av-line">
               🛡️ Tenir : {{ advice.militia }} milicien{{ advice.militia > 1 ? 's' : '' }} à faire
               venir · <b>{{ Math.round(advice.holdPct * 100) }} %</b> des reprises repoussées
+              <template v-if="advice.holdKeepPct !== null">
+                · avec {{ advice.keep }} champion{{ advice.keep > 1 ? 's' : '' }} en garnison :
+                <b>{{ Math.round(advice.holdKeepPct * 100) }} %</b>
+              </template>
             </div>
             <div class="av-line">
               🎓 XP par mission : {{ advice.xp.here }} → <b>{{ advice.xp.there }}</b> · 🪙 mine

@@ -445,13 +445,15 @@ export const defendsControl = (kind: ControlKind | undefined): boolean => kind !
  *  milicien ne va (objectif, forteresse, citadelle) et au lapidaire. */
 export const militiaSeatsOf = (kind: ControlKind): number =>
   RAZE_KINDS.has(kind) || kind === 'lapidary' ? 0 : MILITIA.perPoint;
-/** 🛡️ Les champions et le héros postés DÉFENDENT-ils ce point ? Seulement là où aucune milice
- *  ne va (objectif tenu, forteresse) : ailleurs, seuls les miliciens combattent la reprise.
- *  ⚠️ SOURCE UNIQUE : la bataille du store et chaque pronostic de tenue la lisent. */
-export const champsDefend = (kind: ControlKind | undefined): boolean =>
-  !!kind && defendsControl(kind) && militiaSeatsOf(kind) === 0;
-/** 🛡️ Ceux qui COMBATTENT la reprise d'un point : les miliciens de `ids`, et les champions
- *  et le héros seulement là où ils défendent (`champsDefend`). Personne au lapidaire. */
+/** 🛡️ CHAMPIONS, HÉROS ET MILICIENS DÉFENDENT ENSEMBLE (2026-10-12, décision de l'utilisateur :
+ *  « pour plus de cohérence, faire défendre les miliciens et les champions — garder les
+ *  champions ou non est un choix »). SOURCE DE VÉRITÉ, override « seuls les miliciens
+ *  défendent » (v1.104.0). Ceux qui COMBATTENT la reprise d'un point : les champions postés
+ *  (avec compagnons et pièces), le héros posté ET les miliciens de `ids`. Personne au
+ *  lapidaire (`defendsControl`). ⚠️ Lu par la bataille du store et par chaque pronostic de
+ *  tenue. Un champion vaut
+ *  ~2 miliciens (`MILITIA.unitShare`) ; au-delà de `CONTROL.maxHold` l'ennemi grossit
+ *  (`retakeBoost`) : empiler ne rend jamais un lieu imprenable. */
 export function controlAllies(
   kind: ControlKind | undefined,
   champs: readonly Adventurer[],
@@ -461,21 +463,14 @@ export function controlAllies(
   playerLevel: number,
 ): SkirmishUnit[] {
   if (!defendsControl(kind)) return [];
-  if (champsDefend(kind)) return partyAllies([...champs], kit, hero);
-  return militiaUnits([...ids], playerLevel);
+  return [...partyAllies([...champs], kit, hero), ...militiaUnits([...ids], playerLevel)];
 }
-/** 🛡️ Ce membre de garnison (`ids` d'une garnison : champion ou `mil:`) COMBAT-il la reprise ?
- *  La règle de `controlAllies`, lue membre par membre (compte des défenseurs, part de chacun). */
-export const memberDefends = (kind: ControlKind | undefined, id: string): boolean =>
-  defendsControl(kind) && (isMilitiaId(id) ? !champsDefend(kind) : champsDefend(kind));
-/** 🛡️ Combien COMBATTRONT : les membres qui défendent (`memberDefends`), plus le héros là où
- *  les champions défendent. */
+/** 🛡️ Combien COMBATTRONT : toute la garnison et le héros, sauf au lapidaire. */
 export const defenderCount = (
   kind: ControlKind | undefined,
   ids: readonly string[],
   hero: boolean,
-): number =>
-  ids.filter((id) => memberDefends(kind, id)).length + (hero && champsDefend(kind) ? 1 : 0);
+): number => (defendsControl(kind) ? ids.length + (hero ? 1 : 0) : 0);
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
  *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
  *  la Forge de campagne (2026-09-29). */
