@@ -376,7 +376,13 @@ describe('planificateur — le consommable pallie un manque d’effectif, au min
     kit: (_t, _us, avail) => [...avail],
   };
   const run = (targets: R[], units: PlanUnit[], stock: Record<string, number>) =>
-    planExpeditions(targets, units, { threshold: 0.9, mode: 'events', maxTeam: 6, deps: rdeps, stock });
+    planExpeditions(targets, units, {
+      threshold: 0.9,
+      mode: 'events',
+      maxTeam: 6,
+      deps: rdeps,
+      stock,
+    });
 
   it('l’effectif passe avant : jamais moins de champions grâce à un consommable', async () => {
     // B seul + potion passerait (8/5), mais A + B passent sans rien : on envoie les deux.
@@ -447,7 +453,8 @@ describe('planificateur — le consommable pallie un manque d’effectif, au min
     // « interdit » ferait passer le seuil, mais `kit` ne le rend jamais (le store le refuserait).
     const strict: PlanDeps<R> = {
       ...rdeps,
-      win: (t, us, kit) => Math.min(1, (power(us, kit) + (kit.includes('interdit') ? 4 : 0)) / t.need),
+      win: (t, us, kit) =>
+        Math.min(1, (power(us, kit) + (kit.includes('interdit') ? 4 : 0)) / t.need),
       kit: (_t, _us, avail) => avail.filter((id) => id !== 'interdit'),
     };
     const r = (await planExpeditions([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], {

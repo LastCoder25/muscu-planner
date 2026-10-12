@@ -295,7 +295,11 @@ export async function planExpeditions<T extends { id: string }>(
     for (const origin of origins) {
       const local = pool.filter((u) => u.origin === origin).sort((a, b) => b.power - a.power);
       largest(local, 1);
-      if (local.some((u) => u.hero)) largest(local.filter((u) => !u.hero), 1);
+      if (local.some((u) => u.hero))
+        largest(
+          local.filter((u) => !u.hero),
+          1,
+        );
     }
     if (opts.combined && origins.length > 1)
       for (const order of combinedOrders(t, pool)) largest(order, 2);
