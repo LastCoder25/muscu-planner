@@ -437,6 +437,7 @@ import {
   dueRetakes,
   holdGrace,
   retiredHeld,
+  convertReplacedControls,
   hospiceHealMult,
   retakeCalmMs,
   withLastAttack,
@@ -2481,6 +2482,32 @@ export const useCharacterStore = defineStore('character', () => {
         return;
       }
     }
+    // 🔀 Un lieu TENU dont le type a été remplacé par un autre à la même place devient ce
+    // nouveau type (`convertReplacedControls`) : carte et champions postés dans la MÊME écriture.
+    if (cur.expedition_map) {
+      const aimed = new Set([
+        ...[...partyList.value, ...(cur.expedition ? [cur.expedition] : [])].flatMap((p) => [
+          p.poi.id,
+          ...(p.homeId ? [p.homeId] : []),
+        ]),
+        ...attackList.value.flatMap((a) => [
+          a.poi.id,
+          ...a.wings.flatMap((w) => (w.originId ? [w.originId] : [])),
+        ]),
+      ]);
+      const conv = convertReplacedControls(cur.expedition_map, now, aimed);
+      if (conv) {
+        if (!tickMayWrite(cur)) return;
+        await persist(userId, {
+          expedition_map: conv.map,
+          adventurers: advList.value.map((a) => {
+            const to = a.posted && conv.renamed.get(a.posted);
+            return to ? { ...a, posted: to } : a;
+          }),
+        });
+        return;
+      }
+    }
     // 🗼 Un point d'un type RETIRÉ encore tenu (la tour de guet) : sa garnison et le héros
     // rentrent à pied d'abord ; il quitte la carte au tick suivant, une fois vide.
     if (cur.expedition_map) {
@@ -2574,12 +2601,7 @@ export const useCharacterStore = defineStore('character', () => {
     // pu changer l'île active), pour qu'ils sachent s'ils sont « ici » ou ailleurs.
     // ⛵🛡️ Les miliciens arrivés d'une autre île rejoignent la réserve où ils accostent
     // (`militiaSea.ts`) — AVANT `settleSailings`, qui retire les navigations arrivées.
-    const milSea = settleMilitiaSailings(
-      mapM,
-      land?.militia ?? cur.base?.militia,
-      now,
-      level,
-    );
+    const milSea = settleMilitiaSailings(mapM, land?.militia ?? cur.base?.militia, now, level);
     const mapS = milSea?.map ?? mapM;
     const sail = settleSailings(mapS, advLanded ?? advBase, now);
     const map = sail?.map ?? mapS;
