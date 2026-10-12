@@ -117,3 +117,19 @@ describe('💎 le lapidaire de l’île 3', () => {
     expect(got.hours).toBeCloseTo(5.5, 6);
   });
 });
+
+describe('💎 aucun milicien ne marche vers le lapidaire', () => {
+  it('ni tenu, ni ennemi : il n’a aucune place de milice', async () => {
+    const { acceptsMilitia, militiaMayHead, reinforceBlocker } =
+      await import('@/lib/controlPoints');
+    const enemy = island3().pois.find((p) => p.id === id)!.control!;
+    const mine = { ...enemy, owner: 'player' as const, garrison: [] };
+    expect(militiaMayHead(enemy)).toBe(false);
+    expect(militiaMayHead(mine)).toBe(false);
+    expect(acceptsMilitia(mine)).toBe(false);
+    expect(reinforceBlocker(mine, 1, true)).toBe('noMilitia');
+    // Un lieu de production, lui, en reçoit toujours.
+    expect(militiaMayHead({ ...mine, kind: 'arsenal' })).toBe(true);
+    expect(acceptsMilitia({ ...mine, kind: 'arsenal' })).toBe(true);
+  });
+});

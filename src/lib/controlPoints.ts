@@ -2888,7 +2888,9 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
  *  garnison même si le lieu est plein ») : on les envoie AVANT que des champions partent en
  *  sortie ; à l'arrivée, ils s'installent s'il y a de la place, sinon ils font demi-tour. */
 export function acceptsMilitia(c: ControlState | undefined | null): boolean {
-  return !!c && c.owner === 'player' && !RAZE_KINDS.has(c.kind);
+  // 💎 Ni le lapidaire : il n'a AUCUNE place de milice (`militiaSeatsOf`), un milicien y
+  // allait pour faire demi-tour (signalé 2026-10-12, un milicien en route vers le lapidaire).
+  return !!c && c.owner === 'player' && militiaSeatsOf(c.kind) > 0;
 }
 /** 🛡️⚔️ Des miliciens peuvent-ils MARCHER vers ce lieu ? Comme `acceptsMilitia`, mais aussi
  *  vers un lieu ENNEMI (2026-10-06, demandé : « pré-envoyer une garnison si une attaque
@@ -2896,7 +2898,7 @@ export function acceptsMilitia(c: ControlState | undefined | null): boolean {
  *  occupent les places libres ; toujours ennemi (ou pris APRÈS leur arrivée), demi-tour vers
  *  la base. Jamais vers un objectif, la forteresse ni la citadelle. */
 export function militiaMayHead(c: ControlState | undefined | null): boolean {
-  return !!c && !RAZE_KINDS.has(c.kind);
+  return !!c && militiaSeatsOf(c.kind) > 0;
 }
 /** 🏰 Places libres dans la garnison, TOUT CONFONDU : celles de champion PLUS celles de milice
  *  (deux réserves séparées depuis le 2026-10-08). 0 si le point n'est pas à nous. */
