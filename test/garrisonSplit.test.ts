@@ -104,13 +104,15 @@ describe('🏰 (a) deux réserves de places', () => {
     expect(controlFreeSeats(c)).toBe(5 - 1 - MILITIA.heroSeats);
     expect(militiaFreeSeats(c)).toBe(5);
   });
-  it('aucun milicien sur un objectif, la forteresse ni le lapidaire', () => {
-    for (const kind of ['objective', 'fortress', 'lapidary', 'citadel'] as const) {
+  it('aucun milicien sur un objectif, la forteresse ni la citadelle', () => {
+    for (const kind of ['objective', 'fortress', 'citadel'] as const) {
       expect(militiaSeatsOf(kind)).toBe(0);
       expect(militiaFreeSeats(ctl({ kind }))).toBe(0);
     }
     expect(garrisonCap('objective')).toBe(seatsOf('objective'));
-    expect(garrisonCap('lapidary')).toBe(seatsOf('lapidary'));
+    // 💎 Le lapidaire, lui, a ses 5 places de milice (2026-10-12).
+    expect(militiaSeatsOf('lapidary')).toBe(MILITIA.perPoint);
+    expect(garrisonCap('lapidary')).toBe(seatsOf('lapidary') + MILITIA.perPoint);
     expect(garrisonCap('fortress')).toBe(Infinity);
   });
   it('la sélection d’un renfort : des champions n’entament pas la place des miliciens', () => {
@@ -186,9 +188,9 @@ describe('🛡️ (c) qui défend la reprise', () => {
       expect(got).toEqual(expect.arrayContaining([...advs.map((a) => a.id), HERO_UNIT_ID]));
     }
   });
-  it('au lapidaire, personne', () => {
+  it('au lapidaire, ses miliciens seuls (ni champion ni héros)', () => {
     expect(defendsControl('lapidary')).toBe(false);
-    expect(allyIds('lapidary', HERO)).toEqual([]);
+    expect(allyIds('lapidary', HERO)).toEqual(['mil:a', 'mil:b']);
   });
 });
 
@@ -200,7 +202,8 @@ describe('🛡️ qui compte comme défenseur (defenderCount)', () => {
   it('sur un objectif tenu : les champions et le héros', () => {
     expect(defenderCount('objective', ['a', 'b'], true)).toBe(3);
   });
-  it('au lapidaire : personne', () => {
-    expect(defenderCount('lapidary', ['a', 'mil:1'], true)).toBe(0);
+  it('au lapidaire : ses miliciens seuls', () => {
+    expect(defenderCount('lapidary', ['a', 'mil:1'], true)).toBe(1);
+    expect(defenderCount('lapidary', ['a'], true)).toBe(0);
   });
 });

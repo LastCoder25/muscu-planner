@@ -5,8 +5,10 @@ import {
   applyLapis,
   captureControl,
   collectControl,
+  controlAllies,
   controlIdOf,
   controlKindsOf,
+  defenderCount,
   defendsControl,
   ensureControls,
   garrisonCap,
@@ -60,16 +62,33 @@ describe('💎 le lapidaire de l’île 5', () => {
     expect(poiLabel(island3().pois.find((p) => p.id === id)!)).toContain('Lapidaire');
   });
 
-  it('cinq champions, aucun milicien, et personne pour le défendre', () => {
+  it('cinq champions qui ne se battent pas, cinq miliciens qui le défendent', () => {
     expect(seatsOf('lapidary')).toBe(5);
-    expect(garrisonCap('lapidary')).toBe(5);
+    expect(garrisonCap('lapidary')).toBe(10);
     expect(defendsControl('lapidary')).toBe(false);
     expect(defendsControl('mine')).toBe(true);
     const m = captureControl(island3(), id, ['a', 'b'], NOW, 7);
     const p = m.pois.find((q) => q.id === id)!;
     expect(p.control!.garrison).toEqual(['a', 'b']);
-    expect(militiaSeatsOf('lapidary')).toBe(0);
-    expect(garrisonHold(p, refEscortUnits(LV), 1)).toBe(0);
+    expect(militiaSeatsOf('lapidary')).toBe(5);
+    // Ses champions ne combattent pas : aucun allié tant qu'il n'y a pas de milicien.
+    expect(
+      controlAllies('lapidary', [refChampionAdv(LV, 0)], { advGear: [] }, null, ['a'], LV),
+    ).toEqual([]);
+    expect(garrisonHold(p, [], 1)).toBe(0);
+    // Ses miliciens, eux, combattent — et eux seuls.
+    const milIds = ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'];
+    const allies = controlAllies(
+      'lapidary',
+      [refChampionAdv(LV, 0)],
+      { advGear: [] },
+      null,
+      ['a', ...milIds],
+      LV,
+    );
+    expect(allies.map((u) => u.id)).toEqual(milIds);
+    expect(defenderCount('lapidary', ['a', ...milIds], true)).toBe(5);
+    expect(garrisonHold(p, allies, 1)).toBeGreaterThan(0);
     // Les mêmes défenseurs tiendraient un autre lieu : c'est bien le lapidaire qui ne se défend
     // pas. 🛡️ Depuis le 2026-10-08, seuls des MILICIENS défendent une mine ; des champions,
     // eux, défendent un objectif (aucune milice n'y va).
@@ -78,11 +97,13 @@ describe('💎 le lapidaire de l’île 5', () => {
     const kit = { advGear: [] };
     const asObj = { ...p, control: { ...p.control!, kind: 'objective' as const, garrison: ids } };
     expect(controlAttackHold(m, asObj, ids, champs, kit, LV, 1, null)).toBeGreaterThan(0);
+    // 💎 Ses champions ne le défendent pas…
     expect(controlAttackHold(m, p, ids, champs, kit, LV, 1, null)).toBe(0);
-    const mil = ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'];
-    const asMine = { ...p, control: { ...p.control!, kind: 'mine' as const, garrison: mil } };
-    expect(controlAttackHold(m, asMine, mil, [], kit, LV, 1, null)).toBeGreaterThan(0);
-    expect(controlAttackHold(m, p, mil, [], kit, LV, 1, null)).toBe(0);
+    // …ses miliciens, si (2026-10-12) : la même milice tient le lapidaire comme une mine.
+    const asMine = { ...p, control: { ...p.control!, kind: 'mine' as const, garrison: milIds } };
+    const asLapis = { ...p, control: { ...p.control!, garrison: milIds } };
+    expect(controlAttackHold(m, asMine, milIds, [], kit, LV, 1, null)).toBeGreaterThan(0);
+    expect(controlAttackHold(m, asLapis, milIds, [], kit, LV, 1, null)).toBeGreaterThan(0);
   });
 
   it('le temps dépend de la couleur : 1, 2, 4 et 7 jours', () => {
@@ -126,7 +147,12 @@ describe('💎 le lapidaire de l’île 5', () => {
     expect(got).toEqual([{ advId: 'a', hours: 5.5 }]);
     m = collectControl(m, id, NOW + 5.5 * H, LV).map;
     // Il part : la récolte suivante ne lui verse plus rien.
-    m = { ...m, pois: m.pois.map((p) => (p.id === id ? { ...p, control: { ...p.control!, garrison: [] } } : p)) };
+    m = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === id ? { ...p, control: { ...p.control!, garrison: [] } } : p,
+      ),
+    };
     expect(collectControl(m, id, NOW + 20 * H, LV).lapis).toBeUndefined();
   });
 
@@ -150,16 +176,16 @@ describe('💎 le lapidaire de l’île 5', () => {
   });
 });
 
-describe('💎 aucun milicien ne marche vers le lapidaire', () => {
-  it('ni tenu, ni ennemi : il n’a aucune place de milice', async () => {
+describe('💎 les miliciens vont au lapidaire', () => {
+  it('tenu ou ennemi : il a ses places de milice', async () => {
     const { acceptsMilitia, militiaMayHead, reinforceBlocker } =
       await import('@/lib/controlPoints');
     const enemy = island3().pois.find((p) => p.id === id)!.control!;
     const mine = { ...enemy, owner: 'player' as const, garrison: [] };
-    expect(militiaMayHead(enemy)).toBe(false);
-    expect(militiaMayHead(mine)).toBe(false);
-    expect(acceptsMilitia(mine)).toBe(false);
-    expect(reinforceBlocker(mine, 1, true)).toBe('noMilitia');
+    expect(militiaMayHead(enemy)).toBe(true);
+    expect(militiaMayHead(mine)).toBe(true);
+    expect(acceptsMilitia(mine)).toBe(true);
+    expect(reinforceBlocker(mine, 1, true)).toBeNull();
     // Un lieu de production, lui, en reçoit toujours.
     expect(militiaMayHead({ ...mine, kind: 'arsenal' })).toBe(true);
     expect(acceptsMilitia({ ...mine, kind: 'arsenal' })).toBe(true);

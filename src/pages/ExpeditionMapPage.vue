@@ -4754,7 +4754,8 @@ const quickHold = computed(() => {
   const trans: Record<string, number> = {};
   for (const src of quickSources.value)
     for (const m of src.members) {
-      if (!defendsControl(p.control?.kind)) continue;
+      // 💎 Au lapidaire, seuls les miliciens défendent.
+      if (!defendsControl(p.control?.kind) && !isMilitiaId(m.id)) continue;
       const on = sel.transfers.some((t) => t.id === m.id);
       if (!on && !reinfCanAdd(sel, isMilitiaId(m.id) ? 'mil' : 'champ', free)) continue;
       const next = toggleReinfTransfer(sel, src.fromId, m.id, free);

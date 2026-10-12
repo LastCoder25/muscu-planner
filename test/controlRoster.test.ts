@@ -83,7 +83,10 @@ describe('🗂️ controlRoster', () => {
 
   it('🕊️ île pacifiée : une place vide est « calm », jamais « sans défense »', () => {
     const m = captureControl(base(), MINE, [], 0, 7);
-    const peace = { ...m, archipel: { ...(m.archipel ?? { island: 1, levelCap: 20 }), pacifiedAt: 0 } } as ExpeditionMap;
+    const peace = {
+      ...m,
+      archipel: { ...(m.archipel ?? { island: 1, levelCap: 20 }), pacifiedAt: 0 },
+    } as ExpeditionMap;
     const r = row(controlRoster(peace, [], H, L, new Set(), null), MINE);
     expect(r.status).toBe('calm');
     expect(controlFilterOf(r.status)).toBe('held');
@@ -228,10 +231,10 @@ describe('⚫⚫ garrisonDotRows — champions en haut, miliciens en dessous', (
     expect(garrisonDotRows(r)).toEqual(['cff', 'fffff']);
   });
 
-  it('⚫ pas de ligne de miliciens là où ils n’entrent pas (lapidaire, objectif)', () => {
+  it('⚫ pas de ligne de miliciens là où ils n’entrent pas (objectif) — le lapidaire en a une', () => {
     const m = setAttack(captureControl(base(), MINE, ['a'], 0, 7), MINE, 9e15);
     const r = row(controlRoster(m, [], 2 * H, L, new Set(), null), MINE);
-    expect(garrisonDotRows({ ...r, kind: 'lapidary', seats: 1 })).toEqual(['c', '']);
+    expect(garrisonDotRows({ ...r, kind: 'lapidary', seats: 1 })).toEqual(['c', 'fffff']);
     expect(garrisonDotRows({ ...r, kind: 'objective', seats: 5 })).toEqual(['cffff', '']);
   });
 

@@ -5508,12 +5508,12 @@ export const useCharacterStore = defineStore('character', () => {
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
       // 🛡️ CHAMPIONS, HÉROS ET MILICIENS DÉFENDENT ENSEMBLE (2026-10-12, décision de
-      // l'utilisateur ; `controlAllies`). Seul le lapidaire ne se défend pas : ceux qui y sont
-      // postés rentrent SANS blessure s'il tombe.
+      // l'utilisateur ; `controlAllies`). Au lapidaire, seuls les MILICIENS se battent : les
+      // champions postés rentrent SANS blessure s'il tombe.
       const fights = defendsControl(p.control!.kind);
       const posted = advs.filter((a) => ids.has(a.id));
       const escort = fights ? posted : [];
-      const militia = fights ? militiaUnits(p.control!.garrison, playerLevel) : [];
+      const militia = militiaUnits(p.control!.garrison, playerLevel);
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);

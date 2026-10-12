@@ -421,8 +421,9 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   cartographer: PRODUCER_SEATS,
   hospice: PRODUCER_SEATS,
   lab: PRODUCER_SEATS,
-  // 💎 Cinq champions, chacun sa barre (2026-10-12), et personne pour le défendre (pas de
-  // milice : `garrisonCap`).
+  // 💎 Cinq champions, chacun sa barre (2026-10-12) : ils taillent, ils ne se battent pas.
+  // Cinq places de milice le défendent (2026-10-12, demandé : « il manque les places des
+  // miliciens sur le lapidaire »).
   lapidary: PRODUCER_SEATS,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
@@ -443,16 +444,17 @@ export const holdSeats = (c: Pick<ControlState, 'kind' | 'razes'>): number =>
 /** 🏰 La garnison ENTIÈRE d'un point : ses places de champion PLUS ses places de milice
  *  (deux réserves séparées depuis le 2026-10-08), sans limite pour la forteresse. */
 export const garrisonCap = (kind: ControlKind): number => seatsOf(kind) + militiaSeatsOf(kind);
-/** 🛡️ Sa garnison le DÉFEND-elle ? Pas le lapidaire : son champion polit, il ne se bat pas —
- *  le lieu ne se protège qu'en interceptant l'armée qui marche dessus. ⚠️ Lu par la reprise
- *  (store) ET par chaque pronostic de tenue. */
+/** 🛡️ Ses CHAMPIONS (et le héros) le défendent-ils ? Pas au lapidaire : ils taillent, ils ne
+ *  se battent pas — seuls ses MILICIENS le défendent (`controlAllies`, 2026-10-12). ⚠️ Lu
+ *  par la reprise (store) ET par chaque pronostic de tenue. */
 export const defendsControl = (kind: ControlKind | undefined): boolean => kind !== 'lapidary';
 /** 🛡️ Les places de MILICE d'un point, À PART de celles des champions (2026-10-08, décision
  *  de l'utilisateur : « seuls les miliciens défendent les lieux fixes ; champions et héros y
  *  restent postés, produisent, et interceptent »). 5 sur un lieu de production, 0 là où aucun
- *  milicien ne va (objectif, forteresse, citadelle) et au lapidaire. */
+ *  milicien ne va (objectif, forteresse, citadelle). Le lapidaire en a 5 (2026-10-12) : ce
+ *  sont eux qui le défendent. */
 export const militiaSeatsOf = (kind: ControlKind): number =>
-  RAZE_KINDS.has(kind) || kind === 'lapidary' ? 0 : MILITIA.perPoint;
+  RAZE_KINDS.has(kind) ? 0 : MILITIA.perPoint;
 /** 🛡️ CHAMPIONS, HÉROS ET MILICIENS DÉFENDENT ENSEMBLE (2026-10-12, décision de l'utilisateur :
  *  « pour plus de cohérence, faire défendre les miliciens et les champions — garder les
  *  champions ou non est un choix »). SOURCE DE VÉRITÉ, override « seuls les miliciens
@@ -470,15 +472,16 @@ export function controlAllies(
   ids: readonly string[],
   playerLevel: number,
 ): SkirmishUnit[] {
-  if (!defendsControl(kind)) return [];
+  // 💎 Au lapidaire, seuls les miliciens se battent.
+  if (!defendsControl(kind)) return militiaUnits([...ids], playerLevel);
   return [...partyAllies([...champs], kit, hero), ...militiaUnits([...ids], playerLevel)];
 }
-/** 🛡️ Combien COMBATTRONT : toute la garnison et le héros, sauf au lapidaire. */
+/** 🛡️ Combien COMBATTRONT : toute la garnison et le héros ; au lapidaire, ses miliciens. */
 export const defenderCount = (
   kind: ControlKind | undefined,
   ids: readonly string[],
   hero: boolean,
-): number => (defendsControl(kind) ? ids.length + (hero ? 1 : 0) : 0);
+): number => (defendsControl(kind) ? ids.length + (hero ? 1 : 0) : ids.filter(isMilitiaId).length);
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
  *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
  *  la Forge de campagne (2026-09-29). */
@@ -1897,8 +1900,8 @@ export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[], fort = 1): 
  *  ⚠️ `fort` REQUIS (`fortifyMult`) : oublié, l'écran annoncerait une tenue sans l'enceinte
  *  alors que la bataille la compte. */
 export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[], fort: number): number {
-  // 💎 Le lapidaire ne se défend pas (`defendsControl`).
-  if (!defendsControl(p.control?.kind)) return 0;
+  // 🛡️ Personne pour se battre (au lapidaire : aucun milicien) — rien ne tient.
+  if (!allies.length) return 0;
   // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
   const threat =
     tierThreatMult(tierAtAttack(p.control)) *
@@ -2663,7 +2666,10 @@ export function controlYieldCard(
   // 🏰🏳️ La forteresse et les objectifs ne produisent rien : ils se tiennent.
   if (!c || c.owner !== 'player' || c.kind === 'fortress' || c.kind === 'objective') return null;
   // 🧝 Le héros posté vaut 2 travailleurs — sauf au camp, où chacun n'apprend que pour lui.
-  const n = isPerChampKind(c.kind) ? c.garrison.length : controlWorkforce(c);
+  // Les miliciens ne travaillent pas au camp ni au lapidaire : seuls les champions comptent.
+  const n = isPerChampKind(c.kind)
+    ? c.garrison.filter((g) => !isMilitiaId(g)).length
+    : controlWorkforce(c);
   const seats = seatsOf(c.kind);
   const [one, many] = WORKER[c.kind];
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
@@ -2675,7 +2681,7 @@ export function controlYieldCard(
       what: 'chacun fait passer une compétence du niveau 5 au niveau 6',
       pct: null,
       gauge: idle,
-      rate: `${crew} · personne ne le défend : intercepte l’armée`,
+      rate: `${crew} · seuls ses miliciens le défendent`,
       ready: false,
       full: false,
     };
@@ -2955,8 +2961,6 @@ export function controlFreeSeats(c: ControlState | undefined | null): number {
  *  garnison même si le lieu est plein ») : on les envoie AVANT que des champions partent en
  *  sortie ; à l'arrivée, ils s'installent s'il y a de la place, sinon ils font demi-tour. */
 export function acceptsMilitia(c: ControlState | undefined | null): boolean {
-  // 💎 Ni le lapidaire : il n'a AUCUNE place de milice (`militiaSeatsOf`), un milicien y
-  // allait pour faire demi-tour (signalé 2026-10-12, un milicien en route vers le lapidaire).
   return !!c && c.owner === 'player' && militiaSeatsOf(c.kind) > 0;
 }
 /** 🛡️⚔️ Des miliciens peuvent-ils MARCHER vers ce lieu ? Comme `acceptsMilitia`, mais aussi
@@ -4270,7 +4274,7 @@ export function garrisonDotRows(row: ControlRosterRow): [string, string] {
   // ⚫ DEUX LIGNES PLEINES, LES CASES VIDES EN NOIR (demandé, 2026-10-06 : « deux lignes de 5,
   // un emplacement noir quand personne n'est là ») : la ligne du haut compte les places d'un
   // champion (`row.seats`, 5 sur un lieu de production), celle du bas les places d'un milicien
-  // (`garrisonCap`, 5) — aucune là où ils n'entrent pas (objectifs, forteresse, lapidaire).
+  // (`garrisonCap`, 5) — aucune là où ils n'entrent pas (objectifs, forteresse).
   // Deux réserves SÉPARÉES depuis le 2026-10-08 (`controlFreeSeats` / `militiaFreeSeats` font
   // foi) : seule la ligne du bas défend. Sans limite (forteresse) : aucune case vide.
   const pad = (s: string, n: number) =>

@@ -107,7 +107,7 @@ export type ControlKind =
    *  souvent sur l'île (`CARTO_TYPES`, `cartoPick`). */
   | 'cartographer'
   /** 🏝️💎 Le LAPIDAIRE (île 3) : UN champion y polit une de SES compétences (+1 niveau, 5 au
-   *  plus). Personne ne le défend : on intercepte l'armée qui marche dessus. */
+   *  plus). Seuls ses miliciens le défendent (2026-10-12). */
   | 'lapidary'
   /** 🏝️🕯️ L'HOSPICE (île 3) : ne produit rien ; tenu, les champions blessés sur l'île
    *  guérissent plus vite (`hospiceHealMult`, jusqu'à ×2 garnison pleine). */
