@@ -158,6 +158,33 @@ describe('planificateur d’expéditions', () => {
     expect(far.trips[0]!.units.map((x) => x.id)).toEqual(['A']);
   });
 
+  it('mode « XP » : le champion en plus rejoint le trajet COURT (XP par heure), pas le long qui rapporte plus par voyage', async () => {
+    // « court » : 10 XP par champion en 30 min (20 XP/h) ; « long » : 15 XP en 10 h (1,5 XP/h).
+    // Dans le temps d'un long voyage, on refait le court vingt fois : B doit y aller.
+    const targets: T[] = [
+      { id: 'court', need: 3, min: 30, xp: 10 },
+      { id: 'long', need: 3, min: 600, xp: 15 },
+    ];
+    const r = (await plan(targets, [u('A', 3), u('C', 3), u('B', 1)], 0.9, 'xp'))!;
+    const court = r.trips.find((t) => t.target.id === 'court')!;
+    const long = r.trips.find((t) => t.target.id === 'long')!;
+    expect(court.units.map((x) => x.id)).toContain('B');
+    expect(long.units.map((x) => x.id)).not.toContain('B');
+  });
+
+  it('mode « XP » : entre deux plans, garde celui qui rapporte le plus d’XP PAR HEURE', async () => {
+    // « court » : 3 champions × 19 XP en 30 min = 114 XP/h ; « moyen » : 2 × 54 XP en 1 h =
+    // 108 XP/h. Le second rapporte plus d'XP par voyage (108 contre 57), le premier plus par heure.
+    const targets: T[] = [
+      { id: 'court', need: 5, min: 30, xp: 19, cap: 3 },
+      { id: 'long', need: 7, min: 600, xp: 37, cap: 1 },
+      { id: 'moyen', need: 6, min: 60, xp: 54, cap: 2 },
+    ];
+    const units = [u('a', 1), u('b', 5), u('c', 3), u('d', 1)];
+    const r = (await plan(targets, units, 0.9, 'xp'))!;
+    expect(r.trips.map((t) => t.target.id)).toEqual(['court']);
+  });
+
   it('mode « XP » : un Mentor n’est pas remplacé par un plus faible qui rapporte moins', async () => {
     // 🎓 « M » double l'XP de son équipe ; « W » suffit pourtant au combat.
     const mentorDeps: PlanDeps<T> = {

@@ -95,11 +95,19 @@ interface Candidate<T> {
   xp: number;
 }
 
+/**
+ * ⏱️ L'XP PAR HEURE d'un voyage (2026-10-12, demandé par l'utilisateur : « un trajet très long
+ * empêche de gagner plus d'XP en faisant plus de trajets »). L'XP d'une mission ne dépend pas
+ * de la distance : un trajet de 10 h rapporte autant qu'un trajet de 30 min, que l'on aurait
+ * refait vingt fois dans le même temps. On compare donc des DÉBITS, jamais de l'XP brute.
+ */
+const xpPerHour = (t: { xp: number; tripMin: number }) => t.xp / Math.max(1 / 60, t.tripMin / 60);
+
 /** Ce qui classe deux propositions pour un même lieu, ou deux lieux entre eux. */
 function score<T>(c: Candidate<T>, mode: PlanMode): number {
   if (mode === 'xp') {
     const champs = c.units.filter((u) => !u.hero).length || 1;
-    return c.xp / champs / Math.max(1 / 60, c.tripMin / 60);
+    return xpPerHour(c) / champs;
   }
   // ⏱️ Le TEMPS OCCUPÉ : champions × aller-retour (2026-10-11, signalé : « de très longs trajets
   // proposés »). Avant, une équipe plus petite passait toujours devant, quel que soit son trajet :
@@ -261,7 +269,8 @@ export async function planExpeditions<T extends { id: string }>(
     // 3) ⭐ Mode XP : un champion resté à la base n'apprend rien. On l'ajoute à l'équipe (même
     // point de départ) où il fait gagner le plus d'XP au total — la chance de victoire ne fait que
     // monter quand on ajoute quelqu'un, mais le partage d'XP et le trajet (au pas du plus lent)
-    // peuvent coûter : on ne le prend que si le total MONTE.
+    // peuvent coûter : on ne le prend que si l'XP PAR HEURE de ce voyage MONTE (un voyage long
+    // rapporte plus par trajet, mais le court se refait plusieurs fois dans le même temps).
     if (withSpare) {
       const spare = units
         .filter((u) => !used.has(u.id) && !u.hero)
@@ -278,14 +287,16 @@ export async function planExpeditions<T extends { id: string }>(
           if (opts.cancelled?.()) return null;
           const w = (await winOf(tr.target, team)) ?? 1;
           const xp = deps.xp(tr.target, team) * w;
-          if (xp - tr.xp > bestGain) {
-            bestGain = xp - tr.xp;
+          const tripMin = deps.tripMin(tr.target, team);
+          const gain = xpPerHour({ xp, tripMin }) - xpPerHour(tr);
+          if (gain > bestGain) {
+            bestGain = gain;
             bestI = i;
             bestTrip = {
               target: tr.target,
               units: team,
               win: w,
-              tripMin: deps.tripMin(tr.target, team),
+              tripMin,
               xp,
             };
           }
@@ -305,7 +316,8 @@ export async function planExpeditions<T extends { id: string }>(
   const orders = (['events', 'xp'] as PlanMode[]).map((m) =>
     [...firstPass].sort((x, y) => score(y, m) - score(x, m)),
   );
-  const totalXp = (r: { trips: PlannedTrip<T>[] }) => r.trips.reduce((s, t) => s + t.xp, 0);
+  // ⏱️ Le DÉBIT du plan : chaque équipe refait son voyage en boucle, donc on somme l'XP par heure.
+  const xpRate = (r: { trips: PlannedTrip<T>[] }) => r.trips.reduce((s, t) => s + xpPerHour(t), 0);
   const totalMin = (r: { trips: PlannedTrip<T>[] }) =>
     r.trips.reduce((s, t) => s + t.tripMin * Math.max(1, t.units.length), 0);
   let pick: { trips: PlannedTrip<T>[]; missed: T[] } | null = null;
@@ -315,7 +327,7 @@ export async function planExpeditions<T extends { id: string }>(
     const better = !pick
       ? true
       : mode === 'xp'
-        ? totalXp(r) > totalXp(pick)
+        ? xpRate(r) > xpRate(pick)
         : r.trips.length > pick.trips.length ||
           (r.trips.length === pick.trips.length && totalMin(r) < totalMin(pick));
     if (better) pick = r;
