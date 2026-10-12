@@ -717,11 +717,6 @@ function facesOf(t: MapTrip) {
   gap: 3px;
   margin-top: 2px;
 }
-/* Tuile pleine largeur : sur la ligne de l'icône et des portraits, aucune hauteur en plus. */
-.trip.line .tr-boosts {
-  flex-basis: auto;
-  margin: 0 0 0 4px;
-}
 .tr-boost {
   min-width: 36px;
   min-height: 30px;
@@ -752,9 +747,27 @@ function facesOf(t: MapTrip) {
   opacity: 0.5;
   cursor: default;
 }
-/* Icône et portraits sur la même ligne : la tuile a la place. */
-.trip.line .tr-faces {
-  flex-basis: auto;
+/* 📐 QUATRE LIGNES, TOUJOURS DANS CET ORDRE (demandé) : 1) l'icône de l'étape et les
+   effectifs · 2) les accélérations · 3) la progression (échec, temps restants, frise) ·
+   4) les ressources récoltées. `order` fixe l'ordre quel que soit le gabarit ; chaque ligne
+   après la première prend toute la largeur, donc passe à la ligne d'elle-même. */
+.tr-who,
+.tr-faces {
+  order: 1;
+}
+.tr-boosts {
+  order: 2;
+}
+.tr-fail,
+.tr-legs,
+.tl-frise {
+  order: 3;
+}
+.tr-seats {
+  order: 4;
+}
+.tr-loot {
+  order: 5;
 }
 /* 💰 La récompense : le butin ramené (pastilles), ou l'estimation « si pris » à l'aller. */
 .tr-loot {
@@ -989,10 +1002,10 @@ function facesOf(t: MapTrip) {
 .tr-who {
   font-size: 17px;
 }
-/* 🛡️ Les portraits du renfort : une ligne pleine largeur, centrée, sous l'icône. */
+/* 👥 Les effectifs, sur la ligne de l'icône de l'étape (ligne 1). */
 .tr-faces {
-  flex-basis: 100%;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   gap: 2px;

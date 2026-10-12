@@ -118,7 +118,7 @@ const ECRANS = [
       // 🧭 …et toucher un voyage de la liste ouvre sa fiche, le tracé en avant sur la carte.
       {
         nom: 'tuile-trace',
-        clic: '.map-overlay .trip',
+        clic: '.map-overlay .trip .tr-who', // pas le centre : les boosts y sont (ligne 2)
         attendu: 'body:has(.trail-focus) .trip-bar',
       },
       {
