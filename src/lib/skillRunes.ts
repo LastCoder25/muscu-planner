@@ -140,9 +140,31 @@ export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 
 /** Niveau maximum d'une compétence PAR LES RUNES (tirage, fusion, don). */
 export const SKILL_MAX_LEVEL = 5;
-/** 💎 Le niveau TAILLÉ : au-delà des runes, seul le LAPIDAIRE (île 3) fait passer une
- *  compétence du niveau 5 au 6 (décision de l'utilisateur, 2026-10-12). */
-export const SKILL_CUT_LEVEL = 6;
+/**
+ * ⚡ LA SURCHARGE (décision de l'utilisateur, 2026-10-12, remplace le « niveau 6 taillé »).
+ * Le LAPIDAIRE (île 3) ne fait plus passer une compétence au niveau 6 : il SURCHARGE une
+ * compétence déjà au niveau 5. Elle reste niveau 5 à l'écran (« 5⚡ », « surchargée ») et sa
+ * valeur est multipliée par `OVERCLOCK_MULT`.
+ *
+ * ⚠️ STOCKÉE comme un niveau 6 (`level: 6`) : c'est la valeur que les champions taillés avant
+ * portent déjà en base — aucune migration. Un niveau 6 n'est donc qu'un DRAPEAU, jamais un cran
+ * de plus sur `LEVEL_CURVE` ; seuls `skillValue` et les libellés le lisent.
+ */
+export const SKILL_OVERCLOCK_LEVEL = 6;
+/** ⚡ +50 % sur la valeur du niveau 5. L'ancien niveau 6 (+0,15 sur la courbe) ne valait que
+ *  +5,6 % : imperceptible pour 1 à 7 jours de lapidaire. ×1,5, c'est plus que tout ce que
+ *  les niveaux 2 à 5 ajoutent l'un après l'autre (+0,2 à +0,7), sans jamais doubler. */
+export const OVERCLOCK_MULT = 1.5;
+
+/** ⚡ La compétence est-elle surchargée ? */
+export function isOverclocked(level: number): boolean {
+  return Math.floor(level) >= SKILL_OVERCLOCK_LEVEL;
+}
+
+/** Le niveau d'une compétence tel qu'on l'ÉCRIT : « 3 », ou « 5⚡ » si elle est surchargée. */
+export function skillLevelTag(level: number): string {
+  return isOverclocked(level) ? `${SKILL_MAX_LEVEL}⚡` : String(Math.floor(level));
+}
 
 /** La teinte d'une couleur de rune — source unique des écrans (fiche, portraits). */
 export const RUNE_COLOR: Record<RuneTier, string> = {
@@ -153,14 +175,22 @@ export const RUNE_COLOR: Record<RuneTier, string> = {
 };
 
 /** ⚠️ RENDEMENT DÉCROISSANT : multiplicateur de la valeur de base à chaque niveau. Chaque
- *  niveau apporte moins que le précédent (+0,7, +0,5, +0,3, +0,2, puis +0,15 au niveau taillé) — cumuler reste un
- *  progrès sans jamais valoir une compétence d'un cran plus haut empilée à l'infini. */
-export const LEVEL_CURVE: readonly number[] = [1, 1.7, 2.2, 2.5, 2.7, 2.85];
+ *  niveau apporte moins que le précédent (+0,7, +0,5, +0,3, +0,2) — cumuler reste un
+ *  progrès sans jamais valoir une compétence d'un cran plus haut empilée à l'infini.
+ *  La surcharge du lapidaire n'est PAS un cran de cette courbe (`OVERCLOCK_MULT`). */
+export const LEVEL_CURVE: readonly number[] = [1, 1.7, 2.2, 2.5, 2.7];
 
-/** La valeur d'une compétence à un niveau donné, en %, arrondie au dixième. */
+/** La valeur d'une compétence à un niveau donné, en %, arrondie au dixième (surcharge comprise). */
 export function skillValue(id: SkillId, level: number): number {
-  const l = Math.max(1, Math.min(SKILL_CUT_LEVEL, Math.floor(level)));
-  return Math.round(SKILLS[id].base * LEVEL_CURVE[l - 1]! * 10) / 10;
+  const l = Math.max(1, Math.min(SKILL_MAX_LEVEL, Math.floor(level)));
+  const boost = isOverclocked(level) ? OVERCLOCK_MULT : 1;
+  return Math.round(SKILLS[id].base * LEVEL_CURVE[l - 1]! * boost * 10) / 10;
+}
+
+/** ⚡ Ce que la surcharge change, en clair : « 32,4 % → 48,6 % ». */
+export function overclockGain(id: SkillId): string {
+  const f = (v: number) => `${String(v).replace('.', ',')} %`;
+  return `${f(skillValue(id, SKILL_MAX_LEVEL))} → ${f(skillValue(id, SKILL_OVERCLOCK_LEVEL))}`;
 }
 
 export function skillsOfTier(tier: RuneTier): SkillId[] {
@@ -489,7 +519,7 @@ export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0
 const isSkill = (s: unknown): s is SkillId => typeof s === 'string' && s in SKILLS;
 
 /** Relecture défensive des compétences d'un champion : ids inconnus, doublons et niveaux
- *  hors bornes écartés ou ramenés dans [1, SKILL_CUT_LEVEL] (le 6 vient du lapidaire). */
+ *  hors bornes écartés ou ramenés dans [1, SKILL_OVERCLOCK_LEVEL] (le 6 = surchargée par le lapidaire). */
 export function normalizeChampSkills(raw: unknown): ChampSkill[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<SkillId>();
@@ -500,7 +530,7 @@ export function normalizeChampSkills(raw: unknown): ChampSkill[] {
     const lv = Math.floor(Number(s.level));
     out.push({
       id: s.id,
-      level: Math.max(1, Math.min(SKILL_CUT_LEVEL, Number.isFinite(lv) ? lv : 1)),
+      level: Math.max(1, Math.min(SKILL_OVERCLOCK_LEVEL, Number.isFinite(lv) ? lv : 1)),
     });
   }
   return out;

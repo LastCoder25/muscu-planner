@@ -25,7 +25,7 @@ import { ensureIslandConquest } from '@/lib/islandConquest';
 import { refEscortUnits } from '@/lib/caravan';
 import { refChampionAdv } from '@/lib/caravan';
 import type { Adventurer } from '@/lib/adventurers';
-import { LEVEL_CURVE, SKILL_CUT_LEVEL, skillValue } from '@/lib/skillRunes';
+import { OVERCLOCK_MULT, SKILL_OVERCLOCK_LEVEL, skillValue } from '@/lib/skillRunes';
 
 const NOW = Date.UTC(2026, 9, 3, 12);
 const H = 3600_000;
@@ -112,12 +112,12 @@ describe('💎 le lapidaire de l’île 5', () => {
     expect(lapidaryHours('plunder')).toBe(168);
   });
 
-  it('seule une compétence au niveau 5 se taille, et elle passe au niveau 6', () => {
+  it('seule une compétence au niveau 5 se surcharge, et elle le reste', () => {
     expect(lapisCandidates(adv())).toEqual(['care']);
     const a = applyLapis([adv()], [{ advId: 'a', hours: lapidaryHours('care') }]);
     expect(a.up).toBe(1);
-    expect(a.advs[0]!.skills!.find((s) => s.id === 'care')!.level).toBe(SKILL_CUT_LEVEL);
-    // Les autres ne bougent pas, et un niveau 6 ne se taille plus.
+    expect(a.advs[0]!.skills!.find((s) => s.id === 'care')!.level).toBe(SKILL_OVERCLOCK_LEVEL);
+    // Les autres ne bougent pas, et une compétence surchargée ne se surcharge plus.
     expect(a.advs[0]!.skills!.find((s) => s.id === 'plunder')!.level).toBe(4);
     const again = applyLapis(a.advs, [{ advId: 'a', hours: 1e6 }]);
     expect(again.advs).toBe(a.advs);
@@ -126,10 +126,11 @@ describe('💎 le lapidaire de l’île 5', () => {
     expect(applyLapis(none, [{ advId: 'a', hours: 1e6 }]).advs).toBe(none);
   });
 
-  it('le niveau 6 vaut plus que le 5, sans casser le rendement décroissant', () => {
-    expect(skillValue('care', 6)).toBeGreaterThan(skillValue('care', 5));
-    const steps = LEVEL_CURVE.slice(1).map((v, i) => v - LEVEL_CURVE[i]!);
-    for (let i = 1; i < steps.length; i++) expect(steps[i]!).toBeLessThan(steps[i - 1]!);
+  it('⚡ surchargée, elle vaut +50 % de sa valeur au niveau 5', () => {
+    expect(skillValue('care', SKILL_OVERCLOCK_LEVEL)).toBeCloseTo(
+      skillValue('care', 5) * OVERCLOCK_MULT,
+      0,
+    );
   });
 
   it('la progression est GARDÉE sur le champion : s’il part, elle se met en pause', () => {

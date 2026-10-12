@@ -43,7 +43,7 @@ import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
 import {
   SKILLS,
-  SKILL_CUT_LEVEL,
+  SKILL_OVERCLOCK_LEVEL,
   SKILL_MAX_LEVEL,
   type RuneTier,
   type SkillId,
@@ -108,7 +108,7 @@ export const CONTROL = {
    */
   // ⚖️ Au rythme de l'arsenal depuis le 2026-10-08 : même besoin, même offre (cf. RUINS_SEALS).
   ossuaryHoursPerRuin: 144,
-  /** 💎 Lapidaire (île 3) : heures de taille pour passer une compétence du niveau 5 au 6,
+  /** 💎 Lapidaire (île 3) : heures pour SURCHARGER une compétence niveau 5 (+50 %),
    *  selon sa couleur (2026-10-12) : 1, 2, 4 et 7 jours. */
   lapidaryHours: { green: 24, blue: 48, violet: 96, gold: 168 } as Record<RuneTier, number>,
   arsenalHoursPerRuin: 144,
@@ -537,7 +537,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   distillery: 'boosts de vitesse ⚡',
   fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
   cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
-  lapidary: 'une compétence niveau 5 de chaque champion taillée au niveau 6 💎',
+  lapidary: 'une compétence niveau 5 de chaque champion surchargée (+50 %) ⚡',
   hospice: 'des champions blessés de l’île guéris plus vite 🕯️',
   lab: 'runes multicolores violettes ou mieux 🟣',
   tower: 'trajets plus courts 🧭',
@@ -1562,10 +1562,9 @@ export interface LapisGain {
 }
 
 /**
- * 💎 LE LAPIDAIRE TAILLE LE NIVEAU 6 (décision de l'utilisateur, 2026-10-12) : au-delà des
- * runes (5 au plus), il fait passer une compétence du niveau 5 au niveau 6. Les heures selon
- * sa couleur (`CONTROL.lapidaryHours` : 1, 2, 4, 7 jours) — le niveau 6 ne vaut que +0,15
- * (`LEVEL_CURVE`), d'où des durées courtes.
+ * ⚡ LE LAPIDAIRE SURCHARGE (décision de l'utilisateur, 2026-10-12) : au-delà des runes (5 au
+ * plus), il SURCHARGE une compétence au niveau 5 — elle reste niveau 5, sa valeur prend +50 %
+ * (`OVERCLOCK_MULT`). Les heures selon sa couleur (`CONTROL.lapidaryHours` : 1, 2, 4, 7 jours).
  */
 export function lapidaryHours(id: SkillId): number {
   return CONTROL.lapidaryHours[SKILLS[id].tier];
@@ -1597,7 +1596,7 @@ export function lapisTarget(
 
 /**
  * 💎 Verse les heures du lapidaire : chaque champion sur SA compétence (`lapisTarget`), qui
- * passe au niveau 6 quand son temps est atteint. ⚠️ Les heures sont GARDÉES sur le champion
+ * est surchargée quand son temps est atteint. ⚠️ Les heures sont GARDÉES sur le champion
  * (`lapisHours`, par compétence), pas sur le lieu : s'il part, sa barre se met en PAUSE et
  * reprend où elle en était à son retour. Un champion sans compétence au niveau 5 ne reçoit rien.
  */
@@ -1625,7 +1624,7 @@ export function applyLapis(
     return {
       ...a,
       skills: (a.skills ?? []).map((s) =>
-        cut && s.id === skill ? { ...s, level: SKILL_CUT_LEVEL } : s,
+        cut && s.id === skill ? { ...s, level: SKILL_OVERCLOCK_LEVEL } : s,
       ),
       lapisHours: hours,
     };
@@ -2734,8 +2733,8 @@ export function controlYieldCard(
   if (c.kind === 'lapidary') {
     return {
       emoji: '💎',
-      value: `${n} en taille`,
-      what: 'chacun fait passer une compétence du niveau 5 au niveau 6',
+      value: `${n} en surcharge`,
+      what: 'chacun surcharge une compétence au niveau 5 : +50 % sur sa valeur',
       pct: null,
       gauge: idle,
       rate: `${crew} · seuls ses miliciens le défendent`,
