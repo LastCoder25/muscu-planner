@@ -419,55 +419,114 @@
          ⚠️ Toujours PAS de niveau : c'est la règle posée à la conception (« un aventurier
          de manga »). Le rang et la barre disent où il en est ; le nombre, jamais. -->
   <q-dialog :model-value="!!detailAdv" position="bottom" @update:model-value="detailAdv = null">
-    <q-card v-if="detailAdv" class="guild-card">
-      <div class="g-head">
-        <span class="g-title font-display">
-          {{ titleOf(detailAdv)?.emoji ?? '🧑' }} {{ detailAdv.name }}
-        </span>
-        <span class="adv-rank" :style="{ color: rankOf(detailAdv).color }">
-          {{ rankOf(detailAdv).emoji }} {{ rankOf(detailAdv).name }}
-          {{ stars(rankOf(detailAdv).star) }}
+    <q-card v-if="detailAdv" class="guild-card d-sheet">
+      <!-- EN-TÊTE : qui il est, son rang, où il est. Le reste vit dans trois BLOCS
+           (statistiques · équipement · compétences) — demandé : les stats prenaient toute
+           la fiche, on ne savait plus où regarder. -->
+      <div class="d-hero">
+        <span class="d-hero-emo">{{ titleOf(detailAdv)?.emoji ?? '🧑' }}</span>
+        <div class="d-hero-main">
+          <div class="d-hero-name font-display">{{ detailAdv.name }}</div>
+          <!-- 🏅 CE QU'IL EST : la rareté tirée, qui ne bouge jamais.
+               ⚠️ Le titre n'est repris QUE s'il n'est pas son nom — `advTitle` rend le NOM
+               d'un champion, donc cette ligne répétait le titre affiché juste au-dessus. -->
+          <div class="d-sub">
+            <b :style="{ color: nomColor(detailAdv) }">{{ nomOf(detailAdv) }}</b>
+            <template v-if="subOf(detailAdv)"> · {{ subOf(detailAdv) }}</template>
+            · {{ advShapeLabel(statWeights(detailAdv)) }}
+            <!-- ✨ L'ÉVEIL : jusqu'à +48 % de stats — touchable, il s'explique. -->
+            <template v-if="awkOf(detailAdv)">
+              ·
+              <button type="button" class="d-awk" @click="showAwakenInfo(detailAdv)">
+                ✨ Éveil {{ awkOf(detailAdv) }}/{{ AWAKEN.max }} ⓘ
+              </button>
+            </template>
+          </div>
+        </div>
+        <span class="d-hero-rank" :style="{ '--c': rankOf(detailAdv).color }">
+          <span>{{ rankOf(detailAdv).emoji }} {{ rankOf(detailAdv).name }}</span>
+          <small>{{ stars(rankOf(detailAdv).star) }}</small>
         </span>
       </div>
-
-      <!-- 🏅 CE QU'IL EST : la rareté tirée, qui ne bouge jamais.
-           ⚠️ Le titre n'est repris QUE s'il n'est pas son nom — `advTitle` rend le NOM d'un
-           champion, donc cette ligne répétait le titre affiché juste au-dessus. -->
-      <div class="d-sub">
-        <b :style="{ color: nomColor(detailAdv) }">{{ nomOf(detailAdv) }}</b>
-        <template v-if="subOf(detailAdv)"> · {{ subOf(detailAdv) }}</template>
-        · {{ advShapeLabel(statWeights(detailAdv)) }}
-        <!-- ✨ L'ÉVEIL : jusqu'à +48 % de stats, et il pouvait monter une signature — mais
-             il ne se lisait qu'au tirage et dans le Codex, jamais sur la fiche du champion
-             qu'on envoie au combat. Sur `/max` ici : la fiche a la place de dire ce qu'il
-             reste à réveiller, la tuile non. -->
-        <template v-if="awkOf(detailAdv)">
-          ·
-          <button type="button" class="d-awk" @click="showAwakenInfo(detailAdv)">
-            ✨ Éveil {{ awkOf(detailAdv) }}/{{ AWAKEN.max }} ⓘ
-          </button>
+      <div
+        class="d-state"
+        :class="{ hurt: !!hurtOf(detailAdv), away: !hurtOf(detailAdv) && !!busyOf(detailAdv) }"
+      >
+        <template v-if="hurtOf(detailAdv)">
+          🛏️ à l'infirmerie · {{ leftOf(hurtOf(detailAdv)) }}
         </template>
+        <template v-else-if="busyOf(detailAdv)">
+          🐫 en route · {{ leftOf(busyOf(detailAdv)) }}{{ walkHurt(detailAdv) }}
+        </template>
+        <template v-else>✅ disponible</template>
       </div>
 
-      <!-- ⚔️ La puissance, et ce que l'ÉQUIPEMENT y ajoute : sans l’écart, on ne sait pas si
-           les pièces confiées servent à quelque chose. -->
-      <div class="d-pow">
-        <span class="d-pow-val font-display"
-          >⚔️ <CountUp :value="powerOf(detailAdv)" :format="(n: number) => fmtChampPow(n, showK)"
-        /></span>
-        <span v-if="pairBonusOf(detailAdv) > 0" class="d-pow-gain">
-          dont +{{ fmtChampPow(pairBonusOf(detailAdv), showK) }} grâce à son équipement
-        </span>
-        <span v-else class="d-pow-gain">sans équipement qui compte</span>
-      </div>
+      <!-- ── 📊 STATISTIQUES ── la puissance d'abord (le verdict), puis ses trois piliers.
+           Une ascension possible s'y lit DIRECTEMENT, en vert à côté de chaque valeur :
+           l'ancien tableau avant → après doublait les stats et prenait la moitié de la fiche. -->
+      <section class="d-blk">
+        <div class="d-blk-t">📊 Statistiques</div>
+        <div class="d-pow">
+          <span class="d-pow-val font-display"
+            >⚔️ <CountUp :value="powerOf(detailAdv)" :format="(n: number) => fmtChampPow(n, showK)"
+          /></span>
+          <span v-if="ascentRow('pow')" class="d-up">
+            → {{ fmtChampPow(ascentRow('pow')!.a, showK) }}
+          </span>
+        </div>
+        <div class="d-pow-gain">
+          <template v-if="pairBonusOf(detailAdv) > 0">
+            dont +{{ fmtChampPow(pairBonusOf(detailAdv), showK) }} grâce à son équipement
+          </template>
+          <template v-else>sans équipement qui compte</template>
+        </div>
+        <div class="d-stats">
+          <div v-for="s in statTiles" :key="s.key" class="d-stat">
+            <span class="d-stat-emo">{{ s.emoji }}</span>
+            <span class="d-stat-val font-display">{{ champStat(s.v, showK) }}</span>
+            <span class="d-stat-lab">{{ s.label }}</span>
+            <span v-if="ascentRow(s.key)" class="d-stat-up">
+              → {{ champStat(ascentRow(s.key)!.a, showK) }}
+            </span>
+          </div>
+        </div>
+        <div class="d-prog">
+          <div class="adv-bar" :title="barTitle(detailAdv)">
+            <span
+              class="adv-fill"
+              :style="{ width: Math.round(progressOf(detailAdv) * 100) + '%' }"
+            />
+          </div>
+          <span class="d-prog-pct">{{ Math.round(progressOf(detailAdv) * 100) }} %</span>
+        </div>
 
-      <!-- ⬆️ L'ASCENSION (v0.1014 ; réorganisée, demandé « montrer le changement de stat
-           avant et après »). Placée EN HAUT de la fiche : c'est l'action qui attend.
-           Trois lectures dans l'ordre où on les cherche — le RANG qu'il gagne, ce que ça
-           CHANGE (avant → après), ce que ça COÛTE — puis le bouton.
+        <!-- 📘 LES TOMES D'EXPÉRIENCE : de la progression, donc rangés avec elle. -->
+        <template v-if="detailTomes.length">
+          <div class="d-sec">📘 Tomes d’expérience</div>
+          <div class="d-tomes">
+            <button
+              v-for="t in detailTomes"
+              :key="t.id"
+              type="button"
+              class="d-tome"
+              :class="{ banked: t.banked }"
+              :disabled="busy"
+              :title="tomeTitle(t)"
+              @click="doTome(detailAdv, t)"
+            >
+              <span class="d-tome-xp">+{{ t.xp.toLocaleString('fr-FR') }} XP</span>
+              <span class="d-tome-gain">{{ tomeGain(t) }}</span>
+              <span class="d-tome-n">×{{ t.count }}</span>
+            </button>
+          </div>
+        </template>
+      </section>
+
+      <!-- ⬆️ L'ASCENSION : le rang qu'il gagne, ce qu'elle coûte, le bouton. Ce qu'elle
+           CHANGE se lit en vert dans le bloc des stats juste au-dessus.
            ⚠️ La raison d'un refus vient de `ascensionBlocker`, la règle du store. -->
-      <div v-if="detailAscent" class="d-ascent" :class="{ ready: !detailAscent.block }">
-        <div class="da-t font-display">⬆️ Ascension</div>
+      <section v-if="detailAscent" class="d-blk d-ascent" :class="{ ready: !detailAscent.block }">
+        <div class="d-blk-t">⬆️ Ascension</div>
         <div class="da-ranks">
           <span class="da-rank" :style="{ '--c': detailAscent.rankBefore.color }">
             {{ detailAscent.rankBefore.emoji }} {{ detailAscent.rankBefore.name }}
@@ -479,37 +538,15 @@
             <small>{{ detailAscent.rankAfter.stars }}</small>
           </span>
         </div>
-
-        <div class="da-grid">
-          <template v-for="r in detailAscent.rows" :key="r.key">
-            <span class="da-lab">{{ r.emoji }} {{ r.label }}</span>
-            <span class="da-b">{{
-              r.key === 'pow' ? fmtChampPow(r.b, showK) : champStat(r.b, showK)
-            }}</span>
-            <span class="da-arrow">→</span>
-            <span class="da-a" :class="{ up: r.a > r.b }">{{
-              r.key === 'pow' ? fmtChampPow(r.a, showK) : champStat(r.a, showK)
-            }}</span>
-            <span class="da-d" :class="{ up: r.a > r.b }">{{
-              r.a > r.b
-                ? '+' +
-                  (r.key === 'pow'
-                    ? fmtChampPow(r.a - r.b, showK)
-                    : champStat(r.a, showK) - champStat(r.b, showK))
-                : '='
-            }}</span>
-          </template>
-        </div>
         <p class="da-note">
           <template v-if="detailAscent.gained">
-            Il récupère aussitôt l’expérience gardée en réserve à ★★★★★.
+            Il récupère aussitôt l’expérience gardée en réserve à ★★★★★ (gains en vert ci-dessus).
           </template>
           <template v-else>
             Pas d’expérience en réserve : ses stats ne bougent pas tout de suite, mais il reprend sa
             progression jusqu’à ★★★★★ {{ detailAscent.rankAfter.name }}.
           </template>
         </p>
-
         <div class="da-cost">
           <span class="da-c" :class="{ short: detailAscent.sealsShort }">
             🔱 {{ detailAscent.have }}/{{ detailAscent.cost.seals }} sceau{{
@@ -533,143 +570,117 @@
           :disable="!!detailAscent.block || busy"
           @click="doAscend(detailAdv)"
         />
-      </div>
+      </section>
 
-      <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
-      <div class="d-stats">
-        <span class="d-stat">💪 {{ champStat(statsOf(detailAdv).puissance, showK) }}</span>
-        <span class="d-stat">❤️ {{ champStat(statsOf(detailAdv).endurance, showK) }}</span>
-        <span class="d-stat">⚡ {{ champStat(statsOf(detailAdv).agilite, showK) }}</span>
-      </div>
-
-      <!-- 🗡️ SES 4 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
-           la même stat qu'un objet du héros : elles viennent du tirage, et le sélecteur filtre par lignée et
-           rareté de classe (`canWearAdvGear`). -->
-      <div class="d-gear">
-        <button
-          v-for="s in detailGearSlots"
-          :key="s.slot"
-          type="button"
-          class="d-gear-slot"
-          :class="{ empty: !s.piece }"
-          @click="onGearCell(detailAdv, s.slot)"
-        >
-          <span class="dg-emo"
-            ><AdvGearArt :model="s.model">{{ s.emoji }}</AdvGearArt></span
+      <!-- ── 🗡️ ÉQUIPEMENT ── ses 4 emplacements, une pièce par métier : elles viennent du
+           tirage, et le sélecteur filtre par lignée et rareté de classe (`canWearAdvGear`). -->
+      <section class="d-blk">
+        <div class="d-blk-t">
+          🗡️ Équipement
+          <span class="d-blk-n"
+            >{{ detailGearSlots.filter((s) => s.piece).length }}/{{ detailGearSlots.length }}</span
           >
-          <span class="dg-name" :style="s.color ? { color: s.color } : {}">{{ s.name }}</span>
-          <!-- Rang (même lecture que familiers et talents) et stat principale : on voit
-               ce qu'il porte d'un coup d'œil, sans ouvrir le sélecteur (v0.865). -->
-          <RankStarBadge v-if="s.piece" class="dg-rsb" v-bind="advGearRankStar(s.piece)" />
-          <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
-          <GearStarBar v-if="s.piece" class="dg-bar" :g="s.piece" thin />
-          <!-- Ce que la pièce APPORTE : la stat seule ne se compare pas d'une pièce à
-               l'autre (des dégâts contre de la réduction) et ne dit pas son assiette. -->
-          <span v-if="(detailGearGain.get(s.slot) ?? 0) > 0" class="dg-gain"
-            >⚔️ +{{ fmtChampPow(detailGearGain.get(s.slot) ?? 0, showK) }}</span
-          >
-        </button>
-      </div>
-      <!-- ⬆️ L'ascension d'une pièce, depuis la fiche de son porteur (demandé : on la
-           cherchait dans le stock). Seulement quand elle est POSSIBLE — la raison d'un refus
-           reste au stock ; ici on ne propose que ce qui se fait. Même règle et même geste
-           (`gearAscent` / `doAscendGear`) que la tuile du stock. -->
-      <div v-if="detailGearAscents.length" class="d-gear-asc">
-        <button
-          v-for="x in detailGearAscents"
-          :key="x.piece.id"
-          type="button"
-          class="d-gear-asc-btn"
-          :disabled="busy"
-          @click="doAscendGear(x.piece)"
-        >
-          ⬆️ {{ x.piece.name }} → {{ x.rank.emoji }} {{ x.rank.name }}
-          <span class="d-gear-asc-cost"
-            >⚜️ {{ x.cost.seals }} · 🪙 {{ x.cost.gold.toLocaleString('fr-FR') }}</span
-          >
-        </button>
-      </div>
-
-      <div class="adv-bar" :title="barTitle(detailAdv)">
-        <span class="adv-fill" :style="{ width: Math.round(progressOf(detailAdv) * 100) + '%' }" />
-      </div>
-
-      <div class="d-state">
-        <template v-if="hurtOf(detailAdv)">
-          🛏️ à l'infirmerie · {{ leftOf(hurtOf(detailAdv)) }}
-        </template>
-        <template v-else-if="busyOf(detailAdv)">
-          🐫 en route · {{ leftOf(busyOf(detailAdv)) }}{{ walkHurt(detailAdv) }}
-        </template>
-        <template v-else>✅ disponible</template>
-      </div>
-
-      <!-- 📘 LES TOMES D'EXPÉRIENCE : un consommable par taille, le gain dit AVANT d'ouvrir. -->
-      <template v-if="detailTomes.length">
-        <div class="d-sec">📘 Tomes d’expérience</div>
-        <div class="d-tomes">
+        </div>
+        <div class="d-gear">
           <button
-            v-for="t in detailTomes"
-            :key="t.id"
+            v-for="s in detailGearSlots"
+            :key="s.slot"
             type="button"
-            class="d-tome"
-            :class="{ banked: t.banked }"
-            :disabled="busy"
-            :title="tomeTitle(t)"
-            @click="doTome(detailAdv, t)"
+            class="d-gear-slot"
+            :class="{ empty: !s.piece }"
+            @click="onGearCell(detailAdv, s.slot)"
           >
-            <span class="d-tome-xp">+{{ t.xp.toLocaleString('fr-FR') }} XP</span>
-            <span class="d-tome-gain">{{ tomeGain(t) }}</span>
-            <span class="d-tome-n">×{{ t.count }}</span>
+            <span class="dg-emo"
+              ><AdvGearArt :model="s.model">{{ s.emoji }}</AdvGearArt></span
+            >
+            <span class="dg-name" :style="s.color ? { color: s.color } : {}">{{ s.name }}</span>
+            <!-- Rang et stat principale : on voit ce qu'il porte sans ouvrir le sélecteur. -->
+            <RankStarBadge v-if="s.piece" class="dg-rsb" v-bind="advGearRankStar(s.piece)" />
+            <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
+            <GearStarBar v-if="s.piece" class="dg-bar" :g="s.piece" thin />
+            <!-- Ce que la pièce APPORTE : la stat seule ne se compare pas d'une pièce à
+                 l'autre (des dégâts contre de la réduction) et ne dit pas son assiette. -->
+            <span v-if="(detailGearGain.get(s.slot) ?? 0) > 0" class="dg-gain"
+              >⚔️ +{{ fmtChampPow(detailGearGain.get(s.slot) ?? 0, showK) }}</span
+            >
           </button>
         </div>
-      </template>
+        <!-- ⬆️ L'ascension d'une pièce, seulement quand elle est POSSIBLE. Même règle et
+             même geste (`gearAscent` / `doAscendGear`) que la tuile du stock. -->
+        <div v-if="detailGearAscents.length" class="d-gear-asc">
+          <button
+            v-for="x in detailGearAscents"
+            :key="x.piece.id"
+            type="button"
+            class="d-gear-asc-btn"
+            :disabled="busy"
+            @click="doAscendGear(x.piece)"
+          >
+            ⬆️ {{ x.piece.name }} → {{ x.rank.emoji }} {{ x.rank.name }}
+            <span class="d-gear-asc-cost"
+              >⚜️ {{ x.cost.seals }} · 🪙 {{ x.cost.gold.toLocaleString('fr-FR') }}</span
+            >
+          </button>
+        </div>
+      </section>
 
-      <!-- 🔮 LES COMPÉTENCES D'UN CHAMPION : des RUNES qu'on pose (plus rien d'écrit sur lui). -->
-      <SkillRunesPanel
-        v-if="detailAdv.championId"
-        :adv="detailAdv"
-        :stock="runeBank.skills.length"
-      />
+      <!-- ── 🪬 COMPÉTENCES ── les runes posées (champion), sinon le parcours et ce que
+           ses classes lui ont appris (aventurier d'avant la bascule). -->
+      <section class="d-blk">
+        <div class="d-blk-t">
+          🪬 Compétences
+          <span v-if="detailAdv.championId" class="d-blk-n"
+            >{{ advRuneSkills(detailAdv).length }}/{{ advSkillSlots(detailAdv) }}</span
+          >
+        </div>
+        <SkillRunesPanel
+          v-if="detailAdv.championId"
+          :adv="detailAdv"
+          :stock="runeBank.skills.length"
+        />
 
-      <!-- ⚠️ LE PARCOURS est la vraie raison d'être de cette fiche : chaque promotion est
-             un choix DÉFINITIF, et il n'existait aucun endroit pour relire la suite de
-             choix qui a fait cet aventurier. -->
-      <div class="d-sec">🧭 Parcours</div>
-      <div class="d-path">
-        <span v-for="(c, i) in pathOf(detailAdv)" :key="i" class="d-step">
-          {{ c.emoji }} {{ c.label }}
-        </span>
-      </div>
+        <!-- ⚠️ LE PARCOURS : chaque promotion était un choix DÉFINITIF, et c'est le seul
+             endroit où relire la suite de choix qui a fait cet aventurier. -->
+        <template v-if="pathOf(detailAdv).length">
+          <div class="d-sec">🧭 Parcours</div>
+          <div class="d-path">
+            <span v-for="(c, i) in pathOf(detailAdv)" :key="i" class="d-step">
+              {{ c.emoji }} {{ c.label }}
+            </span>
+          </div>
+        </template>
 
-      <!-- ⚠️ Une compétence apprise DEUX FOIS n'est pas listée deux fois : elle monte
-           d'un NIVEAU, et son effet suit. Répétée, elle se lisait comme un bug. -->
-      <div v-if="!detailAdv.championId && rolesOf(detailAdv).length" class="d-sec">
-        🐫 En expédition
-      </div>
-      <div v-if="!detailAdv.championId && rolesOf(detailAdv).length" class="d-perks">
-        <span v-for="s in rolesOf(detailAdv)" :key="s.what" class="d-perk">
-          {{ ADV_ROLE_LABEL[s.what] }}
-          <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
-        </span>
-      </div>
+        <!-- ⚠️ Une compétence apprise DEUX FOIS n'est pas listée deux fois : elle monte
+             d'un NIVEAU, et son effet suit. -->
+        <template v-if="!detailAdv.championId && rolesOf(detailAdv).length">
+          <div class="d-sec">🐫 En expédition</div>
+          <div class="d-perks">
+            <span v-for="s in rolesOf(detailAdv)" :key="s.what" class="d-perk">
+              {{ ADV_ROLE_LABEL[s.what] }}
+              <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
+            </span>
+          </div>
+        </template>
 
-      <div v-if="!detailAdv.championId && sigLabelsOf(detailAdv).length" class="d-sec">
-        ⚔️ Au combat
-      </div>
-      <div v-if="!detailAdv.championId && sigLabelsOf(detailAdv).length" class="d-perks">
-        <span v-for="s in sigLabelsOf(detailAdv)" :key="s.label" class="d-perk sig">
-          {{ s.label }}
-          <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
-        </span>
-      </div>
+        <template v-if="!detailAdv.championId && sigLabelsOf(detailAdv).length">
+          <div class="d-sec">⚔️ Au combat</div>
+          <div class="d-perks">
+            <span v-for="s in sigLabelsOf(detailAdv)" :key="s.label" class="d-perk sig">
+              {{ s.label }}
+              <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
+            </span>
+          </div>
+        </template>
 
-      <p
-        v-if="!detailAdv.championId && !rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length"
-        class="g-note"
-      >
-        Ni rôle d’expédition ni signature — de la stat brute.
-      </p>
+        <p
+          v-if="
+            !detailAdv.championId && !rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length
+          "
+          class="g-note"
+        >
+          Ni rôle d’expédition ni signature — de la stat brute.
+        </p>
+      </section>
 
       <div class="g-actions">
         <q-btn flat no-caps label="Fermer" @click="detailAdv = null" />
@@ -944,6 +955,8 @@ import {
   advRoleLevels,
   advSignatureLevels,
   advStats,
+  advRuneSkills,
+  advSkillSlots,
   groupByGrade,
   advShapeLabel,
   ADV_ROLE_LABEL,
@@ -1540,6 +1553,23 @@ const detailAscent = computed(() => {
     sealsShort: s.have < s.cost.seals,
   };
 });
+/** La ligne « après ascension » d'une stat — `null` sans ascension ou si rien ne bouge :
+ *  on n'affiche un gain que s'il y en a un. */
+function ascentRow(key: string) {
+  const r = detailAscent.value?.rows.find((x) => x.key === key);
+  return r && r.a > r.b ? r : null;
+}
+/** Les trois piliers de la fiche, dans l'ordre des emojis du jeu (💪 ❤️ ⚡). */
+const statTiles = computed(() => {
+  const a = detailAdv.value;
+  if (!a) return [];
+  const st = advStats(a);
+  return [
+    { key: 'p', emoji: '💪', label: 'Puissance', v: st.puissance },
+    { key: 'e', emoji: '❤️', label: 'Endurance', v: st.endurance },
+    { key: 'g', emoji: '⚡', label: 'Agilité', v: st.agilite },
+  ];
+});
 /** ⬆️ L'ascension d'une PIÈCE — même patron que celle d'un champion. `null` tant qu'elle
  *  n'est pas à ★5 : un bouton qui promettrait une échéance lointaine encombrerait la tuile. */
 function gearAscent(g: AdvGear) {
@@ -1821,7 +1851,6 @@ const wornGain = computed(() => {
     }
   return out;
 });
-const statsOf = (a: Adventurer) => advStats(a);
 /** Les stats ramenées à la FORME attendue par `advShapeLabel` (p/e/a) : on nomme
  *  l'orientation à partir des stats RÉELLES, pas des poids d'une seule classe. */
 const statWeights = (a: Adventurer) => {
@@ -1846,6 +1875,166 @@ function leftOf(at: number): string {
 </script>
 
 <style scoped lang="scss">
+/* ── 🧑 FICHE D'UN CHAMPION : en-tête + trois BLOCS (stats · équipement · compétences).
+   Demandé : les stats prenaient toute la fiche. Chaque bloc est une carte arrondie,
+   en RETRAIT des bords de la feuille (`margin-inline`), sur la teinte `--surface-2`. ── */
+.d-sheet {
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.d-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 4px 8px;
+}
+.d-hero-emo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  font-size: 28px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+}
+.d-hero-main {
+  flex: 1;
+  min-width: 0;
+}
+.d-hero-name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.d-sub {
+  font-size: 12.5px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+.d-hero-rank {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--c) 55%, var(--line));
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+  color: var(--c);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.d-hero-rank small {
+  font-size: 10px;
+  opacity: 0.9;
+}
+.d-blk {
+  margin: 0 4px 10px;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  background: var(--surface-2, #2b241b);
+  border: 1px solid var(--line);
+}
+.d-blk-t {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.d-blk-n {
+  font-family: Oswald, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.d-blk .d-sec:first-child {
+  margin-top: 0;
+}
+.d-pow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.d-pow-val {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.d-up {
+  font-family: Oswald, sans-serif;
+  font-size: 15px;
+  color: var(--d1, #7bc86c);
+}
+.d-pow-gain {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 2px 0 10px;
+}
+.d-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.d-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.d-stat-emo {
+  font-size: 16px;
+}
+.d-stat-val {
+  font-size: 18px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.d-stat-lab {
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.d-stat-up {
+  font-family: Oswald, sans-serif;
+  font-size: 12px;
+  color: var(--d1, #7bc86c);
+}
+.d-prog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.d-prog .adv-bar {
+  flex: 1;
+  height: 6px;
+  margin: 0;
+  /* La piste de base a la teinte du bloc : sur lui elle disparaissait. */
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.d-prog-pct {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+/* L'ascension garde son cadre de couleur : c'est l'action qui attend. */
+.d-blk.d-ascent {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2, #2b241b));
+}
 .g-full {
   margin-bottom: 10px;
 }
@@ -2000,54 +2189,10 @@ function leftOf(at: number): string {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
-.d-sub {
-  font-size: 12.5px;
-  color: var(--dim);
-  margin: 2px 0 8px;
-}
-.d-pow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  margin-bottom: 8px;
-}
-.d-pow-val {
-  font-size: 20px;
-}
-.d-pow-gain {
-  font-size: 12px;
-  color: var(--dim);
-}
-.d-stats {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.d-stat {
-  flex: 1;
-  text-align: center;
-  padding: 6px 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-family: Oswald, sans-serif;
-  font-size: 15px;
-}
-.d-ascent {
-  margin: 10px 0 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
 /* Payable tout de suite : le vert « gain » de l'anneau du Panthéon, même signal. */
 .d-ascent.ready {
   border-color: var(--d1, #7bc86c);
   background: color-mix(in srgb, var(--d1, #7bc86c) 10%, transparent);
-}
-.da-t {
-  font-size: 15px;
-  margin-bottom: 8px;
 }
 .da-ranks {
   display: flex;
@@ -2075,42 +2220,8 @@ function leftOf(at: number): string {
 .da-arrow {
   color: var(--dim);
 }
-/* Une ligne par stat, colonnes alignées : on compare d'un coup d'œil. */
-.da-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
-  align-items: baseline;
-  gap: 4px 8px;
-  font-size: 13px;
-}
-.da-lab {
-  min-width: 0;
-  color: var(--dim);
-}
-.da-b,
-.da-a,
-.da-d {
-  font-family: Oswald, sans-serif;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.da-b {
-  color: var(--dim);
-}
-.da-a {
-  font-size: 15px;
-}
-.da-a.up,
-.da-d.up {
-  color: var(--d1, #7bc86c);
-}
-.da-d {
-  min-width: 3ch;
-  color: var(--dim);
-  font-size: 12px;
-}
 .da-note {
-  margin: 8px 0 10px;
+  margin: 0 0 8px;
   font-size: 12px;
   color: var(--dim);
 }
@@ -2183,10 +2294,34 @@ function leftOf(at: number): string {
   font-size: 11px;
   color: var(--dim);
 }
+/* L'état : une pastille sous l'en-tête, teintée comme les portraits du vivier. */
+/* L'état : une pastille sous l'en-tête, teintée comme les portraits du vivier. */
 .d-state {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 12px 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 12px;
-  color: var(--dim);
-  margin: 6px 0 4px;
+  font-weight: 600;
+  color: var(--d1, #7bc86c);
+  background: color-mix(in srgb, var(--d1, #7bc86c) 14%, transparent);
+}
+.d-state.away {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.d-state.hurt {
+  color: var(--d4, #ff6a45);
+  background: color-mix(in srgb, var(--d4, #ff6a45) 14%, transparent);
+}
+.d-state.away {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.d-state.hurt {
+  color: var(--d4, #ff6a45);
+  background: color-mix(in srgb, var(--d4, #ff6a45) 14%, transparent);
 }
 .d-pick {
   display: flex;

@@ -1,10 +1,5 @@
 <template>
   <div class="srp">
-    <div class="srp-head">
-      <span class="srp-t font-display">🪬 Compétences</span>
-      <span class="srp-n">{{ skills.length }}/{{ slots }}</span>
-    </div>
-
     <!-- Les emplacements : posés, puis vides en pointillés (ils disent ce qu'on peut encore
          avoir, comme les emplacements de tourelle de la base). -->
     <div class="srp-slots">
@@ -63,22 +58,6 @@ function whatOf(id: SkillId, level: number): string {
 </script>
 
 <style scoped>
-.srp {
-  margin-top: 12px;
-}
-.srp-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.srp-t {
-  font-size: 15px;
-}
-.srp-n {
-  color: var(--dim);
-  font-size: 13px;
-}
 .srp-slots {
   display: grid;
   gap: 6px;
@@ -90,7 +69,7 @@ function whatOf(id: SkillId, level: number): string {
   min-height: 48px;
   padding: 6px 10px;
   border-radius: 12px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  background: var(--surface);
   border: 1.5px solid var(--tier, var(--line));
 }
 .srp-slot.empty {
