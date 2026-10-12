@@ -14,6 +14,8 @@
     :disabled="!!reason"
     :aria-pressed="readonly ? undefined : on"
     :tabindex="readonly ? -1 : undefined"
+    :style="{ '--rc': rar.color }"
+    :title="`Rareté ${rar.label}`"
     @click="readonly || emit('toggle')"
   >
     <!-- 🖼️ SON PORTRAIT, comme partout où un champion se montre (tirage, Guilde, Codex).
@@ -25,10 +27,10 @@
     >
     <!-- 📐 EN LIGNE (demandé : « bcp de choses à défiler ») : le portrait à gauche garde sa
          taille, les infos s'empilent à droite — la tuile passe de ~170 à ~80 px de haut. -->
-    <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable), en pastille FIXÉE dans le coin haut
-         droit de la tuile (demandé) : toujours au même endroit, quelle que soit la longueur
-         du nom. -->
-    <span class="ca-rar" :style="{ '--rc': rar.color }">{{ rar.label }}</span>
+    <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable) se lit au CONTOUR de la tuile (demandé :
+         la pastille du coin prenait la place du nom). Le mot reste au survol et pour les
+         lecteurs d'écran. -->
+    <span class="ca-sr">Rareté {{ rar.label }}</span>
     <span class="ca-body">
       <span class="ca-name">{{ adv.name }}</span>
       <span class="ca-line">
@@ -170,16 +172,28 @@ const rar = computed(() => advGradeBadge(props.adv));
   padding: 7px 8px;
   text-align: left;
   background: #1d1913;
-  border: 1px solid var(--line);
+  /* 🏅 La rareté au CONTOUR (demandé) : elle fait ressortir la tuile sans lui voler de place.
+     Repli sur le trait neutre si la couleur manque. */
+  border: 2px solid var(--rc, var(--line));
   border-radius: 12px;
   color: var(--text);
   min-height: 44px;
   cursor: pointer;
   position: relative;
 }
+/* Coché : le contour GARDE la rareté ; la sélection se lit par le fond accent et un anneau
+   accent à l'extérieur — deux signaux qui ne se recouvrent pas. */
 .car-adv.on {
-  border-color: var(--accent);
   background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.ca-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 /* Indisponible : lisible (on doit lire POURQUOI), mais visiblement hors jeu. */
 .car-adv.ro {
@@ -210,33 +224,15 @@ const rar = computed(() => advGradeBadge(props.adv));
   gap: 5px;
   max-width: 100%;
 }
-/* Le nom laisse la place de la pastille du coin : il se tronque avant de passer dessous. */
+/* Le nom prend toute la largeur (plus de pastille dans le coin) et se tronque au besoin. */
 .ca-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   max-width: 100%;
-  padding-right: 16px;
   box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* La rareté de classe : mêmes mots et mêmes couleurs que la Guilde et que le butin.
-   Fixée dans le coin haut droit de la tuile. */
-.ca-rar {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  padding: 0 4px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent);
-  background: color-mix(in srgb, var(--rc) 16%, transparent);
-  color: var(--rc);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.3;
-  text-transform: capitalize;
   white-space: nowrap;
 }
 /* Les étoiles : le travail de terrain, dans la teinte de son rang. */
@@ -357,8 +353,8 @@ const rar = computed(() => advGradeBadge(props.adv));
   line-height: 1.1;
   color: var(--text);
 }
-/* Z Fold plié (~344 px) : le nom réserve ~16 px pour la pastille du coin. On les reprend sur le
-   portrait et les marges plutôt que de tronquer le nom (mesuré au banc). */
+/* Z Fold plié (~344 px) : on reprend un peu de place sur le portrait et les marges plutôt que
+   de tronquer le nom. */
 @media (max-width: 379px) {
   .car-adv {
     gap: 6px;

@@ -859,6 +859,18 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain(`class="ca-rk-star">${r.star}★<`);
   }, 30_000);
 
+  // 🏅 La rareté se lit au CONTOUR de la tuile, plus dans une pastille du coin (demandé).
+  it('AdvPickTile pose la couleur de rareté sur la tuile, sans pastille', async () => {
+    const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
+    const { advGradeBadge } = await import('@/lib/adventurers');
+    const adv = ROW.adventurers[0];
+    const rar = advGradeBadge(adv);
+    let out = '';
+    await mountIt(AdvPickTile, { adv, on: false }, ROW, undefined, '/', (h) => (out = h));
+    expect(out).toContain(`--rc: ${rar.color}`);
+    expect(out).not.toContain('ca-rar');
+  }, 30_000);
+
   // 💰 Le plateau de ressources, partagé par l'Aventure et la carte (demandé 2026-09-30).
   it('ResourceTray affiche les ressources du personnage, et une partie seulement si demandé', async () => {
     const { default: ResourceTray } = await import('@/components/ResourceTray.vue');
