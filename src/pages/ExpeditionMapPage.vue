@@ -1131,7 +1131,7 @@
             </p>
             <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
                sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
-            <div v-if="partyGroups.length" class="car-pick">
+            <div v-if="partyGroups.length" class="car-pick" @click.capture="anchorPick">
               <template v-for="g in partyGroups" :key="g.id">
                 <!-- 🧭 Toucher le lieu coche tous ses champions, ou les décoche tous (demandé). -->
                 <button
@@ -1149,7 +1149,9 @@
                 >
                   <span class="pool-emo">{{ g.emo }}</span>
                   <span class="pool-name">{{ g.label }}</span>
-                  <span class="pool-leg">à {{ formatDurationMin(g.legMin) }}</span>
+                  <span class="pool-leg" title="Aller-retour depuis ce lieu"
+                    >⇄ {{ formatDurationMin(2 * g.legMin) }}</span
+                  >
                   <span class="pool-n">{{ g.advs.length }} 🗡️</span>
                   <span v-if="g.advs.length" class="pool-check">{{
                     partyGroupState(g.advs.map((a) => a.id)) === 'all'
@@ -1192,7 +1194,7 @@
                 />
               </template>
             </div>
-            <div v-else class="car-pick">
+            <div v-else class="car-pick" @click.capture="anchorPick">
               <HeroPickTile
                 :on="partyHeroOn"
                 :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
@@ -1516,6 +1518,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import { holdPosition } from '@/lib/scrollAnchor';
 import GarrisonStrip from '@/components/GarrisonStrip.vue';
 import { oneWayLegs } from '@/lib/oneWayTrip';
 import { garrisonStrip, type StripMember } from '@/lib/garrisonStrip';
@@ -5337,7 +5340,20 @@ const poiFacts = computed<PoiFact[]>(() => {
     // (2026-09-29, décision de l'utilisateur) — un seul % mêlait deux risques qui ne se
     // paient pas pareil. Aller perdu = demi-tour sans rien, retour perdu = une part du butin.
     const route = partyRoute.value;
-    if (route) {
+    // 📌 RÉSERVÉES DÈS QUE LA ROUTE SE JOUERA (demandé : cocher un champion faisait apparaître
+    // ces pastilles et décalait tout l'écran vers le bas) : sans équipe, « — » à leur place.
+    const roadPlays = HARVEST_TYPES.has(p.type) && !partyHeroOn.value && !rift && !band;
+    if (!route && roadPlays) {
+      const dash = { value: '—', cls: 'dim', title: 'Compose ton équipe pour le connaître' };
+      if (guard) out.push({ icon: '🎯', label: 'Gardes', go: true, ...dash });
+      out.push({
+        icon: '🛣️',
+        label: p.perilous || p.riftPeril || p.nestPeril ? 'Route dangereuse' : 'Route',
+        go: true,
+        ...dash,
+      });
+      if (!combined.value) out.push({ icon: '🔙', label: 'Demi-tour', ...dash });
+    } else if (route) {
       const gw = partyGuardWin.value;
       if (guard)
         out.push({
@@ -5362,7 +5378,9 @@ const poiFacts = computed<PoiFact[]>(() => {
           : `${clear} % des trajets sans embuscade perdue · ${back} % font demi-tour à l’aller (lieu jamais atteint, blessés à l’infirmerie) · au retour, une embuscade perdue coûte une part du butin. Plus de champions, mieux la route tient.`,
         cls: winClass(clear),
       });
-      if (back > 0)
+      // Toujours affiché hors attaque combinée (jamais de demi-tour) : la pastille ne doit pas
+      // apparaître ni disparaître au gré des champions cochés.
+      if (!combined.value)
         out.push({
           icon: '🔙',
           label: 'Demi-tour',
@@ -5403,6 +5421,15 @@ const poiFacts = computed<PoiFact[]>(() => {
     });
   return out;
 });
+/** 📌 La tuile touchée reste sous le doigt quand la fiche au-dessus change de hauteur
+ *  (`holdPosition`). Après le rendu, puis une fois les apports recalculés. */
+function anchorPick(e: MouseEvent) {
+  const el = (e.target as HTMLElement | null)?.closest('button');
+  if (!el) return;
+  const restore = holdPosition(el);
+  requestAnimationFrame(restore);
+  setTimeout(restore, 300);
+}
 /** 🎯 Ce que la barre d'envoi collante rappelle pendant qu'on coche les champions : les
  *  pastilles de réussite de l'équipe (réussite, fermeture, gardes, route), lues dans
  *  `poiFacts`. Rien tant que l'équipe est vide (la fiche dit déjà « compose ton équipe »). */
