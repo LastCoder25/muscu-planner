@@ -1313,6 +1313,63 @@ export function retiredHeld(map: ExpeditionMap): Poi[] {
   );
 }
 
+/**
+ * 🔀 UN LIEU TENU DONT LE TYPE A ÉTÉ REMPLACÉ DEVIENT LE NOUVEAU TYPE, il n'est pas perdu
+ * (2026-10-12, signalé par l'utilisateur : la v1.167 a échangé lapidaire et distillerie, son
+ * lapidaire tenu est resté à côté d'une distillerie neuve ENNEMIE posée exactement à sa place).
+ * Le remplaçant se reconnaît à sa PLACE : le nouveau type prend celle de l'ancien, donc aucune
+ * table de correspondance à tenir. Le point garde son propriétaire, sa garnison, ses renforts,
+ * ses retours, son héros, son niveau et son attaque prévue ; ce qui est propre à l'ancien type
+ * (réserve, compétence taillée, faveur du cartographe, XP par champion) repart de zéro.
+ * Une distillerie ENNEMIE déjà posée à sa place est retirée si personne ne l'a encore touchée.
+ * `skip` : les ids qu'un voyage en cours vise encore (le store réessaie à leur retour).
+ * Rend `null` quand il n'y a rien à convertir ; sinon la carte et les ids renommés, que le
+ * store applique aux champions postés DANS LA MÊME écriture.
+ */
+export function convertReplacedControls(
+  map: ExpeditionMap,
+  now: number,
+  skip: ReadonlySet<string> = new Set(),
+): { map: ExpeditionMap; renamed: Map<string, string> } | null {
+  const kinds = controlKindsOf(map);
+  const renamed = new Map<string, string>();
+  const drop = new Set<string>();
+  const replace = new Map<string, Poi>();
+  for (const p of map.pois) {
+    const c = p.control;
+    if (!c || c.owner !== 'player' || RAZE_KINDS.has(c.kind) || kinds.includes(c.kind)) continue;
+    if (skip.has(p.id)) continue;
+    const kind = kinds.find((k) => {
+      if (k === c.kind) return false;
+      const s = controlSpot(map, k);
+      return s.x === p.x && s.y === p.y;
+    });
+    if (!kind) continue;
+    const id = controlIdOf(kind);
+    if (renamed.has(p.id) || [...renamed.values()].includes(id)) continue;
+    const there = map.pois.find((q) => q.id === id);
+    if (there) {
+      const t = there.control;
+      const untouched =
+        t?.owner === 'enemy' &&
+        !t.assault &&
+        t.garrison.length === 0 &&
+        !t.reinforcing?.length &&
+        !t.retakes &&
+        !skip.has(there.id);
+      if (!untouched) continue;
+      drop.add(there.id);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { favor, lapis, lapisPick, perXp, banked, yieldMult, fortMult, ...rest } = c;
+    replace.set(p.id, { ...p, id, control: { ...rest, kind, banked: 0, collectedAt: now } });
+    renamed.set(p.id, id);
+  }
+  if (!renamed.size) return null;
+  const pois = map.pois.filter((p) => !drop.has(p.id)).map((p) => replace.get(p.id) ?? p);
+  return { map: { ...map, pois }, renamed };
+}
+
 /** Pose les points de contrôle MANQUANTS sur la carte (tenus par l'ennemi). Rend la même
  *  carte quand il ne manque rien : le store n'écrit pas à vide. */
 export function ensureControls(
