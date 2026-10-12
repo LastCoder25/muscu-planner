@@ -496,7 +496,8 @@ export function landCrossing(
   void _c;
   // ⛵ VERS L'ÎLE SUIVANTE (décision de l'utilisateur, 2026-10-03) : l'île quittée est
   // pacifiée et vidée de ses lieux (`vacateIsland`), et TOUS les champions partent — ils
-  // quittent aussi les garnisons des îles rangées (`stripChampions`). Les miliciens restent.
+  // quittent aussi les garnisons des îles rangées (`stripChampions`). Les miliciens
+  // postés sur ses lieux fixes restent ; ceux de sa réserve embarquent (cf. `boarding`).
   // Les navigations sans héros en cours n'ont plus d'objet : leurs champions suivent le héros.
   const forward = isForwardCrossing(c);
   const lvl = (m: Pick<ExpeditionMap, 'archipel'>) => mapPlayerLevel(m, playerLevel);
@@ -510,10 +511,18 @@ export function landCrossing(
   delete stash[String(c.to)];
   const leftWithMilitia = militia ? { ...left, militia } : left;
   // 🛡️ La milice de l'île quittée se range comme le joueur l'a choisi en partant.
-  stash[String(c.from)] =
+  const ranged =
     forward && c.militiaPlan
       ? applyMilitiaPlan(leftWithMilitia, c.militiaPlan, c.arriveAt, lvl(left))
       : leftWithMilitia;
+  // ⛵🛡️ VERS L'ÎLE SUIVANTE, CE QUI N'EST POSÉ SUR AUCUN LIEU EMBARQUE AVEC LE HÉROS
+  // (2026-10-12, signalé : « j'ai vidé un lieu de ses 5 miliciens, je n'en ai qu'un à
+  // l'arrivée »). La réserve d'une île pacifiée n'y sert plus à rien : elle suit le héros.
+  const boarding = forward ? (ranged.militia?.home ?? 0) : 0;
+  stash[String(c.from)] =
+    boarding > 0 && ranged.militia
+      ? { ...ranged, militia: { ...ranged.militia, home: 0 } }
+      : ranged;
   // La réserve de l'île d'arrivée quitte sa carte : elle revient dans `base.militia`.
   let saved: ExpeditionMap | undefined;
   let arrival: MilitiaState | undefined;
@@ -542,7 +551,7 @@ export function landCrossing(
     },
     crossing: c,
     firstTime: !saved,
-    militia: arrival ?? emptyMilitia(c.arriveAt),
+    militia: returnMilitia(arrival ?? emptyMilitia(c.arriveAt), boarding),
   };
 }
 

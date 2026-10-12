@@ -314,18 +314,55 @@ describe('🛡️ une réserve de milice par île', () => {
   const booked = startCrossing(start, 2, [], T0);
   const arrive = booked.crossing!.arriveAt;
   const mil1 = { home: 4, producedAt: T0, seq: 9 };
-  it('la milice ne traverse pas : rangée avec l’île 1, l’île 2 démarre vide', () => {
+  it('vers l’île suivante, la réserve embarque avec le héros (2026-10-12)', () => {
     const l = landCrossing(booked, arrive, 30, mil1);
-    expect(l.militia).toEqual({ home: 0, producedAt: arrive, seq: 0 });
-    expect(l.map.islands!['1']!.militia).toEqual(mil1);
+    expect(l.militia).toEqual({ home: 4, producedAt: arrive, seq: 0 });
+    expect(l.map.islands!['1']!.militia).toEqual({ ...mil1, home: 0 });
     expect(l.map.militia).toBeUndefined();
+  });
+  it('les miliciens retirés d’un lieu fixe au départ arrivent avec le héros', () => {
+    // Signalé : « j'ai vidé un lieu de ses 5 miliciens, je n'en ai qu'un à l'arrivée ».
+    const mine = {
+      id: 'ctl_mine',
+      type: 'control',
+      level: 10,
+      x: 50,
+      y: 50,
+      distNorm: 0.3,
+      spawnedAt: T0,
+      expiresAt: 9e15,
+      control: {
+        kind: 'mine',
+        owner: 'player',
+        faction: 'bandits',
+        size: 1,
+        garrison: ['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'],
+        retakes: 0,
+        since: T0,
+        collectedAt: T0,
+      },
+    } as Poi;
+    const held = { ...start, pois: [...start.pois, mine] };
+    const go = startCrossing(held, 2, [], T0, 0, { ctl_mine: 0 });
+    const l = landCrossing(go, go.crossing!.arriveAt, 30, { home: 0, producedAt: T0, seq: 5 });
+    expect(l.militia.home).toBe(5);
+    expect(l.map.islands!['1']!.militia!.home).toBe(0);
+    const left = l.map.islands!['1']!.pois.find((p) => p.id === 'ctl_mine');
+    expect(left?.control?.garrison ?? []).toEqual([]);
+  });
+  it('vers une île précédente, la réserve reste où elle est', () => {
+    const on2 = landCrossing(booked, arrive, 30, mil1).map;
+    const back = startCrossing(on2, 1, [], arrive + 10);
+    const l = landCrossing(back, back.crossing!.arriveAt, 30, { home: 3, producedAt: T0, seq: 3 });
+    expect(l.map.islands!['2']!.militia!.home).toBe(3);
   });
   it('au retour, la réserve de l’île 1 revient, celle de l’île 2 est rangée', () => {
     const on2 = landCrossing(booked, arrive, 30, mil1);
     const mil2 = { home: 1, producedAt: arrive, seq: 1 };
     const back = startCrossing(on2.map, 1, [], arrive + 10);
     const l = landCrossing(back, back.crossing!.arriveAt, 30, mil2);
-    expect(l.militia).toEqual(mil1);
+    // Sa réserve était partie avec le héros vers l'île 2 : il n'en reste rien.
+    expect(l.militia).toEqual({ ...mil1, home: 0 });
     expect(l.map.militia).toBeUndefined();
     expect(l.map.islands!['2']!.militia).toEqual(mil2);
   });

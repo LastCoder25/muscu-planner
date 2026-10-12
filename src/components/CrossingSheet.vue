@@ -85,13 +85,13 @@
         </p>
       </template>
 
-      <!-- 🛡️ La milice reste sur l'île quittée (2026-10-08, demandé) : on choisit où. Posée au
-           débarquement, tant que les places et la réserve le permettent. -->
+      <!-- 🛡️ On choisit combien de miliciens restent sur chaque lieu fixe de l'île quittée
+           (2026-10-08) ; tous les autres embarquent avec le héros (2026-10-12, `landCrossing`). -->
       <div v-if="forward && militiaPoints.length && militiaTotal > 0" class="cs-mil">
         <div class="cs-mil-head">
-          <b>🛡️ Où reste ta milice ?</b>
+          <b>🛡️ Qui reste garder l'île ?</b>
           <span class="cs-mil-left" :class="{ zero: militiaLeft === 0 }"
-            >{{ militiaLeft }} en réserve</span
+            >⛵ {{ militiaLeft }} {{ militiaLeft > 1 ? 'viennent' : 'vient' }} avec toi</span
           >
         </div>
         <p v-if="militiaTransit > 0" class="cs-mil-transit">

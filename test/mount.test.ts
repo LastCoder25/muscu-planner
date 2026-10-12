@@ -614,9 +614,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(forced).toContain('île 1 est pacifiée');
     expect(forced).not.toMatch(/2\/2\s+champions/);
     expect(forced).toContain('Le départ attend le retour de tes troupes');
-    // 🛡️ Vers l'avant, on choisit où reste la milice (2026-10-08).
-    expect(forced).toContain('Où reste ta milice');
-    expect(forced).toContain('2 en réserve');
+    // 🛡️ Vers l'avant, on choisit qui reste ; les autres viennent avec le héros (2026-10-12).
+    expect(forced).toContain('Qui reste garder');
+    expect(forced).toContain('2 viennent avec toi');
     let back = '';
     await mountIt(
       CrossingSheet,

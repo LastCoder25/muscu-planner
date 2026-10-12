@@ -114,7 +114,9 @@ describe('🛡️ on choisit où reste la milice', () => {
     const left = l.map.islands!['1']!;
     expect(count(left, 'ctl_a')).toBe(2);
     expect(count(left, 'ctl_b')).toBe(0);
-    expect(left.militia!.home).toBe(2);
+    // Ce qui n'est posé sur aucun lieu embarque avec le héros (2026-10-12).
+    expect(left.militia!.home).toBe(0);
+    expect(l.militia.home).toBe(2);
   });
   it('un retour vers une île visitée n’emporte aucun plan', () => {
     const on2 = { ...island1(), archipel: archipelOn(2) } as ExpeditionMap;
