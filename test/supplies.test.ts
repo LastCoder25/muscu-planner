@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SUPPLY,
+  SUPPLY_IDS,
   CONSUMABLE_IDS,
   isBoostId,
   isTomeId,
@@ -38,6 +39,7 @@ import {
   partyLegMin,
   suppliesBlocker,
   supplyTarget,
+  usefulSupplies,
 } from '@/lib/party';
 import { HARVEST_TYPES, haulPills, type PartyResult, type Poi } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
@@ -484,5 +486,18 @@ describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
     expect(suppliesBlocker(['potion', 'cor'], target)).toBeNull();
     expect(suppliesBlocker(['lanterne'], target)).toMatch(/Lanterne/);
     expect(suppliesBlocker(['potion', 'potion'], target)).not.toBeNull();
+  });
+
+  it('🪄 usefulSupplies (planificateur) : garde ceux qui servent, un de chaque, jamais refusé', () => {
+    const camp = supplyTarget(poiAt(20, 'camp'), false, 2);
+    const kit = usefulSupplies(['potion', 'lanterne', 'cor', 'potion', 'sceau', 'boost5'], camp);
+    expect(kit).toEqual(['potion', 'cor']);
+    expect(suppliesBlocker(kit, camp)).toBeNull();
+    // Sur chaque type de lieu, ce qu'il rend passe toujours le refus du store.
+    for (const type of ['camp', 'rift', 'mine', 'well', 'lair'] as const)
+      for (const hero of [false, true]) {
+        const t = supplyTarget(poiAt(20, type), hero, 2);
+        expect(suppliesBlocker(usefulSupplies(SUPPLY_IDS, t), t), type).toBeNull();
+      }
   });
 });

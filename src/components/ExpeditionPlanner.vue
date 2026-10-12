@@ -68,6 +68,26 @@
       </div>
     </div>
 
+    <!-- 🎒 LES CONSOMMABLES DANS LES SIMULATIONS (demandé) : on coche ceux qu'on accepte
+         d'engager ; chaque expédition proposée emporte ceux qui lui servent, tant qu'il en
+         reste en stock, et son 🎯 % et son trajet les comptent. Rien de coché = aucun. -->
+    <div v-if="section === 'plan' && supplyStock.length" class="pl-row">
+      <span class="pl-lab">🎒 Consommables à engager</span>
+      <div class="pl-chips">
+        <button
+          v-for="s in supplyStock"
+          :key="s.id"
+          type="button"
+          class="pl-chip"
+          :class="{ on: s.on }"
+          :aria-pressed="s.on"
+          :title="`${s.def.name} — ${s.def.what}`"
+          @click="toggleSupply(s.id)"
+        >
+          {{ s.def.emoji }} {{ s.def.name }} <span class="pl-n">×{{ s.n }}</span>
+        </button>
+      </div>
+    </div>
     <p v-if="section === 'plan'" class="pl-pool">
       👥 {{ poolInfo.base }} champion{{ poolInfo.base > 1 ? 's' : '' }} libre{{
         poolInfo.base > 1 ? 's' : ''
@@ -158,6 +178,12 @@
               >
               <span class="pt-stat">⏱️ {{ fmt(r.tripMin) }}</span>
               <span v-if="r.xp" class="pt-stat">⭐ {{ r.xp }}</span>
+              <span
+                v-if="r.supplies.length"
+                class="pt-stat pt-sup"
+                :title="r.supplies.map((id) => SUPPLIES[id].name).join(' · ')"
+                >🎒 {{ r.supplies.map((id) => SUPPLIES[id].emoji).join('') }}</span
+              >
               <button type="button" class="pt-go" :disabled="!!launching" @click="launch(r)">
                 {{ launching === r.key ? '⏳' : 'Lancer' }}
               </button>
@@ -277,6 +303,7 @@ import { characterRank } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import type { PlanMode } from '@/lib/expeditionPlanner';
+import { SUPPLIES } from '@/lib/supplies';
 
 const props = defineProps<{
   planner: ReturnType<typeof useExpeditionPlanner>;
@@ -288,6 +315,8 @@ const {
   mode,
   withGarrisons,
   withHero,
+  supplyStock,
+  toggleSupply,
   heroFree,
   poolInfo,
   running,
@@ -641,6 +670,11 @@ const avgTrip = computed(
 }
 .pt-sup {
   letter-spacing: 1px;
+}
+.pl-n {
+  font-size: 11px;
+  color: var(--dim);
+  font-weight: 700;
 }
 .pl-pool,
 .pl-empty,

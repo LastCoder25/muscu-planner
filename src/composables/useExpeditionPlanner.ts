@@ -40,10 +40,17 @@ import {
   type DeploySpot,
   type DeployUnit,
 } from '@/lib/mapDeployment';
-import { partyHeroBlocker, partyLegMin, partySendBlocker } from '@/lib/party';
+import {
+  partyHeroBlocker,
+  partyLegMin,
+  partySendBlocker,
+  supplyTarget,
+  usefulSupplies,
+} from '@/lib/party';
 import { CAMP_SAMPLE_MULT, FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import type { BaseState } from '@/lib/raid';
 import { withRiftCut } from '@/lib/rift';
+import { SUPPLIES, SUPPLY_IDS, type SupplyId } from '@/lib/supplies';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -77,6 +84,7 @@ const REF_SIZE = 2.5;
 const THRESHOLD_KEY = 'muscu:planner:threshold';
 const MODE_KEY = 'muscu:planner:mode';
 const GARRISON_KEY = 'muscu:planner:garrisons';
+const SUPPLY_KEY = 'muscu:planner:supplies';
 
 function readNum(key: string, def: number): number {
   try {
@@ -146,6 +154,8 @@ export interface PlannerRow {
   win: number;
   tripMin: number;
   xp: number;
+  /** 🎒 Les consommables emportés (déjà comptés dans le 🎯 % et le trajet). */
+  supplies: SupplyId[];
 }
 
 /**
@@ -166,6 +176,32 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   watch(threshold, (v) => save(THRESHOLD_KEY, String(v)));
   watch(mode, (v) => save(MODE_KEY, v));
   watch(withGarrisons, (v) => save(GARRISON_KEY, v ? '1' : '0'));
+  /** 🎒 Les consommables que le joueur AUTORISE dans les simulations (demandé : « pouvoir
+   *  rajouter des consommables sur les simulations d'optimisation des expéditions »). Rien par
+   *  défaut : on ne dépense jamais un objet que le joueur n'a pas choisi d'engager. */
+  const allowedSupplies = ref<SupplyId[]>(
+    (readStr(SUPPLY_KEY) ?? '')
+      .split(',')
+      .filter((id): id is SupplyId => (SUPPLY_IDS as readonly string[]).includes(id)),
+  );
+  watch(allowedSupplies, (v) => save(SUPPLY_KEY, v.join(',')));
+  /** Le stock emportable (consommables de VOYAGE en stock), tuile par tuile. Un consommable
+   *  qui ne part pas en voyage (sceau, boost, tome) n'y figure pas : il ne sert à aucune
+   *  simulation. */
+  const supplyStock = computed(() => {
+    const stock = char.row?.supplies ?? {};
+    return SUPPLY_IDS.filter((id) => SUPPLIES[id].voyage && (stock[id] ?? 0) > 0).map((id) => ({
+      id,
+      def: SUPPLIES[id],
+      n: stock[id]!,
+      on: allowedSupplies.value.includes(id),
+    }));
+  });
+  function toggleSupply(id: SupplyId) {
+    allowedSupplies.value = allowedSupplies.value.includes(id)
+      ? allowedSupplies.value.filter((x) => x !== id)
+      : [...allowedSupplies.value, id];
+  }
 
   const running = ref(false);
   const progress = ref(0);
@@ -261,10 +297,16 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       const targets = ctx.targets.value;
       const total = Math.max(1, targets.length * 6);
       let done = 0;
+      // 🎒 Le stock des consommables autorisés : jamais plus que ce qu'on possède.
+      const owned = char.row?.supplies ?? {};
+      const stock: Record<string, number> = {};
+      for (const r of supplyStock.value) if (r.on) stock[r.id] = owned[r.id] ?? 0;
+      const sup = (kit: readonly string[]) => kit as readonly SupplyId[];
       const res = await planExpeditions(targets, units, {
         threshold: threshold.value / 100,
         mode: mode.value,
         maxTeam: MAX_TEAM,
+        stock,
         cancelled: () => me !== run,
         // ⚔️ Des garnisons en jeu : une équipe peut se réunir de plusieurs endroits.
         combined: withGarrisons.value,
@@ -287,18 +329,25 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
               now,
             );
           },
-          win: (t, us) =>
+          // 🎒 Ce que l'équipe emporte : les consommables autorisés qui lui SERVENT là
+          // (`usefulSupplies`, la règle de la tuile grisée et du refus du store).
+          kit: (t, us, avail) =>
+            usefulSupplies(
+              sup(avail),
+              supplyTarget(withRiftCut(t, base), hasHero(us), advsOf(us).length),
+            ),
+          win: (t, us, kit) =>
             partyWinChance(
               withRiftCut(t, base),
               advsOf(us),
-              road,
+              { ...road, supplies: [...sup(kit)] },
               hasHero(us) ? hero : null,
               now,
               FORECAST_SAMPLES,
             ),
           // ⚔️ Plusieurs points de départ (attaque combinée) : chaque groupe à son pas, depuis
           // chez lui ; tout le monde arrive ensemble, donc l'aller-retour du plus lent.
-          tripMin: (t, us) =>
+          tripMin: (t, us, kit) =>
             Math.max(
               ...groupsOf(us).map(([origin, g]) => {
                 const advs = advsOf(g);
@@ -307,6 +356,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
                     hero: hasHero(g),
                     travelMult: ctx.travelMult.value,
                     gearSpeed: advGearRoles(advs, road.advGear).speed,
+                    supplies: sup(kit),
                   });
                 const from = points.get(origin);
                 return 2 * (from ? legFromSpot(t, from, legOf) : legOf(t));
@@ -336,6 +386,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         win: tr.win,
         tripMin: tr.tripMin,
         xp: Math.round(tr.xp),
+        supplies: [...sup(tr.kit)],
       }));
       unreachable.value = res.unreachable;
       progress.value = 1;
@@ -603,7 +654,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     repoTeams.value = null;
     repoMoves.value = [];
   }
-  watch([threshold, mode, withGarrisons, withHero], reset);
+  watch([threshold, mode, withGarrisons, withHero, allowedSupplies], reset);
   watch([threshold, withHero], resetRepo);
 
   /** Lance UNE proposition. Rend la raison d'un refus (`null` = parti). */
@@ -621,6 +672,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         })),
         playerLevel: r.hero ? ctx.progressionLevel.value : ctx.heroLevel.value,
         now: Date.now(),
+        supplies: r.supplies,
       });
     return char.sendParty(uid, r.poi, {
       hero: r.hero ? heroObj() : null,
@@ -628,6 +680,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       // Même règle que l'écran d'envoi : avec le héros, son niveau de progression.
       playerLevel: r.hero ? ctx.progressionLevel.value : ctx.heroLevel.value,
       now: Date.now(),
+      // 🎒 Les consommables du plan : le store les revérifie (`suppliesBlocker`, stock).
+      supplies: r.supplies,
       ...(r.from ? { fromControlId: r.from.id } : {}),
     });
   }
@@ -678,6 +732,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     mode,
     withGarrisons,
     withHero,
+    supplyStock,
+    toggleSupply,
     heroFree,
     poolInfo,
     anyForceFree,

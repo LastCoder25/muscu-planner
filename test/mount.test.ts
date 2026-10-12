@@ -303,6 +303,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       mode: ref('events'),
       withGarrisons: ref(false),
       withHero: ref(true),
+      supplyStock: ref([
+        {
+          id: 'rations',
+          def: { emoji: '🥖', name: 'Rations de route', what: '' },
+          n: 3,
+          on: false,
+        },
+      ]),
+      toggleSupply: () => undefined,
       heroFree: ref(true),
       poolInfo: ref({ base: 3, garrison: 2 }),
       running: ref(false),
@@ -318,6 +327,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           win: 0.94,
           tripMin: 75,
           xp: 120,
+          supplies: ['rations'],
         },
       ]),
       unreachable: ref([poi]),
@@ -349,6 +359,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).toContain('3 champions libres');
     expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
     expect(html).toContain('1 lieu hors de portée');
+    // 🎒 Les consommables à engager (stock affiché) et ceux qu'une proposition emporte.
+    expect(html).toContain('Consommables à engager');
+    expect(html).toContain('×3');
+    expect(html).toContain('🎒 🥖');
     // 👥 La répartition vit dans son propre panneau (demandé) : pas ici.
     expect(html).not.toContain('Répartir l’effectif');
 
@@ -1248,9 +1262,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (out = h),
         // 🏠 Signalé : « quand je clique sur la base ça ne fait rien » : la toucher ouvre le
         // bloc qui fait venir sa milice sur l'île active.
-        (host) => (host.querySelector('.rim-town') as unknown as HTMLElement).dispatchEvent(
-          new Event('click', { bubbles: true }),
-        ),
+        (host) =>
+          (host.querySelector('.rim-town') as unknown as HTMLElement).dispatchEvent(
+            new Event('click', { bubbles: true }),
+          ),
       ),
     ).toBeNull();
     expect(out).toMatch(/class="rim-town[^"]*"[^>]*role="button"/);

@@ -252,3 +252,94 @@ describe('planificateur — attaque combinée et temps occupé', () => {
     expect(r.trips[0]!.units.map((x) => x.id).sort()).toEqual(['a', 'b']);
   });
 });
+
+describe('planificateur — consommables autorisés (stock)', () => {
+  // 🧪 « potion » ajoute 4 de puissance ; « rations » divise le trajet par deux ; « inutile »
+  // n'est jamais emporté (`kit` ne le rend pas, comme `usefulSupplies`).
+  const sdeps: PlanDeps<T> = {
+    ...deps,
+    win: (t, us, kit) =>
+      Math.min(
+        1,
+        (us.reduce((s, x) => s + x.power, 0) + (kit.includes('potion') ? 4 : 0)) / t.need,
+      ),
+    tripMin: (t, _us, kit) => (kit.includes('rations') ? t.min / 2 : t.min),
+    kit: (_t, _us, avail) => avail.filter((id) => id !== 'inutile'),
+  };
+  const run = (targets: T[], units: PlanUnit[], stock?: Record<string, number>) =>
+    planExpeditions(targets, units, {
+      threshold: 0.9,
+      mode: 'events',
+      maxTeam: 6,
+      deps: sdeps,
+      ...(stock ? { stock } : {}),
+    });
+
+  it('sans stock : aucun consommable, comme avant', async () => {
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)]))!;
+    expect(r.trips).toEqual([]);
+    expect(r.unreachable.map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('une potion autorisée rend un lieu prenable, et le pronostic la compte', async () => {
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], { potion: 1 }))!;
+    expect(r.trips).toHaveLength(1);
+    expect(r.trips[0]!.kit).toEqual(['potion']);
+    expect(r.trips[0]!.win).toBe(1);
+  });
+
+  it('le trajet compte les rations ; un consommable inutile n’est jamais emporté', async () => {
+    const r = (await run([{ id: 'a', need: 1, min: 60, xp: 1 }], [u('A', 1)], {
+      rations: 2,
+      inutile: 5,
+    }))!;
+    expect(r.trips[0]!.kit).toEqual(['rations']);
+    expect(r.trips[0]!.tripMin).toBe(30);
+  });
+
+  it('le stock se partage : jamais plus de voyages avec une potion que de potions', async () => {
+    const targets = [
+      { id: 'a', need: 5, min: 30, xp: 1 },
+      { id: 'b', need: 5, min: 40, xp: 1 },
+      { id: 'c', need: 5, min: 50, xp: 1 },
+    ];
+    const r = (await run(targets, [u('A', 1), u('B', 1), u('C', 1)], { potion: 2 }))!;
+    expect(r.trips.filter((t) => t.kit.includes('potion'))).toHaveLength(2);
+    expect(r.trips).toHaveLength(2);
+    expect(r.unreachable.map((t) => t.id)).toHaveLength(1);
+  });
+
+  it('une équipe intacte qui avait compté sur une potion déjà prise est recalculée', async () => {
+    // Chaque lieu n'accepte que SON champion : la première passe garde des équipes distinctes,
+    // toutes avec une potion. Le stock (1) n'en sert qu'une : les deux autres sont recalculées
+    // sans, et ne passent plus.
+    const own: PlanDeps<T> = { ...sdeps, fits: (t, us) => us.every((x) => x.id === t.id) };
+    const r = (await planExpeditions(
+      [
+        { id: 'a', need: 5, min: 30, xp: 1 },
+        { id: 'b', need: 5, min: 40, xp: 1 },
+        { id: 'c', need: 5, min: 50, xp: 1 },
+      ],
+      // Un point de départ chacun : la première passe trouve bien chaque champion seul.
+      [u('a', 1, 'A'), u('b', 1, 'B'), u('c', 1, 'C')],
+      { threshold: 0.9, mode: 'events', maxTeam: 6, deps: own, stock: { potion: 1 } },
+    ))!;
+    expect(r.trips).toHaveLength(1);
+    expect(r.trips[0]!.kit).toEqual(['potion']);
+    expect(r.unreachable).toHaveLength(2);
+  });
+
+  it('un stock épuisé n’est plus emporté : pas de potion sans potion', async () => {
+    const r = (await run([{ id: 'a', need: 5, min: 60, xp: 1 }], [u('A', 1)], { potion: 0 }))!;
+    expect(r.trips).toEqual([]);
+  });
+
+  it('mode XP : un champion ajouté ne fait pas prendre de consommable en plus', async () => {
+    const r = (await planExpeditions(
+      [{ id: 'a', need: 5, min: 60, xp: 10 }],
+      [u('A', 1), u('B', 1)],
+      { threshold: 0.9, mode: 'xp', maxTeam: 6, deps: sdeps, stock: { potion: 1 } },
+    ))!;
+    expect(r.trips.flatMap((t) => t.kit).filter((k) => k === 'potion').length).toBe(1);
+  });
+});

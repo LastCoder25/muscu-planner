@@ -198,6 +198,13 @@ export function supplyTarget(poi: Poi, hero: boolean, escort: number): SupplyTar
   };
 }
 
+/** 🎒 Parmi ces consommables, ceux qui SERVENT sur ce voyage (un de chaque type) — ce que le
+ *  planificateur d'expéditions fait emporter. ⚠️ Même règle que `suppliesBlocker` : ce qu'il
+ *  rend n'est jamais refusé par le store. */
+export function usefulSupplies(ids: readonly SupplyId[], t: SupplyTarget): SupplyId[] {
+  return [...new Set(ids)].filter((id) => !supplyUselessWhy(id, t));
+}
+
 /** Pourquoi on ne peut pas emporter ces consommables sur ce voyage — `null` s'ils servent
  *  tous. ⚠️ SOURCE UNIQUE de l'écran (tuile grisée et sa raison) et du store (refus). */
 export function suppliesBlocker(ids: readonly SupplyId[], t: SupplyTarget): string | null {
