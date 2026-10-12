@@ -16,7 +16,20 @@
       <svg :viewBox="`${view.x} ${view.y} ${view.size} ${view.size}`" class="rim-svg">
         <IslandTerrain :t="terr" :view="view" />
         <!-- 🏰 La base (île 1) ou 🏘️ le village du port (îles 2 à 5) : le même dessin que la carte active. -->
-        <MapTown :island="island.id" :row="townRow" />
+        <!-- 🏠 CLIQUABLE (2026-10-12, signalé : « quand je clique sur la base ça ne fait
+             rien ») : sa réserve se fait venir sur l'île active, comme sur la fiche de l'île. -->
+        <g
+          class="rim-town"
+          :class="{ sel: sel === BASE }"
+          role="button"
+          tabindex="0"
+          :aria-label="`${townName} · ${reserve} milicien${reserve > 1 ? 's' : ''} en réserve`"
+          @click="toggle(BASE)"
+          @keydown.enter.prevent="toggle(BASE)"
+          @keydown.space.prevent="toggle(BASE)"
+        >
+          <MapTown :island="island.id" :row="townRow" />
+        </g>
         <g
           v-for="p in points"
           :key="p.id"
@@ -44,6 +57,16 @@
     <!-- 🛡️ Les lieux tenus, en tuiles : le lieu touché (sur la carte ou ici) se gère dessous. -->
     <div class="rim-list">
       <button
+        type="button"
+        class="rim-tile"
+        :class="{ sel: sel === BASE }"
+        @click="toggle(BASE)"
+      >
+        <span class="rt-emo">{{ island.id === 1 ? '🏰' : '🏘️' }}</span>
+        <span class="rt-name">{{ townName }}</span>
+        <span class="rt-n">🛡️ {{ reserve }}</span>
+      </button>
+      <button
         v-for="p in points"
         :key="p.id"
         type="button"
@@ -56,6 +79,51 @@
         <span class="rt-n">🛡️ {{ p.militia }}</span>
       </button>
       <p v-if="!points.length" class="rim-empty">Aucun lieu tenu sur cette île.</p>
+    </div>
+    <!-- ⛵🛡️ La base touchée : faire venir sa milice sur l'île active (`militiaSea.ts`). -->
+    <div v-if="sel === BASE" class="rim-manage">
+      <div class="rm-name">{{ island.id === 1 ? '🏰' : '🏘️' }} {{ townName }}</div>
+      <template v-if="shippable > 0 && activeId !== null">
+        <div class="rm-row">
+          <button
+            type="button"
+            class="rm-btn"
+            aria-label="Un milicien de moins"
+            :disabled="busy || shipN <= 1"
+            @click="shipCount = shipN - 1"
+          >
+            −
+          </button>
+          <span class="rm-count">🛡️ {{ shipN }}</span>
+          <button
+            type="button"
+            class="rm-btn"
+            aria-label="Un milicien de plus"
+            :disabled="busy || shipN >= shippable"
+            @click="shipCount = shipN + 1"
+          >
+            +
+          </button>
+        </div>
+        <button
+          type="button"
+          class="rm-ship"
+          :disabled="busy"
+          @click="emit('ship', { island: island.id, n: shipN })"
+        >
+          ⛵ Faire venir {{ shipN }} milicien{{ shipN > 1 ? 's' : '' }} sur l'île {{ activeId }}
+        </button>
+        <p class="rm-note">
+          2 h de mer. La réserve part d'abord, puis les lieux les plus garnis.
+        </p>
+      </template>
+      <p v-else class="rm-note">
+        {{
+          reserve + points.reduce((s, p) => s + p.militia, 0) < 1
+            ? 'Plus aucun milicien sur cette île.'
+            : `L'île ${activeId ?? ''} n'a plus de place pour accueillir des miliciens.`
+        }}
+      </p>
     </div>
     <div v-if="selPt" class="rim-manage">
       <div class="rm-name">{{ selPt.emoji }} {{ selPt.label }}</div>
@@ -117,11 +185,24 @@ const props = defineProps<{
   /** Les champions restés sur l'île (`crossInfo.away`). */
   champions?: number;
   busy?: boolean;
+  /** ⛵ Combien de miliciens cette île peut envoyer sur l'île active (`shippableMilitia`). */
+  shippable: number;
+  /** L'île active, où ils arriveraient. */
+  activeId: number | null;
 }>();
 const emit = defineEmits<{
   close: [];
   militia: [{ pointId: string; delta: number }];
+  ship: [{ island: number; n: number }];
 }>();
+
+/** La sélection « base » (les lieux fixes sont sélectionnés par leur id). */
+const BASE = '__base';
+const townName = computed(() => (props.island.id === 1 ? 'Ta base' : 'Le village du port'));
+const toggle = (id: string) => (sel.value = sel.value === id ? null : id);
+/** ⛵ Combien faire venir : 5 par défaut (une garnison pleine), borné à ce que l'île peut envoyer. */
+const shipCount = ref(5);
+const shipN = computed(() => Math.max(1, Math.min(shipCount.value, props.shippable)));
 
 const view = computed(() => mapViewOf(props.map));
 /** ⚫ Sous le village : les champions restés là, puis la milice en réserve (le héros est ailleurs). */
@@ -189,8 +270,33 @@ watch(
   height: auto;
   aspect-ratio: 1;
 }
-.rim-pt {
+.rim-pt,
+.rim-town {
   cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.rim-town.sel :deep(.town-wall),
+.rim-town:focus-visible :deep(.town-wall) {
+  stroke: var(--accent);
+}
+.rm-ship {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rm-ship:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .rim-hit {
   fill: transparent;

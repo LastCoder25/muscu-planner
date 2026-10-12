@@ -1236,13 +1236,23 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           map,
           remote: [{ id: 'ctl_mine', label: 'Mine fortifiée', emoji: '⛏️', militia: 5, room: 0 }],
           reserve: 10,
+          shippable: 7,
+          activeId: 2,
         },
         ROW,
         undefined,
         '/',
         (h) => (out = h),
+        // 🏠 Signalé : « quand je clique sur la base ça ne fait rien » : la toucher ouvre le
+        // bloc qui fait venir sa milice sur l'île active.
+        (host) => (host.querySelector('.rim-town') as unknown as HTMLElement).dispatchEvent(
+          new Event('click', { bubbles: true }),
+        ),
       ),
     ).toBeNull();
+    expect(out).toMatch(/class="rim-town[^"]*"[^>]*role="button"/);
+    expect(out).toContain('Faire venir 5 miliciens sur l');
+    expect(out).toContain('Ta base');
     expect(out).toContain(`Île 1 · ${isl.name}`);
     expect(out).toContain('10 en réserve');
     expect(out).toContain('Mine fortifiée');

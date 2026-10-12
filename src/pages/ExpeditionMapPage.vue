@@ -16,6 +16,9 @@
       :reserve="viewed.reserve"
       :champions="crossInfo.away[viewed.island.id] ?? 0"
       :busy="archBusy"
+      :shippable="shippable[viewed.island.id] ?? 0"
+      :active-id="island?.id ?? null"
+      @ship="shipMilitiaFrom"
       @close="viewIsland = null"
       @militia="(e) => moveMilitia({ island: viewed!.island.id, ...e })"
     >
