@@ -391,21 +391,11 @@
                       type="button"
                       class="gear-btn"
                       :class="{ active: g.locked }"
-                      :title="g.locked ? 'Déverrouiller' : 'Verrouiller (protège de la vente)'"
+                      :title="g.locked ? 'Déverrouiller' : 'Verrouiller'"
                       :aria-label="g.locked ? 'Déverrouiller' : 'Verrouiller'"
                       @click="toggleGearLock(g)"
                     >
                       {{ g.locked ? '🔒' : '🔓' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="gear-btn"
-                      :disabled="!!g.locked || !!ownerOf(g)"
-                      :title="`Vendre (+${advGearSellValue(g)} 🪙)`"
-                      :aria-label="`Vendre pour ${advGearSellValue(g)} or`"
-                      @click="sellOneGear(g)"
-                    >
-                      🪙
                     </button>
                   </div>
                 </div>
@@ -1006,7 +996,6 @@ import {
   advGearCells,
   advGearModelOf,
   advGearOptions,
-  advGearSellValue,
   advLooks,
   canWearAdvGear,
   pendingAdvGear,
@@ -1277,7 +1266,7 @@ watch(
   },
 );
 
-// ── 🗡️ LE STOCK — équiper / vendre / verrouiller une pièce d'aventurier ──
+// ── 🗡️ LE STOCK — équiper / verrouiller une pièce d'aventurier (plus de vente, demandé) ──
 // ⚠️ Même politique que le sac du héros : 🔒 protège des deux, une pièce PORTÉE
 // (`Adventurer.gear`, BRUT — même lecture que `dropAdvGear` côté store) ne se cède pas.
 /** Le stock, par LETTRE (S, A, B), puis du rang le plus haut au plus bas, puis par
@@ -1377,16 +1366,6 @@ function lineageLabel(l: Lineage): string {
 }
 function toggleGearLock(g: AdvGear) {
   void pair((uid) => char.toggleAdvGearLock(uid, g.id));
-}
-/** ⚠️ CONFIRMATION, comme le sac du héros — une pièce vendue est définitivement perdue. */
-function sellOneGear(g: AdvGear) {
-  const gain = advGearSellValue(g);
-  $q.dialog({
-    title: 'Vendre cette pièce ?',
-    message: `« ${g.name} » partira définitivement contre ${gain} 🪙.`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: `Vendre (+${gain} 🪙)`, color: 'negative' },
-  }).onOk(() => void pair((uid) => char.sellAdvGear(uid, [g.id])));
 }
 
 const busy = ref(false);

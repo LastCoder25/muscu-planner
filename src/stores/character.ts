@@ -308,7 +308,6 @@ import {
 import { caravanLegMin, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
-  advGearSellValue,
   canWearAdvGear,
   rollGachaPiece,
   advGearModelOf,
@@ -3842,26 +3841,6 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { adventurers });
   }
 
-  /** Retire des pièces du STOCK et les désassigne. 🔒 et pièces PORTÉES exclues —
-   *  même politique que le sac du héros. Helper de la vente. */
-  function dropAdvGear(cur: CharacterRow, ids: string[]) {
-    const worn = new Set((cur.adventurers ?? []).flatMap((a) => Object.values(a.gear ?? {})));
-    const stock = cur.adv_gear?.stock ?? [];
-    const gone = stock.filter((g) => ids.includes(g.id) && !g.locked && !worn.has(g.id));
-    return {
-      gone,
-      state: { stock: stock.filter((g) => !gone.includes(g)) },
-    };
-  }
-  /** 🪙 VEND des pièces du stock — la moitié d'un objet du héros de même grade. */
-  async function sellAdvGear(userId: string, ids: string[]) {
-    const cur = row.value;
-    if (!cur) return;
-    const { gone, state } = dropAdvGear(cur, ids);
-    if (!gone.length) return;
-    const gold = gone.reduce((s, g) => s + advGearSellValue(g), 0);
-    await persist(userId, { gold: cur.gold + gold, adv_gear: state });
-  }
   /** 🔒 Verrouille/déverrouille une pièce du stock — protégée de la vente, comme un objet
    *  du héros. */
   async function toggleAdvGearLock(userId: string, id: string) {
@@ -6859,7 +6838,6 @@ export const useCharacterStore = defineStore('character', () => {
     awakenGear,
     awakenAllGear,
     stripAllAdvGear,
-    sellAdvGear,
     toggleAdvGearLock,
     withAdvGear,
     autoAssignGear,
