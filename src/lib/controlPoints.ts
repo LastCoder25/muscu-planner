@@ -3851,7 +3851,8 @@ export interface ControlRosterRow {
   /** ⚔️⏳ Ceux de la garnison réservés pour une attaque combinée qui part d'ici : encore là,
    *  mais engagés (dessinés comme en expédition). */
   engaged: string[];
-  assault: { ids: string[]; inMs: number } | null;
+  /** `hero` : le héros marche avec l'assaut (2 places, dessinées comme un héros en route). */
+  assault: { ids: string[]; inMs: number; hero: boolean } | null;
   /** 🧝 Le héros sur ce point : `posted` (en garnison), `coming` (en route), `away` (en sortie)
    *  ou `engaged` (encore là, réservé par une attaque combinée en attente) — 2 places. */
   hero: 'posted' | 'coming' | 'away' | 'engaged' | null;
@@ -3860,7 +3861,7 @@ export interface ControlRosterRow {
 }
 export function controlRoster(
   map: ExpeditionMap | null | undefined,
-  assaults: readonly { poiId: string; midAt: number; ids: readonly string[] }[],
+  assaults: readonly { poiId: string; midAt: number; ids: readonly string[]; hero?: boolean }[],
   now: number,
   playerLevel: number,
   /** ⚔️⏳ Les champions réservés par une attaque combinée en attente (`waitingFrom`).
@@ -3890,7 +3891,11 @@ export function controlRoster(
           .sort((a, b) => a.midAt - b.midAt);
         const assault =
           !held && march.length
-            ? { ids: march.flatMap((a) => [...a.ids]), inMs: march[0]!.midAt - now }
+            ? {
+                ids: march.flatMap((a) => [...a.ids]),
+                inMs: march[0]!.midAt - now,
+                hero: march.some((a) => !!a.hero),
+              }
             : null;
         const status: ControlRosterStatus = !held
           ? assault || c.assault
@@ -4156,8 +4161,10 @@ export function garrisonDots(row: ControlRosterRow): string {
     // ⚔️ Un point ennemi qu'on attaque : nos champions en marche occupent déjà leurs places
     // (au plus celles du point — ceux en trop rentrent après la prise).
     if (!row.assault) return '';
-    const go = Math.min(row.assault.ids.length, row.seats);
-    return 'r'.repeat(go) + free(go);
+    // 🧝 Le héros qui mène l'assaut prend ses 2 places, reliées (`g`), avant les champions.
+    const hero = row.assault.hero ? 'g'.repeat(MILITIA.heroSeats) : '';
+    const go = Math.max(0, Math.min(row.assault.ids.length, row.seats - hero.length));
+    return hero + 'r'.repeat(go) + free(hero.length + go);
   }
   // ⚔️⏳ Un champion réservé pour une attaque combinée est encore là, mais engagé : il se
   // dessine comme en expédition (demandé : « les montrer comme occupés »).

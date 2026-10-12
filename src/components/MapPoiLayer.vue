@@ -52,7 +52,7 @@
           class="ctl-bg"
           :class="[p.control.owner, { assault: p.control.assault }]"
         />
-        <text :x="p.x" :y="p.y + 1.6" class="poi-emo">{{ CONTROL_EMO[p.control.kind] }}</text>
+        <text :x="p.x" :y="p.y + 1.6" class="poi-emo">{{ poiEmo(p) }}</text>
         <line :x1="p.x + 5.2" :y1="p.y - 5.2" :x2="p.x + 5.2" :y2="p.y - 10.4" class="ctl-mast" />
         <path
           :d="`M${p.x + 5.2},${p.y - 10.4} l4.2,1.3 l-4.2,1.3 z`"
@@ -211,7 +211,7 @@ import { computed } from 'vue';
 import QgFrame from '@/components/QgFrame.vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
-import { CONTROL_EMO, HELD_COLOR, heroDotLinks, isHeldControl } from '@/lib/controlPoints';
+import { HELD_COLOR, heroDotLinks, isHeldControl } from '@/lib/controlPoints';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import { RIFT_MAP_ICON, riftMapBox } from '@/lib/riftPortal';

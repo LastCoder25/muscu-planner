@@ -33,6 +33,8 @@ export interface Island {
   objectiveEmoji: string;
   /** 🏯 Le DERNIER objectif est différent des autres (île 3 : la citadelle des morts). */
   keystone?: { name: string; emoji: string };
+  /** 🏰 L'icône de la forteresse adverse, en accord avec son nom. */
+  fortressEmoji: string;
   faction: RaidFaction;
 }
 
@@ -44,6 +46,7 @@ export const ISLANDS: readonly Island[] = [
     emoji: '🗡️',
     threat: 'Camps de brigands',
     fortress: 'Le Fort des pillards',
+    fortressEmoji: '🏴‍☠️',
     objectives: 2,
     objective: 'Camp de brigands',
     objectiveEmoji: '⛺',
@@ -57,6 +60,7 @@ export const ISLANDS: readonly Island[] = [
     emoji: '🐺',
     threat: 'Nids qui se multiplient',
     fortress: 'La Tanière-port',
+    fortressEmoji: '🐾',
     objectives: 3,
     objective: 'Nid',
     objectiveEmoji: '🪺',
@@ -70,11 +74,12 @@ export const ISLANDS: readonly Island[] = [
     emoji: '💀',
     threat: 'Cimetières et citadelle',
     fortress: 'Le Bastion des marées',
+    fortressEmoji: '🌊',
     // 🪦 Deux cimetières + la citadelle des morts (la roadmap : « 2 cimetières + la citadelle »).
     objectives: 3,
     objective: 'Cimetière',
     objectiveEmoji: '🪦',
-    keystone: { name: 'Citadelle des morts', emoji: '🏯' },
+    keystone: { name: 'Citadelle des morts', emoji: '💀' },
     faction: 'mortsvivants',
     minLevel: 41,
     maxLevel: 60,
@@ -85,9 +90,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '⚔️',
     threat: 'Camps de guerre, armée mobile',
     fortress: 'Le Fort du seigneur',
+    fortressEmoji: '👑',
     objectives: 3,
     objective: 'Camp de guerre',
-    objectiveEmoji: '🚩',
+    objectiveEmoji: '⚔️',
     faction: 'bandits',
     minLevel: 61,
     maxLevel: 80,
@@ -98,9 +104,10 @@ export const ISLANDS: readonly Island[] = [
     emoji: '🌑',
     threat: 'Sanctuaires maudits',
     fortress: 'La Citadelle maudite',
+    fortressEmoji: '🌑',
     objectives: 3,
     objective: 'Sanctuaire maudit',
-    objectiveEmoji: '🔮',
+    objectiveEmoji: '⛩️',
     faction: 'mortsvivants',
     minLevel: 81,
     maxLevel: 100,

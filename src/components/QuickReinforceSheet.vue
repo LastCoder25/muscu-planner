@@ -11,8 +11,8 @@
     <div v-if="poi && poi.control" class="qr">
       <div class="qr-head">
         <span class="qr-title"
-          >➕ Renfort · {{ CONTROL_EMO[poi.control.kind] }}
-          {{ CONTROL_LABEL[poi.control.kind] }}</span
+          >➕ Renfort · {{ poiEmo(poi) }}
+          {{ poiLabel(poi) }}</span
         >
         <button type="button" class="qr-x" aria-label="Fermer" @click="emit('close')">✕</button>
       </div>
@@ -198,8 +198,8 @@ import { computed } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
-import { CONTROL_EMO, CONTROL_LABEL, defendsControl } from '@/lib/controlPoints';
-import type { Poi } from '@/lib/expedition';
+import { defendsControl } from '@/lib/controlPoints';
+import { poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import { MILITIA, MILITIA_NAME } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { formatDurationMin } from '@/lib/duration';

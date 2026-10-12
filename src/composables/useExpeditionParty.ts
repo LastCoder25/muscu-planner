@@ -33,8 +33,6 @@ import {
   type GainTeam,
 } from '@/lib/partyForecast';
 import {
-  CONTROL_EMO,
-  CONTROL_LABEL,
   champSeatsWithHero,
   holdSeats,
   garrisonHold,
@@ -64,7 +62,7 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import type { Combatant } from '@/lib/combat';
-import { isWarbandPoi, type Poi } from '@/lib/expedition';
+import { isWarbandPoi, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -176,8 +174,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
         {
           id: p.id,
           poi: p,
-          emo: CONTROL_EMO[p.control.kind],
-          label: CONTROL_LABEL[p.control.kind],
+          emo: poiEmo(p),
+          label: poiLabel(p),
           n: ready.length,
         },
       ];
@@ -213,8 +211,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
       {
         id: p.id,
         poi: p,
-        emo: CONTROL_EMO[p.control.kind],
-        label: CONTROL_LABEL[p.control.kind],
+        emo: poiEmo(p),
+        label: poiLabel(p),
         n: 0,
       },
     ];

@@ -49,7 +49,7 @@ describe('🗂️ controlRoster', () => {
     );
     const r = row(rows, MINE);
     expect(r.status).toBe('assault');
-    expect(r.assault).toEqual({ ids: ['a', 'b'], inMs: 3 * H });
+    expect(r.assault).toEqual({ ids: ['a', 'b'], inMs: 3 * H, hero: false });
     // Arrivée passée : ce n'est plus une marche.
     expect(
       row(

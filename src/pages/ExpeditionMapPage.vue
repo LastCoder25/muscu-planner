@@ -1562,6 +1562,7 @@ import {
   CARTO_TYPES,
   type CartoType,
   poiLabel,
+  poiEmo,
   type ExpeditionMessage,
   EXPE,
   travelPosition,
@@ -1714,7 +1715,6 @@ import {
 } from '@/lib/adventurers';
 import { formatCountdown, formatDuration, formatDurationMin } from '@/lib/duration';
 import {
-  CONTROL_EMO,
   CONTROL_LABEL,
   CONTROL_YIELD,
   controlFreeSeats,
@@ -3248,7 +3248,7 @@ const swapCandidates = computed(() => {
   const reserved = char.reservedIds;
   for (const q of map.pois) {
     if (q.id === p.id || q.control?.owner !== 'player') continue;
-    const label = CONTROL_LABEL[q.control.kind];
+    const label = poiLabel(q);
     const before = defenseOf(q)?.pct ?? 0;
     for (const id of q.control.garrison) {
       if (reserved.has(id)) continue;
@@ -3264,7 +3264,7 @@ const swapCandidates = computed(() => {
           fromId: q.id,
           adv,
           name: adv ? adv.name : MILITIA_NAME,
-          where: `${CONTROL_EMO[q.control.kind]} ${label}`,
+          where: `${poiEmo(q)} ${label}`,
           min,
           other: why
             ? null
@@ -3351,8 +3351,8 @@ const transferTargets = computed(() => {
           : 0;
         return {
           id: p.id,
-          emo: CONTROL_EMO[p.control!.kind],
-          label: CONTROL_LABEL[p.control!.kind],
+          emo: poiEmo(p),
+          label: poiLabel(p),
           enemy: p.control!.owner !== 'player',
           free: garrisonFreeSeats(p.control),
           // Les miliciens sans place aujourd'hui (une fois servis les champions de la sélection).
@@ -4509,11 +4509,25 @@ const storedProd = computed(() =>
 const ctlRoster = computed(() =>
   controlRoster(
     char.row?.expedition_map,
-    char.partyList.map((g) => ({
-      poiId: g.poi.id,
-      midAt: g.midAt,
-      ids: tripCrew(g),
-    })),
+    [
+      ...char.partyList.map((g) => ({
+        poiId: g.poi.id,
+        midAt: g.midAt,
+        ids: tripCrew(g),
+      })),
+      // 🧝 L'assaut que le HÉROS mène voyage dans `expedition`, pas dans les groupes : sans
+      // lui, aucun point « en route » ne se dessinait sur le lieu visé.
+      ...(active.value
+        ? [
+            {
+              poiId: active.value.poi.id,
+              midAt: active.value.midAt,
+              ids: tripCrew(active.value),
+              hero: true,
+            },
+          ]
+        : []),
+    ],
     coarseNow.value,
     heroLevel.value,
     attackReservedIds(char.attackList),
@@ -4739,8 +4753,8 @@ const quickSources = computed(() => {
       ? [
           {
             fromId: from.id,
-            emo: CONTROL_EMO[from.control.kind],
-            label: CONTROL_LABEL[from.control.kind],
+            emo: poiEmo(from),
+            label: poiLabel(from),
             members,
           },
         ]
@@ -5084,8 +5098,8 @@ const baseTargets = computed(() =>
     .filter((p) => p.control?.owner === 'player')
     .map((p) => ({
       id: p.id,
-      emo: CONTROL_EMO[p.control!.kind],
-      label: CONTROL_LABEL[p.control!.kind],
+      emo: poiEmo(p),
+      label: poiLabel(p),
       control: p.control!,
     })),
 );

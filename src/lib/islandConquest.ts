@@ -652,7 +652,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
           faction: isl.faction,
           size: force.size,
           name: isl.fortress,
-          emoji: '🏰',
+          emoji: isl.fortressEmoji,
           ...(force.locked ? { locked: true } : {}),
         },
       ),
@@ -747,6 +747,9 @@ export function ensureIslandConquest(
     if (c.assault) continue;
     const wc = w.control!;
     const next: ControlState = { ...c, size: wc.size, faction: wc.faction };
+    // 🪦 Le nom et l'icône suivent l'île : un lieu posé avant gardait l'ancienne icône.
+    if (wc.name !== undefined) next.name = wc.name;
+    if (wc.emoji !== undefined) next.emoji = wc.emoji;
     if (wc.locked) next.locked = true;
     else delete next.locked;
     if (wc.razes) next.razes = true;
