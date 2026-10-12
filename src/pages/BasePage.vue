@@ -38,6 +38,9 @@
       </div>
       <span v-if="!prodPills.length" class="bar-chip dim">Aucun bâtiment de production</span>
       <span v-if="wounded" class="bar-chip hurt">🤕 Héros à l’infirmerie — {{ healIn }}</span>
+      <span v-else-if="heroWalkingHurt" class="bar-chip hurt">
+        🤕 Héros blessé, rentre à la base — {{ heroHomeIn }}
+      </span>
     </div>
 
     <!-- ── L'ENCEINTE ────────────────────────────────────────────────────────
@@ -947,10 +950,17 @@
              blessés en défense ou en convoi —, un champion au quart du tarif du héros. -->
         <div v-if="defSel.id === 'infirmary'" class="sh-garrison">
           <div class="sh-gtitle">🤕 Blessés — {{ patientCount }}</div>
-          <p v-if="!patientCount" class="sh-gnote">
+          <p v-if="!patientCount && !heroWalkingHurt" class="sh-gnote">
             Personne n’est alité. Un siège perdu envoie ici le héros s’il défendait et les champions
             tombés ; une expédition perdue, les champions de l’équipe.
           </p>
+          <div v-if="heroWalkingHurt" class="inf-row">
+            <span class="inf-emo">🦸</span>
+            <span class="inf-main">
+              <span class="inf-name">Ton héros</span>
+              <span class="inf-sub">rentre blessé — soins à son arrivée {{ heroHomeIn }}</span>
+            </span>
+          </div>
           <div v-if="wounded" class="inf-row">
             <span class="inf-emo">🦸</span>
             <span class="inf-main">
@@ -1063,6 +1073,7 @@ import {
   defensePerLevelLabel,
   raidIntervalMs,
   isWounded,
+  heroAtInfirmary,
   healCost,
   woundRemainingMs,
   advHealCost,
@@ -1184,7 +1195,15 @@ const merlons = computed(() =>
     };
   }),
 );
-const wounded = computed(() => isWounded(base.value, now.value));
+/** 🏥 À l'infirmerie, donc soignable. Blessé mais encore en route vers la base (retour à pied
+ *  d'une sortie), il ne l'est pas encore : comme un champion, il se soigne une fois arrivé. */
+const wounded = computed(() =>
+  heroAtInfirmary(base.value, char.row?.expedition_map, now.value),
+);
+const heroWalkingHurt = computed(() => isWounded(base.value, now.value) && !wounded.value);
+const heroHomeIn = computed(() =>
+  fmtDelay((char.row?.expedition_map?.heroReturnAt ?? now.value) - now.value),
+);
 
 /** ⚠️ SOURCE UNIQUE de « qui porte quoi », partagée par le panneau de forces et le
  *  combat : deux lectures différentes finiraient par se contredire. C’est le même objet

@@ -6,11 +6,11 @@ import {
   heroBackToPost,
   heroWalkVoyage,
   heroWalksHomeFrom,
-  heroHealedHome,
   stripChampions,
   unpostHero,
 } from '@/lib/islandConquest';
 import { heroStayedSplit } from '@/lib/party';
+import { heroAtInfirmary } from '@/lib/raid';
 import { EXPE, type ActiveExpedition, type ExpeditionMap, type Poi } from '@/lib/expedition';
 
 // 🧝 Passe « rendre le héros stable » (2026-10-07) : le héros posté sur un lieu fixe doit
@@ -127,14 +127,14 @@ describe('blessé au retour d’une sortie, il rentre à pied de son poste', () 
     const v = heroWalkVoyage(heroWalksHomeFrom(map([p]), p, NOW, 25), NOW + MIN);
     expect(v?.poi.id).toBe('a');
   });
-  it('soigné en chemin, il est aussitôt à la base (plus en marche)', () => {
+  it('il ne se soigne qu’arrivé à la base, comme un champion', () => {
     const p = post('a');
-    const healed = heroHealedHome(heroWalksHomeFrom(map([p]), p, NOW, 25));
-    expect(healed.heroReturnAt).toBeUndefined();
-    expect(healed.heroReturnFrom).toBeUndefined();
-    expect(heroWalkVoyage(healed, NOW + MIN)).toBeFalsy();
-    const idle = map([p]);
-    expect(heroHealedHome(idle)).toBe(idle);
+    const walking = heroWalksHomeFrom(map([p]), p, NOW, 25);
+    const base = { wound: { until: NOW + 25 * MIN + 90 * MIN } } as never;
+    expect(heroAtInfirmary(base, walking, NOW + MIN)).toBe(false);
+    expect(heroAtInfirmary(base, walking, NOW + 25 * MIN)).toBe(true);
+    expect(heroAtInfirmary(base, map([p]), NOW)).toBe(true);
+    expect(heroAtInfirmary({ wound: null } as never, map([p]), NOW)).toBe(false);
   });
 });
 

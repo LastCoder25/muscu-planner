@@ -1933,6 +1933,18 @@ export function isWounded(base: BaseState | null | undefined, now: number): bool
 export function woundRemainingMs(base: BaseState | null | undefined, now: number): number {
   return isWounded(base, now) ? base!.wound!.until - now : 0;
 }
+/** 🏥 LE HÉROS EST À L'INFIRMERIE — donc soignable. Blessé au retour d'une sortie, il rentre
+ *  À PIED (`heroReturnAt` à venir) et sa convalescence l'attend à l'arrivée : tant qu'il
+ *  marche, il n'est PAS à l'infirmerie et on ne le soigne pas (décision de l'utilisateur,
+ *  2026-10-12 : « soigné seulement quand il rentre à la base, comme tous les champions »).
+ *  Le pendant exact d'`advAtInfirmary` pour un champion. */
+export function heroAtInfirmary(
+  base: BaseState | null | undefined,
+  map: { heroReturnAt?: number } | null | undefined,
+  now: number,
+): boolean {
+  return isWounded(base, now) && (map?.heroReturnAt ?? 0) <= now;
+}
 /** Convalescence. L'Infirmerie l'abrège — c'est tout son intérêt. ⚠️ Bornée à
  *  `WOUND_MAX_MS` : elle doit rester COURTE devant l'intervalle entre deux sièges, sinon
  *  un héros encore alité manquerait la défense suivante et la défaite s'auto-entretiendrait. */

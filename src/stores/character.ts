@@ -187,7 +187,6 @@ import {
   syncHeroAway,
   heroKeepPostId,
   heroWalksHomeFrom,
-  heroHealedHome,
   turnBackComingHero,
   heroPostOf,
   heroBackToPost,
@@ -254,6 +253,7 @@ import {
   equipThenMerge,
   retireKennel,
   healCost,
+  heroAtInfirmary,
   woundRemainingMs,
   woundMsFor,
   type BaseState,
@@ -3604,15 +3604,14 @@ export const useCharacterStore = defineStore('character', () => {
   async function healHero(userId: string, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur?.base?.wound) return;
+    // 🏥 Il rentre encore à pied : les soins attendent son arrivée à la base.
+    if (!heroAtInfirmary(cur.base, cur.expedition_map, now))
+      throw new Error('Ton héros rentre à la base : il se soigne une fois arrivé.');
     const cost = healCost(woundRemainingMs(cur.base, now), playerLevel);
     if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour des soins d'urgence.`);
     await persistOptimistic(userId, {
       gold: cur.gold - cost,
       base: { ...cur.base, wound: null },
-      // ⛑️ Soigné pendant qu'il rentrait à pied : il est à la base, plus « en expédition ».
-      ...(cur.expedition_map?.heroReturnAt !== undefined
-        ? { expedition_map: heroHealedHome(cur.expedition_map) }
-        : {}),
     });
     return cost;
   }
