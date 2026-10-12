@@ -18,7 +18,9 @@
       :busy="archBusy"
       :shippable="shippable[viewed.island.id] ?? 0"
       :active-id="island?.id ?? null"
+      :sea-targets="seaTargetsFrom(viewed.island.id)"
       @ship="shipMilitiaFrom"
+      @sea="(e) => shipToPoint(viewed!.island.id, e)"
       @close="viewIsland = null"
       @militia="(e) => moveMilitia({ island: viewed!.island.id, ...e })"
     >
@@ -910,6 +912,15 @@
                 </button>
               </div>
             </div>
+            <!-- ⛵🏰 Ou ses MILICIENS par la mer, vers un lieu fixe d'une autre île
+                 (`shipPointBlocker`, la règle du store). -->
+            <MilitiaSeaSend
+              v-if="island && livePoi && liveControl?.owner === 'player'"
+              :destinations="seaTargetsFrom(island.id)"
+              :max="militiaIn(liveControl.garrison).length"
+              :busy="archBusy"
+              @send="(e) => shipToPoint(island!.id, { fromPoint: livePoi!.id, ...e })"
+            />
             <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
             <!-- 🕊️ Île pacifiée : personne ne viendra le reprendre, l'alerte mentirait. -->
@@ -1664,7 +1675,8 @@ import {
   visitedIslands,
   type RemotePoint,
 } from '@/lib/crossing';
-import { islandMilitiaStock, shippableMilitia } from '@/lib/militiaSea';
+import { islandMilitiaStock, seaDestinations, shippableMilitia } from '@/lib/militiaSea';
+import MilitiaSeaSend from '@/components/MilitiaSeaSend.vue';
 import { crossingAdvice } from '@/lib/crossingAdvice';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import CrossingScene from '@/components/CrossingScene.vue';
@@ -2027,6 +2039,37 @@ const archOn = {
   militia: moveMilitia,
   ship: shipMilitiaFrom,
 };
+/** ⛵🏰 Les lieux des autres îles où envoyer la milice d'un lieu de l'île `from`. */
+function seaTargetsFrom(from: number) {
+  return seaDestinations(char.row?.expedition_map, char.row?.base?.militia, from);
+}
+/** ⛵🏰 Envoie des miliciens d'un lieu fixe vers un lieu fixe d'une autre île (2 h de mer). */
+async function shipToPoint(
+  fromIsland: number,
+  e: { fromPoint: string; island: number; pointId: string; n: number; label: string },
+) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.shipMilitiaBetweenPoints(
+      uid,
+      { island: fromIsland, pointId: e.fromPoint },
+      { island: e.island, pointId: e.pointId },
+      e.n,
+      Date.now(),
+      heroLevel.value,
+    );
+    $q.notify({
+      type: 'positive',
+      message: `⛵ ${e.n} milicien${e.n > 1 ? 's' : ''} en mer vers ${e.label} (île ${e.island}) : arrivée dans 2 h.`,
+    });
+  } catch (err) {
+    $q.notify({ type: 'negative', message: (err as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 /** ⛵🛡️ Fait venir des miliciens d'une île rangée sur l'île active (2 h de mer). */
 async function shipMilitiaFrom(e: { island: number; n: number }) {
   const uid = auth.user?.id;

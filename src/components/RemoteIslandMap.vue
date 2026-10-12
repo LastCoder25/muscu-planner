@@ -160,6 +160,13 @@
         }}
         Le changement est immédiat : l'île est rangée, personne n'y marche.
       </p>
+      <!-- ⛵🏰 Ou vers un lieu fixe d'une AUTRE île (2 h de mer, place gardée). -->
+      <MilitiaSeaSend
+        :destinations="seaTargets ?? []"
+        :max="selPt.militia"
+        :busy="!!busy"
+        @send="(e) => emit('sea', { fromPoint: selPt!.id, ...e })"
+      />
     </div>
   </div>
 </template>
@@ -168,8 +175,10 @@
 import { computed, ref, watch } from 'vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import MapTown from '@/components/MapTown.vue';
+import MilitiaSeaSend from '@/components/MilitiaSeaSend.vue';
 import type { Island } from '@/lib/archipelago';
 import type { RemotePoint } from '@/lib/crossing';
+import type { SeaDestination } from '@/lib/militiaSea';
 import { mapViewOf, type ExpeditionMap } from '@/lib/expedition';
 import { islandTerrain } from '@/lib/islandTerrain';
 import { townDots } from '@/lib/townDots';
@@ -189,11 +198,14 @@ const props = defineProps<{
   shippable: number;
   /** L'île active, où ils arriveraient. */
   activeId: number | null;
+  /** ⛵🏰 Les lieux des autres îles où envoyer la milice d'un lieu (`seaDestinations`). */
+  seaTargets?: SeaDestination[] | undefined;
 }>();
 const emit = defineEmits<{
   close: [];
   militia: [{ pointId: string; delta: number }];
   ship: [{ island: number; n: number }];
+  sea: [{ fromPoint: string; island: number; pointId: string; n: number; label: string }];
 }>();
 
 /** La sélection « base » (les lieux fixes sont sélectionnés par leur id). */

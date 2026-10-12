@@ -960,6 +960,9 @@ export interface Crossing {
   /** ⛵🛡️ Une navigation de MILICIENS seuls (`militiaSea.ts`) : combien sont à bord (`ids`
    *  vide). Ils rejoignent la réserve de l'île où ils accostent. */
   militia?: number;
+  /** ⛵🏰 Les miliciens vont sur CE lieu fixe de l'île d'arrivée (`shipMilitiaToPoint`) : sa
+   *  place leur est gardée pendant la mer ; sans place à l'arrivée, ils restent en réserve. */
+  militiaTo?: string;
 }
 
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de

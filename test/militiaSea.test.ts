@@ -98,8 +98,8 @@ describe('⛵🛡️ faire venir des miliciens d’une île rangée', () => {
 
   it('à l’arrivée, ils rejoignent la réserve de l’île active', () => {
     const sent = shipMilitia(active2(), null, 1, 3, T0, 21)!;
-    expect(settleMilitiaSailings(sent, null, T0 + H)).toBeNull();
-    const done = settleMilitiaSailings(sent, { home: 1, producedAt: T0, seq: 0 }, T0 + 2 * H)!;
+    expect(settleMilitiaSailings(sent, null, T0 + H, 21)).toBeNull();
+    const done = settleMilitiaSailings(sent, { home: 1, producedAt: T0, seq: 0 }, T0 + 2 * H, 21)!;
     expect(done.reserve!.home).toBe(4);
     expect(done.map.sailings).toBeUndefined();
   });
@@ -115,7 +115,7 @@ describe('⛵🛡️ faire venir des miliciens d’une île rangée', () => {
       militia: 2,
     };
     const m = active2({ sailings: [sail] });
-    const done = settleMilitiaSailings(m, { home: 1, producedAt: T0, seq: 0 }, T0 + 2 * H)!;
+    const done = settleMilitiaSailings(m, { home: 1, producedAt: T0, seq: 0 }, T0 + 2 * H, 21)!;
     expect(done.reserve!.home).toBe(1);
     expect(done.map.islands!['1']!.militia!.home).toBe(4);
   });
@@ -134,7 +134,7 @@ describe('⛵🛡️ faire venir des miliciens d’une île rangée', () => {
     const m = active2({ sailings: [mil, champ] });
     const champs = settleSailings(m, [], T0 + 2 * H)!;
     expect(champs.map.sailings).toEqual([mil]);
-    const mils = settleMilitiaSailings(m, null, T0 + 2 * H)!;
+    const mils = settleMilitiaSailings(m, null, T0 + 2 * H, 21)!;
     expect(mils.map.sailings).toEqual([champ]);
   });
 

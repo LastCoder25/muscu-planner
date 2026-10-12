@@ -162,10 +162,14 @@ import {
   startCrossing,
 } from '@/lib/crossing';
 import {
+  POINT_SHIP_BLOCK_LABEL,
   SHIP_MILITIA_BLOCK_LABEL,
   settleMilitiaSailings,
   shipMilitia,
   shipMilitiaBlocker,
+  shipMilitiaToPoint,
+  shipPointBlocker,
+  type MilitiaSpot,
 } from '@/lib/militiaSea';
 import { basculeToArchipel } from '@/lib/archipelBascule';
 import {
@@ -2570,7 +2574,12 @@ export const useCharacterStore = defineStore('character', () => {
     // pu changer l'île active), pour qu'ils sachent s'ils sont « ici » ou ailleurs.
     // ⛵🛡️ Les miliciens arrivés d'une autre île rejoignent la réserve où ils accostent
     // (`militiaSea.ts`) — AVANT `settleSailings`, qui retire les navigations arrivées.
-    const milSea = settleMilitiaSailings(mapM, land?.militia ?? cur.base?.militia, now);
+    const milSea = settleMilitiaSailings(
+      mapM,
+      land?.militia ?? cur.base?.militia,
+      now,
+      level,
+    );
     const mapS = milSea?.map ?? mapM;
     const sail = settleSailings(mapS, advLanded ?? advBase, now);
     const map = sail?.map ?? mapS;
@@ -2786,6 +2795,26 @@ export const useCharacterStore = defineStore('character', () => {
     const why = shipMilitiaBlocker(map, cur.base?.militia, from, n);
     if (why) throw new Error(SHIP_MILITIA_BLOCK_LABEL[why]);
     const next = shipMilitia(map, cur.base?.militia, from, n, now, level);
+    if (next) await persist(userId, { expedition_map: next });
+  }
+  /** ⛵🏰 Envoie `n` miliciens d'un lieu fixe vers un lieu fixe d'une AUTRE île
+   *  (`shipMilitiaToPoint`) : 2 h de mer, leur place gardée. Le refus a sa raison
+   *  (`shipPointBlocker`). */
+  async function shipMilitiaBetweenPoints(
+    userId: string,
+    from: MilitiaSpot,
+    to: MilitiaSpot,
+    n: number,
+    now: number,
+    level: number,
+  ) {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return;
+    const why = shipPointBlocker(map, cur.base?.militia, from, to, n);
+    if (why) throw new Error(POINT_SHIP_BLOCK_LABEL[why]);
+    const next = shipMilitiaToPoint(map, cur.base?.militia, from, to, n, now, level);
     if (next) await persist(userId, { expedition_map: next });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
@@ -6844,6 +6873,7 @@ export const useCharacterStore = defineStore('character', () => {
     crossIsland,
     moveIslandMilitia,
     shipIslandMilitia,
+    shipMilitiaBetweenPoints,
     fortifyFor,
     crossingDepartAt,
     sailChampions,
