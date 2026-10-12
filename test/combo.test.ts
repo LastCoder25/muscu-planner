@@ -44,6 +44,7 @@ import {
   type ComboLeg,
   type ComboSet,
   comboEnded,
+  activeCombo,
   comboNextStatus,
   comboClosed,
   comboChestEligible,
@@ -1075,6 +1076,35 @@ describe('📅 le 360 se ferme à l’objectif, et paie ce qui est fait dans les
     expect(comboNextStatus(deux(sets(5), sets(5), { status: 'abandoned' }), JOUR)).toBe(
       'abandoned',
     );
+  });
+
+  // ── 🎯 « LE 360 EN COURS » — une seule règle (v0.905) ──────────────────────────────
+  // ⚠️ Signalé : « quand je regarde l'avancement du Défi 360 de Cypher, je ne vois pas son
+  // dernier en date mais l'ancien, déjà à 100 % ». Vérifié en base : il en avait bien DEUX
+  // en statut `active`, et l'écran d'un ami lisait une liste NON TRIÉE.
+  it('rend le PLUS RÉCENT en cours (la liste est triée du plus récent au plus ancien)', () => {
+    const recent = deux(sets(1), sets(1), { id: 'recent' });
+    // ⚠️ L'ancien doit être ENCORE en cours lui aussi : sinon l'ordre ne serait jamais éprouvé.
+    const ancien = deux(sets(1), sets(1), { id: 'ancien' });
+    expect(comboNextStatus(ancien, JOUR)).toBe('active');
+    expect(activeCombo([recent, ancien], JOUR)?.id).toBe('recent');
+  });
+
+  it('⚠️ RECALCULE le statut : un 360 périmé resté « actif » en base ne masque plus le neuf', () => {
+    // Le balayage de fermeture ne tourne que chez le propriétaire : chez un ami, la ligne
+    // porte encore `active` alors que sa période est passée.
+    const perime = deux(sets(1), sets(1), { id: 'perime' });
+    const neuf = deux(sets(1), sets(1), { id: 'neuf', start_date: '2026-01-12' });
+    expect(perime.status).toBe('active');
+    expect(comboNextStatus(perime, APRES)).toBe('done');
+    expect(activeCombo([perime, neuf], APRES)?.id).toBe('neuf');
+  });
+
+  it('un abandon n’est jamais « le 360 en cours »', () => {
+    const abandonne = deux(sets(1), sets(1), { id: 'ab', status: 'abandoned' });
+    const vrai = deux(sets(1), sets(1), { id: 'vrai' });
+    expect(activeCombo([abandonne, vrai], JOUR)?.id).toBe('vrai');
+    expect(activeCombo([abandonne], JOUR)).toBeNull();
   });
 
   it('⚠️ bouclé EN RETARD n’est pas payé comme à l’heure : seules les séries dans les temps', () => {
