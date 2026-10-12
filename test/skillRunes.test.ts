@@ -6,7 +6,11 @@ import {
   SKILLS,
   SKILL_IDS,
   SKILL_MAX_LEVEL,
-  SKILL_CUT_LEVEL,
+  SKILL_OVERCLOCK_LEVEL,
+  OVERCLOCK_MULT,
+  isOverclocked,
+  skillLevelTag,
+  overclockGain,
   SKILL_SLOTS,
   skillValue,
   skillsOfTier,
@@ -56,10 +60,33 @@ describe('🔮 le catalogue', () => {
 });
 
 describe('📈 le cumul', () => {
-  it('niveau maximum 5 par les runes, 6 taillé au lapidaire, et au-delà la valeur ne monte plus', () => {
+  it('niveau maximum 5 par les runes, la surcharge du lapidaire est stockée en 6, et rien au-delà', () => {
     expect(SKILL_MAX_LEVEL).toBe(5);
-    expect(SKILL_CUT_LEVEL).toBe(6);
-    for (const id of SKILL_IDS) expect(skillValue(id, 9)).toBe(skillValue(id, SKILL_CUT_LEVEL));
+    expect(SKILL_OVERCLOCK_LEVEL).toBe(6);
+    expect(LEVEL_CURVE.length).toBe(SKILL_MAX_LEVEL);
+    for (const id of SKILL_IDS)
+      expect(skillValue(id, 9)).toBe(skillValue(id, SKILL_OVERCLOCK_LEVEL));
+  });
+
+  it('⚡ la SURCHARGE vaut +50 % sur le niveau 5, pour toutes les compétences', () => {
+    expect(OVERCLOCK_MULT).toBe(1.5);
+    for (const id of SKILL_IDS) {
+      const five = SKILLS[id].base * LEVEL_CURVE[SKILL_MAX_LEVEL - 1]!;
+      expect(skillValue(id, SKILL_OVERCLOCK_LEVEL), id).toBeCloseTo(five * OVERCLOCK_MULT, 0);
+      // Plus que n'importe quel cran de la courbe (le plus gros vaut +70 %… de la base).
+      expect(
+        skillValue(id, SKILL_OVERCLOCK_LEVEL) - skillValue(id, SKILL_MAX_LEVEL),
+        id,
+      ).toBeGreaterThan(skillValue(id, 2) - skillValue(id, 1));
+    }
+  });
+
+  it('⚡ une compétence surchargée se lit niveau 5, jamais 6', () => {
+    expect(isOverclocked(5)).toBe(false);
+    expect(isOverclocked(6)).toBe(true);
+    expect(skillLevelTag(5)).toBe('5');
+    expect(skillLevelTag(6)).toBe('5⚡');
+    expect(overclockGain('crit')).toBe('32,4 % → 48,6 %');
   });
 
   it('⚠️ RENDEMENT DÉCROISSANT : chaque niveau apporte moins que le précédent', () => {

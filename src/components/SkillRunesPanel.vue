@@ -15,10 +15,10 @@
             <span class="srp-name">
               {{ SKILLS[s.id].name }}
               <b class="srp-lvl"
-                >Nv {{ s.level
+                >Nv {{ skillLevelTag(s.level)
                 }}{{
-                  s.level > SKILL_MAX_LEVEL
-                    ? ' · taillée 💎'
+                  isOverclocked(s.level)
+                    ? ' · surchargée'
                     : s.level === SKILL_MAX_LEVEL
                       ? ' · max'
                       : ''
@@ -45,7 +45,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { SKILLS, SKILL_MAX_LEVEL, skillValue, type SkillId } from '@/lib/skillRunes';
+import {
+  SKILLS,
+  SKILL_MAX_LEVEL,
+  isOverclocked,
+  skillLevelTag,
+  skillValue,
+  type SkillId,
+} from '@/lib/skillRunes';
 import { advRuneSkills, advSkillSlots, type Adventurer } from '@/lib/adventurers';
 
 /** `stock` : combien de compétences attendent au stock (pour le rappel). */

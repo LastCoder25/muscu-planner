@@ -298,7 +298,7 @@
 import { computed } from 'vue';
 import type { RepoTeamRow, useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
-import { SKILLS } from '@/lib/skillRunes';
+import { SKILLS, skillLevelTag } from '@/lib/skillRunes';
 import { SUPPORT_SKILLS } from '@/lib/mapDeployment';
 import { characterRank } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
@@ -351,7 +351,7 @@ const skillsOf = (a: Adventurer) =>
     .join('');
 const skillsTitle = (a: Adventurer) =>
   advRuneSkills(a)
-    .map((k) => `${SKILLS[k.id].name} ${k.level}`)
+    .map((k) => `${SKILLS[k.id].name} ${skillLevelTag(k.level)}`)
     .join(' · ');
 const rankOf = (p: Poi) => characterRank(poiDifficultyLevel(p));
 const fmt = (min: number) => formatDurationMin(min);

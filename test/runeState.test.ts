@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CHAMPIONS } from '@/data/champions';
-import { normalizeChampSkills, SKILL_CUT_LEVEL } from '@/lib/skillRunes';
+import { normalizeChampSkills, SKILL_OVERCLOCK_LEVEL } from '@/lib/skillRunes';
 import {
   AWAKEN_RUNE_COUNT,
   REFUND_PER_LEVEL,
@@ -152,7 +152,7 @@ describe('🪬 les compétences d’un champion', () => {
         { id: 'crit', level: 0 },
       ]),
     ).toEqual([
-      { id: 'pv', level: SKILL_CUT_LEVEL },
+      { id: 'pv', level: SKILL_OVERCLOCK_LEVEL },
       { id: 'crit', level: 1 },
     ]);
     expect(normalizeChampSkills('x')).toEqual([]);

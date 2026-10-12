@@ -658,9 +658,11 @@
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
-            <!-- 💎 LE LAPIDAIRE : une barre par champion (niveau 5 → 6). -->
+            <!-- ⚡ LE LAPIDAIRE : une barre par champion (surcharge d'une compétence niveau 5). -->
             <div v-if="liveControl.kind === 'lapidary'" class="carto-box">
-              <p class="carto-q">💎 Taille au niveau 6 — une barre par champion</p>
+              <p class="carto-q">
+                ⚡ Surcharge : +50 % sur une compétence niveau 5 — une barre par champion
+              </p>
               <p v-if="!lapisRows.length" class="carto-q">
                 Poste jusqu’à 5 champions qui portent une compétence au niveau 5.
               </p>
@@ -674,7 +676,8 @@
                     <i :style="{ width: Math.round(r.bar.pct * 100) + '%' }" />
                   </div>
                   <p class="lapis-left">
-                    {{ Math.round(r.bar.pct * 100) }} % · niveau 6 dans {{ r.left }}
+                    {{ Math.round(r.bar.pct * 100) }} % · surchargée dans {{ r.left }} · ⚡
+                    {{ r.gain }}
                   </p>
                   <div v-if="r.choices.length > 1" class="lapis-choices">
                     <button
@@ -684,7 +687,7 @@
                       class="carto-tile lapis-pick"
                       :class="{ on: r.bar.skill === k.id }"
                       :aria-pressed="r.bar.skill === k.id"
-                      :aria-label="`Tailler ${k.name}`"
+                      :aria-label="`Surcharger ${k.name}`"
                       :disabled="ctlBusy"
                       @click="chooseLapis(r.adv.id, k.id)"
                     >
@@ -694,7 +697,7 @@
                   </div>
                 </template>
                 <p v-else class="lapis-left">
-                  Aucune compétence au niveau 5 : rien à tailler pour lui.
+                  Aucune compétence au niveau 5 : rien à surcharger pour lui.
                 </p>
               </div>
             </div>
@@ -1583,7 +1586,7 @@ import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildi
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { SKILLS, type SkillId } from '@/lib/skillRunes';
+import { SKILLS, overclockGain, type SkillId } from '@/lib/skillRunes';
 import {
   POI_EMO,
   POI_LABEL,
@@ -3477,6 +3480,7 @@ const lapisRows = computed(() => {
         adv: a,
         bar,
         sk: bar ? SKILLS[bar.skill] : null,
+        gain: bar ? overclockGain(bar.skill) : '',
         left: bar ? formatDuration(bar.leftH * 3600_000) : '',
         choices: lapisCandidates(a).map((id) => ({
           id,

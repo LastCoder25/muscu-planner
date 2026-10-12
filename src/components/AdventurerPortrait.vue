@@ -152,10 +152,11 @@
         class="aps-cell"
         :class="{ empty: !s }"
         :style="s ? { '--tc': RUNE_COLOR[SKILLS[s.id].tier] } : {}"
-        :title="s ? `${SKILLS[s.id].name} · niveau ${s.level}` : 'Emplacement libre'"
+        :title="s ? `${SKILLS[s.id].name} · niveau ${skillLevelTag(s.level)}` : 'Emplacement libre'"
       >
         <template v-if="s"
-          >{{ SKILLS[s.id].emoji }}<b class="aps-lvl font-display">{{ s.level }}</b></template
+          >{{ SKILLS[s.id].emoji
+          }}<b class="aps-lvl font-display">{{ skillLevelTag(s.level) }}</b></template
         >
       </span>
     </button>
@@ -227,7 +228,7 @@ import {
   advSkillCells,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RUNE_COLOR, SKILLS } from '@/lib/skillRunes';
+import { RUNE_COLOR, SKILLS, skillLevelTag } from '@/lib/skillRunes';
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
 import { rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
