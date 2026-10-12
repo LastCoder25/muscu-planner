@@ -3939,6 +3939,17 @@ export function controlRoster(
  * rang n'appartient qu'aux ENNEMIS — ceux qui le défendent, puis ceux qui le reprennent.
  */
 export const isHeldControl = (p: Pick<Poi, 'control'>): boolean => p.control?.owner === 'player';
+/** 💀 Parmi les lieux TERRASSÉS par un voyage (`voyageVanquished`), ceux que la carte cesse de
+ *  dessiner. ⚠️ Un lieu fixe PRIS reste à nous : le cacher jusqu'au retour de l'équipe le faisait
+ *  disparaître de la carte (signalé : « j'ai pris le lapidaire et il a disparu » — son champion
+ *  y était posté, les autres rentraient encore). */
+export function vanquishedHidden(
+  ids: readonly string[],
+  pois: readonly Pick<Poi, 'id' | 'control'>[],
+): string[] {
+  const held = new Set(pois.filter(isHeldControl).map((p) => p.id));
+  return ids.filter((id) => !held.has(id));
+}
 /** 🏳️ La couleur d'un point tenu : ni celle d'un rang, ni l'accent, ni celle d'un trajet
  *  (héros bleu, équipes violet, renforts vert). ⚠️ Même valeur que `--held` (app.scss). */
 export const HELD_COLOR = '#ff6fb5';

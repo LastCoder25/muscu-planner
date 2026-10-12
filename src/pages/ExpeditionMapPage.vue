@@ -1742,6 +1742,7 @@ import {
   controlDefenseHold,
   defenderCount,
   lapidaryHours,
+  vanquishedHidden,
   defendersAtAttack,
   imminentControlKey,
   knownAttackAt,
@@ -2275,10 +2276,13 @@ function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
  *  SUR la carte (une armée en campagne n'en est pas retirée au départ). En chaîne d'ids, pour
  *  que les listes qui en dépendent ne changent qu'à un rapport. */
 const vanquishedKey = computed(() =>
-  [
-    ...(active.value && voyageVanquished(active.value, now.value) ? [active.value.poi.id] : []),
-    ...char.partyList.filter((g) => voyageVanquished(g, now.value)).map((g) => g.poi.id),
-  ]
+  vanquishedHidden(
+    [
+      ...(active.value && voyageVanquished(active.value, now.value) ? [active.value.poi.id] : []),
+      ...char.partyList.filter((g) => voyageVanquished(g, now.value)).map((g) => g.poi.id),
+    ],
+    pois.value,
+  )
     .sort()
     .join('|'),
 );
