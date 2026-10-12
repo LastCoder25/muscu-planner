@@ -42,8 +42,8 @@ function rift(m: ExpeditionMap): Poi {
 }
 /** Deux lieux tenus, attaques lointaines. */
 function held(m: ExpeditionMap): ExpeditionMap {
-  let out = captureControl(m, controlIdOf('distillery'), ['a', 'b', 'c'], NOW, 7);
-  out = captureControl(out, controlIdOf('altar'), ['d'], NOW, 7);
+  let out = captureControl(m, controlIdOf('circle'), ['a', 'b', 'c'], NOW, 7);
+  out = captureControl(out, controlIdOf('lab'), ['d'], NOW, 7);
   const far = NOW + 30 * DAY;
   return {
     ...out,
@@ -131,12 +131,12 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
       ...started,
       departures: dep,
       pois: started.pois.map((p) =>
-        p.control?.kind === 'altar' ? { ...p, control: { ...p.control, attackAt: soon } } : p,
+        p.control?.kind === 'lab' ? { ...p, control: { ...p.control, attackAt: soon } } : p,
       ),
     };
     const m = warlordRaids(m1, t);
-    expect(m.pois.find((p) => p.control?.kind === 'altar')!.control!.attackAt).toBe(soon);
-    const d = m.pois.find((p) => p.control?.kind === 'distillery')!.control!.attackAt!;
+    expect(m.pois.find((p) => p.control?.kind === 'lab')!.control!.attackAt).toBe(soon);
+    const d = m.pois.find((p) => p.control?.kind === 'circle')!.control!.attackAt!;
     expect(d).toBeGreaterThanOrEqual(t + H);
     expect(d).toBeLessThanOrEqual(t + 3 * H);
   });
@@ -148,9 +148,10 @@ describe('🔮 l’île 5 : les sanctuaires maudits', () => {
 });
 
 describe('🗿 l’autel des runes', () => {
-  it('l’île 5 porte l’autel et la distillerie — sans camp, ni mine, ni source', () => {
+  it('l’île 4 porte l’autel, l’île 5 le cercle et le lapidaire — sans camp, ni mine, ni source', () => {
+    expect(kinds(islandMap(4, 70))).toContain('altar');
     const k = kinds(islandMap());
-    for (const x of ['altar', 'distillery']) expect(k).toContain(x);
+    for (const x of ['circle', 'lapidary']) expect(k).toContain(x);
     expect(k).not.toContain('training');
     expect(k).not.toContain('mine');
     expect(k).not.toContain('mana');
@@ -161,7 +162,7 @@ describe('🗿 l’autel des runes', () => {
   });
   it('tenu au complet, une rune multicolore tous les 2 jours (étape 0)', () => {
     const id = controlIdOf('altar');
-    let m = islandMap();
+    let m = islandMap(4, 70);
     expect(poiLabel(m.pois.find((p) => p.id === id)!)).toContain('Autel des runes');
     m = captureControl(m, id, ['a', 'b', 'c'], NOW, 7);
     const got = harvestOver(m, id, NOW, 8 * 24, LV);
@@ -169,7 +170,7 @@ describe('🗿 l’autel des runes', () => {
     expect(got.runes).toBeGreaterThanOrEqual(3);
     expect(got.runes).toBeLessThanOrEqual(6);
     expect(got.gold + got.gearSeals + got.keys + got.summon + got.champSeals).toBe(0);
-    const one = captureControl(islandMap(), id, ['a'], NOW, 7);
+    const one = captureControl(islandMap(4, 70), id, ['a'], NOW, 7);
     expect(harvestOver(one, id, NOW, 8 * 24, LV).runes).toBeLessThan(got.runes);
   });
 });

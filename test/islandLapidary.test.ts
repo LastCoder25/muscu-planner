@@ -31,7 +31,7 @@ const LV = 50;
 const id = controlIdOf('lapidary');
 
 function island3(): ExpeditionMap {
-  const m = createMap(3, NOW, LV, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(3));
+  const m = createMap(3, NOW, LV, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(5));
   return ensureIslandConquest(ensureControls(m, NOW, LV, ISLAND_OUTPOST_LEVEL), NOW, LV);
 }
 const adv = (over: Partial<Adventurer> = {}): Adventurer =>
@@ -50,11 +50,11 @@ const adv = (over: Partial<Adventurer> = {}): Adventurer =>
     ...over,
   }) as Adventurer;
 
-describe('💎 le lapidaire de l’île 3', () => {
-  it('l’île 3 : lapidaire, arsenal, hospice', () => {
-    expect([...controlKindsOf({ archipel: archipelOn(3) })].sort()).toEqual([
-      'arsenal',
-      'hospice',
+describe('💎 le lapidaire de l’île 5', () => {
+  it('l’île 5 : cercle d’invocation, lapidaire, laboratoire', () => {
+    expect([...controlKindsOf({ archipel: archipelOn(5) })].sort()).toEqual([
+      'circle',
+      'lab',
       'lapidary',
     ]);
     expect(poiLabel(island3().pois.find((p) => p.id === id)!)).toContain('Lapidaire');

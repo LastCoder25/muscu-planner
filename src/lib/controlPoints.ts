@@ -496,21 +496,24 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   ossuary: 2.5,
   // ⚒️ Île 3 (2026-10-03) : face au camp, assez loin de lui pour un rang différent.
   arsenal: 3,
-  // 🌀 Île 4 (2026-10-04, 3ᵉ lieu de l'île) : la place du camp (fortin en 2, cartographe en 3).
-  circle: 1,
-  // 🗿 Île 5 : la place du jardin, qui n'y est pas.
-  altar: 2,
-  // 🧪 Île 5 : la place de la tour de guet (camp en 1, autel en 2).
-  distillery: 3,
+  // 🌀 Île 5 (2026-10-12, échangé avec l'autel) : la place qu'avait l'autel.
+  circle: 2,
+  // 🗿 Île 4 (2026-10-12, échangé avec le cercle) : la place qu'avait le cercle (fortin en 2,
+  // cartographe en 3).
+  altar: 1,
+  // 🧪 Île 3 (2026-10-12, échangée avec le lapidaire) : la place qu'avait le lapidaire
+  // (hospice en 1, arsenal en 3).
+  distillery: 2,
   // 🧱 Île 4 : la place du jardin (camp en 1).
   fort: 2,
   // 🗺️ Île 4 : la place de la tour de guet (camp en 1, fortin en 2).
   cartographer: 3,
-  // 💎 Île 3 : la place du jardin (camp en 1, arsenal en 3).
-  lapidary: 2,
-  // 🕯️ Île 3 : la place du camp (lapidaire en 2, arsenal en 3).
+  // 💎 Île 5 (2026-10-12, échangé avec la distillerie) : la place qu'avait la distillerie
+  // (laboratoire en 1, cercle en 2).
+  lapidary: 3,
+  // 🕯️ Île 3 : la place du camp (distillerie en 2, arsenal en 3).
   hospice: 1,
-  // ⚗️ Île 5 : la place du camp (autel en 2, distillerie en 3).
+  // ⚗️ Île 5 : la place du camp (cercle en 2, lapidaire en 3).
   lab: 1,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
@@ -1246,9 +1249,11 @@ const ISLAND_KINDS: Record<number, readonly ControlKind[]> = {
   // 🏝️ TROIS LIEUX FIXES PAR ÎLE (2026-10-04, décision de l'utilisateur) : archives (île 2),
   // hospice (île 3), cercle d'invocation (île 4), laboratoire (île 5).
   2: ['scriptorium', 'ossuary', 'archives'],
-  3: ['lapidary', 'arsenal', 'hospice'],
-  4: ['cartographer', 'fort', 'circle'],
-  5: ['altar', 'distillery', 'lab'],
+  // 🔀 2026-10-12 (décision de l'utilisateur) : distillerie ⇄ lapidaire (îles 3 et 5) et
+  // cercle d'invocation ⇄ autel des runes (îles 4 et 5).
+  3: ['distillery', 'arsenal', 'hospice'],
+  4: ['cartographer', 'fort', 'altar'],
+  5: ['circle', 'lapidary', 'lab'],
 };
 export function controlKindsOf(map: Pick<ExpeditionMap, 'archipel'>): readonly ControlKind[] {
   return (map.archipel && ISLAND_KINDS[map.archipel.island]) || CONTROL.kinds;

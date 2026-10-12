@@ -17,17 +17,17 @@ const NOW = Date.UTC(2026, 9, 3, 12);
 const H = 3600_000;
 
 function island5(L = 90): ExpeditionMap {
-  const m = createMap(5, NOW, L, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(5));
+  const m = createMap(5, NOW, L, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(3));
   return ensureIslandConquest(ensureControls(m, NOW, L, ISLAND_OUTPOST_LEVEL), NOW, L);
 }
 const id = controlIdOf('distillery');
 
-describe('🧪 la distillerie de l’île 5', () => {
-  it('l’île 5 : autel des runes, distillerie, laboratoire — sans mine ni source', () => {
-    expect([...controlKindsOf({ archipel: archipelOn(5) })].sort()).toEqual([
-      'altar',
+describe('🧪 la distillerie de l’île 3', () => {
+  it('l’île 3 : distillerie, arsenal, hospice — sans mine ni source', () => {
+    expect([...controlKindsOf({ archipel: archipelOn(3) })].sort()).toEqual([
+      'arsenal',
       'distillery',
-      'lab',
+      'hospice',
     ]);
     const p = island5().pois.find((q) => q.id === id)!;
     expect(poiLabel(p)).toContain('Distillerie');

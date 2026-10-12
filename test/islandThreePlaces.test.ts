@@ -20,7 +20,7 @@ import type { Adventurer } from '@/lib/adventurers';
 
 /**
  * 🏝️ TROIS LIEUX FIXES PAR ÎLE (2026-10-04, décision de l'utilisateur) : archives (île 2),
- * hospice (île 3), cercle d'invocation (île 4), laboratoire (île 5).
+ * hospice (île 3), cercle d'invocation (île 4, sur l'île 5 depuis le 2026-10-12), laboratoire (île 5).
  */
 const NOW = Date.UTC(2026, 9, 4, 12);
 const H = 3600_000;
@@ -57,7 +57,7 @@ describe('🏝️ trois lieux fixes par île', () => {
     }
     expect(controlKindsOf({ archipel: archipelOn(2) })).toContain('archives');
     expect(controlKindsOf({ archipel: archipelOn(3) })).toContain('hospice');
-    expect(controlKindsOf({ archipel: archipelOn(4) })).toContain('circle');
+    expect(controlKindsOf({ archipel: archipelOn(5) })).toContain('circle');
     expect(controlKindsOf({ archipel: archipelOn(5) })).toContain('lab');
   });
 
@@ -139,7 +139,7 @@ describe('⚗️ le laboratoire (île 5)', () => {
     expect(CONTROL.labHoursPerRune).toBe(96);
     for (const crew of [['a'], ['a', 'b', 'c'], ['a', 'b', 'c', 'd', 'e']]) {
       const lab = held(islandMap(5), controlIdOf('lab'), crew);
-      const alt = held(islandMap(5), controlIdOf('altar'), crew);
+      const alt = held(islandMap(4), controlIdOf('altar'), crew);
       const T = NOW + 40 * CONTROL.altarHoursPerRune * H;
       const gl = collectControl(lab, controlIdOf('lab'), T, L);
       const ga = collectControl(alt, controlIdOf('altar'), T, L);
@@ -151,7 +151,7 @@ describe('⚗️ le laboratoire (île 5)', () => {
   it('toutes ses runes « à partir du violet », jamais comptées bénies', () => {
     const crew = ['a', 'b', 'c', 'd', 'e'];
     const lab = held(islandMap(5), controlIdOf('lab'), crew);
-    const alt = held(islandMap(5), controlIdOf('altar'), crew);
+    const alt = held(islandMap(4), controlIdOf('altar'), crew);
     const T = NOW + 20 * CONTROL.labHoursPerRune * H;
     const gl = collectControl(lab, controlIdOf('lab'), T, L);
     const ga = collectControl(alt, controlIdOf('altar'), T, L);
