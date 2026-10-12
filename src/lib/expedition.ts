@@ -236,6 +236,10 @@ export interface ControlState {
    *  et les chocs qui l'ont faite (jamais appliqués deux fois). Effacés à la reprise. */
   retakeCut?: number;
   fieldHits?: string[];
+  /** 🕊️ TRÊVE d'un lieu pris sur une île (`controlPoints.holdGrace`) : `from` = l'heure de la
+   *  prise ; `held` = l'attaque la plus proche demandée pendant la trêve (elle tombe à la fin
+   *  de la trêve si elle est déjà passée). Retirée à la fin de la trêve. */
+  grace?: { from: number; held?: number };
   /** 🏰 Renforts en ROUTE vers le point tenu : ils rejoignent la garnison à `at`. Ils
    *  occupent déjà une place (jamais plus de 3 champions au total), mais ne produisent ni
    *  ne combattent avant d'être arrivés. `from` = leur départ de la ville (absent sur les
@@ -950,6 +954,9 @@ export interface Crossing {
   /** 🛡️ Vers l'avant : combien de miliciens laisser sur chaque lieu fixe de l'île quittée
    *  (id du lieu → nombre), appliqué au débarquement (`applyMilitiaPlan`). */
   militiaPlan?: Record<string, number>;
+  /** ⛵🛡️ Une navigation de MILICIENS seuls (`militiaSea.ts`) : combien sont à bord (`ids`
+   *  vide). Ils rejoignent la réserve de l'île où ils accostent. */
+  militia?: number;
 }
 
 /** 🏝️ Le niveau de trajet d'un lieu POSÉ en mode archipel : 0, donc aucun multiplicateur de

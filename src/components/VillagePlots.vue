@@ -93,7 +93,14 @@
               <span v-if="militia.away"> · {{ militia.away }} sur la carte</span>
             </span>
             <span class="pm-cap">
-              {{ militia.home + militia.away }} / {{ militia.cap }} ·
+              <!-- ⛵ Des miliciens venus d'autres îles peuvent dépasser le plafond de la
+                   Caserne : on le dit, sinon « 8 / 3 » se lit comme un bug. -->
+              {{
+                militia.home + militia.away > militia.cap
+                  ? `${militia.home + militia.away} (Caserne : ${militia.cap}, renforts d’autres îles compris)`
+                  : `${militia.home + militia.away} / ${militia.cap}`
+              }}
+              ·
               {{
                 militia.next ? `prochain dans ${formatDuration(militia.next)}` : 'effectif complet'
               }}

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { ISLAND_OUTPOST_LEVEL, archipelOn } from '@/lib/archipelago';
 import { createMap, type ExpeditionMap, type Poi } from '@/lib/expedition';
-import { controlYieldCard, dueRetakes, ensureControls, seatsOf } from '@/lib/controlPoints';
+import {
+  controlYieldCard,
+  dueRetakes,
+  ensureControls,
+  holdGrace,
+  seatsOf,
+} from '@/lib/controlPoints';
 import {
   ensureIslandConquest,
   FORTRESS_ID,
@@ -56,9 +62,11 @@ describe('🏳️ un objectif pris se tient', () => {
 });
 
 describe('🎯 la forteresse vise d’abord les objectifs qu’on tient', () => {
-  /** Un lieu fixe tenu, son attaque échue maintenant ; l'objectif 0 tenu, attaque lointaine. */
-  function setup(): ExpeditionMap {
-    const m0 = takeObjective(island(1), OBJ, ['a'], NOW);
+  /** Un lieu fixe tenu, son attaque échue maintenant ; l'objectif 0 tenu, attaque lointaine.
+   *  ⚠️ L'objectif est pris il y a 4 jours : sa trêve (`holdGrace`, 72 h au plus) est finie,
+   *  sinon il ne pourrait pas être attaqué maintenant. */
+  function setup(takenAt = NOW - 96 * H): ExpeditionMap {
+    const m0 = takeObjective(island(1), OBJ, ['a'], takenAt);
     const fixed = m0.pois.find((p) => p.control && !p.id.startsWith('isl_'))!;
     return {
       ...m0,
@@ -81,6 +89,12 @@ describe('🎯 la forteresse vise d’abord les objectifs qu’on tient', () => 
     expect(poi(r, OBJ)!.control!.attackAt).toBe(NOW - 1);
     expect(poi(r, fixedId)!.control!.attackAt).toBeGreaterThan(NOW);
     expect(dueRetakes(r, NOW).map((p) => p.id)).toEqual([OBJ]);
+  });
+  it('🕊️ un objectif tout juste pris est en trêve : le report ne le rend pas dû', () => {
+    const m = setup(NOW - H);
+    const r = holdGrace(redirectIslandAttacks(m, NOW), NOW);
+    expect(dueRetakes(r, NOW).map((p) => p.id)).toEqual([]);
+    expect(poi(r, OBJ)!.control!.attackAt).toBeGreaterThan(NOW);
   });
   it('sans objectif tenu, ou île pacifiée, rien ne change', () => {
     const m = setup();

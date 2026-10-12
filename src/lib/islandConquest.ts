@@ -38,6 +38,8 @@ import {
   walkHomeMs,
   heroPostBlocker,
   defenderCount,
+  graceOnCapture,
+  holdGrace,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
@@ -840,8 +842,12 @@ export function ensureIslandConquest(
   // 6. 🚩 L'armée mobile du seigneur de guerre (île 4), 🔮 les invasions combinées (île 5).
   // 7. 🐫 Les convois de ravitaillement de l'île 4.
   // 8. 🧭 Les trajets se mesurent depuis le point de départ.
+  // 9. 🕊️ Les trêves des lieux fraîchement pris : APRÈS tout ce qui avance une attaque.
   return withTownDistance(
-    warlordConvoys(warlordRaids(changed ? { ...map, pois } : map, now), now, vanquished),
+    holdGrace(
+      warlordConvoys(warlordRaids(changed ? { ...map, pois } : map, now), now, vanquished),
+      now,
+    ),
   );
 }
 
@@ -924,7 +930,10 @@ export function takeObjective(
   const razed = razeIslandTarget(map, id, at);
   // 🪺 Un nid pris est ABATTU : il quitte la carte, personne n'y reste.
   if (!before?.control || razed === map || before.control.razes) return razed;
-  return { ...razed, pois: [...razed.pois, heldObjective(before, garrison, at, hero)] };
+  return {
+    ...razed,
+    pois: [...razed.pois, heldObjective(before, garrison, at, hero, graceOnCapture(razed, at))],
+  };
 }
 
 /** 🏳️ L'objectif `before` (encore ennemi) devenu NÔTRE à `at`, avec sa garnison. */
@@ -933,6 +942,8 @@ function heldObjective(
   garrison: readonly string[],
   at: number,
   hero?: PostedHero,
+  /** 🕊️ La trêve de la prise (`graceOnCapture`), absente pour un objectif rendu. */
+  grace?: ControlState['grace'],
 ): Poi {
   const { attackAt: _a, raidAt: _r, locked: _l, hero: _h, heroUnit: _u, ...rest } = before.control!;
   void _a;
@@ -951,6 +962,7 @@ function heldObjective(
       collectedAt: at,
       assault: false,
       ...(hero ? { hero: true, heroUnit: hero } : {}),
+      ...(grace ? { grace } : {}),
     },
   };
 }

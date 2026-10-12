@@ -899,6 +899,10 @@
               attaque — sauf si un renfort arrive avant.
             </p>
             <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
+            <!-- 🕊️ Lieu fraîchement pris sur une île : la trêve et ce qui la lève. -->
+            <p v-if="liveGrace" class="ctl-line ctl-hold">
+              🕊️ <b>Trêve</b> : aucune reprise avant {{ liveGrace }}.
+            </p>
             <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
             <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
               ⚠️ <b>Bataille imminente</b> : une troupe ennemie marche sur ce lieu. Un renfort
@@ -1634,6 +1638,7 @@ import {
   visitedIslands,
   type RemotePoint,
 } from '@/lib/crossing';
+import { shippableMilitia } from '@/lib/militiaSea';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
@@ -1725,6 +1730,7 @@ import {
   trainingCapLevel,
   seatsOf,
   attackImminent,
+  graceInfo,
   attackerHidden,
   controlDefenseHold,
   defenderCount,
@@ -1895,6 +1901,15 @@ const remoteInfo = computed(() => {
     out[Number(k)] = remotePoints(im);
   return out;
 });
+/** ⛵🛡️ Combien de miliciens chaque île rangée peut envoyer sur l'île active (la règle du
+ *  store, `shippableMilitia`). */
+const shippable = computed(() => {
+  const map = char.row?.expedition_map;
+  const out: Record<number, number> = {};
+  for (const k of Object.keys(map?.islands ?? {}))
+    out[Number(k)] = shippableMilitia(map, char.row?.base?.militia, Number(k));
+  return out;
+});
 /** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
 /** 🗺️ L'île rangée qu'on regarde (`null` = la carte active). */
 const viewIsland = ref<number | null>(null);
@@ -1954,6 +1969,7 @@ const archBind = computed(() => ({
   away: crossInfo.value.away,
   militia: crossInfo.value.militia,
   remote: remoteInfo.value,
+  shippable: shippable.value,
   now: now.value,
 }));
 const archOn = {
@@ -1961,7 +1977,25 @@ const archOn = {
   cross: crossTo,
   fetch: fetchFrom,
   militia: moveMilitia,
+  ship: shipMilitiaFrom,
 };
+/** ⛵🛡️ Fait venir des miliciens d'une île rangée sur l'île active (2 h de mer). */
+async function shipMilitiaFrom(e: { island: number; n: number }) {
+  const uid = auth.user?.id;
+  if (!uid || archBusy.value) return;
+  archBusy.value = true;
+  try {
+    await char.shipIslandMilitia(uid, e.island, e.n, Date.now(), heroLevel.value);
+    $q.notify({
+      type: 'positive',
+      message: `⛵ ${e.n} milicien${e.n > 1 ? 's' : ''} en mer : arrivée dans 2 h.`,
+    });
+  } catch (err) {
+    $q.notify({ type: 'negative', message: (err as Error).message });
+  } finally {
+    archBusy.value = false;
+  }
+}
 async function moveMilitia(e: { island: number; pointId: string; delta: number }) {
   const uid = auth.user?.id;
   if (!uid || archBusy.value) return;
@@ -2738,6 +2772,23 @@ const livePoi = computed(() =>
     ? (char.row?.expedition_map?.pois.find((p) => p.id === selected.value!.id) ?? null)
     : null,
 );
+/** 🕊️ La trêve du lieu sélectionné (`graceInfo`) : ce qu'il reste à faire avant qu'on puisse
+ *  le reprendre, en mots. `null` hors trêve. */
+const liveGrace = computed(() => {
+  const map = char.row?.expedition_map;
+  const g = map ? graceInfo(livePoi.value?.control, map, coarseNow.value) : null;
+  if (!g) return null;
+  const parts: string[] = [];
+  if (g.departuresLeft > 0)
+    parts.push(`encore ${g.departuresLeft} départ${g.departuresLeft > 1 ? 's' : ''} sur la carte`);
+  if (g.militiaComing) parts.push('l’arrivée de tes miliciens en route');
+  const end = new Date(g.until).toLocaleString('fr-FR', {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${parts.join(' et ')} · au plus tard ${end}`;
+});
 /** 🏰 Qui occupe le point : la garnison (arrivée), puis les renforts en route. */
 const controlMembers = computed(() => {
   const c = liveControl.value;
@@ -4089,7 +4140,7 @@ const trips = computed(() => {
           (s.delayed ? ' — le départ attend le retour de tes troupes' : ''),
       },
       title:
-        `${s.hero ? 'Ton héros' : 'Champions'} vers ${isle} · ` +
+        `${s.hero ? 'Ton héros' : c.militia ? `🛡️ ${c.militia} milicien${c.militia > 1 ? 's' : ''}` : 'Champions'} vers ${isle} · ` +
         (s.waiting ? `départ à ${clock(c.departAt)}` : 'en mer') +
         ` · arrivée à ${clock(c.arriveAt)}` +
         (s.delayed ? ' · le départ attend le retour de tes troupes' : ''),
@@ -4380,41 +4431,39 @@ function onMapTab(t: MapTab) {
   }
   toggleOverlay(t.id);
 }
-const mapTabs = computed<MapTab[]>(
-  () => [
-    {
-      id: 'trips',
-      emo: '🧭',
-      label: 'Expéditions',
-      n: trips.value.length + attacks.value.length,
-      alert: attacks.value.length > 0,
-    },
-    { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
-    // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
-    // ⚠️ Utilisable seulement si au moins un effectif hors milicien est disponible (demandé).
-    // Sinon le rond reste VISIBLE mais grisé, et le toucher dit pourquoi (comme `repart`).
-    {
-      id: 'plan',
-      emo: '🪄',
-      label: 'Planifier des expéditions',
-      n: 0,
-      alert: false,
-      ...(planner.anyForceFree.value ? {} : { blocked: planBlockedWhy.value }),
-    },
-    // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
-    // ⚠️ Utilisable seulement quand TOUT l'effectif est disponible (demandé) : la répartition
-    // laisse de côté qui est en route ou à l'infirmerie. Sinon le rond reste VISIBLE mais
-    // grisé, et le toucher dit qui manque (demandé : un rond qui disparaît ne dit rien).
-    {
-      id: 'repart',
-      emo: '👥',
-      label: 'Répartir l’effectif',
-      n: 0,
-      alert: false,
-      ...(allForcesFree.value ? {} : { blocked: repartBlockedWhy.value }),
-    },
-  ],
-);
+const mapTabs = computed<MapTab[]>(() => [
+  {
+    id: 'trips',
+    emo: '🧭',
+    label: 'Expéditions',
+    n: trips.value.length + attacks.value.length,
+    alert: attacks.value.length > 0,
+  },
+  { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
+  // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
+  // ⚠️ Utilisable seulement si au moins un effectif hors milicien est disponible (demandé).
+  // Sinon le rond reste VISIBLE mais grisé, et le toucher dit pourquoi (comme `repart`).
+  {
+    id: 'plan',
+    emo: '🪄',
+    label: 'Planifier des expéditions',
+    n: 0,
+    alert: false,
+    ...(planner.anyForceFree.value ? {} : { blocked: planBlockedWhy.value }),
+  },
+  // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
+  // ⚠️ Utilisable seulement quand TOUT l'effectif est disponible (demandé) : la répartition
+  // laisse de côté qui est en route ou à l'infirmerie. Sinon le rond reste VISIBLE mais
+  // grisé, et le toucher dit qui manque (demandé : un rond qui disparaît ne dit rien).
+  {
+    id: 'repart',
+    emo: '👥',
+    label: 'Répartir l’effectif',
+    n: 0,
+    alert: false,
+    ...(allForcesFree.value ? {} : { blocked: repartBlockedWhy.value }),
+  },
+]);
 /** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */
 const storedProd = computed(() =>
   storedIslandProduction(char.row?.expedition_map, coarseNow.value, heroLevel.value),
@@ -5784,7 +5833,8 @@ watch(allForcesFree, (ok) => {
 });
 /** Pourquoi le planificateur est grisé : personne à envoyer (héros et champions indisponibles). */
 const planBlockedWhy = computed(() => {
-  if (!outpostBuilt.value) return 'Construis d’abord un Avant-poste sur ta base pour envoyer des expéditions.';
+  if (!outpostBuilt.value)
+    return 'Construis d’abord un Avant-poste sur ta base pour envoyer des expéditions.';
   if (char.advList.length === 0 && planner.repoMissing.value.hero)
     return 'Personne à envoyer : ton héros n’est pas disponible et tu n’as pas encore de champion.';
   return 'Personne à envoyer : ton héros et tous tes champions sont en route, à l’infirmerie ou retenus ailleurs. Le planificateur revient dès que l’un d’eux est libre.';

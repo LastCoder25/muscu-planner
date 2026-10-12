@@ -1604,8 +1604,18 @@ export function captureControl(
       tier: controlTier(p.control, at),
       tierAt: at,
       tierCharge: 0,
+      // 🕊️ Sur une île pas encore pacifiée : une trêve (`holdGrace`).
+      grace: graceOnCapture(map, at),
     },
   }));
+}
+
+/** 🕊️ La trêve posée à une prise : sur une île encore disputée, aucune ailleurs. */
+export function graceOnCapture(
+  map: Pick<ExpeditionMap, 'archipel'>,
+  at: number,
+): ControlState['grace'] {
+  return map.archipel && !islandPacified(map) ? { from: at } : undefined;
 }
 
 /**
@@ -3687,7 +3697,91 @@ export function imminentControlKey(map: ExpeditionMap | null, now: number): stri
     .join('|');
 }
 
-/** Les points tenus dont l'attaque est DUE à `now`, de la plus ancienne à la plus récente. */
+/**
+ * 🕊️ LA TRÊVE D'UN LIEU PRIS SUR UNE ÎLE (2026-10-12, décision de l'utilisateur : « trêve en
+ * nombre d'expéditions »). Sur une île neuve, les nids (île 2), le seigneur de guerre (île 4) et
+ * le report sur les objectifs peuvent avancer une reprise à quelques heures d'une prise — avant
+ * que les miliciens aient pu arriver. Aucune reprise tant que :
+ * - le joueur n'a pas fait `departures` DÉPARTS sur la carte depuis la prise (les départs que
+ *   compte le harcèlement : héros, équipes, attaques combinées — jamais un renfort, sinon
+ *   renforcer son lieu raccourcirait sa propre trêve) ;
+ * - OU des miliciens sont encore en route vers ce lieu, ou en mer vers l'île (plancher : la
+ *   trêve leur laisse le temps d'arriver) ;
+ * - et au plus `maxMs` après la prise (plafond : sinon il suffirait de ne plus partir en
+ *   expédition pour garder un lieu qui produit sans jamais être attaqué).
+ * Calibré sur les comptes réels (2026-10-12) : un joueur peu actif sur la carte fait ~3 départs
+ * par jour (médiane, 1 certains jours) → environ une journée de trêve ; un joueur très actif
+ * (~37/jour) les fait en 1 à 2 h, et c'est le plancher des miliciens qui le protège.
+ */
+export const GRACE = { departures: 3, maxMs: 72 * 3600_000 } as const;
+
+export interface GraceInfo {
+  /** La fin au plus tard (le plafond). */
+  until: number;
+  /** Départs encore à faire avant la fin. */
+  departuresLeft: number;
+  /** Des miliciens sont en route vers ce lieu, ou en mer vers l'île. */
+  militiaComing: boolean;
+}
+
+/** 🕊️ La trêve en cours sur un point tenu, `null` s'il n'en a pas (ou plus). */
+export function graceInfo(
+  c: ControlState | null | undefined,
+  map: Pick<ExpeditionMap, 'departures' | 'sailings' | 'archipel'>,
+  now: number,
+): GraceInfo | null {
+  const g = c?.grace;
+  if (!c || !g || c.owner !== 'player') return null;
+  const until = g.from + GRACE.maxMs;
+  if (now >= until) return null;
+  const done = (map.departures ?? []).filter((t) => t > g.from && t <= now).length;
+  const departuresLeft = Math.max(0, GRACE.departures - done);
+  const toHere = (c.reinforcing ?? []).filter((r) => r.at > now).map((r) => r.id);
+  const militiaComing =
+    toHere.some(isMilitiaId) ||
+    (map.sailings ?? []).some(
+      (s) => (s.militia ?? 0) > 0 && s.to === map.archipel?.island && s.arriveAt > now,
+    );
+  if (departuresLeft === 0 && !militiaComing) return null;
+  return { until, departuresLeft, militiaComing };
+}
+
+/**
+ * 🕊️ Applique les trêves : une attaque demandée pendant la trêve est repoussée à sa fin au
+ * plus tard (`held` garde la plus proche demandée) ; la trêve finie, la clé est retirée et
+ * l'attaque retenue tombe à cet instant (jamais avant). ⚠️ À appliquer APRÈS tout ce qui
+ * avance une attaque (nids, seigneur de guerre, report sur les objectifs). Rend la MÊME carte
+ * si rien ne change.
+ */
+export function holdGrace(map: ExpeditionMap, now: number): ExpeditionMap {
+  let pois = map.pois;
+  map.pois.forEach((p, k) => {
+    const c = p.control;
+    if (!c?.grace) return;
+    const info = graceInfo(c, map, now);
+    let next: ControlState;
+    if (info) {
+      if (c.attackAt === undefined || c.attackAt >= info.until) return;
+      next = {
+        ...c,
+        attackAt: info.until,
+        grace: { ...c.grace, held: Math.min(c.grace.held ?? c.attackAt, c.attackAt) },
+      };
+    } else {
+      const { grace, ...rest } = c;
+      next =
+        grace.held !== undefined && rest.attackAt !== undefined
+          ? { ...rest, attackAt: Math.min(rest.attackAt, Math.max(grace.held, now)) }
+          : rest;
+    }
+    if (pois === map.pois) pois = [...map.pois];
+    pois[k] = { ...p, control: next };
+  });
+  return pois === map.pois ? map : { ...map, pois };
+}
+
+/** Les points tenus dont l'attaque est DUE à `now`, de la plus ancienne à la plus récente.
+ *  ⚠️ Jamais un point en trêve (`graceInfo`), même si `holdGrace` n'est pas encore passé. */
 export function dueRetakes(map: ExpeditionMap | null, now: number): Poi[] {
   if (!map) return [];
   return map.pois
@@ -3695,7 +3789,8 @@ export function dueRetakes(map: ExpeditionMap | null, now: number): Poi[] {
       (p) =>
         p.control?.owner === 'player' &&
         p.control.attackAt !== undefined &&
-        p.control.attackAt <= now,
+        p.control.attackAt <= now &&
+        !graceInfo(p.control, map, now),
     )
     .sort((a, b) => a.control!.attackAt! - b.control!.attackAt!);
 }

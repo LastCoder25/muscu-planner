@@ -434,7 +434,8 @@ export function settleSailings(
   advs: Adventurer[],
   now: number,
 ): { map: ExpeditionMap; advs: Adventurer[] } | null {
-  const done = (map.sailings ?? []).filter((s) => s.arriveAt <= now);
+  // 🛡️ Les navigations de miliciens se règlent à part (`settleMilitiaSailings`).
+  const done = (map.sailings ?? []).filter((s) => s.arriveAt <= now && !s.militia);
   if (!done.length || !map.archipel) return null;
   const active = map.archipel.island;
   const where = new Map<string, number>();
@@ -450,7 +451,7 @@ export function settleSailings(
     }
     return { ...a, elsewhere: to };
   });
-  const left = (map.sailings ?? []).filter((s) => s.arriveAt > now);
+  const left = (map.sailings ?? []).filter((s) => !done.includes(s));
   const { sailings: _s, ...rest } = map;
   void _s;
   return { map: left.length ? { ...rest, sailings: left } : rest, advs: out };
@@ -500,7 +501,8 @@ export function landCrossing(
   const forward = isForwardCrossing(c);
   const lvl = (m: Pick<ExpeditionMap, 'archipel'>) => mapPlayerLevel(m, playerLevel);
   const left = forward ? vacateIsland(left0, c.arriveAt, lvl(left0)) : left0;
-  const sailings = forward ? undefined : sailing0;
+  // ⛵🛡️ Les miliciens en mer, eux, continuent : ils accosteront sur l'île visée, rangée ou non.
+  const sailings = forward ? sailing0?.filter((s) => (s.militia ?? 0) > 0) : sailing0;
   const stash: Record<string, ExpeditionMap> = {};
   for (const [k, im] of Object.entries(islands ?? {}))
     stash[k] = forward ? stripChampions(im, c.arriveAt, lvl(im)) : im;

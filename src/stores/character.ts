@@ -161,6 +161,12 @@ import {
   produceIslandMilitia,
   startCrossing,
 } from '@/lib/crossing';
+import {
+  SHIP_MILITIA_BLOCK_LABEL,
+  settleMilitiaSailings,
+  shipMilitia,
+  shipMilitiaBlocker,
+} from '@/lib/militiaSea';
 import { basculeToArchipel } from '@/lib/archipelBascule';
 import {
   FORTRESS_ID,
@@ -424,6 +430,7 @@ import {
   controlDetectBoost,
   trainingRoom,
   dueRetakes,
+  holdGrace,
   retiredHeld,
   hospiceHealMult,
   retakeCalmMs,
@@ -2561,15 +2568,20 @@ export const useCharacterStore = defineStore('character', () => {
     const advLanded = land?.crossing ? landAdventurers(advBase, land.crossing) : null;
     // ⛵ Les champions partis SANS le héros arrivent : APRÈS le débarquement du héros (qui a
     // pu changer l'île active), pour qu'ils sachent s'ils sont « ici » ou ailleurs.
-    const sail = settleSailings(mapM, advLanded ?? advBase, now);
-    const map = sail?.map ?? mapM;
+    // ⛵🛡️ Les miliciens arrivés d'une autre île rejoignent la réserve où ils accostent
+    // (`militiaSea.ts`) — AVANT `settleSailings`, qui retire les navigations arrivées.
+    const milSea = settleMilitiaSailings(mapM, land?.militia ?? cur.base?.militia, now);
+    const mapS = milSea?.map ?? mapM;
+    const sail = settleSailings(mapS, advLanded ?? advBase, now);
+    const map = sail?.map ?? mapS;
     const advNext = sail?.advs ?? advLanded ?? post?.advs ?? null;
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
     // graine qui n'est pas celle que le tick de base lui aurait donnée.
     // ⚓ Au débarquement, la réserve de milice de l'île d'arrivée devient celle de la base.
-    const base0 = land?.militia && cur.base ? { ...cur.base, militia: land.militia } : null;
+    const reserveNext = milSea ? milSea.reserve : land?.militia;
+    const base0 = reserveNext && cur.base ? { ...cur.base, militia: reserveNext } : null;
     const baseM = base0 ?? cur.base;
     const base = over.length && baseM ? markOverflow(baseM, over.map(riftOverflowOf)) : base0;
     const mapChanged = JSON.stringify(map) !== JSON.stringify(orig);
@@ -2757,6 +2769,24 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: { ...map, islands: { ...map.islands, [String(island)]: next } },
     });
+  }
+  /** ⛵🛡️ Fait venir `n` miliciens de l'île rangée `from` sur l'île active (`militiaSea.ts`) :
+   *  2 h de mer, puis la réserve de la base. Le refus a sa raison (`shipMilitiaBlocker`). */
+  async function shipIslandMilitia(
+    userId: string,
+    from: number,
+    n: number,
+    now: number,
+    level: number,
+  ) {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return;
+    const why = shipMilitiaBlocker(map, cur.base?.militia, from, n);
+    if (why) throw new Error(SHIP_MILITIA_BLOCK_LABEL[why]);
+    const next = shipMilitia(map, cur.base?.militia, from, n, now, level);
+    if (next) await persist(userId, { expedition_map: next });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
   async function expeSend(userId: string, poi: Poi, hero: Combatant, now: number, level: number) {
@@ -5399,7 +5429,8 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     // 🎯 Sur une île, la forteresse vise d'abord les objectifs qu'on lui a pris.
-    settled = redirectIslandAttacks(settled, now);
+    // 🕊️ Puis les trêves des lieux fraîchement pris : le report ne passe pas au travers.
+    settled = holdGrace(redirectIslandAttacks(settled, now), now);
     const due = dueRetakes(settled, now);
     if (!due.length) {
       if (settled !== cur.expedition_map) {
@@ -6810,6 +6841,7 @@ export const useCharacterStore = defineStore('character', () => {
     expeSyncMap,
     crossIsland,
     moveIslandMilitia,
+    shipIslandMilitia,
     fortifyFor,
     crossingDepartAt,
     sailChampions,

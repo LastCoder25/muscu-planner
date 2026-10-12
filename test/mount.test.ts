@@ -523,6 +523,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         ...props,
         visitedIds: [1, 2],
         fetchable: { 2: 3 },
+        shippable: { 2: 3 },
         blocks: { 1: null, 2: 'Ton héros doit être rentré pour embarquer.' },
       },
       undefined,
@@ -538,6 +539,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(back).toMatch(/Faire venir 3\s+champions/);
     expect(back).toContain('avec ou sans le héros');
+    // ⛵🛡️ Ses miliciens aussi : borné à ce que l'île peut envoyer (3, pas les 5 par défaut).
+    expect(back).toMatch(/Faire venir 3\s+miliciens/);
   });
 
   it('CrossingSheet : héros imposé vers une île neuve, facultatif vers une île visitée', async () => {

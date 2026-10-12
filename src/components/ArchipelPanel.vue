@@ -76,7 +76,10 @@
               · arrivée à {{ clock(s.arriveAt) }} (dans
               {{ formatDuration(Math.max(0, s.arriveAt - now)) }})
             </template>
-            <span class="as-sub"
+            <span v-if="s.militia" class="as-sub"
+              >🛡️ {{ s.militia }} milicien{{ s.militia > 1 ? 's' : '' }} en route</span
+            >
+            <span v-else class="as-sub"
               >{{ s.ids.length }} champion{{ s.ids.length > 1 ? 's' : '' }} sans le héros</span
             >
           </span>
@@ -163,6 +166,50 @@
                 +
               </button>
             </div>
+          </div>
+          <!-- ⛵🛡️ Faire venir des miliciens de cette île sur l'île active (`militiaSea.ts`). -->
+          <div
+            v-if="!selTile.active && island && (shippable?.[selTile.id] ?? 0) > 0"
+            class="at-ship"
+          >
+            <div class="ar-row">
+              <span class="ar-name">⛵ Faire venir sur l'île {{ island.id }}</span>
+              <button
+                type="button"
+                class="ar-btn"
+                aria-label="Un milicien de moins"
+                :disabled="busy || shipCount <= 1"
+                @click="shipCount = Math.max(1, shipCount - 1)"
+              >
+                −
+              </button>
+              <span class="ar-count">🛡️ {{ shipN(selTile.id) }}</span>
+              <button
+                type="button"
+                class="ar-btn"
+                aria-label="Un milicien de plus"
+                :disabled="busy || shipCount >= (shippable?.[selTile.id] ?? 0)"
+                @click="shipCount = Math.min(shippable?.[selTile.id] ?? 1, shipCount + 1)"
+              >
+                +
+              </button>
+            </div>
+            <button
+              type="button"
+              class="at-cross alt"
+              :disabled="busy"
+              @click="$emit('ship', { island: selTile.id, n: shipN(selTile.id) })"
+            >
+              <span class="ac-main"
+                >⛵ Faire venir {{ shipN(selTile.id) }} milicien{{
+                  shipN(selTile.id) > 1 ? 's' : ''
+                }}</span
+              >
+              <span class="ac-sub"
+                >2 h de mer · ils rejoindront ta réserve sur l'île {{ island.id }} · la réserve de
+                cette île part d'abord, puis ses lieux les plus garnis</span
+              >
+            </button>
           </div>
           <template v-if="island && !selTile.active && !selTile.locked">
             <!-- ⛵ Option A (2026-10-03) : le héros retenu bloque SA traversée, pas celle des
@@ -252,10 +299,13 @@ const props = defineProps<{
   heroDepartAt?: number;
   /** ⛵ Champions restés sur chaque autre île. */
   away?: Record<number, number>;
-  /** 🛡️ La réserve de milice de chaque île visitée (la milice ne traverse pas). */
+  /** 🛡️ La réserve de milice de chaque île visitée (elle traverse sur demande, `ship`). */
   militia?: Record<number, number>;
   /** 🛡️ Les lieux fixes tenus de chaque île rangée, avec leur milice (`remotePoints`). */
   remote?: Record<number, RemotePoint[]>;
+  /** ⛵🛡️ Combien de miliciens chaque île rangée peut envoyer sur l'île active
+   *  (`shippableMilitia`). */
+  shippable?: Record<number, number>;
   /** 🗺️ L'île rangée dont on regarde la carte (null : la carte active). */
   shown?: number | null;
   now: number;
@@ -266,6 +316,7 @@ const emit = defineEmits<{
   cross: [to: number];
   fetch: [from: number];
   militia: [{ island: number; pointId: string; delta: number }];
+  ship: [{ island: number; n: number }];
 }>();
 
 /** Heure d'horloge (« 14:00 »). */
@@ -274,6 +325,10 @@ const clock = (t: number) =>
 const departAt = computed(() => nextCrossingDeparture(props.now));
 const awayOn = (id: number) => props.away?.[id] ?? 0;
 const militiaOn = (id: number) => props.militia?.[id] ?? 0;
+/** ⛵🛡️ Combien de miliciens faire venir (5 = une garnison pleine), borné à ce que l'île
+ *  peut envoyer. */
+const shipCount = ref(5);
+const shipN = (id: number) => Math.max(1, Math.min(shipCount.value, props.shippable?.[id] ?? 1));
 const prevFortress = (id: number) => ISLANDS.find((i) => i.id === id - 1)?.fortress ?? '';
 
 const open = ref(false);
@@ -580,6 +635,12 @@ const islandCapRank = computed(() =>
 }
 .at-away.mil {
   color: var(--dim);
+}
+.at-ship {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .at-remote {
   margin-top: 8px;
