@@ -1287,6 +1287,19 @@ export function heroWalksHomeFrom(
   return { ...map, heroReturnAt: back, heroReturnFrom: { x: from.x, y: from.y, at } };
 }
 
+/** ⛑️ SOIGNÉ EN CHEMIN, IL EST À LA BASE (2026-10-12, signalé : « il était à l'infirmerie, je
+ *  l'ai soigné et ça me dit qu'il est en expédition »). Blessé au retour d'une sortie, il
+ *  rentre À PIED (`heroWalksHomeFrom`) et sa convalescence ne court qu'à l'arrivée — donc les
+ *  soins d'urgence, qui facturent le temps restant TRAJET COMPRIS, le remettent sur pied tout
+ *  de suite : la marche s'arrête. Sans retour en cours, la carte est rendue telle quelle. */
+export function heroHealedHome(map: ExpeditionMap): ExpeditionMap {
+  if (map.heroReturnAt === undefined) return map;
+  const m = { ...map };
+  delete m.heroReturnAt;
+  delete m.heroReturnFrom;
+  return m;
+}
+
 /** 💰 Met de côté la production d'un lieu tenu à `at`, avant qu'un départ ou un retour du
  *  héros (qui compte pour 2) ne change son effectif — la règle de `releaseFromControl` pour un
  *  champion. Le niveau est celui que le héros portait en se postant (`heroUnit`). Sans niveau

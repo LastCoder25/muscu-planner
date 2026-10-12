@@ -187,6 +187,7 @@ import {
   syncHeroAway,
   heroKeepPostId,
   heroWalksHomeFrom,
+  heroHealedHome,
   turnBackComingHero,
   heroPostOf,
   heroBackToPost,
@@ -3608,6 +3609,10 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, {
       gold: cur.gold - cost,
       base: { ...cur.base, wound: null },
+      // ⛑️ Soigné pendant qu'il rentrait à pied : il est à la base, plus « en expédition ».
+      ...(cur.expedition_map?.heroReturnAt !== undefined
+        ? { expedition_map: heroHealedHome(cur.expedition_map) }
+        : {}),
     });
     return cost;
   }

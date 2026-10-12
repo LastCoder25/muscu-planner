@@ -6,6 +6,7 @@ import {
   heroBackToPost,
   heroWalkVoyage,
   heroWalksHomeFrom,
+  heroHealedHome,
   stripChampions,
   unpostHero,
 } from '@/lib/islandConquest';
@@ -125,6 +126,15 @@ describe('blessé au retour d’une sortie, il rentre à pied de son poste', () 
     const p = post('a');
     const v = heroWalkVoyage(heroWalksHomeFrom(map([p]), p, NOW, 25), NOW + MIN);
     expect(v?.poi.id).toBe('a');
+  });
+  it('soigné en chemin, il est aussitôt à la base (plus en marche)', () => {
+    const p = post('a');
+    const healed = heroHealedHome(heroWalksHomeFrom(map([p]), p, NOW, 25));
+    expect(healed.heroReturnAt).toBeUndefined();
+    expect(healed.heroReturnFrom).toBeUndefined();
+    expect(heroWalkVoyage(healed, NOW + MIN)).toBeFalsy();
+    const idle = map([p]);
+    expect(heroHealedHome(idle)).toBe(idle);
   });
 });
 
