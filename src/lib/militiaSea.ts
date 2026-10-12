@@ -204,6 +204,3 @@ export function settleMilitiaSailings(
   };
   return { map: next, reserve: base };
 }
-
-/** Une navigation qui ne porte que des miliciens. */
-export const isMilitiaSailing = (s: Pick<Crossing, 'militia'>): boolean => (s.militia ?? 0) > 0;

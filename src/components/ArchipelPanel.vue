@@ -211,6 +211,37 @@
               >
             </button>
           </div>
+          <!-- 🧭 Partir ou rester ? (`crossingAdvice`) : sur l'île SUIVANTE, une fois la sienne pacifiée. -->
+          <div
+            v-if="advice && !selTile.active && selTile.id === advice.next.id"
+            class="at-advice"
+            :class="advice.verdict"
+          >
+            <div class="av-head">{{ ADVICE_TITLE[advice.verdict] }}</div>
+            <div class="av-line">
+              ⚔️ Prendre un lieu (niv. {{ advice.levels.lo
+              }}{{ advice.levels.hi > advice.levels.lo ? '-' + advice.levels.hi : '' }}) :
+              <b>{{
+                advice.need === null
+                  ? `hors de portée de tes ${advice.pool}`
+                  : `${advice.need} champion${advice.need > 1 ? 's' : ''} sur ${advice.pool}`
+              }}</b>
+              · {{ Math.round(advice.takePct * 100) }} %
+            </div>
+            <div class="av-line">
+              🛡️ Tenir : {{ advice.militia }} milicien{{ advice.militia > 1 ? 's' : '' }} à faire
+              venir · <b>{{ Math.round(advice.holdPct * 100) }} %</b> des reprises repoussées
+            </div>
+            <div class="av-line">
+              🎓 XP par mission : {{ advice.xp.here }} → <b>{{ advice.xp.there }}</b> · 🪙 mine
+              {{ advice.gold.here.toLocaleString('fr-FR') }}/h →
+              <b>{{ advice.gold.there.toLocaleString('fr-FR') }}/h</b>
+            </div>
+            <div class="av-note">Ton île pacifiée continue de produire après ton départ.</div>
+            <ul v-if="advice.missing.length" class="av-miss">
+              <li v-for="m in advice.missing" :key="m">{{ m }}</li>
+            </ul>
+          </div>
           <template v-if="island && !selTile.active && !selTile.locked">
             <!-- ⛵ Option A (2026-10-03) : le héros retenu bloque SA traversée, pas celle des
                champions vers une île déjà visitée — la feuille propose alors de les envoyer seuls. -->
@@ -271,6 +302,7 @@ import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import { OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
+import type { AdviceVerdict, CrossingAdvice } from '@/lib/crossingAdvice';
 
 const props = defineProps<{
   island: Island | null;
@@ -306,6 +338,9 @@ const props = defineProps<{
   /** ⛵🛡️ Combien de miliciens chaque île rangée peut envoyer sur l'île active
    *  (`shippableMilitia`). */
   shippable?: Record<number, number>;
+  /** 🧭 Le conseil « partir ou rester » pour l'île suivante (`crossingAdvice`), une fois
+   *  l'île active pacifiée. */
+  advice?: CrossingAdvice | null;
   /** 🗺️ L'île rangée dont on regarde la carte (null : la carte active). */
   shown?: number | null;
   now: number;
@@ -355,6 +390,11 @@ const tiles = computed(() =>
     };
   }),
 );
+const ADVICE_TITLE: Record<AdviceVerdict, string> = {
+  go: '🧭 Tu peux partir',
+  bring: '🧭 Pars, mais fais venir de la milice',
+  train: '🧭 Reste et entraîne tes champions',
+};
 const sel = ref(props.island?.id ?? 1);
 /** 📍 L'île AFFICHÉE : une île rangée qu'on regarde, sinon celle où l'on est. */
 const shownId = computed(() => props.shown ?? props.island?.id ?? 1);
@@ -677,6 +717,39 @@ const islandCapRank = computed(() =>
 .ar-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+.at-advice {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--av, var(--line));
+  background: color-mix(in srgb, var(--av, var(--line)) 12%, transparent);
+  font-size: 12px;
+}
+.at-advice.go {
+  --av: var(--d1);
+}
+.at-advice.bring {
+  --av: var(--d3);
+}
+.at-advice.train {
+  --av: var(--d4);
+}
+.av-head {
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--av);
+}
+.av-line {
+  margin-top: 2px;
+}
+.av-note {
+  margin-top: 4px;
+  color: var(--dim);
+}
+.av-miss {
+  margin: 4px 0 0;
+  padding-left: 18px;
 }
 .at-block {
   margin: 8px 0 0;

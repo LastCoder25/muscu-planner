@@ -1641,7 +1641,8 @@ import {
   visitedIslands,
   type RemotePoint,
 } from '@/lib/crossing';
-import { shippableMilitia } from '@/lib/militiaSea';
+import { islandMilitiaStock, shippableMilitia } from '@/lib/militiaSea';
+import { crossingAdvice } from '@/lib/crossingAdvice';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
@@ -1913,6 +1914,25 @@ const shippable = computed(() => {
     out[Number(k)] = shippableMilitia(map, char.row?.base?.militia, Number(k));
   return out;
 });
+/** 🧭 PARTIR OU RESTER ? (`crossingAdvice`) — seulement une fois l'île active PACIFIÉE.
+ *  La milice comptée : celle de l'île active (réserve + lieux tenus) et de toutes les îles
+ *  quittées, tout ce qui pourra traverser. ⚠️ Rejoue des combats (~25 ms) : il ne dépend
+ *  pas de l'horloge, il se recalcule seulement quand le vivier ou la carte bougent. */
+const islandAdvice = computed(() => {
+  const map = char.row?.expedition_map;
+  if (!island.value || !islandProgress.value?.pacified || !map) return null;
+  let militia = islandMilitiaStock({ ...map, militia: char.row?.base?.militia ?? undefined });
+  for (const im of Object.values(map.islands ?? {})) militia += islandMilitiaStock(im);
+  return crossingAdvice({
+    current: island.value.id,
+    heroLevel: heroLevel.value,
+    champions: char.advList,
+    kit: char.escortKit,
+    engage: engageCap(char.pantheonLevel),
+    militia,
+    fort: char.fortifyFor(heroLevel.value),
+  });
+});
 /** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
 /** 🗺️ L'île rangée qu'on regarde (`null` = la carte active). */
 const viewIsland = ref<number | null>(null);
@@ -1973,6 +1993,7 @@ const archBind = computed(() => ({
   militia: crossInfo.value.militia,
   remote: remoteInfo.value,
   shippable: shippable.value,
+  advice: islandAdvice.value,
   now: now.value,
 }));
 const archOn = {

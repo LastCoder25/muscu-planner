@@ -514,6 +514,40 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(there).toContain('Traverser vers l');
     expect(there).toContain('avec le héros, tu choisis les champions');
+    // 🧭 Le conseil « partir ou rester » s'affiche sur l'île suivante, avec ce qui manque.
+    let adv = '';
+    await mountIt(
+      ArchipelPanel,
+      {
+        ...props,
+        advice: {
+          next: islandById(2),
+          verdict: 'train',
+          levels: { lo: 21, hi: 30 },
+          need: 3,
+          pool: 3,
+          takePct: 0.83,
+          militia: 5,
+          holdPct: 0.81,
+          xp: { here: 27, there: 48 },
+          gold: { here: 2613, there: 3030 },
+          missing: ['il faudrait 3 champions sur 3 pour prendre un lieu'],
+        },
+      },
+      undefined,
+      undefined,
+      '/',
+      (h) => (adv = h),
+      async (host) => {
+        host.querySelector<HTMLElement>('.arch-cur')?.click();
+        await nextTick();
+        host.querySelectorAll<HTMLElement>('.isl')[1]?.click();
+        await nextTick();
+      },
+    );
+    expect(adv).toContain('class="at-advice train"');
+    expect(adv).toContain('Reste et entraîne tes champions');
+    expect(adv).toContain('il faudrait 3 champions sur 3');
     // ⛵ Option A : une île déjà visitée où attendent des champions propose de les faire venir,
     // même si le héros est retenu (sa traversée bloquée n'empêche pas la leur).
     let back = '';
