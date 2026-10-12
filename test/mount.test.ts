@@ -4654,4 +4654,27 @@ describe('💰 la récompense sur la tuile d’un voyage', () => {
     expect(html).toContain('777');
     expect(html).not.toContain('si pris');
   }, 30_000);
+
+  // ⛵ La traversée remplace la carte : compte à rebours et ambiance de l'île d'arrivée.
+  it('CrossingScene montre le temps restant et l’île d’arrivée', async () => {
+    const { default: CrossingScene } = await import('@/components/CrossingScene.vue');
+    const H = 3_600_000;
+    for (const to of [1, 2, 3, 4, 5]) {
+      let out = '';
+      const crossing = { from: 1, to, bookedAt: 0, departAt: 0, arriveAt: 2 * H, ids: [] };
+      expect(
+        await mountIt(
+          CrossingScene,
+          { crossing, now: H },
+          undefined,
+          undefined,
+          '/',
+          (h) => (out = h),
+        ),
+      ).toBeNull();
+      expect(out).toContain('1 h 00');
+      expect(out).toContain('Île ' + to);
+      expect(out).toContain('m-');
+    }
+  }, 30_000);
 });

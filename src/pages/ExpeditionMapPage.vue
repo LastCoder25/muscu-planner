@@ -396,6 +396,10 @@
         </svg>
       </div>
 
+      <!-- ⛵ EN MER (demandé) : la traversée remplace la carte, avec le temps restant avant
+           d'accoster. L'archipel reste au-dessus pour regarder une île rangée. -->
+      <CrossingScene v-if="sailing" :crossing="sailing" :now="now" />
+
       <!-- Indicateurs de bord : flèche vers les activités hors écran -->
       <button
         v-for="e in edgeIndicators"
@@ -1642,6 +1646,7 @@ import {
 import { islandMilitiaStock, shippableMilitia } from '@/lib/militiaSea';
 import { crossingAdvice } from '@/lib/crossingAdvice';
 import CrossingSheet from '@/components/CrossingSheet.vue';
+import CrossingScene from '@/components/CrossingScene.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
 import { pantheonLights } from '@/lib/pantheonLights';
