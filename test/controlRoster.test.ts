@@ -81,6 +81,14 @@ describe('🗂️ controlRoster', () => {
     expect(row(controlRoster(m, [], H, L, new Set(), null), MINE).status).toBe('imminent');
   });
 
+  it('🕊️ île pacifiée : une place vide est « calm », jamais « sans défense »', () => {
+    const m = captureControl(base(), MINE, [], 0, 7);
+    const peace = { ...m, archipel: { ...(m.archipel ?? { island: 1, levelCap: 20 }), pacifiedAt: 0 } } as ExpeditionMap;
+    const r = row(controlRoster(peace, [], H, L, new Set(), null), MINE);
+    expect(r.status).toBe('calm');
+    expect(controlFilterOf(r.status)).toBe('held');
+  });
+
   it('plus rien « à récolter » : la ligne n’appelle plus pour une réserve (versé directement)', () => {
     let m = captureControl(base(), MINE, ['a', 'b', 'c'], 0, 7);
     m = setAttack(m, MINE, 9e15);

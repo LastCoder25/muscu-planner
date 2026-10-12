@@ -275,6 +275,7 @@ const STATUS: Record<ControlRosterStatus, string> = {
   held: '🏰 tenu',
   empty: '⚠️ sans défense',
   imminent: '⚠️ attaque imminente',
+  calm: '🕊️ en paix',
 };
 
 /** 🔎 Le filtre choisi (`null` = toutes). S'il se vide (on vient de reprendre la dernière
@@ -599,7 +600,8 @@ const isFull = (r: ControlRosterRow) =>
 .st-enemy .pill.st {
   color: var(--dim);
 }
-.st-held .pill.st {
+.st-held .pill.st,
+.st-calm .pill.st {
   color: var(--d1);
   border-color: color-mix(in srgb, var(--d1) 50%, transparent);
 }

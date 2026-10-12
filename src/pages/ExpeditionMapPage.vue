@@ -890,7 +890,11 @@
             </div>
             <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
-            <p v-if="!controlWorkforce(liveControl)" class="ctl-line ctl-warn">
+            <!-- 🕊️ Île pacifiée : personne ne viendra le reprendre, l'alerte mentirait. -->
+            <p v-if="!controlWorkforce(liveControl) && mapPacified" class="ctl-line ctl-dim">
+              🕊️ <b>En paix</b> : l’île est pacifiée, personne ne viendra le reprendre.
+            </p>
+            <p v-else-if="!controlWorkforce(liveControl)" class="ctl-line ctl-warn">
               ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
               attaque — sauf si un renfort arrive avant.
             </p>
@@ -2661,6 +2665,8 @@ const selectedWarband = computed(() => {
   };
 });
 /** 🏰 L'état VIVANT du point de contrôle sélectionné (la sélection garde un instantané). */
+/** 🕊️ L'île active est pacifiée : plus aucune reprise ni raid. */
+const mapPacified = computed(() => islandPacified(char.row?.expedition_map));
 const liveControl = computed(() => {
   const id = selected.value?.id;
   return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
@@ -3439,7 +3445,7 @@ function recallAllMessage(p: Poi): string {
   const list =
     who.length > 1 ? `${who.slice(0, -1).join(', ')} et ${who.at(-1)}` : (who[0] ?? 'Personne');
   const head = list.charAt(0).toUpperCase() + list.slice(1);
-  return `${head} ${who.length > 1 || champs > 1 || mil > 1 ? 'rentrent' : 'rentre'} à pied à la base. ${poiLabel(p)} reste à toi, mais sans défense : l’ennemi le reprendra à sa prochaine attaque, sauf si un renfort arrive avant.`;
+  return `${head} ${who.length > 1 || champs > 1 || mil > 1 ? 'rentrent' : 'rentre'} à pied à la base. ${poiLabel(p)} reste à toi${islandPacified(char.row?.expedition_map) ? ' : l’île est pacifiée, personne ne viendra le reprendre.' : ', mais sans défense : l’ennemi le reprendra à sa prochaine attaque, sauf si un renfort arrive avant.'}`;
 }
 async function recallCtl() {
   const uid = auth.user?.id;

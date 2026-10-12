@@ -3728,7 +3728,7 @@ export function heldControls(map: ExpeditionMap | null): Poi[] {
  * `assaults` = les équipes en marche pour PRENDRE un point (elles restent en garnison à
  * l'arrivée, `midAt`).
  */
-export type ControlRosterStatus = 'enemy' | 'assault' | 'held' | 'empty' | 'imminent';
+export type ControlRosterStatus = 'enemy' | 'assault' | 'held' | 'empty' | 'imminent' | 'calm';
 /** 🔎 Les filtres de la liste des places fortes (2026-09-28, demandé : « tenu, pas tenu,
  *  vide »). ⚠️ Dérivés du statut, jamais une seconde règle : une place « attaque imminente »
  *  est TENUE (on y a du monde), une place sous notre assaut n'est PAS TENUE. Vide = à nous,
@@ -3742,6 +3742,7 @@ export const CONTROL_FILTER_LABEL: Record<ControlFilter, string> = {
 };
 export function controlFilterOf(status: ControlRosterStatus): ControlFilter {
   if (status === 'enemy' || status === 'assault') return 'notHeld';
+  // 🕊️ « calm » = vide mais sur une île pacifiée : tenu, et rien ne viendra le reprendre.
   return status === 'empty' ? 'empty' : 'held';
 }
 export interface ControlRosterRow {
@@ -3776,6 +3777,9 @@ export function controlRoster(
   heroEngagedAt: string | null,
 ): ControlRosterRow[] {
   if (!map) return [];
+  // 🕊️ Île pacifiée : plus aucune reprise ni raid. Une place vide n'y est donc pas « sans
+  // défense » — l'alerte mentait (2026-10-12, signalé sur la forteresse).
+  const pacified = islandPacified(map);
   const order = (k: ControlKind) => ALL_CONTROL_KINDS.indexOf(k);
   return (
     map.pois
@@ -3802,7 +3806,9 @@ export function controlRoster(
             ? 'imminent'
             : controlWorkforce(c)
               ? 'held'
-              : 'empty';
+              : pacified
+                ? 'calm'
+                : 'empty';
         return {
           poi: p,
           kind: c.kind,
