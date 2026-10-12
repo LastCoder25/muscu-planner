@@ -1944,3 +1944,85 @@ export function vacateIsland(map: ExpeditionMap, at: number, playerLevel: number
   void _am;
   return { ...clean, pois };
 }
+
+/** 📜 Une ligne des règles d'une île : une pastille et sa phrase. */
+export interface IslandRule {
+  emoji: string;
+  text: string;
+}
+
+/**
+ * 📜 LES RÈGLES D'UNE ÎLE, en clair (demandé le 2026-10-12 : « sur chaque île, où sont
+ * expliquées les règles ? »). Elles ne vivaient que dans la fiche de chaque objectif
+ * (`islandTargetNote`) : on ne les lisait qu'en touchant un cimetière ou un nid. ⚠️ Écrites à
+ * partir des MÊMES constantes que les mécaniques (RISE, NEST, SORTIE_EVENTS…) : un réglage
+ * qui bouge change le texte avec lui.
+ */
+export function islandRules(isl: Island): IslandRule[] {
+  const n = isl.objectives;
+  const obj = `${isl.objectiveEmoji} ${isl.objective.toLowerCase()}s`;
+  const days = (ms: number) => Math.round(ms / (24 * 3600_000));
+  const rules: IslandRule[] = [
+    {
+      emoji: '🏳️',
+      text: `Tiens ${OBJECTIVES_AFTER_HELD} lieux fixes de l’île pour pouvoir attaquer ses ${obj} (${n} à prendre${isl.keystone ? `, dont la ${isl.keystone.emoji} ${isl.keystone.name}` : ''}).`,
+    },
+    {
+      emoji: '🏰',
+      text: `${Math.min(ISLAND_CONQUEST.unlockAfter, n)} objectifs pris ouvrent ${isl.fortress} ; tous pris, elle tombe à son plus bas. Elle reprend en priorité les objectifs que tu tiens.`,
+    },
+  ];
+  if (PILLAGE_ISLANDS.has(isl.id))
+    rules.push({
+      emoji: '💰',
+      text: `Tant qu’un camp tient, ses brigands pillent la réserve non récoltée de ta base (environ toutes les ${Math.round(BRIGANDS.pillageMs / 3600_000)} h par camp debout) : récolte souvent.`,
+    });
+  if (NEST.islands.has(isl.id))
+    rules.push(
+      {
+        emoji: '🔁',
+        text: `Un nouveau nid apparaît toutes les ${NEST.departuresMin} à ${NEST.departuresMax} sorties sur la carte (${NEST.cap} au plus), et son armée marche aussitôt sur ton lieu tenu le plus proche : intercepte-la.`,
+      },
+      {
+        emoji: '⚠️',
+        text: 'Les routes autour d’un nid sont dangereuses (embuscades doublées). Un nid pris est abattu, personne n’y reste.',
+      },
+    );
+  if (RISE.islands.has(isl.id))
+    rules.push({
+      emoji: '🔁',
+      text: `Un ${isl.objective.toLowerCase()} pris se tient, mais ses morts l’attaquent ${days(RISE.riseMs)} jours plus tard tant que la ${isl.keystone?.name ?? 'citadelle'} tient. Prends-la d’abord, ou prends les ${n} en moins de ${days(RISE.riseMs)} jours.`,
+    });
+  if (WARLORD.islands.has(isl.id))
+    rules.push(
+      {
+        emoji: '🔁',
+        text: `Tant qu’un camp tient, son armée marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties avec trois camps debout, plus rarement avec moins).`,
+      },
+      {
+        emoji: '🐫',
+        text: `Ses convois partent renforcer la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties) : intercepte-les.`,
+      },
+    );
+  if (CURSE.islands.has(isl.id))
+    rules.push(
+      {
+        emoji: '🔁',
+        text: `Tant qu’un sanctuaire tient, une invasion frappe TOUS tes lieux tenus à la fois (toutes les ${SORTIE_EVENTS.invasion.min} à ${SORTIE_EVENTS.invasion.max} sorties avec trois sanctuaires debout) : il faut des garnisons partout.`,
+      },
+      {
+        emoji: '🕳️',
+        text: 'Chaque sanctuaire debout fait naître les failles un jour plus vieilles : elles débordent plus tôt.',
+      },
+    );
+  if (ENDLESS.islands.has(isl.id))
+    rules.push({
+      emoji: '🌀',
+      text: `Une fois la citadelle prise, une brèche maudite s’ouvre : abattue, elle revient ${days(ENDLESS.respawnMs)} jours plus tard, plus forte, sans fin (un coffre à chaque victoire).`,
+    });
+  rules.push({
+    emoji: '🕊️',
+    text: 'Forteresse et objectifs tous pris : l’île est pacifiée, plus aucune attaque. Tes lieux fixes continuent de produire.',
+  });
+  return rules;
+}

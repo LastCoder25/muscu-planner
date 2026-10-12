@@ -104,6 +104,15 @@
           </div>
           <div class="at-threat">⚔️ {{ selTile.threat }}</div>
           <div class="at-fort">🏰 {{ selTile.fortress }}</div>
+          <!-- 📜 Les règles de l'île, repliées : ce qui revient, à quel rythme, ce qui l'arrête. -->
+          <details :key="'rules-' + selTile.id" class="at-rules">
+            <summary>📜 Règles de l’île</summary>
+            <ul>
+              <li v-for="(r, k) in islandRules(selTile)" :key="k">
+                <span class="ar-emo" aria-hidden="true">{{ r.emoji }}</span>{{ r.text }}
+              </li>
+            </ul>
+          </details>
           <!-- 🏝️ La conquête de l'île active : objectifs abattus, forteresse, pacification. -->
           <div v-if="selTile.active && conquest" class="at-conq">
             <span class="at-pill" :class="{ done: conquest.pointsHeld >= OBJECTIVES_AFTER_HELD }"
@@ -305,7 +314,7 @@ import { CROSSING, nextCrossingDeparture, type RemotePoint } from '@/lib/crossin
 import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
-import { OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
+import { islandRules, OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
 import type { AdviceVerdict, CrossingAdvice } from '@/lib/crossingAdvice';
 
 const props = defineProps<{
@@ -622,6 +631,36 @@ const islandCapRank = computed(() =>
   font-size: 11px;
   color: var(--dim);
   overflow-wrap: anywhere;
+}
+.at-rules {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.at-rules summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent);
+}
+.at-rules ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.at-rules li {
+  display: flex;
+  gap: 6px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ar-emo {
+  flex: none;
 }
 .at-conq {
   display: flex;

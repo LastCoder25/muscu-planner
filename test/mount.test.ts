@@ -474,6 +474,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(open.split('🔒').length - 1).toBeGreaterThanOrEqual(4);
     expect(open).toContain('Tu es ici');
     expect(open).toContain('Le Fort des pillards');
+    // 📜 Les règles de l'île, repliées dans la fiche, dont la règle propre de l'île 1.
+    expect(open).toContain('Règles de l’île');
+    expect(open).toContain('pillent la réserve');
     // 🏝️ Étape 7 : tout le monde joue l'archipel, plus d'interrupteur pour en sortir.
     expect(open).not.toContain('Quitter le mode archipel');
   });
