@@ -4385,10 +4385,16 @@ const mapTabs = computed<MapTab[]>(
     },
     { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
     // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
-    // ⚠️ Seulement si au moins un effectif hors milicien est disponible (demandé).
-    ...(planner.anyForceFree.value
-      ? [{ id: 'plan' as const, emo: '🪄', label: 'Planifier des expéditions', n: 0, alert: false }]
-      : []),
+    // ⚠️ Utilisable seulement si au moins un effectif hors milicien est disponible (demandé).
+    // Sinon le rond reste VISIBLE mais grisé, et le toucher dit pourquoi (comme `repart`).
+    {
+      id: 'plan',
+      emo: '🪄',
+      label: 'Planifier des expéditions',
+      n: 0,
+      alert: false,
+      ...(planner.anyForceFree.value ? {} : { blocked: planBlockedWhy.value }),
+    },
     // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
     // ⚠️ Utilisable seulement quand TOUT l'effectif est disponible (demandé) : la répartition
     // laisse de côté qui est en route ou à l'infirmerie. Sinon le rond reste VISIBLE mais
@@ -5770,6 +5776,14 @@ const repartBlockedWhy = computed(() => {
 watch(allForcesFree, (ok) => {
   if (!ok && overlay.value === 'repart') overlay.value = null;
 });
+/** Pourquoi le planificateur est grisé : personne à envoyer (héros et champions indisponibles). */
+const planBlockedWhy = computed(() => {
+  if (!outpostBuilt.value) return 'Construis d’abord un Avant-poste sur ta base pour envoyer des expéditions.';
+  if (char.advList.length === 0 && planner.repoMissing.value.hero)
+    return 'Personne à envoyer : ton héros n’est pas disponible et tu n’as pas encore de champion.';
+  return 'Personne à envoyer : ton héros et tous tes champions sont en route, à l’infirmerie ou retenus ailleurs. Le planificateur revient dès que l’un d’eux est libre.';
+});
+// Le panneau ouvert se referme si plus personne n'est libre (son rond passe au gris).
 watch(planner.anyForceFree, (ok) => {
   if (!ok && overlay.value === 'plan') overlay.value = null;
 });

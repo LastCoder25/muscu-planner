@@ -147,6 +147,13 @@ const ECRANS = [
         clic: '.tile-fab.off[aria-label^="Répartir"]',
         attendu: '.q-notification',
       },
+      {
+        nom: 'tuiles-plan-grise',
+        // 🪄 Grisé quand personne n’est libre : le toucher dit pourquoi.
+        facultatif: true,
+        clic: '.tile-fab.off[aria-label^="Planifier"]',
+        attendu: '.q-notification',
+      },
       // 🏠 Le rond tout à gauche mène à la base de l'île 1 (l'onglet Base de l'Aventure).
       // ⚠️ En DERNIER : il quitte la carte.
       {
