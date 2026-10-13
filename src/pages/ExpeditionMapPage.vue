@@ -1597,6 +1597,7 @@ import {
   PARTY_SEND_BLOCK_LABEL,
   partyLegMin,
   tripCrew,
+  voyageAboard,
   recallBlocker,
   recallWindow,
   recallPreview,
@@ -2385,7 +2386,13 @@ const heroProg = computed(() =>
 );
 /** 🏥 Un champion du héros rentre blessé : son trajet finit à l'infirmerie. */
 const heroInfirmary = computed(
-  () => !!active.value && crewHeadsToInfirmary(tripCrew(active.value), char.advList, now.value),
+  () =>
+    !!active.value &&
+    crewHeadsToInfirmary(
+      voyageAboard(active.value, char.advList, now.value),
+      char.advList,
+      now.value,
+    ),
 );
 
 // Chevrons de direction le long du segment RESTANT (héros → cible du moment :
@@ -3739,8 +3746,8 @@ const partiesOnMap = computed(() =>
       // triait sur son ANCIEN retour au lieu de passer en tête des voyages (v1.8.19).
       win: recallWindow(g),
       returnAt: g.returnAt,
-      escort: tripCrew(g).length,
-      members: tripCrew(g),
+      escort: voyageAboard(g, char.advList, now.value).length,
+      members: voyageAboard(g, char.advList, now.value),
       hero: partyCarriesHero(g),
       haul: expeHaul(g.outcome),
       origin: g.origin,
@@ -3890,7 +3897,7 @@ function launchedCrew(v: ActiveExpedition): RecallCrew {
   const all: ActiveExpedition[] = [...(active.value ? [active.value] : []), ...char.partyList];
   const group = [v, ...combinedSiblings(v, all)];
   return {
-    members: group.flatMap((g) => tripCrew(g)),
+    members: group.flatMap((g) => voyageAboard(g, char.advList, now.value)),
     hero: !!active.value && group.includes(active.value),
   };
 }
@@ -4030,7 +4037,7 @@ const fouilles = computed(() =>
             key: 'hero',
             poi: active.value.poi,
             pos: hero.value,
-            count: tripCrew(active.value).length + 1,
+            count: voyageAboard(active.value, char.advList, now.value).length + 1,
           },
         ]
       : []),
@@ -4104,12 +4111,12 @@ const trips = computed(() => {
       // affichait « → La base » au retour, ce qui annonçait une défaite (seul un héros blessé
       // rentre à la base) avant même que le combat n'ait eu lieu.
       from: tripOriginPoi(pois.value, a.origin),
-      members: tripCrew(a),
+      members: voyageAboard(a, char.advList, now.value),
       haul: expeHaul(a.outcome),
       expected: expectedHaul(a.poi, true),
       legs: tripLegs(a, now.value),
       failed: voyageFailure(a, now.value),
-      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${tripCrew(a).length ? ` · avec ${tripCrew(a).length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
+      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${voyageAboard(a, char.advList, now.value).length ? ` · avec ${voyageAboard(a, char.advList, now.value).length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
   for (const g of partiesOnMap.value) {

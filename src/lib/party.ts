@@ -478,6 +478,20 @@ export function voyageMemberIds(
   });
 }
 
+/**
+ * 👥 QUI EST À BORD, pour l'AFFICHAGE (tuile, carte, fiche de la base). À l'aller, tout le
+ * groupe marche ; au retour, seulement ceux qui rentrent vraiment (`voyageMemberIds`) — un
+ * champion resté en garnison sur le point pris n'est plus du voyage. ⚠️ Signalé (2026-10-13) :
+ * « Érèbe rentre avec le héros vers la base » alors qu'il était posté sur la citadelle prise.
+ */
+export function voyageAboard(
+  v: Pick<ActiveExpedition, 'crew' | 'outcome' | 'returnAt' | 'midAt'>,
+  roster: readonly Pick<Adventurer, 'id' | 'posted' | 'busyUntil'>[],
+  now: number,
+): string[] {
+  return now < v.midAt ? tripCrew(v) : voyageMemberIds(v, roster);
+}
+
 /** 🦸 Le héros voyage-t-il avec CE groupe ? ⚠️ Signalé : « deux retours d'attaque combinée,
  *  le héros dans les deux ». Le rapport d'une attaque combinée est partagé : il dit que le
  *  héros a combattu, pas avec QUEL groupe il rentre. Le groupe du héros vit dans

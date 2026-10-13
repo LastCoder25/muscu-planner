@@ -16,7 +16,7 @@ import type { Adventurer } from './adventurers';
 import {
   recallBlocker,
   recallVoyage,
-  tripCrew,
+  voyageAboard,
   RECALL_BLOCK_LABEL,
   type ActiveParty,
   type RecallTarget,
@@ -84,6 +84,7 @@ function line(
 /** Un voyage (le héros ou une équipe) : demi-tour par la règle de la carte. */
 function tripLine(
   v: ActiveExpedition,
+  advs: readonly Adventurer[],
   key: string,
   hero: boolean,
   target: RecallTarget,
@@ -101,7 +102,7 @@ function tripLine(
     {
       key,
       hero,
-      advIds: tripCrew(v),
+      advIds: voyageAboard(v, advs, now),
       poi: v.poi,
       state: returning ? 'returning' : 'going',
       homeAt: toPost ? null : v.returnAt,
@@ -124,10 +125,11 @@ export function homeRecallLines(i: HomeRecallInput): HomeRecallLine[] {
   const { now, raidAt } = i;
   const out: HomeRecallLine[] = [];
   const e = i.expedition;
-  if (e && now < e.returnAt) out.push(tripLine(e, 'hero', true, { kind: 'hero' }, now, raidAt));
+  if (e && now < e.returnAt)
+    out.push(tripLine(e, i.advs, 'hero', true, { kind: 'hero' }, now, raidAt));
   for (const g of i.parties) {
     if (now >= g.returnAt) continue;
-    out.push(tripLine(g, 'g' + g.id, false, { kind: 'party', id: g.id }, now, raidAt));
+    out.push(tripLine(g, i.advs, 'g' + g.id, false, { kind: 'party', id: g.id }, now, raidAt));
   }
   const map = i.map;
   if (map) {

@@ -24,7 +24,7 @@ import {
   regainIslandTarget,
   takeObjective,
 } from '@/lib/islandConquest';
-import { islandRetakeOrigin, syncFieldArmies } from '@/lib/fieldArmy';
+import { FIELD_ARMY, islandRetakeOrigin, syncFieldArmies } from '@/lib/fieldArmy';
 
 /**
  * 🏳️ ÉTAPE 6 BIS (décisions de l'utilisateur, 2026-10-02) : les objectifs d'une île SE
@@ -194,5 +194,45 @@ describe('🏝️ une reprise sur une île part d’un lieu ennemi', () => {
   it('un autre lieu fixe, par l’objectif ennemi le plus proche, sinon la forteresse', () => {
     expect(islandRetakeOrigin([fort, near, far], mk('m', 'mine', 'player', 60, 60))!.id).toBe('o1');
     expect(islandRetakeOrigin([fort], mk('m', 'mine', 'player', 60, 60))!.id).toBe('f');
+  });
+});
+
+// 🏝️ Signalé (2026-10-13) : partie de la forteresse toute proche, la reprise n'était visible
+// que quelques minutes. Elle apparaît à son départ, au moins `islandLeadMs` avant l'attaque.
+describe('🏝️ la reprise d’un cimetière se voit venir depuis la forteresse', () => {
+  const T = NOW + 30 * H;
+  const map = () => {
+    const m = takeObjective(island(3), OBJ, ['a'], NOW);
+    return {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === OBJ ? { ...p, control: { ...p.control!, attackAt: T } } : p,
+      ),
+    };
+  };
+  const army = (m: ExpeditionMap, now: number) =>
+    syncFieldArmies(m, { raid: null, detectR: 0, reach: 0, now, playerLevel: 50 }).pois.find(
+      (p) => p.army?.kind === 'retake' && p.army.targetId === OBJ,
+    );
+  it('visible au moins 4 h avant, partie de la forteresse, sans cercle de détection', () => {
+    const m = map();
+    const lead = FIELD_ARMY.islandLeadMs;
+    const a = army(m, T - 60_000)!;
+    expect(a).toBeDefined();
+    const fort = poi(m, FORTRESS_ID)!;
+    expect(Math.hypot(a.from!.x - fort.x, a.from!.y - fort.y)).toBeLessThan(8);
+    expect(a.spawnedAt).toBeLessThanOrEqual(T - lead);
+    expect(army(m, a.spawnedAt - 60_000)).toBeUndefined();
+    expect(army(m, a.spawnedAt + 60_000)).toBeDefined();
+  });
+  it('une forteresse toute proche : rassemblée 4 h avant quand même', () => {
+    const m0 = map();
+    const c = poi(m0, OBJ)!;
+    const m = {
+      ...m0,
+      pois: m0.pois.map((p) => (p.id === FORTRESS_ID ? { ...p, x: c.x + 6, y: c.y } : p)),
+    };
+    const a = army(m, T - 60_000)!;
+    expect(a.spawnedAt).toBe(T - FIELD_ARMY.islandLeadMs);
   });
 });

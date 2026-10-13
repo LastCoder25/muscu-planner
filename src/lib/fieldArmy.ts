@@ -88,6 +88,11 @@ export const FIELD_ARMY = {
   manaFoesPerSize: RIFT.siegeManaFoes / SIEGE_SIZE,
   /** Plancher de la force affichée/affrontée : une armée amputée reste une armée. */
   minSize: 0.25,
+  /** 🏝️ Sur une île, une reprise qui part d'un lieu ennemi CONNU (forteresse, objectif) est
+   *  visible dès son départ, et AU MOINS ce temps avant l'attaque — elle se rassemble et
+   *  marche prudemment sur un trajet court. ⚠️ Signalé (2026-10-13) : partie de la forteresse
+   *  toute proche, elle n'était visible que quelques minutes, impossible à intercepter. */
+  islandLeadMs: 4 * 3_600_000,
 } as const;
 
 const H = 3_600_000;
@@ -411,6 +416,14 @@ export function retakeArmyPoi(
     p,
     isl,
   );
+  // 🏝️ Sur une île, le lieu d'où elle part se voit : elle apparaît à son départ, au moins
+  // `islandLeadMs` avant l'attaque (`FIELD_ARMY.islandLeadMs`), sans attendre un cercle.
+  if (isl !== undefined && origin) {
+    const marchH = Math.hypot(p.x - start.x, p.y - start.y) / FIELD_ARMY.speedPerHour;
+    const leaveAt = c.attackAt - Math.max(marchH * H, FIELD_ARMY.islandLeadMs);
+    if (now < leaveAt) return null;
+    return retakeMarch(p, map, start, leaveAt, playerLevel, now);
+  }
   // ⚠️ Le point attaqué voit TOUJOURS ses abords : son cercle est ajouté s'il manque.
   const all = circles.some((k) => k.id === p.id)
     ? circles
@@ -425,6 +438,19 @@ export function retakeArmyPoi(
   const march = Math.hypot(p.x - from.x, p.y - from.y);
   const spawnedAt = c.attackAt - (march / FIELD_ARMY.speedPerHour) * H;
   if (now < spawnedAt) return null;
+  return retakeMarch(p, map, from, spawnedAt, playerLevel, now);
+}
+
+/** 🏰 L'armée de reprise de `p`, partie de `from` à `spawnedAt`, qui arrive à `attackAt`. */
+function retakeMarch(
+  p: Poi,
+  map: Pick<ExpeditionMap, 'seed' | 'archipel'>,
+  from: { x: number; y: number },
+  spawnedAt: number,
+  playerLevel: number,
+  now: number,
+): Poi {
+  const c = p.control!;
   const force = retakeForce(p, 1);
   const size = Math.max(FIELD_ARMY.minSize, force.size * (1 - (c.retakeCut ?? 0)));
   return marching(
@@ -432,10 +458,10 @@ export function retakeArmyPoi(
     from,
     { x: p.x, y: p.y },
     spawnedAt,
-    c.attackAt,
+    c.attackAt!,
     attackerLevel(map, p, playerLevel),
     playerLevel,
-    { kind: 'retake', targetId: p.id, at: c.attackAt, faction: force.faction, size },
+    { kind: 'retake', targetId: p.id, at: c.attackAt!, faction: force.faction, size },
     now,
     islandVia(map.archipel?.island, from, p),
   );
