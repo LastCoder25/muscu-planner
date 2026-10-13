@@ -102,16 +102,51 @@
               </button>
               <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
                    Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
-              <button
-                v-if="t.cleared || auth.isAdmin"
-                type="button"
-                class="lt-go auto"
-                :disabled="keys < labyKeyCost(t.laby.id)"
-                title="Le run se joue tout seul, en accéléré — tu n’as plus rien à regarder"
-                @click="startAuto(t.laby)"
-              >
-                ⚡ Auto ×{{ SPEED_STEPS[SPEED_STEPS.length - 1] }}
-              </button>
+              <template v-if="t.cleared || auth.isAdmin">
+                <!-- Combien de runs à la suite : borné par les clés (prix payé au lancement
+                     de chaque run, donc arrêter en route garde les clés restantes). -->
+                <div v-if="batchOf(t.laby).max > 1" class="lt-batch">
+                  <button
+                    type="button"
+                    class="lb-step"
+                    aria-label="Un run de moins"
+                    :disabled="batchOf(t.laby).count <= 1"
+                    @click="setBatch(t.laby, batchOf(t.laby).count - 1)"
+                  >
+                    −
+                  </button>
+                  <span class="lb-val" :aria-label="`${batchOf(t.laby).count} runs`">{{
+                    batchOf(t.laby).count
+                  }}</span>
+                  <button
+                    type="button"
+                    class="lb-step"
+                    aria-label="Un run de plus"
+                    :disabled="batchOf(t.laby).count >= batchOf(t.laby).max"
+                    @click="setBatch(t.laby, batchOf(t.laby).count + 1)"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    class="lb-max"
+                    :class="{ on: batchOf(t.laby).count === batchOf(t.laby).max }"
+                    @click="setBatch(t.laby, batchOf(t.laby).max)"
+                  >
+                    Max {{ batchOf(t.laby).max }}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  class="lt-go auto"
+                  :disabled="keys < labyKeyCost(t.laby.id)"
+                  title="Les runs se jouent tout seuls, en accéléré, à la suite"
+                  @click="startSeries(t.laby, batchOf(t.laby).count)"
+                >
+                  ⚡ Auto{{ batchOf(t.laby).count > 1 ? ` ×${batchOf(t.laby).count} runs` : '' }} ·
+                  {{ Math.max(batchOf(t.laby).total, labyKeyCost(t.laby.id)) }} 🗝️
+                </button>
+              </template>
             </div>
           </div>
         </article>
@@ -187,8 +222,12 @@
             ⏩ ×{{ autoSpeed }}
           </button>
           <template v-if="autoMode">
-            <span class="af-txt">⚡ Auto</span>
-            <button type="button" class="af-stop" @click="stopAuto">✋ Reprendre la main</button>
+            <span class="af-txt"
+              >⚡ Auto<template v-if="series">
+                · run {{ series.done + 1 }}/{{ series.total }}</template
+              ></span
+            >
+            <button type="button" class="af-stop" @click="takeBack">✋ Reprendre la main</button>
           </template>
           <button
             v-else-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
@@ -538,6 +577,26 @@
         <div class="over-haul">
           🪙 {{ gold }} · 🎒 {{ run.status === 'dead' ? 0 : loot.length }} objet(s)
         </div>
+        <!-- Série de runs auto : le total de la série, pas seulement le dernier run. -->
+        <div v-if="seriesRecap" class="over-series">
+          <div class="os-title">
+            Série : {{ seriesRecap.done }} run{{ seriesRecap.done > 1 ? 's' : '' }} sur
+            {{ seriesRecap.total }}
+          </div>
+          <div class="os-pills">
+            <span class="good"
+              >🏆 {{ seriesRecap.cleared }} nettoyé{{ seriesRecap.cleared > 1 ? 's' : '' }}</span
+            >
+            <span v-if="seriesRecap.dead" class="bad">💀 {{ seriesRecap.dead }}</span>
+            <span>🪙 {{ seriesRecap.gold }}</span>
+            <span
+              >🎒 {{ seriesRecap.loot.length }} objet{{
+                seriesRecap.loot.length > 1 ? 's' : ''
+              }}</span
+            >
+          </div>
+          <div v-if="seriesRecap.stop" class="os-stop">{{ seriesRecap.stop }}</div>
+        </div>
         <div class="over-sub">
           <template v-if="run.status === 'cleared'"> Butin crédité (+ trésor final) 🎉 </template>
           <template v-else>
@@ -546,12 +605,13 @@
         </div>
 
         <!-- Récap du butin ramené (pour juger la rentabilité du run sans fouiller le sac) -->
-        <div v-if="run.status !== 'dead' && loot.length" class="over-loot">
+        <div v-if="shownLoot.length" class="over-loot">
           <div class="ol-title">
-            Objets rapportés <span class="ol-hint">(tape pour le détail)</span>
+            Objets rapportés{{ seriesRecap ? ' (toute la série)' : '' }}
+            <span class="ol-hint">(tape pour le détail)</span>
           </div>
           <button
-            v-for="(it, i) in loot"
+            v-for="(it, i) in shownLoot"
             :key="i"
             type="button"
             class="ol-item"
@@ -584,7 +644,9 @@
             v-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
             flat
             no-caps
-            label="⚡ Rejouer en auto"
+            :label="
+              replayAutoCount > 1 ? `⚡ Rejouer ×${replayAutoCount} en auto` : '⚡ Rejouer en auto'
+            "
             color="primary"
             :disable="!canStart"
             @click="replayAuto"
@@ -717,6 +779,7 @@ import {
   labyClearId,
   labyKeyCost,
   replayKeysInfo,
+  labyBatchPlan,
   deathKeepFraction,
   labySuccessPct,
   type Labyrinth,
@@ -828,6 +891,35 @@ const replayKeys = computed(() => replayKeysInfo(keys.value, replayCost.value));
 const canStart = computed(
   () => labyUnlocked.value && keys.value >= replayCost.value && progress.ready.value && !!char.row,
 );
+
+// ── Série de runs auto : le nombre voulu par palier, borné par les clés (`labyBatchPlan`). ──
+const batchWanted = ref<Record<string, number>>({});
+function batchOf(l: Labyrinth) {
+  return labyBatchPlan(keys.value, labyKeyCost(l.id), batchWanted.value[l.id] ?? 1);
+}
+function setBatch(l: Labyrinth, n: number) {
+  batchWanted.value = { ...batchWanted.value, [l.id]: n };
+}
+/** Combien de runs « Rejouer en auto » relancerait depuis la modale de fin. */
+const replayAutoCount = computed(() =>
+  selectedLaby.value ? Math.max(1, batchOf(selectedLaby.value).count) : 1,
+);
+// Série EN COURS : runs joués et prévus, et ce qu'elle a rapporté jusqu'ici.
+type Series = {
+  total: number;
+  done: number;
+  cleared: number;
+  dead: number;
+  gold: number;
+  loot: Item[];
+};
+const series = ref<Series | null>(null);
+/** Récap affiché dans la modale de fin quand une série (≥ 2 runs) s'est terminée. */
+const seriesRecap = ref<(Series & { stop: string }) | null>(null);
+const shownLoot = computed(() =>
+  seriesRecap.value ? seriesRecap.value.loot : run.value.status === 'dead' ? [] : loot.value,
+);
+let seriesTimer: ReturnType<typeof setTimeout> | undefined;
 
 // ── Ladder de paliers : chaque palier se débloque en nettoyant le précédent. ──
 const clearedSet = computed(() => char.row?.cleared_dungeons ?? []);
@@ -1542,17 +1634,20 @@ function freshRun() {
 }
 
 // Lance un PALIER (consomme ses clés) : carte fraîche du palier, PV pleins.
-async function start(tier?: Labyrinth) {
+// `inSeries` : run suivant d'une série auto (on garde le compte de la série).
+async function start(tier?: Labyrinth, inSeries = false): Promise<boolean> {
   const uid = auth.user?.id;
-  if (!uid) return;
+  if (!uid) return false;
+  seriesRecap.value = null;
+  if (!inSeries) series.value = null;
   if (!labyUnlocked.value) {
     $q.notify({
       type: 'warning',
       message: 'Construis la 🚪 Porte du Labyrinthe (carte d’expédition) pour le débloquer.',
     });
-    return;
+    return false;
   }
-  if (!labyUnlocked.value || !progress.ready.value || !char.row) return;
+  if (!labyUnlocked.value || !progress.ready.value || !char.row) return false;
   // ⚠️ L'infirmerie : cette page permet de rejouer sans repasser par l'Aventure (et son
   // `expeBlocked`), donc elle vérifie elle-même. AVANT les clés, qu'on ne perde rien.
   const healIn = woundRemainingMs(char.row.base, Date.now());
@@ -1561,11 +1656,11 @@ async function start(tier?: Labyrinth) {
       type: 'warning',
       message: `🤕 Ton héros est à l’infirmerie — de retour dans ${Math.ceil(healIn / 60000)} min.`,
     });
-    return;
+    return false;
   }
   // Palier : celui passé (clic sur une carte) ou le courant (rejouer depuis la modale).
   const laby = tier ?? selectedLaby.value ?? LABYRINTHS[0]!;
-  if (!labyrinthUnlockedTier(laby.id, clearedSet.value)) return;
+  if (!labyrinthUnlockedTier(laby.id, clearedSet.value)) return false;
   const cost = labyKeyCost(laby.id);
   const ok = await char.spendKey(uid, cost, laby.id);
   if (!ok) {
@@ -1573,7 +1668,7 @@ async function start(tier?: Labyrinth) {
       type: 'warning',
       message: `Ce palier demande ${cost} clé${cost > 1 ? 's' : ''} 🗝️ (Porte du Labyrinthe, archives, boss).`,
     });
-    return;
+    return false;
   }
   selectedLaby.value = laby;
   seed.value = Math.floor(Math.random() * 1_000_000) + 1;
@@ -1581,6 +1676,7 @@ async function start(tier?: Labyrinth) {
   credited.value = false;
   freshRun();
   phase.value = 'running';
+  return true;
 }
 
 // ── Auto-run (paliers nettoyés) ──
@@ -1717,18 +1813,58 @@ function autoTick() {
   retreat(); // sécurité ultime : on sort avec le butin
 }
 // Lance un palier NETTOYÉ en mode auto (mêmes règles/coût qu'un run manuel).
-async function startAuto(tier: Labyrinth) {
+async function startAuto(tier: Labyrinth, inSeries = false): Promise<boolean> {
   // ⚠️ Sur un palier DÉJÀ NETTOYÉ, regarder le run n'a plus d'intérêt : c'est du farm.
   // On propose donc la vitesse MAXIMALE d'emblée — elle existait, mais à six appuis du
   // départ et annoncée nulle part. Le sélecteur reste là pour ralentir à volonté.
-  if (labyrinthCleared(tier.id, clearedSet.value)) setSpeed(SPEED_STEPS[SPEED_STEPS.length - 1]!);
-  await start(tier);
-  if (phase.value === 'running') {
+  // En série, on garde la vitesse que le joueur a peut-être baissée entre deux runs.
+  if (!inSeries && labyrinthCleared(tier.id, clearedSet.value))
+    setSpeed(SPEED_STEPS[SPEED_STEPS.length - 1]!);
+  const ok = await start(tier, inSeries);
+  if (ok && phase.value === 'running') {
     autoMode.value = true;
     scheduleAuto(800);
   }
+  return ok;
+}
+// Lance `n` runs auto à la suite sur le palier. Chaque run paie SES clés à son lancement :
+// arrêter la série en route garde les clés des runs non joués.
+async function startSeries(tier: Labyrinth, n: number) {
+  clearSeriesTimer();
+  const total = Math.max(1, Math.floor(n));
+  series.value = total > 1 ? { total, done: 0, cleared: 0, dead: 0, gold: 0, loot: [] } : null;
+  const ok = await startAuto(tier, total > 1);
+  if (!ok) series.value = null;
+}
+// « Reprendre la main » : coupe l'auto, et le run en cours devient le DERNIER de la série
+// (on ne relance pas un run auto derrière un joueur qui a repris les commandes).
+function takeBack() {
+  stopAuto();
+  if (series.value) series.value.total = series.value.done + 1;
+}
+function clearSeriesTimer() {
+  if (seriesTimer) clearTimeout(seriesTimer);
+  seriesTimer = undefined;
+}
+// Run suivant de la série. Les clés ont pu manquer entre-temps : la série s'arrête alors
+// proprement, avec son récap.
+async function nextSeriesRun() {
+  seriesTimer = undefined;
+  const s = series.value;
+  const laby = selectedLaby.value;
+  if (!s || !laby) return;
+  const ok = await startAuto(laby, true);
+  if (!ok) closeSeries('La série s’est arrêtée : le run suivant n’a pas pu partir.');
+}
+function closeSeries(stop: string) {
+  const s = series.value;
+  // Un seul run joué (série coupée dès le premier) : la modale normale suffit.
+  if (s && s.done > 1) seriesRecap.value = { ...s, loot: [...s.loot], stop };
+  series.value = null;
+  over.value = true;
 }
 onBeforeUnmount(() => {
+  clearSeriesTimer();
   stopAuto();
   stopWalk();
   if (pulseTimer) clearTimeout(pulseTimer);
@@ -1760,6 +1896,8 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         title: 'Familier trouvé !',
         subtitle: `${fam.name} · rang ${rarityRank(fam.rarity).name}`,
         rarity: fxRarity(fam.rarity),
+        // En série, un éclat plein écran par run bloquerait l'enchaînement : bandeau discret.
+        ...(series.value ? { quiet: true } : {}),
       });
     }
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
@@ -1779,8 +1917,29 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     // Recale le compteur affiché sur le montant RÉELLEMENT crédité (fraction gardée
     // en cas de mort) → le récap ne ment pas.
     gold.value = Math.floor(gold.value * keep);
+    // Série : on cumule ce que ce run a RÉELLEMENT crédité.
+    const s = series.value;
+    if (s) {
+      s.done++;
+      if (outcome === 'cleared') s.cleared++;
+      if (outcome === 'dead') s.dead++;
+      s.gold += gold.value;
+      if (outcome !== 'dead') s.loot.push(...loot.value);
+    }
   }
   stopAuto(); // fin de run → coupe l'auto (la relance depuis la modale est manuelle)
+  const s = series.value;
+  if (s && s.done < s.total) {
+    // Enchaîne le run suivant s'il reste de quoi le payer ; sinon la série s'arrête là.
+    const cost = selectedLaby.value ? labyKeyCost(selectedLaby.value.id) : Infinity;
+    if (keys.value >= cost) {
+      clearSeriesTimer();
+      seriesTimer = setTimeout(() => void nextSeriesRun(), Math.round(1200 / autoSpeed.value));
+      return;
+    }
+    return closeSeries(`Plus assez de clés pour les ${s.total - s.done} run(s) restant(s).`);
+  }
+  if (s) return closeSeries('');
   over.value = true;
 }
 // Relance directement le même palier depuis la modale de fin (au prix de ses clés).
@@ -1788,14 +1947,17 @@ function replay() {
   over.value = false;
   void start();
 }
-// Relance le même palier en AUTO depuis la modale de fin.
+// Relance le même palier en AUTO depuis la modale de fin (autant de runs que choisi sur sa tuile).
 function replayAuto() {
   over.value = false;
-  if (selectedLaby.value) void startAuto(selectedLaby.value);
+  if (selectedLaby.value) void startSeries(selectedLaby.value, replayAutoCount.value);
 }
 // Ferme le rapport de fin → RETOUR AU CHOIX DES PALIERS (on reste sur la page du labyrinthe,
 // le palier qu'on vient de finir est à jour). Le bouton ‹ du header sert à sortir vers l'Aventure.
 function returnToLobby() {
+  clearSeriesTimer();
+  series.value = null;
+  seriesRecap.value = null;
   stopAuto();
   over.value = false;
   phase.value = 'lobby';
@@ -2051,6 +2213,90 @@ function returnToLobby() {
   font-weight: 700;
   font-size: 12.5px;
   cursor: pointer;
+}
+/* Nombre de runs d'une série auto : − N + et « Max ». */
+.lt-batch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.lb-step {
+  flex: 0 0 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, transparent);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lb-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.lb-val {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.lb-max {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lb-max.on {
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.over-series {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.os-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.os-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.os-pills span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.os-pills .good {
+  color: var(--d1);
+  border-color: color-mix(in srgb, var(--d1) 50%, var(--line));
+}
+.os-pills .bad {
+  color: var(--d4);
+  border-color: color-mix(in srgb, var(--d4) 50%, var(--line));
+}
+.os-stop {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--d3);
 }
 .lt-go.auto {
   background: transparent;

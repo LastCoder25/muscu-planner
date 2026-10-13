@@ -18,8 +18,33 @@ import {
   labyRunCleared,
   labySuccessPct,
   labyIdOfClear,
+  labyBatchPlan,
   type LabyStats,
 } from '@/data/labyrinths';
+
+describe('🔁 série de runs auto : combien selon les clés', () => {
+  it('le maximum = clés ÷ prix, et la série est bornée à [1, max]', () => {
+    expect(labyBatchPlan(10, 3, 1)).toEqual({ max: 3, count: 1, total: 3 });
+    expect(labyBatchPlan(10, 3, 2)).toEqual({ max: 3, count: 2, total: 6 });
+    expect(labyBatchPlan(10, 3, 99)).toEqual({ max: 3, count: 3, total: 9 });
+    expect(labyBatchPlan(10, 3, 0)).toEqual({ max: 3, count: 1, total: 3 });
+  });
+  it('sans clés suffisantes, rien à lancer', () => {
+    expect(labyBatchPlan(2, 3, 5)).toEqual({ max: 0, count: 0, total: 0 });
+  });
+  it('même règle de prix que keysAfterPaying : jamais plus de runs que ce que les clés paient', () => {
+    for (let keys = 0; keys <= 20; keys++)
+      for (const cost of [0, 0.5, 1, 2, 3, 4]) {
+        const { count, total } = labyBatchPlan(keys, cost, 99);
+        let left: number | null = keys;
+        for (let i = 0; i < count; i++) left = keysAfterPaying(left!, cost);
+        expect(left).not.toBeNull();
+        expect(keys - left!).toBe(total);
+        // un run de plus ne serait pas payable
+        expect(keysAfterPaying(left!, cost)).toBeNull();
+      }
+  });
+});
 import { buildingProdPerHour, buildingStorageCap } from '@/lib/buildings';
 import { RANK_ORDER, RARITY_RANK, rankCeilingForLevel } from '@/lib/items';
 

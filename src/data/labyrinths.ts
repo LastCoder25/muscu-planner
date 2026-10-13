@@ -236,6 +236,24 @@ export function replayKeysInfo(
   return { keys: k, runs, missing, label };
 }
 
+/**
+ * 🔁 Une SÉRIE de runs auto sur un même palier : combien on peut en lancer avec ses clés, et
+ * combien on en lance si l’on en demande `wanted`. Même règle de prix que `keysAfterPaying`
+ * (au moins une clé, prix entier). `count` est borné à [1, max] — 0 si l’on ne peut rien
+ * payer. Les clés se paient au LANCEMENT de chaque run : arrêter la série en route garde
+ * les clés des runs non joués.
+ */
+export function labyBatchPlan(
+  keys: number,
+  cost: number,
+  wanted: number,
+): { max: number; count: number; total: number } {
+  const prix = Math.max(1, Math.floor(cost));
+  const max = Math.floor(Math.max(0, Math.floor(keys)) / prix);
+  const count = max === 0 ? 0 : Math.min(max, Math.max(1, Math.floor(wanted) || 1));
+  return { max, count, total: count * prix };
+}
+
 /** Palier nettoyé au moins une fois ? */
 export function labyrinthCleared(id: string, cleared: string[]): boolean {
   return cleared.includes(labyClearId(id));
