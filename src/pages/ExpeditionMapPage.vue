@@ -944,8 +944,10 @@
               🕊️ <b>En paix</b> : l’île est pacifiée, personne ne viendra le reprendre.
             </p>
             <p v-else-if="!controlWorkforce(liveControl)" class="ctl-line ctl-warn">
-              ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
-              attaque — sauf si un renfort arrive avant.
+              ⚠️ <b>Sans défense</b> :
+              <!-- 🏳️ Un objectif ou la forteresse pris ne produit rien : le dire mentirait. -->
+              <template v-if="controlProduces(liveControl.kind)">il ne produit plus, et </template
+              >l’ennemi le reprendra à sa prochaine attaque — sauf si un renfort arrive avant.
             </p>
             <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
             <!-- 🕊️ Lieu fraîchement pris sur une île : la trêve et ce qui la lève. -->
@@ -1788,6 +1790,7 @@ import {
   garrisonDotRows,
   controlTravelMult,
   controlYieldCard,
+  controlProduces,
   controlTier,
   controlTierLabel,
   citadelLabel,

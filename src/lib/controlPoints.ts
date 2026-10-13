@@ -2757,14 +2757,21 @@ const WORKER: Record<ControlKind, [string, string]> = {
   fortress: ['assaillant', 'assaillants'],
 };
 
+/** 🏰🏳️ Ce lieu fixe produit-il quelque chose (ou porte-t-il un effet) une fois tenu ? La
+ *  forteresse et les objectifs d'île — les lieux ENNEMIS qu'on prend — ne produisent rien : ils
+ *  se tiennent. Source unique de la tuile de production ET de l'avertissement « sans défense,
+ *  il ne produit plus » (qui mentait sur ces lieux-là). */
+export function controlProduces(kind: ControlKind): boolean {
+  return kind !== 'fortress' && kind !== 'objective' && kind !== 'citadel';
+}
+
 export function controlYieldCard(
   p: Poi,
   now: number,
   playerLevel: number,
 ): ControlYieldCard | null {
   const c = p.control;
-  // 🏰🏳️ La forteresse et les objectifs ne produisent rien : ils se tiennent.
-  if (!c || c.owner !== 'player' || c.kind === 'fortress' || c.kind === 'objective') return null;
+  if (!c || c.owner !== 'player' || !controlProduces(c.kind)) return null;
   // 🧝 Le héros posté vaut 2 travailleurs — sauf au camp, où chacun n'apprend que pour lui.
   // Les miliciens ne travaillent pas au camp ni au lapidaire : seuls les champions comptent.
   const n = isPerChampKind(c.kind)
