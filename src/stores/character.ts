@@ -1821,7 +1821,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🎟️ Les tickets d'abord, le reste en mana (combinables) ; un ×10 coûte 9 tirages payés.
     const pay = pullPayment(count, { tickets: cur.gacha_tickets, mana: cur.mana });
     if (!pay) return null;
-    const lot = pullMany(Math.random, cur.gacha, count);
+    const lot = pullMany(Math.random, cur.gacha, count, cur.adventurers ?? []);
     let advs = cur.adventurers ?? [];
     let manaBack = 0;
     // 🔮 Chaque cran d'Éveil offre une rune, couleur selon la lettre et le cran.

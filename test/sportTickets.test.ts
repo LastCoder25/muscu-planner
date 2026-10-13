@@ -156,13 +156,16 @@ describe('📏 rythme du gacha avec les tickets', () => {
   const MANA_PER_DAY: Record<number, number> = { 12: 63, 30: 91, 60: 157 };
   // + les quêtes de la semaine au PALIER MAXIMAL (v0.1361, 3 tickets) : le pire cas.
   const REGULAR_TICKETS_PER_WEEK =
-    comboTickets(1) + BOSS_TIERS[1]!.tickets + 1.5 + WEEKLY_QUESTS.tiers[WEEKLY_QUESTS.tiers.length - 1]!.tickets;
+    comboTickets(1) +
+    BOSS_TIERS[1]!.tickets +
+    1.5 +
+    WEEKLY_QUESTS.tiers[WEEKLY_QUESTS.tiers.length - 1]!.tickets;
 
   function topsPerYear(pulls: number): number {
     let total = 0;
     const seeds = 40;
     for (let s = 1; s <= seeds; s++) {
-      const { results } = pullMany(mulberry32(s), emptyPity(), pulls);
+      const { results } = pullMany(mulberry32(s), emptyPity(), pulls, []);
       total += results.filter((r) => r.grade === 'S').length;
     }
     return total / seeds;

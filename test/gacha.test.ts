@@ -232,7 +232,7 @@ describe('🎰 tirer un CHAMPION', () => {
     let p = emptyPity();
     const out: ReturnType<typeof pullChampion>[] = [];
     for (let i = 0; i < n; i++) {
-      const r = pullChampion(rng, p);
+      const r = pullChampion(rng, p, new Set());
       p = r.pity;
       out.push(r);
     }
@@ -516,14 +516,14 @@ describe('🎰 LE LOT DE 10 (v0.968)', () => {
   });
 
   it('⚠️ LE PITY S’ENCHAÎNE D’UN TIRAGE AU SUIVANT DANS LE LOT', () => {
-    const lot = pullMany(mulberry32(7), emptyPity(), 10);
+    const lot = pullMany(mulberry32(7), emptyPity(), 10, []);
     expect(lot.results).toHaveLength(10);
     // Un lot de 10 depuis un pity neuf contient au moins un A, par construction.
     expect(
       lot.results.some((r) => r.grade !== 'B'),
       'aucun A ni S dans un lot de 10',
     ).toBe(true);
-    const seul = pullMany(mulberry32(7), emptyPity(), 1);
+    const seul = pullMany(mulberry32(7), emptyPity(), 1, []);
     expect(lot.pity).not.toEqual(seul.pity);
   });
 
@@ -532,19 +532,19 @@ describe('🎰 LE LOT DE 10 (v0.968)', () => {
     const rng = mulberry32(99);
     const un: string[] = [];
     for (let i = 0; i < 10; i++) {
-      const r = pullChampion(rng, p);
+      const r = pullChampion(rng, p, new Set());
       p = r.pity;
       un.push(r.champion?.id ?? r.grade);
     }
-    const lot = pullMany(mulberry32(99), emptyPity(), 10);
+    const lot = pullMany(mulberry32(99), emptyPity(), 10, []);
     expect(lot.results.map((r) => r.champion?.id ?? r.grade)).toEqual(un);
     expect(lot.pity).toEqual(p);
   });
 
   it('un lot de taille nulle, négative ou DÉCIMALE ne fait rien tomber de trop', () => {
-    expect(pullMany(mulberry32(1), emptyPity(), 0).results).toEqual([]);
-    expect(pullMany(mulberry32(1), emptyPity(), -3).results).toEqual([]);
-    expect(pullMany(mulberry32(1), emptyPity(), 2.7).results).toHaveLength(2);
+    expect(pullMany(mulberry32(1), emptyPity(), 0, []).results).toEqual([]);
+    expect(pullMany(mulberry32(1), emptyPity(), -3, []).results).toEqual([]);
+    expect(pullMany(mulberry32(1), emptyPity(), 2.7, []).results).toHaveLength(2);
   });
 });
 
@@ -617,7 +617,7 @@ describe('🖤 ADAMANTIUM — au-dessus du MYTHRIL (2026-09-27)', () => {
   });
 
   it('un tirage X donne un champion ADAMANTIUM', () => {
-    const r = pullChampion(() => 0, emptyPity());
+    const r = pullChampion(() => 0, emptyPity(), new Set());
     expect(r.grade).toBe('X');
     expect(r.champion?.grade).toBe('X');
   });

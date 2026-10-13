@@ -315,14 +315,39 @@ export interface PullResult {
  * ⚠️ **UNIFORME DANS LA LETTRE**, et c'est ce qui fait la vitesse de l'Éveil : un champion
  * PRÉCIS tombe à 1/N du taux « champion » de sa lettre.
  */
-export function pullChampion(rng: () => number, pity: PityState): PullResult & { pity: PityState } {
+export function pullChampion(
+  rng: () => number,
+  pity: PityState,
+  /** ✨ Les champions déjà au MAXIMUM de l'Éveil : on ne les tire plus (décision de
+   *  l'utilisateur, 2026-10-13 : « un autre champion de la même rareté à la place, un dont
+   *  l'éveil n'est pas au maximum ou un nouveau, au hasard »). ⚠️ REQUIS : oublié, une copie
+   *  en trop redeviendrait de la mana sans que rien ne le dise. */
+  maxed: ReadonlySet<string>,
+): PullResult & { pity: PityState } {
   const r = pullGrade(rng, pity);
   if (r.grade === 'B') return { grade: 'B', champion: null, pity: r.pity };
-  const pool = championsOf(r.grade);
+  const all = championsOf(r.grade);
   // ⚠️ INATTEIGNABLE tant que le roster a des S et des A (`champions.test.ts`) : une ceinture
   // pour le jour où quelqu'un vide une lettre, pas une règle de jeu.
-  if (!pool.length) throw new Error(`Aucun champion de lettre ${r.grade}`);
+  if (!all.length) throw new Error(`Aucun champion de lettre ${r.grade}`);
+  // Au hasard parmi ceux qu'on n'a pas ET ceux qu'on peut encore éveiller. Toute la lettre au
+  // maximum : on tire dans la lettre entière, et la copie se convertit en mana (`grantChampion`).
+  // ⚠️ UN SEUL `rng()` dans les deux cas : le flux ne décale pas.
+  const open = all.filter((c) => !maxed.has(c.id));
+  const pool = open.length ? open : all;
   return { grade: r.grade, champion: pool[Math.floor(rng() * pool.length)]!, pity: r.pity };
+}
+
+/** ✨ Les champions du vivier déjà au maximum de l'Éveil : une copie de plus déborderait
+ *  (`awakenOverflow`, la règle de `grantChampion`). */
+export function maxedChampions(
+  roster: readonly Pick<Adventurer, 'championId' | 'copies'>[],
+): Set<string> {
+  return new Set(
+    roster
+      .filter((a) => a.championId && awakenOverflow(Math.max(1, Math.floor(a.copies ?? 1)) + 1))
+      .map((a) => a.championId!),
+  );
 }
 
 /**
@@ -349,12 +374,21 @@ export function pullMany(
   rng: () => number,
   pity: PityState,
   count: number,
+  /** Le vivier AVANT le lot (champion et nombre d'exemplaires). ⚠️ REQUIS (cf. `pullChampion`). */
+  roster: readonly Pick<Adventurer, 'championId' | 'copies'>[],
 ): { results: PullResult[]; pity: PityState } {
   let p = pity;
   const results: PullResult[] = [];
+  // ⚠️ Les exemplaires S'ACCUMULENT dans le lot : un champion qui atteint le maximum au 3ᵉ
+  // tirage n'est plus tiré au 4ᵉ.
+  const copies = new Map<string, number>();
+  for (const a of roster)
+    if (a.championId) copies.set(a.championId, Math.max(1, Math.floor(a.copies ?? 1)));
   for (let i = 0; i < Math.max(0, Math.floor(count)); i++) {
-    const r = pullChampion(rng, p);
+    const maxed = maxedChampions([...copies].map(([championId, n]) => ({ championId, copies: n })));
+    const r = pullChampion(rng, p, maxed);
     p = r.pity;
+    if (r.champion) copies.set(r.champion.id, (copies.get(r.champion.id) ?? 0) + 1);
     results.push({ grade: r.grade, champion: r.champion });
   }
   return { results, pity: p };
