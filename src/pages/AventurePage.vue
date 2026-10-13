@@ -1792,7 +1792,7 @@
           </div>
           <!-- 🔎 Filtres par origine (v1.57) : seulement les catégories présentes. -->
           <div
-            v-if="inboxCats.length > 1"
+            v-if="inboxCats.length > 1 || inboxClaimN > 0"
             class="inbox-filters"
             role="group"
             aria-label="Filtrer les messages"
@@ -1804,6 +1804,16 @@
               @click="inboxFilter = null"
             >
               Tous <span class="ic-n">{{ inboxMessages.length }}</span>
+            </button>
+            <!-- 🎁 Tout ce qui a un butin à prendre, quelle que soit son origine. -->
+            <button
+              v-if="inboxClaimN > 0"
+              class="inbox-chip claim"
+              :class="{ on: inboxCat === 'claim' }"
+              :aria-pressed="inboxCat === 'claim'"
+              @click="inboxFilter = inboxCat === 'claim' ? null : 'claim'"
+            >
+              🎁 À prendre <span class="ic-n">{{ inboxClaimN }}</span>
             </button>
             <button
               v-for="c in inboxCats"
@@ -3286,7 +3296,8 @@ import {
   categoryCounts,
   effectiveCategory,
   filterMessages,
-  type MessageCategory,
+  claimableCount,
+  type InboxFilter,
 } from '@/lib/messageFilter';
 import { logicalToday } from '@/lib/challenges';
 import { islandPacified, plunderForecast } from '@/lib/archipelago';
@@ -5579,10 +5590,16 @@ const unreadMessages = computed(
 const inboxOpen = ref(false);
 /** 🔎 Filtre de la boîte (null = tout) : il RESTE entre deux ouvertures, mais retombe sur tout
  *  quand sa catégorie n'a plus de message (`effectiveCategory`). */
-const inboxFilter = ref<MessageCategory | null>(null);
+const inboxFilter = ref<InboxFilter | null>(null);
 const inboxCats = computed(() => categoryCounts(inboxMessages.value));
-const inboxCat = computed(() => effectiveCategory(inboxMessages.value, inboxFilter.value));
-const inboxShown = computed(() => filterMessages(inboxMessages.value, inboxCat.value));
+/** 🎁 « À prendre » : la pastille n'existe que s'il y a un butin à encaisser. */
+const inboxClaimN = computed(() => claimableCount(inboxMessages.value, expeNow.value));
+const inboxCat = computed(() =>
+  effectiveCategory(inboxMessages.value, inboxFilter.value, expeNow.value),
+);
+const inboxShown = computed(() =>
+  filterMessages(inboxMessages.value, inboxCat.value, expeNow.value),
+);
 function openInbox() {
   inboxOpen.value = true;
   const uid = auth.user?.id;
@@ -10402,6 +10419,12 @@ button.pt-mini:active {
 .inbox-chip.on {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+/* 🎁 « À prendre » : une ACTION à faire, d'où l'accent même quand elle n'est pas choisie. */
+.inbox-chip.claim {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  color: var(--accent);
+  font-weight: 600;
 }
 .inbox-chip .ic-n {
   color: var(--dim);
