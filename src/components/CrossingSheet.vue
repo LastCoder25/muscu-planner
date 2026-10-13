@@ -47,17 +47,28 @@
       </button>
       <p v-if="hero && heroBlock" class="cs-block">{{ heroBlock }}</p>
 
-      <!-- ⛵ Vers l'île suivante (décision de l'utilisateur, 2026-10-03) : pas de choix, tout
-           le monde part, et l'île quittée est pacifiée. -->
-      <div v-if="forward" class="cs-forward">
+      <!-- ⛵ Le héros part : pas de choix, tout le monde suit, dans les deux sens (2026-10-03
+           vers l'avant, 2026-10-13 en reculant). Vers l'avant l'île quittée est pacifiée ; en
+           reculant elle est abandonnée. -->
+      <div v-if="allFollow" class="cs-forward">
         <p>
           <b>🧭 Tous tes champions te suivent</b>, y compris ceux postés sur un lieu fixe ou restés
           sur une autre île. Ils débarquent avec toi à l'arrivée.
         </p>
-        <p>
+        <p v-if="forward">
           <b>🕊️ L'île {{ from }} est pacifiée</b> : camps, failles et armées disparaissent, seuls
           ses lieux fixes restent. Ils produisent toujours, gardés par ta milice.
         </p>
+        <template v-else>
+          <p>
+            <b>🏚️ L'île {{ from }} est abandonnée</b> : ses attaques continuent, et seuls tes
+            miliciens restés la défendent. L'ennemi reprendra ses lieux petit à petit.
+          </p>
+          <p>
+            <b>🌱 L'île {{ to }} reprend vie</b> : ses lieux et ses failles réapparaissent pour
+            farmer. Elle reste pacifiée : ni attaque, ni armée.
+          </p>
+        </template>
       </div>
       <template v-else>
         <div class="cs-bar">
@@ -139,7 +150,7 @@
           @click="
             emit('confirm', {
               hero,
-              ids: [...picked],
+              ids: allFollow ? candidates.map((a) => a.id) : [...picked],
               militiaPlan: forward ? { ...plan } : undefined,
             })
           "
@@ -236,13 +247,13 @@ const toggleAll = () => {
   picked.value =
     picked.value.length === props.candidates.length ? [] : props.candidates.map((a) => a.id);
 };
-/** ⛵ Le héros part vers l'île suivante : tout le monde suit, l'île quittée est pacifiée. */
-const forward = computed(
-  () => hero.value && props.to !== null && props.from === props.activeId && props.to > props.from,
-);
+/** ⛵ Le héros quitte l'île active : tout le monde suit, dans les deux sens (2026-10-13). */
+const allFollow = computed(() => hero.value && props.to !== null && props.from === props.activeId);
+/** …et vers l'île suivante, l'île quittée est pacifiée (sinon elle est abandonnée). */
+const forward = computed(() => allFollow.value && props.to! > props.from);
 const canGo = computed(() => (hero.value ? !props.heroBlock : picked.value.length > 0));
 const goLabel = computed(() => {
-  if (forward.value) return '⛵ Embarquer avec tous les champions';
+  if (allFollow.value) return '⛵ Embarquer avec tous les champions';
   const n = picked.value.length;
   const champs = `${n} champion${n > 1 ? 's' : ''}`;
   return hero.value ? `⛵ Embarquer : le héros et ${champs}` : `⛵ Faire naviguer ${champs}`;

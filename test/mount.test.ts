@@ -660,9 +660,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (back = h),
     );
-    // Au retour, on choisit toujours qui embarque.
-    expect(back).toMatch(/2\/2\s+champions/);
-    expect(back).not.toContain('Tous tes champions te suivent');
+    // Au retour aussi, tout le monde suit (2026-10-13) : l'île quittée est abandonnée, celle
+    // d'arrivée reprend vie. Aucun choix de champions, aucune répartition de milice.
+    expect(back).not.toMatch(/2\/2\s+champions/);
+    expect(back).toContain('Tous tes champions te suivent');
+    expect(back).toContain('île 2 est abandonnée');
+    expect(back).toContain('île 1 reprend vie');
+    expect(back).not.toContain('pacifiée</b>');
+    expect(back).not.toContain('Qui reste garder');
     let alone = '';
     await mountIt(
       CrossingSheet,

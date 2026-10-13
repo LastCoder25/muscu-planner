@@ -7,6 +7,7 @@ import {
   fortressReward,
   fortressSealCount,
   landAdventurers,
+  abandonedIslandKeys,
   landCrossing,
   landingChestMessage,
   moveRemoteMilitia,
@@ -158,14 +159,14 @@ describe('⚓ débarquer', () => {
     // Celui qui attendait sur l'île d'arrivée garde son poste ; les autres le perdent.
     expect(out.map((a) => a.posted)).toEqual([undefined, undefined, 'y', undefined]);
   });
-  it('au retour : embarqués et attendus redeviennent « ici », les autres restent', () => {
+  it('au retour aussi, TOUT LE MONDE suit le héros (2026-10-13 : une seule île à la fois)', () => {
     const c = { from: 2, to: 1, bookedAt: T0, departAt: T0, arriveAt: T0 + 2 * H, ids: ['a'] };
     const out = landAdventurers(
       [adv('a'), adv('p', { posted: 'x' }), adv('w', { elsewhere: 1 }), adv('o', { elsewhere: 3 })],
       c,
     );
-    expect(out.map((a) => a.elsewhere)).toEqual([undefined, 2, undefined, 3]);
-    expect(out[1]!.posted).toBe('x');
+    expect(out.map((a) => a.elsewhere)).toEqual([undefined, undefined, undefined, undefined]);
+    expect(out[1]!.posted).toBeUndefined();
   });
   it('un champion resté ailleurs est indisponible ici', () => {
     expect(advUnavailableReason(adv('x', { elsewhere: 1 }), T0)).toBe('away');
@@ -235,6 +236,49 @@ describe('🕊️ vider l’île quittée', () => {
     expect(vacateIsland(v, T0 + 3 * H, 18)).toBe(v);
     const later = advanceWorld(v, T0 + 72 * H, 18, 3);
     expect(later.pois.map((p) => p.id).sort()).toEqual(['ctl_garden', 'ctl_mine']);
+  });
+
+  // ⛵ 2026-10-13 (décision de l'utilisateur) : on se concentre sur UNE île.
+  const on2 = (): ExpeditionMap => {
+    const i2 = createMap(7, T0, 30, 3, undefined, archipelOn(2));
+    return {
+      ...i2,
+      pois: [...i2.pois, held],
+      islands: { '1': v },
+      crossing: { from: 2, to: 1, bookedAt: T0, departAt: T0, arriveAt: T0 + 2 * H, ids: [] },
+    };
+  };
+  it('en reculant, l’île pacifiée retrouvée refait apparaître ses lieux et ses failles', () => {
+    const land = landCrossing(on2(), T0 + 2 * H, 30, undefined);
+    expect(land.map.archipel!.island).toBe(1);
+    expect(land.map.archipel!.vacatedAt).toBeUndefined();
+    expect(land.map.archipel!.pacifiedAt).toBe(T0 + 2 * H); // toujours pacifiée
+    const later = advanceWorld(land.map, T0 + 3 * H, 18, 3);
+    expect(later.pois.filter((p) => !p.control).length).toBeGreaterThan(0);
+    expect(later.pois.some((p) => p.type === 'rift')).toBe(true);
+    // Toujours pacifiée : aucune attaque ne se prépare sur ses lieux fixes.
+    expect(later.pois.every((p) => p.control?.attackAt === undefined)).toBe(true);
+  });
+  it('en reculant, l’île quittée est ABANDONNÉE : pas pacifiée, ses champions partent, ses miliciens et ses attaques restent', () => {
+    const land = landCrossing(on2(), T0 + 2 * H, 30, undefined);
+    const left = land.map.islands!['2']!;
+    expect(left.archipel!.pacifiedAt).toBeUndefined();
+    expect(left.archipel!.vacatedAt).toBeUndefined();
+    const c = left.pois.find((p) => p.id === 'ctl_mine')!.control!;
+    expect(c.garrison).toEqual(['mil:1', 'mil:2']);
+    expect(c.hero).toBeUndefined();
+    expect(c.attackAt).toBe(T0 + 24 * H);
+    expect(abandonedIslandKeys(land.map)).toEqual(['2']);
+  });
+  it('une île pacifiée rangée n’est jamais abandonnée (elle ne s’attaque plus)', () => {
+    expect(abandonedIslandKeys({ archipel: archipelOn(2), islands: { '1': v } })).toEqual([]);
+  });
+  it('la quitter de nouveau vers l’avant la revide', () => {
+    const back = landCrossing(on2(), T0 + 2 * H, 30, undefined).map;
+    const grown = advanceWorld(back, T0 + 3 * H, 18, 3);
+    const again = vacateIsland(grown, T0 + 4 * H, 18);
+    expect(again.pois.every((p) => !!p.control)).toBe(true);
+    expect(again.archipel!.vacatedAt).toBe(T0 + 4 * H);
   });
 });
 

@@ -21,6 +21,7 @@ import type { Adventurer } from './adventurers';
 import {
   archipelOn,
   islandById,
+  islandPacified,
   ISLAND_OUTPOST_LEVEL,
   ISLANDS,
   mapPlayerLevel,
@@ -184,8 +185,10 @@ export function endlessReward(
 }
 
 /** ⛵ Une traversée VERS L'AVANT (vers une île de numéro plus grand) : c'est elle qui pacifie
- *  l'île quittée et emmène tous les champions. Un retour vers une île déjà visitée ne change
- *  rien de tout ça. */
+ *  l'île quittée. ⚠️ Les champions, eux, suivent le héros DANS LES DEUX SENS (2026-10-13,
+ *  décision de l'utilisateur : « si on quitte une île tout le monde doit suivre, pour éviter
+ *  de farmer deux îles en même temps ») : une île qu'on quitte en reculant est ABANDONNÉE, et
+ *  l'ennemi la reprend petit à petit (`abandonedRetakesDue`). */
 function isForwardCrossing(c: Pick<Crossing, 'from' | 'to'>): boolean {
   return c.to > c.from;
 }
@@ -267,12 +270,11 @@ export function crossingBlocker(
   if (map.archipel.island === to) return 'same';
   if (!openIslands(map).includes(to)) return 'locked';
   if (ctx.heroBusy) return 'heroBusy';
-  // ⛵ VERS L'AVANT, TOUT LE MONDE QUITTE L'ÎLE (2026-10-08, décision de l'utilisateur : « pas
-  // besoin que le héros soit à la forteresse », mais « il faut que les champions et le héros
-  // ne soient pas en trajet ») : héros et champions embarquent d'où ils sont posés, jamais
-  // en pleine route. Un retour vers une île visitée attend, lui, le retour des troupes.
-  if (ctx.championsAway > 0 && isForwardCrossing({ from: map.archipel.island, to }))
-    return 'troopsAway';
+  // ⛵ TOUT LE MONDE QUITTE L'ÎLE (2026-10-08, décision de l'utilisateur : « pas besoin que le
+  // héros soit à la forteresse », mais « il faut que les champions et le héros ne soient pas
+  // en trajet ») : héros et champions embarquent d'où ils sont posés, jamais en pleine route.
+  // ⚠️ Dans les deux sens depuis le 2026-10-13 : un retour emmène aussi tout le monde.
+  if (ctx.championsAway > 0) return 'troopsAway';
   return null;
 }
 
@@ -463,6 +465,28 @@ function islandSeed(seed: number, island: number): number {
   return (Math.imul(seed ^ 0x9e3779b9, 31 + island) ^ (island * 0x85ebca6b)) >>> 0 || 1;
 }
 
+/**
+ * 🏚️ Les îles ABANDONNÉES : rangées sans avoir été pacifiées (quittées en reculant). Ce sont
+ * les SEULES îles rangées qui ne sont pas figées : leurs reprises continuent au rythme normal,
+ * défendues par les seuls miliciens restés, et l'ennemi les reprend petit à petit (2026-10-13,
+ * décision de l'utilisateur). Une île pacifiée, elle, ne s'attaque plus.
+ */
+export function abandonedIslandKeys(map: Pick<ExpeditionMap, 'archipel' | 'islands'>): string[] {
+  return Object.entries(map.islands ?? {})
+    .filter(([k, im]) => Number(k) !== map.archipel?.island && !!im.archipel && !islandPacified(im))
+    .map(([k]) => k);
+}
+
+/** 🌱 Une île quittée vers l'avant redevient vivante : elle refait apparaître ses lieux et
+ *  ses failles (`advanceWorld` lit `vacatedAt`), en restant pacifiée. */
+export function reopenIsland(map: ExpeditionMap): ExpeditionMap {
+  const a = map.archipel;
+  if (!a || a.vacatedAt === undefined) return map;
+  const { vacatedAt: _v, ...archipel } = a;
+  void _v;
+  return { ...map, archipel };
+}
+
 export interface Landing {
   map: ExpeditionMap;
   /** Le débarquement qui vient d'avoir lieu (null si aucun). */
@@ -499,14 +523,20 @@ export function landCrossing(
   // quittent aussi les garnisons des îles rangées (`stripChampions`). Les miliciens
   // postés sur ses lieux fixes restent ; ceux de sa réserve embarquent (cf. `boarding`).
   // Les navigations sans héros en cours n'ont plus d'objet : leurs champions suivent le héros.
+  // ⛵ EN RECULANT (2026-10-13) : l'île quittée n'est PAS pacifiée, elle est ABANDONNÉE — ses
+  // champions partent aussi (`stripChampions`), ses miliciens restent et l'ennemi la reprend
+  // petit à petit (`abandonedRetakesDue`). Dans les deux sens, tout le monde suit le héros.
   const forward = isForwardCrossing(c);
   const lvl = (m: Pick<ExpeditionMap, 'archipel'>) => mapPlayerLevel(m, playerLevel);
-  const left = forward ? vacateIsland(left0, c.arriveAt, lvl(left0)) : left0;
+  const left = forward
+    ? vacateIsland(left0, c.arriveAt, lvl(left0))
+    : stripChampions(left0, c.arriveAt, lvl(left0));
   // ⛵🛡️ Les miliciens en mer, eux, continuent : ils accosteront sur l'île visée, rangée ou non.
-  const sailings = forward ? sailing0?.filter((s) => (s.militia ?? 0) > 0) : sailing0;
+  const sailings = sailing0?.filter((s) => (s.militia ?? 0) > 0);
   const stash: Record<string, ExpeditionMap> = {};
+  // (L'île d'arrivée garde ses postés : ils y attendaient déjà, `landAdventurers`.)
   for (const [k, im] of Object.entries(islands ?? {}))
-    stash[k] = forward ? stripChampions(im, c.arriveAt, lvl(im)) : im;
+    stash[k] = k === String(c.to) ? im : stripChampions(im, c.arriveAt, lvl(im));
   const found = stash[String(c.to)];
   delete stash[String(c.to)];
   const leftWithMilitia = militia ? { ...left, militia } : left;
@@ -528,7 +558,11 @@ export function landCrossing(
   let arrival: MilitiaState | undefined;
   if (found) {
     const { militia: m, ...rest } = found;
-    saved = rest;
+    // 🌱 Une île PACIFIÉE qu'on retrouve refait apparaître ses lieux et ses failles, pour
+    // repartir en farm (2026-10-13, décision de l'utilisateur) : on lève `vacatedAt`, qui
+    // bloquait toute apparition. Elle reste pacifiée (`pacifiedAt`) : ni attaque, ni armée,
+    // ni siège. La quitter de nouveau vers l'avant la revide (`vacateIsland` rejoue).
+    saved = rest.archipel?.vacatedAt !== undefined ? reopenIsland(rest) : rest;
     arrival = m;
   }
   const archipel = archipelOn(c.to);
@@ -768,35 +802,23 @@ export function applyMilitiaPlan(
 }
 
 /**
- * Les champions au débarquement : les embarqués et ceux qui ATTENDAIENT sur l'île d'arrivée
- * redeviennent « ici » ; tous les autres restent sur l'île quittée.
+ * Les champions au débarquement : TOUS débarquent avec le héros, d'où qu'ils viennent
+ * (garnisons, autres îles), dans les deux sens (2026-10-13 : on se concentre sur UNE île) ;
+ * un poste sur une île quittée est levé (`stripChampions`). Ceux qui attendaient déjà sur
+ * l'île d'arrivée gardent leur poste.
  */
 export function landAdventurers(advs: Adventurer[], c: Crossing): Adventurer[] {
-  // ⛵ Vers l'île suivante, TOUS les champions débarquent avec le héros, d'où qu'ils viennent
-  // (garnisons, autres îles) ; un poste sur une île quittée est levé (`stripChampions`). Ceux
-  // qui attendaient déjà sur l'île d'arrivée gardent leur poste.
-  if (isForwardCrossing(c))
-    return advs.map((a) => {
-      if (a.elsewhere === c.to) {
-        const { elsewhere: _e, ...rest } = a;
-        void _e;
-        return rest;
-      }
-      if (a.elsewhere === undefined && a.posted === undefined) return a;
-      const { elsewhere: _e, posted: _p, ...rest } = a;
-      void _e;
-      void _p;
-      return rest;
-    });
-  const on = new Set(c.ids);
   return advs.map((a) => {
-    if (on.has(a.id) || a.elsewhere === c.to) {
-      if (a.elsewhere === undefined) return a;
+    if (a.elsewhere === c.to) {
       const { elsewhere: _e, ...rest } = a;
       void _e;
       return rest;
     }
-    return a.elsewhere === undefined ? { ...a, elsewhere: c.from } : a;
+    if (a.elsewhere === undefined && a.posted === undefined) return a;
+    const { elsewhere: _e, posted: _p, ...rest } = a;
+    void _e;
+    void _p;
+    return rest;
   });
 }
 

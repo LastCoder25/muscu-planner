@@ -155,6 +155,7 @@ import {
   startSailing,
   endlessReward,
   landAdventurers,
+  abandonedIslandKeys,
   landCrossing,
   moveRemoteMilitia,
   landingChestMessage,
@@ -5433,6 +5434,139 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
+   * 🏚️ LES ÎLES ABANDONNÉES SE FONT REPRENDRE (2026-10-13, décision de l'utilisateur : « l'île
+   * quittée se refait prendre par l'ennemi petit à petit ; on laisse les miliciens, qui seront
+   * tués petit à petit »). Les reprises dues d'une île quittée en reculant se jouent comme sur
+   * l'île active, mais seuls les MILICIENS restés défendent (tous les champions ont suivi le
+   * héros). Ce que le lieu a produit jusqu'à l'attaque part avant le combat. Tenu : les
+   * miliciens tombés sont retirés et une nouvelle attaque se prépare ; perdu : le lieu revient
+   * à l'ennemi. `null` si rien n'est dû (l'appelant n'écrit pas à vide).
+   */
+  function abandonedRetakes(
+    cur: CharacterRow,
+    now: number,
+    heroLevel: number,
+    activeDays7: number,
+  ): { patch: Partial<CharacterRow>; msgs: ExpeditionMessage[] } | null {
+    const root = cur.expedition_map;
+    if (!root) return null;
+    if (!root.islands) return null;
+    const islands0 = root.islands;
+    let islands = islands0;
+    const msgs: ExpeditionMessage[] = [];
+    let runes = 0;
+    let blessed = 0;
+    let exalted = 0;
+    let keys = 0;
+    let summon = 0;
+    let gearSeals = 0;
+    const champSeals: [number, number][] = [];
+    for (const k of abandonedIslandKeys(root)) {
+      let map = holdGrace(redirectIslandAttacks(islands[k]!, now), now);
+      const due = dueRetakes(map, now);
+      if (!due.length) {
+        if (map !== islands[k]) islands = { ...islands, [k]: map };
+        continue;
+      }
+      const lvl = mapPlayerLevel(map, heroLevel);
+      const isl = islandById(Number(k));
+      for (const p of due) {
+        const at = p.control!.attackAt!;
+        const h = harvestControlIn(map, advList.value, cur.adv_gear?.stock ?? [], p.id, at, lvl);
+        map = h.map;
+        runes += h.runes;
+        blessed += h.blessedRunes;
+        exalted += h.exaltedRunes;
+        keys += h.keys;
+        summon += h.summon;
+        gearSeals += h.gearSeals;
+        if (h.champSeals) champSeals.push([h.champSealRank, h.champSeals]);
+        const militia = defendsControl(p.control!.kind)
+          ? militiaUnits(p.control!.garrison, lvl)
+          : [];
+        const { foe, force } = retakeBattle(map, p, militia, lvl, fortify(cur, heroLevel));
+        const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
+        const kit = escortKitOf(cur);
+        const o = militia.length
+          ? resolveCamp({
+              poi: foe,
+              spec: force,
+              escort: [],
+              road: kit,
+              hero: null,
+              seed,
+              playerLevel: lvl,
+              pantheonLevel: pantheonLevel.value,
+              militia,
+            })
+          : null;
+        const held = !!o?.win;
+        const where = isl ? ` (${isl.emoji} ${isl.name})` : ` (île ${k})`;
+        const label = CONTROL_LABEL[p.control!.kind] + where;
+        const emo = FACTION_EMOJI[force.faction];
+        const msg: ExpeditionMessage = {
+          ...buildMessage({
+            poi: foe,
+            sentAt: at,
+            midAt: at,
+            returnAt: at,
+            seed,
+            outcome: {
+              ...(o ?? {
+                win: false,
+                gold: 0,
+                energy: 0,
+                summonStones: 0,
+                mana: 0,
+                item: null,
+                items: [],
+                key: 0,
+                text: '',
+              }),
+              gold: (o?.gold ?? 0) + h.gold,
+              mana: (o?.mana ?? 0) + h.mana,
+              supplies: addSupplies(o?.supplies ?? {}, h.supplies),
+            },
+          } as ActiveExpedition),
+          id: controlAttackReportId(p.id, at),
+          title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
+          text: held
+            ? `${emo} Tes miliciens ont tenu l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
+            : militia.length
+              ? `${emo} L’ennemi a repris le lieu sur l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)}`
+              : `${emo} L’ennemi a repris le lieu, laissé sans défense sur l’île abandonnée.`,
+          ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
+        };
+        msgs.push(msg);
+        const dead = o?.party?.militiaLost ?? [];
+        if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, lvl);
+        map = held
+          ? holdControl(map, p.id, at, activeDays7)
+          : regainIslandTarget(
+              loseControl(map, p.id, lvl, at, { level: foe.level, faction: force.faction }),
+              p.id,
+            );
+        map = withLastAttack(map, p.id, msg);
+      }
+      islands = { ...islands, [k]: map };
+    }
+    if (islands === islands0) return null;
+    return {
+      msgs,
+      patch: {
+        expedition_map: { ...root, islands },
+        ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
+        ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed, exalted) } : {}),
+        ...(keys ? { keys: cur.keys + keys } : {}),
+        ...(summon ? { summon_stones: (cur.summon_stones ?? 0) + summon } : {}),
+        ...(gearSeals || champSeals.length
+          ? { seals: withControlSeals(cur.seals, gearSeals, champSeals) }
+          : {}),
+      },
+    };
+  }
+
+  /**
    * 🏰 LES REPRISES ENNEMIES — à l'instant tiré (`attackAt`), que l'app soit ouverte ou non.
    * La garnison livre le combat d'un camp contre une troupe de force ALÉATOIRE : repoussée,
    * elle gagne son XP et une nouvelle attaque se prépare ; vainqueur, l'ennemi reprend le
@@ -5459,6 +5593,13 @@ export const useCharacterStore = defineStore('character', () => {
     if (home) {
       if (tickMayWrite(cur)) await persist(userId, home);
       return none;
+    }
+    // 🏚️ Les îles ABANDONNÉES (quittées en reculant) se font reprendre petit à petit, dans
+    // leur propre écriture.
+    const lost = abandonedRetakes(cur, now, heroLevel, activeDays7);
+    if (lost) {
+      if (tickMayWrite(cur)) await persist(userId, lost.patch);
+      return { attacks: lost.msgs, notices: [] };
     }
     // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
     // combattent avec elle, les autres non).

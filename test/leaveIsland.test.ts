@@ -62,9 +62,10 @@ describe('⛵ quitter l’île : personne en trajet, mais pas besoin d’être �
   it('un champion en route retient le départ vers l’avant', () => {
     expect(crossingBlocker(m, 2, { ...ok, championsAway: 1 })).toBe('troopsAway');
   });
-  it('un retour vers une île visitée attend les troupes, il n’est pas refusé', () => {
+  it('un retour vers une île visitée est retenu lui aussi : tout le monde suit (2026-10-13)', () => {
     const on2 = { ...m, archipel: { ...archipelOn(2) }, islands: { '1': m } } as ExpeditionMap;
-    expect(crossingBlocker(on2, 1, { ...ok, championsAway: 2 })).toBeNull();
+    expect(crossingBlocker(on2, 1, { ...ok, championsAway: 2 })).toBe('troopsAway');
+    expect(crossingBlocker(on2, 1, ok)).toBeNull();
   });
   it('en route = busyUntil dans le futur ; posté en garnison ou sur une autre île, non', () => {
     const a = (id: string, x: Record<string, unknown>) =>
