@@ -1201,6 +1201,9 @@ export interface ExpeditionMessage {
   waves?: number; // 'arena' : vagues tenues
   party?: PartyResult; // ⚔️ rapport d'un groupe de camp (absent des rapports d'avant)
   overflow?: OverflowReplay; // 🕳️💥 une faille a débordé (rien à encaisser)
+  /** 🏰 Rapport de PRODUCTION d'un lieu fixe tenu (or d'une absence, consommables, runes…) :
+   *  ni héros, ni équipe, ni rang — seulement la récolte et les miliciens qui la produisaient. */
+  production?: { militia: number };
   /** 🎓 L'XP des champions a été versée À L'ARRIVÉE du rapport (`grantReportXp`), plus à
    *  l'encaissement. ⚠️ ABSENT des rapports déposés avant ce changement : leur XP est
    *  versée à l'encaissement, comme avant — sinon elle serait perdue. */

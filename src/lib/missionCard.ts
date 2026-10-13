@@ -72,6 +72,9 @@ export interface MissionCard {
   route: MissionRoute | null;
   /** Le héros était du voyage (expédition solo, ou dans le groupe). */
   hero: boolean;
+  /** 🏰 Rapport de production d'un lieu fixe : les miliciens de sa garnison (0 si aucun) ;
+   *  null pour tout autre rapport. */
+  militia: number | null;
   /** « 11/12 abattus » — null quand il n'y a pas eu de combat à compter. */
   kills: string | null;
   totalXp: number;
@@ -94,8 +97,15 @@ const rankLabel = (level: number) => {
 
 const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? 's' : ''}`;
 
+/** 🏰 Un rapport de PRODUCTION d'un lieu fixe. ⚠️ Les rapports d'avant n'ont pas le champ :
+ *  on les reconnaît à leur id (`controlGoldMessage` / `controlLootMessage`). */
+export function isProductionMessage(m: ExpeditionMessage): boolean {
+  return !!m.production || m.id.startsWith('ctlgold_') || m.id.startsWith('ctlloot_');
+}
+
 /** Le verdict, dans les mots du lieu. */
 function messageVerdict(m: ExpeditionMessage): string {
+  if (isProductionMessage(m)) return 'récolte';
   if (m.chest) return 'coffre';
   if (m.overflow) return 'débordée';
   if (m.waves !== undefined) return `${plural(m.waves, 'vague')} tenue${m.waves > 1 ? 's' : ''}`;
@@ -119,7 +129,8 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
   const p = m.party ? partyReport(m.party, roster) : null;
   const rift = m.poiType === 'rift' || !!m.party?.rift;
   const loot = m.items?.length ? m.items : m.item ? [m.item] : [];
-  const rk = m.chest ? null : rankLabel(messageRankLevel(m));
+  const prod = isProductionMessage(m);
+  const rk = m.chest || prod ? null : rankLabel(messageRankLevel(m));
   return {
     id: m.id,
     rift,
@@ -147,7 +158,8 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
       from: m.party?.from?.[x.id]?.label ?? null,
     })),
     route: missionRoute(m),
-    hero: m.chest ? false : p ? p.hero : true,
+    hero: m.chest || prod ? false : p ? p.hero : true,
+    militia: prod ? (m.production?.militia ?? 0) : null,
     kills: p && p.foes > 0 ? `${p.slain}/${p.foes} abattus` : null,
     totalXp: p?.totalXp ?? 0,
     story: m.party?.dispel ? `${m.text} ${DISPEL_TEXT[m.party.dispel]}` : m.text,

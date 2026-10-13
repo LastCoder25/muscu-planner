@@ -166,6 +166,34 @@ export function missionMain(c: MissionCard): ReportDetail {
   const teamBits: string[] = [];
   if (c.kills) teamBits.push(`⚔️ ${c.kills.replace(/ abattus$/, '')}`);
   if (c.totalXp) teamBits.push(`+${fmt(c.totalXp)} XP`);
+  // 🏰 Production d'un lieu fixe : la récolte, et les miliciens qui la produisaient.
+  if (c.militia !== null) {
+    const garrison: ReportSection = {
+      id: 'team',
+      icon: '🛡️',
+      title: 'Garnison',
+      layout: 'list',
+      rows: c.militia
+        ? [
+            {
+              icon: '🛡️',
+              title: plural(c.militia, 'milicien'),
+              sub: 'en garnison',
+              tone: 'dim' as const,
+            },
+          ]
+        : [],
+    };
+    const loot: ReportSection = {
+      id: 'loot',
+      icon: '🎁',
+      title: 'Récolte',
+      layout: 'list',
+      keep: true,
+      rows: [],
+    };
+    return { stats: [], sections: [loot, garrison].filter(filled) };
+  }
   const sections: ReportSection[] = [
     {
       id: 'loot',

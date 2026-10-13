@@ -4130,6 +4130,12 @@ export function newAscensions(
   };
 }
 
+/** 🛡️ Ce qu'un rapport de production dit de la garnison : ses miliciens seulement (demandé :
+ *  le héros et le reste n'y ont rien à faire). */
+function productionOf(p: Poi): { militia: number } {
+  return { militia: (p.control?.garrison ?? []).filter(isMilitiaId).length };
+}
+
 /** 📬 Le rapport d'un lieu fixe qui a produit un consommable ou une rune. ⚠️ DÉJÀ CRÉDITÉ
  *  (`claimed` absent) : il se lit, il ne se récupère pas. */
 export function controlLootMessage(
@@ -4173,6 +4179,7 @@ export function controlLootMessage(
     key: 0,
     ...(nSup ? { supplies } : {}),
     ...(runes ? { runes } : {}),
+    production: productionOf(p),
     resolvedAt: at,
     read: false,
   };
@@ -4214,6 +4221,7 @@ export function controlGoldMessage(
     gold: g,
     energy: 0,
     key: 0,
+    production: productionOf(p),
     resolvedAt: at,
     read: false,
   };
