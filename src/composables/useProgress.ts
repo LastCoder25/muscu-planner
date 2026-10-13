@@ -11,6 +11,7 @@ import { useComboStore } from '@/stores/combo';
 import { useFriendBossStore } from '@/stores/friendBoss';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
+import { useCharacterStore } from '@/stores/character';
 import {
   sessionXp,
   drillSessionXp,
@@ -562,6 +563,18 @@ export function useProgress() {
       from,
     );
   }
+
+  // 🧑‍✈️ Le niveau du HÉROS borne l'XP que ses champions gardent en réserve (`advXpRoom`) :
+  // le store du personnage ne calcule pas le sport, on le lui signale dès qu'il est connu. ⚠️ Pas
+  // avant `ready` : un niveau lu sur des données pas encore chargées vaudrait 1.
+  const character = useCharacterStore();
+  watch(
+    () => (ready.value ? computeLevel(globalXp.value).level : 0),
+    (lvl) => {
+      if (lvl > 0) character.noteHeroLevel(lvl);
+    },
+    { immediate: true },
+  );
 
   return {
     ready,

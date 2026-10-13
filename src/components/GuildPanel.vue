@@ -1527,7 +1527,7 @@ const detailAscent = computed(() => {
   const a = detailAdv.value;
   const s = a ? ascentOf(a) : null;
   if (!a || !s) return null;
-  const after = ascendAdventurer(a, pantheonLevel.value);
+  const after = ascendAdventurer(a, pantheonLevel.value, char.heroLevel);
   const list = char.advList.map((x) => (x.id === a.id ? after : x));
   const powAfter = adventurerPowers(list, compCtx.value).get(a.id) ?? 0;
   const sb = advStats(a);
@@ -1777,11 +1777,13 @@ const runeBank = computed(() => char.row?.runes ?? emptyBank());
 /** 📘 Les tomes qu'on possède, chiffrés pour le champion ouvert (`tomeChoices`, lib). */
 const detailTomes = computed<TomeChoice[]>(() =>
   detailAdv.value
-    ? tomeChoices(char.row?.supplies ?? {}, detailAdv.value, pantheonLevel.value)
+    ? tomeChoices(char.row?.supplies ?? {}, detailAdv.value, pantheonLevel.value, char.heroLevel)
     : [],
 );
 function tomeGain(t: TomeChoice): string {
   if (t.stars > 0) return `+${t.stars} ★`;
+  // 🧑‍✈️ Il a rattrapé ton héros : le tome ne lui apprendrait rien (le store refuse de l'ouvrir).
+  if (t.lost >= t.xp) return 'au niveau de ton héros : n’apprend plus rien';
   return t.banked ? 'gardé pour plus tard' : 'vers l’étoile suivante';
 }
 function tomeTitle(t: TomeChoice): string {

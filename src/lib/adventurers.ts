@@ -2285,10 +2285,14 @@ export function advNextAscension(adv: Adventurer): number | null {
  * récupère aussitôt ses niveaux. ⚠️ Ne vérifie NI le coût NI le Panthéon : c'est
  * `ascensionBlocker` (`ascension.ts`) qui décide si c'est permis. Pur.
  */
-export function ascendAdventurer(adv: Adventurer, pantheonLevel: number): Adventurer {
+export function ascendAdventurer(
+  adv: Adventurer,
+  pantheonLevel: number,
+  heroLevel: number,
+): Adventurer {
   const next = advNextAscension(adv);
   if (next == null) return adv;
-  return grantAdvXp({ ...adv, ascended: next }, 0, pantheonLevel);
+  return grantAdvXp({ ...adv, ascended: next }, 0, pantheonLevel, heroLevel);
 }
 
 /**
@@ -2314,19 +2318,46 @@ export function advBankedLevel(adv: Adventurer, pantheonLevel: number): number {
   return level;
 }
 
-/** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner
- *  plusieurs), plafonnées par la Guilde.
+/**
+ * 🧑‍✈️ L'XP QU'UN CHAMPION PEUT ENCORE PRENDRE avant d'atteindre le niveau du HÉROS
+ * (2026-10-13, décision de l'utilisateur : « les champions ne gagnent ni ne stockent d'XP une
+ * fois qu'ils ont rattrapé le héros ; l'XP accumulée avant une ascension ne doit pas leur
+ * permettre de dépasser le héros une fois l'ascension faite »).
  *
- *  ⚠️ Au plafond, l’XP EXCÉDENTAIRE EST CONSERVÉE et non jetée : quand la Guilde monte,
- *  l’aventurier récupère aussitôt ce qu’il avait accumulé. Sinon un joueur peu sportif —
- *  celui dont le plafond bouge le plus lentement, donc exactement la cible de la
- *  feature — travaillerait des semaines pour rien. Pur : rend un NOUVEL aventurier. */
-export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): Adventurer {
-  // ⚠️ DEUX plafonds, le plus bas gagne : le Panthéon (le sport, via son niveau) et
-  // l'ASCENSION (la fin du rang ouvert). L'XP au-delà reste dans le pool dans les deux cas.
+ * C'est ce qui sépare son niveau de celui du héros, réserve DÉJÀ comprise : au niveau du
+ * héros, il ne reste RIEN. `heroLevel` ≤ 0 ou non fini = niveau du héros inconnu (le store ne
+ * l'a pas encore lu) : aucune borne, plutôt que de jeter de l'XP sur une valeur fausse. Pur.
+ */
+export function advXpRoom(adv: Adventurer, heroLevel: number): number {
+  if (!(heroLevel > 0) || !Number.isFinite(heroLevel)) return Infinity;
+  let room = 0;
+  for (let l = adv.level; l < heroLevel; l++) room += advXpToNext(l);
+  return Math.max(0, room - Math.max(0, adv.xp));
+}
+
+/** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner
+ *  plusieurs), plafonnées par le Panthéon et l'ascension.
+ *
+ *  ⚠️ L'XP au-delà de ces deux plafonds est MISE DE CÔTÉ (elle revient quand le Panthéon
+ *  monte ou à l'ascension), MAIS JAMAIS AU-DELÀ DE CE QUI MÈNE AU NIVEAU DU HÉROS
+ *  (`advXpRoom`, 2026-10-13) : un champion qui a rattrapé le héros ne gagne ni ne stocke plus
+ *  rien, et une réserve accumulée avant une ascension ne le fait jamais dépasser le héros.
+ *  `heroLevel` est REQUIS : optionnel, un appelant l'oublierait et le champion recommencerait
+ *  à stocker sans limite. Pur : rend un NOUVEL aventurier. */
+export function grantAdvXp(
+  adv: Adventurer,
+  xp: number,
+  pantheonLevel: number,
+  heroLevel: number,
+): Adventurer {
+  // ⚠️ DEUX plafonds de NIVEAU, le plus bas gagne : le Panthéon (le sport, via son niveau) et
+  // l'ASCENSION (la fin du rang ouvert). Le héros, lui, borne ce qu'on garde en réserve.
   const cap = Math.min(Math.max(1, pantheonLevel), advAscensionCap(adv));
+  // Ce que sa réserve peut contenir AU TOTAL d'ici le niveau du héros (réserve comptée à 0) :
+  // borner le total, et non le seul gain, purge aussi une réserve accumulée avant la règle.
+  const maxPool = advXpRoom({ ...adv, xp: 0 }, heroLevel);
   let level = adv.level;
-  let pool = Math.max(0, adv.xp) + Math.max(0, Math.round(xp));
+  let pool = Math.min(maxPool, Math.max(0, adv.xp) + Math.max(0, Math.round(xp)));
   while (level < cap && pool >= advXpToNext(level)) {
     pool -= advXpToNext(level);
     level++;

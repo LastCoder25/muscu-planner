@@ -999,27 +999,38 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     const eq = [a, b2];
     const ids = [a.id, b2.id];
     for (const hero of [true, false])
-      expect(missionXpPreview(eq, ids, p, 100, hero)[a.id]!.xp).toBe(
+      expect(missionXpPreview(eq, ids, p, 100, 0, hero)[a.id]!.xp).toBe(
         missionXpFor(eq, p, true, {}, 100, hero)[a.id],
       );
-    expect(missionXpPreview(eq, ids, p, 100, false)[a.id]!.xp).toBeGreaterThan(
-      missionXpPreview(eq, ids, p, 100, true)[a.id]!.xp,
+    expect(missionXpPreview(eq, ids, p, 100, 0, false)[a.id]!.xp).toBeGreaterThan(
+      missionXpPreview(eq, ids, p, 100, 0, true)[a.id]!.xp,
     );
   });
 
   it('🎯 l’XP annoncée est pondérée par la chance de victoire (v1.1.1)', () => {
     // Signalé : un champion seul contre une armée annonçait l'XP d'une victoire à 0 %.
     const a = champ(10, 'a')[0]!;
-    const plein = missionXpPreview([a], [a.id], p, 100, false)[a.id]!;
+    const plein = missionXpPreview([a], [a.id], p, 100, 0, false)[a.id]!;
     expect(plein.win).toBeNull();
     expect(plein.xp).toBe(plein.xpWin);
-    const perdu = missionXpPreview([a], [a.id], p, 100, false, () => 0)[a.id]!;
+    const perdu = missionXpPreview([a], [a.id], p, 100, 0, false, () => 0)[a.id]!;
     expect(perdu.xp).toBe(0);
     expect(perdu.xpWin).toBe(plein.xpWin);
-    const moitie = missionXpPreview([a], [a.id], p, 100, false, () => 0.5)[a.id]!;
+    const moitie = missionXpPreview([a], [a.id], p, 100, 0, false, () => 0.5)[a.id]!;
     expect(moitie.xp).toBe(Math.round(plein.xpWin * 0.5));
     // borné : une chance hors [0, 1] ne gonfle jamais l'annonce
-    expect(missionXpPreview([a], [a.id], p, 100, false, () => 2)[a.id]!.xp).toBe(plein.xpWin);
+    expect(missionXpPreview([a], [a.id], p, 100, 0, false, () => 2)[a.id]!.xp).toBe(plein.xpWin);
+  });
+
+  it('🧑‍✈️ au niveau du héros, l’aperçu annonce 0 XP (2026-10-13)', () => {
+    const a = champ(10, 'a')[0]!;
+    const vu = missionXpPreview([a], [a.id], p, 100, a.level, false)[a.id]!;
+    expect(vu.xp).toBe(0);
+    expect(vu.xpWin).toBe(0);
+    expect(vu.capped).toBe(true);
+    const libre = missionXpPreview([a], [a.id], p, 100, a.level + 20, false)[a.id]!;
+    expect(libre.capped).toBe(false);
+    expect(libre.xpWin).toBeGreaterThan(0);
   });
 
   it('⚠️ c’est bien CE calcul que la mission verse : le SOCLE est primé, pas les abattus', () => {

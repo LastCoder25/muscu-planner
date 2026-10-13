@@ -927,6 +927,8 @@ export function grantReportXp(
   fresh: readonly ExpeditionMessage[],
   roster: Adventurer[],
   pantheonLevel: number,
+  /** 🧑‍✈️ Le niveau du héros : un champion qui l'a rattrapé ne prend plus d'XP (`advXpRoom`). */
+  heroLevel: number,
 ): { messages: ExpeditionMessage[]; adventurers: Adventurer[]; granted: ExpeditionMessage[] } {
   const ids = new Set(box.map((m) => m.id));
   const granted = fresh.filter((m) => m.party && !m.xpGranted && ids.has(m.id));
@@ -936,7 +938,7 @@ export function grantReportXp(
     const xp = m.party!.xp;
     adventurers = adventurers.map((a) => {
       const gain = xp[a.id];
-      return gain === undefined ? a : grantAdvXp(a, gain, pantheonLevel);
+      return gain === undefined ? a : grantAdvXp(a, gain, pantheonLevel, heroLevel);
     });
   }
   const done = new Set(granted.map((m) => m.id));
@@ -962,6 +964,8 @@ export function partyClaimRoster(
    *  serait oublié au premier appelant — et c'est exactement le défaut qu'on corrige. */
   ctx: {
     pantheonLevel: number;
+    /** 🧑‍✈️ Le niveau du héros (`advXpRoom`). ⚠️ REQUIS, comme le Panthéon. */
+    heroLevel: number;
     infirmaryLevel: number;
     backAt: number;
     now: number;
@@ -986,7 +990,7 @@ export function partyClaimRoster(
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
-    const up = ctx.xpGranted ? a : grantAdvXp(a, gain, ctx.pantheonLevel);
+    const up = ctx.xpGranted ? a : grantAdvXp(a, gain, ctx.pantheonLevel, ctx.heroLevel);
     // 🏠 L'infirmerie est À LA BASE : la convalescence ne court qu'une fois le champion
     // RENTRÉ. Un blessé encore en route (retour d'une sortie par la base, groupe d'une
     // attaque combinée qui rentre plus tard, garnison délogée qui marche) est occupé

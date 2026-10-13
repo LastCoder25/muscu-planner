@@ -3,7 +3,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { advGearRoles } from '@/lib/advGear';
-import { advRuneSkills, type Adventurer } from '@/lib/adventurers';
+import { advRuneSkills, advXpRoom, type Adventurer } from '@/lib/adventurers';
 import {
   heroPartyCombatant,
   missionXpFor,
@@ -363,10 +363,16 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
                 return 2 * (from ? legFromSpot(t, from, legOf) : legOf(t));
               }),
             ),
-          xp: (t, us) =>
-            Object.values(
-              missionXpFor(advsOf(us), t, true, {}, char.pantheonLevel, hasHero(us), null),
-            ).reduce((s, x) => s + x, 0),
+          // 🧑‍✈️ Seule l'XP que chacun peut ENCORE prendre (`advXpRoom`) : un champion qui a
+          // rattrapé le héros n'apprend plus rien, le mode « XP » ne doit pas le compter.
+          xp: (t, us) => {
+            const team = advsOf(us);
+            const got = missionXpFor(team, t, true, {}, char.pantheonLevel, hasHero(us), null);
+            return team.reduce(
+              (s, a) => s + Math.min(got[a.id] ?? 0, advXpRoom(a, char.heroLevel)),
+              0,
+            );
+          },
         },
       });
       if (!res || me !== run) return;

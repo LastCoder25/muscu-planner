@@ -71,6 +71,7 @@ import {
 } from './expedition';
 import {
   advBankedLevel,
+  advXpRoom,
   advChampion,
   advRarity,
   advRoles,
@@ -1080,12 +1081,17 @@ export interface MissionXpPreview {
   full: boolean;
   /** Sa prime de retard (1 = aucune). Une BONNE nouvelle : on la montre. */
   catchUp: number;
+  /** 🧑‍✈️ Il a rattrapé le héros : il n'apprend plus rien tant que le héros ne monte pas. */
+  capped: boolean;
 }
 export function missionXpPreview(
   advs: readonly Adventurer[],
   escortIds: readonly string[],
   poi: Poi,
   pantheonLevel: number,
+  /** 🧑‍✈️ Le niveau du héros : un champion qui l'a rattrapé n'apprend plus rien (`advXpRoom`),
+   *  l'aperçu annonce donc ce que l'encaissement versera VRAIMENT. ⚠️ REQUIS. */
+  heroLevel: number,
   hero: boolean,
   /** 🎯 La chance de victoire (0..1) de l'équipe AVEC ce champion (coché : l'équipe telle
    *  quelle ; non coché : l'équipe + lui). `null`/absent = inconnue. */
@@ -1098,9 +1104,12 @@ export function missionXpPreview(
   const d = poiDifficultyLevel(poi);
   const out: Record<string, MissionXpPreview> = {};
   for (const a of advs) {
-    const xp = escortIds.includes(a.id)
+    const gross = escortIds.includes(a.id)
       ? (dejaLa[a.id] ?? 0)
       : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero, null)[a.id] ?? 0);
+    // ⚠️ Ce que `grantAdvXp` lui laissera prendre : rien s'il a rattrapé le héros.
+    const room = advXpRoom(a, heroLevel);
+    const xp = Math.min(gross, room);
     const L = advBankedLevel(a, pantheonLevel);
     const w = winOf?.(a.id);
     const win = typeof w === 'number' ? Math.max(0, Math.min(1, w)) : null;
@@ -1110,6 +1119,7 @@ export function missionXpPreview(
       win,
       full: d >= L,
       catchUp: catchUpMult(L, pantheonLevel),
+      capped: room <= 0,
     };
   }
   return out;

@@ -32,12 +32,7 @@ import {
   winGain,
   type GainTeam,
 } from '@/lib/partyForecast';
-import {
-  champSeatsWithHero,
-  holdSeats,
-  garrisonHold,
-  defendsControl,
-} from '@/lib/controlPoints';
+import { champSeatsWithHero, holdSeats, garrisonHold, defendsControl } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { heroPostOf } from '@/lib/islandConquest';
 import {
@@ -854,6 +849,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
           partyEscort.value,
           selected.value,
           char.pantheonLevel,
+          char.heroLevel,
           !!partyHeroOn.value,
           // 🎯 L'XP annoncée est PONDÉRÉE par la chance de victoire (signalé : un champion seul
           // contre une armée annonçait l'XP d'une victoire). Coché : le 🎯 % de l'équipe ;

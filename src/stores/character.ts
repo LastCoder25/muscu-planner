@@ -402,6 +402,7 @@ import {
   supplyFx,
   takeSupplies,
   BOOST_MIN,
+  TOME_XP,
   type BoostId,
   type SupplyId,
   type SupplyStock,
@@ -3188,6 +3189,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (party) {
       const claim = partyClaimRoster(party, advList.value, {
         pantheonLevel: pantheonLevel.value,
+        heroLevel: heroLevel.value,
         infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
         // ⏱️ Le RETOUR en ville (`claimAt`), pas ce clic : la convalescence a déjà couru.
         // Les rapports d’avant n’ont que `resolvedAt` — le même repli qu`isClaimable`.
@@ -3619,7 +3621,12 @@ export const useCharacterStore = defineStore('character', () => {
         if (!ids.has(a.id)) return a;
         const gain = siegeGains[a.id] ?? 0;
         gains[a.id] = gain;
-        const next = grantAdvXp(a, gain, pantheonLevel.value);
+        const next = grantAdvXp(
+          a,
+          gain,
+          pantheonLevel.value,
+          Math.max(ctx.playerLevel, heroLevel.value),
+        );
         return hurt.has(a.id) && champWoundUntil
           ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, champWoundUntil) }
           : next;
@@ -3736,7 +3743,7 @@ export const useCharacterStore = defineStore('character', () => {
      *  vivier-là était ignoré et l'XP du camp se perdait dès que la garnison défendait. */
     base: Adventurer[],
   ) {
-    const g = grantReportXp(box, fresh, base, pantheonLevel.value);
+    const g = grantReportXp(box, fresh, base, pantheonLevel.value, heroLevel.value);
     if (!g.granted.length) return { messages: box, patch: {}, play: () => {} };
     const gearPatch = gearTrainedPatch(cur, advList.value, g.adventurers);
     const tracks = gearAwareTracks(cur, advList.value, g.adventurers, gearPatch);
@@ -3865,7 +3872,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (block) return ASCENSION_BLOCK_LABEL[block];
     const next = advNextAscension(adv)!;
     const cost = ascensionCost(next);
-    const up = ascendAdventurer(adv, pantheonLevel.value);
+    const up = ascendAdventurer(adv, pantheonLevel.value, heroLevel.value);
     // 💠 La récompense part dans la MÊME écriture que le coût : jamais l'un sans l'autre.
     const mana = ascensionMana(next);
     // 🪬 Des runes GARANTIES, plus nombreuses à mesure que le rang atteint est haut.
@@ -4107,6 +4114,19 @@ export const useCharacterStore = defineStore('character', () => {
    *  FORGE (le temps de fabrication d'une pièce). ⚠️ Il porte aussi le plafond d'XP d'un
    *  champion (`grantAdvXp`) — c'est le « le sport fixe le plafond » de cette boucle. */
   const pantheonLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'pantheon'));
+  /**
+   * 🧑‍✈️ LE NIVEAU DU HÉROS, qui borne l'XP qu'un champion garde en réserve (`advXpRoom`).
+   * Il vient du SPORT (`useProgress`), que le store ne calcule pas : deux sources, toutes deux
+   * des MINORANTS du vrai niveau (il ne fait que monter), dont on garde la plus haute —
+   * `reward_level` (le dernier niveau récompensé, persisté) et ce que `useProgress` a signalé
+   * (`noteHeroLevel`). ⚠️ 0 = inconnu : `advXpRoom` ne borne alors RIEN, plutôt que de jeter
+   * l'XP d'un champion sur un niveau qu'on n'a pas encore lu.
+   */
+  const heroLevelSeen = ref(0);
+  const heroLevel = computed(() => Math.max(row.value?.reward_level ?? 0, heroLevelSeen.value));
+  function noteHeroLevel(level: number) {
+    if (Number.isFinite(level) && level > heroLevelSeen.value) heroLevelSeen.value = level;
+  }
   // ⚠️ L'AVANT-POSTE, depuis qu'il a absorbé le Comptoir de caravanes : un seul bâtiment
   // règle tout le VOYAGE — trajet du héros et des équipes.
   // Le nom du binding reste `comptoirLevel` : c’est le paramètre que lit
@@ -5699,6 +5719,8 @@ export const useCharacterStore = defineStore('character', () => {
       if (m.party && !m.win)
         roster = partyClaimRoster(m.party, roster, {
           pantheonLevel: pantheonLevel.value,
+          // ⚠️ Ici `heroLevel` est le niveau du joueur passé au tick (un nombre).
+          heroLevel,
           infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
           backAt: m.resolvedAt,
           now,
@@ -5804,6 +5826,7 @@ export const useCharacterStore = defineStore('character', () => {
             a,
             Math.min(xp, trainingRoom(a, heroLevel, pantheonLevel.value)),
             pantheonLevel.value,
+            heroLevel,
           )
         : a;
     });
@@ -6519,7 +6542,9 @@ export const useCharacterStore = defineStore('character', () => {
     const before = advList.value;
     const adv = before.find((a) => a.id === advId);
     if (!adv) return 'champion introuvable';
-    const { after } = openTome(adv, tomeId, pantheonLevel.value);
+    const { after, lost } = openTome(adv, tomeId, pantheonLevel.value, heroLevel.value);
+    // ⚠️ Un tome qui ne servirait à RIEN (champion au niveau du héros) n'est pas consommé.
+    if (lost >= TOME_XP[tomeId]) return 'il a rattrapé ton héros : il n’apprend plus rien';
     const advs = before.map((a) => (a.id === advId ? after : a));
     const gearPatch = gearTrainedPatch(cur, before, advs);
     const tracks = gearAwareTracks(cur, before, advs, gearPatch);
@@ -6941,6 +6966,8 @@ export const useCharacterStore = defineStore('character', () => {
     escortKit,
     advGearStock,
     pantheonLevel,
+    heroLevel,
+    noteHeroLevel,
     comptoirLevel,
     sealRiftPoi,
     partyList,
