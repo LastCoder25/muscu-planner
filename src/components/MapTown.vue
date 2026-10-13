@@ -41,7 +41,8 @@
       <rect :x="T.x - 1.3" :y="T.y + AP - 1.2" width="2.6" height="2.6" rx="0.8" class="mt-gate" />
     </template>
     <!-- ⚫ QUI EST LÀ, en points sous la ville, comme la garnison d'un lieu fixe (`townDots`) :
-         bleu le héros (deux points reliés), cyan un champion, clair un milicien en réserve, « +N » au-delà. Ici et
+         bleu le héros (deux points reliés), cyan un champion, ORANGE qui est en route et
+         RENTRERA ici (le héros : deux points orange reliés), clair un milicien en réserve, « +N » au-delà. Ici et
          non dans la page : la carte d'une île rangée dessine le même village.
          ⚫⚫ En lignes de 5 : champions d'abord, miliciens sur leurs lignes (`townDots`). -->
     <g v-if="row?.rows.length" class="mt-dots">
@@ -52,6 +53,7 @@
           v-for="i in heroDotLinks(line)"
           :key="'l' + i"
           class="hero-link"
+          :class="'d-' + line[i]"
           :x="T.x + (i - (line.length - 1) / 2) * DOT_GAP - DOT_R - 0.35"
           :y="T.y + dotsY + ri * DOT_GAP - DOT_R - 0.35"
           :width="DOT_GAP + 2 * DOT_R + 0.7"
@@ -138,6 +140,12 @@ const DOT_GAP = 2.7;
 }
 .mt-dots .d-h {
   fill: #2f6bff;
+}
+/* 🧭 En route, il rentrera ici : l'orange d'une troupe en marche sous un lieu fixe. */
+.mt-dots .d-r,
+.mt-dots .d-g,
+.mt-dots .hero-link.d-g {
+  fill: var(--d3, #ffb23f);
 }
 .mt-dots .d-c {
   fill: #5fd0ff;

@@ -1654,7 +1654,7 @@ import {
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import MapTown from '@/components/MapTown.vue';
-import { townDots } from '@/lib/townDots';
+import { baseReturners, townDots } from '@/lib/townDots';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
@@ -5136,6 +5136,12 @@ const townRow = computed(() => {
   // 🤕 À l'infirmerie : le héros blessé (rentré à la base) et les champions alités, en rouge.
   const heroHome = !!char.row && char.heroIsHome(char.row);
   const heroHurt = heroHome && heroHealIn.value > 0;
+  // 🧭 Partis, ils rentreront ici : en orange sous la base (signalé : une équipe qui fouille
+  // des ruines disparaissait de son lieu de départ). Une sortie d'un lieu tenu y revient (`away`).
+  const map = char.row?.expedition_map;
+  const exp = char.row?.expedition;
+  const walk = heroWalk(map, now.value);
+  const heroComing = !heroHome && ((!!exp && !exp.homeId) || (!!walk && !walk.to));
   return townDots(
     heroHome && !heroHurt,
     baseChamps.value.length,
@@ -5144,6 +5150,10 @@ const townRow = computed(() => {
     {
       hero: heroHurt,
       champions: char.advList.filter((a) => advUnavailableReason(a, now.value) === 'hurt').length,
+    },
+    {
+      hero: heroComing,
+      champions: baseReturners(char.advList, map?.pois ?? [], now.value),
     },
   );
 });

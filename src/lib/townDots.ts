@@ -39,16 +39,54 @@ export interface TownHurt {
   champions?: number;
 }
 
+/**
+ * 🧭 PARTIS, ILS REVIENDRONT ICI (signalé, 2026-10-13 : « ils disparaissent de leur lieu de
+ * départ, il faudrait savoir visuellement où ils vont rentrer »). En ORANGE, comme sous un lieu
+ * fixe : `r` un champion en route qui rentre à la base, `gg` le héros (deux points reliés).
+ * Rangés juste après les présents, sur les mêmes lignes.
+ */
+export interface TownComing {
+  hero?: boolean;
+  champions?: number;
+}
+
+/**
+ * 🧭 COMBIEN DE CHAMPIONS RENTRERONT À LA BASE : occupés (en mission, en marche), ni postés, ni
+ * restés sur une autre île, et dont la place n'est pas gardée sur un lieu fixe (une sortie partie
+ * d'un lieu tenu y revient, `away` — c'est LÀ que sa boule orange se dessine). ⚠️ Types
+ * STRUCTURELS : aucune dépendance au store.
+ */
+export function baseReturners(
+  advs: readonly { id: string; busyUntil?: number; posted?: string; elsewhere?: number }[],
+  pois: readonly { control?: { owner?: string; away?: string[] } }[],
+  now: number,
+): number {
+  const keptOnPoint = new Set(
+    pois.flatMap((p) => (p.control?.owner === 'player' ? (p.control.away ?? []) : [])),
+  );
+  return advs.filter(
+    (a) =>
+      (a.busyUntil ?? 0) > now && !a.posted && a.elsewhere === undefined && !keptOnPoint.has(a.id),
+  ).length;
+}
+
 export function townDots(
   heroHome: boolean,
   champions: number,
   militia = 0,
   maxRows = TOWN_ROWS_MAX,
   hurt: TownHurt = {},
+  coming: TownComing = {},
 ): TownDots {
   // 🧝 Le héros en DEUX points reliés, comme sous un lieu fixe (demandé, 2026-10-11 : « la double
   // boule plutôt » — un point doré seul se lisait comme un champion).
-  const champs = (heroHome ? 'h'.repeat(HERO_GARRISON_SEATS) : '') + 'c'.repeat(count(champions));
+  const heroDots = heroHome
+    ? 'h'.repeat(HERO_GARRISON_SEATS)
+    : coming.hero
+      ? 'g'.repeat(HERO_GARRISON_SEATS)
+      : '';
+  const champs =
+    heroDots + 'c'.repeat(count(champions)) + 'r'.repeat(count(coming.champions ?? 0));
   const sick = 'w'.repeat((hurt.hero ? 1 : 0) + count(hurt.champions ?? 0));
   const mil = 'm'.repeat(count(militia));
   const shown = [

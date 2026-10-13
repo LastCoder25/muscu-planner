@@ -444,18 +444,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       let html = '';
       await mountIt(
         MapTown,
-        { island, row: townDots(true, 1, 2, undefined, { champions: 1 }) },
+        {
+          island,
+          row: townDots(true, 1, 2, undefined, { champions: 1 }, { champions: 1 }),
+        },
         undefined,
         undefined,
         '/',
         (h) => (html = h),
       );
       // 🤕 Le blessé (`d-w`, rouge) entre les présents et la milice.
-      expect(html.match(/class="d-[hcmw]"/g)?.join(' ')).toBe(
-        'class="d-h" class="d-h" class="d-c" class="d-w" class="d-m" class="d-m"',
+      // 🧭 Le champion en route qui rentrera ici (`d-r`, orange) juste après les présents.
+      expect(html.match(/class="d-[hcmwr]"/g)?.join(' ')).toBe(
+        'class="d-h" class="d-h" class="d-c" class="d-r" class="d-w" class="d-m" class="d-m"',
       );
       // 🧝 Le héros en double boule RELIÉE, comme sous un lieu fixe.
-      expect(html.match(/class="hero-link"/g)?.length).toBe(1);
+      expect(html.match(/class="hero-link d-h"/g)?.length).toBe(1);
     }
   });
 
