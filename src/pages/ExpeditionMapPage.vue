@@ -493,6 +493,8 @@
       :mil-home="milHome"
       :hero-home="!heroUnavailable"
       :hero-status="heroBaseStatus"
+      :returning="baseReturning"
+      :advs="advById"
       :targets="baseTargets"
       :leg-min="baseLegMin"
       :busy="ctlBusy"
@@ -592,6 +594,15 @@
           :busy-seal="busySeal"
           @close="selected = null"
           @seal="doSeal"
+        />
+        <!-- 🔍 QUI EST SUR CE LIEU (demandé : « sur les lieux où les champions récoltent sur
+             place, voir en cliquant dessus les champions et/ou le héros qui y sont ») : en
+             récolte (violet, temps restant) ou en chemin vers lui. -->
+        <GarrisonStrip
+          v-if="siteCells.length"
+          :cells="siteCells"
+          :title="siteTitle"
+          :advs="advById"
         />
         <!-- ⚔️ D'autres équipes y marchent déjà : on peut en envoyer une de plus. -->
         <p v-if="marchingNote && !engagedTrip" class="sh-note">⚔️ {{ marchingNote }}</p>
@@ -1557,7 +1568,7 @@ import AdvPickTile from '@/components/AdvPickTile.vue';
 import { holdPosition } from '@/lib/scrollAnchor';
 import GarrisonStrip from '@/components/GarrisonStrip.vue';
 import { oneWayLegs } from '@/lib/oneWayTrip';
-import { garrisonStrip, type StripMember } from '@/lib/garrisonStrip';
+import { crewOnSite, garrisonStrip, type StripMember } from '@/lib/garrisonStrip';
 import HeroPickTile from '@/components/HeroPickTile.vue';
 import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
 import RecallHomeSheet from '@/components/RecallHomeSheet.vue';
@@ -1637,6 +1648,7 @@ import {
   veinDwellMs,
   controlWorkforce,
   PARTY_TARGETS,
+  dwellMsFor,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
@@ -1654,7 +1666,7 @@ import {
 import ArchipelPanel from '@/components/ArchipelPanel.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import MapTown from '@/components/MapTown.vue';
-import { baseReturners, townDots } from '@/lib/townDots';
+import { baseReturnerList, townDots } from '@/lib/townDots';
 import RemoteIslandMap from '@/components/RemoteIslandMap.vue';
 import IslandTerrain from '@/components/IslandTerrain.vue';
 import { islandTerrain } from '@/lib/islandTerrain';
@@ -5132,16 +5144,36 @@ onUnmounted(() => applyScrollLock(false));
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, puis les champions présents. */
 /** ⚫ La rangée de points sous la ville : le héros s'il est là, les champions présents, puis
  *  la milice en réserve de l'île (la garnison du village, signalé 2026-10-04). */
+/** 🧭 PARTIS DE LA BASE, ILS Y REVIENDRONT (signalé : une équipe qui fouille des ruines
+ *  disparaissait de son lieu de départ). Une sortie d'un lieu tenu y revient (`away`), pas ici.
+ *  `heroIn` : le retour du héros (expédition partie de la base, ou marche vers la base), sinon
+ *  `null`. Lu par les boules sous la ville ET la fiche de la base : une seule définition. */
+const baseReturning = computed(() => {
+  const map = char.row?.expedition_map;
+  const exp = char.row?.expedition;
+  const walk = heroWalk(map, now.value);
+  const heroHome = !!char.row && char.heroIsHome(char.row);
+  const heroAt = heroHome
+    ? null
+    : exp && !exp.homeId
+      ? exp.returnAt
+      : walk && !walk.to
+        ? walk.at
+        : null;
+  return {
+    heroIn: heroAt === null ? null : Math.max(0, heroAt - now.value),
+    members: baseReturnerList(char.advList, map?.pois ?? [], now.value).map((a) => ({
+      id: a.id,
+      state: 'away' as const,
+      inMs: Math.max(0, (a.busyUntil ?? 0) - now.value),
+    })),
+  };
+});
 const townRow = computed(() => {
   // 🤕 À l'infirmerie : le héros blessé (rentré à la base) et les champions alités, en rouge.
   const heroHome = !!char.row && char.heroIsHome(char.row);
   const heroHurt = heroHome && heroHealIn.value > 0;
-  // 🧭 Partis, ils rentreront ici : en orange sous la base (signalé : une équipe qui fouille
-  // des ruines disparaissait de son lieu de départ). Une sortie d'un lieu tenu y revient (`away`).
-  const map = char.row?.expedition_map;
-  const exp = char.row?.expedition;
-  const walk = heroWalk(map, now.value);
-  const heroComing = !heroHome && ((!!exp && !exp.homeId) || (!!walk && !walk.to));
+  const back = baseReturning.value;
   return townDots(
     heroHome && !heroHurt,
     baseChamps.value.length,
@@ -5152,8 +5184,8 @@ const townRow = computed(() => {
       champions: char.advList.filter((a) => advUnavailableReason(a, now.value) === 'hurt').length,
     },
     {
-      hero: heroComing,
-      champions: baseReturners(char.advList, map?.pois ?? [], now.value),
+      hero: back.heroIn !== null,
+      champions: back.members.length,
     },
   );
 });
@@ -5672,6 +5704,26 @@ const marchingNote = computed(() => {
     (n > 1 ? `${n} équipes y marchent déjà` : 'Une équipe y marche déjà') +
     ' — tu peux en envoyer une autre : la première qui le prend l’emporte, les suivantes arrivent trop tard.'
   );
+});
+/** 🔍 Qui est sur le lieu choisi (héros et équipes), en récolte ou en chemin (`crewOnSite`).
+ *  Seulement là où l'on reste sur place (filon, ruines…) : ailleurs, le combat se règle à
+ *  l'arrivée et la fiche dit déjà qu'une équipe y est partie. */
+const siteCrew = computed(() => {
+  const p = selected.value;
+  if (!p || dwellMsFor(p, 1) <= 0) return null;
+  const a = active.value;
+  return crewOnSite([...(a ? [{ ...a, hero: true }] : []), ...char.partyList], p.id, now.value);
+});
+const siteCells = computed(() => {
+  const s = siteCrew.value;
+  if (!s || (!s.hero && !s.members.length)) return [];
+  return garrisonStrip({ hero: s.hero, members: s.members, free: 0, readonly: true, selected: [] });
+});
+const siteTitle = computed(() => {
+  const s = siteCrew.value;
+  const n = (s?.members.length ?? 0) + (s?.hero ? 1 : 0);
+  const searching = s && [s.hero, ...s.members].some((m) => m?.state === 'search');
+  return `${searching ? '🔍 En récolte ici' : '🧭 En route vers ce lieu'} · ${n}`;
 });
 const engagedTrip = computed(() => {
   const p = selected.value;

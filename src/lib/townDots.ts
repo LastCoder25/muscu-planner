@@ -56,18 +56,29 @@ export interface TownComing {
  * d'un lieu tenu y revient, `away` — c'est LÀ que sa boule orange se dessine). ⚠️ Types
  * STRUCTURELS : aucune dépendance au store.
  */
-export function baseReturners(
-  advs: readonly { id: string; busyUntil?: number; posted?: string; elsewhere?: number }[],
+export function baseReturnerList<
+  A extends { id: string; busyUntil?: number; posted?: string; elsewhere?: number },
+>(
+  advs: readonly A[],
   pois: readonly { control?: { owner?: string; away?: string[] } }[],
   now: number,
-): number {
+): A[] {
   const keptOnPoint = new Set(
     pois.flatMap((p) => (p.control?.owner === 'player' ? (p.control.away ?? []) : [])),
   );
   return advs.filter(
     (a) =>
       (a.busyUntil ?? 0) > now && !a.posted && a.elsewhere === undefined && !keptOnPoint.has(a.id),
-  ).length;
+  );
+}
+
+/** 🧭 Leur nombre (les boules orange sous la ville). */
+export function baseReturners(
+  advs: Parameters<typeof baseReturnerList>[0],
+  pois: Parameters<typeof baseReturnerList>[1],
+  now: number,
+): number {
+  return baseReturnerList(advs, pois, now).length;
 }
 
 export function townDots(
@@ -85,8 +96,7 @@ export function townDots(
     : coming.hero
       ? 'g'.repeat(HERO_GARRISON_SEATS)
       : '';
-  const champs =
-    heroDots + 'c'.repeat(count(champions)) + 'r'.repeat(count(coming.champions ?? 0));
+  const champs = heroDots + 'c'.repeat(count(champions)) + 'r'.repeat(count(coming.champions ?? 0));
   const sick = 'w'.repeat((hurt.hero ? 1 : 0) + count(hurt.champions ?? 0));
   const mil = 'm'.repeat(count(militia));
   const shown = [

@@ -58,6 +58,16 @@
       </div>
       <p v-if="!champs.length" class="bgs-dim">Aucun champion à la base pour l’instant.</p>
 
+      <!-- 🧭 PARTIS, ILS REVIENDRONT ICI (demandé : « voir comme sur les lieux fixes les
+           champions partis de la base qui vont y revenir ») : la frise d'un lieu fixe, en
+           cases pointillées avec leur retour. -->
+      <GarrisonStrip
+        v-if="backCount > 0"
+        :cells="backCells"
+        :title="`🧭 Partis, ils reviendront ici · ${backCount}`"
+        :advs="advs"
+      />
+
       <template v-if="milHome > 0">
         <p class="bgs-cap">
           <span class="bgs-inline"><MilitiaPortrait /></span> <b>Miliciens</b> · touche-en un pour
@@ -124,6 +134,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import GarrisonStrip from '@/components/GarrisonStrip.vue';
+import { garrisonStrip, type StripMember } from '@/lib/garrisonStrip';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Adventurer } from '@/lib/adventurers';
 import {
@@ -151,6 +163,10 @@ const props = defineProps<{
   milHome: number;
   heroHome: boolean;
   heroStatus: string;
+  /** 🧭 Partis de la base, ils y reviendront : le héros (`heroIn`, ms avant son retour) et
+   *  les champions, en cases `away` comme sur la frise d'un lieu fixe. */
+  returning: { heroIn: number | null; members: StripMember[] };
+  advs: ReadonlyMap<string, Adventurer>;
   /** Les lieux fixes TENUS. */
   targets: BaseSendTarget[];
   /** Le trajet (min) d'un départ de la base vers `id` avec cette sélection — la règle du store. */
@@ -163,6 +179,20 @@ const emit = defineEmits<{
   /** 🔙 Ouvrir le rappel de ceux qui sont dehors (héros compris). */
   recall: [];
 }>();
+
+/** 🧭 La frise de ceux qui reviendront : la même que sur un lieu fixe, sans place libre. */
+const backCells = computed(() =>
+  garrisonStrip({
+    hero: props.returning.heroIn === null ? null : { state: 'away', inMs: props.returning.heroIn },
+    members: props.returning.members,
+    free: 0,
+    readonly: true,
+    selected: [],
+  }),
+);
+const backCount = computed(
+  () => props.returning.members.length + (props.returning.heroIn === null ? 0 : 1),
+);
 
 const sel = ref<string[]>([]);
 const mil = ref(0);

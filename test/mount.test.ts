@@ -175,6 +175,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           milHome: 2,
           heroHome: true,
           heroStatus: '✅ à la base',
+          returning: {
+            heroIn: 3_600_000,
+            members: [{ id: ROW.adventurers[0].id, state: 'away', inMs: 600_000 }],
+          },
+          advs: new Map(ROW.adventurers.map((x: { id: string }) => [x.id, x])),
           targets: [{ id: 'm1', emo: '⛏️', label: 'Mine d’or', control }],
           legMin: () => 42,
           busy: false,
@@ -188,6 +193,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     expect(out).toContain('Ta base');
     expect(out).toContain('2 champions ailleurs');
+    // 🧭 Partis de la base, ils y reviendront : la frise des retours, héros compris.
+    expect(out).toContain('Partis, ils reviendront ici · 2');
+    expect(out).toContain('gs-cell hero away');
     // 🦸 Le héros vit DANS la grille des effectifs, en première tuile — plus au-dessus.
     const grid = out.indexOf('class="bgs-pick"');
     expect(grid).toBeGreaterThan(-1);
@@ -221,6 +229,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           milHome: 0,
           heroHome: true,
           heroStatus: '✅ à la base',
+          returning: {
+            heroIn: 3_600_000,
+            members: [{ id: ROW.adventurers[0].id, state: 'away', inMs: 600_000 }],
+          },
+          advs: new Map(ROW.adventurers.map((x: { id: string }) => [x.id, x])),
           targets: [{ id: 'm1', emo: '⛏️', label: 'Mine d’or', control }],
           legMin: () => 42,
           busy: false,
@@ -4600,6 +4613,30 @@ describe('🏰 frise de la garnison', () => {
     expect(html).toContain('−12 %');
     expect(html).toContain('gs-cell member here on');
     expect(html.match(/gs-cell free/g)).toHaveLength(2);
+  }, 30_000);
+
+  it('🔍 un champion en récolte sur place : violet, temps restant, pas choisissable', async () => {
+    const { default: GarrisonStrip } = await import('@/components/GarrisonStrip.vue');
+    const { garrisonStrip } = await import('@/lib/garrisonStrip');
+    const adv = { id: 'a1', name: 'Lyra', path: ['guerrier'], level: 3, xp: 0, seed: 1 };
+    const cells = garrisonStrip({
+      members: [{ id: 'a1', state: 'search', inMs: 2_700_000 }],
+      free: 0,
+      readonly: true,
+      selected: [],
+    });
+    let html = '';
+    await mountIt(
+      GarrisonStrip,
+      { cells, title: '🔍 En récolte ici · 1', advs: new Map([['a1', adv]]) },
+      undefined,
+      undefined,
+      '/',
+      (h) => (html = h),
+    );
+    expect(html).toContain('gs-cell member search locked');
+    expect(html).toContain('🔍 45 min');
+    expect(html).toContain('disabled');
   }, 30_000);
 });
 

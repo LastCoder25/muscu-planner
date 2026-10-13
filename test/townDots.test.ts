@@ -1,6 +1,12 @@
 // 🏰 La garnison de la base en lignes de 5 sous la ville.
 import { describe, expect, it } from 'vitest';
-import { baseReturners, TOWN_ROW_SIZE, TOWN_ROWS_MAX, townDots } from '@/lib/townDots';
+import {
+  baseReturnerList,
+  baseReturners,
+  TOWN_ROW_SIZE,
+  TOWN_ROWS_MAX,
+  townDots,
+} from '@/lib/townDots';
 
 describe('🧭 partis, ils rentreront à la base', () => {
   it('en orange juste après les présents ; le héros en deux points `g` reliés', () => {
@@ -68,5 +74,13 @@ describe('townDots — lignes de 5', () => {
     });
     // Comptés dans le reste quand les lignes manquent.
     expect(townDots(false, 10, 0, 2, { champions: 3 }).more).toBe(3);
+  });
+});
+
+describe('🧭 la liste de ceux qui rentreront (`baseReturnerList`)', () => {
+  it('rend les champions eux-mêmes, et `baseReturners` leur nombre', () => {
+    const advs = [{ id: 'a', busyUntil: 9 }, { id: 'b' }];
+    expect(baseReturnerList(advs, [], 1).map((a) => a.id)).toEqual(['a']);
+    expect(baseReturners(advs, [], 1)).toBe(1);
   });
 });

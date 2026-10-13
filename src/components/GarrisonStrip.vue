@@ -93,9 +93,11 @@ const freeLabel = computed(() =>
 function stateSub(s: StripState, inMs: number): string | null {
   if (s === 'coming') return `🧭 ${formatDuration(inMs)}`;
   if (s === 'away') return `↩ ${inMs > 0 ? formatDuration(inMs) : 'bientôt'}`;
+  if (s === 'search') return `🔍 ${formatDuration(inMs)}`;
   return null;
 }
 function heroTitle(s: StripState, inMs: number) {
+  if (s === 'search') return `Ton héros récolte sur place · encore ${formatDuration(inMs)}`;
   if (s === 'coming') return `Ton héros arrive dans ${formatDuration(inMs)} · il prend 2 places`;
   if (s === 'away') return 'Ton héros est en sortie et reviendra ici · 2 places';
   return 'Ton héros est posté ici · il prend 2 places';
@@ -103,6 +105,8 @@ function heroTitle(s: StripState, inMs: number) {
 function memberTitle(c: Extract<StripCell, { kind: 'member' }>) {
   const who = props.militia ? MILITIA_NAME : (advOf(c.id)?.name ?? '');
   if (c.reserved) return `${who} · ${c.reserved}`;
+  if (c.state === 'search') return `${who} récolte sur place · encore ${formatDuration(c.inMs)}`;
+  if (!c.selectable && c.state === 'coming') return `${who} arrive dans ${formatDuration(c.inMs)}`;
   if (c.state === 'away')
     return `${who} est en sortie · sa place l'attend (${stateSub(c.state, c.inMs)})`;
   if (c.state === 'coming')
@@ -200,6 +204,11 @@ button.gs-cell {
 }
 .gs-cell.away {
   border-color: var(--d3, #ffb23f);
+}
+/* 🔍 En récolte sur place : trait plein, le violet de l'anneau de fouille de la carte. */
+.gs-cell.search {
+  border-color: #b57bff;
+  background: color-mix(in srgb, #b57bff 12%, var(--surface));
 }
 .gs-cell.hero {
   border-color: color-mix(in srgb, var(--accent, #ffd23f) 55%, var(--line));

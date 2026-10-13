@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { garrisonStrip, stripColumns } from '@/lib/garrisonStrip';
+import { crewOnSite, garrisonStrip, stripColumns, type SiteVoyage } from '@/lib/garrisonStrip';
 
 describe('🏰 frise des places d’une garnison', () => {
   it('une case par place : le héros en vaut deux, les libres viennent de la fiche', () => {
@@ -66,5 +66,72 @@ describe('🏰 frise des places d’une garnison', () => {
       selected: [],
     });
     expect(c).toMatchObject({ inMs: 0 });
+  });
+});
+
+describe('🔍 qui est sur un lieu de récolte (`crewOnSite`)', () => {
+  const v = (o: Partial<SiteVoyage> = {}): SiteVoyage => ({
+    poi: { id: 'ruine' },
+    midAt: 10_000,
+    dwellMs: 4_000,
+    returnAt: 20_000,
+    crew: ['a', 'b'],
+    outcome: {},
+    ...o,
+  });
+  it('en chemin avant l’arrivée, en récolte pendant la fouille, rien après', () => {
+    const before = crewOnSite([v()], 'ruine', 1_000);
+    expect(before.members).toEqual([
+      { id: 'a', state: 'coming', inMs: 5_000 },
+      { id: 'b', state: 'coming', inMs: 5_000 },
+    ]);
+    expect(crewOnSite([v()], 'ruine', 7_000).members[0]).toEqual({
+      id: 'a',
+      state: 'search',
+      inMs: 3_000,
+    });
+    expect(crewOnSite([v()], 'ruine', 10_000).members).toEqual([]);
+  });
+  it('le héros de son expédition, un autre lieu ignoré, un demi-tour ou un rappel jamais là', () => {
+    const r = crewOnSite(
+      [
+        v({ hero: true, crew: ['c'] }),
+        v({ poi: { id: 'autre' }, crew: ['d'] }),
+        v({ turnBack: 0.4, crew: ['e'] }),
+        v({ recalled: true, crew: ['f'] }),
+      ],
+      'ruine',
+      7_000,
+    );
+    expect(r.hero).toEqual({ state: 'search', inMs: 3_000 });
+    expect(r.members.map((m) => m.id)).toEqual(['c']);
+  });
+  it('lit l’escorte du rapport à défaut d’équipe', () => {
+    const r = crewOnSite(
+      [v({ crew: undefined, outcome: { party: { escort: ['z'] } } })],
+      'ruine',
+      0,
+    );
+    expect(r.members.map((m) => m.id)).toEqual(['z']);
+  });
+  it('en lecture seule, ni les récolteurs ni ceux en chemin ne se choisissent', () => {
+    const cells = garrisonStrip({
+      members: [
+        { id: 'a', state: 'search', inMs: 1 },
+        { id: 'b', state: 'coming', inMs: 1 },
+        { id: 'c', state: 'here' },
+      ],
+      free: 0,
+      readonly: true,
+      selected: [],
+    });
+    expect(cells.every((c) => c.kind !== 'member' || !c.selectable)).toBe(true);
+    // Une récolte n'est jamais choisissable, même hors lecture seule.
+    const open = garrisonStrip({
+      members: [{ id: 'a', state: 'search', inMs: 1 }],
+      free: 0,
+      selected: [],
+    });
+    expect(open[0]!.kind === 'member' && open[0]!.selectable).toBe(false);
   });
 });

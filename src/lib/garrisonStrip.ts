@@ -8,8 +8,9 @@
  * RANGER. Deux règles pour « combien de places reste-t-il ? » finiraient par se contredire.
  */
 
-/** Où en est un occupant : sur place, en route vers le lieu, ou parti en sortie (il revient). */
-export type StripState = 'here' | 'coming' | 'away';
+/** Où en est un occupant : sur place, en route vers le lieu, parti en sortie (il revient), ou
+ *  en RÉCOLTE sur un lieu sans garnison (filon, ruines… : il fouille, puis repart). */
+export type StripState = 'here' | 'coming' | 'away' | 'search';
 
 export interface StripMember {
   id: string;
@@ -44,11 +45,54 @@ export interface StripInput {
   members: readonly StripMember[];
   free: number;
   selected: readonly string[];
+  /** Rien à toucher (fiche de la base, lieu en récolte) : aucun occupant n'est choisissable. */
+  readonly?: boolean;
   /** La forteresse prise : pas de limite, une seule case « ＋ » qui le dit. */
   unlimited?: boolean;
 }
 
-const ORDER: Record<StripState, number> = { here: 0, coming: 1, away: 2 };
+const ORDER: Record<StripState, number> = { here: 0, search: 1, coming: 2, away: 3 };
+
+/** Ce que `crewOnSite` lit d'un voyage (héros ou équipe) — types STRUCTURELS. */
+export interface SiteVoyage {
+  poi: { id: string };
+  midAt: number;
+  dwellMs?: number;
+  returnAt: number;
+  turnBack?: number;
+  recalled?: true;
+  crew?: string[];
+  outcome: { party?: { escort: string[] } };
+  /** Le héros est du voyage (son expédition). */
+  hero?: boolean;
+}
+
+/**
+ * 🔍 QUI EST SUR CE LIEU, EN RÉCOLTE OU EN CHEMIN (demandé : « sur les lieux où les champions
+ * restent récolter, voir en cliquant dessus les champions et/ou le héros qui y sont »). Les
+ * voyages qui visent `poiId` : `coming` jusqu'à l'arrivée (`midAt − dwellMs`), `search`
+ * pendant la récolte (jusqu'à `midAt`). Après, ils ont quitté le lieu ; un demi-tour ou un
+ * rappel n'y arrive jamais.
+ */
+export function crewOnSite(
+  voyages: readonly SiteVoyage[],
+  poiId: string,
+  now: number,
+): { hero: { state: StripState; inMs: number } | null; members: StripMember[] } {
+  let hero: { state: StripState; inMs: number } | null = null;
+  const members: StripMember[] = [];
+  for (const v of voyages) {
+    if (v.poi.id !== poiId || v.turnBack !== undefined || v.recalled || now >= v.midAt) continue;
+    const arriveAt = v.midAt - Math.max(0, v.dwellMs ?? 0);
+    const at =
+      now < arriveAt
+        ? { state: 'coming' as const, inMs: arriveAt - now }
+        : { state: 'search' as const, inMs: v.midAt - now };
+    if (v.hero) hero = at;
+    for (const id of v.crew ?? v.outcome.party?.escort ?? []) members.push({ id, ...at });
+  }
+  return { hero, members };
+}
 
 /** Les cases d'une rangée, dans l'ordre de lecture : le héros, les présents, ceux qui
  *  arrivent (le plus proche d'abord), ceux en sortie, puis les places libres. */
@@ -78,7 +122,7 @@ export function garrisonStrip(input: StripInput): StripCell[] {
       reserved,
       loss: m.loss ?? null,
       selected: sel.has(m.id),
-      selectable: m.state !== 'away' && !reserved,
+      selectable: !input.readonly && m.state !== 'away' && m.state !== 'search' && !reserved,
     });
   }
   if (input.unlimited) cells.push({ key: 'f0', kind: 'free', span: 1, unlimited: true });
