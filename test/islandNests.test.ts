@@ -18,7 +18,7 @@ import {
   takeFortress,
 } from '@/lib/islandConquest';
 import { onIsland } from '@/lib/islandTerrain';
-import { FIELD_ARMY, syncFieldArmies } from '@/lib/fieldArmy';
+import { FIELD_ARMY, islandRetakeOrigin, syncFieldArmies } from '@/lib/fieldArmy';
 import { islandView } from '@/lib/islandShape';
 
 const NOW = Date.UTC(2026, 9, 2, 12);
@@ -187,13 +187,21 @@ describe('🪺 un nid qui apparaît envoie son armée sur le lieu tenu le plus p
     expect(army).toBeTruthy();
     expect(army.from).toEqual({ x: nest.x, y: nest.y });
   });
-  it('l’attaque suivante, ordinaire, ne part plus du nid', () => {
+  // ⚠️ Depuis le 2026-10-13, l'attaque ORDINAIRE d'un lieu tenu sur une île part de l'objectif
+  // ennemi le plus proche (`islandRetakeOrigin`) — souvent ce même nid. Ce qui compte : la
+  // marque `raidFrom` d'une échéance passée est ignorée (ici déplacée au coin de la carte).
+  it('l’attaque suivante, ordinaire, ne lit plus la marque du nid', () => {
     const { after, id, nest } = strike();
     const later = NOW + 20 * DAY;
     const next: ExpeditionMap = {
       ...after,
       pois: after.pois.map((q) =>
-        q.id === id ? { ...q, control: { ...q.control!, attackAt: later } } : q,
+        q.id === id
+          ? {
+              ...q,
+              control: { ...q.control!, attackAt: later, raidFrom: { x: 0, y: 0, at: NOW } },
+            }
+          : q,
       ),
     };
     const map = syncFieldArmies(next, {
@@ -204,7 +212,10 @@ describe('🪺 un nid qui apparaît envoie son armée sur le lieu tenu le plus p
       playerLevel: LV,
     });
     const army = map.pois.find((q) => q.type === 'warband' && q.army?.targetId === id)!;
-    expect(army.from).not.toEqual({ x: nest.x, y: nest.y });
+    expect(army.from).not.toEqual({ x: 0, y: 0 });
+    const o = islandRetakeOrigin(next.pois, next.pois.find((q) => q.id === id)!)!;
+    expect(army.from).toEqual({ x: o.x, y: o.y });
+    void nest;
   });
   it('une attaque déjà plus proche n’est jamais retardée', () => {
     const { m, id } = heldMap();

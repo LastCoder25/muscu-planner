@@ -51,6 +51,7 @@ import {
   CONTROL,
   attackerLevel,
   citadelIdFor,
+  deadRisingAt,
   retakeBoost,
   retakeForce,
   controlAllies,
@@ -474,6 +475,32 @@ function entryParam(
 }
 
 /**
+ * 🏝️ D'OÙ PART LA REPRISE D'UN LIEU TENU SUR UNE ÎLE (signalé, 2026-10-13 : « une attaque qui
+ * vient de nulle part » — il n'y a pas de citadelle de secteur sur une île, l'armée partait du
+ * bord de la carte). Un OBJECTIF tenu (cimetière…) est repris par la FORTERESSE ; un autre lieu
+ * fixe tenu est attaqué depuis l'objectif ENNEMI le plus proche, à défaut la forteresse.
+ * `undefined` si l'île n'a plus personne pour attaquer.
+ */
+export function islandRetakeOrigin(
+  pois: readonly Poi[],
+  p: Pick<Poi, 'x' | 'y' | 'control'>,
+): Poi | undefined {
+  const fortress = pois.find((q) => q.control?.kind === 'fortress' && q.control.owner === 'enemy');
+  if (p.control?.kind === 'objective') return fortress;
+  let best: Poi | undefined;
+  let bd = Infinity;
+  for (const q of pois) {
+    if (q.control?.kind !== 'objective' || q.control.owner !== 'enemy') continue;
+    const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = q;
+    }
+  }
+  return best ?? fortress;
+}
+
+/**
  * 🗺️ La carte avec ses armées en campagne À JOUR : celles qu'on voit sont posées (ou
  * rafraîchies : position, force restante), celles qui ne sont plus (arrivées, battues,
  * sorties de la détection) sont retirées. Rend la MÊME carte quand rien ne change.
@@ -505,15 +532,19 @@ export function syncFieldArmies(
   const circles = detectionCircles(map, ctx.detectR, ctx.reach);
   for (const p of map.pois) {
     if (p.type !== 'control') continue;
+    // 🪦 Les morts d'un cimetière se relèvent SOUS lui : aucune armée ne marche.
+    if (deadRisingAt(p) !== null) continue;
     // 🪺 Elle part du NID qui vient d'apparaître (`raidFrom`, pour CETTE échéance), sinon de
     // la citadelle qui attaque ce point.
     const rf = p.control?.raidFrom;
     const cit =
       rf && rf.at === p.control?.attackAt
         ? rf
-        : p.control
-          ? map.pois.find((q) => q.id === citadelIdFor(map.pois, p.control!.kind))
-          : undefined;
+        : map.archipel
+          ? islandRetakeOrigin(map.pois, p)
+          : p.control
+            ? map.pois.find((q) => q.id === citadelIdFor(map.pois, p.control!.kind))
+            : undefined;
     const r = retakeArmyPoi(
       p,
       map,

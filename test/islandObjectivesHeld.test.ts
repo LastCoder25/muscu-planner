@@ -6,6 +6,11 @@ import {
   dueRetakes,
   ensureControls,
   holdGrace,
+  deadRisingAt,
+  knownAttackAt,
+  riseCloseness,
+  riseShortLabel,
+  risingControlKey,
   seatsOf,
 } from '@/lib/controlPoints';
 import {
@@ -19,6 +24,7 @@ import {
   regainIslandTarget,
   takeObjective,
 } from '@/lib/islandConquest';
+import { islandRetakeOrigin, syncFieldArmies } from '@/lib/fieldArmy';
 
 /**
  * 🏳️ ÉTAPE 6 BIS (décisions de l'utilisateur, 2026-10-02) : les objectifs d'une île SE
@@ -119,5 +125,74 @@ describe('🪦 un cimetière tenu ne se relève pas : ses morts l’attaquent', 
     expect(islandConquest(m)!.objectivesDown).toBe(1);
     expect(poi(m, OBJ)!.control!.attackAt).toBe(due);
     expect(m.archipel!.razedAt?.[OBJ]).toBeUndefined();
+  });
+});
+
+// 🪦 Signalé (2026-10-13) : « une attaque qui vient de nulle part ». Les morts se relèvent sous
+// le cimetière, à une heure CONNUE dès la prise ; aucune armée ne marche ; la reprise ordinaire
+// d'un cimetière part de la forteresse.
+describe('🪦 les morts qui se relèvent se voient venir', () => {
+  const due = NOW + RISE.riseMs;
+  const withAttack = (m: ExpeditionMap, at: number): ExpeditionMap => ({
+    ...m,
+    pois: m.pois.map((p) =>
+      p.id === OBJ ? { ...p, control: { ...p.control!, attackAt: at } } : p,
+    ),
+  });
+  const taken = () => takeObjective(island(3), OBJ, ['a'], NOW);
+  it('posée dès la prise, connue d’avance, et sans armée en marche', () => {
+    const m = raiseDead(withAttack(taken(), due + 10 * H), NOW + H);
+    const c = poi(m, OBJ)!;
+    expect(c.control!.attackAt).toBe(due);
+    expect(deadRisingAt(c)).toBe(due);
+    expect(knownAttackAt(c, NOW + H)).toBe(due);
+    expect(m.archipel!.razedAt?.[OBJ]).toBe(NOW);
+    const armies = syncFieldArmies(m, {
+      raid: null,
+      detectR: 999,
+      reach: 999,
+      now: due - H,
+      playerLevel: 30,
+    });
+    expect(armies.pois.some((p) => p.army?.kind === 'retake' && p.army.targetId === OBJ)).toBe(
+      false,
+    );
+  });
+  it('une reprise déjà prévue avant passe d’abord', () => {
+    const m0 = withAttack(taken(), NOW + 5 * H);
+    expect(raiseDead(m0, NOW + H)).toBe(m0);
+  });
+  it('jouée une fois : une défense à cette heure ne se rejoue pas', () => {
+    const m1 = raiseDead(withAttack(taken(), due + 10 * H), NOW + H);
+    const m2 = withAttack(m1, due + 40 * H);
+    const m3 = raiseDead(m2, due + 1);
+    expect(poi(m3, OBJ)!.control!.attackAt).toBe(due + 40 * H);
+    expect(deadRisingAt(poi(m3, OBJ)!)).toBeNull();
+  });
+  it('la carte affiche le délai et un cercle qui se resserre', () => {
+    expect(riseShortLabel(45 * 60_000)).toBe('45 min');
+    expect(riseShortLabel(5 * H - 1)).toBe('5 h');
+    expect(riseShortLabel(72 * H)).toBe('3 j');
+    expect(riseCloseness(NOW + 48 * H, NOW)).toBe(0);
+    expect(riseCloseness(NOW, NOW)).toBe(10);
+    const m = raiseDead(withAttack(taken(), due + 10 * H), NOW + H);
+    expect(risingControlKey(m, due - 2 * H)).toBe(`${OBJ}:2 h:9`);
+  });
+});
+
+describe('🏝️ une reprise sur une île part d’un lieu ennemi', () => {
+  const mk = (id: string, kind: string, owner: string, x: number, y: number) =>
+    ({ id, x, y, control: { kind, owner } }) as unknown as Poi;
+  const fort = mk('f', 'fortress', 'enemy', 0, 0);
+  const near = mk('o1', 'objective', 'enemy', 50, 50);
+  const far = mk('o2', 'objective', 'enemy', 200, 200);
+  it('un objectif tenu est repris par la forteresse', () => {
+    expect(islandRetakeOrigin([fort, near, far], mk('h', 'objective', 'player', 60, 60))!.id).toBe(
+      'f',
+    );
+  });
+  it('un autre lieu fixe, par l’objectif ennemi le plus proche, sinon la forteresse', () => {
+    expect(islandRetakeOrigin([fort, near, far], mk('m', 'mine', 'player', 60, 60))!.id).toBe('o1');
+    expect(islandRetakeOrigin([fort], mk('m', 'mine', 'player', 60, 60))!.id).toBe('f');
   });
 });

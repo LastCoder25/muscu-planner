@@ -241,6 +241,7 @@
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
             :imminent-key="imminentKey"
+            :rising-key="risingKey"
             :attacked-key="attackedKey"
             :tier-key="tierKey"
             :garrison-key="garrisonKey"
@@ -393,6 +394,7 @@
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
             :imminent-key="imminentKey"
+            :rising-key="risingKey"
             :attacked-key="attackedKey"
             :target="null"
             :travel-targets="[]"
@@ -950,8 +952,14 @@
             <p v-if="liveGrace" class="ctl-line ctl-hold">
               🕊️ <b>Trêve</b> : aucune reprise avant {{ liveGrace }}.
             </p>
+            <!-- 🪦 Les morts qui se relèvent : l'heure est CONNUE, de quoi prévoir sa défense. -->
+            <p v-if="liveRiseIn !== null" class="ctl-line ctl-alert">
+              🪦 <b>Les morts se relèvent dans {{ formatDuration(liveRiseIn) }}</b> : ils sortent de
+              terre tout autour du cimetière et attaquent ta garnison. Envoie des renforts avant —
+              abattre la citadelle des morts arrête tout.
+            </p>
             <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
-            <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
+            <p v-else-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
               ⚠️ <b>Bataille imminente</b> : une troupe ennemie marche sur ce lieu. Un renfort
               proche peut encore arriver à temps.
             </p>
@@ -1786,6 +1794,8 @@ import {
   trainingCapLevel,
   seatsOf,
   attackImminent,
+  deadRisingAt,
+  risingControlKey,
   graceInfo,
   attackerHidden,
   controlDefenseHold,
@@ -2595,6 +2605,15 @@ const citadelRestIn = computed(() => {
 const imminentKey = computed(() =>
   imminentControlKey(char.row?.expedition_map ?? null, coarseNow.value),
 );
+/** 🪦 Les cimetières où les morts vont se relever (`risingControlKey`), à la minute. */
+const risingKey = computed(() =>
+  risingControlKey(char.row?.expedition_map ?? null, coarseNow.value),
+);
+/** 🪦 Dans combien de temps les morts se relèvent sous le lieu ouvert, `null` si ce n'est pas le cas. */
+const liveRiseIn = computed(() => {
+  const at = livePoi.value ? deadRisingAt(livePoi.value) : null;
+  return at === null ? null : Math.max(0, at - coarseNow.value);
+});
 /** 🔴 Les lieux sur lesquels une de nos troupes marche (point rouge sous le lieu). */
 const attackedKey = computed(() =>
   underAttackKey(

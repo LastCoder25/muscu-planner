@@ -1979,7 +1979,51 @@ export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[], fort: numb
  *  heures (`attackImminent`). Avant, elle reste secrète (v0.1239) — on compte alors tous les
  *  renforts en route comme arrivés, sinon un renfort « en retard » trahirait l'heure. */
 export function knownAttackAt(p: Poi, now: number): number | null {
-  return attackImminent(p, now) ? (p.control!.attackAt ?? null) : null;
+  // 🪦 Les morts qui se relèvent ont une heure CONNUE : la défense se juge dessus.
+  return deadRisingAt(p) ?? (attackImminent(p, now) ? (p.control!.attackAt ?? null) : null);
+}
+
+/**
+ * 🪦 L'HEURE OÙ LES MORTS SE RELÈVENT sous un cimetière TENU (île 3), `null` sinon. Pas une
+ * armée en marche : ils sortent de terre, à une heure connue d'avance — le joueur peut prévoir
+ * sa défense (demandé, 2026-10-13 : « une attaque qui vient de nulle part », « que le joueur
+ * prévoie de défendre le lieu »). Seulement quand la reprise prévue EST la leur (`riseAt`
+ * égale `attackAt`) : une échéance déplacée depuis n'est plus celle des morts.
+ */
+export function deadRisingAt(p: Pick<Poi, 'control'>): number | null {
+  const c = p.control;
+  return c?.owner === 'player' && c.riseAt !== undefined && c.riseAt === c.attackAt
+    ? c.riseAt
+    : null;
+}
+
+/** 🪦 Le délai court affiché sur la carte : « 45 min », « 5 h », « 2 j ». */
+export function riseShortLabel(ms: number): string {
+  const min = Math.max(0, Math.ceil(ms / 60_000));
+  if (min < 60) return `${min} min`;
+  const h = Math.ceil(min / 60);
+  return h < 48 ? `${h} h` : `${Math.floor(h / 24)} j`;
+}
+
+/** 🪦 Sur quelle durée les morts se rapprochent du cimetière (le cercle se resserre). */
+export const RISE_CLOSE_MS = 24 * 3600_000;
+
+/** 🪦 À quel point les morts sont proches, de 0 (encore loin, à ≥ `RISE_CLOSE_MS`) à 10 (à
+ *  l'heure). En crans entiers : la carte ne se redessine pas à chaque minute pour rien. */
+export function riseCloseness(at: number, now: number): number {
+  const left = Math.max(0, at - now);
+  return Math.round(10 * (1 - Math.min(1, left / RISE_CLOSE_MS)));
+}
+
+/** 🪦 Les cimetières où les morts vont se relever, « id:délai:proximité » joints par « | » —
+ *  une chaîne stable pour le calque de la carte (à la minute). */
+export function risingControlKey(map: ExpeditionMap | null, now: number): string {
+  return (map?.pois ?? [])
+    .flatMap((p) => {
+      const at = deadRisingAt(p);
+      return at === null ? [] : [`${p.id}:${riseShortLabel(at - now)}:${riseCloseness(at, now)}`];
+    })
+    .join('|');
 }
 
 /** 🛡️ Qui DÉFENDRA le point : la garnison, puis les renforts (en route, ou `extra` qu'on

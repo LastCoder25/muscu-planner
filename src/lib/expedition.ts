@@ -148,6 +148,10 @@ export interface ControlState {
   /** 🪺 D'où part l'armée de la reprise prévue à `at` (un nid qui vient d'apparaître) : la
    *  carte la fait marcher de là (`syncFieldArmies`). Ignoré pour toute autre échéance. */
   raidFrom?: { x: number; y: number; at: number };
+  /** 🪦 Île 3 : l'heure où les morts de ce cimetière TENU se relèvent (`raiseDead`). Quand elle
+   *  vaut `attackAt`, la reprise vient de SOUS le cimetière : aucune armée ne marche, et l'heure
+   *  est connue d'avance (`deadRisingAt`) — de quoi prévoir sa défense. */
+  riseAt?: number;
   /** 🧝 Le héros y est POSTÉ (étape 6 bis : n'importe quel lieu tenu, la forteresse comprise) —
    *  il défend la place, n'est plus libre pour autre chose et se rappelle à la base. */
   hero?: boolean;

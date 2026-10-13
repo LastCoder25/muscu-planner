@@ -43,6 +43,22 @@
         <g v-if="p.control.kind === 'fortress'" :transform="`translate(${p.x} ${p.y})`">
           <QgFrame :half="7.4" tone="foe" />
         </g>
+        <!-- 🪦🧟 LES MORTS SE RELÈVENT tout autour du cimetière (demandé) : un cercle de morts
+             qui sortent de terre l'un après l'autre et titubent vers le lieu. Le cercle se
+             RESSERRE à mesure que l'heure approche (`riseCloseness`). Sous le fort, sans clic. -->
+        <g v-if="rising.get(p.id)" class="dead-ring" aria-hidden="true">
+          <template v-for="z in deadRing(p, rising.get(p.id)!.close)" :key="z.i">
+            <ellipse :cx="z.x" :cy="z.y + 0.9" rx="1.7" ry="0.6" class="dead-dirt" />
+            <text
+              :x="z.x"
+              :y="z.y + 1.1"
+              class="dead-z"
+              :style="{ '--dx': z.dx + 'px', '--dy': z.dy + 'px', animationDelay: z.delay }"
+            >
+              🧟
+            </text>
+          </template>
+        </g>
         <rect
           :x="p.x - 5.2"
           :y="p.y - 5.2"
@@ -106,6 +122,11 @@
         >
           {{ p.control.kind === 'citadel' ? 'P' : '🏅' }}{{ tiers.get(p.id) }}
         </text>
+        <!-- 🪦 L'HEURE où ils sortent de terre, connue d'avance : de quoi prévoir sa défense. -->
+        <g v-if="rising.get(p.id)" class="dead-pill" aria-hidden="true">
+          <rect :x="p.x - 7" :y="p.y - 16.6" width="14" height="4.4" rx="2.2" />
+          <text :x="p.x" :y="p.y - 13.5">🪦 {{ rising.get(p.id)!.label }}</text>
+        </g>
         <!-- ⚔️ Bataille imminente : un petit avertissement au coin du fort, qui palpite. -->
         <g v-if="imminent.has(p.id)" class="ctl-alert">
           <circle :cx="p.x - 5.2" :cy="p.y - 5.2" r="2.9" />
@@ -178,10 +199,7 @@
       v-for="v in travelTargets"
       :key="'vg' + v.id"
       class="poi target van-target"
-      :class="[
-        v.kind,
-        { 'rift-target': isRiftPoi(v.poi), sel: selectedId === v.poi.id },
-      ]"
+      :class="[v.kind, { 'rift-target': isRiftPoi(v.poi), sel: selectedId === v.poi.id }]"
       @click="emit('select', v.poi)"
     >
       <ellipse
@@ -226,6 +244,8 @@ const props = defineProps<{
   veiledKey: string;
   /** Ids des points de contrôle sous attaque imminente, même forme que `dimmedKey`. */
   imminentKey: string;
+  /** 🪦 Les cimetières où les morts vont se relever, « id:délai:proximité » (`risingControlKey`). */
+  risingKey?: string;
   /** 🔴 Ids des lieux sur lesquels une de nos troupes marche (`underAttackKey`), même forme. */
   attackedKey?: string;
   /** 🏅 Les crans des points fixes, « id:cran » joints par « | » (seuls les crans > 0). */
@@ -244,6 +264,37 @@ const dimmed = computed(() => toSet(props.dimmedKey));
 const veiled = computed(() => toSet(props.veiledKey));
 const imminent = computed(() => toSet(props.imminentKey));
 const attacked = computed(() => toSet(props.attackedKey ?? ''));
+/** 🪦 id → { délai affiché, proximité 0..10 }. */
+const rising = computed(() => {
+  const m = new Map<string, { label: string; close: number }>();
+  for (const part of (props.risingKey ?? '').split('|')) {
+    if (!part) continue;
+    const [id, label, close] = part.split(':');
+    if (id) m.set(id, { label: label ?? '', close: Number(close) || 0 });
+  }
+  return m;
+});
+/** 🧟 Combien de morts autour d'un cimetière. */
+const DEAD_COUNT = 8;
+/** 🧟 Le cercle des morts : loin (rayon 20) à 24 h, au pied du fort (rayon 11) à l'heure. Chacun
+ *  sort de terre à son tour (`delay`) puis avance vers le lieu (`dx`, `dy`). */
+function deadRing(p: Poi, close: number) {
+  const r = 20 - (9 * Math.min(10, Math.max(0, close))) / 10;
+  const off = (seedOf(p.id) % 360) * (Math.PI / 180);
+  return Array.from({ length: DEAD_COUNT }, (_, i) => {
+    const a = off + (i * 2 * Math.PI) / DEAD_COUNT;
+    const ux = Math.cos(a);
+    const uy = Math.sin(a);
+    return {
+      i,
+      x: p.x + ux * r,
+      y: p.y + uy * r,
+      dx: -ux * r * 0.35,
+      dy: -uy * r * 0.35,
+      delay: `${((i * 3) % DEAD_COUNT) * 0.45}s`,
+    };
+  });
+}
 /** 🏰 Agrandissement d'un lieu fixe (citadelle encore plus) ; 1 pour un lieu ordinaire. */
 const FIXED_SCALE = 1.15;
 const CITADEL_SCALE = 1.35;
@@ -341,6 +392,70 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 }
 .ctl-flag.player {
   fill: var(--held);
+}
+/* 🪦🧟 Les morts qui se relèvent : chacun sort de terre (il grandit depuis le sol), titube
+   vers le lieu, puis s'efface — et le suivant se relève. Figé si l'on préfère moins de
+   mouvement. */
+.dead-ring {
+  pointer-events: none;
+}
+.dead-dirt {
+  fill: #4a3624;
+  opacity: 0.75;
+}
+.dead-z {
+  font-size: 5.6px;
+  text-anchor: middle;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: dead-rise 3.6s ease-in-out infinite backwards;
+  filter: drop-shadow(0 0 0.5px #b6f5a6) drop-shadow(0 0 1.2px #7bc86c);
+}
+@keyframes dead-rise {
+  0% {
+    transform: translate(0, 0) scale(1, 0);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(0, 0) scale(1, 1);
+    opacity: 1;
+  }
+  30% {
+    transform: translate(0, 0) rotate(-8deg);
+  }
+  45% {
+    transform: translate(calc(var(--dx) * 0.4), calc(var(--dy) * 0.4)) rotate(7deg);
+  }
+  60% {
+    transform: translate(calc(var(--dx) * 0.6), calc(var(--dy) * 0.6)) rotate(-7deg);
+  }
+  82% {
+    transform: translate(var(--dx), var(--dy)) rotate(5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy));
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dead-z {
+    animation: none;
+  }
+}
+.dead-pill {
+  pointer-events: none;
+}
+.dead-pill rect {
+  fill: #2a1f33;
+  stroke: #7bc86c;
+  stroke-width: 0.4;
+}
+.dead-pill text {
+  fill: #d8f5cf;
+  font-size: 2.9px;
+  font-weight: 700;
+  text-anchor: middle;
 }
 /* ⚔️ Bataille imminente : pastille rouge au coin du fort, lente pulsation (une menace qui
    approche en heures, pas une alarme). Figée si l'on préfère moins de mouvement. */

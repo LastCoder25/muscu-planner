@@ -198,19 +198,27 @@ export function raiseDead(map: ExpeditionMap, now: number): ExpeditionMap {
   if (!key || gone.has(key)) return map;
   const razed = a.razedAt ?? {};
   const up = Object.keys(razed).filter((id) => gone.has(id) && razed[id]! + RISE.riseMs <= now);
-  if (!up.length) return map;
   // 🏳️ Un cimetière TENU ne se relève pas tout seul : ses morts ATTAQUENT la garnison à
-  // l'heure où il se serait relevé (la reprise décide).
+  // l'heure où il se serait relevé (la reprise décide). 🪦 Posée DÈS LA PRISE, pas à
+  // l'échéance (signalé : posée trop tard, elle se résolvait aussitôt sans jamais se voir) :
+  // l'heure est connue d'avance, de quoi prévoir sa défense (`deadRisingAt`).
+  // ⚠️ UNE SEULE FOIS par échéance (`riseAt`) : une défense déjà jouée à cette heure ne se rejoue
+  // pas, même si le relevé passe après la bataille.
   const held = new Set(map.pois.filter((p) => heldIslandTarget(p)).map((p) => p.id));
+  let marked = false;
+  const pois = map.pois.map((p) => {
+    if (!held.has(p.id) || razed[p.id] === undefined || !gone.has(p.id)) return p;
+    const t = razed[p.id]! + RISE.riseMs;
+    if (p.control!.riseAt === t) return p;
+    // Une reprise déjà prévue AVANT passe d'abord : on remarquera les morts après elle.
+    if (t > (p.control!.attackAt ?? Infinity)) return p;
+    marked = true;
+    return { ...p, control: { ...p.control!, attackAt: t, riseAt: t } };
+  });
+  if (!up.length && !marked) return map;
   const back = new Set(up.filter((id) => !held.has(id)));
   const razedAt = { ...razed };
   for (const id of up) delete razedAt[id];
-  const pois = map.pois.map((p) => {
-    if (!held.has(p.id) || !up.includes(p.id)) return p;
-    const t = razed[p.id]! + RISE.riseMs;
-    const cur = p.control!.attackAt ?? Infinity;
-    return { ...p, control: { ...p.control!, attackAt: Math.min(cur, t) } };
-  });
   return {
     ...map,
     pois,
