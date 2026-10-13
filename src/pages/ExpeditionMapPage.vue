@@ -1530,6 +1530,8 @@ import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import {
   attackReservedIds,
   attackHeroWaitingAt,
+  heroWaitingAtBase,
+  heroAttackReturnAt,
   attackWingVoyages,
   combinedColors,
   combinedKey,
@@ -5153,13 +5155,17 @@ const baseReturning = computed(() => {
   const exp = char.row?.expedition;
   const walk = heroWalk(map, now.value);
   const heroHome = !!char.row && char.heroIsHome(char.row);
-  const heroAt = heroHome
-    ? null
-    : exp && !exp.homeId
-      ? exp.returnAt
-      : walk && !walk.to
-        ? walk.at
-        : null;
+  // ⚔️⏳ Réservé à la base pour une attaque combinée : il rentrera avec son groupe.
+  const heroAt =
+    heroHome && heroWaitingAtBase(char.attackList)
+      ? heroAttackReturnAt(char.attackList)
+      : heroHome
+        ? null
+        : exp && !exp.homeId
+          ? exp.returnAt
+          : walk && !walk.to
+            ? walk.at
+            : null;
   return {
     heroIn: heroAt === null ? null : Math.max(0, heroAt - now.value),
     members: baseReturnerList(char.advList, map?.pois ?? [], now.value).map((a) => ({
@@ -5173,9 +5179,11 @@ const townRow = computed(() => {
   // 🤕 À l'infirmerie : le héros blessé (rentré à la base) et les champions alités, en rouge.
   const heroHome = !!char.row && char.heroIsHome(char.row);
   const heroHurt = heroHome && heroHealIn.value > 0;
+  // ⚔️⏳ Réservé pour une attaque combinée : encore là, mais pris → en orange (`coming`).
+  const heroWaiting = heroHome && heroWaitingAtBase(char.attackList);
   const back = baseReturning.value;
   return townDots(
-    heroHome && !heroHurt,
+    heroHome && !heroHurt && !heroWaiting,
     baseChamps.value.length,
     char.row?.base?.militia?.home ?? 0,
     undefined,
@@ -5201,6 +5209,7 @@ const heroBaseStatus = computed(() => {
   if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
   const post = heroPostOf(map);
   if (post) return `🏰 posté : ${poiLabel(post)}`;
+  if (heroWaitingAtBase(char.attackList)) return '⚔️ réservé pour une attaque combinée';
   if (char.heroEngaged) return '🧭 en expédition';
   return '✅ à la base — il part depuis la fiche d’un lieu';
 });

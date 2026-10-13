@@ -314,6 +314,15 @@ export function attackWaitingIds(
   return ids;
 }
 
+/** 🧝⏳ Le héros attend-il, À LA BASE, le départ d'une attaque combinée ? Il y est encore
+ *  mais pris : la base le dessine en orange sous son icône, comme un champion réservé
+ *  (demandé, 2026-10-13 : « montrer qu'il est impliqué dans une attaque et ne peut pas bouger »). */
+export function heroWaitingAtBase(attacks: readonly CombinedAttack[] | null | undefined): boolean {
+  return (attacks ?? []).some((a) =>
+    a.wings.some((w) => w.state === 'waiting' && w.hero && w.originId === null),
+  );
+}
+
 /** 🧝 Le héros est-il engagé dans une attaque combinée (en attente ou parti) ? */
 export function heroInAttack(attacks: readonly CombinedAttack[] | null | undefined): boolean {
   return (attacks ?? []).some((a) =>

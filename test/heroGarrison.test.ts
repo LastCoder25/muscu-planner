@@ -1,7 +1,8 @@
 // 🧝 Le héros en garnison sur un lieu fixe prend 2 places sur les 5 (2026-10-05, demandé :
 // « permettre au héros d'être en garnison sur les lieux fixes. il prend 2 places sur les 5 »).
-import { attackHeroWaitingAt, type CombinedAttack } from '@/lib/combinedAttack';
+import { attackHeroWaitingAt, heroWaitingAtBase, type CombinedAttack } from '@/lib/combinedAttack';
 import { describe, expect, it } from 'vitest';
+import { townDots } from '@/lib/townDots';
 import {
   baseSendBlocker,
   captureControl,
@@ -104,7 +105,9 @@ describe('🧝 le héros prend 2 places de champion sur les 5', () => {
           size: 1,
         },
       };
-      expect(heroCanStay(poi as never)).toBe(kind !== 'lapidary' && seatsOf(kind) >= MILITIA.heroSeats);
+      expect(heroCanStay(poi as never)).toBe(
+        kind !== 'lapidary' && seatsOf(kind) >= MILITIA.heroSeats,
+      );
     }
   });
 });
@@ -261,5 +264,23 @@ describe('🧝⏳ attackHeroWaitingAt — d’où le héros attend son départ',
     expect(attackHeroWaitingAt([atk(wing('gone', true, 'p'))])).toBeNull();
     expect(attackHeroWaitingAt([atk(wing('waiting', true, null))])).toBeNull();
     expect(attackHeroWaitingAt(null)).toBeNull();
+  });
+});
+
+// ⚔️⏳ Demandé (2026-10-13) : le héros réservé à la BASE pour une attaque combinée s'y
+// dessine en orange (pris, il ne peut pas bouger), comme un champion réservé.
+describe('🧝⏳ heroWaitingAtBase — le héros réservé à la base est en orange', () => {
+  const wing = (state: string, hero: boolean, originId: string | null) =>
+    ({ state, hero, originId, members: [] }) as unknown as CombinedAttack['wings'][number];
+  const atk = (...wings: CombinedAttack['wings']) => ({ wings }) as unknown as CombinedAttack;
+  it('seulement s’il attend, à la base, avec un groupe', () => {
+    expect(heroWaitingAtBase([atk(wing('waiting', true, null))])).toBe(true);
+    expect(heroWaitingAtBase([atk(wing('waiting', true, 'p'))])).toBe(false);
+    expect(heroWaitingAtBase([atk(wing('gone', true, null))])).toBe(false);
+    expect(heroWaitingAtBase([atk(wing('waiting', false, null))])).toBe(false);
+    expect(heroWaitingAtBase(null)).toBe(false);
+  });
+  it('sous la ville : deux points orange (g), et non deux points dorés (h)', () => {
+    expect(townDots(false, 0, 0, undefined, {}, { hero: true }).rows).toEqual(['gg']);
   });
 });
