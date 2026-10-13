@@ -1790,7 +1790,9 @@
             <div class="shop-title font-display">📬 Messages</div>
             <button class="shop-x" aria-label="Fermer" @click="closeInbox">✕</button>
           </div>
-          <!-- 🔎 Filtres par origine (v1.57) : seulement les catégories présentes. -->
+          <!-- 🔎 Filtres par origine (v1.57) : seulement les catégories présentes. Icônes
+               seules, compte en pastille dans le coin, pour tenir sur UNE ligne (v1.181) ; le
+               nom du filtre choisi s'écrit sous la rangée. -->
           <div
             v-if="inboxCats.length > 1 || inboxClaimN > 0"
             class="inbox-filters"
@@ -1801,19 +1803,23 @@
               class="inbox-chip"
               :class="{ on: !inboxCat }"
               :aria-pressed="!inboxCat"
+              title="Tous"
+              aria-label="Tous"
               @click="inboxFilter = null"
             >
-              Tous <span class="ic-n">{{ inboxMessages.length }}</span>
+              📬<span class="ic-n">{{ inboxMessages.length }}</span>
             </button>
-            <!-- 🎁 Tout ce qui a un butin à prendre, quelle que soit son origine. -->
+            <!-- 📥 Tout ce qui a un butin à prendre, quelle que soit son origine. -->
             <button
               v-if="inboxClaimN > 0"
               class="inbox-chip claim"
               :class="{ on: inboxCat === 'claim' }"
               :aria-pressed="inboxCat === 'claim'"
+              title="À prendre"
+              aria-label="À prendre"
               @click="inboxFilter = inboxCat === 'claim' ? null : 'claim'"
             >
-              🎁 À prendre <span class="ic-n">{{ inboxClaimN }}</span>
+              📥<span class="ic-n">{{ inboxClaimN }}</span>
             </button>
             <button
               v-for="c in inboxCats"
@@ -1821,11 +1827,14 @@
               class="inbox-chip"
               :class="{ on: inboxCat === c.id }"
               :aria-pressed="inboxCat === c.id"
+              :title="c.label"
+              :aria-label="c.label"
               @click="inboxFilter = inboxCat === c.id ? null : c.id"
             >
-              {{ c.emoji }} {{ c.label }} <span class="ic-n">{{ c.n }}</span>
+              {{ c.emoji }}<span class="ic-n">{{ c.n }}</span>
             </button>
           </div>
+          <div v-if="inboxCatLabel" class="inbox-cat-name">{{ inboxCatLabel }}</div>
           <div class="inbox-list">
             <div v-if="!inboxMessages.length" class="inbox-empty">
               Aucun message. Les rapports de tes expéditions apparaîtront ici.
@@ -5600,6 +5609,14 @@ const inboxCat = computed(() =>
 const inboxShown = computed(() =>
   filterMessages(inboxMessages.value, inboxCat.value, expeNow.value),
 );
+/** Les pastilles ne montrent que l'icône : le filtre choisi se nomme en toutes lettres. */
+const inboxCatLabel = computed(() => {
+  const c = inboxCat.value;
+  if (!c) return '';
+  if (c === 'claim') return '📥 À prendre';
+  const cat = inboxCats.value.find((x) => x.id === c);
+  return cat ? `${cat.emoji} ${cat.label}` : '';
+});
 function openInbox() {
   inboxOpen.value = true;
   const uid = auth.user?.id;
@@ -10397,23 +10414,30 @@ button.pt-mini:active {
   gap: 8px;
   padding: 4px 2px;
 }
+/* Une seule ligne : les tuiles se partagent la largeur (jusqu'à 52 px chacune), l'icône en
+   haut, le compte dessous — dans la tuile, pour ne jamais chevaucher la voisine. */
 .inbox-filters {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 2px 2px 8px;
+  gap: 4px;
+  padding: 2px 2px 6px;
 }
 .inbox-chip {
-  flex: none;
-  min-height: 36px;
-  padding: 0 11px;
-  border-radius: 999px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 52px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
 }
 .inbox-chip.on {
@@ -10423,13 +10447,21 @@ button.pt-mini:active {
 /* 🎁 « À prendre » : une ACTION à faire, d'où l'accent même quand elle n'est pas choisie. */
 .inbox-chip.claim {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
-  color: var(--accent);
-  font-weight: 600;
 }
 .inbox-chip .ic-n {
+  font-size: 10.5px;
+  font-weight: 700;
   color: var(--dim);
-  font-weight: 500;
-  margin-left: 2px;
+}
+.inbox-chip.on .ic-n,
+.inbox-chip.claim .ic-n {
+  color: var(--accent);
+}
+.inbox-cat-name {
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 2px 6px;
 }
 .inbox-empty {
   color: var(--dim);
