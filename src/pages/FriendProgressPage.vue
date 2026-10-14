@@ -71,6 +71,50 @@
         </div>
       </section>
 
+      <!-- 🗓️ Ses quêtes de la semaine : un INSTANTANÉ publié depuis son accueil (on ne peut
+           pas les recalculer ici, cf. `questSnapshot.ts`), d'où la date de mise à jour. -->
+      <section class="fp-sec">
+        <div class="fp-sec-t">
+          🗓️ Quêtes de la semaine
+          <span v-if="quests" class="fp-q-head">
+            {{ quests.doneCount }}/{{ quests.quests.length }} · 🎟️ {{ quests.earned }}
+          </span>
+        </div>
+        <div v-if="!quests" class="fp-empty">
+          Pas encore de quêtes cette semaine — elles s'afficheront à sa prochaine visite de
+          l'accueil.
+        </div>
+        <div v-else class="fp-card">
+          <div class="fp-q-tiers">
+            <span
+              v-for="t in quests.tiers"
+              :key="t.at"
+              class="fp-q-tier"
+              :class="{ on: t.reached }"
+            >
+              {{ t.at }} obj. → 🎟️{{ t.tickets }}
+            </span>
+          </div>
+          <div v-for="q in quests.quests" :key="q.kind" class="fp-q">
+            <div class="fp-leg-top">
+              <span class="fp-leg-n">{{ q.emoji }} {{ q.label }}</span>
+              <span class="fp-leg-c" :class="{ ok: q.complete }">
+                {{ q.complete ? '✓ ' : '' }}{{ q.done }}/{{ q.target
+                }}{{ q.kind === 'cardio_minutes' ? ' min' : '' }}
+              </span>
+            </div>
+            <div class="fp-bar thin">
+              <div
+                class="fp-fill"
+                :class="{ ok: q.complete }"
+                :style="fillOf((q.done / q.target) * 100)"
+              />
+            </div>
+          </div>
+          <div v-if="questsWhen" class="fp-c-dates">Mis à jour {{ questsWhen }}</div>
+        </div>
+      </section>
+
       <section v-if="doneCount" class="fp-sec">
         <div class="fp-sec-t">✅ Terminés</div>
         <div class="fp-done">
@@ -95,6 +139,9 @@ import {
   type Challenge,
 } from '@/lib/challenges';
 import { dateRangeLabel } from '@/lib/startDate';
+import { readQuestSnapshot, type FriendQuestView } from '@/lib/questSnapshot';
+import { weekStart } from '@/lib/weeklyQuests';
+import { feedWhen } from '@/lib/friendFeed';
 import {
   activeCombo as activeComboOf,
   comboNextStatus,
@@ -120,6 +167,12 @@ const loading = ref(true);
 const denied = ref(false);
 const challenges = ref<Challenge[]>([]);
 const combos = ref<ComboChallenge[]>([]);
+
+const quests = ref<FriendQuestView | null>(null);
+const questsAt = ref<string | null>(null);
+const questsWhen = computed(() =>
+  questsAt.value ? feedWhen(questsAt.value, new Date().toISOString()) : '',
+);
 
 const pseudo = computed(() => friends.pseudos[friendId] ?? '');
 const activeChallenges = computed(() => challenges.value.filter((c) => c.status === 'active'));
@@ -164,6 +217,14 @@ onMounted(async () => {
     const d = await friends.fetchFriendTraining(friendId);
     challenges.value = d.challenges;
     combos.value = d.combos;
+    // Les quêtes sont un bonus : leur absence (ou une erreur) ne masque pas le reste.
+    try {
+      const q = await friends.fetchFriendQuests(friendId);
+      quests.value = q ? readQuestSnapshot(q.board, weekStart(logicalToday())) : null;
+      questsAt.value = q && quests.value ? q.updated_at : null;
+    } catch {
+      quests.value = null;
+    }
     // La RLS renvoie 0 ligne si on n'est pas ami : on le dit clairement plutôt que
     // d'afficher une page vide trompeuse.
     if (!friends.accepted.some((v) => v.userId === friendId)) denied.value = true;
@@ -335,6 +396,43 @@ async function goBack() {
   text-align: center;
   font-size: 13px;
   color: var(--dim);
+}
+.fp-q-head {
+  float: right;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.fp-q-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+.fp-q-tier {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  color: var(--dim);
+}
+.fp-q-tier.on {
+  border-color: var(--d1);
+  color: var(--d1);
+  font-weight: 700;
+}
+.fp-q {
+  margin-top: 9px;
+}
+.fp-q .fp-leg-n {
+  white-space: normal;
+}
+.fp-bar.thin {
+  height: 6px;
+  margin: 5px 0 0;
+}
+.fp-fill.ok {
+  background: var(--d1);
 }
 .fp-done {
   font-size: 13px;

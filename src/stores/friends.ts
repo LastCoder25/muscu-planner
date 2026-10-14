@@ -10,6 +10,7 @@ import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Challenge, ChallengeConfig, ChallengeFormat } from '@/lib/challenges';
 import type { ComboChallenge } from '@/lib/combo';
+import type { QuestSnapshot } from '@/lib/questSnapshot';
 import { FEED_RECENT_DAYS, type FriendTraining, type RowStamps } from '@/lib/friendFeed';
 
 type FriendStatus = 'pending' | 'accepted' | 'declined';
@@ -344,7 +345,30 @@ export const useFriendsStore = defineStore('friends', () => {
     };
   }
 
+  /** 🗓️ Publie MON instantané de quêtes de la semaine (lisible par mes amis, migr. 0102). */
+  async function publishQuests(userId: string, board: QuestSnapshot) {
+    const { error } = await supabase
+      .from('weekly_quest_boards')
+      .upsert({ user_id: userId, board, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  }
+
+  /** L'instantané de quêtes d'un ami, brut (relu défensivement par `readQuestSnapshot`). */
+  async function fetchFriendQuests(
+    friendId: string,
+  ): Promise<{ board: unknown; updated_at: string } | null> {
+    const { data, error } = await supabase
+      .from('weekly_quest_boards')
+      .select('board, updated_at')
+      .eq('user_id', friendId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data) ?? null;
+  }
+
   return {
+    publishQuests,
+    fetchFriendQuests,
     links,
     pseudos,
     loading,

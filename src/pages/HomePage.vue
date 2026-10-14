@@ -986,7 +986,7 @@ const hasFree = ref(false);
 
 // Boss entre amis : chargé en fond, silencieux (la carte n'apparaît que s'il y a du nouveau).
 const bossEntry = useFriendBossEntry();
-const quests = useWeeklyQuests(); // 🗓️ 3 objectifs de sport → 2 tickets
+const quests = useWeeklyQuests(progress.ready); // 🗓️ 3 objectifs de sport → 2 tickets
 // Défis et quêtes : tuiles pliables, REPLIÉES à chaque ouverture (demandé).
 const defisOpen = ref(false);
 const questsOpen = ref(false);

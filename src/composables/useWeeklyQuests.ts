@@ -1,7 +1,7 @@
 // 🗓️ Les quêtes de la semaine, vues depuis l'accueil. La règle vit en lib (`weeklyQuests`) :
 // ce composable ne fait que RÉUNIR les sources (celles que `useProgress` charge déjà, aucune
 // requête de plus) et appeler la récupération du store.
-import { computed, ref } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useCardioStore } from '@/stores/cardio';
 import { useTennisStore } from '@/stores/tennis';
@@ -12,8 +12,15 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { weeklyQuests } from '@/lib/weeklyQuests';
 import { logicalToday } from '@/lib/challenges';
+import { useFriendsStore } from '@/stores/friends';
+import { questSnapshot } from '@/lib/questSnapshot';
 
-export function useWeeklyQuests() {
+/** Dernier instantané publié, par compte : on n'écrit que ce qui a changé. */
+const published = new Map<string, string>();
+
+/** `ready` : les sources de sport sont chargées. Sans lui, on publierait aux amis un tableau
+ *  calculé sur un historique vide (cibles au plancher, rien de fait). */
+export function useWeeklyQuests(ready?: Ref<boolean>) {
   const logs = useLogsStore();
   const cardio = useCardioStore();
   const tennis = useTennisStore();
@@ -52,6 +59,25 @@ export function useWeeklyQuests() {
     } finally {
       claiming.value = false;
     }
+  }
+
+  // 👥 Publie l'instantané pour les amis (migr. 0102) dès qu'il change — une écriture par
+  // changement réel, jamais à chaque rendu.
+  if (ready) {
+    const friends = useFriendsStore();
+    watch(
+      [ready, board],
+      () => {
+        const uid = auth.user?.id;
+        if (!uid || !ready.value) return;
+        const snap = questSnapshot(board.value);
+        const key = JSON.stringify(snap);
+        if (published.get(uid) === key) return;
+        published.set(uid, key);
+        friends.publishQuests(uid, snap).catch(() => published.delete(uid));
+      },
+      { immediate: true },
+    );
   }
 
   return { board, canClaim, claiming, claim };
