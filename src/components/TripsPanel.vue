@@ -194,13 +194,13 @@
         </template>
         <i v-else class="tr-bar" :style="{ width: lt.pct + '%' }" />
         <!-- 💰 LA RÉCOMPENSE SUR LA TUILE (2026-10-09, demandé) : au retour, ce que le voyage
-             RAMÈNE (le butin réel, comme dans le détail de l'équipe) ; à l'aller, seulement ce
+             RAMÈNE (le butin réel, comme dans le détail de l'équipe), les ressources seules — sans 🎁 (demandé) ; à l'aller, seulement ce
              que le lieu rapporte s'il est pris — le butin réel révélerait l'issue. -->
         <!-- ⚠️ Du TEXTE, pas `HaulPills` : la tuile était un <button>, et des boutons imbriqués
              ne sont pas du HTML valide (vu au banc : le navigateur referme la tuile avant les
              pastilles). Le détail de l'équipe, lui, garde les pastilles touchables. -->
         <span v-if="t.back && t.haul.length" class="tr-loot" title="Ce que le voyage ramène"
-          ><span class="tr-loot-lab">🎁</span> {{ haulText(t.haul) }}</span
+          >{{ haulText(t.haul) }}</span
         >
         <span
           v-else-if="!t.back && t.expected"
