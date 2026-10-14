@@ -7026,15 +7026,25 @@ async function savePseudo() {
 // Bonus de passage de niveau : réclamé dès que les données de fond sont prêtes
 // (niveau réel) et qu'un perso existe. Idempotent (reward_level persisté).
 let claimingLevel = false;
+let comboSweepDone = false;
+// ⚠️ La source rend un NOMBRE, jamais un tableau (2026-10-14, trouvé en cherchant la limite
+// Supabase) : un tableau neuf à chaque évaluation se redéclenchait à CHAQUE écriture du
+// personnage (`char.row` change à chaque tick), et relançait à chaque fois une relecture
+// des Défis 360 — 294 000 lectures mesurées, ~6× toutes les autres tables. Un nombre ne
+// se redéclenche que quand le niveau change vraiment.
 watch(
-  () => [progress.ready.value, char.row ? c.value.level.level : 0] as [boolean, number],
-  async ([rdy, lvl]: [boolean, number]) => {
+  () => (progress.ready.value && char.row ? c.value.level.level : 0),
+  async (lvl: number) => {
     const uid = auth.user?.id;
-    if (!rdy || !char.row || lvl < 1 || claimingLevel || !uid) return;
+    if (!char.row || lvl < 1 || claimingLevel || !uid) return;
     claimingLevel = true;
     // Filet des coffres de Défi 360 : ceux bouclés avant cette version, ou pendant que
-    // l'app n'était pas ouverte. Idempotent, donc repasser ne coûte rien.
-    void grantPendingComboChests();
+    // l'app n'était pas ouverte. Idempotent — mais il RELIT la base : une fois par
+    // ouverture de l'écran suffit.
+    if (!comboSweepDone) {
+      comboSweepDone = true;
+      void grantPendingComboChests();
+    }
     try {
       const r = await char.claimLevelUps(uid, lvl);
       if (r) {
