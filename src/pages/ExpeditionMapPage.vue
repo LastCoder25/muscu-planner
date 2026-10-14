@@ -1067,6 +1067,19 @@
               ✅ Une armée arrive, mais il sera rentré avant elle.
             </p>
             <div class="send-bar">
+              <!-- ⏱️🎯 Trajet et réussite du héros seul, sous les yeux au moment d'envoyer. -->
+              <div v-if="sendOdds.length" class="send-odds" aria-live="polite">
+                <span
+                  v-for="o in sendOdds"
+                  :key="o.label + o.value"
+                  class="send-odd"
+                  :class="o.cls"
+                  :title="o.title"
+                >
+                  <span class="send-odd-lab">{{ o.icon }} {{ o.label }}</span>
+                  <b class="send-odd-val">{{ o.value }}</b>
+                </span>
+              </div>
               <button class="sh-send" :disabled="!canSend" @click="send">
                 {{ sendLabel }}
               </button>
@@ -1401,10 +1414,10 @@
                l'armée abattue), nos pertes par issue — `partyBattleView`. -->
             <ForecastChips v-if="partyBattleView" :view="partyBattleView" />
             <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
-            <div class="send-bar" :class="{ 'with-odds': sendOdds.length }">
-              <!-- 🎯 La réussite SUIT la composition (demandé) : elle vivait dans la fiche, en haut,
-                 et il fallait remonter après chaque champion coché. Mêmes valeurs que la fiche
-                 (`poiFacts`), jamais un second calcul. -->
+            <div class="send-bar">
+              <!-- ⏱️🎯 Trajet ET réussite, affichés EN PERMANENCE pendant qu'on compose (demandé) :
+                 ils suivent chaque champion coché, « — » tant que l'équipe est vide. Mêmes valeurs
+                 que la fiche (`poiFacts`), jamais un second calcul. -->
               <div v-if="sendOdds.length" class="send-odds" aria-live="polite">
                 <span
                   v-for="o in sendOdds"
@@ -5845,14 +5858,11 @@ function anchorPick(e: MouseEvent) {
   requestAnimationFrame(restore);
   setTimeout(restore, 300);
 }
-/** 🎯 Ce que la barre d'envoi collante rappelle pendant qu'on coche les champions : les
- *  pastilles de réussite de l'équipe (réussite, fermeture, gardes, route), lues dans
- *  `poiFacts`. Rien tant que l'équipe est vide (la fiche dit déjà « compose ton équipe »). */
-const sendOdds = computed(() =>
-  partyTarget.value && partySize.value
-    ? poiFacts.value.filter((f) => f.go && (f.icon === '🎯' || f.icon === '🛣️'))
-    : [],
-);
+/** ⏱️🎯 Ce que la barre d'envoi collante garde EN PERMANENCE sous les yeux : les pastilles
+ *  `go` de la fiche — trajet (aller/retour d'un point fixe) et réussite (fermeture, gardes,
+ *  route). Les mêmes pour le héros seul et pour l'équipe : `poiFacts` ne pousse que celles du
+ *  mode affiché. Sans équipe, elles valent « — » à leur place (rien ne saute à l'écran). */
+const sendOdds = computed(() => poiFacts.value.filter((f) => f.go));
 /** 💰 La QUANTITÉ ramenée si le lieu est pris, puis le bonus à part. Sans équipe composée on
  *  compte au pas du héros (on compare deux lieux avant de choisir qui part) ; le chiffre se
  *  recale sur l'équipe dès qu'elle est composée. Le niveau est celui que la récolte applique. */
@@ -6733,28 +6743,21 @@ onUnmounted(() => {
   height: calc(68px + env(safe-area-inset-bottom));
   background: var(--bg);
 }
-/* 🎯 La réussite à gauche du bouton : elle reste sous les yeux pendant qu'on défile. */
-.send-bar.with-odds {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-}
-.send-bar.with-odds .sh-send {
-  flex: 1;
-  min-width: 0;
-}
+/* ⏱️🎯 Trajet et réussite en rangée au-dessus du bouton : ils restent sous les yeux pendant
+   qu'on défile. Parts égales, sans jamais déborder (une valeur longue passe à la ligne). */
 .send-odds {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  flex: none;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 .send-odd {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-width: 64px;
+  align-items: center;
+  text-align: center;
   padding: 3px 9px;
   border-radius: 12px;
   border: 1px solid var(--line);
@@ -6765,15 +6768,12 @@ onUnmounted(() => {
 .send-odd-lab {
   font-size: 10px;
   color: var(--dim);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .send-odd-val {
   font-family: 'Oswald', sans-serif;
-  font-size: 18px;
-}
-/* Deux pastilles (gardes + route) : on les tasse pour garder la barre à la hauteur du bouton. */
-.send-odds:has(.send-odd + .send-odd) .send-odd-val {
-  font-size: 14px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
 }
 .send-odd.wp-good {
   border-color: color-mix(in srgb, var(--d1) 60%, var(--line));
