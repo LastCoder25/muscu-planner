@@ -45,7 +45,8 @@ describe('reachTime — le temps pour réunir la force sur un point', () => {
     ['B', 'A'],
   ];
   it('les endroits les plus proches d’abord, jusqu’à la force voulue', () => {
-    // Point 0 : A (5) suffit à 0 min ; point 1 : B (2) ne suffit pas, A le complète à 4 min.
+    // Point 0 : A (5) suffit à 0 min. Point 1 : B (2) à 1 min, A complète (3) à 4 min — dernier
+    // arrivé 4, temps moyen de la force (2×1 + 3×4)/5 = 2,8 : la moitié de chaque.
     expect(
       reachTime(
         new Map([
@@ -56,13 +57,14 @@ describe('reachTime — le temps pour réunir la force sur un point', () => {
         trips,
         5,
       ),
-    ).toBe((0 + 4) / 2);
+    ).toBeCloseTo((0 + (4 + 2.8) / 2) / 2);
   });
   it('un endroit vide ne compte pas', () => {
     expect(reachTime(new Map([['A', 5]]), order, trips, 5)).toBe((0 + 4) / 2);
   });
   it('si tout le monde ne suffit pas, le temps est majoré d’autant', () => {
-    // Il manque la moitié partout : point 0, 3 min × 14/7 ; point 1, 4 min × 14/7.
+    // Il manque la moitié partout : le dernier arrivé est majoré (3 × 14/7, 4 × 14/7) et le manque
+    // arrive à ce temps-là. Point 0 : (6 + (0 + 2×3 + 7×6)/14) / 2 ; point 1 : (8 + (2 + 5×4 + 7×8)/14) / 2.
     expect(
       reachTime(
         new Map([
@@ -73,7 +75,7 @@ describe('reachTime — le temps pour réunir la force sur un point', () => {
         trips,
         14,
       ),
-    ).toBe((6 + 8) / 2);
+    ).toBeCloseTo(((6 + 48 / 14) / 2 + (8 + 78 / 14) / 2) / 2);
   });
 });
 
@@ -123,6 +125,21 @@ describe('planStations — les plus forts aux meilleurs endroits', () => {
       used.set(r.spotOf.get(x.id)!, (used.get(r.spotOf.get(x.id)!) ?? 0) + (x.hero ? 2 : 1));
     expect(used.get('poste') ?? 0).toBeLessThanOrEqual(1);
     expect(used.get('fort') ?? 0).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('planStations — couvrir l’île', () => {
+  it('même quand un lieu réunit seul la force, les autres couvrent l’île, pas la base lointaine', () => {
+    // Le défaut mesuré sur un compte réel : le fort au centre suffit partout, et rien ne poussait
+    // les autres hors de la base, pourtant la plus loin de tout.
+    const r = plan(
+      [u('fort', 10), u('w1', 2), u('w2', 2)],
+      [spot('base'), spot('ouest', 1), spot('centre', 1), spot('est', 1)],
+      { base: -20, ouest: 1, centre: 5, est: 9 },
+      10,
+    );
+    expect(r.spotOf.get('fort')).toBe('centre');
+    expect(new Set([r.spotOf.get('w1'), r.spotOf.get('w2')])).toEqual(new Set(['ouest', 'est']));
   });
 });
 

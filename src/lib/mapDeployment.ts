@@ -62,9 +62,16 @@ export interface DeployResult {
 const deployWeight = (u: DeployUnit): number => (u.hero ? 2 : 1);
 
 /**
- * ⏱️ Le temps moyen pour réunir `force` sur un point de l'île, avec `power` par endroit.
- * `order[p]` = les endroits triés du plus proche au plus loin du point p. Si l'effectif entier
- * ne suffit pas, le temps du plus lointain est majoré d'autant (plus il manque, pire c'est).
+ * ⏱️ Le temps pour réunir `force` sur un point de l'île, avec `power` par endroit, moyenné sur
+ * l'île. `order[p]` = les endroits triés du plus proche au plus loin du point p.
+ *
+ * Par point : la moitié du DERNIER arrivé (l'attaque combinée part avec le plus lent) et la
+ * moitié du temps MOYEN de la force réunie (chaque part de force pèse selon son trajet).
+ * ⚠️ La seconde moitié n'est pas décorative (2026-10-14, mesuré sur un compte réel) : avec le
+ * dernier arrivé SEUL, dès qu'un lieu réunit la force à lui seul, un champion posté plus près
+ * d'un point ne change jamais ce temps — rien ne pousse à couvrir l'île, et 16 champions sur
+ * 19 restaient à la base, l'endroit le plus loin de tout.
+ * Si l'effectif entier ne suffit pas, le manque arrive au temps du plus lointain, majoré.
  */
 export function reachTime(
   power: ReadonlyMap<string, number>,
@@ -72,19 +79,24 @@ export function reachTime(
   trips: ReadonlyMap<string, readonly number[]>,
   force: number,
 ): number {
-  if (!order.length) return 0;
+  if (!order.length || force <= 0) return 0;
   let sum = 0;
   for (let p = 0; p < order.length; p++) {
     let cum = 0;
     let t = 0;
+    let mass = 0;
     for (const s of order[p]!) {
       const pw = power.get(s) ?? 0;
       if (pw <= 0) continue;
-      cum += pw;
       t = trips.get(s)![p]!;
+      mass += Math.min(pw, force - cum) * t;
+      cum += pw;
       if (cum >= force) break;
     }
-    sum += cum <= 0 ? 0 : cum >= force ? t : (t * force) / cum;
+    if (cum <= 0) continue;
+    const last = cum >= force ? t : (t * force) / cum;
+    if (cum < force) mass += (force - cum) * last;
+    sum += (last + mass / force) / 2;
   }
   return sum / order.length;
 }
