@@ -2671,6 +2671,46 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number, reach: 
 /** Place un POI de type IMPOSÉ : espacement, niveau tiré au hasard (trajet dérivé de la distance), durée de vie.
  *  ⚠️ EXTRAIT de `spawnOne` sans rien réordonner — le tirage du TYPE reste en tête chez
  *  l'appelant, donc le flux aléatoire d'un spawn ordinaire est inchangé au bit près. */
+/**
+ * 🎯 Le NIVEAU DES ENNEMIS d'un lieu visé à la difficulté `vise` (ce que la carte affiche, le
+ * rang et ses étoiles). ⚠️ SOURCE UNIQUE : la carte (`placePoiOfType`) et le conseil de
+ * traversée (`crossingAdvice`) construisent leurs lieux ici — le conseil jugeait un lieu
+ * « Légendaire ★1 » sur des ennemis de niveau 41, alors que la carte y pose 1,5 à 2 gardes de
+ * niveau 50-58 (mesuré le 2026-10-14 : il annonçait 4 champions là où il en faut 6).
+ * ⚠️ Les gardes d'une récolte ont une RAMPE de début de partie qui lit le niveau : on
+ * l'estime sur la difficulté visée. Au-delà du niveau 7 elle vaut 1, donc sans effet ; en
+ * deçà le lieu sort un peu plus facile que sa cible — c'est la rampe d'apprentissage.
+ */
+export function enemyLevelFor(
+  id: string,
+  type: PoiType,
+  vise: number,
+  /** 🏝️ Le niveau d'entrée de l'île (1 hors archipel). */
+  floorLv: number,
+  /** 🏝️ Le plafond de l'île (absent hors archipel). */
+  cap: number | undefined,
+): number {
+  const force = poiForceOf({ id, type, level: vise });
+  let level = force ? levelForDifficulty(vise, force.size) : vise;
+  // ⚠️ JAMAIS AU-DESSUS DE LA CIBLE (v0.1153) : `levelForDifficulty` rend le premier niveau qui
+  // ATTEINT la cible, et en début de partie la force d’un groupe saute par paliers (rampe des
+  // gardes, qui lit le niveau RÉEL et non la cible) — mesuré, un lieu visé « difficulté 4 » sortait à 7 au niveau 5, donc imprenable.
+  // On redescend jusqu’à ne plus dépasser : plus facile que la cible, jamais plus dur.
+  while (force && level > 1 && poiDifficultyLevel({ id, type, level }) > vise) level--;
+  // 🏝️ …MAIS JAMAIS SOUS LE RANG D'ENTRÉE DE L'ÎLE (2 ter) : la redescente pouvait poser un
+  // camp visé à 21 (île 2) à une difficulté de 20, donc un rang sous l'île. On remonte d'un cran
+  // tant que la difficulté reste sous le plancher — sauf joueur encore lui-même en dessous.
+  // ⚠️ Le NIVEAU des ennemis peut dépasser le plafond de l'île : c'est la DIFFICULTÉ (ce que
+  // la carte affiche, et ce que retire le passage au plafond) qui doit rester dans la tranche —
+  // un camp à un seul garde au niveau 40 n'affiche que la difficulté 20, un rang sous l'île 2.
+  if (force && vise >= floorLv) {
+    const diffOf = (lv: number) => poiDifficultyLevel({ id, type, level: lv });
+    const top = cap ?? vise;
+    while (level < 100 && diffOf(level) < floorLv && diffOf(level + 1) <= top) level++;
+  }
+  return level;
+}
+
 function placePoiOfType(
   map: ExpeditionMap,
   now: number,
@@ -2753,28 +2793,7 @@ function placePoiOfType(
   // des failles et la tanière compris) : au-delà ils restent au plafond, ce qui pousse à avancer.
   const cap = map.archipel?.levelCap;
   const vise = cap ? Math.min(cap, vise0) : vise0;
-  // ⚠️ Les gardes d’une récolte ont une RAMPE de début de partie qui lit le niveau : on
-  // l’estime sur la difficulté visée. Au-delà du niveau 7 elle vaut 1, donc sans effet ; en
-  // deçà le lieu sort un peu plus facile que sa cible — c’est la rampe d’apprentissage.
-  const force = poiForceOf({ id, type, level: vise });
-  let level = force ? levelForDifficulty(vise, force.size) : vise;
-  // ⚠️ JAMAIS AU-DESSUS DE LA CIBLE (v0.1153) : `levelForDifficulty` rend le premier niveau qui
-  // ATTEINT la cible, et en début de partie la force d’un groupe saute par paliers (rampe des
-  // gardes, qui lit le niveau RÉEL et non la cible) — mesuré, un lieu visé « difficulté 4 » sortait à 7 au niveau 5, donc imprenable.
-  // On redescend jusqu’à ne plus dépasser : plus facile que la cible, jamais plus dur.
-  while (force && level > 1 && poiDifficultyLevel({ id, type, level }) > vise) level--;
-  // 🏝️ …MAIS JAMAIS SOUS LE RANG D'ENTRÉE DE L'ÎLE (2 ter) : la redescente pouvait poser un
-  // camp visé à 21 (île 2) à une difficulté de 20, donc un rang sous l'île. On remonte d'un cran
-  // tant que la difficulté reste sous le plancher — sauf joueur encore lui-même en dessous.
-  const floorLv = map.archipel ? archipelFloor(map) : 1;
-  // ⚠️ Le NIVEAU des ennemis peut dépasser le plafond de l'île : c'est la DIFFICULTÉ (ce que
-  // la carte affiche, et ce que retire le passage au plafond) qui doit rester dans la tranche —
-  // un camp à un seul garde au niveau 40 n'affiche que la difficulté 20, un rang sous l'île 2.
-  if (force && vise >= floorLv) {
-    const diffOf = (lv: number) => poiDifficultyLevel({ id, type, level: lv });
-    const top = cap ?? vise;
-    while (level < 100 && diffOf(level) < floorLv && diffOf(level + 1) <= top) level++;
-  }
+  const level = enemyLevelFor(id, type, vise, map.archipel ? archipelFloor(map) : 1, cap);
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
   // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant
   // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.

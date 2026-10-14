@@ -28,7 +28,8 @@ import { campWinPct } from './camp';
 import { dangerMult, missionXpSplit, partyAllies, type EscortKit } from './caravan';
 import { characterRank, rankStartLevel } from './characterRank';
 import { CONTROL, controlGoldPerHour, garrisonHoldChance } from './controlPoints';
-import { mineVeinGold, type Poi } from './expedition';
+import { enemyLevelFor, mineVeinGold, type Poi, type PoiType } from './expedition';
+import { partyWinChance } from './partyForecast';
 import { ISLAND_CONQUEST, fortressForce } from './islandConquest';
 import { MILITIA, MILITIA_PREFIX, militiaUnits } from './militia';
 import { adventurerPowers } from './raid';
@@ -268,7 +269,9 @@ export function crossingAdvice(i: CrossingAdviceInput): CrossingAdvice | null {
  *   donc les reprendre en boucle est une source d'XP, pas une conquête — seule la forteresse,
  *   qui demande d'en tenir deux à la fois, fait avancer l'île.
  */
-export type StayVerdict = 'stay' | 'back';
+export type StayVerdict = 'stay' | 'even' | 'back';
+/** L'écart (en part) sous lequel les deux îles se valent. */
+const STAY_TIE = 0.1;
 
 export interface IslandYield {
   island: Island;
@@ -278,7 +281,8 @@ export interface IslandYield {
   takePct: number;
   /** XP d'une mission gagnée, par champion engagé (partage d'équipe compris). */
   xpPerChamp: number;
-  /** Équipes qu'on peut lancer à la fois avec le vivier engageable. */
+  /** Équipes qu'on peut lancer à la fois avec le vivier engageable (fractionnaire : le reste du
+   *  vivier renforce une équipe ou part sur une faille, il n'est pas oisif). */
   teams: number;
   /** XP du vivier pour une vague (toutes ces équipes, une mission chacune). */
   waveXp: number;
@@ -329,6 +333,13 @@ function fewest(pool: number, ok: (k: number) => boolean): number | null {
   return null;
 }
 
+/** Les lieux types d'une île : récoltes gardées et camps, deux tirages de gardes chacun. */
+const PLACE_TYPES: readonly PoiType[] = ['mine', 'archive', 'well', 'ruins', 'camp', 'lair'];
+const PLACE_IDS = ['advice_a', 'advice_b'] as const;
+/** Combats rejoués par lieu et par taille d'équipe (× `CAMP_SAMPLE_MULT` dans le pronostic) :
+ *  peu, mais sur 36 lieux — le conseil se lit en gros. */
+const PLACE_SAMPLES = 4;
+
 /** Le rendement d'une île pour ce vivier (les meilleurs d'abord). */
 function islandYield(
   isl: Island,
@@ -339,17 +350,35 @@ function islandYield(
   samples: number,
 ): IslandYield {
   const levels = adviceLevels(isl, Math.min(heroLevel, isl.maxLevel));
-  const spots = spread(levels.lo, levels.hi);
+  // ⚠️ LES LIEUX COMME LA CARTE LES POSE (2026-10-14, signalé par l'utilisateur : « 4 ou 5
+  // champions sur un lieu Légendaire ★1, le pourcentage est très faible »). Un lieu affiché à
+  // la difficulté D aligne 1 à 3 gardes d'un niveau PLUS HAUT (`enemyLevelFor`), et une récolte
+  // sans le héros affronte aussi la ROUTE (`partyWinChance`, le 🎯 % de l'écran). Juger sur des
+  // ennemis au niveau D annonçait 4 champions là où il en faut 6 (mesuré sur son vivier ; ses
+  // vraies missions sur l'île 3 partaient à 5-10 champions).
+  const places = spread(levels.lo, levels.hi).flatMap((d) =>
+    PLACE_TYPES.flatMap((type) =>
+      PLACE_IDS.map((pre) => {
+        const id = `${pre}_${type}`;
+        return {
+          id,
+          type,
+          level: enemyLevelFor(id, type, d, isl.minLevel, isl.maxLevel),
+          x: 0,
+          y: 0,
+          distNorm: 0.5,
+          spawnedAt: 0,
+          expiresAt: 9e15,
+        };
+      }),
+    ),
+  );
   const take = (k: number): number => {
-    const allies = partyAllies(best.slice(0, k), kit, null);
+    const esc = best.slice(0, k);
     let w = 0;
-    let n = 0;
-    for (const L of spots)
-      for (const size of CONTROL.captureSizes) {
-        w += campWinPct(enemyPlace(L, size, isl), { faction: isl.faction, size }, allies, samples);
-        n++;
-      }
-    return n ? w / n : 0;
+    for (const p of places)
+      w += partyWinChance(p, esc, kit, null, 0, Math.min(samples, PLACE_SAMPLES)) ?? 1;
+    return places.length ? w / places.length : 0;
   };
   let takePct = 0;
   const need = fewest(pool, (k) => (takePct = take(k)) >= ADVICE.takeOk);
@@ -359,7 +388,10 @@ function islandYield(
     ? (team.reduce((s, a) => s + learn(a.level, mid), 0) / team.length) *
       missionXpSplit(team.length)
     : 0;
-  const teams = need ? Math.floor(pool / need) : 0;
+  // ⚠️ Des équipes FRACTIONNAIRES : le reste du vivier n'est pas oisif (il renforce une équipe,
+  // referme une faille ou creuse un filon). Arrondi en dessous, 17 champions à 6 par lieu en
+  // laissaient 5 « inutiles » et l'île dure perdait un tiers de vague sur un artefact.
+  const teams = need ? Math.round((pool / need) * 100) / 100 : 0;
   const mineGold = Math.round(mineVeinGold(mid));
   return {
     island: isl,
@@ -370,7 +402,7 @@ function islandYield(
     teams,
     waveXp: Math.round(teams * (need ?? 0) * xpPerChamp),
     mineGold,
-    waveGold: teams * mineGold,
+    waveGold: Math.round(teams * mineGold),
   };
 }
 
@@ -425,7 +457,11 @@ export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
   // XP et or pesés à part égale (l'un fait monter le vivier, l'autre les bâtiments).
   const ratio = (a: number, b: number) => (b > 0 ? a / b : a > 0 ? 2 : 1);
   const score = ratio(here.waveXp, back.waveXp) + ratio(here.waveGold, back.waveGold);
-  const verdict: StayVerdict = here.need !== null && score >= 2 ? 'stay' : 'back';
+  // ⚖️ À moins de 10 % d'écart, c'est une ÉGALITÉ : le modèle ne tranche pas à cette précision
+  // (tirages, route, consommables), et l'annoncer comme un verdict mentirait.
+  let verdict: StayVerdict = 'even';
+  if (here.need === null || score < 2 * (1 - STAY_TIE)) verdict = 'back';
+  else if (score > 2 * (1 + STAY_TIE)) verdict = 'stay';
   const reasons: string[] = [];
   const times = (a: number, b: number) =>
     b > 0 ? (Math.round((a / b) * 10) / 10).toLocaleString('fr-FR') : '∞';

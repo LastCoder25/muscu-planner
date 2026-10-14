@@ -46,10 +46,18 @@ describe('🧭 rester ou reculer', () => {
   it('la vague compte les équipes que le vivier peut lancer à la fois', () => {
     const a = stayOrBackAdvice(input(3, 41, 17))!;
     for (const y of [a.here, a.back]) {
-      expect(y.teams).toBe(Math.floor(17 / y.need!));
+      // Fractionnaire : le reste du vivier renforce une équipe, il n'est pas oisif.
+      expect(y.teams).toBe(Math.round((17 / y.need!) * 100) / 100);
       expect(y.waveXp).toBeCloseTo(y.teams * y.need! * y.xpPerChamp, -2);
-      expect(y.waveGold).toBe(y.teams * y.mineGold);
+      expect(y.waveGold).toBe(Math.round(y.teams * y.mineGold));
     }
+  });
+
+  it('les lieux sont ceux de la carte : l’île dure demande plus que la moitié de plus de champions', () => {
+    // Rang affiché = DIFFICULTÉ ; les ennemis sont plus forts, et la route compte (constaté :
+    // l’utilisateur prenait l’île 2 à 3 champions, l’île 3 lui en demandait 6, pas 4).
+    const a = stayOrBackAdvice(input(3, 41, 17))!;
+    expect(a.here.need!).toBeGreaterThanOrEqual(Math.ceil(a.back.need! * 1.5));
   });
 
   it('un vivier très en retard RECULE : il ne prend aucun lieu ici', () => {

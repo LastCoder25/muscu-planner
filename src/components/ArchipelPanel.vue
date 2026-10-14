@@ -223,17 +223,9 @@
           </div>
           <!-- 🧭 Rester ou reculer ? (`stayOrBackAdvice`) : sur l'île où l'on est, tant qu'elle
                n'est pas pacifiée. -->
-          <div
-            v-if="stay && selTile.active"
-            class="at-advice"
-            :class="stay.verdict === 'stay' ? 'go' : 'train'"
-          >
+          <div v-if="stay && selTile.active" class="at-advice" :class="STAY_CLASS[stay.verdict]">
             <div class="av-head">
-              {{
-                stay.verdict === 'stay'
-                  ? '🧭 Reste : cette île rapporte plus'
-                  : `🧭 Recule sur l'île ${stay.back.island.id} : tu y gagnes plus`
-              }}
+              {{ stayTitle(stay) }}
             </div>
             <div class="av-line">
               ⚔️ Un lieu (niv. {{ stay.here.levels.lo }}-{{ stay.here.levels.hi }}) :
@@ -368,7 +360,12 @@ import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import { islandRules, OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
-import type { AdviceVerdict, CrossingAdvice, StayOrBackAdvice } from '@/lib/crossingAdvice';
+import type {
+  AdviceVerdict,
+  CrossingAdvice,
+  StayOrBackAdvice,
+  StayVerdict,
+} from '@/lib/crossingAdvice';
 
 const props = defineProps<{
   island: Island | null;
@@ -458,6 +455,12 @@ const tiles = computed(() =>
     };
   }),
 );
+const STAY_CLASS: Record<StayVerdict, string> = { stay: 'go', even: 'bring', back: 'train' };
+const stayTitle = (s: StayOrBackAdvice): string => {
+  if (s.verdict === 'stay') return '🧭 Reste : cette île rapporte plus';
+  if (s.verdict === 'even') return '🧭 À égalité : rester garde tes lieux fixes';
+  return `🧭 Recule sur l'île ${s.back.island.id} : tu y gagnes plus`;
+};
 const ADVICE_TITLE: Record<AdviceVerdict, string> = {
   go: '🧭 Tu peux partir',
   bring: '🧭 Pars, mais fais venir de la milice',
