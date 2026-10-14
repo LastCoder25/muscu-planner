@@ -15,6 +15,7 @@ import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } 
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import type { MilitiaState } from './militia';
+import { wornSize, type EnemyWear } from './enemyWear';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
@@ -247,6 +248,9 @@ export interface ControlState {
    *  et les chocs qui l'ont faite (jamais appliqués deux fois). Effacés à la reprise. */
   retakeCut?: number;
   fieldHits?: string[];
+  /** 🩸 La troupe ENNEMIE qui occupe le lieu est usée par un combat (`enemyWear.ts`) : elle
+   *  combat à `size × (1 − share)` et se renforce au fil des trajets. Absente : pleine force. */
+  wear?: EnemyWear;
   /** 🕊️ TRÊVE d'un lieu pris sur une île (`controlPoints.holdGrace`) : `from` = l'heure de la
    *  prise ; `held` = l'attaque la plus proche demandée pendant la trêve (elle tombe à la fin
    *  de la trêve si elle est déjà passée). Retirée à la fin de la trêve. */
@@ -662,11 +666,12 @@ function hashId(s: string): number {
  * entrent : « de tout un peu partout » (seul le niveau suit la distance, règle v0.683).
  */
 export function campSpecOf(poi: Pick<Poi, 'id' | 'type' | 'control'>): CampSpec | null {
-  // 🏰 Un point de contrôle tenu par l'ennemi : SA troupe (tirée à chaque reprise). Tenu par
+  // 🏰 Un point de contrôle tenu par l'ennemi : SA troupe (tirée à chaque reprise), USÉE par
+  // les combats qu'elle a livrés (`enemyWear.ts`). Tenu par
   // nous, il n'y a rien à attaquer.
   if (poi.type === 'control')
     return poi.control?.owner === 'enemy'
-      ? { faction: poi.control.faction, size: poi.control.size }
+      ? { faction: poi.control.faction, size: wornSize(poi.control.size, poi.control.wear) }
       : null;
   if (poi.type !== 'camp' && poi.type !== 'lair' && poi.type !== 'den') return null;
   // 🐺 Une tanière abrite une BÊTE seule (`lone`) : pas de troupe, un seul corps à abattre.
