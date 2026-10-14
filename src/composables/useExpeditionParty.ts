@@ -40,6 +40,7 @@ import {
   byReach,
   combinedBlocker,
   originGroupState,
+  originGroupsWithSomeone,
   toggleOriginGroupWithHero,
   wingOriginId,
 } from '@/lib/combinedAttack';
@@ -624,14 +625,22 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  posté ; sinon la liste habituelle. */
   const partyGroups = computed(() => {
     if (!startOptions.value.length) return [];
-    return originTiles.value.map((t) => {
-      const all =
-        t.id === 'base'
-          ? freeSorted.value
-          : sortByGradeThenRank(readyByPoint.value.get(t.id) ?? []);
-      return { ...t, advs: all };
-    });
+    // 🙈 Un lieu sans champion prêt ni héros présent est caché (demandé).
+    return originGroupsWithSomeone(
+      originTiles.value.map((t) => {
+        const all =
+          t.id === 'base'
+            ? freeSorted.value
+            : sortByGradeThenRank(readyByPoint.value.get(t.id) ?? []);
+        return { ...t, advs: all };
+      }),
+      heroAt.value,
+    );
   });
+  /** 🧝 Où le héros se trouve VRAIMENT : son poste, la base, ou `null` s'il est dehors. */
+  const heroAt = computed(() =>
+    heroPost.value ? heroPost.value.id : char.row && char.heroIsHome(char.row) ? 'base' : null,
+  );
   /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
   // point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où

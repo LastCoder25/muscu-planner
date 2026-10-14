@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   originGroupState,
+  originGroupsWithSomeone,
   toggleOriginGroup,
   toggleOriginGroupWithHero,
 } from '@/lib/combinedAttack';
@@ -75,5 +76,27 @@ describe('« Tous » d’un lieu fixe où le héros est posté — il part avec 
     expect(originGroupState([], ['a'], true, false)).toBe('none');
     expect(originGroupState([], [], true, true)).toBe('all');
     expect(originGroupState(['a'], ['a'], false, false)).toBe('all');
+  });
+});
+
+describe('originGroupsWithSomeone — un lieu sans personne sur place est caché', () => {
+  const g = (id: string, n: number) => ({ id, advs: Array.from({ length: n }, (_, i) => i) });
+  it('garde les lieux avec un champion prêt, cache les vides', () => {
+    expect(originGroupsWithSomeone([g('base', 0), g('mine', 2), g('arsenal', 0)], null)).toEqual([
+      g('mine', 2),
+    ]);
+  });
+  it('garde le lieu (ou la base) où le héros se trouve, même sans champion', () => {
+    expect(
+      originGroupsWithSomeone([g('base', 0), g('arsenal', 0)], 'arsenal').map((x) => x.id),
+    ).toEqual(['arsenal']);
+    expect(
+      originGroupsWithSomeone([g('base', 0), g('arsenal', 0)], 'base').map((x) => x.id),
+    ).toEqual(['base']);
+  });
+  it('garde l’ordre de l’écran', () => {
+    expect(
+      originGroupsWithSomeone([g('c', 1), g('a', 0), g('b', 1)], 'a').map((x) => x.id),
+    ).toEqual(['c', 'a', 'b']);
   });
 });

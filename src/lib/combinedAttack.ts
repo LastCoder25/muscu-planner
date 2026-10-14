@@ -474,6 +474,16 @@ export function originGroupState(
   return n === 0 ? 'none' : n === total ? 'all' : 'some';
 }
 
+/** 🙈 Les lieux de départ qui ont quelqu'un SUR PLACE : un champion prêt, ou le héros présent
+ *  (`heroAt` = l'id du lieu où il se trouve VRAIMENT, `'base'` compris ; `null` s'il est
+ *  dehors). Un lieu vide est caché pendant qu'on compose l'équipe (demandé). */
+export function originGroupsWithSomeone<G extends { id: string; advs: readonly unknown[] }>(
+  groups: readonly G[],
+  heroAt: string | null,
+): G[] {
+  return groups.filter((g) => g.advs.length > 0 || g.id === heroAt);
+}
+
 /**
  * 🎨 UNE COULEUR PAR ATTAQUE COMBINÉE (demandé par l'utilisateur) : tous les groupes d'une
  * même attaque portent le même contour dans la rangée des voyages, et deux attaques en cours
