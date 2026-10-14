@@ -1,68 +1,50 @@
 /**
- * 🧭 LA RÉPARTITION DE L'EFFECTIF SUR LA CARTE (2026-10-11, demandé par l'utilisateur : « à
- * partir de tous mes champions et du héros, simuler leur répartition sur la base, les lieux
- * fixes et la forteresse, pour que le planificateur 🪄 parte ensuite des meilleurs endroits »).
+ * 🧭 LA RÉPARTITION DE L'EFFECTIF SUR LA CARTE — bouton « Répartir », SANS RÉGLAGE.
  *
- * C'est un placement DE FOND, fait une fois (surtout utile avec un gros vivier, ou sur une île
- * pacifiée qu'on farme) — il n'attaque RIEN, c'est le 🪄 qui lance les expéditions ensuite.
+ * Refonte du 2026-10-14 (demandé par l'utilisateur : « quand je fais auto, ça me répartit les
+ * effectifs au mieux sur la carte » — plus de seuil de réussite ni de %). Les objectifs, posés
+ * avec lui :
+ * 1. LES PLUS FORTS AUX MEILLEURS ENDROITS. On attaque souvent un lieu avec les effectifs des
+ *    lieux fixes les plus proches (attaque combinée : tout le monde arrive avec le plus LENT).
+ *    Pour chaque point de l'île, on regarde le temps qu'il faut pour y réunir assez de force
+ *    (`force`, la force qu'il faut contre un lieu dur courant) en partant des endroits occupés
+ *    les plus proches — c'est l'heure d'arrivée de l'attaque combinée. On minimise la moyenne
+ *    de ce temps sur toute l'île : les forts finissent naturellement là où ils servent le plus.
+ * 2. EN SECONDAIRE, LA DÉFENSE : un lieu tenu qui se défend (`guard`) garde au moins un
+ *    membre, s'il y a assez de monde — sinon il est repris sans combat.
+ * 3. LE MOINS DE DÉPLACEMENTS : on part de là où chacun est, et un déplacement doit faire
+ *    gagner du temps (`MOVE_COST`) — sinon on ne le propose pas.
  *
- * Deux temps, choisis avec l'utilisateur :
- * 1. ÉQUIPES ÉQUILIBRÉES. On en fait le plus possible tout en gardant chacune capable de
- *    prendre un lieu de référence parmi les plus durs de l'île au seuil réglé : n'importe quelle
- *    équipe peut alors prendre n'importe quel lieu, et c'est ce qui donne le moins de temps pour
- *    tout attaquer. Les compétences de SOUTIEN (⛑️ soins, 🐫 cargaison, 🧲 pillard, 👁️ repérage,
- *    🧭 vitesse, 🎓 mentor) sont RÉPARTIES — une par équipe autant que possible — plutôt
- *    qu'empilées au même endroit.
- * 2. COUVERTURE DE L'ÎLE. Chaque équipe est posée à l'endroit (base ou lieu tenu, places
- *    comprises) qui fait baisser le plus le temps pour tout couvrir : la terre de l'île est
- *    échantillonnée, chaque point va à l'endroit occupé le plus proche, et on minimise la plus
- *    grosse charge par équipe (le dernier lieu atteint). On ne juge PAS sur les lieux présents
- *    sur la carte : ils changent toutes les heures, la géographie non.
- *
- * ⚠️ Aucune règle de jeu ici : la réussite et les trajets sont INJECTÉS.
+ * On ne juge PAS sur les lieux présents sur la carte : ils changent toutes les heures, la
+ * géographie non. ⚠️ Aucune règle de jeu ici : forces et trajets sont INJECTÉS.
  */
 import { onIsland, islandSpan, LAND_MARGIN } from './islandShape';
 import { EXPE, revealRadius } from './expedition';
 import { characterRank, rankStartLevel } from './characterRank';
-
-/** Les compétences qu'on répartit entre les équipes au lieu de les empiler. */
-export const SUPPORT_SKILLS = ['care', 'haul', 'plunder', 'scout', 'speed', 'mentor'] as const;
 
 export interface DeployUnit {
   id: string;
   hero: boolean;
   /** Où il est : `'base'` ou l'id du lieu tenu. */
   loc: string;
-  /** Sa force (même unité pour tous : seul l'ordre compte). */
+  /** Sa force (même unité pour tous, ADDITIVE : celle d'un groupe = la somme). */
   power: number;
-  /** Ses compétences de soutien (cf. `SUPPORT_SKILLS`), une fois chacune. */
-  roles: readonly string[];
 }
 
 export interface DeploySpot {
   /** `'base'` ou l'id du lieu tenu. */
   id: string;
-  /** Places de champion (le héros en prend 2) ; `Infinity` pour la base et la forteresse. */
+  /** Places (le héros en prend 2) ; `Infinity` pour la base. */
   seats: number;
   /** Le héros peut-il y être posté ? */
   heroOk: boolean;
+  /** Lieu tenu qui se défend : il garde au moins un membre (si l'effectif le permet). */
+  guard?: boolean;
 }
 
 export interface DeployDeps {
-  /** Chance de l'équipe contre le lieu de référence (0..1). */
-  win: (team: readonly DeployUnit[]) => number;
   /** Trajet (minutes, aller) de l'endroit `spot` vers le point d'échantillon n° `point`. */
   trip: (spot: string, point: number) => number;
-}
-
-interface DeployTeam {
-  units: DeployUnit[];
-  spot: string;
-  win: number;
-  /** Part de l'île que couvre son endroit, divisée entre ses équipes (0..1). */
-  share: number;
-  /** Trajet moyen (aller) de son endroit vers les points qu'il couvre. */
-  avgTrip: number;
 }
 
 interface DeployMove {
@@ -72,240 +54,144 @@ interface DeployMove {
 }
 
 export interface DeployResult {
-  teams: DeployTeam[];
+  /** Où chacun finit (id de l'unité → endroit). */
+  spotOf: Map<string, string>;
   moves: DeployMove[];
-  /** Aucune équipe n'atteint le seuil : on a gardé tout le monde ensemble. */
-  belowThreshold: boolean;
-  /** Le plus long temps de couverture par équipe (somme des trajets d'une zone ÷ ses équipes). */
-  makespan: number;
+  /** Temps moyen (minutes, aller) pour réunir la force voulue sur un point de l'île. */
+  reach: number;
 }
 
 /** Ce qu'un membre occupe sur un lieu : le héros en prend 2. */
 export const deployWeight = (u: DeployUnit): number => (u.hero ? 2 : 1);
-const teamWeight = (t: readonly DeployUnit[]) => t.reduce((n, u) => n + deployWeight(u), 0);
+
+/** Ce que doit faire gagner un déplacement (minutes de temps moyen) pour être proposé : un
+ *  champion qui part ne produit plus et ne défend plus le temps de son trajet. */
+export const MOVE_COST = 1;
 
 /**
- * ⚖️ Répartit les unités en `k` équipes de force équivalente : du plus fort au plus faible,
- * chacun rejoint l'équipe la plus faible — sauf si elle a déjà sa compétence de soutien
- * (chaque doublon pèse la moitié d'une unité moyenne). Le héros d'abord : il est le plus lourd.
+ * ⏱️ Le temps moyen pour réunir `force` sur un point de l'île, avec `power` par endroit.
+ * `order[p]` = les endroits triés du plus proche au plus loin du point p. Si l'effectif entier
+ * ne suffit pas, le temps du plus lointain est majoré d'autant (plus il manque, pire c'est).
  */
-export function balancedTeams(units: readonly DeployUnit[], k: number): DeployUnit[][] {
-  const teams: DeployUnit[][] = Array.from({ length: Math.max(1, k) }, () => []);
-  const power = teams.map(() => 0);
-  const avg = units.reduce((s, u) => s + u.power, 0) / Math.max(1, units.length);
-  const order = [...units].sort(
-    (a, b) => Number(b.hero) - Number(a.hero) || b.power - a.power || a.id.localeCompare(b.id),
-  );
-  for (const u of order) {
-    let best = 0;
-    let bestCost = Infinity;
-    teams.forEach((t, i) => {
-      const dup = u.roles.filter((r) => t.some((m) => m.roles.includes(r))).length;
-      // ⚠️ Deux héros ne vont jamais ensemble (il n'y en a qu'un, mais la règle tient seule).
-      const cost = power[i]! + dup * avg * 0.5 + (u.hero && t.some((m) => m.hero) ? 1e12 : 0);
-      if (cost < bestCost - 1e-9) {
-        best = i;
-        bestCost = cost;
-      }
-    });
-    teams[best]!.push(u);
-    power[best]! += u.power;
-  }
-  return teams.filter((t) => t.length);
-}
-
-/**
- * 🧮 Le plus grand nombre d'équipes dont CHACUNE passe le seuil (recherche dichotomique : plus
- * d'équipes = équipes plus faibles). Aucune ne passe → une seule équipe, signalée.
- */
-export function formTeams(
-  units: readonly DeployUnit[],
-  threshold: number,
-  win: DeployDeps['win'],
-): { teams: DeployUnit[][]; below: boolean } {
-  if (!units.length) return { teams: [], below: false };
-  const ok = (k: number) => balancedTeams(units, k).every((t) => win(t) >= threshold);
-  if (!ok(1)) return { teams: balancedTeams(units, 1), below: true };
-  let lo = 1;
-  let hi = units.length;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    if (ok(mid)) lo = mid;
-    else hi = mid - 1;
-  }
-  return { teams: balancedTeams(units, lo), below: false };
-}
-
-/**
- * 🗺️ Pose les équipes pour couvrir l'île au plus vite : chacune va à l'endroit (places et héros
- * permis) qui fait baisser le plus la charge maximale par équipe ; à charge égale, celui où ses
- * membres sont déjà (moins de déplacements).
- */
-export function placeTeams(
-  teams: readonly DeployUnit[][],
-  spots: readonly DeploySpot[],
-  points: number,
-  trip: DeployDeps['trip'],
-): { spotOf: string[]; load: Map<string, number>; count: Map<string, number>; makespan: number } {
-  const T = new Map<string, number[]>();
-  for (const s of spots)
-    T.set(
-      s.id,
-      Array.from({ length: points }, (_, p) => trip(s.id, p)),
-    );
-  const room = new Map(spots.map((s) => [s.id, s.seats]));
-  const count = new Map<string, number>();
-  const spotOf: string[] = new Array<string>(teams.length).fill('base');
-
-  const evaluate = (cnt: Map<string, number>) => {
-    const occ = spots.filter((s) => (cnt.get(s.id) ?? 0) > 0);
-    const load = new Map<string, number>(occ.map((s) => [s.id, 0]));
-    let sum = 0;
-    for (let p = 0; p < points; p++) {
-      let bs = '';
-      let bt = Infinity;
-      for (const s of occ) {
-        const t = T.get(s.id)![p]!;
-        if (t < bt) {
-          bt = t;
-          bs = s.id;
-        }
-      }
-      if (bs) {
-        load.set(bs, load.get(bs)! + bt);
-        sum += bt;
-      }
+export function reachTime(
+  power: ReadonlyMap<string, number>,
+  order: readonly (readonly string[])[],
+  trips: ReadonlyMap<string, readonly number[]>,
+  force: number,
+): number {
+  if (!order.length) return 0;
+  let sum = 0;
+  for (let p = 0; p < order.length; p++) {
+    let cum = 0;
+    let t = 0;
+    for (const s of order[p]!) {
+      const pw = power.get(s) ?? 0;
+      if (pw <= 0) continue;
+      cum += pw;
+      t = trips.get(s)![p]!;
+      if (cum >= force) break;
     }
-    let max = 0;
-    for (const [id, l] of load) max = Math.max(max, l / cnt.get(id)!);
-    return { load, max, sum };
-  };
-
-  // Les plus lourdes d'abord : ce sont elles qui ont le moins d'endroits possibles.
-  const order = teams
-    .map((_, i) => i)
-    .sort((a, b) => teamWeight(teams[b]!) - teamWeight(teams[a]!));
-  for (const i of order) {
-    const team = teams[i]!;
-    const w = teamWeight(team);
-    const hasHero = team.some((u) => u.hero);
-    let best: { id: string; score: number } | null = null;
-    for (const s of spots) {
-      if ((room.get(s.id) ?? 0) < w) continue;
-      if (hasHero && !s.heroOk) continue;
-      const cnt = new Map(count);
-      cnt.set(s.id, (cnt.get(s.id) ?? 0) + 1);
-      const e = evaluate(cnt);
-      const moves = team.filter((u) => u.loc !== s.id).length;
-      const score = e.max + e.sum * 1e-6 + moves * 1e-9;
-      if (!best || score < best.score) best = { id: s.id, score };
-    }
-    const at = best?.id ?? 'base';
-    spotOf[i] = at;
-    count.set(at, (count.get(at) ?? 0) + 1);
-    room.set(at, (room.get(at) ?? Infinity) - w);
+    sum += cum <= 0 ? 0 : cum >= force ? t : (t * force) / cum;
   }
-  const e = evaluate(count);
-  return { spotOf, load: e.load, count, makespan: e.max };
+  return sum / order.length;
 }
 
-/** Combien de compétences de soutien sont en double dans l'équipe. */
-const dupRoles = (t: readonly DeployUnit[]): number => {
-  const seen = new Set<string>();
-  let n = 0;
-  for (const u of t)
-    for (const r of u.roles) {
-      if (seen.has(r)) n++;
-      seen.add(r);
-    }
-  return n;
-};
-
-/**
- * 🔁 LE MOINS DE DÉPLACEMENTS POSSIBLE (2026-10-11, signalé : « pas assez de place sur les lieux
- * en question »). Les équipes sont équilibrées sans regarder où chacun se trouve : deux lieux
- * pleins pouvaient s'ÉCHANGER des champions, et aucun des deux transferts ne pouvait partir
- * (chacun attend une place que l'autre libère). On échange donc deux membres de deux équipes
- * quand ça fait rester plus de monde sur place — jamais le héros (il pèse 2 places), jamais au
- * prix d'une équipe sous le seuil ni d'une compétence de soutien en double de plus.
- */
-export function trimMoves(
-  teams: readonly DeployUnit[][],
-  spotOf: readonly string[],
-  ok: (team: readonly DeployUnit[]) => boolean,
-): DeployUnit[][] {
-  const out = teams.map((t) => [...t]);
-  const stay = (u: DeployUnit, i: number) => (u.loc === spotOf[i] ? 1 : 0);
-  for (let round = 0; round < 200; round++) {
-    let swapped = false;
-    search: for (let i = 0; i < out.length; i++)
-      for (let j = i + 1; j < out.length; j++) {
-        if (spotOf[i] === spotOf[j]) continue;
-        for (const a of out[i]!)
-          for (const b of out[j]!) {
-            if (a.hero || b.hero) continue;
-            if (stay(b, i) + stay(a, j) <= stay(a, i) + stay(b, j)) continue;
-            const ti = out[i]!.map((x) => (x === a ? b : x));
-            const tj = out[j]!.map((x) => (x === b ? a : x));
-            if (dupRoles(ti) + dupRoles(tj) > dupRoles(out[i]!) + dupRoles(out[j]!)) continue;
-            if (!ok(ti) || !ok(tj)) continue;
-            out[i] = ti;
-            out[j] = tj;
-            swapped = true;
-            break search;
-          }
-      }
-    if (!swapped) break;
-  }
-  return out;
-}
-
-/** 🧭 La répartition complète : équipes, endroits, et déplacements à faire. */
-export function planDeployment(
+/** 🧭 La répartition : où mettre chacun (cf. l'en-tête). */
+export function planStations(
   units: readonly DeployUnit[],
   spots: readonly DeploySpot[],
   points: number,
-  opts: { threshold: number; deps: DeployDeps },
+  opts: { force: number; deps: DeployDeps },
 ): DeployResult {
-  const formed = formTeams(units, opts.threshold, opts.deps.win);
-  const below = formed.below;
-  const placed = placeTeams(formed.teams, spots, Math.max(1, points), opts.deps.trip);
-  const teams = trimMoves(
-    formed.teams,
-    placed.spotOf,
-    (t) => below || opts.deps.win(t) >= opts.threshold,
+  const byId = new Map(spots.map((s) => [s.id, s]));
+  const trips = new Map(
+    spots.map((s) => [s.id, Array.from({ length: points }, (_, p) => opts.deps.trip(s.id, p))]),
   );
-  const total = Math.max(1, points);
-  // Les points de chaque endroit, pour le trajet moyen.
-  const zone = new Map<string, number>();
-  for (let p = 0; p < points; p++) {
-    let bs = '';
-    let bt = Infinity;
-    for (const [id] of placed.count) {
-      const t = opts.deps.trip(id, p);
-      if (t < bt) {
-        bt = t;
-        bs = id;
-      }
-    }
-    if (bs) zone.set(bs, (zone.get(bs) ?? 0) + 1);
+  const order = Array.from({ length: points }, (_, p) =>
+    spots.map((s) => s.id).sort((a, b) => trips.get(a)![p]! - trips.get(b)![p]!),
+  );
+  const at = new Map<string, string>();
+  const used = new Map<string, number>();
+  const put = (u: DeployUnit, s: string) => {
+    const old = at.get(u.id);
+    if (old) used.set(old, (used.get(old) ?? 0) - deployWeight(u));
+    at.set(u.id, s);
+    used.set(s, (used.get(s) ?? 0) + deployWeight(u));
+  };
+  const room = (s: string) => byId.get(s)!.seats - (used.get(s) ?? 0);
+  const fits = (u: DeployUnit, s: string) =>
+    (!u.hero || byId.get(s)!.heroOk) && room(s) >= deployWeight(u);
+  const members = (s: string) => units.filter((u) => at.get(u.id) === s);
+
+  // Départ : chacun là où il est (moins de déplacements), sinon à la base.
+  const base = spots.find((s) => s.id === 'base')?.id ?? spots[0]?.id ?? 'base';
+  for (const u of units) put(u, byId.has(u.loc) && fits(u, u.loc) ? u.loc : base);
+
+  // 🛡️ Un membre au moins sur chaque lieu qui se défend : le moins fort qu'on peut retirer
+  // d'un endroit qui en a plusieurs (jamais un lieu gardé vidé pour en remplir un autre).
+  for (const s of spots) {
+    if (!s.guard || members(s.id).length) continue;
+    const pick = units
+      .filter((u) => {
+        const from = at.get(u.id)!;
+        return fits(u, s.id) && (!byId.get(from)?.guard || members(from).length > 1);
+      })
+      .sort((a, b) => a.power - b.power)[0];
+    if (pick) put(pick, s.id);
   }
-  const out: DeployTeam[] = teams.map((units2, i) => {
-    const spot = placed.spotOf[i]!;
-    const n = zone.get(spot) ?? 0;
-    const c = placed.count.get(spot) ?? 1;
-    return {
-      units: units2,
-      spot,
-      win: opts.deps.win(units2),
-      share: n / total / c,
-      avgTrip: n ? (placed.load.get(spot) ?? 0) / n : 0,
-    };
-  });
-  const moves: DeployMove[] = [];
-  for (const t of out)
-    for (const u of t.units) if (u.loc !== t.spot) moves.push({ unit: u, from: u.loc, to: t.spot });
-  return { teams: out, moves, belowThreshold: below, makespan: placed.makespan };
+  const guardOk = (s: string) => !byId.get(s)?.guard || members(s).length > 0;
+
+  const powers = () => {
+    const m = new Map<string, number>();
+    for (const u of units) m.set(at.get(u.id)!, (m.get(at.get(u.id)!) ?? 0) + u.power);
+    return m;
+  };
+  const moved = () => units.filter((u) => at.get(u.id) !== u.loc).length;
+  const cost = () => reachTime(powers(), order, trips, opts.force) + MOVE_COST * moved();
+
+  // 🔁 Amélioration locale : déplacer un membre, ou en échanger deux, tant que ça fait gagner.
+  let best = cost();
+  for (let round = 0; round < 200; round++) {
+    let improved = false;
+    const strongFirst = [...units].sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
+    for (const u of strongFirst) {
+      const from = at.get(u.id)!;
+      for (const s of spots) {
+        if (s.id === from || !fits(u, s.id)) continue;
+        put(u, s.id);
+        const c = guardOk(from) ? cost() : Infinity;
+        if (c < best - 1e-6) {
+          best = c;
+          improved = true;
+          break;
+        }
+        put(u, from);
+      }
+      if (improved) break;
+      for (const v of strongFirst) {
+        const to = at.get(v.id)!;
+        if (to === from || deployWeight(u) !== deployWeight(v)) continue;
+        if ((u.hero && !byId.get(to)!.heroOk) || (v.hero && !byId.get(from)!.heroOk)) continue;
+        put(u, to);
+        put(v, from);
+        const c = cost();
+        if (c < best - 1e-6) {
+          best = c;
+          improved = true;
+          break;
+        }
+        put(u, from);
+        put(v, to);
+      }
+      if (improved) break;
+    }
+    if (!improved) break;
+  }
+
+  const moves: DeployMove[] = units
+    .filter((u) => at.get(u.id) !== u.loc)
+    .map((u) => ({ unit: u, from: u.loc, to: at.get(u.id)! }));
+  return { spotOf: at, moves, reach: reachTime(powers(), order, trips, opts.force) };
 }
 
 /**

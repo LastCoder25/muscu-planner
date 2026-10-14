@@ -7,8 +7,9 @@
        (réglages partagés : réussite visée, héros), deux calculs et deux résultats distincts. -->
   <div class="xp-plan">
     <p v-if="section === 'repart'" class="pl-note">
-      Place tout ton effectif (base, lieux tenus, forteresse) pour couvrir l’île : chaque équipe
-      reçoit une zone qu’elle peut tenir au taux visé.
+      Place ton héros et tes champions au mieux : les plus forts là d’où ils rejoignent le plus vite
+      le reste de l’île (attaques combinées), au moins un champion sur chaque lieu tenu qui se
+      défend, et le moins de trajets possible.
     </p>
     <div v-if="section === 'plan'" class="pl-modes" role="radiogroup" aria-label="Optimiser">
       <button
@@ -27,7 +28,7 @@
       </button>
     </div>
 
-    <div class="pl-row">
+    <div v-if="section === 'plan'" class="pl-row">
       <span class="pl-lab">🎯 Réussite au moins</span>
       <div class="pl-chips">
         <button
@@ -42,7 +43,7 @@
         </button>
       </div>
     </div>
-    <div class="pl-row">
+    <div v-if="section === 'plan'" class="pl-row">
       <span class="pl-lab">Qui peut partir</span>
       <div class="pl-chips">
         <button
@@ -207,52 +208,22 @@
     <template v-if="section === 'repart' && repoTeams && !repoRunning">
       <p v-if="!repoTeams.length" class="pl-empty">Personne n’est disponible à répartir.</p>
       <template v-else>
-        <div class="pl-sum">
-          <span class="pl-pill"
-            >👥 {{ repoTeams.length }} équipe{{ repoTeams.length > 1 ? 's' : '' }}</span
-          >
-          <span class="pl-pill"
-            >📍 {{ repoSpots.length }} endroit{{ repoSpots.length > 1 ? 's' : '' }}</span
-          >
-          <span class="pl-pill">⏱️ ~{{ fmt(avgTrip) }} par expédition</span>
-        </div>
-        <p v-if="repoBelow" class="pl-miss">
-          ⚠️ Même tous ensemble, ton effectif n’atteint pas {{ threshold }} % contre les lieux les
-          plus durs de l’île : une seule équipe, à la base.
-        </p>
         <div class="pl-list">
-          <div v-for="g in repoSpots" :key="g.key" class="pl-tile spot">
+          <div v-for="g in repoTeams" :key="g.key" class="pl-tile spot">
             <div class="pt-head">
               <span class="pt-name">{{ placeOf(g.spot) }}</span>
-              <span class="pt-cov">couvre {{ Math.round(g.share * 100) }} % de l’île</span>
             </div>
-            <div v-for="t in g.teams" :key="t.key" class="pt-squad">
-              <div class="pt-team">
-                <span v-if="t.hero" class="pt-mem hero">🧝 Héros</span>
-                <span v-for="a in t.advs" :key="a.id" class="pt-mem">
-                  {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
-                  <span v-if="skillsOf(a)" class="pt-sk" :title="skillsTitle(a)">{{
-                    skillsOf(a)
-                  }}</span>
-                </span>
-              </div>
-              <div class="pt-foot">
-                <span class="pt-stat" :class="winClass(t.win)"
-                  >🎯 {{ Math.round(t.win * 100) }} %</span
-                >
-                <span class="pt-stat">⏱️ ~{{ fmt(t.avgTripMin) }}</span>
-                <span v-if="supportOf(t)" class="pt-stat pt-sup" title="Compétences de soutien">{{
-                  supportOf(t)
+            <div class="pt-team">
+              <span v-if="g.hero" class="pt-mem hero">🧝 Héros</span>
+              <span v-for="a in g.advs" :key="a.id" class="pt-mem">
+                {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+                <span v-if="skillsOf(a)" class="pt-sk" :title="skillsTitle(a)">{{
+                  skillsOf(a)
                 }}</span>
-              </div>
+              </span>
             </div>
           </div>
         </div>
-        <p class="pl-note">
-          🎯 la garnison contre un lieu dur courant de l’île (2,5 gardes) — les repaires pleins et
-          les failles se prennent en réunissant des garnisons voisines (⚔️ attaque combinée) · ⏱️
-          aller-retour moyen vers les lieux de sa zone.
-        </p>
         <p v-if="!repoMoves.length" class="pl-empty">✅ Tout le monde est déjà à sa place.</p>
         <template v-else>
           <p class="pl-lab">Les trajets à faire</p>
@@ -296,10 +267,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { RepoTeamRow, useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
+import type { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
 import { SKILLS, skillLevelTag } from '@/lib/skillRunes';
-import { SUPPORT_SKILLS } from '@/lib/mapDeployment';
 import { characterRank } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
@@ -331,7 +301,6 @@ const {
   repoTeams,
   repoMoves,
   repoRunning,
-  repoBelow,
   repoMissing,
   repartir,
   launchAllMoves,
@@ -364,37 +333,6 @@ const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0))
 
 /** 🧭 Un endroit : la base ou le lieu fixe. */
 const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Base');
-/** Les compétences de soutien d'une équipe (⛑️ 🐫 🧲 👁️ 🧭 🎓), une fois chacune. */
-const supportOf = (t: RepoTeamRow) => {
-  const ids = new Set(t.advs.flatMap((a) => advRuneSkills(a).map((k) => k.id as string)));
-  return SUPPORT_SKILLS.filter((r) => ids.has(r))
-    .map((r) => SKILLS[r].emoji)
-    .join('');
-};
-/** Les équipes regroupées par endroit, la base d'abord. */
-const repoSpots = computed(() => {
-  const by = new Map<
-    string,
-    { key: string; spot: Poi | null; share: number; teams: RepoTeamRow[] }
-  >();
-  for (const t of repoTeams.value ?? []) {
-    const key = t.spot?.id ?? 'base';
-    const g = by.get(key) ?? { key, spot: t.spot, share: 0, teams: [] };
-    g.share += t.share;
-    g.teams.push(t);
-    by.set(key, g);
-  }
-  return [...by.values()].sort((a, b) => Number(!!a.spot) - Number(!!b.spot) || b.share - a.share);
-});
-/** Trajet moyen d'une expédition, pondéré par la part d'île couverte. */
-const avgTrip = computed(
-  () =>
-    (repoTeams.value ?? []).reduce((s, t) => s + t.avgTripMin * t.share, 0) /
-    Math.max(
-      1e-9,
-      (repoTeams.value ?? []).reduce((s, t) => s + t.share, 0),
-    ),
-);
 </script>
 
 <style scoped lang="scss">
@@ -656,18 +594,6 @@ const avgTrip = computed(
 }
 .pl-tile.spot {
   border-color: color-mix(in srgb, #5fd0ff 45%, var(--line));
-}
-.pt-cov {
-  flex: none;
-  font-size: 11px;
-  color: var(--dim);
-}
-.pt-squad {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--line);
 }
 .pt-sup {
   letter-spacing: 1px;

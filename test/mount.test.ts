@@ -352,7 +352,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       repoTeams: ref(null),
       repoMoves: ref([]),
       repoRunning: ref(false),
-      repoBelow: ref(false),
       repoMissing: ref({ hero: false, advs: [] }),
       repartir: () => undefined,
       launchAllMoves: () => undefined,
@@ -425,8 +424,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       { key: 'base>f1', from: null, to: fort, advs: [argus], hero: false, min: 20 },
     ] as never;
     planner.repoTeams.value = [
-      { key: 'a', spot: fort, advs: [argus], hero: false, win: 0.95, share: 0.6, avgTripMin: 40 },
-      { key: 'h', spot: null, advs: [], hero: true, win: 0.92, share: 0.4, avgTripMin: 30 },
+      { key: 'f1', spot: fort, advs: [argus], hero: false },
+      { key: 'base', spot: null, advs: [], hero: true },
     ] as never;
     planner.repoMissing.value = {
       hero: false,
@@ -445,8 +444,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).not.toContain('Proposer des expéditions');
     expect(html).not.toContain('Événements');
     expect(html).toContain('🏠 Base');
-    expect(html).toContain('couvre 60 % de l’île');
-    expect(html).toContain('2 équipes');
+    // 🧭 Sans réglage (demandé) : ni seuil de réussite, ni pourcentage, ni bouton du héros.
+    expect(html.replace(/<!--[\s\S]*?-->/g, '')).not.toContain('%');
+    expect(html).not.toContain('Réussite au moins');
+    expect(html).not.toContain('Qui peut partir');
+    expect(html).toContain('Argus');
     expect(html).toContain('Fila');
   });
 
@@ -4763,8 +4765,26 @@ describe('💰 la récompense sur la tuile d’un voyage', () => {
         {
           active: [{ emoji: '🛡️', name: 'Bastion de fortune', cutPct: 20, left: '17 h' }],
           options: [
-            { id: 'palissade', emoji: '🪵', name: 'Palissade', what: '', cutPct: 10, stock: 2, why: null, after: 71 },
-            { id: 'bastion', emoji: '🛡️', name: 'Bastion de fortune', what: '', cutPct: 20, stock: 1, why: 'plafond de 30 % atteint sur ce lieu', after: null },
+            {
+              id: 'palissade',
+              emoji: '🪵',
+              name: 'Palissade',
+              what: '',
+              cutPct: 10,
+              stock: 2,
+              why: null,
+              after: 71,
+            },
+            {
+              id: 'bastion',
+              emoji: '🛡️',
+              name: 'Bastion de fortune',
+              what: '',
+              cutPct: 20,
+              stock: 1,
+              why: 'plafond de 30 % atteint sur ce lieu',
+              after: null,
+            },
           ],
           totalPct: 20,
           capPct: 30,
