@@ -57,7 +57,9 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import type { Combatant } from '@/lib/combat';
-import { isWarbandPoi, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
+import { isFieldArmyPoi, isWarbandPoi, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
+import { attackForecast, interceptForecast } from '@/lib/defenseForecast';
+import { attackView, interceptView, type ForecastView } from '@/lib/forecastChips';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -335,6 +337,23 @@ export function useExpeditionParty(ctx: PartyCtx) {
       FORECAST_SAMPLES,
     );
     return w === null ? null : Math.round(w * 100);
+  });
+  /** 🔮 CE QUE LE COMBAT COÛTERA ET RAPPORTERA, en pastilles (`defenseForecast.ts`) : l'usure de
+   *  la troupe ennemie si l'assaut échoue, la part abattue d'une armée interceptée, et NOS pertes
+   *  (miliciens, blessés) par issue. ⚠️ Rejoue le combat sur des graines de pronostic, comme le
+   *  🎯 % ; ne lit ni l'horloge ni rien d'autre que le lieu, l'équipe et son kit : le `computed`
+   *  le mémoïse (96 combats par changement d'équipe). Rien tant que l'équipe est vide. */
+  const partyBattleView = computed<ForecastView | null>(() => {
+    const p = aimed.value;
+    if (!p || !partySize.value) return null;
+    const hero = heroForParty.value;
+    if (isFieldArmyPoi(p)) {
+      const f = interceptForecast(p, partyAdvs.value, partyRoad.value, hero);
+      return f ? interceptView(f) : null;
+    }
+    if (p.type !== 'control' && p.type !== 'camp' && p.type !== 'lair') return null;
+    const f = attackForecast(p, partyAdvs.value, partyRoad.value, hero);
+    return f ? attackView(f, p.type === 'control') : null;
   });
   /** 🏰👥 LA FORTERESSE ENNEMIE, TOUT LE MONDE RÉUNI (demandé) : le 🎯 % si le joueur
    *  rassemblait TOUS ses champions (occupés, postés ou blessés compris) et son héros — un
@@ -1123,6 +1142,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     toggleSupply,
     partyRoad,
     partyWin,
+    partyBattleView,
     fortressAllWin,
     partyGuardWin,
     partyRoute,

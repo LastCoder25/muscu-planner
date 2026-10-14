@@ -40,6 +40,7 @@ import {
 } from './advGear';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
+import { addWear, withoutWear } from './enemyWear';
 import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
 import {
   SKILLS,
@@ -81,6 +82,7 @@ import {
   controlWorkforce,
   type ExpeditionMessage,
   type Poi,
+  type CampSpec,
 } from './expedition';
 
 /** 🪬 L'autel des runes : heures pour 1 rune « à partir du bleu » au complet (le labo en dérive). */
@@ -1015,7 +1017,8 @@ export function razeCitadel(map: ExpeditionMap, id: string, at: number): Expedit
           return {
             ...p,
             control: {
-              ...c,
+              // 🩸 Abattue : la citadelle repart d'une troupe neuve (palier +1).
+              ...withoutWear(c),
               assault: false,
               retakes,
               faction: enemyForce(`${map.seed}:${id}`, retakes).faction,
@@ -1426,7 +1429,11 @@ export function ensureControls(
       const big = c.size > Math.max(...CONTROL.captureSizes);
       if (lv === p.level && !big) return p;
       const key = `${map.seed}:${p.id}`;
-      return { ...p, level: lv, control: big ? { ...c, ...enemyForce(key, c.retakes) } : c };
+      return {
+        ...p,
+        level: lv,
+        control: big ? { ...withoutWear(c), ...enemyForce(key, c.retakes) } : c,
+      };
     }
     const tooHigh = p.level > Math.max(1, playerLevel);
     // 🏝️ Sous le rang d'entrée de l'île (carte qui change d'île) : re-tiré aussi, si le joueur
@@ -1442,7 +1449,7 @@ export function ensureControls(
       ...p,
       level:
         tooHigh || tooLow ? controlLevel(key, c.retakes, playerLevel, archipelFloor(map)) : p.level,
-      control: tooBig ? { ...c, ...enemyForce(key, c.retakes) } : c,
+      control: tooBig ? { ...withoutWear(c), ...enemyForce(key, c.retakes) } : c,
     };
   });
   // 🗑️ Un point d'un type RETIRÉ (la Forge de campagne, fondue dans le camp le 2026-09-29)
@@ -1693,7 +1700,8 @@ export function captureControl(
   return withControl(map, id, (p) => ({
     ...p,
     control: {
-      ...p.control!,
+      // 🩸 Pris : l'usure de la troupe vaincue disparaît avec elle (`enemyWear.ts`).
+      ...withoutWear(p.control!),
       owner: 'player',
       // 🧝 Le héros qui reste prend 2 places sur les 5 (`champSeatsWithHero`).
       garrison: garrison.slice(0, champSeatsWithHero(p.control!, !!hero)),
@@ -1826,7 +1834,15 @@ export function loseControl(
   playerLevel: number,
   /** L'heure de la chute : les renforts encore en route font demi-tour à cet instant. */
   at: number,
-  won?: { level: number; faction: ControlState['faction'] },
+  won?: {
+    level: number;
+    faction: ControlState['faction'];
+    /** 🩸 Ce que le combat a retiré à l'assaillant (`PartyResult.dealt`, 0..1) : sa troupe
+     *  s'installe USÉE d'autant (`enemyWear.ts`). */
+    dealt?: number;
+    /** L'id du rapport, pour ne compter le combat qu'une fois. */
+    hitId?: string;
+  },
 ): ExpeditionMap {
   // 🧝 Le héros encore EN ROUTE vers ce point fait demi-tour : il rentre à la base depuis là
   // où il est (`walkHomeMs`) (le héros posté, lui, est rappelé par le store).
@@ -1843,6 +1859,7 @@ export function loseControl(
     const retakes = p.control!.retakes + 1;
     const force = enemyForce(`${map.seed}:${id}`, retakes);
     const returning = [...(p.control!.returning ?? []), ...turnBackReinforcements(p.control!, at)];
+    const wear = won?.dealt ? addWear(undefined, won.dealt, at, won.hitId) : undefined;
     const next: ControlState = {
       kind: p.control!.kind,
       owner: 'enemy',
@@ -1850,6 +1867,8 @@ export function loseControl(
       retakes,
       ...force,
       ...(won ? { faction: won.faction } : {}),
+      // 🩸 L'assaillant qui s'installe garde la trace de la bataille.
+      ...(wear ? { wear } : {}),
       // 🏅 Perdu : −1 cran tout de suite, puis −1 toutes les 24 h chez l'ennemi.
       tier: Math.max(0, controlTier(p.control, at) - 1),
       tierAt: at,
@@ -1916,21 +1935,52 @@ export function garrisonHoldChance(
   fort = 1,
 ): number {
   if (!allies.length) return 0;
+  let w = 0;
+  const foes = garrisonFoes(p, boost, fort);
+  for (const { poi, spec } of foes) w += campWinPct(poi, spec, allies, samples);
+  return w / foes.length;
+}
+
+/** 🎲 LES TROUPES qu'une garnison affronte quand l'attaque n'est pas encore visible : une par
+ *  taille de `CONTROL.sizes`, ramenée aux places du point et renforcée de `boost` (÷ l'enceinte).
+ *  ⚠️ SOURCE UNIQUE : `garrisonHoldChance`, `garrisonHold` ET le pronostic entier
+ *  (`defenseForecast`) combattent exactement celles-ci — la faction n'y joue pas (iso-menace). */
+export function garrisonFoes(p: Poi, boost: number, fort: number): { poi: Poi; spec: CampSpec }[] {
   // ⚠️ Calée sur une garnison de RÉFÉRENCE (3 au plus) : poster 4 ou 5 personnes renforce la
   // garnison, l'ennemi ne grossit pas pour autant (au-delà de 90 % de tenue, `retakeBoost` s'en
   // charge).
   const seats = p.control
     ? Math.min(seatsOf(p.control.kind), CONTROL.maxGarrison)
     : CONTROL.maxGarrison;
-  let w = 0;
-  for (const size of CONTROL.sizes)
-    w += campWinPct(
-      p,
-      { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * (boost / fort) },
-      allies,
-      samples,
+  return CONTROL.sizes.map((size) => ({
+    poi: p,
+    spec: { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * (boost / fort) },
+  }));
+}
+
+/** 🎲 Le renfort TOTAL de l'ennemi face à cette garnison : `retakeBoost` (suspense), le cran du
+ *  point et la colère (`retakeForce`), le fortin de l'île, les palissades (`wardedBoost`). Rendu une fois : l'écran le réutilise
+ *  pour le % et le pronostic entier. */
+export function garrisonBoost(
+  p: Poi,
+  allies: readonly SkirmishUnit[],
+  fort: number,
+  /** 🪵 L'instant où l'on juge les palissades (`wardMult`), REQUIS ; `null` = aucune. */
+  wardAt: number | null,
+): number {
+  // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
+  const threat =
+    tierThreatMult(tierAtAttack(p.control)) *
+    rageMult(
+      p.control?.angerSince,
+      p.control?.attackAt ?? p.control?.angerSince ?? 0,
+      activityOf(p.control),
     );
-  return w / CONTROL.sizes.length;
+  return (
+    wardedBoost(p, allies, fort, wardAt === null ? 1 : wardMult(p.control, wardAt)) *
+    threat *
+    (p.control?.fortMult ?? 1)
+  );
 }
 
 /** 🎲 De combien l'ennemi grossit sa troupe face à CETTE garnison : 1 tant qu'elle ne tient
@@ -1993,20 +2043,10 @@ export function garrisonHold(
 ): number {
   // 🛡️ Personne pour se battre (au lapidaire : aucun milicien) — rien ne tient.
   if (!allies.length) return 0;
-  // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
-  const threat =
-    tierThreatMult(tierAtAttack(p.control)) *
-    rageMult(
-      p.control?.angerSince,
-      p.control?.attackAt ?? p.control?.angerSince ?? 0,
-      activityOf(p.control),
-    );
   return garrisonHoldChance(
     p,
     allies,
-    wardedBoost(p, allies, fort, wardAt === null ? 1 : wardMult(p.control, wardAt)) *
-      threat *
-      (p.control?.fortMult ?? 1),
+    garrisonBoost(p, allies, fort, wardAt),
     CONTROL.holdSamples,
     fort,
   );

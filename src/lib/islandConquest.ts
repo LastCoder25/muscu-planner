@@ -45,6 +45,7 @@ import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
 import { enemyWaitMs, sortieFires, SORTIE_EVENTS, type SortieKind } from './sortieClock';
 import { islandPoint, islandScatter } from './islandShape';
+import { withoutWear, wornSize, type EnemyWear } from './enemyWear';
 import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -125,6 +126,15 @@ export const NEST = {
   /** La troupe d'un nid né en route. */
   size: 3,
 } as const;
+
+/** 🩸 « troupe de 3 champions de référence » — usée, sa force du moment et ce qui lui manque. */
+function troopText(c: { size: number; wear?: EnemyWear }): string {
+  const now = wornSize(c.size, c.wear);
+  const r = (x: number) => Math.round(x * 10) / 10;
+  return now < c.size
+    ? `troupe de ${r(now)} champions de référence (affaiblie de ${Math.round((1 - now / c.size) * 100)} %, ${r(c.size)} au complet)`
+    : `troupe de ${c.size} champions de référence`;
+}
 
 /** 🪺 Le niveau du nid d'index `i` (demandé le 2026-10-06 : « un niveau qui varie du minimum
  *  de la carte au maximum de la carte ») : tiré entre le min et le max de l'île, sur la carte
@@ -956,7 +966,15 @@ function heldObjective(
   /** 🕊️ La trêve de la prise (`graceOnCapture`), absente pour un objectif rendu. */
   grace?: ControlState['grace'],
 ): Poi {
-  const { attackAt: _a, raidAt: _r, locked: _l, hero: _h, heroUnit: _u, ...rest } = before.control!;
+  // 🩸 Pris : l'usure de la troupe vaincue disparaît (`enemyWear.ts`).
+  const {
+    attackAt: _a,
+    raidAt: _r,
+    locked: _l,
+    hero: _h,
+    heroUnit: _u,
+    ...rest
+  } = withoutWear(before.control!);
   void _a;
   void _r;
   void _l;
@@ -1074,7 +1092,7 @@ export function takeFortress(
   const before = map.pois.find((p) => p.id === FORTRESS_ID);
   const razed = razeIslandTarget(map, FORTRESS_ID, at);
   if (!before?.control || razed === map) return razed;
-  const { attackAt: _a, raidAt: _r, locked: _l, ...rest } = before.control;
+  const { attackAt: _a, raidAt: _r, locked: _l, ...rest } = withoutWear(before.control);
   void _a;
   void _r;
   void _l;
@@ -1414,7 +1432,7 @@ export function islandTargetLabel(
     return {
       title: `🌀 Brèche maudite · ${tier} fois abattue`,
       detail:
-        `troupe de ${p.control.size} champions de référence · abattue, elle se rouvre 3 jours plus ` +
+        `${troopText(p.control)} · abattue, elle se rouvre 3 jours plus ` +
         'tard, plus forte d’un champion de référence, sans fin · chaque victoire dépose un coffre ' +
         '(runes et sceaux de champion).',
     };
@@ -1431,7 +1449,7 @@ export function islandTargetLabel(
         (p.control.locked
           ? `tiens d’abord ${OBJECTIVES_AFTER_HELD} lieux fixes de l’île (n’importe lesquels) pour l’attaquer · `
           : '') +
-        `troupe de ${p.control.size} champions de référence · ` +
+        `${troopText(p.control)} · ` +
         (rise && !isKey
           ? 'pris, il se tient — mais ses morts l’attaquent 3 jours plus tard tant que la citadelle des morts tient'
           : rise

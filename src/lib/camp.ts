@@ -13,6 +13,7 @@
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
 import { mulberry32 } from './combat';
+import { wearHitLabel } from './enemyWear';
 import { forceShare } from './poiDifficulty';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
@@ -445,6 +446,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     faction: spec.faction,
     escort: escort.map((a) => a.id),
     win: d.win,
+    dealt: d.foeDealt,
     foes: g.foes,
     slain: g.slain,
     kills: g.kills,
@@ -479,7 +481,10 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     key: 0, // ⚠️ jamais de clé d'un camp
     reconBonus: 0,
     returnMult: 1,
-    text: d.win ? `⚔️ Camp pris ! ${tag}` : `💀 Repoussés. ${tag}`,
+    // 🩸 Un lieu fixe ennemi qui tient garde la trace du combat (`enemyWear.ts`).
+    text: d.win
+      ? `⚔️ Camp pris ! ${tag}`
+      : `💀 Repoussés. ${tag}${poi.type === 'control' ? wearHitLabel(d.foeDealt) : ''}`,
     party,
   };
 }

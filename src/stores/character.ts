@@ -125,6 +125,7 @@ import {
   supersedeLate,
   staysUnderAttack,
   forgetDeparture,
+  isAttackTarget,
   moveDeparture,
   recordDeparture,
   archipelFloor,
@@ -218,6 +219,7 @@ import { combatPower, mulberry32, type Combatant } from '@/lib/combat';
 import {
   emptyMilitia,
   isMilitiaId,
+  lightHurtLabel,
   militiaLostLabel,
   militiaOfControl,
   militiaOnMap,
@@ -423,6 +425,7 @@ import {
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
+import { healWear, wearEnemy, wearSettleLabel } from '@/lib/enemyWear';
 import { FACTION_EMOJI } from '@/lib/raid';
 import {
   islandMilitiaOf,
@@ -2548,7 +2551,9 @@ export const useCharacterStore = defineStore('character', () => {
     const map0: ExpeditionMap = ensureIslandConquest(
       ensureControls(
         prev
-          ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
+          ? // 🩸 Les troupes ennemies usées se renforcent des sorties arrivées (une fois par
+            // tick, avant les combats ; la même carte quand rien ne change).
+            healWear(advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id), now)
           : { ...createMap(newSeed(now), now, level, outpost), archipel: archipelOn(1) },
         now,
         level,
@@ -4350,7 +4355,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🧝 Le héros posté sur un lieu tenu en part directement : il quitte la garnison.
     const map2 = map1 && hero ? unpostHero(map1, now, !!origin) : map1;
     // 🔙 Daté de l'ARRIVÉE : un demi-tour (avant l'arrivée) le retire, il ne compte jamais.
-    const map = map2 ? recordDeparture(map2, now, trip.midAt) : map2;
+    const map = map2 ? recordDeparture(map2, now, trip.midAt, isAttackTarget(poi)) : map2;
     await persist(userId, {
       expedition_map: map,
       ...(supplies.length ? { supplies: stockAfter } : {}),
@@ -4712,7 +4717,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 🧝 Réservé pour l'attaque, le héros posté GARDE son poste jusqu'au départ de son
       // groupe (`attackTick`) : il défend le lieu pendant l'attente, comme les champions qui
       // attendent chez eux. (Signalé : il quittait l'Ossuaire dès l'envoi.)
-      expedition_map: recordDeparture(targetTaken(map, poi)!, now, plan.midAt),
+      expedition_map: recordDeparture(targetTaken(map, poi)!, now, plan.midAt, true),
       attacks: [...attackList.value, attack],
       ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>
@@ -5416,7 +5421,15 @@ export const useCharacterStore = defineStore('character', () => {
       touched = true;
       // 🏯 La citadelle ne se prend pas : gagnée, elle tombe (palier +1, trêve) ; perdue, palier −1.
       if (isCitadelId(id)) {
-        map = m.win ? razeCitadel(map, id, m.resolvedAt) : repelledAtCitadel(map, id, m.resolvedAt);
+        map = m.win
+          ? razeCitadel(map, id, m.resolvedAt)
+          : wearEnemy(
+              repelledAtCitadel(map, id, m.resolvedAt),
+              id,
+              m.party?.dealt,
+              m.resolvedAt,
+              m.id,
+            );
         continue;
       }
       // 🏝️ Un objectif de l'île ou sa forteresse : gagné, il tombe pour toujours (et l'île se
@@ -5450,7 +5463,11 @@ export const useCharacterStore = defineStore('character', () => {
             islandFxSeen.add(m.id);
             islandFx.push(map.archipel?.pacifiedAt !== undefined && !wasPacified ? 'pacified' : id);
           }
-        } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
+        } else {
+          // 🩸 Raté : sa troupe garde la trace du combat.
+          map = wearEnemy(map, id, m.party?.dealt, m.resolvedAt, m.id);
+          if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
+        }
         continue;
       }
       if (m.win) {
@@ -5462,7 +5479,11 @@ export const useCharacterStore = defineStore('character', () => {
         map = captureControl(map, id, stay, m.resolvedAt, activeDays7, heroUnit);
         const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
         advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
-      } else if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
+      } else {
+        // 🩸 Raté : sa troupe garde la trace du combat.
+        map = wearEnemy(map, id, m.party?.dealt, m.resolvedAt, m.id);
+        if (!stillMarching(cur, id, m.resolvedAt)) map = markAssault(map, id, false);
+      }
     }
     return touched ? { map, adventurers: advs } : null;
   }
@@ -5567,7 +5588,7 @@ export const useCharacterStore = defineStore('character', () => {
           text: held
             ? `${emo} Tes miliciens ont tenu l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
             : militia.length
-              ? `${emo} L’ennemi a repris le lieu sur l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)}`
+              ? `${emo} L’ennemi a repris le lieu sur l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt)}`
               : `${emo} L’ennemi a repris le lieu, laissé sans défense sur l’île abandonnée.`,
           ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
         };
@@ -5577,7 +5598,12 @@ export const useCharacterStore = defineStore('character', () => {
         map = held
           ? holdControl(map, p.id, at, activeDays7)
           : regainIslandTarget(
-              loseControl(map, p.id, lvl, at, { level: foe.level, faction: force.faction }),
+              loseControl(map, p.id, lvl, at, {
+                level: foe.level,
+                faction: force.faction,
+                dealt: o?.party?.dealt ?? 0,
+                hitId: msg.id,
+              }),
               p.id,
             );
         map = withLastAttack(map, p.id, msg);
@@ -5802,11 +5828,11 @@ export const useCharacterStore = defineStore('character', () => {
         title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
         text:
           (held
-            ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
+            ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)}${lightHurtLabel(o?.party?.lightHurt)} Une nouvelle attaque se prépare.`
             : escort.length
-              ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}`
+              ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt)}`
               : militia.length
-                ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
+                ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt)}`
                 : `${emo} L’ennemi a repris le lieu, laissé sans personne pour le défendre.`) +
           (!held && !fights && (posted.length || p.control!.hero)
             ? ' Tes champions postés n’ont pas combattu : ils rentrent à pied, sans blessure.'
@@ -5841,7 +5867,13 @@ export const useCharacterStore = defineStore('character', () => {
       map = held
         ? holdControl(map, p.id, at, activeDays7)
         : regainIslandTarget(
-            loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction }),
+            loseControl(map, p.id, playerLevel, at, {
+              level: foe.level,
+              faction: force.faction,
+              // 🩸 L'ennemi s'installe USÉ de ce que la bataille lui a retiré.
+              dealt: o?.party?.dealt ?? 0,
+              hitId: msg.id,
+            }),
             p.id,
           );
       // 🏠 Délogée, la garnison RENTRE À PIED à la base (le trajet d'un rappel) : elle est en
@@ -5890,8 +5922,9 @@ export const useCharacterStore = defineStore('character', () => {
     // 🤕 La garnison vaincue est blessée TOUT DE SUITE, mais ses soins ne courent qu'à son
     // ARRIVÉE à la base (`busyUntil`, posé plus haut) : l'infirmerie est à la base.
     // L'encaissement refera le même calcul, et `Math.max` le rend idempotent.
+    // 🩹 Victoire serrée : les blessés LÉGERS (`lightHurt`) y passent aussi, sans XP en double.
     for (const m of msgs)
-      if (m.party && !m.win)
+      if (m.party && (!m.win || m.party.lightHurt?.length))
         roster = partyClaimRoster(m.party, roster, {
           pantheonLevel: pantheonLevel.value,
           // ⚠️ Ici `heroLevel` est le niveau du joueur passé au tick (un nombre).

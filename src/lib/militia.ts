@@ -270,6 +270,14 @@ export function militiaLostLabel(lost: readonly string[] | undefined): string {
   return ` ${MILITIA_EMO} ${n} milicien${n > 1 ? 's' : ''} tombé${n > 1 ? 's' : ''}.`;
 }
 
+/** 🩹 Le mot du rapport d'une défense gagnée de justesse : « 🩹 2 blessés légers. » (vide
+ *  s'il n'y en a aucun). */
+export function lightHurtLabel(hurt: readonly string[] | undefined): string {
+  const n = hurt?.length ?? 0;
+  if (!n) return '';
+  return ` 🩹 ${n} blessé${n > 1 ? 's' : ''} léger${n > 1 ? 's' : ''}.`;
+}
+
 /** Les miliciens d'un point : sa garnison ET ceux en route vers lui. */
 export function militiaOfControl(
   c: { garrison: readonly string[]; reinforcing?: readonly { id: string }[] } | undefined | null,

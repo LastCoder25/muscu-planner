@@ -609,6 +609,9 @@
         />
         <!-- ⚔️ D'autres équipes y marchent déjà : on peut en envoyer une de plus. -->
         <p v-if="marchingNote && !engagedTrip" class="sh-note">⚔️ {{ marchingNote }}</p>
+        <!-- 🩸 UN LIEU ENNEMI USÉ : sa troupe garde les pertes de ses combats, et se renforce au fil
+             de tes trajets (`wornChip`, la phrase de `wearLabel`). -->
+        <ForecastChips v-if="wornView" :view="wornView" />
         <!-- 🏅 L'ANCIENNETÉ du point (2026-09-30) : son cran, ce qu'il rapporte, ce qu'il attire. -->
         <p v-if="tierLine" class="ctl-line ctl-tier">
           <b>{{ tierLine.title }}</b> <span class="ctl-dim">· {{ tierLine.detail }}</span>
@@ -991,6 +994,9 @@
                 tard</span
               >
             </p>
+            <!-- 🔮 Et si elle tombe ? L'usure de la troupe qui s'installe, nos pertes (miliciens,
+               blessés) : le même combat que le % ci-dessus, rejoué (`defenseForecast`). -->
+            <ForecastChips v-if="defenseFcView" :view="defenseFcView" />
             <!-- 🪵 Les palissades : rétrécir la troupe qui attaquera ce lieu (24 h chacune). -->
             <WardPanel
               v-if="wardView"
@@ -1390,6 +1396,9 @@
             <p v-else-if="partySize && !progress.ready.value" class="sh-away">
               ⏳ Chargement de ta progression…
             </p>
+            <!-- 🔮 CE QUE LE COMBAT COÛTERA : usure de sa troupe si l'assaut échoue (ou part de
+               l'armée abattue), nos pertes par issue — `partyBattleView`. -->
+            <ForecastChips v-if="partyBattleView" :view="partyBattleView" />
             <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
             <div class="send-bar" :class="{ 'with-odds': sendOdds.length }">
               <!-- 🎯 La réussite SUIT la composition (demandé) : elle vivait dans la fiche, en haut,
@@ -1761,6 +1770,9 @@ import {
   type ReinfSelection,
 } from '@/lib/reinforceSelection';
 import PoiCard from '@/components/PoiCard.vue';
+import ForecastChips from '@/components/ForecastChips.vue';
+import { defenseForecast } from '@/lib/defenseForecast';
+import { defenseView, wornChip, type ForecastView } from '@/lib/forecastChips';
 import SupplyPicker from '@/components/SupplyPicker.vue';
 import {
   controlReturnNote as returnNote,
@@ -3278,7 +3290,7 @@ function toggleRecall(id: string) {
  *  troupe, ce que les sorties en ont abattu — `controlAttackHold`, la bataille du store) ;
  *  avant, contre l'ennemi le plus fort possible (`controlDefenseHold`, un plancher).
  *  ⚠️ Sur l'horloge GROSSIÈRE : une simulation par appel, pas une par seconde. */
-function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
+function defenseArgs(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const c = p?.control;
   if (!p || !c || c.owner !== 'player') return null;
   const at = knownAttackAt(p, coarseNow.value);
@@ -3289,18 +3301,34 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
     !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
   // 🧱🏹 L'enceinte de la base renforce toutes les garnisons (la règle de la bataille).
   const fort = char.fortifyFor(heroLevel.value);
+  // 🪵 Les palissades à l'heure de l'attaque si on la connaît, sinon celles d'aujourd'hui.
+  const wardAt = at ?? coarseNow.value;
+  return { p, c, map, present, late, hero, heroLate, vsArmy, fort, wardAt };
+}
+function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
+  const a = defenseArgs(p, extra);
+  if (!a) return null;
+  const { c, map, present, late, hero, heroLate, vsArmy, fort } = a;
   const hold = vsArmy
-    ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort, hero)
-    : controlDefenseHold(
-        p,
+    ? controlAttackHold(
+        map!,
+        a.p,
         present,
         char.advList,
         roadCtx.value,
         heroLevel.value,
         fort,
         hero,
-        // 🪵 Les palissades à l'heure de l'attaque si on la connaît, sinon celles d'aujourd'hui.
-        at ?? coarseNow.value,
+      )
+    : controlDefenseHold(
+        a.p,
+        present,
+        char.advList,
+        roadCtx.value,
+        heroLevel.value,
+        fort,
+        hero,
+        a.wardAt,
       );
   return {
     pct: Math.round(hold * 100),
@@ -3309,7 +3337,48 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
     vsArmy,
   };
 }
-const defenseNow = computed(() => defenseOf(livePoi.value));
+/** 🔮 Le pronostic ENTIER de la défense du lieu (`defenseForecast`) : la bataille est calculée UNE
+ *  fois (renfort ennemi, armée, 96 combats) et `defenseNow` comme les pastilles la lisent — son
+ *  `hold` est EXACTEMENT celui de `controlAttackHold` / `controlDefenseHold` (testé). Sur
+ *  l'horloge grossière, comme `defenseOf`. */
+const defenseFc = computed(() => {
+  const a = defenseArgs(livePoi.value);
+  if (!a) return null;
+  return {
+    a,
+    fc: defenseForecast(
+      a.map ?? { seed: 0 },
+      a.p,
+      a.present,
+      char.advList,
+      roadCtx.value,
+      heroLevel.value,
+      a.fort,
+      a.hero,
+      a.vsArmy,
+      a.wardAt,
+    ),
+  };
+});
+const defenseNow = computed(() => {
+  const d = defenseFc.value;
+  if (!d) return null;
+  const { a, fc } = d;
+  return {
+    pct: Math.round(fc.hold * 100),
+    count: defenderCount(a.c.kind, a.present, !!a.hero),
+    late: defenderCount(a.c.kind, a.late, !!a.heroLate),
+    vsArmy: a.vsArmy,
+  };
+});
+const defenseFcView = computed<ForecastView | null>(() =>
+  defenseFc.value && defenseFc.value.a.present.length ? defenseView(defenseFc.value.fc) : null,
+);
+/** 🩸 La pastille d'un lieu ENNEMI dont la troupe est usée (`wearLabel`). */
+const wornView = computed<ForecastView | null>(() => {
+  const chip = wornChip((livePoi.value ?? selected.value)?.control);
+  return chip ? { head: [chip], rows: [] } : null;
+});
 /** 🛡️ La tenue d'un point si `remove` n'y étaient plus et `extra` arrivaient — la règle de
  *  `defenseOf`, sur une garnison retouchée (ce que fera l'échange). */
 function holdAfter(p: Poi, remove: readonly string[], extra: { id: string; at: number }[]) {
@@ -6131,6 +6200,7 @@ const {
   toggleSupply,
   partyRoad,
   partyWin,
+  partyBattleView,
   fortressAllWin,
   partyGuardWin,
   partyRoute,

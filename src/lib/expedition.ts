@@ -562,6 +562,9 @@ export interface PartyResult {
   /** Ids des aventuriers envoyés (le héros n'y figure pas). */
   escort: string[];
   win: boolean;
+  /** 🩸 La part des PV de l'ennemi que le combat a entamée (0..1, `foeDealt`) : elle se
+   *  reporte sur la troupe qui s'installe (`enemyWear.ts`). Absent des rapports d'avant. */
+  dealt?: number;
   foes: number;
   slain: number;
   /** Abattus PAR aventurier. ⚠️ `foesDown` (la liste des corps) n'est plus stocké : seul
@@ -887,6 +890,12 @@ export interface ExpeditionMap {
   /** 🗺️ Les départs (héros et équipes) des 7 derniers jours : l'UTILISATION de la carte, qui
    *  règle son harcèlement (`mapHarass`). Absent des cartes d'avant → 0, aucune migration. */
   departures?: number[];
+  /** 🩸 Les trajets d'ATTAQUE (un voyage qui va COMBATTRE un lieu : camp, repaire, tanière,
+   *  lieu gardé, lieu fixe ennemi, objectif, forteresse, citadelle, interception), datés de
+   *  l'ARRIVÉE comme `departures` (mêmes règles de fenêtre et de demi-tour). Ce sont eux, et
+   *  eux seuls, qui renforcent les troupes ennemies usées (`healWear`). Absent des cartes
+   *  d'avant → aucun renfort à rattraper, aucune migration. */
+  attackTrips?: number[];
   /** 🏝️ MODE ARCHIPEL (`archipelago.ts` ; tous les comptes depuis la bascule, étape 7) : l'île active et le
    *  plafond de niveau de ses lieux. Absent = la carte d'avant, rien ne change. */
   archipel?: {
@@ -1010,8 +1019,24 @@ export function recentDepartures(map: Pick<ExpeditionMap, 'departures'>, now: nu
  * `forgetDeparture` le retire (demandé, 2026-10-04 : « les nids ne comptent pas les
  * attaques concernées par un demi-tour »).
  */
-export function recordDeparture(map: ExpeditionMap, now: number, at: number = now): ExpeditionMap {
-  return { ...map, departures: [...keptDepartures(map, now), at].slice(-200) };
+export function recordDeparture(
+  map: ExpeditionMap,
+  now: number,
+  at: number = now,
+  /** 🩸 Le voyage va combattre un lieu (`isAttackTarget`) : il compte aussi dans `attackTrips`. */
+  attack = false,
+): ExpeditionMap {
+  const next = { ...map, departures: [...keptDepartures(map, now), at].slice(-200) };
+  if (!attack) return next;
+  const kept = (map.attackTrips ?? []).filter((t) => t > now - DEPARTURE_WINDOW_MS);
+  return { ...next, attackTrips: [...kept, at].slice(-200) };
+}
+
+/** ⚔️ Aller à ce lieu, c'est aller COMBATTRE (un trajet d'attaque, `attackTrips`) : lieu gardé,
+ *  convoi, lieu fixe tenu par l'ennemi. Pas une récolte libre, un renfort ou un transfert. */
+export function isAttackTarget(p: Poi): boolean {
+  if (p.type === 'control') return p.control?.owner === 'enemy';
+  return !!(campSpecOf(p) || harvestGuardOf(p) || isRiftPoi(p) || isWarbandPoi(p) || p.convoy);
 }
 
 /** ⚡ Un boost avance l'arrivée d'un voyage : son départ (daté de l'arrivée) suit, sinon un
@@ -1020,7 +1045,10 @@ export function moveDeparture(map: ExpeditionMap, from: number, to: number): Exp
   const list = map.departures ?? [];
   const i = list.indexOf(from);
   if (i < 0 || from === to) return map;
-  return { ...map, departures: list.map((t, k) => (k === i ? to : t)) };
+  const moved = { ...map, departures: list.map((t, k) => (k === i ? to : t)) };
+  const trips = map.attackTrips ?? [];
+  const j = trips.indexOf(from);
+  return j < 0 ? moved : { ...moved, attackTrips: trips.map((t, k) => (k === j ? to : t)) };
 }
 
 /** 🔙 Le départ d'un voyage rappelé (daté de son arrivée prévue `at`) ne compte pas : il
@@ -1030,9 +1058,17 @@ export function forgetDeparture(map: ExpeditionMap, at: number): ExpeditionMap {
   const i = list.indexOf(at);
   if (i < 0) return map;
   const rest = [...list.slice(0, i), ...list.slice(i + 1)];
-  if (rest.length) return { ...map, departures: rest };
-  const { departures: _d, ...out } = map;
-  void _d;
+  const out: ExpeditionMap = { ...map };
+  if (rest.length) out.departures = rest;
+  else delete out.departures;
+  // 🩸 Le trajet d'attaque rappelé ne renforcera pas non plus l'ennemi.
+  const trips = map.attackTrips ?? [];
+  const j = trips.indexOf(at);
+  if (j >= 0) {
+    const left = [...trips.slice(0, j), ...trips.slice(j + 1)];
+    if (left.length) out.attackTrips = left;
+    else delete out.attackTrips;
+  }
   return out;
 }
 
