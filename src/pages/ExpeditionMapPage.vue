@@ -1226,15 +1226,17 @@
                 <button
                   type="button"
                   class="pool-head"
-                  :class="`pool-${partyGroupState(g.advs.map((a) => a.id))}`"
-                  :disabled="!g.advs.length"
-                  :aria-pressed="partyGroupState(g.advs.map((a) => a.id)) === 'all'"
+                  :class="`pool-${partyGroupState(g)}`"
+                  :disabled="!g.advs.length && !heroPostedAt(g.id)"
+                  :aria-pressed="partyGroupState(g) === 'all'"
                   :title="
-                    partyGroupState(g.advs.map((a) => a.id)) === 'all'
+                    partyGroupState(g) === 'all'
                       ? `Décocher tous les champions de ${g.label}`
-                      : `Cocher tous les champions de ${g.label}`
+                      : heroPostedAt(g.id)
+                        ? `Cocher le héros et tous les champions de ${g.label}`
+                        : `Cocher tous les champions de ${g.label}`
                   "
-                  @click="togglePartyGroup(g.advs.map((a) => a.id))"
+                  @click="togglePartyGroup(g)"
                 >
                   <span class="pool-emo">{{ g.emo }}</span>
                   <span class="pool-name">{{ g.label }}</span>
@@ -1242,10 +1244,10 @@
                     >⇄ {{ formatDurationMin(2 * g.legMin) }}</span
                   >
                   <span class="pool-n">{{ g.advs.length }} 🗡️</span>
-                  <span v-if="g.advs.length" class="pool-check">{{
-                    partyGroupState(g.advs.map((a) => a.id)) === 'all'
+                  <span v-if="g.advs.length || heroPostedAt(g.id)" class="pool-check">{{
+                    partyGroupState(g) === 'all'
                       ? '✓ tous'
-                      : partyGroupState(g.advs.map((a) => a.id)) === 'some'
+                      : partyGroupState(g) === 'some'
                         ? '◐'
                         : '＋ tous'
                   }}</span>
@@ -6231,6 +6233,7 @@ const {
   togglePartyAdv,
   togglePartyGroup,
   partyGroupState,
+  heroPostedAt,
   partyAllIds,
   partyAllOn,
   togglePartyAll,

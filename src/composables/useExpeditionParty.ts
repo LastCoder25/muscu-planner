@@ -39,7 +39,8 @@ import {
   COMBINED_BLOCK_LABEL,
   byReach,
   combinedBlocker,
-  toggleOriginGroup,
+  originGroupState,
+  toggleOriginGroupWithHero,
   wingOriginId,
 } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
@@ -60,6 +61,10 @@ import type { Combatant } from '@/lib/combat';
 import { isFieldArmyPoi, isWarbandPoi, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import { attackForecast, interceptForecast } from '@/lib/defenseForecast';
 import { attackView, interceptView, type ForecastView } from '@/lib/forecastChips';
+
+/** Un lieu de départ tel que l'écran le liste (cf. `partyGroups`). */
+type OriginGroup = { id: string; advs: readonly Adventurer[] };
+const idsOf = (g: OriginGroup) => g.advs.map((a) => a.id);
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -906,14 +911,27 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyEscort.value = [...partyEscort.value, id];
   }
   /** 🧭 Toucher un lieu de départ : tous ses champions cochés, ou tous décochés s'ils l'étaient
-   *  déjà (demandé). Borné par le plafond de l'équipe, comme un toucher par champion. */
-  function togglePartyGroup(ids: readonly string[]) {
-    partyEscort.value = toggleOriginGroup(partyEscort.value, ids, partyMax.value);
+   *  déjà (demandé). Borné par le plafond de l'équipe, comme un toucher par champion. Le héros
+   *  posté sur ce lieu fixe part et revient avec eux (demandé). */
+  function togglePartyGroup(g: OriginGroup) {
+    const r = toggleOriginGroupWithHero(
+      partyEscort.value,
+      idsOf(g),
+      partyMax.value,
+      heroPostedAt(g.id),
+      partyHeroOn.value,
+    );
+    partyEscort.value = r.escort;
+    partyHero.value = r.hero;
+  }
+  /** 🧝 Le héros est posté sur CE lieu fixe et peut partir : « tous » l'emmène. La base n'est
+   *  pas concernée — y cocher « tous » ne l'engage pas. */
+  function heroPostedAt(groupId: string): boolean {
+    return groupId !== 'base' && groupId === heroOriginId.value && !partyHeroBlock.value;
   }
   /** État d'un lieu pour son titre : 'all' tout coché, 'some' en partie, 'none' rien. */
-  function partyGroupState(ids: readonly string[]): 'all' | 'some' | 'none' {
-    const n = ids.filter((id) => partyEscort.value.includes(id)).length;
-    return n === 0 ? 'none' : n === ids.length ? 'all' : 'some';
+  function partyGroupState(g: OriginGroup): 'all' | 'some' | 'none' {
+    return originGroupState(partyEscort.value, idsOf(g), heroPostedAt(g.id), partyHeroOn.value);
   }
   /** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
    *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
@@ -1159,6 +1177,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     togglePartyAdv,
     togglePartyGroup,
     partyGroupState,
+    heroPostedAt,
     partyAllIds,
     partyAllOn,
     togglePartyAll,

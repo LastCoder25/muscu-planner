@@ -429,12 +429,49 @@ export function toggleOriginGroup(
   if (!groupIds.length) return [...selected];
   if (groupIds.every((id) => selected.includes(id)))
     return selected.filter((id) => !groupIds.includes(id));
+  return addGroup(selected, groupIds, max);
+}
+
+/** Ajoute les champions du lieu, dans l'ordre de l'écran, sans dépasser `max`. */
+function addGroup(selected: readonly string[], groupIds: readonly string[], max: number): string[] {
   const out = [...selected];
   for (const id of groupIds) {
     if (out.length >= max) break;
     if (!out.includes(id)) out.push(id);
   }
   return out;
+}
+
+/**
+ * 🧝 « Tous » d'un lieu fixe où le HÉROS est posté (demandé) : il fait partie du lieu, donc
+ * il est coché avec ses champions et décoché avec eux. `heroHere` = il est posté sur CE lieu
+ * et peut partir ; sinon c'est la règle de `toggleOriginGroup`, héros intact. Le héros ne
+ * compte pas dans `max` (le plafond des champions). « Tout coché » exige les champions ET le
+ * héros : sinon toucher décocherait un lieu qu'on voulait compléter.
+ */
+export function toggleOriginGroupWithHero(
+  selected: readonly string[],
+  groupIds: readonly string[],
+  max: number,
+  heroHere: boolean,
+  heroOn: boolean,
+): { escort: string[]; hero: boolean } {
+  if (!heroHere) return { escort: toggleOriginGroup(selected, groupIds, max), hero: heroOn };
+  if (heroOn && groupIds.every((id) => selected.includes(id)))
+    return { escort: selected.filter((id) => !groupIds.includes(id)), hero: false };
+  return { escort: addGroup(selected, groupIds, max), hero: true };
+}
+
+/** État d'un lieu pour son titre : le héros posté y compte comme un membre du lieu. */
+export function originGroupState(
+  selected: readonly string[],
+  groupIds: readonly string[],
+  heroHere: boolean,
+  heroOn: boolean,
+): 'all' | 'some' | 'none' {
+  const n = groupIds.filter((id) => selected.includes(id)).length + (heroHere && heroOn ? 1 : 0);
+  const total = groupIds.length + (heroHere ? 1 : 0);
+  return n === 0 ? 'none' : n === total ? 'all' : 'some';
 }
 
 /**
