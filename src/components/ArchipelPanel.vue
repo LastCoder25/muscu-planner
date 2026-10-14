@@ -109,7 +109,8 @@
             <summary>📜 Règles de l’île</summary>
             <ul>
               <li v-for="(r, k) in islandRules(selTile)" :key="k">
-                <span class="ar-emo" aria-hidden="true">{{ r.emoji }}</span>{{ r.text }}
+                <span class="ar-emo" aria-hidden="true">{{ r.emoji }}</span
+                >{{ r.text }}
               </li>
             </ul>
           </details>
@@ -220,6 +221,58 @@
               >
             </button>
           </div>
+          <!-- 🧭 Rester ou reculer ? (`stayOrBackAdvice`) : sur l'île où l'on est, tant qu'elle
+               n'est pas pacifiée. -->
+          <div
+            v-if="stay && selTile.active"
+            class="at-advice"
+            :class="stay.verdict === 'stay' ? 'go' : 'train'"
+          >
+            <div class="av-head">
+              {{
+                stay.verdict === 'stay'
+                  ? '🧭 Reste : cette île rapporte plus'
+                  : `🧭 Recule sur l'île ${stay.back.island.id} : tu y gagnes plus`
+              }}
+            </div>
+            <div class="av-line">
+              ⚔️ Un lieu (niv. {{ stay.here.levels.lo }}-{{ stay.here.levels.hi }}) :
+              <b>{{
+                stay.here.need === null ? 'hors de portée' : `${stay.here.need} champions`
+              }}</b>
+              · île {{ stay.back.island.id }} :
+              {{ stay.back.need === null ? 'hors de portée' : `${stay.back.need} champions` }}
+            </div>
+            <div class="av-line">
+              🎓 XP par champion : {{ stay.back.xpPerChamp }} → <b>{{ stay.here.xpPerChamp }}</b> ·
+              🪙 mine {{ stay.back.mineGold.toLocaleString('fr-FR') }} →
+              <b>{{ stay.here.mineGold.toLocaleString('fr-FR') }}</b>
+            </div>
+            <div class="av-line">
+              🛡️ 5 miliciens tiennent un lieu fixe ici :
+              <b>{{ Math.round(stay.holdHerePct * 100) }} %</b>
+            </div>
+            <div class="av-line">
+              {{ selTile.objectiveEmoji }} Objectif :
+              <b>{{
+                stay.objective.take === null
+                  ? 'hors de portée'
+                  : `${stay.objective.take} pour le prendre`
+              }}</b>
+              <template v-if="stay.objective.hold !== null">
+                · {{ stay.objective.hold }} postés pour le tenir</template
+              >
+              ·
+              {{
+                stay.objective.fortress === null
+                  ? '🏰 forteresse hors de portée'
+                  : `🏰 forteresse à ${stay.objective.fortress}`
+              }}
+            </div>
+            <ul class="av-miss">
+              <li v-for="m in stay.reasons" :key="m">{{ m }}</li>
+            </ul>
+          </div>
           <!-- 🧭 Partir ou rester ? (`crossingAdvice`) : sur l'île SUIVANTE, une fois la sienne pacifiée. -->
           <div
             v-if="advice && !selTile.active && selTile.id === advice.next.id"
@@ -315,7 +368,7 @@ import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import { islandRules, OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
-import type { AdviceVerdict, CrossingAdvice } from '@/lib/crossingAdvice';
+import type { AdviceVerdict, CrossingAdvice, StayOrBackAdvice } from '@/lib/crossingAdvice';
 
 const props = defineProps<{
   island: Island | null;
@@ -354,6 +407,8 @@ const props = defineProps<{
   /** 🧭 Le conseil « partir ou rester » pour l'île suivante (`crossingAdvice`), une fois
    *  l'île active pacifiée. */
   advice?: CrossingAdvice | null;
+  /** 🧭 Le conseil « rester ou reculer » sur l'île active, tant qu'elle n'est pas pacifiée. */
+  stay?: StayOrBackAdvice | null;
   /** 🗺️ L'île rangée dont on regarde la carte (null : la carte active). */
   shown?: number | null;
   now: number;

@@ -25,10 +25,11 @@
 import type { Adventurer } from './adventurers';
 import { ISLANDS, type Island } from './archipelago';
 import { campWinPct } from './camp';
-import { partyAllies, type EscortKit } from './caravan';
+import { dangerMult, missionXpSplit, partyAllies, type EscortKit } from './caravan';
 import { characterRank, rankStartLevel } from './characterRank';
 import { CONTROL, controlGoldPerHour, garrisonHoldChance } from './controlPoints';
-import type { Poi } from './expedition';
+import { mineVeinGold, type Poi } from './expedition';
+import { ISLAND_CONQUEST, fortressForce } from './islandConquest';
 import { MILITIA, MILITIA_PREFIX, militiaUnits } from './militia';
 import { adventurerPowers } from './raid';
 import { trialXpBase } from './skirmish';
@@ -122,10 +123,13 @@ function enemyPlace(level: number, size: number, island: Island): Poi {
   };
 }
 
-/** XP d'une mission pour un champion de niveau `L` sur un lieu de niveau `d` (le rendement
- *  décroissant de `missionXp`, sans la prime de danger : on compare, on ne promet pas). */
+/** XP d'une mission GAGNÉE pour un champion de niveau `L` sur un lieu de niveau `d` : le
+ *  rendement décroissant de `missionXp` ET sa prime de danger (`dangerMult`). ⚠️ Sans la prime
+ *  (avant le 2026-10-14) le conseil sous-estimait l'île la plus dure : mesuré sur un vrai
+ *  compte (île 3, champions niv. 27-40), une mission y rapportait 80 à 200 XP par champion,
+ *  contre ~55 sur l'île 2. */
 function learn(L: number, d: number): number {
-  return trialXpBase(d) * Math.min(1, d / Math.max(1, L)) ** 1.5;
+  return trialXpBase(d) * Math.min(1, d / Math.max(1, L)) ** 1.5 * dangerMult(L, d);
 }
 
 export function crossingAdvice(i: CrossingAdviceInput): CrossingAdvice | null {
@@ -238,5 +242,252 @@ export function crossingAdvice(i: CrossingAdviceInput): CrossingAdvice | null {
     xp,
     gold,
     missing,
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 🧭 RESTER OU RECULER ? (2026-10-14, demandé par l'utilisateur : « avec mon arrivée sur
+ * l'île 3 et mes actions dessus, est-il plus rentable de rester ou de revenir en arrière ? »).
+ *
+ * Le conseil de traversée ne parlait que d'AVANCER, et seulement une fois l'île pacifiée : rien
+ * ne disait, sur une île qu'on vient d'aborder, si l'on y gagnait plus qu'en revenant. On
+ * compare donc les deux îles avec les mêmes fonctions que le combat :
+ *
+ * - **CE QU'UNE VAGUE DE MISSIONS RAPPORTE**, pas une mission : sur l'île la plus dure il faut
+ *   des équipes plus grosses, donc moins d'équipes à la fois. ⚠️ Mesuré sur le compte qui a posé
+ *   la question (17 champions niv. 27-40, île 3) : un lieu y demande plus de champions que sur
+ *   l'île 2, mais une mission y rapporte bien plus d'XP par champion (prime de danger) et une
+ *   mine bien plus d'or — d'où une comparaison en VAGUE, jamais par mission.
+ * - **CE QU'ON PERD EN RECULANT** : l'île quittée vers l'arrière est ABANDONNÉE (v1.184) — ses
+ *   lieux fixes tombent un à un et leurs miliciens meurent. L'île retrouvée est pacifiée :
+ *   aucune attaque, mais ses lieux plafonnent à son niveau maximal.
+ * - **LES OBJECTIFS** : combien de champions pour en prendre un, et pour le TENIR. ⚠️ Mesuré :
+ *   ils se reprennent dès qu'on les laisse vides (le cimetière de l'île 3 se relève de lui-même),
+ *   donc les reprendre en boucle est une source d'XP, pas une conquête — seule la forteresse,
+ *   qui demande d'en tenir deux à la fois, fait avancer l'île.
+ */
+export type StayVerdict = 'stay' | 'back';
+
+export interface IslandYield {
+  island: Island;
+  levels: { lo: number; hi: number };
+  /** Champions nécessaires pour prendre un lieu à ≥ 70 % (null : hors de portée). */
+  need: number | null;
+  takePct: number;
+  /** XP d'une mission gagnée, par champion engagé (partage d'équipe compris). */
+  xpPerChamp: number;
+  /** Équipes qu'on peut lancer à la fois avec le vivier engageable. */
+  teams: number;
+  /** XP du vivier pour une vague (toutes ces équipes, une mission chacune). */
+  waveXp: number;
+  /** Or d'une mine du milieu de la tranche, et d'une vague de mines. */
+  mineGold: number;
+  waveGold: number;
+}
+
+export interface StayOrBackAdvice {
+  verdict: StayVerdict;
+  here: IslandYield;
+  back: IslandYield;
+  /** Tenue d'un lieu fixe de l'île actuelle gardé par une garnison pleine de miliciens. */
+  holdHerePct: number;
+  /** Ce que reculer abandonne : lieux fixes tenus et miliciens qui y sont postés. */
+  lose: { points: number; militia: number };
+  /** Objectif secondaire : champions pour le prendre, puis pour le tenir à ≥ 50 % (null : hors
+   *  de portée), l'XP par champion d'une prise, et la forteresse une fois ouverte (null : hors
+   *  de portée). */
+  objective: {
+    take: number | null;
+    hold: number | null;
+    xpPerChamp: number;
+    fortress: number | null;
+    locked: boolean;
+  };
+  reasons: string[];
+}
+
+export interface StayOrBackInput {
+  current: number;
+  heroLevel: number;
+  champions: readonly Adventurer[];
+  kit: EscortKit;
+  engage: number;
+  fort: number;
+  /** Lieux fixes tenus sur l'île actuelle, et miliciens qui y sont postés. */
+  pointsHeld: number;
+  militiaPosted: number;
+  /** Objectifs secondaires abattus (`islandConquest`). */
+  objectivesDown: number;
+  samples?: number;
+}
+
+/** Le plus petit nombre de meilleurs champions qui vérifie `ok`, ou null. */
+function fewest(pool: number, ok: (k: number) => boolean): number | null {
+  for (let k = 1; k <= pool; k++) if (ok(k)) return k;
+  return null;
+}
+
+/** Le rendement d'une île pour ce vivier (les meilleurs d'abord). */
+function islandYield(
+  isl: Island,
+  heroLevel: number,
+  best: readonly Adventurer[],
+  pool: number,
+  kit: EscortKit,
+  samples: number,
+): IslandYield {
+  const levels = adviceLevels(isl, Math.min(heroLevel, isl.maxLevel));
+  const spots = spread(levels.lo, levels.hi);
+  const take = (k: number): number => {
+    const allies = partyAllies(best.slice(0, k), kit, null);
+    let w = 0;
+    let n = 0;
+    for (const L of spots)
+      for (const size of CONTROL.captureSizes) {
+        w += campWinPct(enemyPlace(L, size, isl), { faction: isl.faction, size }, allies, samples);
+        n++;
+      }
+    return n ? w / n : 0;
+  };
+  let takePct = 0;
+  const need = fewest(pool, (k) => (takePct = take(k)) >= ADVICE.takeOk);
+  const mid = Math.round((levels.lo + levels.hi) / 2);
+  const team = best.slice(0, Math.max(1, need ?? pool));
+  const xpPerChamp = team.length
+    ? (team.reduce((s, a) => s + learn(a.level, mid), 0) / team.length) *
+      missionXpSplit(team.length)
+    : 0;
+  const teams = need ? Math.floor(pool / need) : 0;
+  const mineGold = Math.round(mineVeinGold(mid));
+  return {
+    island: isl,
+    levels,
+    need,
+    takePct,
+    xpPerChamp: Math.round(xpPerChamp),
+    teams,
+    waveXp: Math.round(teams * (need ?? 0) * xpPerChamp),
+    mineGold,
+    waveGold: teams * mineGold,
+  };
+}
+
+export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
+  const hereIsl = ISLANDS.find((x) => x.id === i.current);
+  const backIsl = ISLANDS.find((x) => x.id === i.current - 1);
+  if (!hereIsl || !backIsl) return null;
+  const samples = i.samples ?? ADVICE.samples;
+  const pw = adventurerPowers([...i.champions], i.kit);
+  const best = [...i.champions].sort(
+    (a, b) => (pw.get(b.id) ?? 0) - (pw.get(a.id) ?? 0) || a.id.localeCompare(b.id),
+  );
+  const pool = Math.min(best.length, Math.max(0, Math.floor(i.engage)));
+  const allies = (k: number) => partyAllies(best.slice(0, k), i.kit, null);
+  const here = islandYield(hereIsl, i.heroLevel, best, pool, i.kit, samples);
+  const back = islandYield(backIsl, i.heroLevel, best, pool, i.kit, samples);
+
+  // 🛡️ Ce que tiennent les lieux fixes d'ici, gardés par une garnison pleine de miliciens.
+  const units = militiaUnits(
+    Array.from({ length: MILITIA.perPoint }, (_, k) => `${MILITIA_PREFIX}${k}`),
+    Math.min(i.heroLevel, hereIsl.maxLevel),
+  );
+  const mid = Math.round((here.levels.lo + here.levels.hi) / 2);
+  const holdHerePct = garrisonHoldChance(enemyPlace(mid, 1, hereIsl), units, 1, samples, i.fort);
+
+  // 🪦 Les objectifs : au plafond de l'île, troupe des premiers objectifs.
+  const size = ISLAND_CONQUEST.firstSize;
+  const objBase = enemyPlace(hereIsl.maxLevel, size, hereIsl);
+  const obj: Poi = { ...objBase, control: { ...objBase.control!, kind: 'objective' } };
+  const objTake = fewest(
+    pool,
+    (k) => campWinPct(obj, { faction: hereIsl.faction, size }, allies(k), samples) >= ADVICE.takeOk,
+  );
+  const objHold = fewest(
+    pool,
+    (k) => garrisonHoldChance(obj, allies(k), 1, samples, i.fort) >= ADVICE.holdOk,
+  );
+  // 🏰 La forteresse telle qu'elle serait UNE FOIS OUVERTE (au moins `unlockAfter` objectifs
+  // tenus) : verrouillée, elle n'en reste pas moins le but — savoir si on pourra la prendre
+  // dit si tenir des objectifs vaut le coup.
+  const fort = fortressForce(hereIsl, i.objectivesDown);
+  const open = fortressForce(hereIsl, Math.max(i.objectivesDown, ISLAND_CONQUEST.unlockAfter));
+  const fortPlace = enemyPlace(open.level, open.size, hereIsl);
+  const fortNeed = fewest(
+    pool,
+    (k) =>
+      campWinPct(fortPlace, { faction: hereIsl.faction, size: open.size }, allies(k), samples) >=
+      ADVICE.takeOk,
+  );
+
+  // Verdict : rester tant qu'on y prend des lieux et qu'une vague y rapporte au moins autant,
+  // XP et or pesés à part égale (l'un fait monter le vivier, l'autre les bâtiments).
+  const ratio = (a: number, b: number) => (b > 0 ? a / b : a > 0 ? 2 : 1);
+  const score = ratio(here.waveXp, back.waveXp) + ratio(here.waveGold, back.waveGold);
+  const verdict: StayVerdict = here.need !== null && score >= 2 ? 'stay' : 'back';
+  const reasons: string[] = [];
+  const times = (a: number, b: number) =>
+    b > 0 ? (Math.round((a / b) * 10) / 10).toLocaleString('fr-FR') : '∞';
+  if (here.need === null)
+    reasons.push(
+      `même tes ${pool} meilleurs champions ne prennent pas un lieu de l'île ${hereIsl.id}`,
+    );
+  else {
+    reasons.push(
+      `une vague de missions rapporte ×${times(here.waveXp, back.waveXp)} d'XP et ×${times(here.waveGold, back.waveGold)} d'or ici`,
+    );
+    // Quand la carte manque de lieux (et non de champions), c'est le rendement PAR LIEU qui
+    // compte : mesuré sur le compte qui a posé la question, l'île 3 y est très au-dessus.
+    if (back.need !== null)
+      reasons.push(
+        `par lieu pris : ×${times(here.need * here.xpPerChamp, back.need * back.xpPerChamp)} d'XP et ×${times(here.mineGold, back.mineGold)} d'or`,
+      );
+    if (back.need !== null && here.need > back.need)
+      reasons.push(
+        `un lieu y demande ${here.need} champions contre ${back.need} sur l'île ${backIsl.id}`,
+      );
+  }
+  if (holdHerePct < ADVICE.holdOk)
+    reasons.push(`tes lieux fixes y tombent souvent (${Math.round(holdHerePct * 100)} % repoussé)`);
+  if (i.pointsHeld)
+    reasons.push(
+      `reculer abandonne ${i.pointsHeld} lieu${i.pointsHeld > 1 ? 'x' : ''} fixe${i.pointsHeld > 1 ? 's' : ''} et ${i.militiaPosted} milicien${i.militiaPosted > 1 ? 's' : ''} (ils tombent peu à peu)`,
+    );
+  // 🪦 Reprendre un objectif : au plafond de l'île, c'est la mission qui paie le plus par
+  // champion. ⚠️ Mesuré sur le compte qui a posé la question : 5 prises en 41 h, ~230 XP par
+  // champion chacune, presque la moitié de l'XP gagnée sur l'île — alors qu'elles retombaient
+  // aussitôt, laissées vides.
+  const objTeam = best.slice(0, objTake ?? 0);
+  const objXp = objTeam.length
+    ? (objTeam.reduce((s, a) => s + learn(a.level, hereIsl.maxLevel), 0) / objTeam.length) *
+      missionXpSplit(objTeam.length)
+    : 0;
+  if (fortNeed === null) {
+    reasons.push(
+      `même ouverte, la forteresse reste hors de portée de tes ${pool} champions : inutile de garder tes objectifs pour l'instant`,
+    );
+    if (objTake !== null && here.xpPerChamp > 0)
+      reasons.push(
+        `reprendre un objectif rapporte ~${Math.round(objXp)} XP par champion (×${times(objXp, here.xpPerChamp)} une mission ordinaire) : fais-le quand ${objTake} champions sont libres`,
+      );
+  } else if (fort.locked)
+    reasons.push(
+      `tiens ${ISLAND_CONQUEST.unlockAfter} objectifs à la fois${objHold !== null ? ` (${objHold} champions postés sur chacun)` : ''} pour ouvrir la forteresse, puis prends-la à ${fortNeed}`,
+    );
+  return {
+    verdict,
+    here,
+    back,
+    holdHerePct,
+    lose: { points: i.pointsHeld, militia: i.militiaPosted },
+    objective: {
+      take: objTake,
+      hold: objHold,
+      xpPerChamp: Math.round(objXp),
+      fortress: fortNeed,
+      locked: fort.locked,
+    },
+    reasons,
   };
 }

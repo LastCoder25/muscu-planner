@@ -1527,6 +1527,7 @@
 <script setup lang="ts">
 import {
   FORTRESS_ID,
+  heldPoints,
   heroPostOf,
   heroWalk,
   heroWalkVoyage,
@@ -1705,7 +1706,7 @@ import {
 } from '@/lib/crossing';
 import { islandMilitiaStock, seaDestinations, shippableMilitia } from '@/lib/militiaSea';
 import MilitiaSeaSend from '@/components/MilitiaSeaSend.vue';
-import { crossingAdvice } from '@/lib/crossingAdvice';
+import { crossingAdvice, stayOrBackAdvice } from '@/lib/crossingAdvice';
 import CrossingSheet from '@/components/CrossingSheet.vue';
 import CrossingScene from '@/components/CrossingScene.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
@@ -2000,6 +2001,50 @@ const islandAdvice = computed(() => {
     fort: char.fortifyFor(heroLevel.value),
   });
 });
+/** 🧭 RESTER OU RECULER ? (`stayOrBackAdvice`, 2026-10-14) — sur une île qu'on n'a pas encore
+ *  pacifiée, à partir de la deuxième. ⚠️ Rejoue ~100 à 200 ms de combats : la clé ne retient que
+ *  ce qui change le conseil (vivier, niveaux, lieux tenus, objectifs), pas l'horloge ni les
+ *  déplacements sur la carte, et le résultat est mis de côté tant qu'elle ne bouge pas. */
+let stayMemo: { key: string; v: ReturnType<typeof stayOrBackAdvice> } | null = null;
+const stayAdvice = computed(() => {
+  const map = char.row?.expedition_map;
+  const prog = islandProgress.value;
+  if (!island.value || island.value.id < 2 || !prog || prog.pacified || !map) return null;
+  const held = heldPoints(map);
+  const militiaPosted = held.reduce(
+    (n, p) => n + (p.control?.garrison ?? []).filter(isMilitiaId).length,
+    0,
+  );
+  const engage = engageCap(char.pantheonLevel);
+  const fort = char.fortifyFor(heroLevel.value);
+  const key = [
+    island.value.id,
+    heroLevel.value,
+    engage,
+    fort,
+    held.length,
+    militiaPosted,
+    prog.objectivesDown,
+    char.advList.map((a) => `${a.id}:${a.level}:${a.ascended ?? 0}`).join(','),
+    char.escortKit.advGear.length,
+  ].join('|');
+  if (stayMemo?.key !== key)
+    stayMemo = {
+      key,
+      v: stayOrBackAdvice({
+        current: island.value.id,
+        heroLevel: heroLevel.value,
+        champions: char.advList,
+        kit: char.escortKit,
+        engage,
+        fort,
+        pointsHeld: held.length,
+        militiaPosted,
+        objectivesDown: prog.objectivesDown,
+      }),
+    };
+  return stayMemo.v;
+});
 /** 🛡️ Fait basculer des miliciens d'une île rangée entre sa réserve et un lieu fixe. */
 /** 🗺️ L'île rangée qu'on regarde (`null` = la carte active). */
 const viewIsland = ref<number | null>(null);
@@ -2061,6 +2106,7 @@ const archBind = computed(() => ({
   remote: remoteInfo.value,
   shippable: shippable.value,
   advice: islandAdvice.value,
+  stay: stayAdvice.value,
   now: now.value,
 }));
 const archOn = {
