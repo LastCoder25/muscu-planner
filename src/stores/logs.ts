@@ -99,6 +99,9 @@ export const useLogsStore = defineStore('logs', () => {
     const { error } = await supabase.from('session_logs').delete().eq('id', id);
     if (error) throw error;
     recent.value = recent.value.filter((r) => r.id !== id);
+    // Le cache complet aussi : c'est lui que lit l'XP (`useProgress`), qui ne recharge plus
+    // à chaque écran (2026-10-14).
+    all.value = all.value.filter((r) => r.id !== id);
   }
 
   return {

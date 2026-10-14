@@ -27,6 +27,7 @@ import { friendBossXp } from '@/lib/friendBoss';
 import { challengeLane } from '@/lib/tennisTraining';
 import { computeLevel } from '@/lib/levels';
 import { activeDaysSince } from '@/lib/activityDays';
+import { progressLoadPlan } from '@/lib/progressLoad';
 import {
   isCardioTrackChallenge,
   isCardioOutingChallenge,
@@ -51,6 +52,12 @@ import type { CardioActivity } from '@/lib/types';
 // 1 = « ton énergie = ton XP de fond » (généreux : le sport finance une vraie session de jeu).
 const ENERGY_PER_XP = 1;
 
+// 📶 L'état de chargement des données de fond, PARTAGÉ par tous les appels (`progressLoadPlan`).
+const sharedReady = ref(false);
+/** L'utilisateur dont les données sont en mémoire : `undefined` = jamais, `null` = déconnecté. */
+let loadedUid: string | null | undefined;
+let loadedAt = 0;
+
 export function useProgress() {
   const logs = useLogsStore();
   const tennis = useTennisStore();
@@ -63,7 +70,8 @@ export function useProgress() {
   const auth = useAuthStore();
 
   // Vrai une fois les données de fond chargées (évite d'agir sur un niveau « stale »).
-  const ready = ref(false);
+  // ⚠️ PARTAGÉ entre tous les appels (cf. `progressLoadPlan`) : les données le sont.
+  const ready = sharedReady;
 
   // ⚠️ ON ATTEND QU'IL Y AIT UN UTILISATEUR. Ces sept chargements partaient d'un
   // `onMounted`, or ce composable est instancié par `useComboChest`, monté dans `App.vue`
@@ -78,19 +86,34 @@ export function useProgress() {
   // connexion, les caches contiennent des réponses anonymes (vides) qu'il faut jeter ; et
   // si un second compte se connecte dans le même onglet, il ne doit pas hériter du cache
   // du premier — la RLS protège la BASE, elle ne protège pas un cache déjà en mémoire.
-  // `avant === undefined` distingue le premier appel (session déjà là au boot : le cache
-  // est sain, rien à forcer) d'une transition null → uid ou A → B.
+  // Le premier chargement de l'onglet (session déjà là au boot : le cache est sain, rien à
+  // forcer) se distingue d'une transition null → uid ou A → B (`progressLoadPlan`).
+  //
+  // ⚠️ UNE FOIS PAR UTILISATEUR, PAS UNE FOIS PAR ÉCRAN (2026-10-14) : ce composable a 18
+  // appelants, et chacun relançait les sept chargements à son montage — ~220 Ko renvoyés par
+  // la base à chaque changement d'écran, l'essentiel des 5 Go de trafic sortant du forfait
+  // gratuit avec la boucle des Défis 360 (v1.184.1). Les stores se tiennent à jour à chaque
+  // saisie ; on ne recharge que pour voir ce qu'un autre appareil a saisi, au plus tous les
+  // quarts d'heure (`PROGRESS_RELOAD_MS`).
   watch(
-    () => auth.user?.id,
-    (uid, avant) => {
-      ready.value = false;
-      if (!uid) return;
+    () => auth.user?.id ?? null,
+    (uid) => {
+      const now = Date.now();
+      const plan = progressLoadPlan(loadedUid, loadedAt, uid, now);
+      if (plan.stale) ready.value = false;
+      if (!uid) {
+        if (loadedUid !== undefined) loadedUid = null;
+        return;
+      }
+      if (!plan.load) return;
+      loadedUid = uid;
+      loadedAt = now;
       // ⚠️ `force` n'est passé qu'à `logs.fetchAll` : c'est le SEUL de ces sept à refuser de
       // repartir quand il a déjà chargé (`allLoaded`), donc le seul dont un cache vide
       // survivrait à la connexion. Les six autres re-requêtent à chaque appel — leur
       // `loaded` n'est qu'un drapeau « on a déjà essayé », lu ailleurs. Vérifié un par un ;
       // le jour où l'un d'eux gagne une garde de cache, il devra rejoindre cette ligne.
-      const force = avant !== undefined;
+      const force = plan.force;
       void Promise.allSettled([
         logs.fetchAll(force),
         tennis.fetchLogs(),
