@@ -13,7 +13,7 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
-import { controlFreeSeats, defendsControl, seatsOf } from '@/lib/controlPoints';
+import { seatsOf } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -33,7 +33,6 @@ import {
 import { heroPostOf } from '@/lib/islandConquest';
 import {
   deployRefLevel,
-  deployWeight,
   deploymentPoints,
   planStations,
   type DeploySpot,
@@ -394,9 +393,9 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   /**
    * 🧭 RÉPARTIR TOUT L'EFFECTIF SUR LA CARTE — SANS RÉGLAGE (refonte 2026-10-14, demandé :
    * « quand je fais auto, ça me répartit les effectifs au mieux »). Les plus forts là où ils
-   * rejoignent le plus vite n'importe quel point de l'île en attaque combinée, un membre au
-   * moins sur chaque lieu tenu qui se défend, le moins de déplacements (cf. `mapDeployment.ts`).
-   * Le héros en fait partie s'il est libre. Il n'attaque rien. Pas de miliciens.
+   * rejoignent le plus vite n'importe quel point de l'île en attaque combinée — seul objectif.
+   * On part de ZÉRO : lieux vidés, tout le monde redispatché (cf. `mapDeployment.ts`). La défense
+   * des lieux, ce sont les miliciens. Le héros en fait partie s'il est libre. Il n'attaque rien.
    */
   const repoTeams = ref<RepoTeamRow[] | null>(null);
   const repoMoves = ref<RepoMoveRow[]>([]);
@@ -453,20 +452,19 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       }
 
       // Les endroits : la base, et tout lieu tenu qui reçoit des champions (`seatsOf` > 0).
-      // Places = places libres + celles de ceux qui y sont et peuvent bouger.
+      // ⚠️ On part de ZÉRO : tout le monde bouge en même temps, chaque lieu est considéré VIDE,
+      // donc ses places sont toutes ses places de champions. La défense n'entre pas en compte :
+      // ce sont les miliciens qui gardent les lieux fixes.
       const held = (map?.pois ?? []).filter(
         (p) => p.control?.owner === 'player' && seatsOf(p.control.kind) > 0,
       );
       const points = new Map(held.map((p) => [p.id, p]));
-      const weightAt = (id: string) =>
-        units.filter((u) => u.loc === id).reduce((n, u) => n + deployWeight(u), 0);
       const spots: DeploySpot[] = [
         { id: 'base', seats: Infinity, heroOk: true },
         ...held.map((p) => ({
           id: p.id,
-          seats: controlFreeSeats(p.control) + weightAt(p.id),
+          seats: seatsOf(p.control!.kind),
           heroOk: seatsOf(p.control!.kind) >= HERO_GARRISON_SEATS,
-          guard: defendsControl(p.control!.kind),
         })),
       ];
 

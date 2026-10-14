@@ -7,9 +7,9 @@
        (réglages partagés : réussite visée, héros), deux calculs et deux résultats distincts. -->
   <div class="xp-plan">
     <p v-if="section === 'repart'" class="pl-note">
-      Place ton héros et tes champions au mieux : les plus forts là d’où ils rejoignent le plus vite
-      le reste de l’île (attaques combinées), au moins un champion sur chaque lieu tenu qui se
-      défend, et le moins de trajets possible.
+      Redistribue ton héros et tes champions de zéro pour attaquer au mieux : les plus forts là d’où
+      ils rejoignent le plus vite le reste de l’île en attaque combinée. La garde des lieux reste
+      aux miliciens.
     </p>
     <div v-if="section === 'plan'" class="pl-modes" role="radiogroup" aria-label="Optimiser">
       <button

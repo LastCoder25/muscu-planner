@@ -2,18 +2,17 @@
  * 🧭 LA RÉPARTITION DE L'EFFECTIF SUR LA CARTE — bouton « Répartir », SANS RÉGLAGE.
  *
  * Refonte du 2026-10-14 (demandé par l'utilisateur : « quand je fais auto, ça me répartit les
- * effectifs au mieux sur la carte » — plus de seuil de réussite ni de %). Les objectifs, posés
- * avec lui :
- * 1. LES PLUS FORTS AUX MEILLEURS ENDROITS. On attaque souvent un lieu avec les effectifs des
- *    lieux fixes les plus proches (attaque combinée : tout le monde arrive avec le plus LENT).
- *    Pour chaque point de l'île, on regarde le temps qu'il faut pour y réunir assez de force
- *    (`force`, la force qu'il faut contre un lieu dur courant) en partant des endroits occupés
- *    les plus proches — c'est l'heure d'arrivée de l'attaque combinée. On minimise la moyenne
- *    de ce temps sur toute l'île : les forts finissent naturellement là où ils servent le plus.
- * 2. EN SECONDAIRE, LA DÉFENSE : un lieu tenu qui se défend (`guard`) garde au moins un
- *    membre, s'il y a assez de monde — sinon il est repris sans combat.
- * 3. LE MOINS DE DÉPLACEMENTS : on part de là où chacun est, et un déplacement doit faire
- *    gagner du temps (`MOVE_COST`) — sinon on ne le propose pas.
+ * effectifs au mieux sur la carte », puis « ne prends en compte que l'optimisation des attaques ;
+ * on vide les lieux fixes et on dispatche de zéro »). UN SEUL objectif : les ATTAQUES.
+ * On attaque un lieu avec les effectifs des lieux fixes les plus proches (attaque combinée :
+ * tout le monde arrive avec le plus LENT). Pour chaque point de l'île, on regarde le temps qu'il
+ * faut pour y réunir assez de force (`force`, la force qu'il faut contre un lieu dur courant) en
+ * partant des endroits occupés les plus proches. On minimise la moyenne de ce temps sur l'île :
+ * les forts finissent là où ils servent le plus.
+ *
+ * ⚠️ ON PART DE ZÉRO : tout le monde bouge en même temps, chaque lieu est vide au départ, peu
+ * importe où chacun se trouve. La DÉFENSE n'est pas l'affaire de cette fonction : la garde de
+ * base d'un lieu fixe, ce sont les miliciens ; les champions y sont un plus qu'on ignore ici.
  *
  * On ne juge PAS sur les lieux présents sur la carte : ils changent toutes les heures, la
  * géographie non. ⚠️ Aucune règle de jeu ici : forces et trajets sont INJECTÉS.
@@ -38,8 +37,6 @@ export interface DeploySpot {
   seats: number;
   /** Le héros peut-il y être posté ? */
   heroOk: boolean;
-  /** Lieu tenu qui se défend : il garde au moins un membre (si l'effectif le permet). */
-  guard?: boolean;
 }
 
 export interface DeployDeps {
@@ -62,11 +59,7 @@ export interface DeployResult {
 }
 
 /** Ce qu'un membre occupe sur un lieu : le héros en prend 2. */
-export const deployWeight = (u: DeployUnit): number => (u.hero ? 2 : 1);
-
-/** Ce que doit faire gagner un déplacement (minutes de temps moyen) pour être proposé : un
- *  champion qui part ne produit plus et ne défend plus le temps de son trajet. */
-export const MOVE_COST = 1;
+const deployWeight = (u: DeployUnit): number => (u.hero ? 2 : 1);
 
 /**
  * ⏱️ Le temps moyen pour réunir `force` sur un point de l'île, avec `power` par endroit.
@@ -121,45 +114,47 @@ export function planStations(
   const room = (s: string) => byId.get(s)!.seats - (used.get(s) ?? 0);
   const fits = (u: DeployUnit, s: string) =>
     (!u.hero || byId.get(s)!.heroOk) && room(s) >= deployWeight(u);
-  const members = (s: string) => units.filter((u) => at.get(u.id) === s);
-
-  // Départ : chacun là où il est (moins de déplacements), sinon à la base.
-  const base = spots.find((s) => s.id === 'base')?.id ?? spots[0]?.id ?? 'base';
-  for (const u of units) put(u, byId.has(u.loc) && fits(u, u.loc) ? u.loc : base);
-
-  // 🛡️ Un membre au moins sur chaque lieu qui se défend : le moins fort qu'on peut retirer
-  // d'un endroit qui en a plusieurs (jamais un lieu gardé vidé pour en remplir un autre).
-  for (const s of spots) {
-    if (!s.guard || members(s.id).length) continue;
-    const pick = units
-      .filter((u) => {
-        const from = at.get(u.id)!;
-        return fits(u, s.id) && (!byId.get(from)?.guard || members(from).length > 1);
-      })
-      .sort((a, b) => a.power - b.power)[0];
-    if (pick) put(pick, s.id);
-  }
-  const guardOk = (s: string) => !byId.get(s)?.guard || members(s).length > 0;
 
   const powers = () => {
     const m = new Map<string, number>();
-    for (const u of units) m.set(at.get(u.id)!, (m.get(at.get(u.id)!) ?? 0) + u.power);
+    for (const u of units) {
+      const s = at.get(u.id);
+      if (s) m.set(s, (m.get(s) ?? 0) + u.power);
+    }
     return m;
   };
-  const moved = () => units.filter((u) => at.get(u.id) !== u.loc).length;
-  const cost = () => reachTime(powers(), order, trips, opts.force) + MOVE_COST * moved();
+  const cost = () => reachTime(powers(), order, trips, opts.force);
+  const strongFirst = [...units].sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
+
+  // 🧹 Départ de ZÉRO : tous les lieux sont vides. Le plus fort d'abord, chacun là où il fait
+  // le plus gagner (à égalité, la base : pas de déplacement inutile).
+  for (const u of strongFirst) {
+    let pick: string | null = null;
+    let pickCost = Infinity;
+    for (const s of spots) {
+      if (!fits(u, s.id)) continue;
+      put(u, s.id);
+      const c = cost();
+      if (c < pickCost - 1e-6 || (Math.abs(c - pickCost) <= 1e-6 && s.id === 'base')) {
+        pickCost = c;
+        pick = s.id;
+      }
+      at.delete(u.id);
+      used.set(s.id, (used.get(s.id) ?? 0) - deployWeight(u));
+    }
+    put(u, pick ?? 'base');
+  }
 
   // 🔁 Amélioration locale : déplacer un membre, ou en échanger deux, tant que ça fait gagner.
   let best = cost();
   for (let round = 0; round < 200; round++) {
     let improved = false;
-    const strongFirst = [...units].sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
     for (const u of strongFirst) {
       const from = at.get(u.id)!;
       for (const s of spots) {
         if (s.id === from || !fits(u, s.id)) continue;
         put(u, s.id);
-        const c = guardOk(from) ? cost() : Infinity;
+        const c = cost();
         if (c < best - 1e-6) {
           best = c;
           improved = true;

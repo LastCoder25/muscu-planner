@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   deploymentPoints,
   deployRefLevel,
-  MOVE_COST,
   planStations,
   reachTime,
   type DeploySpot,
@@ -127,37 +126,41 @@ describe('planStations — les plus forts aux meilleurs endroits', () => {
   });
 });
 
-describe('planStations — la défense en secondaire', () => {
-  it('un lieu tenu qui se défend reçoit au moins un membre, le moins fort', () => {
-    const r = plan(
-      [u('fort', 10), u('moyen', 5), u('faible', 1)],
-      [spot('base'), spot('mine', 3, { guard: true })],
-      { base: 5, mine: 0 },
+describe('planStations — on part de zéro, seules les attaques comptent', () => {
+  const spots = [spot('base'), spot('bord', 1), spot('centre', 1), spot('loin', 1)];
+  const xs = { base: 0, bord: 2, centre: 5, loin: 9 };
+
+  it('où chacun se trouve ne change rien : tout le monde est redispatché', () => {
+    const team = (loc: (i: number) => string) => [10, 6, 3].map((p, i) => u(`c${i}`, p, loc(i)));
+    const a = plan(
+      team(() => 'base'),
+      spots,
+      xs,
       10,
     );
-    expect([...r.spotOf.values()].filter((s) => s === 'mine').length).toBeGreaterThanOrEqual(1);
-    expect(r.spotOf.get('faible')).toBe('mine');
+    const b = plan(
+      team((i) => ['loin', 'bord', 'centre'][i]!),
+      spots,
+      xs,
+      10,
+    );
+    expect([...b.spotOf.entries()].sort()).toEqual([...a.spotOf.entries()].sort());
   });
 
-  it('jamais un lieu gardé vidé pour en remplir un autre', () => {
-    const r = plan(
-      [u('seul', 10, 'mine')],
-      [spot('base'), spot('mine', 3, { guard: true }), spot('jardin', 1, { guard: true })],
-      { base: 5, mine: 0, jardin: 10 },
-      10,
-    );
-    expect(r.spotOf.get('seul')).toBe('mine');
+  it('un lieu est considéré vide : ses places sont toutes à prendre', () => {
+    // Le faible occupe le centre (1 place) : le fort la lui prend quand même.
+    const r = plan([u('faible', 1, 'centre'), u('fort', 10, 'loin')], spots, xs, 10);
+    expect(r.spotOf.get('fort')).toBe('centre');
+  });
+
+  it('aucun lieu n’est gardé d’office : la défense, ce sont les miliciens', () => {
+    // Un seul champion : il va là où il attaque le mieux, rien ne le retient sur un bord.
+    const r = plan([u('seul', 10, 'bord')], spots, xs, 10);
+    expect(r.spotOf.get('seul')).toBe('centre');
   });
 });
 
-describe('planStations — le moins de déplacements', () => {
-  it('rien ne bouge quand le gain ne vaut pas le trajet', () => {
-    // Deux endroits presque équivalents : gagner moins de MOVE_COST ne justifie pas un départ.
-    const r = plan([u('a', 10, 'x')], [spot('x'), spot('y')], { x: 5 + MOVE_COST / 40, y: 5 }, 10);
-    expect(r.moves).toEqual([]);
-    expect(r.spotOf.get('a')).toBe('x');
-  });
-
+describe('planStations — les déplacements', () => {
   it('les déplacements disent d’où et vers où', () => {
     const r = plan(
       [u('fort', 10, 'bord')],
