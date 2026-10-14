@@ -958,6 +958,7 @@
             <p v-if="liveGrace" class="ctl-line ctl-hold">
               🕊️ <b>Trêve</b> : aucune reprise avant {{ liveGrace }}.
             </p>
+            <p v-if="liveGrace && liveGraceHeld" class="ctl-line ctl-alert">{{ liveGraceHeld }}</p>
             <!-- 🪦 Les morts qui se relèvent : l'heure est CONNUE, de quoi prévoir sa défense. -->
             <p v-if="liveRiseIn !== null" class="ctl-line ctl-alert">
               🪦 <b>Les morts se relèvent dans {{ formatDuration(liveRiseIn) }}</b> : ils sortent de
@@ -1839,6 +1840,7 @@ import {
   deadRisingAt,
   risingControlKey,
   graceInfo,
+  graceHeldLabel,
   attackerHidden,
   controlDefenseHold,
   defenderCount,
@@ -3016,6 +3018,8 @@ const liveGrace = computed(() => {
   });
   return `${parts.join(' et ')} · au plus tard ${end}`;
 });
+/** 🕊️⚔️ L'attaque retenue par la trêve du lieu sélectionné (`graceHeldLabel`), '' sinon. */
+const liveGraceHeld = computed(() => graceHeldLabel(livePoi.value?.control));
 /** 🏰 Qui occupe le point : la garnison (arrivée), puis les renforts en route. */
 const controlMembers = computed(() => {
   const c = liveControl.value;

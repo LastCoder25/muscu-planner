@@ -219,7 +219,9 @@ export function raiseDead(map: ExpeditionMap, now: number): ExpeditionMap {
   const pois = map.pois.map((p) => {
     if (!held.has(p.id) || razed[p.id] === undefined || !gone.has(p.id)) return p;
     const t = razed[p.id]! + RISE.riseMs;
-    if (p.control!.riseAt === t) return p;
+    // ⚠️ Une relève déjà posée, ou décalée PLUS TARD par la fin d'une trêve (`holdGrace`), est
+    // traitée : la ramener à `t` la ferait tomber sans préavis.
+    if (p.control!.riseAt !== undefined && p.control!.riseAt >= t) return p;
     // Une reprise déjà prévue AVANT passe d'abord : on remarquera les morts après elle.
     if (t > (p.control!.attackAt ?? Infinity)) return p;
     marked = true;

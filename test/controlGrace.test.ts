@@ -3,10 +3,13 @@ import {
   GRACE,
   captureControl,
   dueRetakes,
+  deadRisingAt,
+  graceHeldLabel,
   graceInfo,
   graceOnCapture,
   holdGrace,
 } from '@/lib/controlPoints';
+import { FIELD_ARMY } from '@/lib/fieldArmy';
 import { archipelOn } from '@/lib/archipelago';
 import { createMap, type ControlState, type ExpeditionMap, type Poi } from '@/lib/expedition';
 
@@ -67,12 +70,15 @@ describe('🕊️ la trêve d’un lieu pris sur une île', () => {
     expect(g.departuresLeft).toBe(1);
   });
 
-  it(`elle tombe au ${GRACE.departures}ᵉ départ : l’attaque retenue tombe alors, jamais avant`, () => {
+  it(`elle tombe au ${GRACE.departures}ᵉ départ : l’attaque retenue PART alors, et se voit venir`, () => {
     const m0 = holdGrace(isle2({ attackAt: T0 + H }), T0 + 10 * 60_000);
     const deps = [T0 + H, T0 + 2 * H, T0 + 3 * H];
     const m = holdGrace({ ...m0, departures: deps }, T0 + 4 * H);
     expect(ctl(m).grace).toBeUndefined();
-    expect(ctl(m).attackAt).toBe(T0 + 4 * H);
+    // ⚠️ Jamais à l'instant : elle arrive `releaseMs` plus tard (signalé le 2026-10-14).
+    expect(ctl(m).attackAt).toBe(T0 + 4 * H + GRACE.releaseMs);
+    expect(dueRetakes(m, T0 + 4 * H)).toEqual([]);
+    expect(dueRetakes(m, T0 + 4 * H + GRACE.releaseMs).map((p) => p.id)).toEqual(['ctl_mine']);
     // Une attaque retenue PLUS TARD que la fin garde son heure.
     const late = holdGrace(
       { ...isle2({ attackAt: T0 + GRACE.maxMs, grace: { from: T0, held: T0 + 9 * H } }) },
@@ -112,5 +118,42 @@ describe('🕊️ la trêve d’un lieu pris sur une île', () => {
     expect(dueRetakes(m, T0 + 2 * H)).toEqual([]);
     const free = isle2({ attackAt: T0 + H, grace: undefined });
     expect(dueRetakes(free, T0 + 2 * H).map((p) => p.id)).toEqual(['ctl_mine']);
+  });
+});
+
+describe('🕊️⚔️ la fin de la trêve : l’attaque retenue se voit venir (signalé le 2026-10-14)', () => {
+  const deps = [T0 + H, T0 + 2 * H, T0 + 3 * H];
+  it('le délai est celui où une armée d’île apparaît avant son assaut', () => {
+    expect(GRACE.releaseMs).toBe(FIELD_ARMY.islandLeadMs);
+  });
+  it('trêve finie au plafond de 72 h : l’attaque retenue ne tombe pas non plus à l’instant', () => {
+    const m0 = holdGrace(isle2({ attackAt: T0 + H }), T0 + 10 * 60_000);
+    const end = T0 + GRACE.maxMs + 5 * 60_000;
+    const m = holdGrace(m0, end);
+    expect(ctl(m).grace).toBeUndefined();
+    expect(ctl(m).attackAt).toBe(end + GRACE.releaseMs);
+    expect(dueRetakes(m, end)).toEqual([]);
+  });
+  it('sans attaque retenue, la fin de la trêve ne touche pas à l’heure prévue', () => {
+    const m = holdGrace({ ...isle2({ attackAt: T0 + 50 * H }), departures: deps }, T0 + 4 * H);
+    expect(ctl(m).grace).toBeUndefined();
+    expect(ctl(m).attackAt).toBe(T0 + 50 * H);
+  });
+  it('🪦 une relève des morts retenue est décalée et reste une relève (pas d’armée)', () => {
+    const t0 = T0 + H;
+    const m0 = holdGrace(isle2({ attackAt: t0, riseAt: t0 }), T0 + 10 * 60_000);
+    expect(deadRisingAt(m0.pois[0]!)).toBeNull(); // retenue : plus de compte à rebours trompeur
+    const m = holdGrace({ ...m0, departures: deps }, T0 + 4 * H);
+    const at = T0 + 4 * H + GRACE.releaseMs;
+    expect(ctl(m).attackAt).toBe(at);
+    expect(ctl(m).riseAt).toBe(at);
+    expect(deadRisingAt(m.pois[0]!)).toBe(at);
+  });
+  it('la fiche dit qu’une attaque est retenue, et rien sans elle', () => {
+    const m0 = holdGrace(isle2({ attackAt: T0 + H }), T0 + 10 * 60_000);
+    expect(graceHeldLabel(ctl(m0))).toContain('retenue');
+    expect(graceHeldLabel(ctl(isle2({ attackAt: T0 + 90 * H })))).toBe('');
+    const rise = holdGrace(isle2({ attackAt: T0 + H, riseAt: T0 + H }), T0 + 10 * 60_000);
+    expect(graceHeldLabel(ctl(rise))).toContain('morts');
   });
 });

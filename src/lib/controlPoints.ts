@@ -3970,7 +3970,17 @@ export function imminentControlKey(map: ExpeditionMap | null, now: number): stri
  * par jour (médiane, 1 certains jours) → environ une journée de trêve ; un joueur très actif
  * (~37/jour) les fait en 1 à 2 h, et c'est le plancher des miliciens qui le protège.
  */
-export const GRACE = { departures: 3, maxMs: 72 * 3600_000 } as const;
+export const GRACE = {
+  departures: 3,
+  maxMs: 72 * 3600_000,
+  /** 🕊️⚔️ L'attaque RETENUE part à la fin de la trêve, mais n'arrive jamais moins de ça après
+   *  (2026-10-14, signalé : « un lieu fixe m'a été repris sans que je voie d'armée »). Elle
+   *  tombait À L'INSTANT où la trêve finissait : son heure sautait de « fin maximale de la
+   *  trêve » à « maintenant », aucune armée n'avait le temps de marcher, rien à voir ni à
+   *  intercepter. ⚠️ = `FIELD_ARMY.islandLeadMs` (testé) : l'armée d'une île apparaît au moins
+   *  ce délai avant son assaut, donc dès la fin de la trêve. */
+  releaseMs: 4 * 3600_000,
+} as const;
 
 export interface GraceInfo {
   /** La fin au plus tard (le plafond). */
@@ -3979,6 +3989,16 @@ export interface GraceInfo {
   departuresLeft: number;
   /** Des miliciens sont en route vers ce lieu, ou en mer vers l'île. */
   militiaComing: boolean;
+}
+
+/** 🕊️⚔️ Une attaque RETENUE par la trêve, dite sur la fiche du lieu (sinon on ne la découvrait
+ *  qu'à sa chute) — '' s'il n'y en a pas. */
+export function graceHeldLabel(c: ControlState | null | undefined): string {
+  if (c?.owner !== 'player' || c.grace?.held === undefined) return '';
+  const h = Math.round(GRACE.releaseMs / 3600_000);
+  return c.riseAt !== undefined && c.riseAt === c.grace.held
+    ? `🪦 Ses morts devaient se relever : la trêve les retient, ils se relèveront au plus tôt ${h} h après sa fin.`
+    : `⚔️ Une attaque est retenue par la trêve : elle partira à sa fin et n’arrivera pas avant ${h} h — tu la verras venir.`;
 }
 
 /** 🕊️ La trêve en cours sur un point tenu, `null` s'il n'en a pas (ou plus). */
@@ -4006,7 +4026,9 @@ export function graceInfo(
 /**
  * 🕊️ Applique les trêves : une attaque demandée pendant la trêve est repoussée à sa fin au
  * plus tard (`held` garde la plus proche demandée) ; la trêve finie, la clé est retirée et
- * l'attaque retenue tombe à cet instant (jamais avant). ⚠️ À appliquer APRÈS tout ce qui
+ * l'attaque retenue PART : elle arrive à son heure, jamais moins de `GRACE.releaseMs` après
+ * (le temps de la voir venir). 🪦 Des morts qui se relèvent (`riseAt`) : leur heure, connue et
+ * affichée, est décalée de même — ils se relèvent sous le lieu, aucune armée ne marche. ⚠️ À appliquer APRÈS tout ce qui
  * avance une attaque (nids, seigneur de guerre, report sur les objectifs). Rend la MÊME carte
  * si rien ne change.
  */
@@ -4026,10 +4048,14 @@ export function holdGrace(map: ExpeditionMap, now: number): ExpeditionMap {
       };
     } else {
       const { grace, ...rest } = c;
-      next =
-        grace.held !== undefined && rest.attackAt !== undefined
-          ? { ...rest, attackAt: Math.min(rest.attackAt, Math.max(grace.held, now)) }
-          : rest;
+      if (grace.held === undefined || rest.attackAt === undefined) next = rest;
+      else {
+        const asked = Math.min(rest.attackAt, grace.held);
+        const at = Math.max(asked, now + GRACE.releaseMs);
+        // 🪦 La relève des morts retenue garde son statut (`deadRisingAt` : riseAt === attackAt).
+        const rise = rest.riseAt !== undefined && rest.riseAt === asked ? { riseAt: at } : {};
+        next = { ...rest, attackAt: at, ...rise };
+      }
     }
     if (pois === map.pois) pois = [...map.pois];
     pois[k] = { ...p, control: next };

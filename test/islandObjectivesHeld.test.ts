@@ -236,3 +236,22 @@ describe('🏝️ la reprise d’un cimetière se voit venir depuis la forteress
     expect(a.spawnedAt).toBe(T - FIELD_ARMY.islandLeadMs);
   });
 });
+
+// 🕊️🪦 Signalé (2026-10-14) : la fin d'une trêve décale une relève retenue ; `raiseDead` ne
+// doit pas la ramener à son heure d'origine (elle tomberait alors sans préavis).
+describe('🪦 une relève décalée par la fin de la trêve garde sa nouvelle heure', () => {
+  it('riseAt plus tard que l’échéance : raiseDead n’y touche pas', () => {
+    const due = NOW + RISE.riseMs;
+    const later = due + 4 * H;
+    const m0 = takeObjective(island(3), OBJ, ['a'], NOW);
+    const shifted: ExpeditionMap = {
+      ...m0,
+      pois: m0.pois.map((p) =>
+        p.id === OBJ ? { ...p, control: { ...p.control!, attackAt: later, riseAt: later } } : p,
+      ),
+    };
+    const m = raiseDead(shifted, NOW + H);
+    expect(poi(m, OBJ)!.control!.attackAt).toBe(later);
+    expect(poi(m, OBJ)!.control!.riseAt).toBe(later);
+  });
+});
