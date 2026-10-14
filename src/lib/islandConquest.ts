@@ -1256,6 +1256,24 @@ export function heroHomePostId(
   return exp.homeId;
 }
 
+/** 🧝 LE LIEU FIXE DU HÉROS, qu'il y soit ou non : celui où il est posté, celui vers lequel il
+ *  marche, ou celui où il revient d'une sortie (voyage ou attaque combinée). `undefined` = la
+ *  base. ⚠️ Signalé (2026-10-14) : parti en sortie depuis l'Arsenal, il n'est plus « posté »,
+ *  et l'écran d'envoi le rangeait sous la base. Lu par l'écran pour savoir SOUS QUEL LIEU le
+ *  montrer ; partir de ce lieu reste gardé par le refus « héros indisponible ». */
+export function heroSpotOf(
+  map: Pick<ExpeditionMap, 'pois'> | null | undefined,
+  exp: Parameters<typeof heroHomePostId>[0],
+  wings: Parameters<typeof heroKeepPostId>[1],
+): Poi | undefined {
+  const posted = heroPostOf(map);
+  if (posted) return posted;
+  const coming = map?.pois.find((p) => p.control?.owner === 'player' && !!p.control.heroComing);
+  if (coming) return coming;
+  const id = heroKeepPostId(exp, wings);
+  return id ? map?.pois.find((p) => p.id === id && p.control?.owner === 'player') : undefined;
+}
+
 /** ⚔️🏰 Le poste dont la place reste gardée au héros : celui de son voyage
  *  (`heroHomePostId`), ou celui du groupe d'ATTAQUE COMBINÉE avec lequel il est parti.
  *  ⚠️ Signalé (2026-10-08, Ossuaire) : tant que l'attaque n'est pas résolue, son voyage vit

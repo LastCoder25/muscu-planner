@@ -34,7 +34,7 @@ import {
 } from '@/lib/partyForecast';
 import { champSeatsWithHero, holdSeats, garrisonHold, defendsControl } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import { heroPostOf } from '@/lib/islandConquest';
+import { heroPostOf, heroSpotOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
   byReach,
@@ -203,10 +203,21 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** 🧝 D'où part le HÉROS : le lieu tenu où il est posté, sinon la base (signalé : il partait
    *  de la base alors qu'il était à l'Ossuaire). */
   const heroPost = computed(() => heroPostOf(char.row?.expedition_map) ?? null);
-  const heroOriginId = computed(() => heroPost.value?.id ?? 'base');
-  /** Les points de départ possibles, le poste du héros compris même sans champion prêt. */
+  /** 🧝 Son lieu fixe même quand il est dehors (sortie, marche vers son poste) : sa tuile se
+   *  range sous ce lieu, pas sous la base (signalé). Dehors, il est bloqué
+   *  (`partyHeroBlock`) : ce lieu ne sert qu'à le montrer au bon endroit. */
+  const heroSpot = computed(
+    () =>
+      heroSpotOf(
+        char.row?.expedition_map,
+        char.row?.expedition,
+        char.attackList.flatMap((a) => a.wings),
+      ) ?? null,
+  );
+  const heroOriginId = computed(() => heroSpot.value?.id ?? 'base');
+  /** Les points de départ possibles, le lieu du héros compris même sans champion prêt. */
   const startOptions = computed(() => {
-    const p = heroPost.value;
+    const p = heroSpot.value;
     if (!p?.control || originOptions.value.some((o) => o.id === p.id)) return originOptions.value;
     return [
       ...originOptions.value,
