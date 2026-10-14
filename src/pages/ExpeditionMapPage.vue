@@ -241,6 +241,7 @@
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
             :imminent-key="imminentKey"
+            :warded-key="wardedKey"
             :rising-key="risingKey"
             :attacked-key="attackedKey"
             :tier-key="tierKey"
@@ -990,6 +991,17 @@
                 tard</span
               >
             </p>
+            <!-- 🪵 Les palissades : rétrécir la troupe qui attaquera ce lieu (24 h chacune). -->
+            <WardPanel
+              v-if="wardView"
+              :active="wardView.active"
+              :options="wardView.options"
+              :total-pct="wardView.totalPct"
+              :cap-pct="wardView.capPct"
+              :hold-pct="defenseNow?.pct ?? null"
+              :busy="busyWard"
+              @place="doPlaceWard"
+            />
             <button
               v-if="controlCount"
               type="button"
@@ -1537,6 +1549,19 @@ import {
   nestZones,
 } from '@/lib/islandConquest';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import WardPanel, { type WardOption } from '@/components/WardPanel.vue';
+import {
+  WARD,
+  WARD_BLOCK_LABEL,
+  WARD_CUT,
+  WARD_IDS,
+  activeWards,
+  isWardId,
+  placeWard,
+  wardBlocker,
+  wardCut,
+  wardedControlKey,
+} from '@/lib/controlWard';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import {
   attackReservedIds,
@@ -1570,7 +1595,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
-import { BOOST_IDS, type BoostId, type SupplyStock } from '@/lib/supplies';
+import { BOOST_IDS, SUPPLIES, type BoostId, type SupplyStock } from '@/lib/supplies';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
@@ -2658,6 +2683,10 @@ const citadelRestIn = computed(() => {
   return t > 0 ? t - now.value : 0;
 });
 /** ⚔️ Les points sous attaque imminente, à la minute près (une chaîne stable pour la carte). */
+/** 🪵 Les lieux tenus sous palissade, à la minute (l'anneau de la carte). */
+const wardedKey = computed(() =>
+  wardedControlKey(char.row?.expedition_map ?? null, coarseNow.value),
+);
 const imminentKey = computed(() =>
   imminentControlKey(char.row?.expedition_map ?? null, coarseNow.value),
 );
@@ -3262,7 +3291,17 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const fort = char.fortifyFor(heroLevel.value);
   const hold = vsArmy
     ? controlAttackHold(map, p, present, char.advList, roadCtx.value, heroLevel.value, fort, hero)
-    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value, fort, hero);
+    : controlDefenseHold(
+        p,
+        present,
+        char.advList,
+        roadCtx.value,
+        heroLevel.value,
+        fort,
+        hero,
+        // 🪵 Les palissades à l'heure de l'attaque si on la connaît, sinon celles d'aujourd'hui.
+        at ?? coarseNow.value,
+      );
   return {
     pct: Math.round(hold * 100),
     count: defenderCount(c.kind, present, !!hero),
@@ -3727,6 +3766,65 @@ const teamOnly = computed(
 const partyTarget = computed(
   () => teamOnly.value || (!!selected.value && HARVEST_TYPES.has(selected.value.type)),
 );
+
+/** 🪵 LES PALISSADES du lieu fixe ouvert : celles qui tiennent, et celles qu'on peut poser —
+ *  avec la tenue si on la pose (`defenseOf` sur le lieu palissadé : la règle de la bataille).
+ *  ⚠️ La règle de pose est `wardBlocker`, la même que le store. Sur l'horloge GROSSIÈRE :
+ *  une simulation par palissade possible, pas une par seconde. */
+const wardView = computed(() => {
+  const p = livePoi.value;
+  const c = p?.control;
+  if (!p || !c || c.owner !== 'player' || !defendsControl(c.kind)) return null;
+  const t = coarseNow.value;
+  const stock = char.row?.supplies ?? {};
+  const active = activeWards(c, t).map((w) => ({
+    emoji: SUPPLIES[w.id].emoji,
+    name: SUPPLIES[w.id].name,
+    cutPct: Math.round(WARD_CUT[w.id] * 100),
+    left: formatDuration(Math.max(0, w.until - t)),
+  }));
+  const options: WardOption[] = WARD_IDS.filter((id) => (stock[id] ?? 0) > 0).map((id) => {
+    const block = wardBlocker(c, id, true, t);
+    return {
+      id,
+      emoji: SUPPLIES[id].emoji,
+      name: SUPPLIES[id].name,
+      what: SUPPLIES[id].what,
+      cutPct: Math.round(WARD_CUT[id] * 100),
+      stock: stock[id] ?? 0,
+      why: block ? WARD_BLOCK_LABEL[block] : null,
+      after: block ? null : (defenseOf({ ...p, control: placeWard(c, id, t) })?.pct ?? null),
+    };
+  });
+  // Rien posé et rien en stock : on ne montre pas un bloc vide sur chaque lieu.
+  if (!active.length && !options.length) return null;
+  return {
+    active,
+    options,
+    totalPct: Math.round(wardCut(c, t) * 100),
+    capPct: Math.round(WARD.max * 100),
+  };
+});
+const busyWard = ref(false);
+async function doPlaceWard(id: string) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || !isWardId(id) || busyWard.value) return;
+  busyWard.value = true;
+  try {
+    const refused = await char.placeControlWard(uid, p.id, id, Date.now());
+    $q.notify(
+      refused
+        ? { type: 'negative', message: `Impossible : ${refused}.` }
+        : {
+            type: 'positive',
+            message: `${SUPPLIES[id].emoji} ${SUPPLIES[id].name} posée : troupe ennemie −${Math.round(WARD_CUT[id] * 100)} % pendant 24 h.`,
+          },
+    );
+  } finally {
+    busyWard.value = false;
+  }
+}
 
 /** 🧿 Le sceau de brèche : combien il en reste, et le poser sur la faille ouverte. */
 const sealStock = computed(() => char.row?.supplies.sceau ?? 0);

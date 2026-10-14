@@ -4751,4 +4751,35 @@ describe('💰 la récompense sur la tuile d’un voyage', () => {
       expect(out).toContain('m-');
     }
   }, 30_000);
+
+  // 🪵 Les palissades d'un lieu fixe : celle qu'on peut poser dit la tenue après, celle qui
+  // dépasserait le plafond dit pourquoi.
+  it('WardPanel montre l’actif, la tenue après pose et la raison d’un refus', async () => {
+    const { default: WardPanel } = await import('@/components/WardPanel.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        WardPanel,
+        {
+          active: [{ emoji: '🛡️', name: 'Bastion de fortune', cutPct: 20, left: '17 h' }],
+          options: [
+            { id: 'palissade', emoji: '🪵', name: 'Palissade', what: '', cutPct: 10, stock: 2, why: null, after: 71 },
+            { id: 'bastion', emoji: '🛡️', name: 'Bastion de fortune', what: '', cutPct: 20, stock: 1, why: 'plafond de 30 % atteint sur ce lieu', after: null },
+          ],
+          totalPct: 20,
+          capPct: 30,
+          holdPct: 58,
+          busy: false,
+        },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('troupe ennemie −20 %');
+    expect(out).toContain('encore 17 h');
+    expect(out).toMatch(/58 % → <b[^>]*>71 %/);
+    expect(out).toContain('plafond de 30 % atteint');
+  });
 });

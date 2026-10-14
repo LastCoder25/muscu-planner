@@ -52,10 +52,11 @@ import {
   attackerLevel,
   citadelIdFor,
   deadRisingAt,
-  retakeBoost,
+  wardedBoost,
   retakeForce,
   controlAllies,
 } from './controlPoints';
+import { wardMult } from './controlWard';
 import {
   campHurt,
   campLightHurt,
@@ -893,7 +894,10 @@ export function retakeBattle(
 ): { foe: Poi; force: CampSpec } {
   const foe = { ...p, level: attackerLevel(map, p, playerLevel) };
   const strongest = { ...p, level: Math.max(1, playerLevel) };
-  const f0 = retakeForce(foe, retakeBoost(strongest, allies, fort));
+  // 🪵 Les palissades encore debout à l'heure de l'assaut (sans heure, aucune).
+  const at = p.control?.attackAt;
+  const w = at === undefined ? 1 : wardMult(p.control, at);
+  const f0 = retakeForce(foe, wardedBoost(strongest, allies, fort, w));
   return { foe, force: { ...f0, size: (f0.size * retakeRemaining(p)) / Math.max(1, fort) } };
 }
 

@@ -54,6 +54,7 @@ import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
 import { pickBoost, pickSupply, type SupplyStock } from './supplies';
+import { WARD, wardMult } from './controlWard';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
   archipelFloor,
@@ -1935,27 +1936,61 @@ export function garrisonHoldChance(
 /** 🎲 De combien l'ennemi grossit sa troupe face à CETTE garnison : 1 tant qu'elle ne tient
  *  pas plus de `CONTROL.maxHold` (le cas normal), sinon juste assez pour y redescendre.
  *  ⚠️ Un champion faible n'est donc jamais pénalisé ; seul un choix « sans risque » l'est. */
-export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[], fort = 1): number {
+export function retakeBoost(
+  p: Poi,
+  allies: readonly SkirmishUnit[],
+  fort = 1,
+  /** La tenue visée (`CONTROL.maxHold` ; `WARD.holdCap` sous palissade). */
+  cap: number = CONTROL.maxHold,
+): number {
   const hold = (b: number) => garrisonHoldChance(p, allies, b, CONTROL.holdSamples, fort);
-  if (!allies.length || hold(1) <= CONTROL.maxHold) return 1;
+  if (!allies.length || hold(1) <= cap) return 1;
   let lo = 1;
   let hi = 2;
-  while (hold(hi) > CONTROL.maxHold && hi < 256) {
+  while (hold(hi) > cap && hi < 256) {
     lo = hi;
     hi *= 2;
   }
   for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
-    if (hold(mid) > CONTROL.maxHold) lo = mid;
+    if (hold(mid) > cap) lo = mid;
     else hi = mid;
   }
   return hi;
 }
 
+/**
+ * 🪵 LE RENFORT ENNEMI SOUS PALISSADE (`w` = `wardMult`, < 1) : la troupe est multipliée par
+ * `w`, mais jamais en dessous de celle qui ramènerait la tenue à `WARD.holdCap` (95 %).
+ * ⚠️ PAR-DESSUS le plafond de suspense de 90 % : sans ça, `retakeBoost` regrossirait
+ * l'ennemi d'autant et la palissade ne ferait rien sur une garnison solide.
+ * Sans palissade (`w` = 1), c'est exactement `retakeBoost`.
+ */
+export function wardedBoost(
+  p: Poi,
+  allies: readonly SkirmishUnit[],
+  fort: number,
+  w: number,
+): number {
+  const plain = retakeBoost(p, allies, fort);
+  if (w >= 1) return plain;
+  // La troupe effective vaut boost × w / fort : on cherche le boost qui, réduit par la
+  // palissade, tient `holdCap` — d'où `fort / w`.
+  const floor = retakeBoost(p, allies, fort / w, WARD.holdCap);
+  return Math.max(plain, floor) * w;
+}
+
 /** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`).
  *  ⚠️ `fort` REQUIS (`fortifyMult`) : oublié, l'écran annoncerait une tenue sans l'enceinte
  *  alors que la bataille la compte. */
-export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[], fort: number): number {
+export function garrisonHold(
+  p: Poi,
+  allies: readonly SkirmishUnit[],
+  fort: number,
+  /** 🪵 L'instant où l'on juge les palissades (`wardMult`), REQUIS ; `null` = aucune (un
+   *  point pas encore pris). Oublié, l'écran annoncerait une tenue sans elles. */
+  wardAt: number | null,
+): number {
   // 🛡️ Personne pour se battre (au lapidaire : aucun milicien) — rien ne tient.
   if (!allies.length) return 0;
   // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
@@ -1969,7 +2004,9 @@ export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[], fort: numb
   return garrisonHoldChance(
     p,
     allies,
-    retakeBoost(p, allies, fort) * threat * (p.control?.fortMult ?? 1),
+    wardedBoost(p, allies, fort, wardAt === null ? 1 : wardMult(p.control, wardAt)) *
+      threat *
+      (p.control?.fortMult ?? 1),
     CONTROL.holdSamples,
     fort,
   );
@@ -2067,11 +2104,14 @@ export function controlDefenseHold(
   /** 🧝 Le héros qui défendra (`heroAtAttack`), REQUIS : oublié, l'écran annoncerait une
    *  tenue sans lui alors que la bataille le compte. */
   hero: PostedHero | null,
+  /** 🪵 L'instant où l'on juge les palissades, REQUIS (l'heure de l'attaque si elle est
+   *  connue, sinon maintenant : l'écran ne doit pas trahir une heure secrète). */
+  wardAt: number,
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
   const allies = controlAllies(p.control?.kind, champs, kit, hero, ids, playerLevel);
-  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies, fort);
+  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies, fort, wardAt);
 }
 
 /** La troupe qui vient REPRENDRE le point — tirée sur l'instant de l'attaque. */

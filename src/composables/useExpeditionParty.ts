@@ -1034,6 +1034,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
             heldAt(p),
             partyAllies(g, roadCtx.value, hero),
             char.fortifyFor(heroLevel.value),
+            // 🪵 Un point qu'on PREND n'a pas encore de palissade.
+            null,
           ) * 100,
         )
       : null;
@@ -1057,6 +1059,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             heldAt(p),
             partyAllies([a], roadCtx.value, null),
             char.fortifyFor(heroLevel.value),
+            null,
           ) * 100,
         ),
       ]),

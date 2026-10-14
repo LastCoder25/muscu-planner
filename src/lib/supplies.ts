@@ -20,6 +20,7 @@
  */
 import { mulberry32, type Combatant } from './combat';
 import type { Poi, PoiType } from './expedition';
+import { WARD, WARD_CUT } from './controlWard';
 
 export type SupplyId =
   | 'rations'
@@ -32,6 +33,8 @@ export type SupplyId =
   | 'lanterne'
   | 'cor'
   | 'sceau'
+  | 'palissade'
+  | 'bastion'
   | 'boost5'
   | 'boost10'
   | 'boost15'
@@ -64,6 +67,8 @@ export const SUPPLY_IDS: readonly SupplyId[] = [
   'bats',
   'lanterne',
   'sceau',
+  'palissade',
+  'bastion',
   'boost5',
   'boost10',
   'boost15',
@@ -124,6 +129,9 @@ export const SUPPLY_WEIGHT: Record<SupplyId, number> = {
   bats: 1,
   lanterne: 1,
   sceau: 1,
+  // 🪵 La plus forte est deux fois plus rare (même échelle que les boosts).
+  palissade: 1,
+  bastion: 0.5,
   boost5: 1,
   boost10: 0.7,
   boost15: 0.5,
@@ -271,6 +279,8 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
     what: 'Rend 24 h de répit à une faille : débordement repoussé, effectif rajeuni (une fois par faille)',
     voyage: false,
   },
+  palissade: wardDef('🪵', 'Palissade', WARD_CUT.palissade),
+  bastion: wardDef('🛡️', 'Bastion de fortune', WARD_CUT.bastion),
   boost5: boostDef(5),
   boost10: boostDef(10),
   boost15: boostDef(15),
@@ -282,6 +292,15 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
   tome1500: tomeDef(1500),
   tome4000: tomeDef(4000),
 };
+
+function wardDef(emoji: string, name: string, cut: number): SupplyDef {
+  return {
+    emoji,
+    name,
+    what: `Sur un lieu fixe tenu, depuis sa fiche : troupe qui l’attaque −${pct(cut)} pendant 24 h (${pct(WARD.max)} au plus par lieu)`,
+    voyage: false,
+  };
+}
 
 function tomeDef(xp: number): SupplyDef {
   const n = xp.toLocaleString('fr-FR');
@@ -449,6 +468,9 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
       return t.type === 'rift' ? null : 'seulement dans une faille';
     case 'sceau':
       return 'se pose sur une faille, depuis sa fiche';
+    case 'palissade':
+    case 'bastion':
+      return 'se pose sur un lieu fixe tenu, depuis sa fiche';
     case 'boost5':
     case 'boost10':
     case 'boost15':

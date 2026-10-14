@@ -7,6 +7,7 @@
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
 import type { RuneTier } from './skillRunes';
+import type { Ward } from './controlWard';
 import { runeCount } from './runeBank';
 import type { RiftBossReplay, RiftBossStep, WarbandBattle } from './rift';
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
@@ -224,6 +225,9 @@ export interface ControlState {
   /** 🧱 Le FORTIN de l'île tenu (`fortMultOf`, posé par `ensureIslandConquest`) : la troupe
    *  qui vient reprendre CE lieu est multipliée par ce facteur (< 1). Absent sans fortin. */
   fortMult?: number;
+  /** 🪵 Les PALISSADES posées sur ce lieu (`controlWard`) : chacune retire une part de la
+   *  troupe qui attaque, jusqu'à son échéance. Absent : aucune. */
+  wards?: Ward[];
   /** 🗺️ CARTOGRAPHE : le type de lieu que le joueur fait apparaître plus souvent. */
   favor?: PoiType;
   /** 💎 LAPIDAIRE (avant le 2026-10-12) : la compétence polie. Ignoré, remplacé par `lapisPick`. */

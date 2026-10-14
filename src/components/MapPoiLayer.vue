@@ -59,6 +59,16 @@
             </text>
           </template>
         </g>
+        <!-- 🪵 Sous palissade : une enceinte de pieux dorée autour du fort, qui respire. -->
+        <rect
+          v-if="warded.has(p.id)"
+          :x="p.x - 7.6"
+          :y="p.y - 7.6"
+          width="15.2"
+          height="15.2"
+          rx="3.4"
+          class="ctl-ward"
+        />
         <rect
           :x="p.x - 5.2"
           :y="p.y - 5.2"
@@ -244,6 +254,8 @@ const props = defineProps<{
   veiledKey: string;
   /** Ids des points de contrôle sous attaque imminente, même forme que `dimmedKey`. */
   imminentKey: string;
+  /** Ids des lieux tenus sous palissade (`wardedControlKey`), même forme. */
+  wardedKey?: string;
   /** 🪦 Les cimetières où les morts vont se relever, « id:délai:proximité » (`risingControlKey`). */
   risingKey?: string;
   /** 🔴 Ids des lieux sur lesquels une de nos troupes marche (`underAttackKey`), même forme. */
@@ -263,6 +275,7 @@ const toSet = (k: string) => new Set(k ? k.split('|') : []);
 const dimmed = computed(() => toSet(props.dimmedKey));
 const veiled = computed(() => toSet(props.veiledKey));
 const imminent = computed(() => toSet(props.imminentKey));
+const warded = computed(() => toSet(props.wardedKey ?? ''));
 const attacked = computed(() => toSet(props.attackedKey ?? ''));
 /** 🪦 id → { délai affiché, proximité 0..10 }. */
 const rising = computed(() => {
@@ -456,6 +469,30 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   font-size: 2.9px;
   font-weight: 700;
   text-anchor: middle;
+}
+/* 🪵 Palissade : des pieux (pointillé) dorés, une respiration lente — distincte de l'alerte
+   rouge et du pointillé d'un assaut. Figée si l'on préfère moins de mouvement. */
+.ctl-ward {
+  fill: color-mix(in srgb, #e3b25b 14%, transparent);
+  stroke: #e3b25b;
+  stroke-width: 1.1;
+  stroke-dasharray: 1.6 0.9;
+  pointer-events: none;
+  animation: ctl-ward-breathe 3.2s ease-in-out infinite;
+}
+@keyframes ctl-ward-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ctl-ward {
+    animation: none;
+  }
 }
 /* ⚔️ Bataille imminente : pastille rouge au coin du fort, lente pulsation (une menace qui
    approche en heures, pas une alarme). Figée si l'on préfère moins de mouvement. */

@@ -403,6 +403,7 @@ import {
   supplyFx,
   takeSupplies,
   BOOST_MIN,
+  SUPPLIES,
   TOME_XP,
   type BoostId,
   type SupplyId,
@@ -410,6 +411,7 @@ import {
   type TomeId,
 } from '@/lib/supplies';
 import { openTome } from '@/lib/xpTome';
+import { WARD_BLOCK_LABEL, placeWard, wardBlocker, type WardId } from '@/lib/controlWard';
 import {
   attackBoostPlan,
   boostAttack,
@@ -4949,6 +4951,38 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /** 🪵 Pose une palissade sur un lieu fixe tenu (`placeWard`) : la troupe qui l'attaque
+   *  rétrécit pendant 24 h. Rend la RAISON d'un refus, `null` si c'est fait. ⚠️ Carte et stock
+   *  dans la MÊME écriture : un objet dépensé sans palissade posée serait perdu.
+   *  ⚠️ La règle (lieu tenu, qui se défend, plafond de 30 %) est `wardBlocker` — celle que
+   *  l'écran affiche : l'un ne peut pas accepter ce que l'autre refuse. */
+  async function placeControlWard(
+    userId: string,
+    poiId: string,
+    wardId: WardId,
+    now: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return 'la carte n’est pas chargée';
+    const stock = takeSupplies(cur.supplies, [wardId]);
+    if (!stock) return `aucun(e) ${SUPPLIES[wardId].name.toLowerCase()} en stock`;
+    const poi = map.pois.find((p) => p.id === poiId);
+    const c = poi?.control;
+    const why = wardBlocker(c, wardId, !!c && defendsControl(c.kind), now);
+    if (why) return WARD_BLOCK_LABEL[why];
+    const control = placeWard(c!, wardId, now);
+    await persist(userId, {
+      supplies: stock,
+      expedition_map: {
+        ...map,
+        pois: map.pois.map((p) => (p.id === poiId ? { ...p, control } : p)),
+      },
+    });
+    return null;
+  }
+
   /** ⚔️ La base après les rapports FRAIS : une interception gagnée disperse l'armée de
    *  la faille (`dispelOverflow`, datée par la bataille). `null` = rien à écrire.
    *  ⚠️ Appelée par les TROIS chemins qui déposent un rapport (groupe, héros à l'arrivée,
@@ -7111,6 +7145,7 @@ export const useCharacterStore = defineStore('character', () => {
     noteHeroLevel,
     comptoirLevel,
     sealRiftPoi,
+    placeControlWard,
     partyList,
     attackList,
     heroEngaged,
