@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CLIENT_PUSH_KINDS } from '@/lib/push';
 import fs from 'node:fs';
 import { comboWeeklySets, COMBO_PLAN_REPS } from '@/lib/combo';
 import {
@@ -464,6 +465,28 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     });
     return bodies[bodies.length - 1]!;
   };
+
+  it('⏳ « dernières heures » : la fin du combat est celle de bossEndsAt, l’alerte 6 h avant', () => {
+    const f = lastDef('fboss_schedule_end');
+    const h = (ms: number) => `interval '${ms / 3600_000} hours'`;
+    expect(f).toContain('b.created_at + ' + h(FRIEND_BOSS.inviteWindowMs));
+    expect(f).toContain("+ interval '" + FRIEND_BOSS.durationMs / 86_400_000 + " days'");
+    expect(f).toContain('v_end - ' + h(FRIEND_BOSS.endWarnMs));
+    expect(f).toContain("then '" + FRIEND_BOSS.endWarnMs / 3600_000 + " h'");
+    // Jamais pour un boss tombé ni fini, jamais dans le passé (au plus tôt : maintenant),
+    // seulement pour les membres acceptés.
+    expect(f).toContain('b.defeated_at is not null then return');
+    expect(f).toContain('v_end <= now() then return');
+    expect(f).toContain('greatest(v_end - ' + h(FRIEND_BOSS.endWarnMs) + ', now())');
+    expect(f).toContain("m.status = 'accepted'");
+  });
+
+  it('⏳ la synchro du client n’efface JAMAIS les messages du boss (posés par le serveur)', () => {
+    for (const k of ['fboss_end', 'fboss_invite', 'fboss_hit', 'fboss_down', 'fboss_joined'])
+      expect(CLIENT_PUSH_KINDS as readonly string[]).not.toContain(k);
+    const src = fs.readFileSync('src/composables/usePush.ts', 'utf8');
+    expect(src).toContain(".in('kind', [...CLIENT_PUSH_KINDS])");
+  });
 
   it('mêmes parts de PV par famille (dernière définition du serveur)', () => {
     const share = lastDef('fboss_share');

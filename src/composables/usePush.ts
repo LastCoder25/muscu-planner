@@ -5,7 +5,7 @@
 
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { planPushes, type PushContext } from '@/lib/push';
+import { CLIENT_PUSH_KINDS, planPushes, type PushContext } from '@/lib/push';
 
 /** ⚠️ PUBLIQUE PAR NATURE — le navigateur la reçoit et le service de push aussi. Elle
  *  est ici plutôt que dans une variable d'environnement pour une raison précise : une
@@ -176,7 +176,14 @@ export function usePush() {
     }
     // Les lignes PAS ENCORE ENVOYÉES qui ne correspondent plus à rien.
     // ⚠️ On ne touche jamais aux lignes déjà envoyées : elles sont l'historique.
-    let q = supabase.from('scheduled_pushes').delete().eq('user_id', userId).is('sent_at', null);
+    // ⚠️ Seulement les sortes que le client programme (`CLIENT_PUSH_KINDS`) : celles du boss
+    // entre amis sont posées par le SERVEUR et ne figurent jamais dans `plans`.
+    let q = supabase
+      .from('scheduled_pushes')
+      .delete()
+      .eq('user_id', userId)
+      .is('sent_at', null)
+      .in('kind', [...CLIENT_PUSH_KINDS]);
     if (vivantes.length) q = q.not('dedupe', 'in', `(${vivantes.map((d) => `"${d}"`).join(',')})`);
     const { error } = await q;
     // Retenu seulement si tout est passé : un échec réessaiera à la synchro suivante.

@@ -43,6 +43,9 @@ export const FRIEND_BOSS = {
   inviteWindowMs: 24 * HOUR,
   /** Durée du combat, à partir du démarrage. */
   durationMs: 7 * DAY,
+  /** ⏳ La notification « dernières heures » part ce délai avant la fin (migr. 0107,
+   *  programmée par le serveur ; un test vérifie que le SQL dit la même chose). */
+  endWarnMs: 6 * HOUR,
   /** Délai avant que le LANCEUR puisse relancer, à partir de la fin (mort ou 7 jours) de
    *  son dernier boss (migr. 0087, par-dessus les jetons). Rejoindre n'est pas concerné. */
   cooldownMs: 48 * HOUR,

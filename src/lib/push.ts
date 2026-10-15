@@ -20,14 +20,20 @@ import {
   type ActiveExpedition,
 } from './expedition';
 
-type PushKind =
-  | 'siege'
-  | 'siege_done'
-  | 'hero_home'
-  | 'party_home'
-  | 'plunder'
-  | 'control_warn'
-  | 'control_attack';
+/** Les sortes de messages que le CLIENT programme. ⚠️ La synchro n'efface QUE celles-ci :
+ *  les autres (boss entre amis : invitation, frappe, mort, dernières heures) sont posées par
+ *  des déclencheurs en base, pour des amis qui n'ont pas l'app ouverte — un client qui les
+ *  effacerait comme « ne correspondant plus à rien » les ferait disparaître avant l'envoi. */
+export const CLIENT_PUSH_KINDS = [
+  'siege',
+  'siege_done',
+  'hero_home',
+  'party_home',
+  'plunder',
+  'control_warn',
+  'control_attack',
+] as const;
+type PushKind = (typeof CLIENT_PUSH_KINDS)[number];
 
 /** 🏰 Le rappel avant l'attaque d'un point tenu (2026-09-29, demandé par l'utilisateur) :
  *  10 min — de quoi ouvrir l'app et envoyer un renfort proche, pas de quoi planifier. */
