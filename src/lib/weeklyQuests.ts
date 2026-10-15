@@ -21,7 +21,7 @@
 // 🎟️ PALIERS : TOUS LES OBJECTIFS, TU FAIS CE QUE TU VEUX (v0.1361 ; demandé par l'utilisateur :
 // « faire plus d'objectifs et on fait ce qu'on veut avec des paliers de récompenses »). Plus
 // de tirage : les six objectifs sont affichés (ceux de tes sports en tête), et chaque palier
-// d'objectifs atteints paie. ⚠️ Depuis la v1.202, seuls les objectifs de TES sports sont
+// d'objectifs atteints paie. ⚠️ Depuis la v1.203, seuls les objectifs de TES sports sont
 // affichés (cf. `isShown`), et le dernier palier suit le nombre d'objectifs affichés. Ça règle aussi « choisir son objectif » sans rien à verrouiller —
 // un choix fait le dimanche aurait pris l'objectif déjà atteint. Le paragraphe suivant (le
 // tirage selon ta pratique) ne décrit plus que l'ORDRE et la marque « tes sports ».
@@ -289,7 +289,7 @@ function questOrder(practiced: Set<SportKind>): QuestKind[] {
   return [first!, ...rest.filter(mine), ...rest.filter((k) => !mine(k) && isShown(k, practiced))];
 }
 
-/** ⚠️ ON NE PROPOSE PAS LE SPORT D'UN AUTRE (v1.202, signalé par l'utilisateur : « je vois du
+/** ⚠️ ON NE PROPOSE PAS LE SPORT D'UN AUTRE (v1.203, signalé par l'utilisateur : « je vois du
  *  tennis dans la quête de Cypher, il n'en fait pas, il ne pourra pas la finir »). Un objectif
  *  de MUSCU, de CARDIO ou de TENNIS n'est affiché que si c'est une de tes pratiques. La
  *  variété (n'importe quel 2ᵉ sport) et la régularité valent pour tous et restent. Sans
