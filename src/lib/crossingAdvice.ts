@@ -273,7 +273,7 @@ export type StayVerdict = 'stay' | 'even' | 'back';
 /** L'écart (en part) sous lequel les deux îles se valent. */
 const STAY_TIE = 0.1;
 
-export interface IslandYield {
+interface IslandYield {
   island: Island;
   levels: { lo: number; hi: number };
   /** Champions nécessaires pour prendre un lieu à ≥ 70 % (null : hors de portée). */

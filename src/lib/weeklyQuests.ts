@@ -253,7 +253,7 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
  *  pied s'il en fait régulièrement »). Si une activité représente au moins les trois quarts
  *  de tes jours de sortie sur l'historique, la quête de sortie porte son nom ET ne compte
  *  qu'elle (« 130 min de course à pied ») ; sinon elle reste une sortie cardio quelconque. */
-export function mainCardioActivity(entries: QuestEntry[], monday: string): string | undefined {
+function mainCardioActivity(entries: QuestEntry[], monday: string): string | undefined {
   const from = addDays(monday, -7 * WEEKLY_QUESTS.historyWeeks);
   const byAct = new Map<string, Set<string>>();
   const all = new Set<string>();

@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-export interface WardActive {
+interface WardActive {
   emoji: string;
   name: string;
   cutPct: number;

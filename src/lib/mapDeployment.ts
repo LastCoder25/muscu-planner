@@ -66,19 +66,19 @@ export interface DeployDeps {
 /** 🧭 Part du coût portée par les lieux FACILES (le reste : les lieux durs). ⚠️ MESURÉE
  *  (2026-10-15, banc d'attaques jouées sur le roster réel, cf. CLAUDE.md) : 0,85 avec une
  *  garnison de secours à 0,3 bat 0,5 sans secours sur les 12 scénarios. */
-export const DEPLOY_SOLO_SHARE = 0.85;
+const DEPLOY_SOLO_SHARE = 0.85;
 /** 🔁 Part du temps « lieu facile » portée par la DEUXIÈME garnison la plus proche (celle qui
  *  part si la première est déjà engagée) : c'est ce qui permet plusieurs attaques à la fois. */
-export const DEPLOY_BACKUP = 0.3;
+const DEPLOY_BACKUP = 0.3;
 /** 🔁 Le secours ne s'allume qu'au-delà de ce rapport « force du vivier / force d'un lieu
  *  facile », et il est entier une unité plus haut : il faut de quoi prendre DEUX lieux faciles.
  *  ⚠️ MESURÉ sur les 5 îles (160 scénarios) : sans ce seuil, un petit vivier s'éparpillait un
  *  champion par lieu et faisait moins bien que la v1.199 (7 scénarios, jusqu'à −9 %). */
-export const DEPLOY_BACKUP_FROM = 1;
+const DEPLOY_BACKUP_FROM = 1;
 /** 🛡️ Garde-fou : la recherche est refaite SANS secours, et ce plan-là est gardé si celui avec
  *  secours y perd plus de 10 %. ⚠️ MESURÉ sur les 5 îles : −21,9 % de temps contre −20,8 % sans
  *  garde-fou, mêmes attaques simultanées, 2 scénarios moins bons que la v1.199 au lieu de 4. */
-export const DEPLOY_GUARD = 0.1;
+const DEPLOY_GUARD = 0.1;
 /** 🎯 Échelle des forces visées : l'escorte de RÉFÉRENCE du rang surestime ce qu'il faut
  *  vraiment pour gagner un lieu (mesuré : 0,4 à 0,9 de la force « facile » selon l'île). Visée
  *  trop haut, la recherche croyait qu'aucune garnison ne suffit seule et éparpillait de petites
@@ -89,7 +89,7 @@ export const DEPLOY_GUARD = 0.1;
 export const DEPLOY_EASY_K = 0.5;
 export const DEPLOY_HARD_K = 0.6;
 /** ⛑️🎓🐫 Ce que des soutiens complets retirent au temps d'une garnison, pour un lieu facile. */
-export const DEPLOY_SUPPORT_W = 0.2;
+const DEPLOY_SUPPORT_W = 0.2;
 
 /** 🔧 Réglages de la recherche (le banc de mesure en compare plusieurs ; le jeu garde les
  *  valeurs par défaut). Couper vitesse, soutiens et lieu facile, le second départ et l'échelle

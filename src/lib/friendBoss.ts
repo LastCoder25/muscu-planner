@@ -493,7 +493,7 @@ export const STRIKE_TIERS: readonly {
 ];
 
 /** Secondes de gainage qui valent une rep pour choisir le palier (le barème des challenges). */
-export const STRIKE_SEC_PER_REP = 4;
+const STRIKE_SEC_PER_REP = 4;
 
 /** Reps « équivalentes » d'une frappe : un boss de gainage se compte en secondes. */
 export function strikeReps(damage: number, family?: BossFamily | null): number {
