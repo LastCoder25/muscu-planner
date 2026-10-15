@@ -8,6 +8,8 @@ import {
   planStations,
   planStationsAsync,
   type DeployDeps,
+  DEPLOY_EASY_K,
+  DEPLOY_HARD_K,
   type DeployTune,
   type DeploySpot,
   type DeployUnit,
@@ -24,11 +26,14 @@ const spot = (id: string, seats: number): DeploySpot => ({ id, seats, heroOk: tr
 const SPOTS = [spot('base', Infinity), spot('ouest', 2), spot('est', 2)];
 const XS: Record<string, number> = { base: -30, ouest: 2, est: 8 };
 const trip = (s: string, p: number) => 10 * Math.abs(XS[s]! - PTS[p]!);
+/** Les tests de MÉCANIQUE posent leurs forces à la main : sans échelle, sans garde-fou. */
+const RAW: DeployTune = { easyK: 1, hardK: 1, guard: null };
 const run = (units: DeployUnit[], deps: Partial<DeployDeps>, easyForce?: number, force = 10) =>
   planStations(units, SPOTS, PTS.length, {
     force,
     ...(easyForce ? { easyForce } : {}),
     deps: { trip, ...deps },
+    tune: RAW,
   });
 
 describe('🧭 la vitesse est propre à chaque garnison', () => {
@@ -76,6 +81,7 @@ describe('🌱 objectif mixte : chaque garnison peut prendre seule un lieu facil
       force: 10,
       ...(easyForce ? { easyForce } : {}),
       deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
+      tune: RAW,
     });
   const powerBySpot = (r: ReturnType<typeof go>) => {
     const m = new Map<string, number>();
@@ -147,7 +153,7 @@ describe('🔁 la garnison de secours et la recherche à deux départs', () => {
       force: 20,
       easyForce: 10,
       deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
-      ...(tune ? { tune } : {}),
+      tune: { ...RAW, ...tune },
     });
   const garrisonCount = (r: ReturnType<typeof go>) => new Set(r.spotOf.values()).size;
 
@@ -165,7 +171,7 @@ describe('🔁 la garnison de secours et la recherche à deux départs', () => {
         force: 20,
         easyForce: 10,
         deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
-        tune,
+        tune: { ...RAW, ...tune },
       });
     expect(new Set(run({ singleStart: true }).spotOf.values()).size).toBe(1);
     expect(new Set(run({}).spotOf.values()).size).toBe(2);
@@ -183,6 +189,7 @@ describe('🔁 la garnison de secours et la recherche à deux départs', () => {
         force: 20,
         easyForce: 10,
         deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
+        tune: RAW,
       },
       0,
     );
@@ -191,5 +198,54 @@ describe('🔁 la garnison de secours et la recherche à deux départs', () => {
     expect(async.reach).toBeCloseTo(sync.reach, 9);
     // Elle a vraiment rendu la main : le minuteur a pu tourner pendant le calcul.
     expect(ticks).toBeGreaterThan(0);
+  });
+});
+
+describe('🎯 forces visées, seuil du secours et garde-fou (réglages mesurés sur les 5 îles)', () => {
+  const xs: Record<string, number> = { base: -30, ouest: 2, centre: 5, est: 8 };
+  const spots = ['base', 'ouest', 'centre', 'est'].map((id) =>
+    spot(id, id === 'base' ? Infinity : 5),
+  );
+  const team = Array.from({ length: 5 }, (_, i) => u(`c${i}`, 4));
+  const deps = { trip: (s: string, p: number) => 10 * Math.abs(xs[s]! - PTS[p]!) };
+  const go = (force: number, easyForce: number, tune: DeployTune = {}) =>
+    planStations(team, spots, PTS.length, { force, easyForce, deps, tune });
+  const same = (a: ReturnType<typeof go>, b: ReturnType<typeof go>) =>
+    expect([...a.spotOf].sort()).toEqual([...b.spotOf].sort());
+
+  it('par défaut, les forces visées valent la moitié (facile) et 60 % (difficile)', () => {
+    same(go(20 / DEPLOY_HARD_K, 10 / DEPLOY_EASY_K, { guard: null }), go(20, 10, { ...RAW }));
+    // Le temps rendu (`reach`) ne lit que la force difficile : elle aussi passe à l’échelle.
+    expect(go(20 / DEPLOY_HARD_K, 10, { guard: null }).reach).toBeCloseTo(
+      go(20, 10, { ...RAW, easyK: DEPLOY_EASY_K }).reach,
+      9,
+    );
+    expect(DEPLOY_EASY_K).toBe(0.5);
+    expect(DEPLOY_HARD_K).toBe(0.6);
+  });
+
+  it('un vivier qui prend à peine un lieu facile n’éparpille pas ses champions en secours', () => {
+    // Six champions de force 5 (30) pour un lieu facile à 27 : de quoi en prendre UN seul.
+    const six = Array.from({ length: 6 }, (_, i) => u(`x${i}`, 5));
+    const g = (tune: DeployTune) =>
+      new Set(
+        planStations(six, spots, PTS.length, {
+          force: 36,
+          easyForce: 27,
+          deps,
+          tune,
+        }).spotOf.values(),
+      ).size;
+    expect(g(RAW)).toBe(g({ ...RAW, backup: 0 }));
+    // Sans le seuil, le secours éparpille ce vivier en une garnison de plus.
+    expect(g({ ...RAW, backupFrom: 0 })).toBeGreaterThan(g(RAW));
+  });
+
+  it('le garde-fou reprend le plan sans secours quand le secours coûte trop', () => {
+    // Avec secours, 3 garnisons ; un garde-fou à 0 % n'accepte aucune perte : 2 garnisons.
+    expect(new Set(go(20, 10, RAW).spotOf.values()).size).toBe(3);
+    same(go(20, 10, { ...RAW, guard: 0 }), go(20, 10, { ...RAW, backup: 0 }));
+    // Avec la marge par défaut (10 %), ce secours-là vaut le coup : il est gardé.
+    expect(new Set(go(20, 10, { easyK: 1, hardK: 1 }).spotOf.values()).size).toBe(3);
   });
 });

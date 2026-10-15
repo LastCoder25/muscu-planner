@@ -70,12 +70,31 @@ export const DEPLOY_SOLO_SHARE = 0.85;
 /** 🔁 Part du temps « lieu facile » portée par la DEUXIÈME garnison la plus proche (celle qui
  *  part si la première est déjà engagée) : c'est ce qui permet plusieurs attaques à la fois. */
 export const DEPLOY_BACKUP = 0.3;
+/** 🔁 Le secours ne s'allume qu'au-delà de ce rapport « force du vivier / force d'un lieu
+ *  facile », et il est entier une unité plus haut : il faut de quoi prendre DEUX lieux faciles.
+ *  ⚠️ MESURÉ sur les 5 îles (160 scénarios) : sans ce seuil, un petit vivier s'éparpillait un
+ *  champion par lieu et faisait moins bien que la v1.199 (7 scénarios, jusqu'à −9 %). */
+export const DEPLOY_BACKUP_FROM = 1;
+/** 🛡️ Garde-fou : la recherche est refaite SANS secours, et ce plan-là est gardé si celui avec
+ *  secours y perd plus de 10 %. ⚠️ MESURÉ sur les 5 îles : −21,9 % de temps contre −20,8 % sans
+ *  garde-fou, mêmes attaques simultanées, 2 scénarios moins bons que la v1.199 au lieu de 4. */
+export const DEPLOY_GUARD = 0.1;
+/** 🎯 Échelle des forces visées : l'escorte de RÉFÉRENCE du rang surestime ce qu'il faut
+ *  vraiment pour gagner un lieu (mesuré : 0,4 à 0,9 de la force « facile » selon l'île). Visée
+ *  trop haut, la recherche croyait qu'aucune garnison ne suffit seule et éparpillait de petites
+ *  garnisons à additionner. ⚠️ MESURÉ sur les 5 îles (160 scénarios, attaques jouées) : facile
+ *  × 0,5 et difficile × 0,6 → −29 % de temps et +0,91 attaque simultanée face à la v1.199
+ *  (−22 % et +0,54 sans), aucun scénario moins bon ; plus bas, certains le redeviennent.
+ *  Tient à 90 % de victoire exigés (−27 %, +0,86). */
+export const DEPLOY_EASY_K = 0.5;
+export const DEPLOY_HARD_K = 0.6;
 /** ⛑️🎓🐫 Ce que des soutiens complets retirent au temps d'une garnison, pour un lieu facile. */
 export const DEPLOY_SUPPORT_W = 0.2;
 
 /** 🔧 Réglages de la recherche (le banc de mesure en compare plusieurs ; le jeu garde les
- *  valeurs par défaut). Couper vitesse, soutiens et lieu facile rend le calcul de la v1.199
- *  (`backup` n'agit que sur le lieu facile). */
+ *  valeurs par défaut). Couper vitesse, soutiens et lieu facile, le second départ et l'échelle
+ *  de la force difficile (`hardK: 1`) rend le calcul de la v1.199 (`backup` et le garde-fou
+ *  n'agissent que sur le lieu facile). */
 export interface DeployTune {
   soloShare?: number;
   supportW?: number;
@@ -83,6 +102,13 @@ export interface DeployTune {
   noSupport?: boolean;
   noEasy?: boolean;
   backup?: number;
+  /** Seuil du secours (`DEPLOY_BACKUP_FROM`). */
+  backupFrom?: number;
+  /** Garde-fou (`DEPLOY_GUARD`) ; `null` le coupe. */
+  guard?: number | null;
+  /** Échelles des forces visées (`DEPLOY_EASY_K` / `DEPLOY_HARD_K`). */
+  easyK?: number;
+  hardK?: number;
   /** Le seul départ glouton (la recherche d'avant la v1.202). */
   singleStart?: boolean;
 }
@@ -217,7 +243,7 @@ function* planSteps(
   const supportOf = (!tune.noSupport && opts.deps.support) || (() => 0);
   const soloShare = tune.soloShare ?? DEPLOY_SOLO_SHARE;
   const supportW = tune.supportW ?? DEPLOY_SUPPORT_W;
-  const backup = tune.backup ?? DEPLOY_BACKUP;
+  const backupBase = tune.backup ?? DEPLOY_BACKUP;
   // Une garnison donnée a toujours la même vitesse et les mêmes soutiens : on ne les recalcule
   // pas à chaque essai (la recherche en fait des milliers).
   const memo = new Map<string, { k: number; sup: number }>();
@@ -233,7 +259,16 @@ function* planSteps(
     }
     return v;
   };
-  const easy = tune.noEasy ? undefined : opts.easyForce;
+  const easy =
+    tune.noEasy || opts.easyForce === undefined
+      ? undefined
+      : opts.easyForce * (tune.easyK ?? DEPLOY_EASY_K);
+  const hardForce = opts.force * (tune.hardK ?? DEPLOY_HARD_K);
+  const totalPw = units.reduce((s, u) => s + Math.max(0, u.power), 0);
+  const pwRatio = easy && easy > 0 ? totalPw / easy : Infinity;
+  const backupFrom = tune.backupFrom ?? DEPLOY_BACKUP_FROM;
+  let backup = backupBase * Math.min(1, Math.max(0, pwRatio - backupFrom));
+  const guard = tune.guard === undefined ? DEPLOY_GUARD : tune.guard;
   const at = new Map<string, string>();
   const used = new Map<string, number>();
   const put = (u: DeployUnit, s: string) => {
@@ -330,7 +365,7 @@ function* planSteps(
     for (let p = 0; p < points; p++) {
       for (let i = 0; i < n; i++) tBuf[i] = tr[i]![p]! * gs[i]!.k;
       sortBy(nearIdx, n, tBuf);
-      const combined = reachIdx(nearIdx, n, tBuf, opts.force, false);
+      const combined = reachIdx(nearIdx, n, tBuf, hardForce, false);
       if (!mixed) {
         sum += combined;
         continue;
@@ -440,21 +475,36 @@ function* planSteps(
   }
 
   // Les deux départs, chacun amélioré ; on garde le meilleur (le glouton à égalité).
-  let bestAt: Map<string, string> | null = null;
-  let bestCost = Infinity;
-  for (const start of tune.singleStart ? [greedyStart] : [greedyStart, spreadStart]) {
+  function* searchAll(): Generator<void, { at: Map<string, string> | null; cost: number }> {
+    let bestAt: Map<string, string> | null = null;
+    let bestCost = Infinity;
+    for (const start of tune.singleStart ? [greedyStart] : [greedyStart, spreadStart]) {
+      at.clear();
+      used.clear();
+      yield* start();
+      const c = yield* improve();
+      if (!bestAt || c < bestCost - 1e-6) {
+        bestCost = c;
+        bestAt = new Map(at);
+      }
+    }
+    return { at: bestAt, cost: bestCost };
+  }
+  const place = (m: Map<string, string> | null) => {
     at.clear();
     used.clear();
-    yield* start();
-    const c = yield* improve();
-    if (!bestAt || c < bestCost - 1e-6) {
-      bestCost = c;
-      bestAt = new Map(at);
-    }
+    for (const u of units) put(u, m?.get(u.id) ?? u.loc);
+  };
+  let best = yield* searchAll();
+  if (guard !== null && backup > 0 && easy) {
+    // Le plan avec secours, jugé SANS secours (plus rien ne lit `backup` après).
+    backup = 0;
+    place(best.at);
+    const cB = cost();
+    const plain = yield* searchAll();
+    if (cB > plain.cost * (1 + guard)) best = plain;
   }
-  at.clear();
-  used.clear();
-  for (const u of units) put(u, bestAt?.get(u.id) ?? u.loc);
+  place(best.at);
 
   const moves: DeployMove[] = units
     .filter((u) => at.get(u.id) !== u.loc)
