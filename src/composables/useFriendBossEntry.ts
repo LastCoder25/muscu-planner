@@ -3,7 +3,7 @@
 // définition, sinon les deux cartes finiraient par annoncer des choses différentes.
 import { computed, ref } from 'vue';
 import { useFriendBossStore } from '@/stores/friendBoss';
-import { useCharacterStore } from '@/stores/character';
+import { loadCharacterStore, useLazyCharacter } from '@/composables/useLazyCharacter';
 import {
   bossEndsAt,
   bossPhase,
@@ -17,13 +17,13 @@ import {
 
 export function useFriendBossEntry() {
   const boss = useFriendBossStore();
-  const char = useCharacterStore();
+  const char = useLazyCharacter();
   const now = ref(Date.now());
 
   const invites = computed(() => boss.invitations(now.value));
   /** Un coffre de boss attend-il d'être ouvert ? (sans personnage chargé, on ne sait pas.) */
   const chestWaiting = computed(() => {
-    const cleared = char.row?.cleared_dungeons;
+    const cleared = char.value?.row?.cleared_dungeons;
     return (
       !!cleared &&
       boss.bosses.some(
@@ -61,7 +61,8 @@ export function useFriendBossEntry() {
   async function refresh() {
     now.value = Date.now();
     // Le coffre se lit sur le personnage : sans lui, la carte le tairait.
-    await Promise.all([boss.fetchMine(), char.loaded ? null : char.fetchMine()]);
+    const c = await loadCharacterStore();
+    await Promise.all([boss.fetchMine(), c.loaded ? null : c.fetchMine()]);
   }
 
   return { invites, chestWaiting, line, active, hot, refresh };

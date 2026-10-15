@@ -6,7 +6,7 @@ import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 import { singleFlight } from '@/lib/singleFlight';
-import { useCharacterStore } from '@/stores/character';
+import { loadCharacterStore } from '@/composables/useLazyCharacter';
 import {
   bossFromRow,
   bossPhase,
@@ -140,7 +140,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       p_tier: tier,
     });
     // Le serveur a dépensé les jetons : on le reflète avant qu'un gain ne réécrive l'ancienne réserve.
-    useCharacterStore().spentBossTokens(bossTokenCost(tier));
+    (await loadCharacterStore()).spentBossTokens(bossTokenCost(tier));
     await loadMine();
   }
 

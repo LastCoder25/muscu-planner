@@ -8,26 +8,27 @@
 // suivant qu'une journée entière de sport vient d'être gagnée.
 import { watch } from 'vue';
 import { useProgress } from '@/composables/useProgress';
-import { useCharacterStore } from '@/stores/character';
+import { useLazyCharacter } from '@/composables/useLazyCharacter';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { logicalToday } from '@/lib/challenges';
 
 export function useBossTokenAccrual() {
   const progress = useProgress();
-  const char = useCharacterStore();
+  const char = useLazyCharacter();
   const auth = useAuthStore();
   const fx = useGameFx();
   let running = false;
 
   watch(
-    [() => progress.ready.value, () => progress.global.value.xp, () => !!char.row],
+    [() => progress.ready.value, () => progress.global.value.xp, () => !!char.value?.row],
     async ([ready, xp, hasRow]) => {
       const uid = auth.user?.id;
-      if (!ready || !hasRow || !uid || running) return;
+      const c = char.value;
+      if (!ready || !hasRow || !uid || running || !c) return;
       running = true;
       try {
-        const gained = await char.accrueBossTokens(uid, xp, logicalToday());
+        const gained = await c.accrueBossTokens(uid, xp, logicalToday());
         if (gained > 0)
           fx.celebrate({
             kind: 'generic',

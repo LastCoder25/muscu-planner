@@ -8,7 +8,7 @@ import { useTennisStore } from '@/stores/tennis';
 import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import { useFriendBossStore } from '@/stores/friendBoss';
-import { useCharacterStore } from '@/stores/character';
+import { useLazyCharacter } from '@/composables/useLazyCharacter';
 import { useAuthStore } from '@/stores/auth';
 import { weeklyQuests } from '@/lib/weeklyQuests';
 import { logicalToday } from '@/lib/challenges';
@@ -27,7 +27,7 @@ export function useWeeklyQuests(ready?: Ref<boolean>) {
   const challenges = useChallengesStore();
   const combo = useComboStore();
   const friendBoss = useFriendBossStore();
-  const char = useCharacterStore();
+  const char = useLazyCharacter();
   const auth = useAuthStore();
   const claiming = ref(false);
 
@@ -42,20 +42,23 @@ export function useWeeklyQuests(ready?: Ref<boolean>) {
         bossHits: friendBoss.myHits,
       },
       logicalToday(),
-      char.row?.quest_week ?? null,
+      char.value?.row?.quest_week ?? null,
     ),
   );
 
   /** ⚠️ Sans personnage chargé, on ne sait pas si la semaine est déjà récupérée : le bouton
    *  attend (il ne promet pas des tickets qu'il ne pourrait pas verser). */
-  const canClaim = computed(() => !!char.row && board.value.claimable > 0 && !claiming.value);
+  const canClaim = computed(
+    () => !!char.value?.row && board.value.claimable > 0 && !claiming.value,
+  );
 
   async function claim() {
     const uid = auth.user?.id;
-    if (!uid || !canClaim.value) return 0;
+    const c = char.value;
+    if (!uid || !canClaim.value || !c) return 0;
     claiming.value = true;
     try {
-      return await char.claimWeeklyQuests(uid, board.value.monday, board.value.earned);
+      return await c.claimWeeklyQuests(uid, board.value.monday, board.value.earned);
     } finally {
       claiming.value = false;
     }

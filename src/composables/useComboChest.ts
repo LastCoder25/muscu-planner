@@ -16,7 +16,7 @@
 import { ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useComboStore } from '@/stores/combo';
-import { useCharacterStore } from '@/stores/character';
+import { loadCharacterStore } from '@/composables/useLazyCharacter';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import {
@@ -36,7 +36,7 @@ export async function depositComboChest(
   playerLevel: number,
 ): Promise<boolean> {
   const combo = useComboStore();
-  const char = useCharacterStore();
+  const char = await loadCharacterStore();
   // Le personnage peut ne pas être chargé (on vient d'un écran sport) : sans sa ligne,
   // on ne saurait ni où écrire le message ni s'il y est déjà.
   if (!char.row) await char.fetchMine();
