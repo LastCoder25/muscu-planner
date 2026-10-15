@@ -35,6 +35,7 @@ import {
 } from '@/lib/partyForecast';
 import { champSeatsWithHero, holdSeats, garrisonHold, defendsControl } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
+import { memberTripDelta } from '@/lib/tripDelta';
 import { heroPostOf, heroSpotOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
@@ -641,11 +642,27 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  donc un temps qui changeait dès qu'on n'envoyait pas tout le monde. Personne de coché :
    *  le pas d'un groupe sans rôle. */
   function selectedLegFrom(id: string): number {
-    const origin = id === 'base' ? null : (startOptions.value.find((o) => o.id === id)?.poi ?? null);
+    const origin =
+      id === 'base' ? null : (startOptions.value.find((o) => o.id === id)?.poi ?? null);
     const members = partyAdvs.value.filter((a) => originOfAdv(a.id) === id);
     const hero = id === heroOriginId.value && partyHeroOn.value;
     return legFrom(origin, members, hero);
   }
+  /** ⏱️ Ce que chaque champion change au trajet de son lieu (`memberTripDelta`), en minutes
+   *  d'aller-retour — le pendant « temps » du 🎯. Négatif = il fait aller le groupe plus vite. */
+  const partyTripDelta = computed(() => {
+    const out: Record<string, number> = {};
+    if (!selected.value) return out;
+    for (const a of partyPool.value) {
+      const id = originOfAdv(a.id);
+      const origin =
+        id === 'base' ? null : (startOptions.value.find((o) => o.id === id)?.poi ?? null);
+      const hero = id === heroOriginId.value && partyHeroOn.value;
+      const picked = partyAdvs.value.filter((b) => originOfAdv(b.id) === id);
+      out[a.id] = memberTripDelta(picked, a, (m) => legFrom(origin, m, hero));
+    }
+    return out;
+  });
   /** 🧭 Les champions PAR LIEU de départ, du lieu le plus proche de la cible au plus loin
    *  (demandé) — dès qu'un point fixe tenu a des champions prêts, ou que le héros y est
    *  posté ; sinon la liste habituelle. */
@@ -1155,6 +1172,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
 
   return {
     partyGain,
+    partyTripDelta,
     combined,
     wingPlan,
     combinedBlock,

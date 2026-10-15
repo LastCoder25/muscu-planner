@@ -54,7 +54,7 @@
          selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
-      <span v-if="(xp || gain != null || travelMin != null) && !reason" class="ca-row">
+      <span v-if="(xp || gain != null || travelMin != null || tripDelta) && !reason" class="ca-row">
         <!-- 🧭 SON TRAJET jusqu'au lieu visé (demandé : on le choisissait sans savoir quand il
              arriverait). -->
         <span v-if="travelMin != null" class="ca-trip" title="Trajet jusqu’au lieu"
@@ -65,6 +65,12 @@
             >×{{ fmtMult(xp.catchUp) }}</b
           >
         </span>
+        <!-- ⏱️ CE QU'IL CHANGE AU TRAJET (demandé : « comme le % de réussite ») : coché, ce que
+             le groupe de son lieu perdrait ou gagnerait sans lui ; non coché, en l'ajoutant.
+             Rien quand il ne change rien (un champion sans compétence de vitesse). -->
+        <span v-if="tripDelta" class="ca-gain" :class="{ neg: tripDelta > 0 }" :title="tripWhy"
+          >⏱️ {{ tripDelta < 0 ? '−' : '+' }}{{ formatDurationMin(Math.abs(tripDelta)) }}</span
+        >
         <!-- 🎯 CE QU'IL APPORTE À LA RÉUSSITE, par rapport à l'équipe cochée (demandé) : coché,
              ce qu'on perdrait en le retirant ; non coché, ce qu'on gagnerait en l'ajoutant. -->
         <span
@@ -124,6 +130,9 @@ const props = defineProps<{
   gainTitle?: string | null;
   /** 🧭 Son trajet jusqu'au lieu visé, en minutes (absent = rien à afficher). */
   travelMin?: number | null;
+  /** ⏱️ Ce qu'il change à l'aller-retour de son lieu, en minutes (`memberTripDelta`).
+   *  Négatif = plus rapide avec lui. */
+  tripDelta?: number | null;
   /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
   readonly?: boolean;
 }>();
@@ -136,6 +145,16 @@ const gainWhy = computed(
       ? 'Ce que l’équipe perdrait en réussite sans lui.'
       : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'),
 );
+const tripWhy = computed(() => {
+  const d = props.tripDelta ?? 0;
+  if (props.on)
+    return d < 0
+      ? 'Aller-retour plus court grâce à lui : sans lui, le groupe de son lieu irait moins vite.'
+      : 'Il ralentit le groupe de son lieu : sans lui, l’aller-retour serait plus court.';
+  return d < 0
+    ? 'Aller-retour plus court si tu l’ajoutes (compétence ou pièce de vitesse).'
+    : 'Aller-retour plus long si tu l’ajoutes : il marche moins vite que le groupe coché.';
+});
 const xpWhy = computed(() => {
   const x = props.xp;
   if (!x) return '';

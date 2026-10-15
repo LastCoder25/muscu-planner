@@ -1270,6 +1270,7 @@
                   :warn="interceptWarn(a.id)"
                   :xp="partyXp[a.id]"
                   :gain="partyGain[a.id]"
+                  :trip-delta="partyTripDelta[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
                 <p
@@ -1308,6 +1309,7 @@
                 :warn="interceptWarn(a.id)"
                 :xp="partyXp[a.id]"
                 :gain="partyGain[a.id]"
+                :trip-delta="partyTripDelta[a.id]"
                 @toggle="togglePartyAdv(a.id)"
               />
               <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
@@ -6160,6 +6162,7 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).
 const {
   partyGain,
+  partyTripDelta,
   stayCap,
   stayHold,
   stayHoldOf,
