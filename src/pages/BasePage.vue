@@ -2688,14 +2688,15 @@ function doHarvest() {
 }
 .pan-dot.on {
   fill: var(--dot);
-  stroke: #fff;
-  stroke-width: 0.4;
-  filter: drop-shadow(0 0 1.6px var(--dot));
+  /* Halo en TRAIT large et translucide, jamais en `filter` : sur du SVG un filtre n'est pas
+     composité, et l'animer repeignait toute la base 60 fois par seconde (mesuré : ~8 % d'un
+     cœur en continu sur cet écran). */
+  stroke: color-mix(in srgb, var(--dot) 55%, transparent);
+  stroke-width: 1.4;
   transform-box: fill-box;
   transform-origin: center;
   /* Un vrai clignotement (demandé : « clignotantes pour bien les voir ») : la boule
-     s'éteint presque, puis revient plus grosse avec un halo — l'ancienne respiration
-     (0,75 → 1) ne se voyait pas sur une boule de 2 unités. */
+     s'éteint presque, puis revient plus grosse — opacité et taille seulement. */
   animation: pan-dot 1.1s ease-in-out infinite;
 }
 @keyframes pan-dot {
@@ -2703,12 +2704,10 @@ function doHarvest() {
   100% {
     opacity: 1;
     transform: scale(1.25);
-    filter: drop-shadow(0 0 2.6px var(--dot));
   }
   50% {
     opacity: 0.15;
     transform: scale(0.85);
-    filter: drop-shadow(0 0 0 var(--dot));
   }
 }
 @media (prefers-reduced-motion: reduce) {
