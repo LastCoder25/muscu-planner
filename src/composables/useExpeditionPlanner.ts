@@ -33,7 +33,7 @@ import {
 } from '@/lib/party';
 import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import type { BaseState } from '@/lib/raid';
-import { withRiftCut } from '@/lib/rift';
+import { riftsByUrgency, withRiftCut } from '@/lib/rift';
 import { SUPPLIES, SUPPLY_IDS, type SupplyId } from '@/lib/supplies';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
@@ -65,6 +65,10 @@ const THRESHOLD_KEY = 'muscu:planner:threshold';
 const MODE_KEY = 'muscu:planner:mode';
 const GARRISON_KEY = 'muscu:planner:garrisons';
 const SUPPLY_KEY = 'muscu:planner:supplies';
+
+/** 🕳️ Mode « Failles » : seulement les failles, la plus urgente d'abord ; sinon tous les lieux. */
+const planTargets = (pois: Poi[], mode: PlanMode): Poi[] =>
+  mode === 'rifts' ? riftsByUrgency(pois) : pois;
 
 function readNum(key: string, def: number): number {
   try {
@@ -144,7 +148,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   const char = useCharacterStore();
 
   const threshold = ref(Math.min(99, Math.max(50, readNum(THRESHOLD_KEY, 90))));
-  const mode = ref<PlanMode>(readStr(MODE_KEY) === 'xp' ? 'xp' : 'events');
+  const savedMode = readStr(MODE_KEY);
+  const mode = ref<PlanMode>(savedMode === 'xp' || savedMode === 'rifts' ? savedMode : 'events');
   const withGarrisons = ref(readStr(GARRISON_KEY) === '1');
   const withHero = ref(true);
   watch(threshold, (v) => save(THRESHOLD_KEY, String(v)));
@@ -268,7 +273,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         for (const u of us) by.set(u.origin, [...(by.get(u.origin) ?? []), u]);
         return [...by];
       };
-      const targets = ctx.targets.value;
+      const targets = planTargets(ctx.targets.value, mode.value);
       const total = Math.max(1, targets.length * 6);
       let done = 0;
       // 🎒 Le stock des consommables autorisés : jamais plus que ce qu'on possède.
@@ -589,9 +594,13 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     );
   }
 
+  /** 🕳️ Combien de failles le mode « Failles » peut viser (l'écran le dit s'il n'y en a aucune). */
+  const riftCount = computed(() => planTargets(ctx.targets.value, 'rifts').length);
+
   return {
     threshold,
     mode,
+    riftCount,
     withGarrisons,
     withHero,
     supplyStock,

@@ -128,7 +128,10 @@
     </div>
 
     <template v-if="section === 'plan' && rows && !running">
-      <p v-if="!rows.length" class="pl-empty">
+      <p v-if="!rows.length && mode === 'rifts' && !riftCount" class="pl-empty">
+        Aucune faille ouverte à attaquer sur la carte.
+      </p>
+      <p v-else-if="!rows.length" class="pl-empty">
         Aucune expédition n’atteint {{ threshold }} % avec les effectifs libres.
       </p>
       <template v-else>
@@ -284,6 +287,7 @@ const props = defineProps<{
 const {
   threshold,
   mode,
+  riftCount,
   withGarrisons,
   withHero,
   supplyStock,
@@ -309,6 +313,7 @@ const {
 const MODES: { id: PlanMode; emo: string; title: string; sub: string }[] = [
   { id: 'events', emo: '🗺️', title: 'Événements', sub: 'le plus possible, le plus vite' },
   { id: 'xp', emo: '⭐', title: 'XP des champions', sub: 'le plus d’XP par heure' },
+  { id: 'rifts', emo: '🕳️', title: 'Failles', sub: 'les plus proches, la plus urgente d’abord' },
 ];
 const THRESHOLDS = [70, 80, 90, 95, 99];
 
@@ -344,7 +349,7 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
 }
 .pl-modes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .pl-mode {

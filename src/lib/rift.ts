@@ -219,6 +219,18 @@ export function riftMaturity(rift: Pick<RiftLike, 'spawnedAt'>, now: number): nu
   return riftMaturityAt(rift.spawnedAt, now);
 }
 
+/**
+ * 🕳️ Les failles d'une liste de lieux, la plus URGENTE d'abord (débordement le plus proche) —
+ * l'ordre dans lequel le planificateur les sert en mode « Failles ». Copie, jamais de tri en place.
+ */
+export function riftsByUrgency<P extends { type: string; spawnedAt: number }>(
+  pois: readonly P[],
+): P[] {
+  return pois
+    .filter((p) => p.type === 'rift')
+    .sort((a, b) => riftOverflowAt(a) - riftOverflowAt(b));
+}
+
 /** A-t-elle débordé ? (elle s'effondre alors, en laissant une mine — cf. `residualMineOf`) */
 export function riftOverflowed(rift: Pick<RiftLike, 'spawnedAt'>, now: number): boolean {
   return now >= riftOverflowAt(rift);

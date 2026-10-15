@@ -8,7 +8,12 @@
  * - `events` : le PLUS D'ÉVÉNEMENTS possible avec les effectifs disponibles, puis le MOINS DE
  *   TEMPS (les équipes les plus petites d'abord, à égalité les trajets les plus courts) ;
  * - `xp` : le PLUS D'XP pour les champions, ramenée au temps passé dehors (XP par heure et
- *   par champion engagé).
+ *   par champion engagé) ;
+ * - `rifts` (2026-10-15, demandé : « une organisation automatique pour attaquer les failles,
+ *   les effectifs les plus proches possibles en optimisant les taux de réussite ») : la page ne
+ *   propose que les failles, et on y envoie le monde le plus PROCHE — le plus court
+ *   aller-retour, même si l'équipe est plus grande. Une faille refermée vite ne déborde pas ;
+ *   l'ordre de service essaie aussi celui de la page (débordement le plus proche d'abord).
  *
  * ⚠️ AUCUNE RÈGLE DE JEU N'EST RECOPIÉE ICI. Le pronostic, le trajet, l'XP et ce qu'une
  * équipe a le droit d'emmener sont INJECTÉS (`PlanDeps`) : la page les branche sur les MÊMES
@@ -29,7 +34,7 @@
  * laissent au-dessus du seuil — les forts restent disponibles pour les lieux difficiles.
  */
 
-export type PlanMode = 'events' | 'xp';
+export type PlanMode = 'events' | 'xp' | 'rifts';
 
 /** Un membre possible : un champion ou le héros, et l'endroit d'où il part. */
 export interface PlanUnit {
@@ -130,6 +135,8 @@ function score<T>(c: Candidate<T>, mode: PlanMode): number {
     const champs = c.units.filter((u) => !u.hero).length || 1;
     return xpPerHour(c) / champs;
   }
+  // 🕳️ Failles : le plus PROCHE (le plus court aller-retour), même si l'équipe est plus grande.
+  if (mode === 'rifts') return -c.tripMin;
   // ⏱️ Le TEMPS OCCUPÉ : champions × aller-retour (2026-10-11, signalé : « de très longs trajets
   // proposés »). Avant, une équipe plus petite passait toujours devant, quel que soit son trajet :
   // un champion seul 5 h battait deux champions 1 h. Un champion occupé moins longtemps est un
@@ -468,24 +475,51 @@ export async function planExpeditions<T extends { id: string }>(
   const orders = (['events', 'xp'] as PlanMode[]).map((m) =>
     [...firstPass].sort((x, y) => score(y, m) - score(x, m)),
   );
+  // 🕳️ Failles : on essaie aussi l'ordre de la page (la plus URGENTE d'abord) et « la plus proche
+  // d'abord ».
+  if (mode === 'rifts')
+    orders.unshift(
+      [...firstPass],
+      [...firstPass].sort((x, y) => score(y, mode) - score(x, mode)),
+    );
   // ⏱️ Le DÉBIT du plan : chaque équipe refait son voyage en boucle, donc on somme l'XP par heure.
   const xpRate = (r: { trips: PlannedTrip<T>[] }) => r.trips.reduce((s, t) => s + xpPerHour(t), 0);
+  // 🕳️ Failles : l'urgence d'un plan = la somme des rangs (dans l'ordre de la page) des lieux
+  // servis — plus petite = les plus pressées sont couvertes.
+  const rankOf = new Map(targets.map((t, i) => [t.id, i]));
+  const urgency = (r: { trips: PlannedTrip<T>[] }) =>
+    r.trips.reduce((s, t) => s + (rankOf.get(t.target.id) ?? 0), 0);
+  // 🕳️ Failles : le temps pour y être (Σ aller-retour), pas le temps champion.
   const totalMin = (r: { trips: PlannedTrip<T>[] }) =>
-    r.trips.reduce((s, t) => s + t.tripMin * Math.max(1, t.units.length), 0);
+    r.trips.reduce(
+      (s, t) => s + t.tripMin * (mode === 'rifts' ? 1 : Math.max(1, t.units.length)),
+      0,
+    );
   let pick: { trips: PlannedTrip<T>[]; missed: T[] } | null = null;
   for (const order of orders) {
     const r = await assign(order, mode === 'xp');
     if (!r) return null;
+    const sameCount = !!pick && r.trips.length === pick.trips.length;
     const better = !pick
       ? true
       : mode === 'xp'
         ? xpRate(r) > xpRate(pick)
         : r.trips.length > pick.trips.length ||
-          (r.trips.length === pick.trips.length && totalMin(r) < totalMin(pick));
+          // 🕳️ Failles, à nombre égal : les plus URGENTES servies avant la plus proche.
+          (sameCount && mode === 'rifts' && urgency(r) < urgency(pick)) ||
+          (sameCount &&
+            (mode !== 'rifts' || urgency(r) === urgency(pick)) &&
+            totalMin(r) < totalMin(pick));
     if (better) pick = r;
   }
   const trips = pick!.trips;
   unreachable.push(...pick!.missed);
-  trips.sort((a, b) => (mode === 'xp' ? score(b, mode) - score(a, mode) : a.tripMin - b.tripMin));
+  trips.sort((a, b) =>
+    mode === 'xp'
+      ? score(b, mode) - score(a, mode)
+      : mode === 'rifts'
+        ? (rankOf.get(a.target.id) ?? 0) - (rankOf.get(b.target.id) ?? 0)
+        : a.tripMin - b.tripMin,
+  );
   return { trips, unreachable };
 }
