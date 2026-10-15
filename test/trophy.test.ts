@@ -29,11 +29,20 @@ import {
   type Item,
 } from '@/lib/items';
 import {
+  BOSS_TIERS,
   FRIEND_BOSS,
   FRIEND_BOSS_CHEST,
+  bonusMark,
+  bonusState,
+  bossShareUnits,
+  bossTier,
   chestMark,
   chestState,
+  friendBossBonus,
   friendBossChest,
+  personalChestReady,
+  personalShare,
+  personalTickets,
   type FriendBoss,
 } from '@/lib/friendBoss';
 import { bossGoldForLevel, bossSummonCost } from '@/data/bosses';
@@ -264,62 +273,137 @@ describe('🏆 TROPHÉE — le choix du joueur, hors de la puissance (v0.1145)',
   });
 });
 
-describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
+describe('🎁 COFFRE DU BOSS ENTRE AMIS — perso et bonus de groupe séparés (v1.200.0)', () => {
+  const share = FRIEND_BOSS.shareUnits.push;
+  const half = share * FRIEND_BOSS.minShare;
+
   it('est le même pour un même boss et un même joueur, différent d’un joueur à l’autre', () => {
     const b = boss();
-    const a1 = friendBossChest(b, 'alice', 30, 0);
-    const a2 = friendBossChest(b, 'alice', 30, 0);
+    const a1 = friendBossChest(b, 'alice', 30, share);
+    const a2 = friendBossChest(b, 'alice', 30, share);
     expect(a2).toEqual(a1);
-    const others = ['bob', 'chloe', 'dan', 'eve'].map((u) => friendBossChest(b, u, 30, 0).trophy);
+    const others = ['bob', 'chloe', 'dan', 'eve'].map(
+      (u) => friendBossChest(b, u, 30, share).trophy,
+    );
     expect(others.some((t) => JSON.stringify(t) !== JSON.stringify(a1.trophy))).toBe(true);
   });
 
-  it('paie comme deux boss de palier du niveau du joueur, sans bonus s’il meurt à la fin', () => {
-    const c = friendBossChest(boss(), 'u', 28, 0);
-    expect(c.early).toBe(0);
+  it('ta part entière : un coffre complet (deux boss de palier), tous les tickets, le trophée', () => {
+    const c = friendBossChest(boss(), 'u', 28, share);
+    expect(c.share).toBe(1);
     expect(c.gold).toBe(Math.round((bossGoldForLevel(28) * FRIEND_BOSS_CHEST.bosses) / 10) * 10);
     expect(c.stones).toBe(bossSummonCost(28) * FRIEND_BOSS_CHEST.bosses);
-    expect(c.trophy.name).toContain('Pompes');
-    expect(trophyPowerOf(c.trophy.power)).toBeDefined();
+    expect(c.trophy?.name).toContain('Pompes');
+    expect(trophyPowerOf(c.trophy?.power)).toBeDefined();
   });
 
-  it('tué tôt, il rapporte plus d’or, de pierres et de chance au trophée', () => {
-    const tard = friendBossChest(boss(), 'u', 40, 0);
-    const tot = friendBossChest(boss({ defeatedAt: T0 + 2 * D }), 'u', 40, 0);
+  it('⚠️ ne dépend PAS du sort du boss : abattu, survivant ou en cours, même coffre', () => {
+    const dead = friendBossChest(boss(), 'u', 30, share);
+    const alive = friendBossChest(boss({ defeatedAt: null }), 'u', 30, share);
+    const early = friendBossChest(boss({ defeatedAt: T0 + 2 * D }), 'u', 30, share);
+    expect(alive).toEqual(dead);
+    expect(early).toEqual(dead);
+  });
+
+  it('le barème : consolation 0 → 25 %, demi-part 50 % et ½ tickets, part entière 100 %', () => {
+    const tier = 'costaud'; // 2 tickets
+    const s = bossShareUnits('push', tier);
+    expect(personalShare('push', 0, tier)).toBe(0);
+    expect(personalShare('push', s * 0.25, tier)).toBeCloseTo(FRIEND_BOSS_CHEST.consolationMax / 2);
+    // Juste sous la demi-part : on frôle 25 %, jamais plus.
+    const under = personalShare('push', s * 0.5 - 1, tier);
+    expect(under).toBeLessThan(FRIEND_BOSS_CHEST.consolationMax);
+    expect(under).toBeGreaterThan(FRIEND_BOSS_CHEST.consolationMax * 0.9);
+    expect(personalShare('push', s * 0.5, tier)).toBe(0.5);
+    expect(personalShare('push', s * 0.75, tier)).toBe(0.75);
+    expect(personalShare('push', s, tier)).toBe(1);
+    expect(personalShare('push', 3 * s, tier)).toBe(1);
+    // Tickets : aucun en dessous de la demi-part, la moitié (arrondie en dessous), tous.
+    const t = bossTier(tier).tickets;
+    expect(personalTickets('push', s * 0.4, tier)).toBe(0);
+    expect(personalTickets('push', s * 0.5, tier)).toBe(Math.floor(t / 2));
+    expect(personalTickets('push', s * 0.9, tier)).toBe(Math.floor(t / 2));
+    expect(personalTickets('push', s, tier)).toBe(t);
+    // ⚠️ Un cran au nombre IMPAIR de tickets : c'est là que « arrondi en dessous » se voit.
+    const odd = BOSS_TIERS.filter((x) => x.tickets % 2 === 1);
+    expect(odd.length).toBeGreaterThan(0);
+    for (const o of odd) {
+      const so = bossShareUnits('push', o.id);
+      expect(personalTickets('push', so / 2, o.id)).toBe((o.tickets - 1) / 2);
+    }
+  });
+
+  it('pas de trophée sans la part entière ; le lot de consolation, c’est de l’or et des pierres', () => {
+    const c = friendBossChest(boss(), 'u', 30, half);
+    expect(c.trophy).toBeNull();
+    const lot = friendBossChest(boss(), 'u', 30, 5);
+    expect(lot.trophy).toBeNull();
+    expect(lot.tickets).toBe(0);
+    expect(lot.gold).toBeGreaterThan(0);
+    expect(lot.gold).toBeLessThan(c.gold);
+  });
+
+  it('⚠️ pas de combine par le cran : le coffre suit les reps faites', () => {
+    // Lancer un Inhumain et n'en faire qu'un peu ne paie que ce peu.
+    const s = bossShareUnits('push', 'inhumain');
+    const few = friendBossChest(boss({ tier: 'inhumain' }), 'u', 30, Math.floor(s * 0.2));
+    const full = friendBossChest(boss({ tier: 'inhumain' }), 'u', 30, s);
+    expect(few.gold).toBeLessThan(full.gold * FRIEND_BOSS_CHEST.consolationMax);
+  });
+
+  it('le bonus de groupe : tué tôt, il rapporte plus — jamais de trophée ni de tickets', () => {
+    const tard = friendBossBonus(boss(), 40, share);
+    const tot = friendBossBonus(boss({ defeatedAt: T0 + 2 * D }), 40, share);
     expect(tot.early).toBeCloseTo(5 / 7, 6);
     expect(tot.gold).toBeGreaterThan(tard.gold);
     expect(tot.stones).toBeGreaterThan(tard.stones);
-    // ⚠️ v0.894 : le rang du trophée est celui du joueur ; la chance relève ses ÉTOILES — et
-    // les étoiles RACCOURCISSENT la quête (sets spécialisés) : tuer tôt donne un trophée qui
-    // se déclenche plus souvent.
-    const fives = (early: number) => {
-      let n = 0;
-      for (let i = 0; i < 400; i++) {
-        const t = friendBossChest(
-          boss({ id: 'b' + i, defeatedAt: T0 + 7 * D * (1 - early) }),
-          'u',
-          40,
-          0,
-        ).trophy;
-        if (jetStar(t.roll) === 5) n++;
-      }
-      return n / 400;
-    };
-    expect(fives(1)).toBeGreaterThan(fives(0) + 0.1);
+    expect(tard.gold).toBe(
+      Math.round(
+        (bossGoldForLevel(40) * FRIEND_BOSS_CHEST.bosses * FRIEND_BOSS_CHEST.groupBase) / 10,
+      ) * 10,
+    );
+    expect(Object.keys(tot).sort()).toEqual(['early', 'gold', 'help', 'stones']);
+  });
+
+  it('le coffre perso s’ouvre dès la part faite, sinon à la fin du combat', () => {
+    const alive = boss({ defeatedAt: null });
+    expect(personalChestReady(alive, share, T0 + D)).toBe(true);
+    expect(personalChestReady(alive, half, T0 + D)).toBe(false);
+    expect(personalChestReady(alive, half, T0 + 8 * D)).toBe(true); // 7 jours passés
+    expect(personalChestReady(boss(), 1, T0 + 7 * D)).toBe(true); // abattu
+    expect(personalChestReady(boss(), 0, T0 + 9 * D)).toBe(false); // aucune rep : rien
   });
 
   it('se lit : rien, à ouvrir, ou à récupérer si le serveur l’a donné sans crédit', () => {
     const b = boss();
-    const share = FRIEND_BOSS.shareUnits.push;
     const m = { status: 'accepted' as const, units: share, claimed: false };
-    expect(chestState(b, m, [])).toBe('open');
-    expect(chestState(b, { ...m, claimed: true }, [])).toBe('recover');
-    expect(chestState(b, { ...m, claimed: true }, [chestMark(b.id)])).toBe('none');
-    expect(chestState(b, m, [chestMark(b.id)])).toBe('none');
-    expect(chestState(boss({ defeatedAt: null }), m, [])).toBe('none');
-    expect(chestState(b, { ...m, units: share * FRIEND_BOSS.minShare - 1 }, [])).toBe('none');
-    expect(chestState(b, { ...m, status: 'declined' }, [])).toBe('none');
-    expect(chestState(b, null, [])).toBe('none');
+    const t = T0 + 7 * D;
+    expect(chestState(b, m, [], t)).toBe('open');
+    expect(chestState(b, { ...m, claimed: true }, [], t)).toBe('recover');
+    expect(chestState(b, { ...m, claimed: true }, [chestMark(b.id)], t)).toBe('none');
+    expect(chestState(b, m, [chestMark(b.id)], t)).toBe('none');
+    // Moins que sa part : rien tant que le combat dure, un lot une fois fini.
+    const alive = boss({ defeatedAt: null });
+    expect(chestState(alive, { ...m, units: half }, [], T0 + D)).toBe('none');
+    expect(chestState(alive, { ...m, units: half }, [], T0 + 8 * D)).toBe('open');
+    expect(chestState(b, { ...m, units: 0 }, [], t)).toBe('none');
+    expect(chestState(b, { ...m, status: 'declined' }, [], t)).toBe('none');
+    expect(chestState(b, null, [], t)).toBe('none');
+  });
+
+  it('le bonus de groupe se lit : boss abattu ET demi-part, jamais pour un coffre d’avant', () => {
+    const b = boss();
+    const m = { status: 'accepted' as const, units: half, bonusClaimed: false };
+    expect(bonusState(b, m, [])).toBe('open');
+    expect(bonusState(b, { ...m, bonusClaimed: true }, [])).toBe('recover');
+    expect(bonusState(b, m, [bonusMark(b.id)])).toBe('none');
+    expect(bonusState(b, { ...m, units: half - 1 }, [])).toBe('none');
+    expect(bonusState(boss({ defeatedAt: null }), m, [])).toBe('none');
+    // ⚠️ Un coffre d'avant la séparation comprenait déjà la victoire.
+    expect(bonusState(b, { ...m, bonusClaimed: true, legacyChest: true }, [])).toBe('none');
+    // Les deux marques sont distinctes : ouvrir l'un ne ferme pas l'autre.
+    expect(bonusMark(b.id)).not.toBe(chestMark(b.id));
+    expect(bonusState(b, m, [chestMark(b.id)])).toBe('open');
   });
 });
 

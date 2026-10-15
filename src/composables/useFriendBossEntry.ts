@@ -8,6 +8,7 @@ import {
   bossEndsAt,
   bossPhase,
   bossStartAt,
+  bonusState,
   chestState,
   fmtBossPv,
   fmtBossSpan,
@@ -24,7 +25,11 @@ export function useFriendBossEntry() {
     const cleared = char.row?.cleared_dungeons;
     return (
       !!cleared &&
-      boss.bosses.some((b) => chestState(b, boss.myMembership(b.id), cleared) !== 'none')
+      boss.bosses.some(
+        (b) =>
+          chestState(b, boss.myMembership(b.id), cleared, now.value) !== 'none' ||
+          bonusState(b, boss.myMembership(b.id), cleared) !== 'none',
+      )
     );
   });
   const running = computed(() => boss.inProgress(now.value));

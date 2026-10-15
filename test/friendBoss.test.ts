@@ -51,6 +51,8 @@ import {
   bossTier,
   bossShareUnits,
   friendBossChest,
+  friendBossBonus,
+  helpShares,
   type FriendBoss,
   type FriendBossMember,
   type FriendBossHit,
@@ -580,9 +582,15 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
   }, 30_000);
 
   it('même part minimale (dernière définition), même nombre d’invités', () => {
-    expect(lastDef('fboss_claim')).toContain(
+    // 🎁 v1.200.0 : la demi-part garde le BONUS DE GROUPE ; le coffre perso, lui, s'ouvre à
+    // la part entière, sinon à la fin du combat (`personalChestReady`).
+    expect(lastDef('fboss_claim_bonus')).toContain(
       `public.fboss_share_tier(b.family, b.tier) * ${FRIEND_BOSS.minShare}`,
     );
+    const claim = lastDef('fboss_claim');
+    expect(claim).toContain('v_units < public.fboss_share_tier(b.family, b.tier)');
+    expect(claim).toContain('now() < public.fboss_ended(b)');
+    expect(claim).not.toContain('defeated_at is null');
     expect(sql).toContain(`cardinality(v_invitees) > ${FRIEND_BOSS.maxInvites}`);
   });
 
@@ -688,8 +696,9 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
       defeatedAt: 7 * D,
       tier,
     });
-    const easy = friendBossChest(boss('serieux'), 'u1', 30, 0);
-    const hard = friendBossChest(boss('inhumain'), 'u1', 30, 0);
+    // Chacun sa part entière : le coffre perso suit les reps (v1.200.0).
+    const easy = friendBossChest(boss('serieux'), 'u1', 30, bossShareUnits('push', 'serieux'));
+    const hard = friendBossChest(boss('inhumain'), 'u1', 30, bossShareUnits('push', 'inhumain'));
     const volume = bossShareUnits('push', 'inhumain') / bossShareUnits('push', 'serieux');
     // L'or PAR REP monte : c'est ce que « de plus en plus intéressante » veut dire.
     expect(hard.gold / easy.gold).toBeGreaterThan(volume);
@@ -1017,28 +1026,26 @@ describe('🤝 BOSS ENTRE AMIS — la part réservée et le surplus', () => {
     expect(d[0]!.damage).toBe(30);
   });
 
-  it('🎁 le surplus grossit SON coffre, plafonné, et rend son trophée plus chanceux', () => {
+  it('🤝 l’entraide paie au BONUS DE GROUPE, plafonnée — le coffre perso plafonne à ta part', () => {
     const b = boss({ id: 'b1', startAt: T0, defeatedAt: T0 + 7 * D });
     const share = bossShareUnits('push');
     expect(surplusShares('push', share)).toBe(0);
     expect(surplusShares('push', 3 * share)).toBe(2);
-    const base = friendBossChest(b, 'u', 30, share);
-    const plus1 = friendBossChest(b, 'u', 30, 2 * share);
-    const big = friendBossChest(b, 'u', 30, 50 * share);
-    expect(plus1.surplus).toBe(1);
-    expect(plus1.gold / base.gold).toBeCloseTo(1 + FRIEND_BOSS_CHEST.surplusGoldPerShare, 1);
-    // ⚠️ PLAFONNÉ : le coffre du cran le plus dur vaut déjà ~1 jour de revenu.
-    expect(big.gold / base.gold).toBeCloseTo(1 + FRIEND_BOSS_CHEST.surplusGoldMax, 1);
+    // Le coffre perso ne grossit plus au-delà de ta part (v1.200.0) : il s'ouvre dès qu'elle
+    // est faite, il doit rendre la même chose ensuite.
+    expect(friendBossChest(b, 'u', 30, 3 * share)).toEqual(friendBossChest(b, 'u', 30, share));
+    // L'entraide : les reps AU-DELÀ de sa part qui ont fait des dégâts.
+    expect(helpShares('push', share)).toBe(0);
+    expect(helpShares('push', 2 * share)).toBe(1);
+    const base = friendBossBonus(b, 30, share);
+    const plus1 = friendBossBonus(b, 30, 2 * share);
+    const big = friendBossBonus(b, 30, 50 * share);
+    expect(plus1.help).toBe(1);
+    const k = FRIEND_BOSS_CHEST.groupBase;
+    expect(plus1.gold / base.gold).toBeCloseTo((k + FRIEND_BOSS_CHEST.helpPerShare) / k, 1);
+    // ⚠️ PLAFONNÉ : jamais plus de `helpMax` d'un coffre complet.
+    expect(big.gold / base.gold).toBeCloseTo((k + FRIEND_BOSS_CHEST.helpMax) / k, 1);
     expect(big.stones).toBeGreaterThan(base.stones);
-    // Le trophée : plus d'étoiles en moyenne (chance), jamais un rang au-dessus du joueur.
-    let s0 = 0;
-    let s1 = 0;
-    for (let i = 0; i < 300; i++) {
-      const bi = boss({ id: 'b' + i, startAt: T0, defeatedAt: T0 + 7 * D });
-      s0 += friendBossChest(bi, 'u', 40, share).trophy.roll ?? 0;
-      s1 += friendBossChest(bi, 'u', 40, 50 * share).trophy.roll ?? 0;
-    }
-    expect(s1).toBeGreaterThan(s0);
   });
 
   it('⚠️ même règle que le serveur (dernière définition de fboss_hit, migr. 0092)', () => {

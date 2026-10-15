@@ -75,6 +75,8 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       status: r.status,
       units: r.units,
       claimed: r.claimed,
+      bonusClaimed: !!r.bonus_claimed,
+      legacyChest: !!r.legacy_chest,
       look: parseHeroLook(r.look),
     }));
     hits.value = (h.data ?? []).map((r) => ({
@@ -181,13 +183,24 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     for (const m of mine) m.look = look;
   }
 
-  /** Réclame son coffre : le serveur vérifie qu'il est dû (boss mort, part minimale) et le
+  /** Réclame son COFFRE PERSO : le serveur vérifie qu'il est dû (part faite, ou combat fini) et le
    *  marque pris. Le contenu est tiré côté client (`friendBossChest`). */
   async function claim(bossId: string) {
     const res = await rpc<{ ok: boolean; reason?: string }>('fboss_claim', { p_boss: bossId });
     if (!res.ok) throw new FriendBossError(res.reason ?? '');
     const m = myMembership(bossId);
     if (m) m.claimed = true;
+  }
+
+  /** Réclame son BONUS DE GROUPE (boss abattu, demi-part faite — migr. 0103). Le contenu
+   *  est calculé côté client (`friendBossBonus`). */
+  async function claimBonus(bossId: string) {
+    const res = await rpc<{ ok: boolean; reason?: string }>('fboss_claim_bonus', {
+      p_boss: bossId,
+    });
+    if (!res.ok) throw new FriendBossError(res.reason ?? '');
+    const m = myMembership(bossId);
+    if (m) m.bonusClaimed = true;
   }
 
   return {
@@ -204,6 +217,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     respond,
     hit,
     claim,
+    claimBonus,
     setLook,
   };
 });

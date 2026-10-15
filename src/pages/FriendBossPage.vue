@@ -127,8 +127,7 @@
           <!-- 🤝 LA PART RÉSERVÉE, dite AVANT la frappe : sinon des reps qui n'entament pas le
                boss se liraient comme un bug. Et on dit ce qu'elles rapportent quand même. -->
           <div v-if="split.surplus > 0" class="fb-hint fb-surplus">
-            🤝 <b>{{ split.surplus }}</b> {{ bossUnitLabel(current.family) }} en
-            <b>surplus</b> :
+            🤝 <b>{{ split.surplus }}</b> {{ bossUnitLabel(current.family) }} en <b>surplus</b> :
             <template v-if="reserved > 0"
               >les derniers PV sont gardés pour {{ waitingNames }}, qui n’{{
                 waitingCount > 1 ? 'ont' : 'a'
@@ -161,12 +160,37 @@
           </template>
           <span v-else class="fb-m-st">{{ m.status === 'invited' ? 'invité' : 'a refusé' }}</span>
         </div>
+        <!-- 🎁 Les deux récompenses SÉPARÉES (v1.200.0) : ton coffre suit TES reps, le bonus
+             tombe si le boss meurt. Dites ici, avant l'effort. -->
+        <div class="fb-rewards">
+          <div class="fb-rw" :class="{ on: myFraction > 0 && myFraction < 0.5 }">
+            <b>1–{{ minShareUnits(current.family, current.tier) - 1 }}</b
+            ><span>lot de consolation</span>
+          </div>
+          <div class="fb-rw" :class="{ on: myFraction >= 0.5 && myFraction < 1 }">
+            <b>{{ minShareUnits(current.family, current.tier) }}</b
+            ><span>demi-coffre · ½ 🎟️</span>
+          </div>
+          <div class="fb-rw" :class="{ on: myFraction >= 1 }">
+            <b>{{ bossShareUnits(current.family, current.tier) }}</b
+            ><span>coffre · 🎟️ · 🏆</span>
+          </div>
+        </div>
         <p class="fb-hint">
-          La barre = ta part ({{ bossShareUnits(current.family, current.tier) }}), le trait = la
-          moitié à apporter pour le coffre. Au-delà de ta part, chaque part en plus grossit ton
-          coffre (+{{ pct(FRIEND_BOSS_CHEST.surplusGoldPerShare) }} d’or et de pierres, jusqu’à
-          +{{ pct(FRIEND_BOSS_CHEST.surplusGoldMax) }}) et la chance de ton trophée.
+          Ton coffre suit <b>tes</b> {{ bossUnitLabel(current.family) }}, que le boss tombe ou non :
+          il s’ouvre dès que ta part est faite, sinon à la fin du combat. S’il tombe, chacun de ceux
+          qui ont fait leur demi-part reçoit en plus un <b>bonus de groupe</b> — plus gros s’il
+          tombe tôt, et plus gros encore pour qui a fait plus que sa part et couvert un ami (jusqu’à
+          +{{ pct(FRIEND_BOSS_CHEST.helpMax) }} d’un coffre).
         </p>
+        <button
+          v-if="chestOf(current) !== 'none'"
+          class="fb-btn big wide fb-chest"
+          :disabled="busy || !progress.ready.value"
+          @click="doOpenRewards(current)"
+        >
+          🎁 Ta part est faite : ouvre ton coffre
+        </button>
 
         <div v-if="hitDays.length" class="fb-sec-t">Frappes</div>
         <!-- ⚠️ GROUPÉES PAR JOUR (demande de l'utilisateur) : une journée de combat, c'est
@@ -342,37 +366,43 @@
             Tu as apporté <b>{{ store.myMembership(victory.id)?.units ?? 0 }}</b>
             {{ bossUnitLabel(victory.family) }}
           </div>
-          <div v-if="victoryChest" class="fb-v-loot">
+          <div v-if="victoryLoot" class="fb-v-loot">
             <div class="fb-v-loot-t">Ton butin</div>
-            <div>🏆 {{ victoryChest.trophy.name }} · {{ gradeLabel(victoryChest.trophy) }}</div>
-            <div>
-              🪙 +{{ victoryChest.gold }} · 🔮 +{{ victoryChest.stones
-              }}<template v-if="victoryChest.tickets"> · 🎟️ +{{ victoryChest.tickets }}</template>
+            <template v-if="victoryLoot.chest">
+              <div>
+                🎁 {{ chestTitle(victoryLoot.chest.share) }} ({{ pct(victoryLoot.chest.share) }}) :
+                🪙 +{{ victoryLoot.chest.gold }} · 🔮 +{{ victoryLoot.chest.stones
+                }}<template v-if="victoryLoot.chest.tickets">
+                  · 🎟️ +{{ victoryLoot.chest.tickets }}</template
+                >
+              </div>
+              <div v-if="victoryLoot.chest.trophy">
+                🏆 {{ victoryLoot.chest.trophy.name }} ·
+                {{ gradeLabel(victoryLoot.chest.trophy) }}
+              </div>
+            </template>
+            <div v-if="victoryLoot.bonus">
+              🤝 Bonus de groupe : 🪙 +{{ victoryLoot.bonus.gold }} · 🔮 +{{
+                victoryLoot.bonus.stones
+              }}
             </div>
-            <div v-if="victoryChest.surplus > 0" class="fb-dim">
-              🎁 {{ fmtParts(victoryChest.surplus) }} de plus que ta part : coffre +{{
-                pct(
-                  Math.min(
-                    FRIEND_BOSS_CHEST.surplusGoldMax,
-                    victoryChest.surplus * FRIEND_BOSS_CHEST.surplusGoldPerShare,
-                  ),
-                )
-              }}, trophée plus chanceux
+            <div v-if="victoryLoot.bonus && victoryLoot.bonus.help > 0" class="fb-dim">
+              Dont l’entraide : {{ fmtParts(victoryLoot.bonus.help) }} au-delà de ta part
             </div>
-            <div class="fb-dim">Trophée rangé dans ton sac à trophées</div>
           </div>
-          <template v-else-if="chestOf(victory) !== 'none'">
-            <div class="fb-v-line fb-dim">Ton coffre t’attend : or, pierres et un trophée.</div>
+          <template v-else-if="hasReward(victory)">
+            <div class="fb-v-line fb-dim">{{ rewardLine(victory) }}</div>
             <button
               class="fb-btn big fb-chest"
               :disabled="busy || !progress.ready.value"
               @click="openVictoryChest"
             >
-              🎁 Ouvrir le coffre
+              🎁 Ouvrir
             </button>
           </template>
           <div v-else class="fb-v-line fb-dim">
-            Pas de coffre : il fallait apporter au moins la moitié de ta part.
+            Rien à ouvrir de plus : ton coffre est déjà ouvert, et le bonus de groupe demande au
+            moins la moitié de ta part.
           </div>
           <button class="fb-btn fb-v-close" :disabled="busy" @click="closeVictory">Fermer</button>
         </div>
@@ -392,12 +422,13 @@
             </span>
           </span>
           <button
-            v-if="chestOf(b) !== 'none'"
+            v-if="hasReward(b)"
             class="fb-btn fb-chest"
             :disabled="busy || !progress.ready.value"
-            @click="doOpenChest(b)"
+            :title="rewardLine(b)"
+            @click="doOpenRewards(b)"
           >
-            🎁 {{ chestOf(b) === 'recover' ? 'Récupérer' : 'Ouvrir' }}
+            🎁 {{ chestOf(b) === 'recover' || bonusOf(b) === 'recover' ? 'Récupérer' : 'Ouvrir' }}
           </button>
         </div>
       </section>
@@ -456,9 +487,14 @@ import {
   bossHitsByDay,
   bossUnitsLeft,
   chestState,
+  bonusState,
+  personalShare,
   fmtBossPv,
   fmtBossSpan,
   friendBossChest,
+  friendBossBonus,
+  type FriendBossBonus,
+  type FriendBossChest,
   isBossExercise,
   metMinShare,
   type BossFamily,
@@ -688,8 +724,7 @@ const waiting = computed(() => {
   if (!b) return [];
   const half = minShareUnits(b.family, b.tier);
   return store.members.filter(
-    (m) =>
-      m.bossId === b.id && m.status === 'accepted' && m.userId !== uid.value && m.units < half,
+    (m) => m.bossId === b.id && m.status === 'accepted' && m.userId !== uid.value && m.units < half,
   );
 });
 const waitingCount = computed(() => waiting.value.length);
@@ -750,21 +785,21 @@ async function doHit() {
   busy.value = true;
   await stage.value?.die();
   busy.value = false;
-  victoryChest.value = null;
+  victoryLoot.value = null;
   victory.value = store.bosses.find((x) => x.id === b.id) ?? b;
 }
 
 // ── Résultat d'un boss abattu ──
 const victory = ref<FriendBoss | null>(null);
-const victoryChest = ref<ReturnType<typeof friendBossChest> | null>(null);
+const victoryLoot = ref<OpenedRewards | null>(null);
 function closeVictory() {
   victory.value = null;
-  victoryChest.value = null;
+  victoryLoot.value = null;
   pinnedId.value = null;
 }
 async function openVictoryChest() {
   if (!victory.value) return;
-  victoryChest.value = await doOpenChest(victory.value);
+  victoryLoot.value = await doOpenRewards(victory.value);
 }
 
 // ── Répondre ──
@@ -873,44 +908,106 @@ const past = computed(() =>
  *  le crédit n'a pas suivi), ou rien. Sans personnage chargé, on ne sait pas s'il est versé. */
 function chestOf(b: FriendBoss) {
   if (!char.row) return 'none';
-  return chestState(b, store.myMembership(b.id), char.row.cleared_dungeons);
+  return chestState(b, store.myMembership(b.id), char.row.cleared_dungeons, now.value);
 }
-/** Ouvre le coffre : le serveur le marque pris, puis il est déposé dans la boîte 📬 et
- *  encaissé aussitôt. ⚠️ Le niveau doit être connu (`progress.ready`) : un coffre tiré au
- *  niveau 1 serait définitif. */
-async function doOpenChest(b: FriendBoss): Promise<ReturnType<typeof friendBossChest> | null> {
+/** État du bonus de groupe (boss abattu, demi-part faite). */
+function bonusOf(b: FriendBoss) {
+  if (!char.row) return 'none';
+  return bonusState(b, store.myMembership(b.id), char.row.cleared_dungeons);
+}
+/** Quelque chose à ouvrir sur ce boss : le coffre perso, le bonus de groupe, ou les deux. */
+const hasReward = (b: FriendBoss) => chestOf(b) !== 'none' || bonusOf(b) !== 'none';
+/** Mes reps qui ont VRAIMENT entamé ce boss (le surplus exclu) : elles portent l'entraide. */
+const myDealt = (bossId: string) =>
+  store.myHits.filter((h) => h.bossId === bossId).reduce((n, h) => n + hitDamageUnits(h), 0);
+
+interface OpenedRewards {
+  chest: FriendBossChest | null;
+  bonus: FriendBossBonus | null;
+}
+/** Ouvre ce qui est dû : le serveur marque chaque récompense prise, puis elle est déposée
+ *  dans la boîte 📬 et encaissée aussitôt. ⚠️ Le niveau doit être connu (`progress.ready`) :
+ *  un coffre tiré au niveau 1 serait définitif. */
+async function doOpenRewards(b: FriendBoss): Promise<OpenedRewards | null> {
   const me = uid.value;
-  const state = chestOf(b);
-  if (!me || state === 'none' || busy.value || !progress.ready.value) return null;
+  const cs = chestOf(b);
+  const bs = bonusOf(b);
+  if (!me || (cs === 'none' && bs === 'none') || busy.value || !progress.ready.value) return null;
   busy.value = true;
+  const out: OpenedRewards = { chest: null, bonus: null };
   try {
-    if (state === 'open') await store.claim(b.id);
-    const chest = friendBossChest(
-      b,
-      me,
-      progress.global.value.level,
-      store.myMembership(b.id)?.units ?? 0,
-    );
-    const now = Date.now();
-    const msgId = await char.grantFriendBossChest(me, b.id, b.exerciseName, chest, now);
-    if (msgId) await char.expeClaim(me, msgId, now);
-    // Reste à l'écran jusqu'au toucher : il y a tout un butin à lire.
-    gameFx.celebrate({
-      kind: 'chest',
-      emoji: '🏆',
-      title: `Trophée : ${chest.trophy.name}`,
-      subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮${chest.tickets ? ` · +${chest.tickets} 🎟️` : ''} · rangé dans ton sac à trophées 🏆`,
-      rarity: fxRarity(chest.trophy.rarity),
-      sticky: true,
-    });
-    return chest;
+    const level = progress.global.value.level;
+    if (cs !== 'none') {
+      if (cs === 'open') await store.claim(b.id);
+      const chest = friendBossChest(b, me, level, store.myMembership(b.id)?.units ?? 0);
+      const t = Date.now();
+      const msgId = await char.grantFriendBossChest(me, b.id, b.exerciseName, chest, t);
+      if (msgId) await char.expeClaim(me, msgId, t);
+      out.chest = chest;
+    }
+    if (bs !== 'none') {
+      if (bs === 'open') await store.claimBonus(b.id);
+      const bonus = friendBossBonus(b, level, myDealt(b.id));
+      const t = Date.now();
+      const msgId = await char.grantFriendBossBonus(me, b.id, b.exerciseName, bonus, level, t);
+      if (msgId) await char.expeClaim(me, msgId, t);
+      out.bonus = bonus;
+    }
+    celebrateRewards(out);
+    return out;
   } catch (e) {
     notifyError(e);
-    return null;
+    return out.chest || out.bonus ? out : null;
   } finally {
     busy.value = false;
   }
 }
+/** Reste à l'écran jusqu'au toucher : il y a tout un butin à lire. */
+function celebrateRewards({ chest, bonus }: OpenedRewards) {
+  const gold = (chest?.gold ?? 0) + (bonus?.gold ?? 0);
+  const stones = (chest?.stones ?? 0) + (bonus?.stones ?? 0);
+  const tickets = chest?.tickets ?? 0;
+  const loot = `+${gold} 🪙 · +${stones} 🔮${tickets ? ` · +${tickets} 🎟️` : ''}`;
+  const extra = bonus ? ' · 🤝 bonus de groupe compris' : '';
+  if (chest?.trophy) {
+    gameFx.celebrate({
+      kind: 'chest',
+      emoji: '🏆',
+      title: `Trophée : ${chest.trophy.name}`,
+      subtitle: `${gradeLabel(chest.trophy)} · ${loot}${extra} · rangé dans ton sac à trophées 🏆`,
+      rarity: fxRarity(chest.trophy.rarity),
+      sticky: true,
+    });
+    return;
+  }
+  gameFx.celebrate({
+    kind: 'chest',
+    emoji: chest ? '🎁' : '🤝',
+    title: chest ? chestTitle(chest.share) : 'Bonus de groupe',
+    subtitle: `${loot}${extra}`,
+    sticky: true,
+  });
+}
+/** Où j'en suis de MA part sur le boss affiché (0..1+) — allume la bonne tuile. */
+const myFraction = computed(() => {
+  const b = current.value;
+  if (!b) return 0;
+  const share = bossShareUnits(b.family, b.tier);
+  return share > 0 ? (store.myMembership(b.id)?.units ?? 0) / share : 0;
+});
+/** Ce qui attend sur ce boss, en une phrase. */
+function rewardLine(b: FriendBoss): string {
+  const parts: string[] = [];
+  if (chestOf(b) !== 'none') {
+    const share = personalShare(b.family, store.myMembership(b.id)?.units ?? 0, b.tier);
+    parts.push(`${chestTitle(share).replace('Ton', 'ton')} (${pct(share)})`);
+  }
+  if (bonusOf(b) !== 'none') parts.push('le bonus de groupe');
+  const s = parts.join(' et ');
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) + ' t’attend.' : '';
+}
+const chestTitle = (share: number) =>
+  share >= 1 ? 'Ton coffre' : share >= 0.5 ? 'Ton demi-coffre' : 'Lot de consolation';
 
 function notifyError(e: unknown) {
   $q.notify({
@@ -1102,6 +1199,36 @@ function notifyError(e: unknown) {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--dim);
+}
+// 🎁 Les trois paliers du coffre perso, la tuile atteinte allumée.
+.fb-rewards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.fb-rw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 4px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+}
+.fb-rw b {
+  font-size: 15px;
+  color: var(--text);
+}
+.fb-rw.on {
+  border-color: var(--d1);
+  color: var(--d1);
+}
+.fb-rw.on b {
+  color: var(--d1);
 }
 .fb-sec {
   margin-top: 6px;

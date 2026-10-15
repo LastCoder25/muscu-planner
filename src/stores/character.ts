@@ -5,8 +5,10 @@ import { sinceEvent } from '@/lib/sinceEvent';
 import { parseQuestMark, questMark } from '@/lib/weeklyQuests';
 import {
   advanceBossTokens,
+  bonusMark,
   chestMark,
   type BossTokenState,
+  type FriendBossBonus,
   type FriendBossChest,
 } from '@/lib/friendBoss';
 import { defineStore, acceptHMRUpdate } from 'pinia';
@@ -3138,24 +3140,65 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return null;
     const id = chestMark(bossId);
     if (cur.cleared_dungeons.includes(id)) return null;
+    // 🎁 Coffre complet (ta part faite), demi-coffre, ou lot de consolation : le titre le dit.
+    const kind =
+      chest.share >= 1 ? 'Coffre' : chest.share >= 0.5 ? 'Demi-coffre' : 'Lot de consolation';
     const msg: ExpeditionMessage = {
       id,
       chest: true,
-      title: '🐉 Coffre du boss entre amis',
-      level: chest.trophy.level,
+      title: `🐉 ${kind} du boss entre amis`,
+      level: chest.level,
       win: true,
-      text:
-        chest.early > 0
-          ? `${bossName} — abattu avec ${Math.round(chest.early * 100)} % du temps restant.`
-          : `${bossName} — abattu.`,
+      text: `${bossName} — ${Math.round(chest.share * 100)} % de ton coffre, selon tes reps.`,
       gold: chest.gold,
       energy: 0,
       summonStones: chest.stones,
-      item: chest.trophy,
-      itemName: chest.trophy.name,
-      items: [chest.trophy],
+      ...(chest.trophy
+        ? { item: chest.trophy, itemName: chest.trophy.name, items: [chest.trophy] }
+        : {}),
       key: 0,
       tickets: chest.tickets,
+      resolvedAt: now,
+      claimAt: now,
+      claimed: false,
+      read: false,
+    };
+    await persist(userId, {
+      messages: boxWith(cur, [msg], MESSAGES_CAP),
+      cleared_dungeons: [...cur.cleared_dungeons, id],
+    });
+    return id;
+  }
+
+  /** Dépose le BONUS DE GROUPE d'un boss abattu dans la boîte 📬 et rend l'id du message.
+   *  Mêmes garanties que `grantFriendBossChest` (marque `bonusMark`, crédit par `expeClaim`). */
+  async function grantFriendBossBonus(
+    userId: string,
+    bossId: string,
+    bossName: string,
+    bonus: FriendBossBonus,
+    level: number,
+    now: number,
+  ): Promise<string | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const id = bonusMark(bossId);
+    if (cur.cleared_dungeons.includes(id)) return null;
+    const parts = [`${bossName} — abattu en groupe`];
+    if (bonus.early > 0) parts.push(`${Math.round(bonus.early * 100)} % du temps restant`);
+    if (bonus.help > 0) parts.push('tu as couvert un ami 🤝');
+    const msg: ExpeditionMessage = {
+      id,
+      chest: true,
+      title: '🐉 Bonus de groupe du boss entre amis',
+      level,
+      win: true,
+      text: parts.join(' · ') + '.',
+      gold: bonus.gold,
+      energy: 0,
+      summonStones: bonus.stones,
+      key: 0,
+      tickets: 0,
       resolvedAt: now,
       claimAt: now,
       claimed: false,
@@ -7139,6 +7182,7 @@ export const useCharacterStore = defineStore('character', () => {
     expeSettle,
     grantComboChest,
     grantFriendBossChest,
+    grantFriendBossBonus,
     expeClaim,
     expeAutoClaim,
     expeMarkRead,

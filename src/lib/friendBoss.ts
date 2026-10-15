@@ -22,6 +22,8 @@
 //    ajoute sa part de PV.
 //  • Les reps comptent comme du sport ; une prime de complétion s'ajoute si le boss meurt
 //    et qu'on a apporté sa part minimale.
+//  • Récompenses SÉPARÉES (v1.200.0) : un coffre perso selon SES reps, et un bonus de groupe
+//    si le boss tombe (cf. « DEUX RÉCOMPENSES SÉPARÉES » plus bas).
 import { REP_XP, XP_MULT } from './athlete';
 import { normMuscle } from './muscles';
 import { mulberry32, seedOf } from './combat';
@@ -263,7 +265,13 @@ export interface FriendBossMember {
   pseudo: string;
   status: BossMemberStatus;
   units: number;
+  /** Coffre perso pris (côté serveur). */
   claimed: boolean;
+  /** Bonus de groupe pris (côté serveur, migr. 0103). */
+  bonusClaimed: boolean;
+  /** Coffre pris AVANT la séparation coffre perso / bonus de groupe : il comprenait déjà la
+   *  victoire, donc aucun bonus en plus (migr. 0103). */
+  legacyChest?: boolean;
   /** Apparence de son héros (migr. 0072), pour la scène de combat. Absente tant qu'il n'a
    *  pas ouvert la page du boss. */
   look?: HeroLook | null;
@@ -367,7 +375,8 @@ export function bossErrorMessage(code: string): string {
     bad_tier: 'Cette difficulté n’existe pas — recharge la page.',
     not_defeated: 'Le boss n’est pas encore tombé.',
     nothing: 'Ton coffre a déjà été ouvert.',
-    min_share: 'Il fallait apporter au moins la moitié de ta part pour le coffre.',
+    not_ended: 'Ton coffre s’ouvre quand ta part est faite, ou à la fin du combat.',
+    min_share: 'Le bonus de groupe demande au moins la moitié de ta part.',
   };
   const key = Object.keys(table).find((k) => code.includes(k));
   return key ? table[key]! : 'Action impossible pour le moment.';
@@ -884,106 +893,196 @@ export function earlyKillFraction(
  *  et le pouvoir). Cf. `TROPHY_POWERS` dans items.ts.
  */
 
+// 🎁 DEUX RÉCOMPENSES SÉPARÉES (v1.200.0 ; conçu avec l'utilisateur : « que celui qui fait son
+// quota ne soit pas pénalisé si ses potes lâchent l'affaire »).
+//  1. Le COFFRE PERSO suit TES reps, que le boss tombe ou non (`personalShare`) :
+//       moins de la demi-part → lot de consolation (0 à 25 %, or et pierres seulement) ;
+//       la demi-part → 50 %, et la moitié des tickets ; ta part entière → 100 %, tous les
+//       tickets ET le trophée. Il s'ouvre dès que ta part est faite (sans attendre la fin),
+//       sinon à la fin du combat (mort ou 7 jours) avec ce que tu as fait.
+//  2. Le BONUS DE GROUPE tombe si le boss meurt, pour chacun de ceux qui ont fait au moins
+//     leur demi-part : or et pierres en plus, le « tué tôt », et l'ENTRAIDE — les reps faites
+//     au-delà de ta part qui ont vraiment entamé le boss, donc couvert un ami.
+// ⚠️ PAS DE COMBINE PAR LE CRAN : le coffre perso suit tes reps, pas le cran choisi. Lancer un
+// Inhumain sans le finir ne paie que les pompes faites.
+
 export const FRIEND_BOSS_CHEST = {
-  /** Or et pierres du coffre, en boss de palier du niveau du joueur : un boss entre amis
-   *  demande une semaine d'effort à plusieurs, il paie comme deux boss de palier. */
+  /** Or et pierres d'un coffre COMPLET, en boss de palier du niveau du joueur. */
   bosses: 2,
-  /** Bonus « tué tôt » : or et pierres × (1 + part du combat restante × ce facteur). */
-  earlyMult: 1,
-  /** Chance du trophée ajoutée par la part du combat restante. */
-  earlyLuck: 0.5,
-  /** 🎁 LE SURPLUS PAIE (v0.1206 ; choix de l'utilisateur : « les deux, plus modestement »).
-   *  Chaque part apportée au-delà de la sienne ajoute de l'or et des pierres à SON coffre, et
-   *  de la chance à SON trophée — jamais rien pris aux autres. ⚠️ PLAFONNÉ : le coffre du cran
-   *  le plus dur vaut déjà ~1 jour de revenu (mesuré v0.904) ; +30 % au plus le garde sous
-   *  ~1,3 jour, et il faut deux parts de plus pour l'atteindre (600 pompes en Inhumain). */
-  surplusGoldPerShare: 0.15,
-  surplusGoldMax: 0.3,
-  surplusLuckPerShare: 0.1,
-  surplusLuckMax: 0.2,
+  /** Lot de consolation : jusqu'à cette part du coffre, juste sous la demi-part. */
+  consolationMax: 0.25,
+  /** Bonus de groupe (boss abattu) : cette part d'un coffre complet… */
+  groupBase: 0.25,
+  /** … plus la part du combat restante × ce facteur (« tué tôt »). */
+  earlyMult: 0.5,
+  /** 🤝 Entraide : chaque part faite au-delà de la sienne et qui a entamé le boss ajoute
+   *  cette part d'un coffre, plafonnée — jamais rien pris aux autres. */
+  helpPerShare: 0.15,
+  helpMax: 0.3,
 } as const;
+
+/** Où en est un joueur par rapport à sa part (0..1+). */
+const partFraction = (family: BossFamily, units: number, tier?: string | null): number => {
+  const share = bossShareUnits(family, tier);
+  return share > 0 ? Math.max(0, units) / share : 0;
+};
+
+/** 🎁 Part du coffre perso que vaut ce que TU as fait : 0 → 25 % juste sous la demi-part
+ *  (consolation), 50 % à la demi-part, puis proportionnel jusqu'à 100 % à ta part entière. */
+export function personalShare(family: BossFamily, units: number, tier?: string | null): number {
+  const f = partFraction(family, units, tier);
+  const half = FRIEND_BOSS.minShare;
+  if (f <= 0) return 0;
+  if (f < half) return (FRIEND_BOSS_CHEST.consolationMax * f) / half;
+  return Math.min(1, f);
+}
+
+/** Tickets du coffre perso : tous à ta part entière, la moitié (arrondie en dessous) à la
+ *  demi-part, aucun en dessous — ils paient une étape de sport franchie. */
+export function personalTickets(family: BossFamily, units: number, tier?: string | null): number {
+  const f = partFraction(family, units, tier);
+  const t = bossTier(tier).tickets;
+  if (f >= 1) return t;
+  if (f >= FRIEND_BOSS.minShare) return Math.floor(t / 2);
+  return 0;
+}
+
+/** Le coffre perso peut-il s'ouvrir ? Dès que ta part est faite ; sinon à la fin du combat,
+ *  avec ce que tu as fait (au moins une rep). La règle exacte de `fboss_claim` (migr. 0103). */
+export function personalChestReady(
+  b: Pick<FriendBoss, 'family' | 'tier' | 'createdAt' | 'startAt' | 'defeatedAt'>,
+  units: number,
+  now: number,
+): boolean {
+  if (units <= 0) return false;
+  if (partFraction(b.family, units, b.tier) >= 1) return true;
+  return b.defeatedAt != null || now >= bossEndsAt(b);
+}
+
+/** Or et pierres d'un coffre COMPLET de ce boss au niveau du joueur, avant toute part. */
+function fullChestValue(tier: string | null | undefined, level: number) {
+  // ⚠️ SUPER-LINÉAIRE en difficulté (`rewardExp` 1,2) : c'est ce qui rend un boss dur plus
+  // payant qu'une enfilade de faciles — mesuré, l'or PAR REP monte de 38 % au cran le plus
+  // dur. Proportionnel (exposant 1), « de plus en plus intéressante » ne voudrait rien dire.
+  const mult = FRIEND_BOSS_CHEST.bosses * bossTier(tier).mult ** FRIEND_BOSS.rewardExp;
+  return { gold: bossGoldForLevel(level) * mult, stones: bossSummonCost(level) * mult };
+}
 
 export interface FriendBossChest {
   gold: number;
   stones: number;
-  /** Part du combat restante à la mort (0..1) : ce qu'a rapporté le fait de le tuer tôt. */
-  early: number;
-  /** 🎟️ Tickets d'invocation — ceux du cran (`BossTier.tickets`). ⚠️ Le « tué tôt » n'en
-   *  ajoute pas : il paie déjà en or, en pierres et en chance du trophée. */
+  /** Part du coffre complet que vaut ce qu'il a fait (cf. `personalShare`). */
+  share: number;
+  /** 🎟️ Tickets (cf. `personalTickets`). */
   tickets: number;
-  /** 🎁 Parts apportées au-delà de la sienne (0..) : ce qu'a rapporté d'en faire plus. */
-  surplus: number;
-  trophy: Omit<Item, 'id'>;
+  /** Niveau auquel le coffre a été tiré (le trophée peut manquer). */
+  level: number;
+  /** Le trophée — seulement si la part entière est faite. */
+  trophy: Omit<Item, 'id'> | null;
 }
 
 /**
- * Contenu du coffre d'UN joueur. Tiré côté client (le serveur ne connaît pas le jeu), avec
- * une graine FIXE boss + joueur : rouvrir la page, ou le récupérer après un échec, rend
+ * COFFRE PERSO d'un joueur. Tiré côté client (le serveur ne connaît pas le jeu), avec une
+ * graine FIXE boss + joueur : rouvrir la page, ou le récupérer après un échec, rend
  * exactement le même coffre. Le serveur, lui, garantit qu'il est dû et pris une fois.
+ * ⚠️ DÉTERMINISTE même ouvert en cours de combat : au-delà de ta part il plafonne à 100 %, et
+ * en dessous il ne s'ouvre qu'une fois le combat fini (reps figées). Le trophée ne dépend donc
+ * que du cran (pas du « tué tôt », qui va au bonus de groupe).
  */
 export function friendBossChest(
-  b: Pick<
-    FriendBoss,
-    'id' | 'family' | 'exerciseName' | 'createdAt' | 'startAt' | 'defeatedAt' | 'tier'
-  >,
+  b: Pick<FriendBoss, 'id' | 'family' | 'exerciseName' | 'tier'>,
   userId: string,
   playerLevel: number,
-  /** ⚠️ REQUIS : SES reps sur ce boss (`FriendBossMember.units`) — c'est le surplus qui les
-   *  lit. Figées à la mort du boss (plus aucune frappe acceptée), donc le coffre reste le
-   *  même à la récupération. */
+  /** ⚠️ REQUIS : SES reps sur ce boss (`FriendBossMember.units`). */
   units: number,
 ): FriendBossChest {
   const level = Math.max(1, Math.floor(playerLevel));
-  const early = earlyKillFraction(b);
   const tier = bossTier(b.tier);
-  const surplus = surplusShares(b.family, units, b.tier);
-  const surplusGold = Math.min(
-    FRIEND_BOSS_CHEST.surplusGoldMax,
-    surplus * FRIEND_BOSS_CHEST.surplusGoldPerShare,
-  );
-  const surplusLuck = Math.min(
-    FRIEND_BOSS_CHEST.surplusLuckMax,
-    surplus * FRIEND_BOSS_CHEST.surplusLuckPerShare,
-  );
-  // ⚠️ SUPER-LINÉAIRE en difficulté (`rewardExp` 1,2) : c'est ce qui rend un boss dur plus
-  // payant qu'une enfilade de faciles — mesuré, ×5,3 d'or par jour, et l'or PAR REP monte
-  // de 38 % au cran le plus dur. Proportionnel (exposant 1), l'or par rep serait plat et
-  // « de plus en plus intéressante » ne voudrait rien dire.
-  const mult =
-    FRIEND_BOSS_CHEST.bosses *
-    (1 + early * FRIEND_BOSS_CHEST.earlyMult) *
-    (1 + surplusGold) *
-    tier.mult ** FRIEND_BOSS.rewardExp;
+  const share = personalShare(b.family, units, b.tier);
+  const full = fullChestValue(b.tier, level);
   const rng = mulberry32(seedOf(`${b.id}:${userId}`));
   return {
-    gold: Math.round((bossGoldForLevel(level) * mult) / 10) * 10,
-    stones: Math.round(bossSummonCost(level) * mult),
-    early,
-    tickets: tier.tickets,
-    surplus,
-    trophy: rollTrophy(rng, {
-      title: b.exerciseName,
-      level,
-      // ⚠️ La chance du CRAN s'AJOUTE à celle du « tué tôt » : les deux disent « tu as fait
-      // plus que le minimum ». Elle ne touche que les étoiles et le niveau d'objet — le rang
-      // reste celui du joueur (v0.894), donc le sport demeure le plafond.
-      luck: early * FRIEND_BOSS_CHEST.earlyLuck + tier.luck + surplusLuck,
-    }),
+    gold: Math.round((full.gold * share) / 10) * 10,
+    stones: Math.round(full.stones * share),
+    share,
+    tickets: personalTickets(b.family, units, b.tier),
+    level,
+    trophy:
+      partFraction(b.family, units, b.tier) >= 1
+        ? rollTrophy(rng, { title: b.exerciseName, level, luck: tier.luck })
+        : null,
   };
 }
 
-/** Marque posée sur le personnage quand le coffre est versé (dans `cleared_dungeons`,
+export interface FriendBossBonus {
+  gold: number;
+  stones: number;
+  /** Part du combat restante à la mort (0..1) : ce qu'a rapporté le fait de le tuer tôt. */
+  early: number;
+  /** 🤝 Parts faites au-delà de la sienne qui ont entamé le boss (0..). */
+  help: number;
+}
+
+/** 🤝 Parts faites au-delà de la sienne qui ont VRAIMENT entamé le boss (`dealt` = reps qui
+ *  ont fait des dégâts, surplus exclu) : elles ont forcément couvert un ami, puisque les PV
+ *  valent la somme des parts. */
+export function helpShares(family: BossFamily, dealt: number, tier?: string | null): number {
+  const share = bossShareUnits(family, tier);
+  return share > 0 ? Math.max(0, dealt - share) / share : 0;
+}
+
+/** BONUS DE GROUPE d'un joueur (boss abattu). Aucun tirage : or et pierres seulement. */
+export function friendBossBonus(
+  b: Pick<FriendBoss, 'family' | 'tier' | 'createdAt' | 'startAt' | 'defeatedAt'>,
+  playerLevel: number,
+  /** Ses reps qui ont fait des dégâts (`hitDamageUnits` sommé) — figées à la mort. */
+  dealt: number,
+): FriendBossBonus {
+  const level = Math.max(1, Math.floor(playerLevel));
+  const early = earlyKillFraction(b);
+  const help = helpShares(b.family, dealt, b.tier);
+  const part =
+    FRIEND_BOSS_CHEST.groupBase +
+    early * FRIEND_BOSS_CHEST.earlyMult +
+    Math.min(FRIEND_BOSS_CHEST.helpMax, help * FRIEND_BOSS_CHEST.helpPerShare);
+  const full = fullChestValue(b.tier, level);
+  return {
+    gold: Math.round((full.gold * part) / 10) * 10,
+    stones: Math.round(full.stones * part),
+    early,
+    help,
+  };
+}
+
+/** Marque posée sur le personnage quand le coffre perso est versé (dans `cleared_dungeons`,
  *  comme les paliers du Labyrinthe) : le serveur dit « pris », cette marque dit « crédité ». */
 export const chestMark = (bossId: string) => `fboss:${bossId}`;
+/** Même chose pour le bonus de groupe. */
+export const bonusMark = (bossId: string) => `fbossb:${bossId}`;
 
-/** État du coffre d'un joueur : rien à faire, à ouvrir (appel serveur), ou à récupérer
- *  (le serveur l'a donné mais le crédit n'a pas eu lieu — réseau coupé entre les deux). */
+type ChestState = 'none' | 'open' | 'recover';
+
+/** État du coffre perso : rien à faire, à ouvrir (appel serveur), ou à récupérer (le serveur
+ *  l'a donné mais le crédit n'a pas eu lieu — réseau coupé entre les deux). */
 export function chestState(
-  b: Pick<FriendBoss, 'id' | 'family' | 'defeatedAt' | 'tier'>,
+  b: Pick<FriendBoss, 'id' | 'family' | 'tier' | 'createdAt' | 'startAt' | 'defeatedAt'>,
   m: Pick<FriendBossMember, 'status' | 'units' | 'claimed'> | null | undefined,
   credited: readonly string[],
-): 'none' | 'open' | 'recover' {
-  if (b.defeatedAt == null || !m || m.status !== 'accepted') return 'none';
-  if (!metMinShare(b.family, m.units, b.tier) || credited.includes(chestMark(b.id))) return 'none';
-  return m.claimed ? 'recover' : 'open';
+  now: number,
+): ChestState {
+  if (!m || m.status !== 'accepted' || credited.includes(chestMark(b.id))) return 'none';
+  if (m.claimed) return 'recover';
+  return personalChestReady(b, m.units, now) ? 'open' : 'none';
+}
+
+/** État du bonus de groupe : boss abattu ET demi-part faite. */
+export function bonusState(
+  b: Pick<FriendBoss, 'id' | 'family' | 'tier' | 'defeatedAt'>,
+  m: Pick<FriendBossMember, 'status' | 'units' | 'bonusClaimed' | 'legacyChest'> | null | undefined,
+  credited: readonly string[],
+): ChestState {
+  // ⚠️ Un coffre d'AVANT la séparation comprenait déjà la victoire : pas de bonus en plus.
+  if (b.defeatedAt == null || !m || m.status !== 'accepted' || m.legacyChest) return 'none';
+  if (!metMinShare(b.family, m.units, b.tier) || credited.includes(bonusMark(b.id))) return 'none';
+  return m.bonusClaimed ? 'recover' : 'open';
 }

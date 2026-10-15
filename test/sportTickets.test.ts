@@ -22,7 +22,7 @@ import {
   comboChestPlan,
   comboChestReward,
 } from '@/lib/comboChest';
-import { BOSS_TIERS, friendBossChest } from '@/lib/friendBoss';
+import { BOSS_TIERS, bossShareUnits, friendBossChest } from '@/lib/friendBoss';
 import { haulPills } from '@/lib/expedition';
 
 describe('🎟️ tickets du Défi 360 — une semaine de sport', () => {
@@ -80,7 +80,8 @@ describe('🎟️ tickets du boss entre amis — selon le cran', () => {
         },
         'me',
         30,
-        0,
+        // Sa part entière : c'est elle qui ouvre tous les tickets (v1.200.0).
+        bossShareUnits('push', t.id),
       );
       expect(chest.tickets).toBe(t.tickets);
     }
