@@ -1563,6 +1563,7 @@
     >
       <span class="tf-emo">{{ t.emo }}</span>
       <span class="tf-lab" aria-hidden="true">{{ t.short }}</span>
+      <span v-if="t.nLeft" class="tf-dot tf-dot-left">{{ t.nLeft }}</span>
       <span v-if="t.n" class="tf-dot">{{ t.n }}</span>
     </button>
   </div>
@@ -4778,8 +4779,8 @@ const focusArmyPoi = computed(() =>
   focusArmy.value ? (pois.value.find((p) => p.id === focusArmy.value) ?? null) : null,
 );
 /** 🧭⚔️ Voyages et attaques ennemies partagent UNE tuile (demandé : « fusionne la tuile
- *  expéditions et attaques ») ; le filtre vit dans `TripsPanel`. La pastille passe au rouge
- *  dès qu'une armée marche. */
+ *  expéditions et attaques ») ; le filtre vit dans `TripsPanel`. Deux pastilles : les expéditions
+ *  en haut à gauche, les attaques ennemies (rouges) en haut à droite. */
 /** Un rond de la carte. `blocked` = la raison pour laquelle il est grisé : il reste visible
  *  (on sait qu'il existe) et le toucher DIT cette raison au lieu d'ouvrir le panneau. */
 interface MapTab {
@@ -4788,7 +4789,10 @@ interface MapTab {
   label: string;
   /** Le mot écrit SOUS le rond (audit 2026-10-15 : un emoji seul ne dit pas ce qu'il ouvre). */
   short: string;
+  /** Le chiffre en haut à DROITE (sur 🧭 : les attaques ennemies, en rouge). */
   n: number;
+  /** 🧭 Le chiffre en haut à GAUCHE : les expéditions en cours (demandé : séparées des attaques). */
+  nLeft?: number;
   alert: boolean;
   blocked?: string;
 }
@@ -4805,7 +4809,8 @@ const mapTabs = computed<MapTab[]>(() => [
     emo: '🧭',
     label: 'Expéditions',
     short: 'Voyages',
-    n: trips.value.length + attacks.value.length,
+    nLeft: trips.value.length,
+    n: attacks.value.length,
     alert: attacks.value.length > 0,
   },
   { id: 'ctl', emo: '🏰', label: 'Places fortes', short: 'Forts', n: ctlCalls.value, alert: false },
@@ -7400,7 +7405,11 @@ onUnmounted(() => {
   font-weight: 800;
   line-height: 18px;
 }
-.tile-fab.alert .tf-dot {
+.tf-dot-left {
+  right: auto;
+  left: -4px;
+}
+.tile-fab.alert .tf-dot:not(.tf-dot-left) {
   background: var(--d4);
   color: #fff;
 }
