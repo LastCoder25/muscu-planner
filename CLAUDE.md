@@ -286,6 +286,12 @@ Il ne peut être arrêté qu'au niveau de la base.
    avant de s'alarmer ou de tout mettre à jour.
 10. ⚠️ **Le bucket `feedback` est PUBLIC** : une capture d'écran jointe à un ticket est lisible par
     quiconque a l'URL. Ne rien y mettre qu'on ne publierait pas.
+11. ⚖️ **LE JEU EST « SUR L'HONNEUR », COMME LE SPORT (décision de l'utilisateur, audit
+    2026-10-15, point S6).** La ligne `characters` (or, objets, champions…) et le `leaderboard`
+    sont écrits par le client : quelqu'un qui bricole les requêtes peut tricher SUR SA PROPRE
+    ligne (la RLS own-only l'empêche de toucher celle d'un autre). C'est **accepté** : faire
+    tourner combats, butin et économie côté serveur coûterait des semaines pour une app entre
+    amis. ⚠️ Ne pas re-soulever ce point ; il ne change que si l'app s'ouvre au public.
 
 ### ✅ TRIPLE VÉRIFICATION — la règle de travail du projet (v0.698)
 
