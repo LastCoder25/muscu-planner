@@ -593,7 +593,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     return null;
   };
   /** 🧭 Les lieux de départ (la base et les points tenus), du plus proche de la cible au plus
-   *  loin (demandé). Le trajet est celui de TOUS les champions prêts du lieu. */
+   *  loin (demandé). L'ORDRE se règle sur un groupe sans rôle (seule la distance compte) : il
+   *  ne doit pas bouger quand on coche un champion. */
   const originTiles = computed(() =>
     byReach([
       {
@@ -601,13 +602,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
         emo: '🏰',
         label: 'Base',
         n: freeStable.value.length,
-        // 🧝 Le trajet du héros compte sur SON lieu de départ (la base, ou son poste), dès
-        // qu'il peut se joindre au groupe.
-        legMin: legFrom(
-          null,
-          freeStable.value,
-          heroOriginId.value === 'base' && !partyHeroBlock.value,
-        ),
+        legMin: legFrom(null, [], false),
       },
       // 🧝 Le poste du héros a sa rangée même sans champion prêt (`startOptions`) — signalé :
       // le héros était montré à la base alors qu'il était à l'Ossuaire.
@@ -616,14 +611,20 @@ export function useExpeditionParty(ctx: PartyCtx) {
         emo: o.emo,
         label: o.label,
         n: o.n,
-        legMin: legFrom(
-          o.poi,
-          readyByPoint.value.get(o.id) ?? [],
-          heroOriginId.value === o.id && !partyHeroBlock.value,
-        ),
+        legMin: legFrom(o.poi, [], false),
       })),
     ]),
   );
+  /** ⏱️ Le trajet AFFICHÉ d'un lieu : celui des membres COCHÉS qui en partent (héros compris
+   *  s'il y est et qu'il vient) — signalé : il prenait les compétences 🧭 de TOUTE la garnison,
+   *  donc un temps qui changeait dès qu'on n'envoyait pas tout le monde. Personne de coché :
+   *  le pas d'un groupe sans rôle. */
+  function selectedLegFrom(id: string): number {
+    const origin = id === 'base' ? null : (startOptions.value.find((o) => o.id === id)?.poi ?? null);
+    const members = partyAdvs.value.filter((a) => originOfAdv(a.id) === id);
+    const hero = id === heroOriginId.value && partyHeroOn.value;
+    return legFrom(origin, members, hero);
+  }
   /** 🧭 Les champions PAR LIEU de départ, du lieu le plus proche de la cible au plus loin
    *  (demandé) — dès qu'un point fixe tenu a des champions prêts, ou que le héros y est
    *  posté ; sinon la liste habituelle. */
@@ -636,7 +637,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
           t.id === 'base'
             ? freeSorted.value
             : sortByGradeThenRank(readyByPoint.value.get(t.id) ?? []);
-        return { ...t, advs: all };
+        return { ...t, advs: all, legMin: selectedLegFrom(t.id) };
       }),
       heroAt.value,
     );
