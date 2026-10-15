@@ -466,6 +466,60 @@ export function strikeShots(damage: number): number[] {
   return Array.from({ length: n }, (_, i) => (i === n - 1 ? total - per * (n - 1) : per));
 }
 
+/** Partage `total` en `n` impacts entiers dont la somme vaut exactement `total`. */
+function splitExact(total: number, n: number): number[] {
+  const per = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => (i === n - 1 ? total - per * (n - 1) : per));
+}
+
+/** 🎆 LES PALIERS D'UNE FRAPPE — plus on envoie de reps d'un coup, plus l'attaque est
+ *  spectaculaire, SANS que l'animation s'allonge : au-delà de 10 reps, on ne tire plus un
+ *  projectile par rep mais un nombre FIXE d'impacts (leur somme vaut toujours la frappe).
+ *  `count` = nombre d'impacts, `-1` = un par rep ; `gapMs` = écart entre deux impacts. */
+export type StrikeStyle = 'orb' | 'fire' | 'storm' | 'laser' | 'meteor';
+export const STRIKE_TIERS: readonly {
+  style: StrikeStyle;
+  from: number;
+  count: number;
+  gapMs: number;
+  name: string;
+  emoji: string;
+}[] = [
+  { style: 'orb', from: 1, count: -1, gapMs: BOSS_SHOT_MS, name: 'Orbe', emoji: '✨' },
+  { style: 'fire', from: 5, count: -1, gapMs: 260, name: 'Boules de feu', emoji: '🔥' },
+  { style: 'storm', from: 10, count: 5, gapMs: 360, name: "Tempête d'éclairs", emoji: '⚡' },
+  { style: 'laser', from: 20, count: 10, gapMs: 210, name: 'Rayon dévastateur', emoji: '🔆' },
+  { style: 'meteor', from: 40, count: 1, gapMs: 0, name: 'Météore', emoji: '☄️' },
+];
+
+/** Secondes de gainage qui valent une rep pour choisir le palier (le barème des challenges). */
+export const STRIKE_SEC_PER_REP = 4;
+
+/** Reps « équivalentes » d'une frappe : un boss de gainage se compte en secondes. */
+export function strikeReps(damage: number, family?: BossFamily | null): number {
+  const units = Math.max(0, Math.round(damage / FRIEND_BOSS.damagePerUnit));
+  return family === 'core' ? Math.round(units / STRIKE_SEC_PER_REP) : units;
+}
+
+export interface StrikePlan {
+  style: StrikeStyle;
+  name: string;
+  emoji: string;
+  /** Dégâts de chaque impact, dans l'ordre ; leur somme vaut la frappe. */
+  hits: number[];
+  gapMs: number;
+}
+
+/** Le palier et les impacts d'une frappe. Orbes et boules de feu : un projectile par rep
+ *  (« boules = reps »), donc au plus 9 ; au-delà, un nombre fixe d'impacts. */
+export function strikePlan(damage: number, family?: BossFamily | null): StrikePlan {
+  const reps = strikeReps(damage, family);
+  const tier = [...STRIKE_TIERS].reverse().find((t) => reps >= t.from) ?? STRIKE_TIERS[0]!;
+  const total = Math.max(0, Math.round(damage));
+  const hits = splitExact(total, tier.count < 0 ? Math.max(1, reps) : tier.count);
+  return { style: tier.style, name: tier.name, emoji: tier.emoji, hits, gapMs: tier.gapMs };
+}
+
 /** Les cris du boss, du plus léger au dernier souffle. Une frappe = UN cri. */
 export const BOSS_CRIES = {
   light: [

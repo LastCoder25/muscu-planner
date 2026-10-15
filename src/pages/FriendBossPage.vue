@@ -92,6 +92,7 @@
           :boss-art="friendBossArt(current.id)"
           :family-emoji="BOSS_FAMILY_LABEL[current.family].emoji"
           :family-name="BOSS_FAMILY_LABEL[current.family].name"
+          :family="current.family"
           :hp-total="current.hpTotal"
           :hp-left="hpLeft"
           :hold="busy"
