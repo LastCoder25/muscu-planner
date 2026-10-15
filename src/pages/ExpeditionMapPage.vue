@@ -1253,7 +1253,7 @@
                   }}</span>
                 </button>
                 <HeroPickTile
-                  v-if="g.id === heroOriginId"
+                  v-if="g.id === heroOriginId && heroPickShown"
                   :on="partyHeroOn"
                   :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
                   :warn="interceptWarn('hero')"
@@ -1271,7 +1271,10 @@
                   :gain="partyGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
-                <p v-if="!g.advs.length && g.id !== heroOriginId" class="pool-empty">
+                <p
+                  v-if="!g.advs.length && !(g.id === heroOriginId && heroPickShown)"
+                  class="pool-empty"
+                >
                   Personne de prêt ici.
                 </p>
               </template>
@@ -1286,7 +1289,9 @@
               </template>
             </div>
             <div v-else class="car-pick" @click.capture="anchorPick">
+              <!-- 🧝 Indisponible (expédition, infirmerie) : pas proposé du tout (demandé). -->
               <HeroPickTile
+                v-if="heroPickShown"
                 :on="partyHeroOn"
                 :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
                 :warn="interceptWarn('hero')"
@@ -6235,6 +6240,7 @@ const {
   showBlocked,
   partyBlocked,
   partyHeroBlock,
+  heroPickShown,
   partyHeroOn,
   partySize,
   supplyRows,

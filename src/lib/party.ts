@@ -402,6 +402,13 @@ export const PARTY_HERO_BLOCK_LABEL: Record<PartyHeroBlock, string> = {
   vein: '💎 un filon s’extrait par les champions seuls',
 };
 
+/** 🧝 Proposer le héros dans le choix d'une équipe ? Pas quand il est INDISPONIBLE (en
+ *  expédition, à l'infirmerie) — 2026-10-15, demandé : « ça ne devrait pas me l'afficher du
+ *  tout ». Les refus liés au LIEU (Avant-poste, filon) restent affichés : ils disent une règle. */
+export function heroPickShown(block: PartyHeroBlock | null): boolean {
+  return block !== 'expedition' && block !== 'infirmary';
+}
+
 /** Ce que `startParty` a besoin de savoir d'un envoi, quelle que soit la cible. Les entrées
  *  de `resolveCamp` et de `resolveIncursion` le satisfont toutes les deux. */
 export interface PartyVoyage {

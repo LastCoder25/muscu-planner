@@ -14,6 +14,7 @@ import { useCharacterStore } from '@/stores/character';
 import { withRiftCut } from '@/lib/rift';
 import {
   partyCapFor,
+  heroPickShown as heroPickShownFor,
   partyHeroBlocker,
   partyLegMin,
   partySendBlocker,
@@ -295,6 +296,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** Le héros est-il VRAIMENT du groupe ? Le choix du joueur, tant que rien ne l'en empêche :
    *  un héros qu'on a coché puis qui part ailleurs ne doit pas fausser le pronostic. */
   const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value);
+  /** 🧝 La tuile du héros n'est pas proposée quand il est indisponible (`heroPickShown`). */
+  const heroPickShown = computed(() => heroPickShownFor(partyHeroBlock.value));
   const heroForParty = computed<PartyHero | null>(() =>
     partyHeroOn.value
       ? { name: char.row?.pseudo ?? 'Toi', level: heroLevel.value, combatant: fighter.value }
@@ -1175,6 +1178,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     showBlocked,
     partyBlocked,
     partyHeroBlock,
+    heroPickShown,
     partyHeroOn,
     partySize,
     supplyRows,
