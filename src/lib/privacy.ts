@@ -4,14 +4,17 @@
 // la purge planifiée (migration SQL) comme ses tests les lisent : une durée annoncée qui ne
 // serait pas appliquée serait un mensonge, et une purge non annoncée, une surprise.
 //
-// ⚠️ Les mentions légales (responsable, contact) viennent de l'environnement (`APP_LEGAL_*`,
-// `.env` / Vercel) : jamais en dur, et « à compléter » plutôt qu'une information inventée.
+// Les mentions légales (responsable, contact) sont celles données par l'utilisateur
+// (2026-10-15) ; l'environnement (`APP_LEGAL_*`, `.env` / Vercel) peut les remplacer.
 
 /** Version du texte. L'augmenter redemande le consentement à tous les comptes. */
 export const PRIVACY_VERSION = 1;
 
-/** Ce qu'on affiche quand une mention n'est pas renseignée. */
-export const TO_COMPLETE = 'à compléter';
+/** Les mentions légales, données par l'utilisateur le 2026-10-15. */
+export const LEGAL_DEFAULTS: LegalInfo = {
+  controller: 'MARTINEZ Alban',
+  contact: 'martinez.alban25@gmail.com',
+};
 
 export interface LegalInfo {
   controller: string;
@@ -21,8 +24,11 @@ export interface LegalInfo {
 export function legalInfo(
   env: Partial<Record<'APP_LEGAL_NAME' | 'APP_LEGAL_CONTACT', string>>,
 ): LegalInfo {
-  const v = (s: string | undefined) => (s && s.trim() ? s.trim() : TO_COMPLETE);
-  return { controller: v(env.APP_LEGAL_NAME), contact: v(env.APP_LEGAL_CONTACT) };
+  const v = (s: string | undefined, d: string) => (s && s.trim() ? s.trim() : d);
+  return {
+    controller: v(env.APP_LEGAL_NAME, LEGAL_DEFAULTS.controller),
+    contact: v(env.APP_LEGAL_CONTACT, LEGAL_DEFAULTS.contact),
+  };
 }
 
 /** ⏳ Durées de conservation appliquées par le code (jours). */

@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import {
   PRIVACY_VERSION,
   RETENTION,
-  TO_COMPLETE,
+  LEGAL_DEFAULTS,
   consentMeta,
   hasConsented,
   legalInfo,
@@ -18,11 +18,14 @@ const migrations = readdirSync('supabase/migrations')
 const allSql = migrations.join('\n');
 
 describe('🔒 RGPD — la page Confidentialité dit ce que le code fait', () => {
-  it('mentions légales : « à compléter » plutôt qu’une info inventée', () => {
-    expect(legalInfo({})).toEqual({ controller: TO_COMPLETE, contact: TO_COMPLETE });
+  it('mentions légales : celles de l’utilisateur, remplaçables par l’environnement', () => {
+    expect(legalInfo({})).toEqual({
+      controller: 'MARTINEZ Alban',
+      contact: 'martinez.alban25@gmail.com',
+    });
     expect(legalInfo({ APP_LEGAL_NAME: '  Alban  ', APP_LEGAL_CONTACT: '' })).toEqual({
       controller: 'Alban',
-      contact: TO_COMPLETE,
+      contact: LEGAL_DEFAULTS.contact,
     });
   });
 
@@ -42,7 +45,10 @@ describe('🔒 RGPD — la page Confidentialité dit ce que le code fait', () =>
 describe('🔒 RGPD — consentement daté', () => {
   it('à jour seulement avec la version courante ET une date', () => {
     const m = consentMeta(new Date('2026-10-15T10:00:00Z'));
-    expect(m).toEqual({ privacy_version: PRIVACY_VERSION, privacy_accepted_at: '2026-10-15T10:00:00.000Z' });
+    expect(m).toEqual({
+      privacy_version: PRIVACY_VERSION,
+      privacy_accepted_at: '2026-10-15T10:00:00.000Z',
+    });
     expect(hasConsented(m)).toBe(true);
     expect(hasConsented({ ...m, privacy_version: PRIVACY_VERSION - 1 })).toBe(false);
     expect(hasConsented({ privacy_version: PRIVACY_VERSION })).toBe(false);
@@ -54,9 +60,13 @@ describe('🔒 RGPD — droit d’accès : l’export couvre TOUTES les tables p
   // Chaque table créée avec une référence à auth.users doit être exportée — sinon une donnée
   // collectée échapperait au droit d'accès. On lit les migrations, pas une liste recopiée.
   const tables = new Set<string>();
-  for (const m of allSql.matchAll(/create table (?:if not exists )?public\.(\w+)\s*\(([\s\S]*?)\n\);/g))
+  for (const m of allSql.matchAll(
+    /create table (?:if not exists )?public\.(\w+)\s*\(([\s\S]*?)\n\);/g,
+  ))
     if (/auth\.users/.test(m[2]!)) tables.add(m[1]!);
-  const dropped = new Set([...allSql.matchAll(/drop table (?:if exists )?public\.(\w+)/g)].map((m) => m[1]!));
+  const dropped = new Set(
+    [...allSql.matchAll(/drop table (?:if exists )?public\.(\w+)/g)].map((m) => m[1]!),
+  );
 
   it('la lecture des migrations trouve bien les tables (le test n’est pas creux)', () => {
     expect(tables.size).toBeGreaterThan(15);
@@ -77,7 +87,9 @@ describe('🔒 RGPD — droit d’accès : l’export couvre TOUTES les tables p
   });
 
   it('nom de fichier daté', () => {
-    expect(exportFileName(new Date('2026-10-15T12:00:00Z'))).toBe('muscu-mes-donnees-2026-10-15.json');
+    expect(exportFileName(new Date('2026-10-15T12:00:00Z'))).toBe(
+      'muscu-mes-donnees-2026-10-15.json',
+    );
   });
 });
 
