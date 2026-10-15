@@ -37,7 +37,7 @@ import {
   metMinShare,
   bossRepsXp,
   bossAgendaEntries,
-  bossHitsByDay,
+  bossHitGrid,
   bossCompletionXp,
   earlyKillFraction,
   bossFromRow,
@@ -897,57 +897,88 @@ describe('🐉 BOSS ENTRE AMIS — ce qui remonte dans l’Agenda', () => {
   });
 });
 
-describe('🐉 les frappes groupées par jour', () => {
-  const dayKey = (ms: number) => {
-    const d = new Date(ms);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  // Dates en LOCAL : un `Date.UTC` + décalage ferait basculer une frappe du soir au
-  // lendemain selon le fuseau, et le groupement — ce qu'on éprouve — dépendrait de la machine.
-  const J = (jour: number, h = 12) => new Date(2026, 8, jour, h).getTime();
-  const hit = (id: string, units: number, at: number, over: Partial<FriendBossHit> = {}) => ({
+describe('🐉 le tableau des frappes : participants × 7 jours', () => {
+  const b = boss({ id: 'b1', startAt: T0 });
+  const mem = (userId: string, pseudo: string, status: FriendBossMember['status'] = 'accepted') =>
+    ({ bossId: 'b1', userId, pseudo, status }) as const;
+  const hit = (
+    id: string,
+    userId: string,
+    units: number,
+    at: number,
+    over: Partial<FriendBossHit> = {},
+  ) => ({
     id,
     bossId: 'b1',
-    userId: 'me',
+    userId,
     units,
     createdAt: at,
     ...over,
   });
+  const members = [mem('me', 'Moi'), mem('toi', 'Toi'), mem('lui', 'Lui', 'declined')];
 
-  it('un jour par ligne, le total du jour, et le détail du plus récent au plus ancien', () => {
-    const d = bossHitsByDay(
-      [hit('a', 10, J(15, 9)), hit('c', 5, J(16)), hit('b', 20, J(15, 18))],
-      'b1',
-      dayKey,
-    );
-    expect(d.map((x) => x.day)).toEqual(['2026-09-16', '2026-09-15']); // récent d'abord
-    expect(d[1]!.total).toBe(30);
-    expect(d[1]!.hits.map((h) => h.id)).toEqual(['b', 'a']);
-    // La ligne est datée par la frappe la PLUS RÉCENTE du jour.
-    expect(d[1]!.at).toBe(J(15, 18));
+  it('7 colonnes = 7 tranches de 24 h DEPUIS LE DÉPART, pas des jours du calendrier', () => {
+    const g = bossHitGrid(b, members, [], T0 + 2 * D + H);
+    expect(g.days).toHaveLength(7);
+    expect(g.days.map((d) => d.start)).toEqual([0, 1, 2, 3, 4, 5, 6].map((i) => T0 + i * D));
+    expect(g.days.map((d) => d.state)).toEqual([
+      'past',
+      'past',
+      'today',
+      'future',
+      'future',
+      'future',
+      'future',
+    ]);
   });
 
-  it('⚠️ les frappes d’un AUTRE boss ne s’y mélangent pas', () => {
-    const d = bossHitsByDay(
-      [hit('a', 10, J(15)), hit('x', 99, J(15), { bossId: 'b2' })],
-      'b1',
-      dayKey,
+  it('chaque frappe tombe dans la case de son auteur et de sa tranche, les reps s’additionnent', () => {
+    const g = bossHitGrid(
+      b,
+      members,
+      [
+        hit('a', 'me', 10, T0 + H),
+        hit('b', 'me', 5, T0 + 23 * H), // encore J1 : la tranche, pas minuit
+        hit('c', 'me', 7, T0 + D + H), // J2
+        hit('d', 'toi', 30, T0 + 3 * D),
+        hit('x', 'me', 99, T0 + H, { bossId: 'b2' }), // un autre boss : ignoré
+      ],
+      T0 + 4 * D,
     );
-    expect(d).toHaveLength(1);
-    expect(d[0]!.total).toBe(10);
+    const me = g.rows.find((r) => r.userId === 'me')!;
+    expect(me.cells).toEqual([15, 7, 0, 0, 0, 0, 0]);
+    expect(me.total).toBe(22);
+    expect(g.days.map((d) => d.total)).toEqual([15, 7, 0, 30, 0, 0, 0]);
+    expect(g.total).toBe(52);
   });
 
-  it('les frappes de TOUT LE MONDE comptent (c’est l’écran du groupe)', () => {
-    const d = bossHitsByDay(
-      [hit('a', 10, J(15)), hit('b', 7, J(15), { userId: 'toi' })],
-      'b1',
-      dayKey,
-    );
-    expect(d[0]!.total).toBe(17);
+  it('les acceptés ont leur ligne même vides, pas les refus ; du plus gros apport au plus petit', () => {
+    const g = bossHitGrid(b, members, [hit('d', 'toi', 30, T0 + H)], T0 + D);
+    expect(g.rows.map((r) => r.userId)).toEqual(['toi', 'me']);
+    expect(g.rows[1]!.total).toBe(0);
   });
 
-  it('une frappe à zéro ne crée pas de ligne', () => {
-    expect(bossHitsByDay([hit('a', 0, J(15))], 'b1', dayKey)).toEqual([]);
+  it('une frappe pile à la fin compte au dernier jour, jamais hors du tableau', () => {
+    const g = bossHitGrid(b, members, [hit('z', 'me', 4, T0 + 7 * D)], T0 + 8 * D);
+    expect(g.rows.find((r) => r.userId === 'me')!.cells[6]).toBe(4);
+  });
+
+  it('le surplus 🤝 est signalé sur sa case ; une frappe à zéro ne compte pas', () => {
+    const g = bossHitGrid(
+      b,
+      members,
+      [hit('s', 'me', 40, T0 + H, { surplus: 10 }), hit('z', 'toi', 0, T0 + H)],
+      T0 + D,
+    );
+    const me = g.rows.find((r) => r.userId === 'me')!;
+    expect(me.surplus[0]).toBe(true);
+    expect(me.cells[0]).toBe(40);
+    expect(g.rows.find((r) => r.userId === 'toi')!.total).toBe(0);
+  });
+
+  it('un boss pas encore démarré : tout le tableau est à venir', () => {
+    const g = bossHitGrid(boss({ id: 'b1' }), members, [], T0);
+    expect(g.days.every((d) => d.state === 'future')).toBe(true);
   });
 });
 
@@ -1021,9 +1052,6 @@ describe('🤝 BOSS ENTRE AMIS — la part réservée et le surplus', () => {
     );
     // La frappe tout en surplus ne se rejoue pas : elle n'a rien entamé.
     expect(r.strikes.map((s) => [s.id, s.damage])).toEqual([['a', 30_000]]);
-    const d = bossHitsByDay([h('a', 50, 20), h('b', 40, 40)], 'b1', () => 'j');
-    expect(d[0]!.total).toBe(90);
-    expect(d[0]!.damage).toBe(30);
   });
 
   it('🤝 l’entraide paie au BONUS DE GROUPE, plafonnée — le coffre perso plafonne à ta part', () => {

@@ -193,31 +193,61 @@
           🎁 Ta part est faite : ouvre ton coffre
         </button>
 
-        <div v-if="hitDays.length" class="fb-sec-t">Frappes</div>
-        <!-- ⚠️ GROUPÉES PAR JOUR (demande de l'utilisateur) : une journée de combat, c'est
-             souvent six ou sept frappes en rafale — la liste à plat noyait le total du jour
-             dans le détail. Le total mène, le détail se déplie. -->
-        <template v-for="d in hitDays" :key="d.day">
-          <button
-            type="button"
-            class="fb-day"
-            :aria-expanded="openDays.has(d.day)"
-            @click="toggleDay(d.day)"
-          >
-            <span class="mf-chev" :class="{ open: openDays.has(d.day) }">▸</span>
-            <b>{{ dayLabel(d.at) }}</b>
-            <span class="fb-day-tot">+{{ d.total }} {{ bossUnitLabel(current.family) }}</span>
-            <span class="fb-dim">−{{ fmtBossPv(bossDamage(d.damage)) }} PV</span>
-            <span v-if="d.hits.length > 1" class="fb-dim">· {{ d.hits.length }} frappes</span>
-          </button>
-          <div v-if="openDays.has(d.day)" class="fb-day-detail">
-            <div v-for="h in d.hits" :key="h.id" class="fb-log">
-              <b>{{ pseudoOf(h.userId) }}</b> +{{ h.units }} {{ bossUnitLabel(current.family) }}
-              <span class="fb-dim">(−{{ fmtBossPv(bossDamage(hitDamageUnits(h))) }} PV)</span>
-              <span v-if="h.surplus" class="fb-dim">· 🤝 {{ h.surplus }} en surplus</span>
-              <span class="fb-dim">· il y a {{ fmtBossSpan(now - h.createdAt) }}</span>
-            </div>
+        <template v-if="hitGrid && hitGrid.rows.length">
+          <div class="fb-sec-t">Frappes · {{ bossUnitLabel(current.family) }} par jour</div>
+          <!-- ⚠️ UN TABLEAU PARTICIPANTS × 7 JOURS (demande de l'utilisateur) : la liste des
+               frappes disait QUAND on avait frappé, jamais qui porte le groupe ni qui décroche.
+               Les jours sont les tranches de 24 h du combat (`bossHitGrid`). -->
+          <div class="fb-grid-wrap">
+            <table class="fb-grid">
+              <thead>
+                <tr>
+                  <th class="fb-g-name" scope="col"></th>
+                  <th
+                    v-for="d in hitGrid.days"
+                    :key="d.index"
+                    scope="col"
+                    :class="['fb-g-day', d.state]"
+                    :aria-current="d.state === 'today' ? 'date' : undefined"
+                  >
+                    J{{ d.index + 1 }}
+                  </th>
+                  <th class="fb-g-tot" scope="col">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in hitGrid.rows" :key="r.userId" :class="{ me: r.userId === uid }">
+                  <th class="fb-g-name" scope="row" :title="r.pseudo">{{ r.pseudo }}</th>
+                  <td
+                    v-for="d in hitGrid.days"
+                    :key="d.index"
+                    :class="[
+                      'fb-g-day',
+                      d.state,
+                      { zero: !r.cells[d.index], surplus: r.surplus[d.index] },
+                    ]"
+                    :title="r.surplus[d.index] ? 'Une partie en surplus 🤝' : undefined"
+                  >
+                    {{ r.cells[d.index] || (d.state === 'future' ? '' : '·') }}
+                  </td>
+                  <td class="fb-g-tot">{{ r.total }}</td>
+                </tr>
+              </tbody>
+              <tfoot v-if="hitGrid.rows.length > 1">
+                <tr>
+                  <th class="fb-g-name" scope="row">Groupe</th>
+                  <td v-for="d in hitGrid.days" :key="d.index" :class="['fb-g-day', d.state]">
+                    {{ d.total || (d.state === 'future' ? '' : '·') }}
+                  </td>
+                  <td class="fb-g-tot">{{ hitGrid.total }}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
+          <p v-if="hitGrid.rows.some((r) => r.surplus.some(Boolean))" class="fb-hint">
+            Souligné en vert : une partie des reps est partie en surplus 🤝 (elles comptent quand
+            même pour toi).
+          </p>
         </template>
       </section>
 
@@ -439,7 +469,6 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
-import { localDayIso } from '@/lib/localDay';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { backOr } from '@/lib/nav';
@@ -485,7 +514,7 @@ import {
   bossPhase,
   bossStartAt,
   bossUnitLabel,
-  bossHitsByDay,
+  bossHitGrid,
   bossUnitsLeft,
   chestState,
   bonusState,
@@ -648,42 +677,10 @@ watch(
   { immediate: true },
 );
 const unitSingular = computed(() => (current.value?.family === 'core' ? 'seconde' : 'rep'));
-/** Jour LOCAL, comme partout ailleurs dans l'app. */
-const dayKey = (ms: number) => localDayIso(new Date(ms));
-const hitDays = computed(() =>
-  current.value ? bossHitsByDay(store.hits, current.value.id, dayKey).slice(0, 10) : [],
+/** Le tableau participants × jours du combat (une seule règle : `bossHitGrid`). */
+const hitGrid = computed(() =>
+  current.value ? bossHitGrid(current.value, store.members, store.hits, now.value) : null,
 );
-/** Les jours dépliés. ⚠️ Le plus récent l'est d'office : c'est celui qu'on vient regarder. */
-const openDays = ref<Set<string>>(new Set());
-watch(
-  hitDays,
-  (days) => {
-    const first = days[0]?.day;
-    if (first && !openDays.value.size) openDays.value = new Set([first]);
-  },
-  { immediate: true },
-);
-// Changer de boss replie les jours du précédent : on repart du plus récent de celui-ci.
-watch(
-  () => current.value?.id,
-  () => (openDays.value = new Set(hitDays.value[0] ? [hitDays.value[0].day] : [])),
-);
-function toggleDay(day: string) {
-  const next = new Set(openDays.value);
-  if (!next.delete(day)) next.add(day);
-  openDays.value = next;
-}
-const dayLabel = (ms: number) => {
-  const today = dayKey(Date.now());
-  const k = dayKey(ms);
-  if (k === today) return "Aujourd'hui";
-  if (k === dayKey(Date.now() - 86400000)) return 'Hier';
-  return new Date(ms).toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'short',
-  });
-};
 const pseudoOf = (userId: string) =>
   store.members.find((m) => m.userId === userId)?.pseudo ?? 'Un ami';
 const ownerPseudo = (b: FriendBoss) => pseudoOf(b.ownerId);
@@ -1302,55 +1299,73 @@ function notifyError(e: unknown) {
   font-size: 12px;
   color: var(--dim);
 }
-.fb-log {
-  font-size: 12.5px;
-  padding: 2px 0;
+/* Le tableau des frappes : participants × 7 jours. Tient à 344 px (le nom se coupe en
+   ellipse) ; le cadre défile de côté en dernier recours, jamais la page. */
+.fb-grid-wrap {
+  overflow-x: auto;
+  margin-top: 4px;
 }
-/* La ligne d'un JOUR : c'est un bouton (on déplie le détail), donc reset, cible de 44 px
-   et curseur. ⚠️ `.mf-chev` est redéfini ici : les styles sont SCOPED par composant, celui
-   d'AventurePage n'atteint pas cet écran. */
-.fb-day {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+.fb-grid {
   width: 100%;
-  min-height: 44px;
-  padding: 0 2px;
-  background: none;
-  border: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.fb-grid th,
+.fb-grid td {
+  padding: 7px 0;
+  text-align: center;
   border-bottom: 1px solid var(--line);
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
 }
-.fb-day:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.fb-grid thead th {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dim);
 }
-.fb-day-tot {
+.fb-g-name {
+  width: 25%;
+  padding-right: 4px !important;
+  text-align: left !important;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-g-tot {
+  width: 13%;
   font-weight: 800;
   color: var(--accent);
 }
-.fb-day-detail {
-  padding: 4px 0 8px 18px;
-  border-left: 1px solid var(--line);
-  margin-left: 6px;
+.fb-g-day {
+  font-size: 11.5px;
+  letter-spacing: -0.2px;
 }
-.mf-chev {
-  display: inline-block;
-  transition: transform 0.15s ease;
+.fb-g-day.zero,
+.fb-g-day.future {
   color: var(--dim);
 }
-.mf-chev.open {
-  transform: rotate(90deg);
+.fb-g-day.today {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-@media (prefers-reduced-motion: reduce) {
-  .mf-chev {
-    transition: none;
-  }
+.fb-grid thead .fb-g-day.today {
+  color: var(--accent);
+}
+.fb-grid tr.me th,
+.fb-grid tr.me td:not(.fb-g-tot) {
+  color: var(--text);
+}
+.fb-grid tr.me .fb-g-name {
+  color: var(--accent);
+}
+/* 🤝 en pastille, pas en exposant : un exposant grandissait la ligne. */
+.fb-g-day.surplus {
+  box-shadow: inset 0 -2px 0 var(--d1, #7bc86c);
+}
+.fb-grid tfoot th,
+.fb-grid tfoot td {
+  border-bottom: 0;
+  font-weight: 700;
 }
 .fb-search {
   width: 100%;

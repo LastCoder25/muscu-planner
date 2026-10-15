@@ -806,42 +806,79 @@ export function bossRepsXp(family: BossFamily, units: number, repWeight: number)
   return Math.round(raw * XP_MULT);
 }
 
-/** Les frappes d'un boss, groupées PAR JOUR — du jour le plus récent au plus ancien, et
- *  dans chaque jour de la frappe la plus récente à la plus ancienne.
+/** Le tableau des frappes d'un boss : une ligne par participant, une colonne par JOUR DU
+ *  COMBAT (J1 → J7), et dans chaque case ses reps (ou secondes) de ce jour.
  *
- *  ⚠️ Distincte de `bossAgendaEntries` : celle-ci garde le DÉTAIL et prend les frappes de
- *  TOUT LE MONDE (l'écran du boss montre le groupe), là où l'agenda ne retient que les
- *  miennes et les convertit en XP. Elles ne répondent pas à la même question.
+ *  ⚠️ LES JOURS SONT DES TRANCHES DE 24 H DEPUIS LE DÉPART DU BOSS, pas des jours du
+ *  calendrier : un boss qui démarre un mardi à 15 h couvrirait sinon HUIT dates (deux
+ *  bouts de journée), et « J1 » ne voudrait plus rien dire. Le combat dure 7 tranches, le
+ *  tableau en a 7, toujours.
  *
- *  ⚠️ `dayKey` est INJECTÉE : « quel jour est-ce ? » dépend du fuseau de l'appelant, et
- *  cette lib reste pure. */
-export function bossHitsByDay(
+ *  ⚠️ Les frappes de TOUT LE MONDE (c'est l'écran du groupe), et un participant accepté
+ *  qui n'a encore rien fait a sa ligne : la voir vide, c'est l'information. Une frappe d'un
+ *  non-membre (impossible côté serveur) a quand même sa ligne : le tableau ne doit rien
+ *  perdre de ce qui a frappé le boss.
+ *
+ *  Ordre : du plus gros apport au plus petit, le pseudo départage (un ordre stable). */
+export interface BossGridDay {
+  /** 0 → 6. */
+  index: number;
+  start: number;
+  state: 'past' | 'today' | 'future';
+  /** Reps du groupe ce jour-là. */
+  total: number;
+}
+export interface BossGridRow {
+  userId: string;
+  pseudo: string;
+  /** Reps par jour, 7 cases. */
+  cells: number[];
+  /** Jours où une partie des reps est partie en surplus (🤝). */
+  surplus: boolean[];
+  total: number;
+}
+export function bossHitGrid(
+  b: Pick<FriendBoss, 'id' | 'createdAt' | 'startAt'>,
+  members: readonly Pick<FriendBossMember, 'bossId' | 'userId' | 'pseudo' | 'status'>[],
   hits: readonly FriendBossHit[],
-  bossId: string,
-  dayKey: (ms: number) => string,
-): { day: string; at: number; total: number; damage: number; hits: FriendBossHit[] }[] {
-  const byDay = new Map<string, FriendBossHit[]>();
+  now: number,
+): { days: BossGridDay[]; rows: BossGridRow[]; total: number } {
+  const start = bossStartAt(b);
+  const n = Math.round(FRIEND_BOSS.durationMs / DAY);
+  const days: BossGridDay[] = Array.from({ length: n }, (_, i) => {
+    const s = start + i * DAY;
+    return {
+      index: i,
+      start: s,
+      state: now >= s + DAY ? 'past' : now >= s ? 'today' : 'future',
+      total: 0,
+    };
+  });
+  const rows = new Map<string, BossGridRow>();
+  const rowOf = (userId: string, pseudo: string) => {
+    let r = rows.get(userId);
+    if (!r) {
+      r = { userId, pseudo, cells: Array(n).fill(0), surplus: Array(n).fill(false), total: 0 };
+      rows.set(userId, r);
+    }
+    return r;
+  };
+  for (const m of members)
+    if (m.bossId === b.id && m.status === 'accepted') rowOf(m.userId, m.pseudo);
   for (const h of hits) {
-    if (h.bossId !== bossId || h.units <= 0) continue;
-    const day = dayKey(h.createdAt);
-    const list = byDay.get(day);
-    if (list) list.push(h);
-    else byDay.set(day, [h]);
+    if (h.bossId !== b.id || h.units <= 0) continue;
+    // Bornée aux 7 tranches : une frappe pile à la fin compte au dernier jour.
+    const i = Math.min(n - 1, Math.max(0, Math.floor((h.createdAt - start) / DAY)));
+    const r = rowOf(h.userId, members.find((m) => m.userId === h.userId)?.pseudo ?? 'Un ami');
+    r.cells[i]! += h.units;
+    r.total += h.units;
+    if ((h.surplus ?? 0) > 0) r.surplus[i] = true;
+    days[i]!.total += h.units;
   }
-  return [...byDay.entries()]
-    .map(([day, list]) => {
-      const sorted = [...list].sort((a, b) => b.createdAt - a.createdAt);
-      return {
-        day,
-        // Le plus récent du jour : c'est lui qui date la ligne (« il y a 2 h »).
-        at: sorted[0]!.createdAt,
-        total: sorted.reduce((n, h) => n + h.units, 0),
-        /** Reps qui ont vraiment entamé le boss (le surplus n'en fait pas partie). */
-        damage: sorted.reduce((n, h) => n + hitDamageUnits(h), 0),
-        hits: sorted,
-      };
-    })
-    .sort((a, b) => b.at - a.at);
+  const list = [...rows.values()].sort(
+    (x, y) => y.total - x.total || x.pseudo.localeCompare(y.pseudo, 'fr'),
+  );
+  return { days, rows: list, total: list.reduce((t, r) => t + r.total, 0) };
 }
 
 /** Une ligne d'agenda : ce qu'un joueur a fait sur UN boss, UN jour donné. */
