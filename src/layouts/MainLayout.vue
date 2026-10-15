@@ -51,7 +51,8 @@
                 <q-item-section>
                   <q-item-label><b>Un boss t’attend</b></q-item-label>
                   <q-item-label caption
-                    >« {{ b.exerciseName }} » — 24 h pour le rejoindre</q-item-label
+                    >{{ bossTitle(b) }} ({{ b.exerciseName }}) — 24 h pour le
+                    rejoindre</q-item-label
                   >
                 </q-item-section>
               </q-item>
@@ -224,6 +225,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useFeedbackStore } from '@/stores/feedback';
 import { useFriendsStore } from '@/stores/friends';
 import { useFriendBossStore } from '@/stores/friendBoss';
+import { bossTitle } from '@/lib/friendBoss';
 import { useInstallPrompt } from '@/composables/useInstallPrompt';
 import { useGamePanel } from '@/composables/useGamePanel';
 

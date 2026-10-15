@@ -12,6 +12,7 @@ import {
   chestState,
   fmtBossPv,
   fmtBossSpan,
+  bossTitle,
 } from '@/lib/friendBoss';
 
 export function useFriendBossEntry() {
@@ -42,14 +43,14 @@ export function useFriendBossEntry() {
   const line = computed(() => {
     const inv = invites.value[0];
     if (inv)
-      return `⚔️ Invité : « ${inv.exerciseName} » — réponds dans ${fmtBossSpan(bossStartAt(inv) - now.value)}`;
+      return `⚔️ Invité : ${bossTitle(inv)} (${inv.exerciseName}) — réponds dans ${fmtBossSpan(bossStartAt(inv) - now.value)}`;
     if (chestWaiting.value) return '🎁 Ton coffre de boss t’attend — viens l’ouvrir.';
     const cur = current.value;
     if (!cur) return 'Lance un boss et abats-le avec tes amis, rep après rep.';
     const pv = Math.max(0, cur.hpTotal - cur.damage);
     return bossPhase(cur, now.value) === 'recruiting'
-      ? `« ${cur.exerciseName} » — démarre dans ${fmtBossSpan(bossStartAt(cur) - now.value)}${more.value}`
-      : `« ${cur.exerciseName} » — ${fmtBossPv(pv)} PV, encore ${fmtBossSpan(bossEndsAt(cur) - now.value)}${more.value}`;
+      ? `${bossTitle(cur)} (${cur.exerciseName}) — démarre dans ${fmtBossSpan(bossStartAt(cur) - now.value)}${more.value}`
+      : `${bossTitle(cur)} (${cur.exerciseName}) — ${fmtBossPv(pv)} PV, encore ${fmtBossSpan(bossEndsAt(cur) - now.value)}${more.value}`;
   });
 
   /** Il se passe quelque chose : une invitation, un coffre ou un boss en cours. */

@@ -246,6 +246,10 @@ export interface FriendBoss {
   family: BossFamily;
   exerciseId: string;
   exerciseName: string;
+  /** 🐉 Son NOM (« Gorgath l’Insatiable »), tiré par la base à la création (migr. 0108) :
+   *  tout le groupe et les notifications lisent le même. Absent sur une ligne d’avant :
+   *  `bossTitle` retombe sur l’exercice. */
+  name?: string | null;
   /** Poids de rep figé à la déclaration : il ne touche que l'XP. */
   repWeight: number;
   /** Cran de difficulté choisi au lancement (`BOSS_TIERS`). ⚠️ Absent sur les boss d'AVANT
@@ -306,6 +310,7 @@ export function bossFromRow(r: {
   family: string;
   exercise_id: string;
   exercise_name: string;
+  name?: string | null;
   rep_weight: number | string | null;
   tier?: string | null;
   created_at: string;
@@ -320,6 +325,7 @@ export function bossFromRow(r: {
     family: r.family as BossFamily,
     exerciseId: r.exercise_id,
     exerciseName: r.exercise_name,
+    name: r.name ?? null,
     repWeight: Number(r.rep_weight ?? 1) || 1,
     tier: r.tier ?? null,
     createdAt: ms(r.created_at) ?? 0,
@@ -445,6 +451,11 @@ export function bossUnitsLeft(b: Pick<FriendBoss, 'hpTotal' | 'damage'>): number
 // ── Scène de combat ───────────────────────────────────────────────────────────────
 
 export const BOSS_EMOJIS = ['🐉', '👹', '🦖', '🐙', '🦂', '🧌', '🐲', '👾'] as const;
+
+/** 🐉 Le nom à afficher : celui du boss, sinon (ligne d’avant la migr. 0108) son exercice. */
+export function bossTitle(b: Pick<FriendBoss, 'name' | 'exerciseName'>): string {
+  return b.name?.trim() || b.exerciseName;
+}
 
 /** Silhouette du boss : tirée de son id, donc la même pour tout le groupe et à chaque visite. */
 export function bossEmoji(bossId: string): string {

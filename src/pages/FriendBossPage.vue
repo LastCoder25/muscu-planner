@@ -21,8 +21,8 @@
       <!-- ── INVITATIONS : la seule chose urgente (24 h pour répondre) ───────────── -->
       <section v-for="b in invitations" :key="'inv-' + b.id" class="fb-card invite">
         <div class="fb-inv-t">
-          <b>{{ ownerPseudo(b) }}</b> t’invite à abattre un boss en
-          <b>{{ b.exerciseName }}</b>
+          <b>{{ ownerPseudo(b) }}</b> t’invite à abattre <b>{{ bossTitle(b) }}</b>
+          <span class="fb-dim">· {{ b.exerciseName }}</span>
         </div>
         <div class="fb-inv-s">
           {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
@@ -65,7 +65,7 @@
           :aria-selected="current?.id === b.id"
           @click="selectedId = b.id"
         >
-          {{ bossEmoji(b.id) }} {{ b.exerciseName }}
+          {{ bossEmoji(b.id) }} {{ bossTitle(b) }}
           <span class="fb-dim">{{ bossTier(b.tier).emoji }}</span>
         </button>
       </div>
@@ -87,7 +87,7 @@
 
         <FriendBossStage
           ref="stage"
-          :boss-name="current.exerciseName"
+          :boss-name="bossTitle(current)"
           :boss-emoji="bossEmoji(current.id)"
           :boss-art="friendBossArt(current.id)"
           :family-emoji="BOSS_FAMILY_LABEL[current.family].emoji"
@@ -387,7 +387,7 @@
       >
         <div v-if="victory" class="fb-victory">
           <div class="fb-v-emo">🏆</div>
-          <div class="fb-v-title font-display">Le boss est tombé !</div>
+          <div class="fb-v-title font-display">{{ bossTitle(victory) }} est tombé !</div>
           <div class="fb-v-sub">
             {{ victory.exerciseName }} · {{ bossTier(victory.tier).emoji }}
             {{ bossTier(victory.tier).label }}
@@ -444,9 +444,9 @@
         <div v-for="b in past" :key="b.id" class="fb-past">
           <span class="fb-emo fb-emo-past">{{ b.defeatedAt ? '🏆' : '💨' }}</span>
           <span class="fb-past-main">
-            <b>{{ b.exerciseName }}</b>
+            <b>{{ bossTitle(b) }}</b>
             <span class="fb-dim">
-              {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
+              {{ b.exerciseName }} · {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
               {{ b.defeatedAt ? 'abattu' : 'a survécu' }} · tu as apporté
               {{ store.myMembership(b.id)?.units ?? 0 }} {{ bossUnitLabel(b.family) }}
             </span>
@@ -506,6 +506,7 @@ import {
   FRIEND_BOSS_CHEST,
   bossEndsAt,
   bossEmoji,
+  bossTitle,
   bossFamily,
   bossDamage,
   strikesToReplay,

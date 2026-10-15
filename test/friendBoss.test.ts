@@ -57,6 +57,7 @@ import {
   type FriendBoss,
   type FriendBossMember,
   type FriendBossHit,
+  bossTitle,
 } from '@/lib/friendBoss';
 import { makeBoss } from './helpers/friendBoss';
 
@@ -466,6 +467,18 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     return bodies[bodies.length - 1]!;
   };
 
+  it('les notifications du boss disent son NOM, tiré une fois à la création', () => {
+    expect(lastDef('fboss_name_on_insert')).toContain('fboss_pick_name()');
+    for (const fn of [
+      'fboss_push_hit',
+      'fboss_push_invite',
+      'fboss_push_joined',
+      'fboss_push_down',
+      'fboss_schedule_end',
+    ]) {
+      expect(lastDef(fn), fn).toMatch(/(b|new)[.]name|v_name/);
+    }
+  });
   it('⏳ « dernières heures » : la fin du combat est celle de bossEndsAt, l’alerte 6 h avant', () => {
     const f = lastDef('fboss_schedule_end');
     const h = (ms: number) => `interval '${ms / 3600_000} hours'`;
@@ -1118,5 +1131,15 @@ describe('🤝 BOSS ENTRE AMIS — la part réservée et le surplus', () => {
     expect(hit).toContain('values (p_boss, v_uid, v_acc, v_acc - v_dmg)');
     expect(hit).toContain('v_dmg := least(v_acc, greatest(0, v_left - v_reserved))');
     expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
+  });
+});
+
+describe('bossTitle', () => {
+  it('rend le nom du boss, l’exercice à défaut', () => {
+    expect(bossTitle({ name: 'Gorgath Brise-Os', exerciseName: 'Pompes' })).toBe(
+      'Gorgath Brise-Os',
+    );
+    expect(bossTitle({ name: null, exerciseName: 'Pompes' })).toBe('Pompes');
+    expect(bossTitle({ name: '  ', exerciseName: 'Pompes' })).toBe('Pompes');
   });
 });
