@@ -193,72 +193,63 @@
           🎁 Ta part est faite : ouvre ton coffre
         </button>
 
-        <template v-if="hitGrid && hitGrid.rows.length">
-          <div class="fb-sec-t">Frappes · {{ bossUnitLabel(current.family) }} par jour</div>
-          <!-- ⚠️ UN TABLEAU PARTICIPANTS × 7 JOURS (demande de l'utilisateur) : la liste des
-               frappes disait QUAND on avait frappé, jamais qui porte le groupe ni qui décroche.
-               Les jours sont les tranches de 24 h du combat (`bossHitGrid`). -->
-          <div class="fb-grid-wrap">
-            <table class="fb-grid">
-              <thead>
-                <tr>
-                  <th class="fb-g-name" scope="col"></th>
-                  <th
-                    v-for="d in hitGrid.days"
-                    :key="d.index"
-                    scope="col"
-                    :class="['fb-g-day', d.state]"
-                    :aria-current="d.state === 'today' ? 'date' : undefined"
-                  >
-                    <span class="fb-day-h">J{{ d.index + 1 }}</span>
-                  </th>
-                  <th class="fb-g-tot" scope="col">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in hitGrid.rows" :key="r.userId" :class="{ me: r.userId === uid }">
-                  <th class="fb-g-name" scope="row" :title="r.pseudo">{{ r.pseudo }}</th>
-                  <td
-                    v-for="d in hitGrid.days"
-                    :key="d.index"
-                    :class="[
-                      'fb-g-day',
-                      d.state,
-                      { zero: !r.cells[d.index], surplus: r.surplus[d.index] },
-                    ]"
-                    :title="r.surplus[d.index] ? 'Une partie en surplus 🤝' : undefined"
-                  >
-                    <!-- Une PASTILLE par case, plus pleine selon le volume (carte de chaleur) :
-                         on voit d'un coup d'œil qui pousse et quel jour. -->
-                    <span class="fb-chip" :style="heatStyle(r.cells[d.index])">{{
-                      r.cells[d.index] || (d.state === 'future' ? '' : '·')
-                    }}</span>
-                  </td>
-                  <td class="fb-g-tot">
-                    <span class="fb-tot-chip">{{ r.total }}</span>
-                  </td>
-                </tr>
-              </tbody>
-              <tfoot v-if="hitGrid.rows.length > 1">
-                <tr>
-                  <th class="fb-g-name" scope="row">Groupe</th>
-                  <td v-for="d in hitGrid.days" :key="d.index" :class="['fb-g-day', d.state]">
-                    <span class="fb-chip group">{{
-                      d.total || (d.state === 'future' ? '' : '·')
-                    }}</span>
-                  </td>
-                  <td class="fb-g-tot">
-                    <span class="fb-tot-chip strong">{{ hitGrid.total }}</span>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+        <!-- ⚠️ UN TABLEAU PARTICIPANTS × 7 JOURS (demande de l'utilisateur) : la liste des
+             frappes disait QUAND on avait frappé, jamais qui porte le groupe ni qui décroche.
+             Les jours sont les tranches de 24 h du combat (`bossHitGrid`).
+             ⚠️ Le CADRE ressort de la page, le CONTENU reste sobre (demandé) : des chiffres,
+             peu de couleur, le moins de place possible. -->
+        <div v-if="hitGrid && hitGrid.rows.length" class="fb-grid-box">
+          <div class="fb-grid-t">
+            📅 Frappes <span class="fb-dim">· {{ bossUnitLabel(current.family) }} par jour</span>
           </div>
-          <p v-if="hitGrid.rows.some((r) => r.surplus.some(Boolean))" class="fb-hint">
-            Point vert : une partie des reps est partie en surplus 🤝 (elles comptent quand même
-            pour toi).
+          <table class="fb-grid">
+            <thead>
+              <tr>
+                <th class="fb-g-name" scope="col"></th>
+                <th
+                  v-for="d in hitGrid.days"
+                  :key="d.index"
+                  scope="col"
+                  :class="['fb-g-day', d.state]"
+                  :aria-current="d.state === 'today' ? 'date' : undefined"
+                >
+                  J{{ d.index + 1 }}
+                </th>
+                <th class="fb-g-tot" scope="col">Σ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in hitGrid.rows" :key="r.userId" :class="{ me: r.userId === uid }">
+                <th class="fb-g-name" scope="row" :title="r.pseudo">{{ r.pseudo }}</th>
+                <td
+                  v-for="d in hitGrid.days"
+                  :key="d.index"
+                  :class="[
+                    'fb-g-day',
+                    d.state,
+                    { zero: !r.cells[d.index], surplus: r.surplus[d.index] },
+                  ]"
+                  :title="r.surplus[d.index] ? 'Une partie en surplus 🤝' : undefined"
+                >
+                  {{ r.cells[d.index] || (d.state === 'future' ? '' : '·') }}
+                </td>
+                <td class="fb-g-tot">{{ r.total }}</td>
+              </tr>
+            </tbody>
+            <tfoot v-if="hitGrid.rows.length > 1">
+              <tr>
+                <th class="fb-g-name" scope="row">Groupe</th>
+                <td v-for="d in hitGrid.days" :key="d.index" :class="['fb-g-day', d.state]">
+                  {{ d.total || (d.state === 'future' ? '' : '·') }}
+                </td>
+                <td class="fb-g-tot">{{ hitGrid.total }}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <p v-if="hitGrid.rows.some((r) => r.surplus.some(Boolean))" class="fb-grid-note">
+            Souligné : une partie des reps est partie en surplus 🤝 (elles comptent quand même).
           </p>
-        </template>
+        </div>
       </section>
 
       <!-- ── LANCER UN BOSS ────────────────────────────────────────────────────── -->
@@ -691,19 +682,6 @@ const unitSingular = computed(() => (current.value?.family === 'core' ? 'seconde
 const hitGrid = computed(() =>
   current.value ? bossHitGrid(current.value, store.members, store.hits, now.value) : null,
 );
-/** La case la plus remplie du tableau : l'étalon de la carte de chaleur. */
-const heatMax = computed(() => Math.max(1, ...(hitGrid.value?.rows.flatMap((r) => r.cells) ?? [])));
-/** Pastille d'une case : vide = contour seul ; sinon un fond d'accent dont l'intensité suit
- *  le volume (de 22 % à 100 %), et un texte sombre quand le fond devient vif. */
-function heatStyle(n: number | undefined): Record<string, string> | undefined {
-  if (!n) return undefined;
-  const k = n / heatMax.value;
-  return {
-    background: `color-mix(in srgb, var(--accent) ${Math.round(22 + 78 * k)}%, var(--surface-2))`,
-    color: k > 0.55 ? '#15120e' : 'var(--text)',
-    borderColor: 'transparent',
-  };
-}
 const pseudoOf = (userId: string) =>
   store.members.find((m) => m.userId === userId)?.pseudo ?? 'Un ami';
 const ownerPseudo = (b: FriendBoss) => pseudoOf(b.ownerId);
@@ -1322,31 +1300,44 @@ function notifyError(e: unknown) {
   font-size: 12px;
   color: var(--dim);
 }
-/* Le tableau des frappes : participants × 7 jours. Tient à 344 px (le nom se coupe en
-   ellipse) ; le cadre défile de côté en dernier recours, jamais la page. */
-.fb-grid-wrap {
+/* Le tableau des frappes : un CADRE qui ressort de la carte (fond plus clair, liseré
+   d'accent à gauche, ombre), un contenu sobre et serré. Tient à 344 px. */
+.fb-grid-box {
+  margin: 16px -4px 2px;
+  padding: 10px 10px 8px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
   overflow-x: auto;
-  margin-top: 4px;
+}
+.fb-grid-t {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
 }
 .fb-grid {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
 .fb-grid th,
 .fb-grid td {
-  padding: 7px 0;
+  padding: 4px 0;
   text-align: center;
+  line-height: 1.2;
 }
 .fb-grid thead th {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--dim);
 }
 .fb-g-name {
-  width: 23%;
+  width: 24%;
   padding-right: 4px !important;
   text-align: left !important;
   font-weight: 600;
@@ -1355,89 +1346,38 @@ function notifyError(e: unknown) {
   white-space: nowrap;
 }
 .fb-g-tot {
-  width: 15%;
-  padding-left: 3px !important;
-  font-weight: 800;
-  color: var(--accent);
-}
-.fb-g-day {
-  font-size: 11.5px;
-  letter-spacing: -0.2px;
-  padding: 3px 1.5px !important;
-}
-/* La pastille d'une case : un petit bloc arrondi, rempli à la mesure du volume
-   (`heatStyle`). Vide = simple contour, à venir = contour pointillé et pâle. */
-.fb-chip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
-  font-weight: 700;
-  color: var(--dim);
-  position: relative;
-}
-.fb-g-day.future .fb-chip {
-  border-style: dashed;
-  background: none;
-  opacity: 0.45;
-}
-/* Le jour en cours : contour d'accent sur toute la colonne. */
-.fb-g-day.today .fb-chip {
-  border-color: var(--accent) !important;
-}
-.fb-chip.group {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: transparent;
-}
-/* 🤝 un point vert dans le coin : une partie des reps est partie en surplus. */
-.fb-g-day.surplus .fb-chip::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--d1, #7bc86c);
-}
-.fb-day-h {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 999px;
-}
-.fb-grid thead .fb-g-day.today .fb-day-h {
-  background: var(--accent);
-  color: #15120e;
-}
-.fb-tot-chip {
-  display: inline-block;
-  max-width: 100%;
-  padding: 4px 4px;
-  font-size: 11.5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
+  width: 13%;
   font-weight: 800;
 }
-.fb-tot-chip.strong {
-  background: var(--accent);
-  color: #15120e;
+.fb-g-day.zero,
+.fb-g-day.future {
+  color: var(--dim-2, var(--dim));
 }
-.fb-grid tr.me .fb-g-name {
+/* Le jour en cours : une colonne à peine teintée, rien de plus. */
+.fb-g-day.today {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.fb-grid thead .fb-g-day.today {
   color: var(--accent);
 }
-.fb-grid tbody tr.me .fb-g-name::before {
-  content: '▸ ';
+.fb-grid tr.me .fb-g-name,
+.fb-grid tr.me .fb-g-tot {
+  color: var(--accent);
+}
+/* 🤝 un trait vert sous le chiffre (sans grandir la ligne). */
+.fb-g-day.surplus {
+  text-decoration: underline 2px var(--d1, #7bc86c);
+  text-underline-offset: 2px;
 }
 .fb-grid tfoot th,
 .fb-grid tfoot td {
   border-top: 1px solid var(--line);
-  padding-top: 7px !important;
-  font-weight: 700;
+  color: var(--dim);
+}
+.fb-grid-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--dim);
 }
 .fb-search {
   width: 100%;
