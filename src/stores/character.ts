@@ -878,6 +878,19 @@ export const useCharacterStore = defineStore('character', () => {
    *  celle qui traverse le réseau. */
   const fetchMine = singleFlight(loadMine);
 
+  /** Quand et pour qui la ligne a été lue pour la dernière fois (`fetchIfStale`). */
+  let loadedAt = 0;
+  let loadedUid: string | null = null;
+  /** ⏱️ Relit la ligne seulement si elle a plus de `maxAgeMs` (audit 2026-10-15 : ouvrir
+   *  l'Aventure relisait toute la ligne, ~48 colonnes JSON, à CHAQUE passage — alors que nos
+   *  propres écritures la tiennent déjà à jour). Un autre utilisateur, ou une ligne absente,
+   *  force la lecture. Ce qu'un AUTRE appareil a écrit arrive au plus `maxAgeMs` plus tard. */
+  async function fetchIfStale(maxAgeMs: number) {
+    const uid = useAuthStore().user?.id ?? null;
+    if (row.value && uid && uid === loadedUid && Date.now() - loadedAt < maxAgeMs) return row.value;
+    return fetchMine();
+  }
+
   async function loadMine() {
     // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
     // jamais ce qu'on VEUT lire. Ici l'enjeu est double : `maybeSingle()` LÈVE une erreur si
@@ -908,6 +921,8 @@ export const useCharacterStore = defineStore('character', () => {
     const rawRuneComp = Math.floor(Number((data?.runes as { comp?: unknown } | null)?.comp)) || 0;
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
+    loadedAt = Date.now();
+    loadedUid = uid;
     // 🪬 La bascule d'abord : tant qu'elle n'est pas écrite, toute écriture du vivier seul
     // effacerait les compétences sans les rembourser.
     if (row.value && rawRuneComp < RUNE_BANK_VERSION) await settleRuneBascule(uid);
@@ -7164,6 +7179,7 @@ export const useCharacterStore = defineStore('character', () => {
     row,
     loaded,
     fetchMine,
+    fetchIfStale,
     accrueBossTokens,
     spentBossTokens,
     setPseudo,

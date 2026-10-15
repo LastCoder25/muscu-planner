@@ -7107,7 +7107,7 @@ function dismissIntro() {
 
 onMounted(async () => {
   try {
-    await char.fetchMine();
+    await char.fetchIfStale(120_000);
   } catch {
     /* pas bloquant */
   } finally {
