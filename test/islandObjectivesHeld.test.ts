@@ -88,13 +88,33 @@ describe('🎯 la forteresse vise d’abord les objectifs qu’on tient', () => 
       ),
     };
   }
-  it('l’attaque échue d’un lieu fixe se reporte sur l’objectif tenu', () => {
+  // ⚠️ Signalé (2026-10-15, cimetière de l'île 3) : le report posait l'attaque de l'objectif à
+  // l'heure ÉCHUE — elle se jouait à la seconde, sans armée en marche ni préavis, et un
+  // objectif laissé vide passait à l'ennemi « instantanément ». L'attaque reportée part
+  // désormais de la forteresse, VISIBLE, et tombe à son arrivée.
+  it('l’attaque échue d’un lieu fixe se reporte sur l’objectif tenu, qu’on voit venir', () => {
     const m = setup();
     const fixedId = dueRetakes(m, NOW).find((p) => !p.id.startsWith('isl_'))!.id;
     const r = redirectIslandAttacks(m, NOW);
-    expect(poi(r, OBJ)!.control!.attackAt).toBe(NOW - 1);
+    const at = poi(r, OBJ)!.control!.attackAt!;
+    expect(at).toBeGreaterThanOrEqual(NOW + FIELD_ARMY.islandLeadMs);
+    expect(at).toBeLessThan(NOW + 48 * H);
     expect(poi(r, fixedId)!.control!.attackAt).toBeGreaterThan(NOW);
-    expect(dueRetakes(r, NOW).map((p) => p.id)).toEqual([OBJ]);
+    expect(dueRetakes(r, NOW)).toEqual([]);
+    // L'armée est sur la carte dès maintenant, partie de la forteresse.
+    const seen = syncFieldArmies(r, { raid: null, detectR: 0, reach: 200, now: NOW, playerLevel: 20 });
+    const army = seen.pois.find((p) => p.army?.kind === 'retake' && p.army.targetId === OBJ);
+    expect(army).toBeDefined();
+  });
+  it('une attaque déjà prévue plus tôt sur l’objectif reste la sienne', () => {
+    const m0 = setup();
+    const m = {
+      ...m0,
+      pois: m0.pois.map((p) =>
+        p.id === OBJ ? { ...p, control: { ...p.control!, attackAt: NOW + H } } : p,
+      ),
+    };
+    expect(poi(redirectIslandAttacks(m, NOW), OBJ)!.control!.attackAt).toBe(NOW + H);
   });
   it('🕊️ un objectif tout juste pris est en trêve : le report ne le rend pas dû', () => {
     const m = setup(NOW - H);

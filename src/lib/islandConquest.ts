@@ -1049,8 +1049,8 @@ export function regainIslandTarget(map: ExpeditionMap, id: string): ExpeditionMa
 /**
  * 🎯 LA FORTERESSE VISE D'ABORD CE QU'ON LUI A PRIS (décision de l'utilisateur, 2026-10-02) :
  * tant qu'on tient un objectif de l'île (pacifiée exceptée), une attaque échue sur un autre
- * lieu tenu se reporte sur l'objectif tenu le PLUS PROCHE (son attaque est avancée à cet
- * instant) et l'attaque du lieu épargné est reprogrammée. La base n'est pas concernée (ses
+ * lieu tenu se reporte sur l'objectif tenu le PLUS PROCHE (une armée part de la forteresse,
+ * visible, et attaque à son arrivée) et l'attaque du lieu épargné est reprogrammée. La base n'est pas concernée (ses
  * sièges suivent leur propre règle). Rend la MÊME carte si rien ne change.
  */
 export function redirectIslandAttacks(map: ExpeditionMap, now: number): ExpeditionMap {
@@ -1067,11 +1067,23 @@ export function redirectIslandAttacks(map: ExpeditionMap, now: number): Expediti
       Math.hypot(o.x - p.x, o.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y) ? o : best,
     );
     const next = at + retakeCalmMs(p.id, at, attackSlow(map, c.kind));
+    // ⚠️ L'armée REPART de la forteresse et tombe à son ARRIVÉE, jamais à l'heure échue
+    // (signalé, 2026-10-15 : posée à `at`, l'attaque reportée se jouait à la seconde, sans
+    // armée sur la carte ni préavis — un objectif laissé vide passait à l'ennemi d'un coup).
+    // Au moins `islandLeadMs` : la même règle que toute reprise partie d'un lieu connu.
+    const fortress = map.pois.find(
+      (q) => q.control?.kind === 'fortress' && q.control.owner === 'enemy',
+    );
+    const marchMs = fortress
+      ? (Math.hypot(target.x - fortress.x, target.y - fortress.y) / FIELD_ARMY.speedPerHour) *
+        3600_000
+      : 0;
+    const arrival = now + Math.max(marchMs, FIELD_ARMY.islandLeadMs);
     pois = pois.map((q) => {
       if (q.id === p.id) return { ...q, control: { ...q.control!, attackAt: next } };
       if (q.id === target.id) {
         const cur = q.control!.attackAt ?? Infinity;
-        return { ...q, control: { ...q.control!, attackAt: Math.min(cur, at) } };
+        return { ...q, control: { ...q.control!, attackAt: Math.min(cur, arrival) } };
       }
       return q;
     });
