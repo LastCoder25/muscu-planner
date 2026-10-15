@@ -1978,18 +1978,20 @@ export function garrisonBoost(
   wardAt: number | null,
 ): number {
   // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
-  const threat =
-    tierThreatMult(tierAtAttack(p.control)) *
-    rageMult(
-      p.control?.angerSince,
-      p.control?.attackAt ?? p.control?.angerSince ?? 0,
-      activityOf(p.control),
-    );
   return (
     wardedBoost(p, allies, fort, wardAt === null ? 1 : wardMult(p.control, wardAt)) *
-    threat *
-    (p.control?.fortMult ?? 1)
+    retakeAfterCapMult(p.control)
   );
+}
+
+/** 🏅😡🧱 Ce qui change la troupe APRÈS le plafond de suspense : le cran du point, la colère
+ *  de la citadelle, le fortin de l'île. SOURCE UNIQUE : la bataille (`retakeForce`), le %
+ *  (`garrisonBoost`) et le plafond des palissades (`wardedBoost`) lisent le même facteur. */
+function retakeAfterCapMult(c: ControlState | undefined): number {
+  const threat =
+    tierThreatMult(tierAtAttack(c)) *
+    rageMult(c?.angerSince, c?.attackAt ?? c?.angerSince ?? 0, activityOf(c));
+  return threat * (c?.fortMult ?? 1);
 }
 
 /** 🎲 De combien l'ennemi grossit sa troupe face à CETTE garnison : 1 tant qu'elle ne tient
@@ -2021,6 +2023,9 @@ export function retakeBoost(
 /**
  * 🪵 LE RENFORT ENNEMI SOUS PALISSADE (`w` = `wardMult`, < 1) : la troupe est multipliée par
  * `w`, mais jamais en dessous de celle qui ramènerait la tenue à `WARD.holdCap` (95 %).
+ * ⚠️ 95 % de la tenue RÉELLE : le plancher compte ce qui grossit la troupe APRÈS
+ * (`retakeAfterCapMult` : cran, colère, fortin). Calculé sans, il tombait sur un lieu en
+ * colère dès la 1ʳᵉ palissade et les suivantes ne servaient à rien (mesuré 77 → 82 → 82 → 82 %).
  * ⚠️ PAR-DESSUS le plafond de suspense de 90 % : sans ça, `retakeBoost` regrossirait
  * l'ennemi d'autant et la palissade ne ferait rien sur une garnison solide.
  * Sans palissade (`w` = 1), c'est exactement `retakeBoost`.
@@ -2033,9 +2038,10 @@ export function wardedBoost(
 ): number {
   const plain = retakeBoost(p, allies, fort);
   if (w >= 1) return plain;
-  // La troupe effective vaut boost × w / fort : on cherche le boost qui, réduit par la
-  // palissade, tient `holdCap` — d'où `fort / w`.
-  const floor = retakeBoost(p, allies, fort / w, WARD.holdCap);
+  // La troupe effective vaut boost × w × after / fort : on cherche le boost qui, réduit par
+  // la palissade et grossi par ce qui suit le plafond, tient `holdCap` — d'où ce `fort`.
+  const after = retakeAfterCapMult(p.control);
+  const floor = retakeBoost(p, allies, fort / (w * after), WARD.holdCap);
   return Math.max(plain, floor) * w;
 }
 
@@ -2175,17 +2181,10 @@ export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction'
     ? Math.min(seatsOf(p.control.kind), CONTROL.maxGarrison)
     : CONTROL.maxGarrison;
   // 🏅 Un vieux point est plus convoité : sa troupe grossit avec son cran à l'heure de
-  // l'attaque (APRÈS le plafond de tenue, cf. `TIER`).
-  const threat =
-    tierThreatMult(tierAtAttack(p.control)) *
-    rageMult(
-      p.control?.angerSince,
-      p.control?.attackAt ?? p.control?.angerSince ?? 0,
-      activityOf(p.control),
-    );
-  // 🧱 Un fortin tenu sur l'île affaiblit la troupe (après le plafond de tenue, comme le cran).
-  const fort = p.control?.fortMult ?? 1;
-  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat * fort };
+  // l'attaque, la colère de sa citadelle aussi ; 🧱 un fortin tenu sur l'île l'affaiblit (tous
+  // APRÈS le plafond de tenue, cf. `TIER`).
+  const after = retakeAfterCapMult(p.control);
+  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * after };
 }
 
 const shareOf = (n: number) =>

@@ -145,6 +145,34 @@ describe('🪵 palissades : la bataille', () => {
     }
   }, 120_000);
 
+  // ⚠️ Signalé sur un compte réel (3 palissades, garnison solide, citadelle en colère) :
+  // 77 % → 82 % → 82 % → 82 %. Le plafond de 95 % était calculé AVANT la colère et le cran,
+  // qui regrossissent la troupe ensuite : la 1ʳᵉ palissade l'atteignait « en théorie » et les
+  // suivantes étaient perdues. Il vaut désormais pour la tenue RÉELLE.
+  it('sur un lieu en colère, chaque palissade compte jusqu’aux 95 % réels', () => {
+    for (const L of [30, 60]) {
+      const base = mineAt(L);
+      const angry = {
+        ...base,
+        control: { ...base.control!, angerSince: ATTACK - 10 * 24 * H },
+      };
+      const strong = allies(L + 20, 3);
+      const sets: ('palissade' | 'bastion')[][] = [
+        [],
+        ['palissade'],
+        ['palissade', 'palissade'],
+        ['palissade', 'palissade', 'palissade'],
+      ];
+      const holds = sets.map((ids) => garrisonHold(warded(angry, ids), strong, 1, 0));
+      expect(holds[0]).toBeLessThan(CONTROL.maxHold);
+      for (let i = 1; i < holds.length; i++) {
+        expect(holds[i]! > holds[i - 1]! || holds[i]! >= WARD.holdCap - 0.03).toBe(true);
+        expect(holds[i]).toBeLessThanOrEqual(WARD.holdCap + 1e-9);
+      }
+      expect(holds[3]).toBeGreaterThan(holds[1]! + 0.03);
+    }
+  }, 180_000);
+
   it('jugée à l’heure de l’assaut : expirée avant, elle ne compte pas', () => {
     const p = mineAt(30);
     const a = allies(30, 2);
