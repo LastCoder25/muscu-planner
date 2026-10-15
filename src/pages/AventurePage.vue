@@ -58,6 +58,9 @@
           >
             📖
           </button>
+          <button class="inbox-btn" aria-label="Aide" title="Revoir le guide de l'Aventure" @click="showIntro = true">
+            ❔
+          </button>
         </div>
         <!-- ⚡ et 💠 sur la ligne du pseudo, tout à droite : ce sont les deux devises
              qu'on consulte le plus (jouer, invoquer). Le reste du plateau passe dessous.
@@ -117,22 +120,16 @@
         <span class="lc-cta font-display">Récupérer</span>
       </button>
 
-      <!-- Onboarding : mini-guide affiché une seule fois (1re visite) -->
+      <!-- Onboarding : mini-guide affiché à la 1re visite, et rouvrable par le ❔ du bandeau
+           (audit 2026-10-15 : il parlait d'onglets « Donjons » et « Boss » qui n'existent plus). -->
       <div v-if="showIntro" class="intro-card">
         <div class="intro-h font-display">⚔️ Bienvenue dans l'Aventure</div>
         <ul class="intro-list">
-          <li>
-            💪 Ton <b>niveau et tes stats</b> sont la projection de ton SPORT réel — rien à
-            répartir.
-          </li>
-          <li>
-            ⚡ Ton sport génère de l'<b>énergie</b> : dépense-la pour explorer donjons & boss.
-          </li>
-          <li>🗺️ Onglet <b>Donjons</b> : avance dans la liste pour du butin.</li>
-          <li>
-            👑 Onglet <b>Boss</b> : un boss tous les 5 niveaux — chacun lâche une pièce de son
-            <b>set</b> (bonus à 2/4/6 pièces).
-          </li>
+          <li>💪 Ton <b>niveau et tes stats</b> viennent de ton SPORT réel — rien à répartir.</li>
+          <li>⚡ Le sport donne de l'<b>énergie</b> : elle paie les donjons, le Labyrinthe et le Portail.</li>
+          <li>🦸 <b>Héros</b> : ta fiche et tes talents. 🎒 <b>Équipement</b> : le 🪄 équipe le meilleur build.</li>
+          <li>🗺️ <b>Explorer</b> : donjons et boss de palier (les boss lâchent les pièces de <b>set</b>), et la <b>carte</b> où partent héros et champions.</li>
+          <li>🛡️ <b>Base</b> : bâtiments, enceinte contre les sièges, et le <b>Panthéon</b> où l'on invoque des champions avec 💠 et 🎟️.</li>
         </ul>
         <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
       </div>
@@ -3035,6 +3032,7 @@
               >{{ reattackCost }} {{ reattackCostIcon }}
               <small class="rm-stock">/ {{ reattackStock }}</small></span
             >
+            <span class="rm-lab">Réattaquer</span>
           </button>
           <!-- Combat SUIVANT (donjon/boss suivant de la chaîne, s'il est débloqué) — à droite
                de Réattaquer, avec son coût. Absent pour le Portail (Réattaquer avance déjà). -->
@@ -3048,6 +3046,7 @@
           >
             <span class="rm-ic">⏭️</span>
             <span class="rm-cost">{{ nextContent.cost }} {{ nextContent.icon }}</span>
+            <span class="rm-lab">Suivant</span>
           </button>
           <!-- Un boss lâche des PIÈCES DE SET, rangées d’office dans « Mes sets » : c’est là
                qu’on va les voir, pas au sac (demandé par l’utilisateur). -->
@@ -3058,7 +3057,7 @@
             aria-label="Mes sets"
             @click="goSetsFromReport"
           >
-            🧩
+            🧩<span class="rm-lab">Sets</span>
           </button>
           <button
             v-else
@@ -3067,7 +3066,7 @@
             aria-label="Inventaire"
             @click="goInventoryFromReport"
           >
-            🎒
+            🎒<span class="rm-lab">Sac</span>
           </button>
           <button
             class="rm-btn rm-icon"
@@ -3075,7 +3074,7 @@
             aria-label="Fermer"
             @click="reportOpen = false"
           >
-            ✕
+            ✕<span class="rm-lab">Fermer</span>
           </button>
         </div>
       </q-card>
@@ -10825,9 +10824,28 @@ button.pt-mini:active {
 /* Boutons ICÔNE seuls (Inventaire, Fermer) : carrés, ne s'étirent pas. */
 .rm-btn.rm-icon {
   flex: none;
-  width: 46px;
+  width: 52px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 4px;
   font-size: 18px;
   line-height: 1;
+}
+/* Le mot sous l'icône (audit 2026-10-15 : ⏭️, 🎒 et ✕ seuls ne disaient pas ce qu'ils font). */
+.rm-btn {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.rm-lab {
+  flex-basis: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  opacity: 0.85;
+}
+.rm-btn.rm-icon .rm-lab {
+  flex-basis: auto;
 }
 .rm-btn:active {
   transform: scale(0.96);

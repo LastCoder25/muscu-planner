@@ -139,8 +139,8 @@
              🔒 / 🪙 comme le sac, désactivés si portée. -->
         <template v-else-if="guildTab === 'stock'">
           <p v-if="!char.advGearStock.length" class="g-empty">
-            Aucune pièce en stock. Le <b>Panthéon</b> en fabrique à partir des objets de ton sac, et
-            les sièges repoussés comme les embuscades en laissent tomber.
+            Aucune pièce en stock. Les pièces viennent du <b>tirage</b> du Panthéon : un tirage qui
+            ne donne pas de champion donne une pièce.
           </p>
           <!-- 🔎 FILTRE (demandé) : ce qui attend preneur, ce qui est CONFIÉ, ou tout.
                ⚠️ C'étaient deux SOUS-ONGLETS (v0.908) ; ils deviennent les MÊMES puces que
@@ -753,7 +753,7 @@
       <p class="g-note">Pièces permises pour son métier et sa classe.</p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
       <button v-if="gearHereId" class="cta ghost" @click="pickGear(null)">Retirer la pièce</button>
-      <p v-if="!gearPool.length" class="g-note">Aucune pièce en stock — le Panthéon en fabrique.</p>
+      <p v-if="!gearPool.length" class="g-note">Aucune pièce en stock — elles viennent du tirage du Panthéon.</p>
       <p v-else-if="!gearRows.rows.length" class="g-note">Aucune pièce disponible pour lui.</p>
       <p v-if="gearHidden" class="g-note dim">{{ gearHidden }}</p>
       <button

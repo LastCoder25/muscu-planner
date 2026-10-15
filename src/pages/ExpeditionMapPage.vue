@@ -1535,6 +1535,7 @@
       @click="goBase"
     >
       <span class="tf-emo">🏠</span>
+      <span class="tf-lab" aria-hidden="true">Base</span>
       <!-- 🛕 Comme les ronds voisins, un chiffre : les voyants ALLUMÉS du Panthéon de la base. -->
       <span v-if="pantheonLitCount" class="tf-dot" :title="pantheonLitTitle">{{
         pantheonLitCount
@@ -1556,6 +1557,7 @@
       @click="onMapTab(t)"
     >
       <span class="tf-emo">{{ t.emo }}</span>
+      <span class="tf-lab" aria-hidden="true">{{ t.short }}</span>
       <span v-if="t.n" class="tf-dot">{{ t.n }}</span>
     </button>
   </div>
@@ -4820,6 +4822,8 @@ interface MapTab {
   id: MapPanel;
   emo: string;
   label: string;
+  /** Le mot écrit SOUS le rond (audit 2026-10-15 : un emoji seul ne dit pas ce qu'il ouvre). */
+  short: string;
   n: number;
   alert: boolean;
   blocked?: string;
@@ -4836,10 +4840,11 @@ const mapTabs = computed<MapTab[]>(() => [
     id: 'trips',
     emo: '🧭',
     label: 'Expéditions',
+    short: 'Voyages',
     n: trips.value.length + attacks.value.length,
     alert: attacks.value.length > 0,
   },
-  { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
+  { id: 'ctl', emo: '🏰', label: 'Places fortes', short: 'Forts', n: ctlCalls.value, alert: false },
   // 🪄 Le planificateur (2026-10-11, demandé) : propose des départs avec les effectifs libres.
   // ⚠️ Utilisable seulement si au moins un effectif hors milicien est disponible (demandé).
   // Sinon le rond reste VISIBLE mais grisé, et le toucher dit pourquoi (comme `repart`).
@@ -4847,6 +4852,7 @@ const mapTabs = computed<MapTab[]>(() => [
     id: 'plan',
     emo: '🪄',
     label: 'Planifier des expéditions',
+    short: 'Planifier',
     n: 0,
     alert: false,
     ...(planner.anyForceFree.value ? {} : { blocked: planBlockedWhy.value }),
@@ -4859,6 +4865,7 @@ const mapTabs = computed<MapTab[]>(() => [
     id: 'repart',
     emo: '👥',
     label: 'Répartir l’effectif',
+    short: 'Effectif',
     n: 0,
     alert: false,
     ...(planner.anyForceFree.value ? {} : { blocked: repartBlockedWhy }),
@@ -7406,6 +7413,23 @@ onUnmounted(() => {
 .tile-fab .tf-emo {
   font-size: 20px;
   line-height: 1;
+}
+/* Le mot sous le rond : il tient dans la marge de 16 px sous le bouton, lisible sur la carte
+   grâce à son contour sombre. Hors du flux, il ne change pas la cible tactile (48 px). */
+.tf-lab {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--text);
+  text-shadow:
+    0 0 3px #000,
+    0 0 3px #000;
+  pointer-events: none;
 }
 /* Rond indisponible : visible mais grisé, le toucher dit pourquoi (`onMapTab`). */
 .tile-fab.off {

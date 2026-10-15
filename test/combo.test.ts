@@ -881,6 +881,18 @@ describe('🛑 ARRÊTER UN DÉFI 360', () => {
     expect(vierge.message).not.toBe(entame.message);
     expect(vierge.ok).not.toBe(entame.ok);
   });
+
+  it('⚠️ un 360 DÉJÀ ABANDONNÉ se SUPPRIME (le 🗑 le ré-abandonnait, audit 2026-10-15)', () => {
+    const abandonne = {
+      ...ch([leg({ sets: [{ date: 'd', reps: 8, weight: null }, { date: 'd', reps: 8, weight: null }] })]),
+      status: 'abandoned',
+    } as ComboChallenge;
+    const plan = comboStopPlan(abandonne);
+    expect(plan.kind).toBe('delete');
+    // On prévient : ses séries ont rapporté de l'XP, la suppression la retire.
+    expect(plan.message).toContain('2 séries');
+    expect(plan.message).toContain('XP');
+  });
 });
 
 describe('📅 LA BARRE D’AVANCEMENT DU 360', () => {
@@ -953,6 +965,21 @@ describe('📅 LA BARRE D’AVANCEMENT DU 360', () => {
       ],
     });
     expect(comboPace(fini, '2026-01-11').showPace).toBe(false);
+  });
+
+  it('⚠️ LE PREMIER JOUR, personne n’est en retard (audit 2026-10-15)', () => {
+    const vide = mk({ legs: [{ slot: 'push', exercise_id: 'e', exercise_name: 'E', target: 10, sets: [] } as ComboLeg] });
+    const p1 = comboPace(vide, '2026-01-05'); // jour 1 sur 7, rien fait
+    expect(p1.latePct).toBe(0);
+    expect(p1.showPace).toBe(false);
+    expect(p1.state).toBe('ahead');
+    expect(p1.showMark).toBe(true); // le trait de l'attendu reste
+    // …mais dès le lendemain, le retard se dit.
+    const p2 = comboPace(vide, '2026-01-06');
+    expect(p2.latePct).toBeGreaterThan(0);
+    expect(p2.showPace).toBe(true);
+    // Un défi d'UN jour : ce premier jour est aussi le dernier, le retard se voit.
+    expect(comboPace({ ...vide, duration_days: 1 }, '2026-01-05').showPace).toBe(true);
   });
 
   it('avant le depart : rien du tout', () => {
