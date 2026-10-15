@@ -173,6 +173,27 @@ const ECRANS = [
         clic: '.tile-fab.off[aria-label^="Planifier"]',
         attendu: '.q-notification',
       },
+      // 🔎 Une proposition du 🪄 s'ouvre comme un envoi manuel : la fiche du lieu, l'équipe
+      // proposée déjà cochée (on y choisit ensuite les consommables). Facultatif : il faut que
+      // le compte ait de quoi proposer une expédition.
+      {
+        nom: 'plan-rouvrir',
+        facultatif: true,
+        clic: '.tile-fab:not(.off)[aria-label="Planifier des expéditions"]',
+        attendu: '.map-overlay .xp-plan .pl-modes',
+      },
+      {
+        nom: 'plan-calcul',
+        facultatif: true,
+        clic: '.xp-plan .pl-go',
+        attendu: '.xp-plan .pl-tile, .xp-plan .pl-empty',
+      },
+      {
+        nom: 'plan-ouvrir',
+        facultatif: true,
+        clic: '.xp-plan .pt-open',
+        attendu: '.poi-card ~ * .car-adv.on, body:has(.poi-card) .car-adv.on',
+      },
       // 🏠 Le rond tout à gauche mène à la base de l'île 1 (l'onglet Base de l'Aventure).
       // ⚠️ En DERNIER : il quitte la carte.
       {

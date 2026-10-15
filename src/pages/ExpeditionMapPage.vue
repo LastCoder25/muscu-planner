@@ -472,6 +472,7 @@
           :key="overlay"
           :planner="planner"
           :section="overlay"
+          @open="openPlannedRow"
         />
         <ControlPointsSheet
           v-else
@@ -1771,7 +1772,7 @@ import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
 import { pantheonLights } from '@/lib/pantheonLights';
 import { normalizeRuneBank } from '@/lib/runeBank';
-import { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
+import { useExpeditionPlanner, type PlannerRow } from '@/composables/useExpeditionPlanner';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
@@ -6216,6 +6217,7 @@ const {
   togglePartyAll,
   partySendLabel,
   doSendParty,
+  prefillTeam,
 } = useExpeditionParty({
   selected,
   now,
@@ -6271,6 +6273,21 @@ const planner = useExpeditionPlanner({
 const repartBlockedWhy =
   'Personne à répartir : ton héros et tous tes champions sont en route, à l’infirmerie ou retenus ailleurs. Le bouton revient dès que l’un d’eux est libre.';
 // Le panneau ouvert se referme si plus personne n'est libre (son rond passe au gris).
+/** 🔎 Une proposition du planificateur ouverte « comme un envoi manuel » (demandé) : le lieu
+ *  s'affiche avec l'équipe proposée déjà cochée — champions (garnisons comprises : plusieurs
+ *  départs redonnent l'attaque combinée), héros et consommables — pour les ajuster avant de
+ *  lancer depuis la fiche. Le lieu est relu sur la carte : la proposition peut être ancienne. */
+function openPlannedRow(r: PlannerRow) {
+  const groups = r.wings ?? [{ advs: r.advs, hero: r.hero }];
+  const p = char.row?.expedition_map?.pois.find((x) => x.id === r.poi.id) ?? r.poi;
+  prefillTeam({
+    poiId: p.id,
+    advs: groups.flatMap((g) => g.advs.map((a) => a.id)),
+    hero: groups.some((g) => g.hero),
+    supplies: r.supplies,
+  });
+  openFromList(p);
+}
 watch(planner.anyForceFree, (ok) => {
   if (!ok && overlay.value === 'repart') overlay.value = null;
 });

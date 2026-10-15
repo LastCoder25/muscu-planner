@@ -215,6 +215,17 @@
                 :title="r.supplies.map((id) => SUPPLIES[id].name).join(' · ')"
                 >🎒 {{ r.supplies.map((id) => SUPPLIES[id].emoji).join('') }}</span
               >
+              <!-- 🔎 OUVRIR (demandé) : le lieu s'affiche comme un envoi manuel, l'équipe proposée
+                   déjà cochée — on y choisit les consommables, puis on lance d'ici-là. -->
+              <button
+                type="button"
+                class="pt-open"
+                :disabled="!!launching"
+                title="Ouvrir comme un envoi manuel : ajuster l’équipe et les consommables"
+                @click="emit('open', r)"
+              >
+                🔎 Ouvrir
+              </button>
               <button type="button" class="pt-go" :disabled="!!launching" @click="launch(r)">
                 {{ launching === r.key ? '⏳' : 'Lancer' }}
               </button>
@@ -310,7 +321,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
+import type { PlannerRow, useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
 import { SKILLS, skillLevelTag } from '@/lib/skillRunes';
 import { characterRank } from '@/lib/characterRank';
@@ -325,6 +336,7 @@ const props = defineProps<{
   /** Le panneau affiché : proposer des expéditions, ou répartir l'effectif. */
   section: 'plan' | 'repart';
 }>();
+const emit = defineEmits<{ open: [row: PlannerRow] }>();
 const {
   threshold,
   mode,
@@ -613,8 +625,21 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
     color: var(--d4);
   }
 }
-.pt-go {
+.pt-open {
   margin-left: auto;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+.pt-go {
   min-height: 40px;
   min-width: 72px;
   padding: 0 14px;

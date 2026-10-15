@@ -377,6 +377,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).toContain('Consommables à engager');
     expect(html).toContain('×3');
     expect(html).toContain('🎒 🥖');
+    // 🔎 Chaque proposition s'ouvre comme un envoi manuel (consommables à choisir).
+    expect(html).toContain('🔎 Ouvrir');
     // 👥 La répartition vit dans son propre panneau (demandé) : pas ici.
     expect(html).not.toContain('Répartir l’effectif');
 

@@ -141,9 +141,15 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** 🧝 Le héros reste-t-il en garnison si le point est pris (étape 6 bis) ? `undefined` = pas
    *  de choix : il reste s'il a sa place après les champions (`heroStaysAt`). */
   const partyHeroStay = ref<boolean | undefined>(undefined);
-  watch(selected, () => {
-    partyHero.value = false;
-    partyEscort.value = [];
+  /** 🪄 Une équipe proposée par le planificateur, à poser sur le lieu qu'on ouvre : elle
+   *  remplace la remise à zéro quand la sélection arrive sur CE lieu (sinon les deux watchers
+   *  ci-dessous l'effaceraient aussitôt). */
+  let pendingTeam: { poiId: string; advs: string[]; hero: boolean; supplies: SupplyId[] } | null =
+    null;
+  watch(selected, (p) => {
+    const t = pendingTeam && p?.id === pendingTeam.poiId ? pendingTeam : null;
+    partyHero.value = t?.hero ?? false;
+    partyEscort.value = t ? [...t.advs] : [];
     partyStay.value = [];
     partyHeroStay.value = undefined;
   });
@@ -308,8 +314,23 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const chosenSupplies = ref<SupplyId[]>([]);
   watch(
     () => selected.value?.id,
-    () => (chosenSupplies.value = []),
+    (id) => {
+      const t = pendingTeam && id === pendingTeam.poiId ? pendingTeam : null;
+      chosenSupplies.value = t ? [...t.supplies] : [];
+      pendingTeam = null;
+    },
   );
+  /** 🪄 Ouvre un lieu « comme un envoi manuel » avec l'équipe que le planificateur proposait :
+   *  champions, héros et consommables déjà cochés, modifiables avant de lancer. À appeler
+   *  AVANT de sélectionner le lieu ; s'il l'est déjà, l'équipe est posée tout de suite. */
+  function prefillTeam(t: { poiId: string; advs: string[]; hero: boolean; supplies: SupplyId[] }) {
+    if (selected.value?.id === t.poiId) {
+      partyHero.value = t.hero;
+      partyEscort.value = [...t.advs];
+      chosenSupplies.value = [...t.supplies];
+      pendingTeam = null;
+    } else pendingTeam = t;
+  }
   /** Le stock, tuile par tuile, et POURQUOI un consommable ne servirait à rien ici. */
   const supplyRows = computed(() => {
     const p = selected.value;
@@ -1192,5 +1213,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     togglePartyAll,
     partySendLabel,
     doSendParty,
+    prefillTeam,
   };
 }

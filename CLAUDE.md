@@ -111,6 +111,8 @@ l’utilisateur. Une nouvelle décision s’ajoute À LA FIN du fichier de son d
 - [docs/domaines/heros-equipement.md](docs/domaines/heros-equipement.md) — Héros : équipement, raretés, drops, sets, talents, familiers, reliques, trophées, combat, donjons, boss de palier (77 entrées)
 - [docs/domaines/divers.md](docs/domaines/divers.md) — Interface transverse et économie (plateau de ressources, boîte à messages, puits d’or, gestes de masse) (62 entrées)
 
+- **🔎 UNE PROPOSITION DU 🪄 S’OUVRE COMME UN ENVOI MANUEL (v1.223.0 ; demandé par l’utilisateur : « choisir une simulation et l’afficher comme si elle était manuelle pour choisir les consommables »)**. Bouton « 🔎 Ouvrir » sur chaque tuile du planificateur : `openPlannedRow` (ExpeditionMapPage) sélectionne le lieu (relu sur la carte) et `prefillTeam` (useExpeditionParty) y pose l’équipe proposée — champions de tous les groupes (plusieurs départs redonnent l’attaque combinée), héros, consommables du plan — à modifier avant de lancer depuis la fiche. ⚠️ L’équipe est posée PAR les watchers de remise à zéro de la sélection (sinon ils l’effaceraient aussitôt). Smoke : gestes `plan-rouvrir` / `plan-calcul` / `plan-ouvrir` (facultatifs) ; montage : bouton présent (1 mutation, 1 rouge).
+
 ## Garde-fous
 
 ### 📉 TRAFIC SORTANT SUPABASE — on n'écrit plus en relisant la ligne (v1.134, mesuré)
