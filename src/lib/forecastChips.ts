@@ -8,7 +8,7 @@ import type { BattleForecast, DefenseForecast, LossForecast } from './defenseFor
 import { wearLabel, wearsDown, type EnemyWear } from './enemyWear';
 import type { ControlState } from './expedition';
 
-export type ChipTone = 'ok' | 'warn' | 'bad' | 'info';
+type ChipTone = 'ok' | 'warn' | 'bad' | 'info';
 
 export interface ForecastChip {
   key: string;
@@ -18,7 +18,7 @@ export interface ForecastChip {
   title?: string;
 }
 
-export interface ForecastRow {
+interface ForecastRow {
   key: string;
   /** « ✅ Si elle tient », « 💥 Si elle tombe »… */
   label: string;
@@ -86,7 +86,7 @@ export function lossChips(l: LossForecast, key: string): ForecastChip[] {
 /** La troupe ennemie usée d'une part `share` (0..1) : « troupe affaiblie de 45 % · se renforce
  *  en 6 vagues d’attaque ». ⚠️ Le libellé est celui de `wearLabel` (une seule phrase pour la fiche d'un
  *  lieu usé ET le pronostic) ; seule la pastille « intacte » est écrite ici. */
-export function wearChips(share: number, key: string, who = 'troupe'): ForecastChip[] {
+function wearChips(share: number, key: string, who = 'troupe'): ForecastChip[] {
   const label = wearLabel({ share, from: 0 });
   if (!label) return [{ key: `${key}-w0`, text: `⚔️ ${who} intacte`, tone: 'bad' }];
   return [

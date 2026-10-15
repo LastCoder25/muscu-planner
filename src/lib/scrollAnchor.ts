@@ -21,7 +21,7 @@ export function scrollParent(el: HTMLElement | null): HTMLElement | null {
 }
 
 /** Le défilement qui ramène un élément à sa position d'avant (0 = rien à faire). */
-export function anchorDelta(before: number, after: number): number {
+function anchorDelta(before: number, after: number): number {
   return Math.round(after - before);
 }
 

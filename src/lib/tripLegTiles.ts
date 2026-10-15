@@ -244,13 +244,9 @@ export const legPillOn = (sel: LegSelection, leg: TripLeg, present: readonly Tri
  * toutes les étapes de son groupe.
  */
 export type LegGroup = 'out' | 'back';
-export const LEG_GROUPS: Record<LegGroup, readonly TripLeg[]> = {
+const LEG_GROUPS: Record<LegGroup, readonly TripLeg[]> = {
   out: ['wait', 'go', 'dwell'],
   back: ['back'],
-};
-export const LEG_GROUP_PILL: Record<LegGroup, { icon: string; label: string }> = {
-  out: { icon: '➡️', label: 'Aller' },
-  back: { icon: '↩️', label: 'Retour' },
 };
 const groupLegs = (g: LegGroup, present: readonly TripLeg[]) =>
   LEG_GROUPS[g].filter((l) => present.includes(l));

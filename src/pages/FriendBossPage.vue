@@ -238,10 +238,8 @@
             </tbody>
             <tfoot v-if="hitGrid.rows.length > 1">
               <tr>
-                <th class="fb-g-name" scope="row">Groupe</th>
-                <td v-for="d in hitGrid.days" :key="d.index" :class="['fb-g-day', d.state]">
-                  {{ d.total || (d.state === 'future' ? '' : '·') }}
-                </td>
+                <!-- Plus de total par jour (demandé) : seul le total du groupe reste, sous Σ. -->
+                <th class="fb-g-name" scope="row" :colspan="hitGrid.days.length + 1">Groupe</th>
                 <td class="fb-g-tot">{{ hitGrid.total }}</td>
               </tr>
             </tfoot>
@@ -1303,8 +1301,8 @@ function notifyError(e: unknown) {
 /* Le tableau des frappes : un CADRE qui ressort de la carte (fond plus clair, liseré
    d'accent à gauche, ombre), un contenu sobre et serré. Tient à 344 px. */
 .fb-grid-box {
-  margin: 16px -4px 2px;
-  padding: 10px 10px 8px;
+  margin: 16px -6px 2px;
+  padding: 12px 12px 10px;
   border-radius: 12px;
   background: var(--surface-2);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
@@ -1322,14 +1320,18 @@ function notifyError(e: unknown) {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
 .fb-grid th,
 .fb-grid td {
-  padding: 4px 0;
+  padding: 8px 0;
   text-align: center;
   line-height: 1.2;
+}
+.fb-grid tbody tr + tr th,
+.fb-grid tbody tr + tr td {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
 .fb-grid thead th {
   font-size: 10px;
@@ -1337,7 +1339,7 @@ function notifyError(e: unknown) {
   color: var(--dim);
 }
 .fb-g-name {
-  width: 24%;
+  width: 19%;
   padding-right: 4px !important;
   text-align: left !important;
   font-weight: 600;
@@ -1346,8 +1348,13 @@ function notifyError(e: unknown) {
   white-space: nowrap;
 }
 .fb-g-tot {
-  width: 13%;
+  width: 12%;
   font-weight: 800;
+}
+.fb-g-day {
+  font-size: 12px;
+  padding-left: 1px !important;
+  padding-right: 1px !important;
 }
 .fb-g-day.zero,
 .fb-g-day.future {
@@ -1373,6 +1380,9 @@ function notifyError(e: unknown) {
 .fb-grid tfoot td {
   border-top: 1px solid var(--line);
   color: var(--dim);
+}
+.fb-grid tfoot .fb-g-tot {
+  color: var(--text);
 }
 .fb-grid-note {
   margin: 6px 0 0;

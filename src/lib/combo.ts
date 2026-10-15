@@ -191,7 +191,7 @@ export function repsEquivalent(reps: number): number {
  * comptent en équivalent-reps ; les séries d'avant gardent le barème linéaire avec lequel
  * elles ont été jouées. Une date absente (série très ancienne) = barème d'avant.
  */
-export const REPS_EQUIVALENT_FROM = '2026-10-11';
+const REPS_EQUIVALENT_FROM = '2026-10-11';
 /** Reps d'une série telles que l'XP les compte : compressées (séries récentes), sauf au
  *  temps. */
 function setRepUnits(leg: ComboLeg, reps: number, date?: string | null): number {

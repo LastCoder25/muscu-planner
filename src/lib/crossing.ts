@@ -479,7 +479,7 @@ export function abandonedIslandKeys(map: Pick<ExpeditionMap, 'archipel' | 'islan
 
 /** 🌱 Une île quittée vers l'avant redevient vivante : elle refait apparaître ses lieux et
  *  ses failles (`advanceWorld` lit `vacatedAt`), en restant pacifiée. */
-export function reopenIsland(map: ExpeditionMap): ExpeditionMap {
+function reopenIsland(map: ExpeditionMap): ExpeditionMap {
   const a = map.archipel;
   if (!a || a.vacatedAt === undefined) return map;
   const { vacatedAt: _v, ...archipel } = a;

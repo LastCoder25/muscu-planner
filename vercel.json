@@ -14,7 +14,7 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/(exercises|champions|monsters|advgear|hero|icons)/(.*)",
+      "source": "/(exercises|champions|monsters|advgear|hero|icons|powers|militia)/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

@@ -2084,7 +2084,7 @@ export function riseShortLabel(ms: number): string {
 }
 
 /** 🪦 Sur quelle durée les morts se rapprochent du cimetière (le cercle se resserre). */
-export const RISE_CLOSE_MS = 24 * 3600_000;
+const RISE_CLOSE_MS = 24 * 3600_000;
 
 /** 🪦 À quel point les morts sont proches, de 0 (encore loin, à ≥ `RISE_CLOSE_MS`) à 10 (à
  *  l'heure). En crans entiers : la carte ne se redessine pas à chaque minute pour rien. */
