@@ -13,7 +13,7 @@
 //
 // Module pur. Relecture DÉFENSIVE : le JSON vient d'un autre client.
 
-import { QUEST_INFO, WEEKLY_QUESTS, type QuestKind, type WeeklyQuestBoard } from './weeklyQuests';
+import { QUEST_INFO, questTiers, type QuestKind, type WeeklyQuestBoard } from './weeklyQuests';
 
 export interface QuestSnapshot {
   monday: string;
@@ -85,7 +85,6 @@ export function readQuestSnapshot(raw: unknown, monday: string): FriendQuestView
   }
   if (!quests.length) return null;
   const doneCount = quests.filter((q) => q.complete).length;
-  const tiers = WEEKLY_QUESTS.tiers.map((t) => ({ ...t, reached: doneCount >= t.at }));
-  const earned = tiers.reduce((best, t) => (t.reached ? Math.max(best, t.tickets) : best), 0);
+  const { tiers, earned } = questTiers(doneCount, quests.length);
   return { quests, doneCount, earned, tiers };
 }

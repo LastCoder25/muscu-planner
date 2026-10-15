@@ -21,7 +21,8 @@
 // 🎟️ PALIERS : TOUS LES OBJECTIFS, TU FAIS CE QUE TU VEUX (v0.1361 ; demandé par l'utilisateur :
 // « faire plus d'objectifs et on fait ce qu'on veut avec des paliers de récompenses »). Plus
 // de tirage : les six objectifs sont affichés (ceux de tes sports en tête), et chaque palier
-// d'objectifs atteints paie. Ça règle aussi « choisir son objectif » sans rien à verrouiller —
+// d'objectifs atteints paie. ⚠️ Depuis la v1.202, seuls les objectifs de TES sports sont
+// affichés (cf. `isShown`), et le dernier palier suit le nombre d'objectifs affichés. Ça règle aussi « choisir son objectif » sans rien à verrouiller —
 // un choix fait le dimanche aurait pris l'objectif déjà atteint. Le paragraphe suivant (le
 // tirage selon ta pratique) ne décrit plus que l'ORDRE et la marque « tes sports ».
 //
@@ -59,6 +60,9 @@ export const WEEKLY_QUESTS = {
     { at: 3, tickets: 2 },
     { at: 5, tickets: 3 },
   ],
+  /** Le dernier palier ne demande jamais plus d'objectifs qu'il n'y en a d'affichés (un
+   *  joueur 100 % muscu en voit 4 : un palier « 5 » serait inatteignable). */
+  lastTierMin: 4,
   /** Tickets déjà pris par une marque d'avant les paliers (un lundi seul = semaine payée). */
   legacyClaimed: 2,
   /** Semaines d'historique qui calent les cibles. */
@@ -135,7 +139,8 @@ export function questEntries(src: QuestSources): QuestEntry[] {
     const d = dayOf(iso);
     if (d) out.push({ day: d, kind, minutes });
   };
-  for (const r of src.sessions) push(r.performed_at, sessionKind(r.payload?.discipline, r.payload?.name));
+  for (const r of src.sessions)
+    push(r.performed_at, sessionKind(r.payload?.discipline, r.payload?.name));
   for (const r of src.cardio)
     push(r.performed_at, 'cardio', Math.max(0, Number(r.payload?.duration_min) || 0));
   for (const r of src.tennis) push(r.performed_at, 'tennis');
@@ -281,7 +286,20 @@ const ALL_KINDS: QuestKind[] = [
 function questOrder(practiced: Set<SportKind>): QuestKind[] {
   const [first, ...rest] = ALL_KINDS;
   const mine = (k: QuestKind) => isMine(k, practiced);
-  return [first!, ...rest.filter(mine), ...rest.filter((k) => !mine(k))];
+  return [first!, ...rest.filter(mine), ...rest.filter((k) => !mine(k) && isShown(k, practiced))];
+}
+
+/** ⚠️ ON NE PROPOSE PAS LE SPORT D'UN AUTRE (v1.202, signalé par l'utilisateur : « je vois du
+ *  tennis dans la quête de Cypher, il n'en fait pas, il ne pourra pas la finir »). Un objectif
+ *  de MUSCU, de CARDIO ou de TENNIS n'est affiché que si c'est une de tes pratiques. La
+ *  variété (n'importe quel 2ᵉ sport) et la régularité valent pour tous et restent. Sans
+ *  aucune pratique connue (joueur neuf, ou rien depuis 4 semaines), on ne sait pas ce que tu
+ *  fais : tout est proposé. */
+function isShown(k: QuestKind, practiced: Set<SportKind>): boolean {
+  const sport = PRACTICE_OF[k];
+  if (!sport) return true;
+  const knowsSport = [...practiced].some((p) => p !== 'other');
+  return !knowsSport || practiced.has(sport);
 }
 
 /** Objectif d'un de TES sports ? Régularité et variété n'appartiennent à aucun sport : la
@@ -336,6 +354,19 @@ export interface WeeklyQuestBoard {
   complete: boolean;
 }
 
+/** 🎟️ Les paliers et les tickets gagnés, pour `doneCount` objectifs atteints sur `shown`
+ *  affichés. SOURCE UNIQUE : le joueur ET l'ami qui lit son instantané l'appellent. Le dernier
+ *  palier ne demande jamais plus d'objectifs qu'il n'y en a d'affichés. */
+export function questTiers(doneCount: number, shown: number) {
+  const last = WEEKLY_QUESTS.tiers.length - 1;
+  const tiers = WEEKLY_QUESTS.tiers.map((t, i) => {
+    const at = i === last ? Math.min(t.at, Math.max(WEEKLY_QUESTS.lastTierMin, shown)) : t.at;
+    return { at, tickets: t.tickets, reached: doneCount >= at };
+  });
+  const earned = tiers.reduce((best, t) => (t.reached ? Math.max(best, t.tickets) : best), 0);
+  return { tiers, earned };
+}
+
 /** 🎟️ La marque stockée (`characters.quest_week`) : le lundi de la semaine, suivi du nombre de
  *  tickets déjà récupérés (`2026-09-28:1`). ⚠️ Un lundi SEUL vient d'avant les paliers : il
  *  voulait dire « les 2 tickets de la semaine sont pris » — on le relit comme tel, sinon une
@@ -383,8 +414,7 @@ export function weeklyQuests(
     };
   });
   const doneCount = quests.filter((q) => q.complete).length;
-  const tiers = WEEKLY_QUESTS.tiers.map((t) => ({ ...t, reached: doneCount >= t.at }));
-  const earned = tiers.reduce((best, t) => (t.reached ? Math.max(best, t.tickets) : best), 0);
+  const { tiers, earned } = questTiers(doneCount, quests.length);
   const claimedTickets = parseQuestMark(mark, monday);
   const claimable = Math.max(0, earned - claimedTickets);
   const top = WEEKLY_QUESTS.tiers[WEEKLY_QUESTS.tiers.length - 1]!.tickets;

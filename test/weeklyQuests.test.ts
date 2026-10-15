@@ -146,8 +146,14 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
     const s = empty();
     s.sessions.push(
       { performed_at: at(MON), payload: { discipline: 'autre_sport', name: 'Tennis' } },
-      { performed_at: at(addDays(MON, 1)), payload: { discipline: 'autre_sport', name: 'Tennis de table' } },
-      { performed_at: at(addDays(MON, 2)), payload: { discipline: 'autre_sport', name: ' tennis ' } },
+      {
+        performed_at: at(addDays(MON, 1)),
+        payload: { discipline: 'autre_sport', name: 'Tennis de table' },
+      },
+      {
+        performed_at: at(addDays(MON, 2)),
+        payload: { discipline: 'autre_sport', name: ' tennis ' },
+      },
     );
     expect(questEntries(s).map((e) => e.kind)).toEqual(['tennis', 'other', 'tennis']);
     expect(quest(s, 'tennis_days', addDays(MON, 6)).done).toBe(2);
@@ -161,10 +167,7 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
   });
   it('rien d’avant lundi ni d’après dimanche', () => {
     const s = empty();
-    s.sessions.push(
-      { performed_at: at(addDays(MON, -1)) },
-      { performed_at: at(addDays(MON, 7)) },
-    );
+    s.sessions.push({ performed_at: at(addDays(MON, -1)) }, { performed_at: at(addDays(MON, 7)) });
     expect(quest(s, 'active_days').done).toBe(0);
   });
   it('la cible tennis suit l’historique', () => {
@@ -180,24 +183,57 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
   });
 });
 
-describe('🗓️ quêtes de la semaine — tous les objectifs, tes sports en tête', () => {
+describe('🗓️ quêtes de la semaine — les objectifs de tes sports, tes sports en tête', () => {
   const kinds = (s: QuestSources) => weeklyQuests(s, MON, null).quests;
+  const ids = (s: QuestSources) => kinds(s).map((x) => x.kind);
 
-  it('les six objectifs, toujours, « jours actifs » en tête', () => {
+  it('« jours actifs » en tête, jamais deux fois le même objectif', () => {
     for (const s of [empty(), history(3, 0), history(0, 90), history(3, 60)]) {
       const q = kinds(s);
-      expect(q).toHaveLength(6);
-      expect(new Set(q.map((x) => x.kind)).size).toBe(6);
+      expect(new Set(q.map((x) => x.kind)).size).toBe(q.length);
       expect(q[0]!.kind).toBe('active_days');
     }
   });
-  it('100 % muscu : la muscu en tête, cardio/tennis/variété proposés en retrait', () => {
+  it('sans pratique connue : les six objectifs sont proposés', () => {
+    expect(kinds(empty())).toHaveLength(6);
+  });
+  it('⚠️ jamais l’objectif d’un sport que tu ne pratiques pas (signalé : du tennis chez Cypher)', () => {
+    expect(ids(history(3, 0))).not.toContain('tennis_days');
+    expect(ids(history(3, 0))).not.toContain('cardio_minutes');
+    expect(ids(history(0, 90))).not.toContain('strength_days');
+    expect(ids(history(0, 90))).not.toContain('tennis_days');
+    // Muscu + course + foot (autre sport), comme Cypher : pas de tennis, 5 objectifs.
+    const cypher = history(5, 100);
+    for (let w = 1; w <= 2; w++)
+      cypher.sessions.push({
+        performed_at: at(addDays(MON, -7 * w + 1)),
+        payload: { discipline: 'autre_sport', name: 'Football' },
+      });
+    expect(ids(cypher)).toEqual([
+      'active_days',
+      'strength_days',
+      'cardio_minutes',
+      'regularity',
+      'variety',
+    ]);
+  });
+  it('un « autre sport » seul ne dit rien de tes sports : tout reste proposé', () => {
+    const s = empty();
+    for (let w = 1; w <= 3; w++)
+      s.sessions.push({
+        performed_at: at(addDays(MON, -7 * w)),
+        payload: { discipline: 'autre_sport', name: 'Yoga' },
+      });
+    expect(kinds(s)).toHaveLength(6);
+  });
+  it('100 % muscu : la muscu en tête, la variété proposée en retrait', () => {
     const q = kinds(history(3, 0));
     expect(q.filter((x) => x.mine).map((x) => x.kind)).toEqual([
       'active_days',
       'strength_days',
       'regularity',
     ]);
+    expect(q.filter((x) => !x.mine).map((x) => x.kind)).toEqual(['variety']);
     // Les objectifs « à toi » passent avant les autres.
     const firstExtra = q.findIndex((x) => !x.mine);
     expect(q.slice(firstExtra).every((x) => !x.mine)).toBe(true);
@@ -205,7 +241,7 @@ describe('🗓️ quêtes de la semaine — tous les objectifs, tes sports en t�
   it('100 % cardio : la muscu n’est pas « à toi »', () => {
     const q = kinds(history(0, 90));
     expect(q.find((x) => x.kind === 'cardio_minutes')!.mine).toBe(true);
-    expect(q.find((x) => x.kind === 'strength_days')!.mine).toBe(false);
+    expect(q.find((x) => x.kind === 'strength_days')).toBeUndefined();
   });
   it('la variété n’est « à toi » qu’à partir de deux sports pratiqués', () => {
     expect(kinds(history(3, 0)).find((x) => x.kind === 'variety')!.mine).toBe(false);
@@ -214,16 +250,16 @@ describe('🗓️ quêtes de la semaine — tous les objectifs, tes sports en t�
   it('une sortie isolée ne fait pas du cardio « ta » pratique', () => {
     const s = history(3, 0);
     s.cardio.push({ performed_at: at(addDays(MON, -20)), payload: { duration_min: 30 } });
-    expect(kinds(s).find((x) => x.kind === 'cardio_minutes')!.mine).toBe(false);
+    expect(kinds(s).find((x) => x.kind === 'cardio_minutes')).toBeUndefined();
   });
   it('⚠️ l’ordre ne bouge pas en route : la semaine en cours n’y entre pas', () => {
     const s = history(3, 0);
     const before = kinds(s).map((q) => [q.kind, q.mine]);
     for (let d = 0; d < 5; d++)
       s.cardio.push({ performed_at: at(addDays(MON, d)), payload: { duration_min: 40 } });
-    expect(
-      weeklyQuests(s, addDays(MON, 5), null).quests.map((q) => [q.kind, q.mine]),
-    ).toEqual(before);
+    expect(weeklyQuests(s, addDays(MON, 5), null).quests.map((q) => [q.kind, q.mine])).toEqual(
+      before,
+    );
   });
 });
 
@@ -262,6 +298,14 @@ describe('🗓️ quêtes de la semaine — les paliers de récompense', () => {
     const five = weeklyQuests(week(4, 60), addDays(MON, 6), null); // + cardio + variété
     expect(five.doneCount).toBe(5);
     expect(five.earned).toBe(3);
+  });
+  it('⚠️ le dernier palier suit le nombre d’objectifs affichés (100 % muscu : 4)', () => {
+    const s = history(3, 0);
+    const b = weeklyQuests(s, MON, null);
+    expect(b.quests).toHaveLength(4);
+    expect(b.tiers.map((t) => t.at)).toEqual([2, 3, 4]);
+    // Avec tous les objectifs affichés, rien ne change.
+    expect(weeklyQuests(empty(), MON, null).tiers.map((t) => t.at)).toEqual([2, 3, 5]);
   });
   it('on récupère palier par palier, sans jamais payer deux fois', () => {
     const s = week(4, 60);
