@@ -298,8 +298,8 @@
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
               @click.stop="askRecall(v.recall, v.recallInfo)"
             />
-            <!-- 🗡️🛡️ Un renfort dit QUI il porte : champions (or, 🗡️), miliciens (vert, 🛡️)
-                 ou les deux (🗡️ + pastille 🛡️). Pion un peu plus gros pour se lire. -->
+            <!-- 🏰🛡️ Un renfort dit QUI il porte : champions (or, 🏰), miliciens (vert, 🛡️)
+                 ou les deux (🏰 + pastille 🛡️). Pion un peu plus gros pour se lire. -->
             <circle
               :cx="v.at.x"
               :cy="v.at.y"
@@ -1681,6 +1681,7 @@ import {
   recallPreview,
   type RecallTarget,
   partyCarriesHero,
+  returningHurt,
 } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -4343,6 +4344,7 @@ const trips = computed(() => {
       // rentre à la base) avant même que le combat n'ait eu lieu.
       from: tripOriginPoi(pois.value, a.origin),
       members: voyageAboard(a, char.advList, now.value),
+      hurt: returningHurt(a, now.value),
       haul: expeHaul(a.outcome),
       expected: expectedHaul(a.poi, true),
       legs: tripLegs(a, now.value),
@@ -4368,6 +4370,7 @@ const trips = computed(() => {
       withHero: g.hero,
       from: tripOriginPoi(pois.value, g.origin),
       members: g.members,
+      hurt: returningHurt(g.trip, now.value),
       haul: g.haul,
       // Un groupe d'attaque combinée n'annonce rien : chaque groupe répéterait la même prise.
       expected: g.combined ? null : expectedHaul(g.poi, g.hero),

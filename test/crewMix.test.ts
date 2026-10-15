@@ -19,4 +19,9 @@ describe('crewMix — qui part en renfort', () => {
     expect(CREW_WHO.mixed).toContain(MILITIA_EMO);
     expect(CREW_WHO.mixed).toContain(CREW_EMO.champions);
   });
+  it('une garnison ne porte aucune arme (elle se lirait comme une attaque)', () => {
+    for (const e of [...Object.values(CREW_EMO), ...Object.values(CREW_WHO)]) {
+      expect(e).not.toMatch(/🗡|⚔/u);
+    }
+  });
 });

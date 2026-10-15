@@ -774,6 +774,20 @@ export function baseWalkers(
 }
 
 /**
+ * 🤕 QUI RENTRE BLESSÉ (demandé : « une icône sur leur tuile pour qu'on voie qui est
+ * blessé »). Les blessés du rapport (`hurt` et `lightHurt`) — seulement une fois le rapport
+ * tombé (`midAt`) : l'issue est tirée au départ, la montrer à l'aller la dévoilerait.
+ */
+export function returningHurt(
+  p: Pick<ActiveExpedition, 'midAt' | 'outcome'>,
+  now: number,
+): string[] {
+  if (now < p.midAt) return [];
+  const party = p.outcome.party;
+  return [...new Set([...(party?.hurt ?? []), ...(party?.lightHurt ?? [])])];
+}
+
+/**
  * 🏥 Le trajet DIRECT vers la base de ceux qui quittent un voyage à `at` : il part de là où
  * ils sont (le lieu de mission à l'arrivée, ou le chemin du retour si leur point tombe en
  * route) et va à la ville. Sa durée = `legMs` (le trajet lieu → ville à leur pas) au

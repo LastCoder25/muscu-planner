@@ -179,17 +179,20 @@ export function crewMix(ids: readonly string[]): CrewMix {
   if (nMil === 0) return 'champions';
   return nMil === ids.length ? 'militia' : 'mixed';
 }
-/** L'icône d'une troupe : 🗡️ des champions, 🛡️ des miliciens (la mixte garde 🗡️ et porte
- *  une pastille 🛡️ sur la carte ; `CREW_WHO` l'écrit en entier là où un texte suffit). */
+/** L'icône d'une troupe qui part en GARNISON : 🏰 des champions, 🛡️ des miliciens (la mixte
+ *  garde 🏰 et porte une pastille 🛡️ sur la carte ; `CREW_WHO` l'écrit en entier là où un
+ *  texte suffit). ⚠️ Jamais une arme (🗡️/⚔️) : un renfort se lisait comme une attaque
+ *  (signalé : « c'est juste une garnison »). */
+const GARRISON_EMO = '🏰';
 export const CREW_EMO: Record<CrewMix, string> = {
-  champions: '🗡️',
+  champions: GARRISON_EMO,
   militia: MILITIA_EMO,
-  mixed: '🗡️',
+  mixed: GARRISON_EMO,
 };
 export const CREW_WHO: Record<CrewMix, string> = {
-  champions: '🗡️',
+  champions: GARRISON_EMO,
   militia: MILITIA_EMO,
-  mixed: '🗡️' + MILITIA_EMO,
+  mixed: GARRISON_EMO + MILITIA_EMO,
 };
 
 /** Les miliciens HORS de la base : postés sur un point ou en route vers lui. Ils comptent

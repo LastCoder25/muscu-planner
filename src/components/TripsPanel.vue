@@ -103,9 +103,15 @@
            miliciens ; le héros aussi quand l'icône du haut dit l'étape, pas le voyageur. -->
         <span v-if="t.members.length || (lt.icon && t.withHero)" class="tr-faces">
           <span v-if="lt.icon && t.withHero" class="tr-face" title="Ton héros">🧝</span>
-          <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
+          <span
+            v-for="f in facesOf(t)"
+            :key="f.id"
+            class="tr-face"
+            :title="f.hurt ? `${f.name} — blessé, rentre à l'infirmerie` : f.name"
+          >
             <MilitiaPortrait v-if="f.militia" />
             <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
+            <span v-if="f.hurt" class="tr-hurt" aria-label="blessé">🤕</span>
           </span>
           <span v-if="t.members.length > facesMax(t)" class="tr-face-more"
             >+{{ t.members.length - facesMax(t) }}</span
@@ -264,6 +270,8 @@ export interface MapTrip {
   /** Qui voyage : le héros, et les ids des champions (montrés quand on touche la tuile). */
   withHero: boolean;
   members: string[];
+  /** 🤕 Ceux qui rentrent blessés (`returningHurt`, une fois le rapport tombé). */
+  hurt?: string[];
   /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
   haul: HaulPill[];
   /** 💰 À l'aller : ce que le lieu rapporte s'il est pris (« 300 🪙 · 2 🔮 », `formatHaul`). */
@@ -587,15 +595,29 @@ const FACES_MAX = 4;
 /** ⛵ Une traversée prend toute la ligne : la place de plus de portraits. */
 const SEA_FACES_MAX = 10;
 const facesMax = (t: MapTrip) => (t.sea ? SEA_FACES_MAX : FACES_MAX);
-/** 🛡️ Les portraits d'un renfort : champions (portrait, repli emoji) et miliciens. */
+/** 🛡️ Les portraits d'un renfort : champions (portrait, repli emoji) et miliciens.
+ *  🤕 Les blessés passent EN TÊTE : au-delà de `facesMax` ils seraient cachés dans « +N ». */
 function facesOf(t: MapTrip) {
   const byId = new Map(char.advList.map((a) => [a.id, a]));
-  return t.members.slice(0, facesMax(t)).map((id) => {
+  const hurt = new Set(t.hurt ?? []);
+  const ordered = [
+    ...t.members.filter((id) => hurt.has(id)),
+    ...t.members.filter((id) => !hurt.has(id)),
+  ];
+  return ordered.slice(0, facesMax(t)).map((id) => {
     if (isMilitiaId(id))
-      return { id, militia: true, name: MILITIA_NAME, championId: null, emoji: '' };
+      return {
+        id,
+        militia: true,
+        name: MILITIA_NAME,
+        championId: null,
+        emoji: '',
+        hurt: hurt.has(id),
+      };
     const a = byId.get(id);
     return {
       id,
+      hurt: hurt.has(id),
       militia: false,
       name: a?.name ?? 'Champion',
       championId: a?.championId ?? null,
@@ -1014,6 +1036,19 @@ function facesOf(t: MapTrip) {
 }
 .tr-face {
   display: inline-flex;
+  position: relative;
+}
+/* 🤕 Un blessé : une pastille au coin du portrait, cerclée de rouge pour se lire en petit. */
+.tr-hurt {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--surface, #211c16);
+  box-shadow: 0 0 0 1px var(--d4, #ff6a45);
+  pointer-events: none;
 }
 .tr-face-more {
   font-size: 10.5px;
