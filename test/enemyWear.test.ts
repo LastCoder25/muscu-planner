@@ -31,7 +31,12 @@ import {
   type ExpeditionMap,
 } from '@/lib/expedition';
 import { archipelOn, ISLAND_OUTPOST_LEVEL } from '@/lib/archipelago';
-import { ensureIslandConquest, objectiveIdOf, takeObjective } from '@/lib/islandConquest';
+import {
+  FORTRESS_ID,
+  ensureIslandConquest,
+  objectiveIdOf,
+  takeObjective,
+} from '@/lib/islandConquest';
 import { partyClaimRoster } from '@/lib/party';
 import { refChampionAdv } from '@/lib/caravan';
 
@@ -249,6 +254,41 @@ describe('prise : l’usure disparaît', () => {
     const held = takeObjective(worn, OBJ, ['a0'], NOW).pois.find((q) => q.id === OBJ)!;
     expect(held.control!.owner).toBe('player');
     expect(held.control!.wear).toBeUndefined();
+  });
+});
+
+// 🏰 La forteresse ne s'use pas (2026-10-15) : sinon des assauts ratés en boucle, dans une seule
+// vague, la faisaient tomber à l'usure dès l'arrivée sur l'île.
+describe('la forteresse ne s’use pas', () => {
+  const islMap = () => {
+    const lv = archipelOn(1).levelCap;
+    return ensureIslandConquest(
+      ensureControls(
+        createMap(7, NOW, lv, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(1)),
+        NOW,
+        lv,
+        ISLAND_OUTPOST_LEVEL,
+      ),
+      NOW,
+      lv,
+    );
+  };
+  it('un assaut raté ne l’entame pas, et le combat se joue à sa pleine troupe', () => {
+    const m = islMap();
+    const before = poiOf(m, FORTRESS_ID);
+    expect(before.control!.kind).toBe('fortress');
+    const after = wearEnemy(m, FORTRESS_ID, 0.6, NOW, 'a');
+    expect(after).toBe(m);
+    expect(poiOf(after, FORTRESS_ID).control!.wear).toBeUndefined();
+    // même une usure déjà stockée (avant la règle) ne réduit pas la troupe combattue
+    const legacy = { ...before, control: { ...before.control!, wear: { share: 0.8, from: NOW } } };
+    expect(campSpecOf(legacy)!.size).toBe(before.control!.size);
+    expect(wearSettleLabel(0.5, before.control)).toBe('');
+  });
+  it('un objectif, lui, s’use toujours', () => {
+    const m = islMap();
+    const OBJ = objectiveIdOf(0);
+    expect(poiOf(wearEnemy(m, OBJ, 0.6, NOW, 'a'), OBJ).control!.wear?.share).toBeCloseTo(0.6);
   });
 });
 

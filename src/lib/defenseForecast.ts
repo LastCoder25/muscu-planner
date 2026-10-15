@@ -47,7 +47,7 @@ import { HERO_UNIT_ID, partyAllies, spareInjured, type EscortKit } from './carav
 import { militiaLost } from './militia';
 import { partyForecastSeed } from './party';
 import { supplyFx } from './supplies';
-import { addWear, type EnemyWear } from './enemyWear';
+import { addWear, wearsDown, type EnemyWear } from './enemyWear';
 import type { Adventurer } from './adventurers';
 
 /** Combien de combats par pronostic d'assaut ou d'interception (les pertes se lisent sur la
@@ -287,7 +287,8 @@ export function attackForecast(
   return simulate([{ poi, spec }], allies, escort, samples, {
     foeMult: supplyFx(road.supplies).guardMult,
     medkit: supplyFx(road.supplies).medkit,
-    prevWear: poi.control?.owner === 'enemy' ? poi.control.wear : undefined,
+    prevWear:
+      poi.control?.owner === 'enemy' && wearsDown(poi.control) ? poi.control.wear : undefined,
   });
 }
 

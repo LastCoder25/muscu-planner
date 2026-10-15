@@ -45,7 +45,7 @@ import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
 import { enemyWaitMs, sortieFires, SORTIE_EVENTS, type SortieKind } from './sortieClock';
 import { islandPoint, islandScatter } from './islandShape';
-import { withoutWear, wornSize, type EnemyWear } from './enemyWear';
+import { troopSize, withoutWear, type EnemyWear } from './enemyWear';
 import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -128,8 +128,8 @@ export const NEST = {
 } as const;
 
 /** 🩸 « troupe de 3 champions de référence » — usée, sa force du moment et ce qui lui manque. */
-function troopText(c: { size: number; wear?: EnemyWear }): string {
-  const now = wornSize(c.size, c.wear);
+function troopText(c: { kind: ControlState['kind']; size: number; wear?: EnemyWear }): string {
+  const now = troopSize(c);
   const r = (x: number) => Math.round(x * 10) / 10;
   return now < c.size
     ? `troupe de ${r(now)} champions de référence (affaiblie de ${Math.round((1 - now / c.size) * 100)} %, ${r(c.size)} au complet)`

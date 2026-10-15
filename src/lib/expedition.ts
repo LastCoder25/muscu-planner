@@ -15,7 +15,7 @@ import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } 
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import type { MilitiaState } from './militia';
-import { wornSize, type EnemyWear } from './enemyWear';
+import { troopSize, type EnemyWear } from './enemyWear';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
@@ -674,7 +674,7 @@ export function campSpecOf(poi: Pick<Poi, 'id' | 'type' | 'control'>): CampSpec 
   // nous, il n'y a rien à attaquer.
   if (poi.type === 'control')
     return poi.control?.owner === 'enemy'
-      ? { faction: poi.control.faction, size: wornSize(poi.control.size, poi.control.wear) }
+      ? { faction: poi.control.faction, size: troopSize(poi.control) }
       : null;
   if (poi.type !== 'camp' && poi.type !== 'lair' && poi.type !== 'den') return null;
   // 🐺 Une tanière abrite une BÊTE seule (`lone`) : pas de troupe, un seul corps à abattre.

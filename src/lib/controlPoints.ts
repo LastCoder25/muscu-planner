@@ -40,7 +40,7 @@ import {
 } from './advGear';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
-import { addWear, withoutWear } from './enemyWear';
+import { addWear, wearsDown, withoutWear } from './enemyWear';
 import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
 import {
   SKILLS,
@@ -1859,7 +1859,8 @@ export function loseControl(
     const retakes = p.control!.retakes + 1;
     const force = enemyForce(`${map.seed}:${id}`, retakes);
     const returning = [...(p.control!.returning ?? []), ...turnBackReinforcements(p.control!, at)];
-    const wear = won?.dealt ? addWear(undefined, won.dealt, at, won.hitId) : undefined;
+    const wear =
+      won?.dealt && wearsDown(p.control) ? addWear(undefined, won.dealt, at, won.hitId) : undefined;
     const next: ControlState = {
       kind: p.control!.kind,
       owner: 'enemy',

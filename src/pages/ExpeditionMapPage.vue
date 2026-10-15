@@ -1789,6 +1789,7 @@ import PoiCard from '@/components/PoiCard.vue';
 import ForecastChips from '@/components/ForecastChips.vue';
 import { defenseForecast } from '@/lib/defenseForecast';
 import { defenseView, wornChip, type ForecastView } from '@/lib/forecastChips';
+import { wearsDown } from '@/lib/enemyWear';
 import SupplyPicker from '@/components/SupplyPicker.vue';
 import {
   controlReturnNote as returnNote,
@@ -3400,7 +3401,9 @@ const defenseNow = computed(() => {
   };
 });
 const defenseFcView = computed<ForecastView | null>(() =>
-  defenseFc.value && defenseFc.value.a.present.length ? defenseView(defenseFc.value.fc) : null,
+  defenseFc.value && defenseFc.value.a.present.length
+    ? defenseView(defenseFc.value.fc, wearsDown(defenseFc.value.a.c))
+    : null,
 );
 /** 🩸 La pastille d'un lieu ENNEMI dont la troupe est usée (`wearLabel`). */
 const wornView = computed<ForecastView | null>(() => {

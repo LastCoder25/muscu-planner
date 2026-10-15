@@ -5631,7 +5631,7 @@ export const useCharacterStore = defineStore('character', () => {
           text: held
             ? `${emo} Tes miliciens ont tenu l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
             : militia.length
-              ? `${emo} L’ennemi a repris le lieu sur l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt)}`
+              ? `${emo} L’ennemi a repris le lieu sur l’île abandonnée.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt, p.control)}`
               : `${emo} L’ennemi a repris le lieu, laissé sans défense sur l’île abandonnée.`,
           ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
         };
@@ -5873,9 +5873,9 @@ export const useCharacterStore = defineStore('character', () => {
           (held
             ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)}${lightHurtLabel(o?.party?.lightHurt)} Une nouvelle attaque se prépare.`
             : escort.length
-              ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt)}`
+              ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt, p.control)}`
               : militia.length
-                ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt)}`
+                ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt, p.control)}`
                 : `${emo} L’ennemi a repris le lieu, laissé sans personne pour le défendre.`) +
           (!held && !fights && (posted.length || p.control!.hero)
             ? ' Tes champions postés n’ont pas combattu : ils rentrent à pied, sans blessure.'

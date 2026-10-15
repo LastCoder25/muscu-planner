@@ -5,7 +5,7 @@
  * ⚠️ AUCUN calcul de combat ici — uniquement de la mise en mots et des seuils d'affichage.
  */
 import type { BattleForecast, DefenseForecast, LossForecast } from './defenseForecast';
-import { wearLabel, type EnemyWear } from './enemyWear';
+import { wearLabel, wearsDown, type EnemyWear } from './enemyWear';
 import type { ControlState } from './expedition';
 
 export type ChipTone = 'ok' | 'warn' | 'bad' | 'info';
@@ -100,7 +100,7 @@ export function wearChips(share: number, key: string, who = 'troupe'): ForecastC
 }
 
 /** 🛡️ Défense d'un lieu tenu. */
-export function defenseView(f: DefenseForecast): ForecastView {
+export function defenseView(f: DefenseForecast, wears: boolean): ForecastView {
   const head: ForecastChip[] = [
     {
       key: 'hold',
@@ -119,7 +119,7 @@ export function defenseView(f: DefenseForecast): ForecastView {
     rows.push({
       key: 'lost',
       label: '💥 Si elle tombe',
-      chips: [...wearChips(f.wearIfLost, 'lost'), ...lossChips(f.ifLost, 'lost')],
+      chips: [...(wears ? wearChips(f.wearIfLost, 'lost') : []), ...lossChips(f.ifLost, 'lost')],
     });
   return { head, rows };
 }
@@ -172,9 +172,10 @@ export function interceptView(f: BattleForecast): ForecastView {
 /** 🩸 La pastille d'un lieu ENNEMI usé : « affaiblie de 40 % · se renforce en 6 vagues d’attaque ».
  *  `null` si le lieu n'est pas ennemi ou pas usé. */
 export function wornChip(
-  control: Pick<ControlState, 'owner' | 'wear'> | undefined,
+  control: Pick<ControlState, 'owner' | 'wear' | 'kind'> | undefined,
 ): ForecastChip | null {
-  const w: EnemyWear | undefined = control?.owner === 'enemy' ? control.wear : undefined;
+  const w: EnemyWear | undefined =
+    control?.owner === 'enemy' && wearsDown(control) ? control.wear : undefined;
   const text = wearLabel(w);
   return text
     ? {

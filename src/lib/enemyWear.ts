@@ -89,6 +89,24 @@ export function withoutWear(c: ControlState): ControlState {
   return rest;
 }
 
+/**
+ * 🏰 LA FORTERESSE NE S'USE PAS (2026-10-15, décision de l'utilisateur) : c'est l'objectif de
+ * long terme d'une île. Usée par des assauts ratés en boucle, elle tombait en une seule vague
+ * de défaites (plusieurs équipes dans l'heure ne comptent qu'une vague, donc aucune reprise de
+ * force entre elles) — on débarquait au niveau 40 et on repartait aussitôt. Elle se prend à sa
+ * force affichée (le verrou des objectifs et leur affaiblissement, `fortressForce`, restent).
+ * SOURCE UNIQUE : stockage (`wearEnemy`, reprise par l'ennemi), combat (`troopSize`),
+ * pronostic et fiche la lisent.
+ */
+export function wearsDown(control: Pick<ControlState, 'kind'> | undefined): boolean {
+  return control?.kind !== 'fortress';
+}
+
+/** La taille effectivement combattue de la troupe d'un lieu : usée, sauf la forteresse. */
+export function troopSize(control: Pick<ControlState, 'kind' | 'size' | 'wear'>): number {
+  return wearsDown(control) ? wornSize(control.size, control.wear) : control.size;
+}
+
 /** La taille effectivement combattue d'une troupe ennemie usée. */
 export function wornSize(size: number, wear: EnemyWear | undefined): number {
   if (!wear) return size;
@@ -181,7 +199,7 @@ export function wearEnemy(
   let changed = false;
   const pois = map.pois.map((p) => {
     const c = p.control;
-    if (p.id !== id || !c || c.owner !== 'enemy') return p;
+    if (p.id !== id || !c || c.owner !== 'enemy' || !wearsDown(c)) return p;
     const wear = addWear(c.wear, dealt, at, hitId);
     if (wear === c.wear) return p;
     changed = true;
@@ -200,8 +218,13 @@ export function wearHitLabel(dealt: number | undefined): string {
   return pct >= 1 ? ` Ce combat a retiré ${pct} % à sa troupe.` : '';
 }
 
-/** « L’ennemi s’installe affaibli de 40 % » — ou '' quand le combat l'a à peine entamé. */
-export function wearSettleLabel(dealt: number | undefined): string {
+/** « L’ennemi s’installe affaibli de 40 % » — ou '' quand le combat l'a à peine entamé, ou
+ *  quand le lieu ne s'use pas (la forteresse, `wearsDown`). */
+export function wearSettleLabel(
+  dealt: number | undefined,
+  control: Pick<ControlState, 'kind'> | undefined,
+): string {
+  if (!wearsDown(control)) return '';
   const pct = Math.round(Math.min(1 - WEAR.minShare, Math.max(0, dealt ?? 0)) * 100);
   return pct >= 1 ? ` L’ennemi s’installe affaibli de ${pct} %.` : '';
 }

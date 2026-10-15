@@ -52,17 +52,17 @@ describe('🏷️ lossChips', () => {
 
 describe('🏷️ defenseView', () => {
   it('« Tient 72 % » en tête, puis les deux issues', () => {
-    const v = defenseView(def());
+    const v = defenseView(def(), true);
     expect(v.head[0]!.text).toBe('🛡️ Tient 72 %');
     expect(v.rows.map((r) => r.key)).toEqual(['won', 'lost']);
     expect(texts(v.rows[1]!.chips)).toContain(wearLabel({ share: 0.4, from: 0 }));
   });
   it('tenue à 100 % : pas de ligne « si elle tombe »', () => {
-    const v = defenseView(def({ hold: 1, win: 1, lostSamples: 0 }));
+    const v = defenseView(def({ hold: 1, win: 1, lostSamples: 0 }), true);
     expect(v.rows.map((r) => r.key)).toEqual(['won']);
   });
   it('personne ne défend : la tête seule', () => {
-    const v = defenseView(def({ hold: 0, win: 0, lostSamples: 0, samples: 0 }));
+    const v = defenseView(def({ hold: 0, win: 0, lostSamples: 0, samples: 0 }), true);
     expect(v.head[0]!.text).toBe('🛡️ Tient 0 %');
     expect(v.rows).toEqual([]);
   });

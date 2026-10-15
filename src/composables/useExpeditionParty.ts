@@ -62,6 +62,7 @@ import type { Combatant } from '@/lib/combat';
 import { isFieldArmyPoi, isWarbandPoi, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import { attackForecast, interceptForecast } from '@/lib/defenseForecast';
 import { attackView, interceptView, type ForecastView } from '@/lib/forecastChips';
+import { wearsDown } from '@/lib/enemyWear';
 
 /** Un lieu de départ tel que l'écran le liste (cf. `partyGroups`). */
 type OriginGroup = { id: string; advs: readonly Adventurer[] };
@@ -370,7 +371,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
     if (p.type !== 'control' && p.type !== 'camp' && p.type !== 'lair') return null;
     const f = attackForecast(p, partyAdvs.value, partyRoad.value, hero);
-    return f ? attackView(f, p.type === 'control') : null;
+    return f ? attackView(f, p.type === 'control' && wearsDown(p.control)) : null;
   });
   /** 🏰👥 LA FORTERESSE ENNEMIE, TOUT LE MONDE RÉUNI (demandé) : le 🎯 % si le joueur
    *  rassemblait TOUS ses champions (occupés, postés ou blessés compris) et son héros — un
