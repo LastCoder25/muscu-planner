@@ -4,21 +4,27 @@
        remplace les toasts verts du bas d'écran, qui s'empilaient à l'ouverture jusqu'à
        couvrir l'écran et SPOILAIENT l'issue des expéditions. Le bandeau ne dit QUE combien :
        d'où ça vient et comment ça s'est passé, c'est la boîte 📬 qui le raconte. -->
-  <Transition name="rg">
-    <div v-if="gains.length" class="rg" role="status" aria-live="polite">
-      <TransitionGroup name="rg-chip" tag="div" class="rg-chips">
-        <span v-for="g in gains" :key="g.id" class="rg-chip" :class="g.id"
-          ><b>+{{ compactNumber(g.n) }}</b
-          ><span class="rg-ico"
-            ><RuneIcon v-if="g.id === 'runes'" /><template v-else>{{
-              ICONS[g.id] ?? '✨'
-            }}</template></span
-          ></span
-        >
-      </TransitionGroup>
-      <button class="rg-more" type="button" @click="openDetails">📬 détail</button>
-    </div>
-  </Transition>
+  <!-- ⚠️ Une ancre de hauteur NULLE : le bandeau FLOTTE par-dessus ce qui suit (le sélecteur
+       Aventure/Carte) au lieu de pousser la page. Il décalait tout, et la carte, mesurée
+       pendant qu'il était là, restait trop courte une fois qu'il était parti (signalé).
+       Toucher le bandeau le ferme. -->
+  <div class="rg-anchor">
+    <Transition name="rg">
+      <div v-if="gains.length" class="rg" role="status" aria-live="polite" @click.self="close">
+        <TransitionGroup name="rg-chip" tag="div" class="rg-chips" @click="close">
+          <span v-for="g in gains" :key="g.id" class="rg-chip" :class="g.id"
+            ><b>+{{ compactNumber(g.n) }}</b
+            ><span class="rg-ico"
+              ><RuneIcon v-if="g.id === 'runes'" /><template v-else>{{
+                ICONS[g.id] ?? '✨'
+              }}</template></span
+            ></span
+          >
+        </TransitionGroup>
+        <button class="rg-more" type="button" @click="openDetails">📬 détail</button>
+      </div>
+    </Transition>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -72,7 +78,7 @@ const snapshot = computed<ResourceSnapshot | null>(() => {
 });
 
 /** Tant que des crédits arrivent, le bandeau reste ; il s'efface ce délai après le dernier. */
-const SHOW_MS = 7000;
+const SHOW_MS = 5000;
 const gains = ref<ResourceGain[]>([]);
 let last: ResourceSnapshot | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -104,19 +110,38 @@ onUnmounted(() => {
   if (timer) clearTimeout(timer);
 });
 
-function openDetails() {
+function close() {
   gains.value = [];
+  if (timer) clearTimeout(timer);
+  timer = null;
+}
+function openDetails() {
+  close();
   emit('details');
 }
 </script>
 
 <style scoped>
+.rg-anchor {
+  position: relative;
+  height: 0;
+}
 .rg {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
   min-width: 0;
+  padding: 2px 2px 2px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
 }
 .rg-chips {
   display: flex;

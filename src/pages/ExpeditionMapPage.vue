@@ -4696,6 +4696,11 @@ function dimmed(p: Poi): boolean {
  *  fortes. Plus rien ne s'affiche sous la carte (demandé). */
 type MapPanel = 'trips' | 'ctl' | 'plan' | 'repart';
 const overlay = ref<MapPanel | null>(null);
+// 📏 Ouvrir une liste re-mesure la carte : si le haut de la page a bougé depuis le montage
+// (un bandeau apparu puis parti), la liste s'arrêtait trop haut au-dessus des ronds du bas.
+watch(overlay, (o) => {
+  if (o) measure();
+});
 const overlayTitle = computed(() =>
   overlay.value === 'ctl'
     ? '🏰 Places fortes'
