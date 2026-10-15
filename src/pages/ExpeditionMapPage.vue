@@ -2561,6 +2561,13 @@ function measure() {
   contH.value = el.clientHeight;
   // Le cadre peut grandir (rotation, rangée de voyages qui disparaît) : on rattrape.
   if (mapPx.value < minPx.value) mapPx.value = minPx.value;
+  // 🧭 Tant que le joueur n'a pas zoomé, la vue de départ SUIT le dézoom maximal : la hauteur
+  // de la carte se recale après le montage (`fitMapHeight`, 250 et 900 ms) et le cadre RÉTRÉCIT
+  // alors — sans ça le zoom restait à l'ancien minimum, un cran trop près (signalé v1.201).
+  else if (fitted && !userZoomed && mapPx.value !== minPx.value) {
+    mapPx.value = minPx.value;
+    void nextTick(centerStart);
+  }
 }
 function onScroll() {
   const el = scrollEl.value;
@@ -2589,6 +2596,7 @@ function zoom(dir: number) {
   // haut-gauche de la carte (signalé : « ça me plaque la carte dans un coin »).
   const cx = ((el?.scrollLeft ?? 0) + (el?.clientWidth ?? contW.value) / 2) / mapPx.value;
   const cy = ((el?.scrollTop ?? 0) + (el?.clientHeight ?? contH.value) / 2) / mapPx.value;
+  userZoomed = true;
   mapPx.value = clampPx(mapPx.value + dir * ZOOM_STEP);
   void nextTick(() => centerOn(V.value.x + cx * V.value.size, V.value.y + cy * V.value.size));
 }
@@ -2620,6 +2628,7 @@ function onTouchMove(e: TouchEvent) {
   e.preventDefault();
   const g = touchGeometry(e);
   const r = pinchUpdate(pinch, g.dist, g.midX, g.midY, minPx.value, MAX_PX);
+  userZoomed = true;
   mapPx.value = r.px;
   // Après le redimensionnement du SVG : sinon le défilement est borné à l'ANCIENNE taille.
   void nextTick(() => {
@@ -4598,6 +4607,7 @@ function frameTrip(key: string) {
   const pts = [t.poi, t.from ?? TOWN];
   if (t.toBase) pts.push(TOWN);
   const f = tripFrame(pts, mapPx.value, V.value.size, contW.value, contH.value);
+  userZoomed = true;
   mapPx.value = clampPx(f.px);
   void nextTick(() => centerOn(f.cx, f.cy));
 }
@@ -6373,6 +6383,8 @@ onMounted(async () => {
 });
 /** Le cadrage tient-il compte d'un cadre de taille réelle ? */
 let fitted = false;
+/** Le joueur a-t-il zoomé (boutons, pincer, cadrage d'un voyage) ? Alors on ne touche plus au zoom. */
+let userZoomed = false;
 let resizeObs: ResizeObserver | null = null;
 /** 🧭 Vue de départ. ⚠️ Ne se fait que sur un cadre MESURÉ : sur un cadre encore à ~0 px,
  *  la formule rendait le dézoom maximal et centrait de travers. */
@@ -6383,6 +6395,9 @@ async function initialFit() {
   // coup, on zoome au + ou en pinçant. 🏝️ Sur une île on centre sur l'île, sinon sur la ville.
   mapPx.value = minPx.value;
   await nextTick();
+  centerStart();
+}
+function centerStart() {
   if (island.value) centerOn(V.value.x + V.value.size / 2, V.value.y + V.value.size / 2);
   else centerTown();
 }

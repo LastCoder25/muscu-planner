@@ -2,7 +2,7 @@
   <!-- Scène du boss entre amis : le boss en haut, le groupe en ligne dessous. Chaque frappe
        fait bondir son auteur, part vers le boss et retire des PV à l'impact. Rien n'est décidé
        ici : les dégâts viennent du serveur, la scène ne fait que les montrer. -->
-  <div ref="root" class="fbs">
+  <div ref="root" class="fbs" :class="{ quake }">
     <div class="fbs-boss-zone">
       <div ref="bossEl" class="fbs-boss" :class="{ shake, dying, dead: fallen && !dying }">
         <span class="fbs-aura" aria-hidden="true" />
@@ -15,7 +15,13 @@
           @error="artFailed = art"
         />
         <span v-else class="fbs-boss-emo" aria-hidden="true">{{ bossEmoji }}</span>
-        <span v-if="flash" :key="flash" class="fbs-flash" aria-hidden="true" />
+        <span
+          v-if="flash"
+          :key="flash"
+          class="fbs-flash"
+          :class="'fx-' + flashStyle"
+          aria-hidden="true"
+        />
         <span class="fbs-family" :title="familyName">{{ familyEmoji }}</span>
         <!-- MORT : éclats qui jaillissent du boss pendant qu'il s'effondre. -->
         <template v-if="dying">
@@ -41,7 +47,14 @@
       <div class="fbs-hp-l">
         <span class="font-display">{{ fmtBossPv(shownHp) }}</span> / {{ fmtBossPv(hpTotal) }} PV
       </div>
-      <span v-for="p in pops" :key="p.key" class="fbs-pop font-display">{{ p.text }}</span>
+      <span
+        v-for="p in pops"
+        :key="p.key"
+        class="fbs-pop font-display"
+        :class="'pop-' + p.size"
+        :style="{ '--px': p.dx + 'px' }"
+        >{{ p.text }}</span
+      >
       <!-- Le cri de la frappe : il naît au premier projectile et s'éteint un peu après le dernier. -->
       <span v-if="cry" :key="cry.key" class="fbs-cry font-display" role="status">{{
         cry.text
@@ -71,14 +84,79 @@
       v-for="p in projs"
       :key="p.key"
       class="fbs-proj"
+      :class="p.style"
       aria-hidden="true"
       :style="{
         left: p.x + 'px',
         top: p.y + 'px',
         '--dx': p.dx + 'px',
         '--dy': p.dy + 'px',
+        '--ang': p.ang + 'deg',
       }"
     />
+
+    <!-- ⚡ Tempête : la foudre tombe du haut de la scène sur le boss. -->
+    <svg
+      v-for="b in bolts"
+      :key="b.key"
+      class="fbs-bolt"
+      aria-hidden="true"
+      :style="{ left: b.x - 30 + 'px', height: b.h + 'px' }"
+      :viewBox="`0 0 60 ${b.h}`"
+      preserveAspectRatio="none"
+    >
+      <polyline :points="b.points" class="fbs-bolt-glow" />
+      <polyline :points="b.points" class="fbs-bolt-core" />
+    </svg>
+
+    <!-- 🔆 Laser : un rayon continu de l'auteur au boss, tant que la frappe dure. -->
+    <span
+      v-if="beam"
+      :key="beam.key"
+      class="fbs-beam"
+      :class="{ end: beam.end }"
+      aria-hidden="true"
+      :style="{
+        left: beam.x + 'px',
+        top: beam.y + 'px',
+        width: beam.len + 'px',
+        '--ang': beam.ang + 'deg',
+      }"
+    />
+
+    <!-- ☄️ Météore : la scène s'assombrit, il tombe du ciel, l'onde de choc balaie tout. -->
+    <span v-if="dim" class="fbs-dim" aria-hidden="true" />
+    <span
+      v-if="meteor"
+      :key="meteor.key"
+      class="fbs-meteor"
+      aria-hidden="true"
+      :style="{
+        left: meteor.x + 'px',
+        top: meteor.y + 'px',
+        '--dx': meteor.dx + 'px',
+        '--dy': meteor.dy + 'px',
+        '--ang': meteor.ang + 'deg',
+      }"
+    />
+    <span
+      v-for="w in waves"
+      :key="w.key"
+      class="fbs-wave"
+      :class="w.style"
+      aria-hidden="true"
+      :style="{ left: w.x + 'px', top: w.y + 'px' }"
+    />
+
+    <!-- Le nom de l'attaque, à partir des boules de feu. -->
+    <span
+      v-if="banner"
+      :key="banner.key"
+      class="fbs-banner font-display"
+      :class="banner.style"
+      role="status"
+      >{{ banner.text }}</span
+    >
 
     <!-- Une frappe de 30 reps dure 15 s : on peut toujours passer au résultat. -->
     <button v-if="animating" class="fbs-skip" @click="skip">⏩ Passer</button>
@@ -90,11 +168,12 @@ import { computed, nextTick, onUnmounted, ref, watch, type ComponentPublicInstan
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import {
   BOSS_CRY_MEMORY,
-  BOSS_SHOT_MS,
   bossCry,
   fmtBossPv,
-  strikeShots,
+  strikePlan,
+  type BossFamily,
   type BossStrike,
+  type StrikeStyle,
 } from '@/lib/friendBoss';
 import { lookEquipped, type HeroLook } from '@/lib/heroLook';
 
@@ -113,6 +192,8 @@ const props = defineProps<{
   bossArt?: string | null;
   familyEmoji: string;
   familyName: string;
+  /** Famille d'exo : un boss de gainage compte ses frappes en secondes (`strikeReps`). */
+  family?: BossFamily | null;
   hpTotal: number;
   /** PV restants selon le serveur. */
   hpLeft: number;
@@ -168,8 +249,35 @@ const SHARDS = 10;
 const DEATH_MS = 2200;
 const shake = ref(false);
 const flash = ref(0);
-const projs = ref<{ key: number; x: number; y: number; dx: number; dy: number }[]>([]);
-const pops = ref<{ key: number; text: string }[]>([]);
+const projs = ref<
+  { key: number; x: number; y: number; dx: number; dy: number; ang: number; style: StrikeStyle }[]
+>([]);
+type PopSize = 'sm' | 'md' | 'xl';
+const pops = ref<{ key: number; text: string; size: PopSize; dx: number }[]>([]);
+/** Couleur du flash d'impact : celle de l'attaque. */
+const flashStyle = ref<StrikeStyle>('orb');
+/** Secousse de TOUTE la scène (laser qui éclate, météore). */
+const quake = ref(false);
+const bolts = ref<{ key: number; x: number; h: number; points: string }[]>([]);
+const beam = ref<{
+  key: number;
+  x: number;
+  y: number;
+  len: number;
+  ang: number;
+  end: boolean;
+} | null>(null);
+const dim = ref(false);
+const meteor = ref<{
+  key: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  ang: number;
+} | null>(null);
+const waves = ref<{ key: number; x: number; y: number; style: StrikeStyle }[]>([]);
+const banner = ref<{ key: number; text: string; style: StrikeStyle } | null>(null);
 const cry = ref<{ key: number; text: string } | null>(null);
 /** Temps pendant lequel le cri reste affiché après l'impact du dernier projectile. */
 const CRY_LINGER_MS = 700;
@@ -207,67 +315,241 @@ function centerOf(el: HTMLElement | null | undefined): { x: number; y: number } 
 
 const FLIGHT_MS = 420;
 
-/** Un impact : le projectile retire SES dégâts, le boss tremble, le chiffre s'affiche. */
-function impact(damage: number) {
+/** Retire un élément d'une liste réactive au bout de `ms`. */
+function expire<T extends { key: number }>(list: { value: T[] }, key: number, ms: number) {
+  setTimeout(() => (list.value = list.value.filter((x) => x.key !== key)), ms);
+}
+
+/** Un impact : il retire SES dégâts, le boss tremble, le chiffre s'affiche. `size` règle la
+ *  taille du chiffre ; `big` secoue toute la scène. */
+function impact(damage: number, style: StrikeStyle, size: PopSize = 'md', big = false) {
   shownHp.value = Math.max(0, shownHp.value - damage);
+  flashStyle.value = style;
   flash.value = ++seq;
   shake.value = false;
   void nextTick(() => {
     shake.value = true;
     setTimeout(() => (shake.value = false), 380);
   });
+  if (big) {
+    quake.value = false;
+    void nextTick(() => {
+      quake.value = true;
+      setTimeout(() => (quake.value = false), 650);
+    });
+  }
   const key = ++seq;
-  pops.value.push({ key, text: `−${fmtBossPv(damage)}` });
-  setTimeout(() => (pops.value = pops.value.filter((p) => p.key !== key)), 1100);
+  // Les petits chiffres s'écartent un peu les uns des autres, sinon un laser les empile.
+  const dx = size === 'sm' ? Math.round((Math.random() - 0.5) * 70) : 0;
+  pops.value.push({ key, text: `−${fmtBossPv(damage)}`, size, dx });
+  expire(pops, key, size === 'xl' ? 1700 : 1100);
 }
 
-/** Une frappe = un projectile par rep, un toutes les `BOSS_SHOT_MS` ; chacun applique ses
- *  propres dégâts à l'impact (leur somme vaut la frappe, `strikeShots`). */
+/** Onde de choc au centre du boss. */
+function wave(style: StrikeStyle) {
+  const to = centerOf(bossEl.value);
+  if (!to) return;
+  const key = ++seq;
+  waves.value.push({ key, x: to.x, y: to.y, style });
+  expire(waves, key, 900);
+}
+
+/** Un éclair en zigzag, du haut de la scène jusqu'au boss (un peu décalé à chaque fois). */
+function bolt(): void {
+  const to = centerOf(bossEl.value);
+  if (!to) return;
+  const h = Math.max(40, Math.round(to.y));
+  const pts: string[] = ['30,0'];
+  const steps = 6;
+  for (let i = 1; i < steps; i++) {
+    pts.push(`${30 + Math.round((Math.random() - 0.5) * 44)},${Math.round((h * i) / steps)}`);
+  }
+  pts.push(`30,${h}`);
+  const key = ++seq;
+  bolts.value.push({
+    key,
+    x: to.x + Math.round((Math.random() - 0.5) * 50),
+    h,
+    points: pts.join(' '),
+  });
+  expire(bolts, key, 260);
+}
+
+/** Fait bondir l'auteur (relance l'animation même s'il frappait déjà). */
+async function hop(userId: string) {
+  strikerId.value = null;
+  await nextTick();
+  strikerId.value = userId;
+}
+
+const live = (token: number) => alive && !skipped && token === run;
+
+/** Orbes (1-4 reps) et boules de feu (5-9) : un projectile par rep. */
+async function volley(
+  s: BossStrike,
+  hits: number[],
+  gap: number,
+  style: StrikeStyle,
+  token: number,
+) {
+  for (const dmg of hits) {
+    if (!live(token)) return;
+    await hop(s.userId);
+    const from = centerOf(allyEls.get(s.userId));
+    const to = centerOf(bossEl.value);
+    if (from && to) {
+      const key = ++seq;
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+      projs.value.push({ key, x: from.x, y: from.y, dx, dy, ang, style });
+      setTimeout(() => {
+        projs.value = projs.value.filter((p) => p.key !== key);
+        if (live(token)) impact(dmg, style, 'md');
+      }, FLIGHT_MS);
+    } else {
+      impact(dmg, style);
+    }
+    await wait(gap);
+  }
+  // Le dernier projectile arrive.
+  await wait(Math.max(0, FLIGHT_MS - gap) + 380);
+}
+
+/** ⚡ 10-19 reps : cinq éclairs s'abattent du ciel. */
+async function storm(s: BossStrike, hits: number[], gap: number, token: number) {
+  await hop(s.userId);
+  await wait(260); // l'auteur lève la main, le ciel gronde
+  for (const dmg of hits) {
+    if (!live(token)) return;
+    bolt();
+    impact(dmg, 'storm', 'md');
+    await wait(gap);
+  }
+  await wait(300);
+}
+
+/** 🔆 20-39 reps : un rayon continu, les PV fondent par petits paliers, puis il éclate. */
+async function laser(s: BossStrike, hits: number[], gap: number, token: number) {
+  await hop(s.userId);
+  await wait(380); // charge
+  if (!live(token)) return;
+  const from = centerOf(allyEls.get(s.userId));
+  const to = centerOf(bossEl.value);
+  if (from && to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    beam.value = {
+      key: ++seq,
+      x: from.x,
+      y: from.y,
+      len: Math.hypot(dx, dy),
+      ang: (Math.atan2(dy, dx) * 180) / Math.PI,
+      end: false,
+    };
+  }
+  for (let i = 0; i < hits.length; i++) {
+    if (!live(token)) break;
+    const last = i === hits.length - 1;
+    if (last && beam.value) beam.value = { ...beam.value, end: true };
+    impact(hits[i]!, 'laser', last ? 'xl' : 'sm', last);
+    if (last) wave('laser');
+    await wait(gap);
+  }
+  await wait(260);
+  beam.value = null;
+  await wait(300);
+}
+
+/** ☄️ 40+ reps : la scène s'assombrit, un météore tombe, onde de choc, un seul gros chiffre. */
+async function meteorStrike(s: BossStrike, hits: number[], token: number) {
+  await hop(s.userId);
+  dim.value = true;
+  await wait(320);
+  if (!live(token)) {
+    dim.value = false;
+    return;
+  }
+  const to = centerOf(bossEl.value);
+  const box = root.value?.getBoundingClientRect();
+  if (to && box) {
+    // Il arrive du coin haut-droit, hors de la scène.
+    const x = Math.min(box.width + 40, to.x + 220);
+    const y = -70;
+    const dx = to.x - x;
+    const dy = to.y - y;
+    meteor.value = { key: ++seq, x, y, dx, dy, ang: (Math.atan2(dy, dx) * 180) / Math.PI };
+  }
+  await wait(METEOR_FALL_MS);
+  meteor.value = null;
+  if (live(token)) {
+    impact(
+      hits.reduce((a, b) => a + b, 0),
+      'meteor',
+      'xl',
+      true,
+    );
+    wave('meteor');
+  }
+  await wait(450);
+  dim.value = false;
+  await wait(400);
+}
+/** Durée de la chute, alignée sur l'animation CSS `fbs-meteor`. */
+const METEOR_FALL_MS = 900;
+
+/** Une frappe, mise en scène selon son nombre de reps (`strikePlan`) : orbes, boules de feu,
+ *  tempête, laser ou météore. Au-delà de 10 reps le nombre d'impacts est FIXE : l'animation
+ *  ne s'allonge pas avec la frappe. Chaque impact retire ses propres dégâts (leur somme vaut
+ *  la frappe). */
 async function strike(s: BossStrike, token: number) {
-  const shots = strikeShots(s.damage);
+  const plan = strikePlan(s.damage, props.family);
   // Un cri par frappe, choisi sur les PV d'AVANT la frappe (le coup fatal arrache un dernier
-  // souffle), affiché dès le premier projectile.
+  // souffle), affiché dès le premier impact.
   if (cryTimer) clearTimeout(cryTimer);
   cry.value = {
     key: ++seq,
     text: bossCry(s.damage, shownHp.value, props.hpTotal, Math.random(), recentCries),
   };
   recentCries = [...recentCries, cry.value.text].slice(-BOSS_CRY_MEMORY);
-  for (const dmg of shots) {
-    if (!alive || skipped) return;
-    strikerId.value = null;
-    await nextTick();
-    strikerId.value = s.userId;
-    const from = centerOf(allyEls.get(s.userId));
-    const to = centerOf(bossEl.value);
-    if (from && to) {
-      const key = ++seq;
-      projs.value.push({ key, x: from.x, y: from.y, dx: to.x - from.x, dy: to.y - from.y });
-      setTimeout(() => {
-        projs.value = projs.value.filter((p) => p.key !== key);
-        if (alive && !skipped && token === run) impact(dmg);
-      }, FLIGHT_MS);
-    } else {
-      impact(dmg);
-    }
-    await wait(BOSS_SHOT_MS);
+  if (plan.style !== 'orb') {
+    const label =
+      plan.style === 'fire'
+        ? `${plan.emoji} ${plan.name} ×${plan.hits.length}`
+        : `${plan.emoji} ${plan.name}`;
+    banner.value = { key: ++seq, text: label, style: plan.style };
   }
-  // Laisse le dernier projectile arriver avant la frappe suivante ; le cri tient encore un
-  // peu après l'impact.
-  const settle = Math.max(0, FLIGHT_MS - BOSS_SHOT_MS) + 380;
+  if (plan.style === 'orb' || plan.style === 'fire') {
+    await volley(s, plan.hits, plan.gapMs, plan.style, token);
+  } else if (plan.style === 'storm') {
+    await storm(s, plan.hits, plan.gapMs, token);
+  } else if (plan.style === 'laser') {
+    await laser(s, plan.hits, plan.gapMs, token);
+  } else {
+    await meteorStrike(s, plan.hits, token);
+  }
+  banner.value = null;
+  // Le cri tient encore un peu après le dernier impact.
   const ours = cry.value?.key;
-  cryTimer = setTimeout(
-    () => {
-      if (cry.value?.key === ours) cry.value = null;
-    },
-    Math.max(0, FLIGHT_MS - BOSS_SHOT_MS) + CRY_LINGER_MS,
-  );
-  await wait(settle);
+  cryTimer = setTimeout(() => {
+    if (cry.value?.key === ours) cry.value = null;
+  }, CRY_LINGER_MS - 380);
   strikerId.value = null;
 }
 
 function skip() {
   skipped = true;
+}
+
+/** Tout ce que la mise en scène a laissé à l'écran disparaît (« Passer », fin du rejeu). */
+function clearFx() {
+  projs.value = [];
+  bolts.value = [];
+  waves.value = [];
+  beam.value = null;
+  meteor.value = null;
+  dim.value = false;
+  banner.value = null;
 }
 
 /** Joue des frappes dans l'ordre. `startHp` = les PV avant la première (rejeu à l'ouverture,
@@ -291,7 +573,7 @@ async function play(strikes: BossStrike[], startHp?: number) {
   }
   if (!alive || token !== run) return;
   animating.value = false;
-  projs.value = [];
+  clearFx();
   strikerId.value = null;
   if (skipped) clearCry();
   shownHp.value = props.hpLeft;
@@ -337,6 +619,7 @@ defineExpose({ play, die });
   overflow: hidden;
 }
 .fbs-boss-zone {
+  z-index: 2;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -505,7 +788,7 @@ defineExpose({ play, die });
    son coin droit touche le boss, elle ne file plus vers le bord de l'écran. */
 .fbs-cry {
   position: absolute;
-  top: 20px;
+  top: 44px;
   right: calc(50% + 44px);
   max-width: 96px;
   padding: 5px 10px;
@@ -520,6 +803,8 @@ defineExpose({ play, die });
   animation: fbs-cry-in 0.22s ease-out;
 }
 .fbs-party {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -572,6 +857,7 @@ defineExpose({ play, die });
 }
 .fbs-skip {
   position: absolute;
+  z-index: 4;
   top: 8px;
   right: 8px;
   min-height: 32px;
@@ -690,15 +976,15 @@ defineExpose({ play, die });
 @keyframes fbs-pop {
   0% {
     opacity: 0;
-    transform: translate(-50%, 10px) scale(0.7);
+    transform: translate(calc(-50% + var(--px, 0px)), 10px) scale(0.7);
   }
   18% {
     opacity: 1;
-    transform: translate(-50%, -6px) scale(1.15);
+    transform: translate(calc(-50% + var(--px, 0px)), -6px) scale(1.15);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -46px) scale(1);
+    transform: translate(calc(-50% + var(--px, 0px)), -46px) scale(1);
   }
 }
 @keyframes fbs-cry-in {
@@ -725,6 +1011,294 @@ defineExpose({ play, die });
   }
   to {
     transform: translate(var(--dx), var(--dy)) scale(1.4);
+  }
+}
+
+/* ── Paliers de frappe ──────────────────────────────────────────────────────────── */
+.fbs-proj,
+.fbs-bolt,
+.fbs-beam,
+.fbs-meteor,
+.fbs-wave,
+.fbs-banner {
+  z-index: 3;
+}
+/* 🔥 Boule de feu : plus grosse, une traînée de flammes derrière elle. */
+.fbs-proj.fire {
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  background: radial-gradient(circle, #fff 0%, #ffd23f 30%, #ff6a2a 60%, transparent 74%);
+  box-shadow:
+    0 0 14px #ff6a2a,
+    0 0 26px color-mix(in srgb, #ff6a2a 50%, transparent);
+}
+.fbs-proj.fire::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 6px;
+  transform-origin: 0 50%;
+  transform: rotate(calc(var(--ang) + 180deg));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 150, 50, 0.95),
+    rgba(255, 70, 30, 0.5) 45%,
+    transparent
+  );
+  filter: blur(1.5px);
+}
+/* Flash d'impact à la couleur de l'attaque. */
+.fbs-flash.fx-fire {
+  background: radial-gradient(circle, #fff 0%, #ff9a3c 40%, transparent 70%);
+}
+.fbs-flash.fx-storm {
+  background: radial-gradient(circle, #fff 0%, #8ecbff 45%, transparent 72%);
+}
+.fbs-flash.fx-laser {
+  background: radial-gradient(circle, #fff 0%, #7ff3ff 45%, transparent 72%);
+}
+.fbs-flash.fx-meteor {
+  inset: -40px;
+  background: radial-gradient(circle, #fff 0%, #ffd23f 30%, #ff5a1f 55%, transparent 72%);
+  animation-duration: 0.6s;
+}
+/* ⚡ Éclair : un zigzag blanc dans un halo bleu, qui grésille. */
+.fbs-bolt {
+  position: absolute;
+  top: 0;
+  width: 60px;
+  overflow: visible;
+  pointer-events: none;
+  animation: fbs-bolt 0.26s steps(4) forwards;
+}
+.fbs-bolt polyline {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.fbs-bolt-glow {
+  stroke: #8ecbff;
+  stroke-width: 9;
+  opacity: 0.45;
+  filter: blur(3px);
+}
+.fbs-bolt-core {
+  stroke: #fff;
+  stroke-width: 2.5;
+}
+/* 🔆 Laser : un rayon continu, cœur blanc, halo cyan, qui pulse. */
+.fbs-beam {
+  position: absolute;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 6px;
+  transform-origin: 0 50%;
+  transform: rotate(var(--ang));
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, #3fd8ff 25%, #fff 50%, #3fd8ff 75%, transparent);
+  box-shadow: 0 0 18px #3fd8ff;
+  animation:
+    fbs-beam-in 0.2s ease-out,
+    fbs-beam-pulse 0.12s ease-in-out 0.2s infinite alternate;
+}
+.fbs-beam.end {
+  height: 26px;
+  margin-top: -13px;
+  box-shadow: 0 0 34px #fff;
+}
+/* ☄️ Météore : la scène s'assombrit, il tombe en grossissant, traîne de feu. */
+.fbs-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 28%, rgba(120, 30, 0, 0.35), rgba(0, 0, 0, 0.78) 70%);
+  animation: fbs-fade-in 0.3s ease-out;
+}
+.fbs-meteor {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, #fff 0%, #ffd23f 28%, #ff6a2a 58%, transparent 74%);
+  box-shadow:
+    0 0 26px #ff6a2a,
+    0 0 60px color-mix(in srgb, #ff6a2a 55%, transparent);
+  animation: fbs-meteor 0.9s cubic-bezier(0.5, 0, 0.9, 0.6) forwards;
+}
+.fbs-meteor::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150px;
+  height: 30px;
+  margin-top: -15px;
+  border-radius: 15px;
+  transform-origin: 0 50%;
+  transform: rotate(calc(var(--ang) + 180deg));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 210, 63, 0.95),
+    rgba(255, 90, 30, 0.6) 40%,
+    transparent
+  );
+  filter: blur(3px);
+}
+/* Onde de choc. */
+.fbs-wave {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  border: 3px solid #7ff3ff;
+  pointer-events: none;
+  animation: fbs-wave 0.75s ease-out forwards;
+}
+.fbs-wave.meteor {
+  border-width: 5px;
+  border-color: #ffb23f;
+  box-shadow: 0 0 24px #ff6a2a;
+  animation-duration: 0.9s;
+}
+/* Nom de l'attaque, calé à gauche (le bouton « Passer » est à droite). */
+.fbs-banner {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  max-width: calc(100% - 120px);
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: color-mix(in srgb, #000 70%, transparent);
+  border: 1px solid var(--line);
+  pointer-events: none;
+  animation: fbs-banner 0.35s ease-out;
+}
+.fbs-banner.fire {
+  color: #ffb23f;
+  border-color: #ff6a2a;
+}
+.fbs-banner.storm {
+  color: #b9e0ff;
+  border-color: #8ecbff;
+}
+.fbs-banner.laser {
+  color: #b5f7ff;
+  border-color: #3fd8ff;
+}
+.fbs-banner.meteor {
+  color: #ffd23f;
+  border-color: #ffb23f;
+  box-shadow: 0 0 14px color-mix(in srgb, #ff6a2a 60%, transparent);
+}
+.fbs-pop.pop-sm {
+  font-size: 16px;
+}
+.fbs-pop.pop-xl {
+  top: 12px;
+  font-size: 40px;
+  color: #fff;
+  text-shadow:
+    0 3px 0 #000,
+    0 0 18px #ff6a2a,
+    0 0 30px #ffd23f;
+  animation-duration: 1.7s;
+}
+/* Toute la scène tremble. */
+.fbs.quake {
+  animation: fbs-quake 0.6s linear;
+}
+
+@keyframes fbs-bolt {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  25%,
+  75% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes fbs-beam-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes fbs-beam-pulse {
+  from {
+    filter: brightness(1);
+  }
+  to {
+    filter: brightness(1.6);
+  }
+}
+@keyframes fbs-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fbs-meteor {
+  from {
+    transform: translate(0, 0) scale(0.5);
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(1.35);
+  }
+}
+@keyframes fbs-wave {
+  from {
+    opacity: 1;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(5);
+  }
+}
+@keyframes fbs-banner {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.85);
+  }
+}
+@keyframes fbs-quake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-6px, 4px);
+  }
+  30% {
+    transform: translate(6px, -3px);
+  }
+  45% {
+    transform: translate(-4px, -4px);
+  }
+  60% {
+    transform: translate(4px, 3px);
+  }
+  80% {
+    transform: translate(-2px, 1px);
   }
 }
 
