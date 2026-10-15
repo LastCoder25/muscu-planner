@@ -25,6 +25,8 @@ export default defineBoot(async ({ router, store }) => {
   router.beforeEach(async (to) => {
     // Écran de nouveau mot de passe : toujours accessible (session de recovery).
     if (to.path === '/reset-password') return true;
+    // 🔒 La politique de confidentialité se lit connecté ou non.
+    if (to.path === '/privacy') return true;
 
     // Non connecté : seul /login est accessible.
     if (!auth.user) {
@@ -34,6 +36,9 @@ export default defineBoot(async ({ router, store }) => {
 
     // Connecté : pas besoin de revoir le login.
     if (to.path === '/login') return { path: '/' };
+    // 🔒 RGPD : un compte qui n'a pas accepté la version courante passe d'abord par là.
+    if (!auth.consented) return to.path === '/consent' ? true : { path: '/consent' };
+    if (to.path === '/consent') return { path: '/' };
 
     // Pages réservées aux admins (la RLS Postgres fait aussi autorité).
     const ADMIN_ONLY = ['/backlog', '/formulas', '/labo'];

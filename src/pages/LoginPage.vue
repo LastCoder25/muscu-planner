@@ -34,6 +34,15 @@
           :rules="[(v) => v === password || 'Les mots de passe ne correspondent pas']"
           lazy-rules
         />
+        <div v-if="mode === 'signup'" class="consent-row">
+          <q-checkbox v-model="consent" dense />
+          <span
+            >J’accepte la
+            <router-link to="/privacy" class="consent-link"
+              >politique de confidentialité</router-link
+            ></span
+          >
+        </div>
 
         <q-btn
           type="submit"
@@ -64,6 +73,9 @@
         :label="secondaryLabel"
         @click="mode === 'forgot' ? (mode = 'signin') : toggleMode()"
       />
+      <div class="q-mt-md">
+        <router-link to="/privacy" class="consent-link">Confidentialité</router-link>
+      </div>
     </div>
   </q-page>
 </template>
@@ -82,6 +94,7 @@ const mode = ref<'signin' | 'signup' | 'forgot'>('signin');
 const email = ref('');
 const password = ref('');
 const confirm = ref('');
+const consent = ref(false);
 const loading = ref(false);
 
 const subtitle = computed(() => {
@@ -123,6 +136,13 @@ async function submit() {
         $q.notify({ type: 'negative', message: 'Les mots de passe ne correspondent pas.' });
         return;
       }
+      if (!consent.value) {
+        $q.notify({
+          type: 'negative',
+          message: 'Accepte la politique de confidentialité pour créer ton compte.',
+        });
+        return;
+      }
       await auth.signUp(email.value.trim(), password.value);
     }
     await router.push('/');
@@ -160,5 +180,16 @@ function humanError(e: unknown): string {
 }
 .text-dim {
   color: var(--dim);
+}
+.consent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-size: 13.5px;
+  min-height: 44px;
+}
+.consent-link {
+  color: var(--accent);
 }
 </style>

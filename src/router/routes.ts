@@ -13,6 +13,16 @@ const routes: RouteRecordRaw[] = [
     children: [{ path: '', component: () => import('@/pages/OnboardingPage.vue') }],
   },
   {
+    path: '/privacy',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/PrivacyPage.vue') }],
+  },
+  {
+    path: '/consent',
+    component: () => import('@/layouts/BlankLayout.vue'),
+    children: [{ path: '', component: () => import('@/pages/ConsentPage.vue') }],
+  },
+  {
     path: '/reset-password',
     component: () => import('@/layouts/BlankLayout.vue'),
     children: [{ path: '', component: () => import('@/pages/ResetPasswordPage.vue') }],

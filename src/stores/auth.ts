@@ -4,6 +4,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref, computed } from 'vue';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { consentMeta, hasConsented } from '@/lib/privacy';
 
 // Comptes autorisés à gérer le backlog. La vérification fait aussi autorité
 // côté Postgres (fonction is_admin() + RLS feedback) — ceci n'est que l'UI.
@@ -34,9 +35,23 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error;
   }
 
+  /** 🔒 Le consentement est enregistré DATÉ dans les métadonnées du compte (RGPD). */
   async function signUp(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: consentMeta(new Date()) },
+    });
     if (error) throw error;
+  }
+
+  /** Le compte a-t-il accepté la version courante de la politique de confidentialité ? */
+  const consented = computed(() => hasConsented(user.value?.user_metadata));
+
+  async function acceptPrivacy() {
+    const { data, error } = await supabase.auth.updateUser({ data: consentMeta(new Date()) });
+    if (error) throw error;
+    user.value = data.user;
   }
 
   async function signOut() {
@@ -57,6 +72,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function updatePassword(password: string) {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
+    // 🔒 Mot de passe changé = toutes les AUTRES sessions et leurs jetons sont révoqués.
+    await supabase.auth.signOut({ scope: 'others' });
   }
 
   return {
@@ -66,6 +83,8 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     signIn,
     signUp,
+    consented,
+    acceptPrivacy,
     signOut,
     resetPassword,
     updatePassword,

@@ -76,6 +76,8 @@ const ECRANS = [
   { route: '/stats', nom: 'stats' },
   { route: '/trophies', nom: 'trophees' },
   { route: '/agenda', nom: 'agenda' },
+  { route: '/settings', nom: 'parametres' },
+  { route: '/privacy', nom: 'confidentialite' },
   {
     route: '/challenges',
     nom: 'defis',

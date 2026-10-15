@@ -15,6 +15,9 @@
 interface ImportMetaEnv {
   readonly SUPABASE_URL: string;
   readonly SUPABASE_ANON_KEY: string;
+  /** 🔒 Mentions légales (RGPD) : affichées « à compléter » si absentes. */
+  readonly APP_LEGAL_NAME?: string;
+  readonly APP_LEGAL_CONTACT?: string;
 }
 
 // Constantes injectées au build (cf. quasar.config.ts > build.define).

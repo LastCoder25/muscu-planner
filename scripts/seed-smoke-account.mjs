@@ -25,6 +25,7 @@
 //
 // Usage : node scripts/seed-smoke-account.mjs
 import fs from 'node:fs';
+import { consentMeta } from '../src/lib/privacy.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -94,6 +95,20 @@ const H = {
   'Content-Type': 'application/json',
   Prefer: 'resolution=merge-duplicates,return=representation',
 };
+
+// 🔒 RGPD : le compte de test a accepté la politique courante, sinon le garde de navigation
+// l'arrêterait sur /consent et le smoke ne verrait aucun écran.
+{
+  const r = await fetch(`${URL_}/auth/v1/user`, {
+    method: 'PUT',
+    headers: { apikey: KEY, Authorization: H.Authorization, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: consentMeta(new Date()) }),
+  });
+  if (!r.ok) {
+    console.error('✗ consentement non enregistré :', r.status);
+    process.exit(1);
+  }
+}
 
 async function rest(table, rows, method = 'POST', qs = '') {
   const r = await fetch(`${URL_}/rest/v1/${table}${qs}`, {

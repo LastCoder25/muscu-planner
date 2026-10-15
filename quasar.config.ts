@@ -64,7 +64,7 @@ export default defineConfig((/* ctx */) => {
       // préfixées QCLI_ (défaut Quasar) et SUPABASE_ via import.meta.env.*.
       // La clé anon Supabase est PUBLIQUE par design (sécurité = RLS Postgres).
       env: {
-        clientPrefix: ['QCLI_', 'SUPABASE_'],
+        clientPrefix: ['QCLI_', 'SUPABASE_', 'APP_LEGAL_'],
       },
 
       // publicPath: '/',
