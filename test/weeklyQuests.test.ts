@@ -8,6 +8,7 @@ import {
   WEEKLY_QUESTS,
   parseQuestMark,
   questMark,
+  QUEST_INFO,
   type QuestSources,
 } from '@/lib/weeklyQuests';
 import type { ComboChallenge } from '@/lib/combo';
@@ -332,5 +333,44 @@ describe('🗓️ quêtes de la semaine — les paliers de récompense', () => {
     expect(parseQuestMark(`${MON}:abc`, MON)).toBe(0);
     expect(parseQuestMark(`${MON}:-4`, MON)).toBe(0);
     expect(parseQuestMark(null, MON)).toBe(0);
+  });
+});
+
+describe('🗓️ quêtes de la semaine — la sortie que tu fais vraiment', () => {
+  /** 4 semaines : `n` sorties de 50 min par semaine, d'activités tirées de `acts`. */
+  const outings = (acts: string[]) => {
+    const s = empty();
+    for (let w = 1; w <= 4; w++)
+      acts.forEach((a, i) =>
+        s.cardio.push({
+          performed_at: at(addDays(MON, -7 * w + i)),
+          activity: a,
+          payload: { duration_min: 50 },
+        }),
+      );
+    return s;
+  };
+  const cardioQuest = (s: QuestSources, day = MON) =>
+    weeklyQuests(s, day, null).quests.find((q) => q.kind === 'cardio_minutes')!;
+
+  it('que de la course : la quête dit « course à pied »', () => {
+    const q = cardioQuest(outings(['course', 'course']));
+    expect(q.activity).toBe('course');
+    expect(QUEST_INFO.cardio_minutes.label(q.target, q.activity)).toContain('course à pied');
+  });
+  it('un mélange sans dominante : sortie cardio quelconque', () => {
+    const q = cardioQuest(outings(['course', 'velo']));
+    expect(q.activity).toBeUndefined();
+    expect(QUEST_INFO.cardio_minutes.label(q.target)).toContain('sortie cardio');
+  });
+  it('nommée, elle ne compte QUE cette sortie', () => {
+    const s = outings(['course', 'course']);
+    s.cardio.push({ performed_at: at(MON), activity: 'velo', payload: { duration_min: 60 } });
+    s.cardio.push({
+      performed_at: at(addDays(MON, 1)),
+      activity: 'course',
+      payload: { duration_min: 40 },
+    });
+    expect(cardioQuest(s, addDays(MON, 2)).done).toBe(40);
   });
 });

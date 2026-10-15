@@ -536,7 +536,7 @@
           >
             <span class="qs-emo">{{ q.complete ? '✅' : QUEST_INFO[q.kind].emoji }}</span>
             <span class="qs-main">
-              <span class="qs-label">{{ QUEST_INFO[q.kind].label(q.target) }}</span>
+              <span class="qs-label">{{ QUEST_INFO[q.kind].label(q.target, q.activity) }}</span>
               <span class="qs-bar"
                 ><i :style="{ width: Math.min(100, (q.done / q.target) * 100) + '%' }"></i
               ></span>

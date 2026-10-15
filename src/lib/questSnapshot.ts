@@ -13,11 +13,17 @@
 //
 // Module pur. Relecture DÉFENSIVE : le JSON vient d'un autre client.
 
-import { QUEST_INFO, questTiers, type QuestKind, type WeeklyQuestBoard } from './weeklyQuests';
+import {
+  QUEST_INFO,
+  SPORT_QUESTS,
+  questTiers,
+  type QuestKind,
+  type WeeklyQuestBoard,
+} from './weeklyQuests';
 
 export interface QuestSnapshot {
   monday: string;
-  quests: { kind: QuestKind; target: number; done: number; mine: boolean }[];
+  quests: { kind: QuestKind; target: number; done: number; mine: boolean; activity?: string }[];
 }
 
 /** Ce qui est publié : les objectifs et leur avancement, rien d'autre (ni marque de tickets,
@@ -30,6 +36,7 @@ export function questSnapshot(board: WeeklyQuestBoard): QuestSnapshot {
       target: q.target,
       done: q.done,
       mine: q.mine,
+      ...(q.activity ? { activity: q.activity } : {}),
     })),
   };
 }
@@ -73,16 +80,23 @@ export function readQuestSnapshot(raw: unknown, monday: string): FriendQuestView
     if (target === null || target <= 0 || done === null) continue;
     seen.add(kind);
     const info = QUEST_INFO[kind];
+    const activity = typeof o.activity === 'string' ? o.activity.slice(0, 30) : undefined;
     quests.push({
       kind,
       emoji: info.emoji,
-      label: info.label(target),
+      label: info.label(target, activity),
       target,
       done,
       complete: done >= target,
       mine: o.mine === true,
     });
   }
+  // ⚠️ Un instantané publié avant la v1.203 porte AUSSI les objectifs des sports que l'ami ne
+  // pratique pas (marqués `mine: false`) : on applique la même règle que son écran
+  // (`isShown`) — dès qu'un de ses sports est connu, les objectifs des autres sports partent.
+  if (quests.some((q) => SPORT_QUESTS.has(q.kind) && q.mine))
+    for (let i = quests.length - 1; i >= 0; i--)
+      if (SPORT_QUESTS.has(quests[i]!.kind) && !quests[i]!.mine) quests.splice(i, 1);
   if (!quests.length) return null;
   const doneCount = quests.filter((q) => q.complete).length;
   const { tiers, earned } = questTiers(doneCount, quests.length);

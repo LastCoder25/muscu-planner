@@ -39,6 +39,7 @@
 
 import { legSets, type ComboChallenge } from './combo';
 import { isCardioTrackChallenge } from '@/data/cardio';
+import type { CardioActivity } from './types';
 
 export type QuestKind =
   | 'active_days'
@@ -75,6 +76,8 @@ export const WEEKLY_QUESTS = {
    *  d'historique (≈ un jour toutes les deux semaines) : une sortie isolée il y a un mois ne
    *  suffit pas à t'imposer une quête de ce sport. */
   practiceMinDays: 2,
+  /** Part des jours de sortie qu'une activité doit couvrir pour nommer la quête. */
+  mainActivityShare: 0.75,
 } as const;
 
 /** Tout ce qui témoigne d'une pratique, avec ce qu'il faut pour la CLASSER. Même famille que
@@ -87,7 +90,12 @@ export interface QuestSources {
     payload?: { discipline?: string | null; name?: string | null } | null;
   }[];
   /** Sorties cardio (miroirs compris : ils reflètent une vraie sortie de défi). */
-  cardio: { performed_at?: string | null; payload?: { duration_min?: number | null } | null }[];
+  cardio: {
+    performed_at?: string | null;
+    /** Activité de la sortie (course, marche…) : sert à nommer la quête de sortie. */
+    activity?: string | null;
+    payload?: { duration_min?: number | null } | null;
+  }[];
   /** Séances sur le court. */
   tennis: { performed_at?: string | null }[];
   /** Défis solo. */
@@ -108,6 +116,8 @@ export interface QuestEntry {
   kind: SportKind;
   /** Minutes de sortie cardio (0 pour le reste). */
   minutes: number;
+  /** Activité d'une sortie cardio (absente ailleurs, et sur une sortie de défi). */
+  activity?: string;
 }
 
 const dayOf = (iso: string | null | undefined): string | null =>
@@ -135,14 +145,19 @@ function sessionKind(
 /** Toutes les pratiques, datées et classées. */
 export function questEntries(src: QuestSources): QuestEntry[] {
   const out: QuestEntry[] = [];
-  const push = (iso: string | null | undefined, kind: SportKind, minutes = 0) => {
+  const push = (
+    iso: string | null | undefined,
+    kind: SportKind,
+    minutes = 0,
+    activity?: string | null,
+  ) => {
     const d = dayOf(iso);
-    if (d) out.push({ day: d, kind, minutes });
+    if (d) out.push(activity ? { day: d, kind, minutes, activity } : { day: d, kind, minutes });
   };
   for (const r of src.sessions)
     push(r.performed_at, sessionKind(r.payload?.discipline, r.payload?.name));
   for (const r of src.cardio)
-    push(r.performed_at, 'cardio', Math.max(0, Number(r.payload?.duration_min) || 0));
+    push(r.performed_at, 'cardio', Math.max(0, Number(r.payload?.duration_min) || 0), r.activity);
   for (const r of src.tennis) push(r.performed_at, 'tennis');
   for (const c of src.challenges) {
     // ⚠️ La VOIE du défi (`challengeLane`) : une sortie reste du cardio, un défi tennis du tennis.
@@ -184,7 +199,7 @@ interface WeekStats {
 }
 
 /** Ce qu'une semaine [monday, monday+6] a produit. */
-function weekStats(entries: QuestEntry[], monday: string): WeekStats {
+function weekStats(entries: QuestEntry[], monday: string, activity?: string): WeekStats {
   const end = addDays(monday, 6);
   const secondHalf = addDays(monday, 3);
   const active = new Set<string>();
@@ -200,7 +215,8 @@ function weekStats(entries: QuestEntry[], monday: string): WeekStats {
     halves.add(e.day < secondHalf ? 0 : 1);
     if (e.kind === 'muscu') strength.add(e.day);
     if (e.kind === 'tennis') tennis.add(e.day);
-    minutes += e.minutes;
+    // La quête de sortie porte sur TA sortie (cf. `mainCardioActivity`) quand elle est nommée.
+    if (!activity || e.activity === activity) minutes += e.minutes;
   }
   return {
     activeDays: active.size,
@@ -233,14 +249,40 @@ function practicedKinds(entries: QuestEntry[], monday: string): Set<SportKind> {
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
 /** Les cibles de la semaine, calées sur les `historyWeeks` semaines complètes d'avant. */
-export function questTargets(entries: QuestEntry[], monday: string): Record<QuestKind, number> {
+/** 🏃 LA SORTIE QUE TU FAIS VRAIMENT (demandé par l'utilisateur : « mets-lui de la course à
+ *  pied s'il en fait régulièrement »). Si une activité représente au moins les trois quarts
+ *  de tes jours de sortie sur l'historique, la quête de sortie porte son nom ET ne compte
+ *  qu'elle (« 130 min de course à pied ») ; sinon elle reste une sortie cardio quelconque. */
+export function mainCardioActivity(entries: QuestEntry[], monday: string): string | undefined {
+  const from = addDays(monday, -7 * WEEKLY_QUESTS.historyWeeks);
+  const byAct = new Map<string, Set<string>>();
+  const all = new Set<string>();
+  for (const e of entries) {
+    if (e.kind !== 'cardio' || e.day < from || e.day >= monday) continue;
+    all.add(e.day);
+    if (!e.activity) continue;
+    const s = byAct.get(e.activity) ?? new Set<string>();
+    s.add(e.day);
+    byAct.set(e.activity, s);
+  }
+  if (all.size < WEEKLY_QUESTS.practiceMinDays) return undefined;
+  for (const [a, days] of byAct)
+    if (days.size >= all.size * WEEKLY_QUESTS.mainActivityShare) return a;
+  return undefined;
+}
+
+export function questTargets(
+  entries: QuestEntry[],
+  monday: string,
+  activity?: string,
+): Record<QuestKind, number> {
   const n = WEEKLY_QUESTS.historyWeeks;
   let a = 0;
   let s = 0;
   let c = 0;
   let t = 0;
   for (let w = 1; w <= n; w++) {
-    const st = weekStats(entries, addDays(monday, -7 * w));
+    const st = weekStats(entries, addDays(monday, -7 * w), activity);
     a += st.activeDays;
     s += st.strengthDays;
     c += st.cardioMinutes;
@@ -270,6 +312,12 @@ export function questTargets(entries: QuestEntry[], monday: string): Record<Ques
 
 /** Ordre d'affichage : « jours actifs » en tête (le cœur de la semaine), puis les objectifs
  *  de TES pratiques, puis les autres — proposés, jamais imposés (paliers). */
+/** Les objectifs liés à UN sport (les autres valent pour tous). */
+export const SPORT_QUESTS: ReadonlySet<QuestKind> = new Set([
+  'strength_days',
+  'cardio_minutes',
+  'tennis_days',
+]);
 const PRACTICE_OF: Partial<Record<QuestKind, SportKind>> = {
   strength_days: 'muscu',
   cardio_minutes: 'cardio',
@@ -310,13 +358,32 @@ function isMine(k: QuestKind, practiced: Set<SportKind>): boolean {
   return practiced.has(PRACTICE_OF[k]!);
 }
 
-export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) => string }> = {
+/** Nom d'une activité de sortie dans une phrase (« course à pied », « vélo »…). */
+const ACTIVITY_PHRASE: Record<CardioActivity, string> = {
+  course: 'course à pied',
+  trail: 'trail',
+  marche: 'marche',
+  rando: 'randonnée',
+  velo: 'vélo',
+  velo_appart: "vélo d'appartement",
+  marche_tapis: 'marche sur tapis',
+  course_tapis: 'course sur tapis',
+};
+
+export const QUEST_INFO: Record<
+  QuestKind,
+  { emoji: string; label: (t: number, activity?: string) => string }
+> = {
   active_days: { emoji: '📅', label: (t) => `Fais du sport ${t} jours` },
   strength_days: {
     emoji: '💪',
     label: (t) => `Muscu ${t} jour${t > 1 ? 's' : ''} (séance, défi ou 360)`,
   },
-  cardio_minutes: { emoji: '🏃', label: (t) => `${t} min de sortie cardio` },
+  cardio_minutes: {
+    emoji: '🏃',
+    label: (t, a) =>
+      `${t} min de ${(a && ACTIVITY_PHRASE[a as CardioActivity]) || 'sortie cardio'}`,
+  },
   tennis_days: {
     emoji: '🎾',
     label: (t) => `Tennis ${t} jour${t > 1 ? 's' : ''} (partie, court ou prépa)`,
@@ -331,6 +398,8 @@ export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) =
 
 interface WeeklyQuest {
   kind: QuestKind;
+  /** Quête de sortie : l'activité qu'elle nomme et qu'elle compte (cf. `mainCardioActivity`). */
+  activity?: string;
   target: number;
   done: number;
   complete: boolean;
@@ -391,8 +460,9 @@ export function weeklyQuests(
 ): WeeklyQuestBoard {
   const entries = questEntries(src);
   const monday = weekStart(today);
-  const targets = questTargets(entries, monday);
-  const now = weekStats(entries, monday);
+  const activity = mainCardioActivity(entries, monday);
+  const targets = questTargets(entries, monday, activity);
+  const now = weekStats(entries, monday, activity);
   const practiced = practicedKinds(entries, monday);
   const doneOf: Record<QuestKind, number> = {
     active_days: now.activeDays,
@@ -411,6 +481,7 @@ export function weeklyQuests(
       done,
       complete: done >= target,
       mine: isMine(kind, practiced),
+      ...(kind === 'cardio_minutes' && activity ? { activity } : {}),
     };
   });
   const doneCount = quests.filter((q) => q.complete).length;

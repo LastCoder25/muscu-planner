@@ -73,3 +73,45 @@ describe('🗓️👥 instantané des quêtes d’un ami', () => {
     expect(days.label).toContain(String(days.target));
   });
 });
+
+describe('🗓️👥 instantané d’avant la v1.203', () => {
+  it('⚠️ les objectifs des sports que l’ami ne pratique pas sont retirés (signalé : Cypher)', () => {
+    const old = {
+      monday: MON,
+      quests: [
+        { kind: 'active_days', target: 6, done: 2, mine: true },
+        { kind: 'strength_days', target: 4, done: 2, mine: true },
+        { kind: 'cardio_minutes', target: 130, done: 40, mine: true },
+        { kind: 'regularity', target: 2, done: 1, mine: true },
+        { kind: 'variety', target: 2, done: 2, mine: true },
+        { kind: 'tennis_days', target: 1, done: 0, mine: false },
+      ],
+    };
+    const v = readQuestSnapshot(old, MON)!;
+    expect(v.quests.map((q) => q.kind)).not.toContain('tennis_days');
+    expect(v.quests).toHaveLength(5);
+  });
+  it('un joueur sans sport connu garde tout (rien n’est « à lui »)', () => {
+    const v = readQuestSnapshot(
+      {
+        monday: MON,
+        quests: [
+          { kind: 'active_days', target: 2, done: 0, mine: true },
+          { kind: 'tennis_days', target: 1, done: 0, mine: false },
+        ],
+      },
+      MON,
+    )!;
+    expect(v.quests).toHaveLength(2);
+  });
+  it('la sortie nommée voyage jusqu’à l’ami', () => {
+    const v = readQuestSnapshot(
+      {
+        monday: MON,
+        quests: [{ kind: 'cardio_minutes', target: 130, done: 40, mine: true, activity: 'course' }],
+      },
+      MON,
+    )!;
+    expect(v.quests[0]!.label).toBe('130 min de course à pied');
+  });
+});
