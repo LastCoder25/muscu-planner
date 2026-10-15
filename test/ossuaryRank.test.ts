@@ -37,13 +37,14 @@ describe('⚱️ l’ossuaire suit le niveau du héros', () => {
       expect(k * RUINS_SEALS.championPerRank).toBe(ruinsChampionSeals(level));
     });
   }
-  it('⚖️ au rythme de l’arsenal : même besoin, même offre (2026-10-08)', () => {
-    // Monter un champion d'un rang coûte autant de sceaux de champion que ses 4 pièces en
-    // sceaux d'objet : l'ossuaire et l'arsenal produisent donc au même débit (1 / 16 h en
-    // Bronze au complet), et une ruine « champion » vaut une ruine « objet ».
-    expect(RUINS_SEALS.championPerRank).toBe(RUINS_SEALS.gearPerRank);
+  it('⚖️ au rythme de l’arsenal, au débit des ruines (v1.218 : 6 sceaux de champion pour 9 d’objet)', () => {
+    // L'ossuaire produit les sceaux d'une ruine « champion » au même RYTHME que l'arsenal ;
+    // son débit suit donc la ruine (`ruinsChampionSeals`), réduit avec elle en v1.218.
+    expect(RUINS_SEALS.championPerRank).toBeLessThan(RUINS_SEALS.gearPerRank);
     expect(CONTROL.ossuaryHoursPerRuin).toBe(CONTROL.arsenalHoursPerRuin);
-    expect(ruinsChampionSeals(5) / CONTROL.ossuaryHoursPerRuin).toBeCloseTo(1 / 16);
+    expect(ruinsChampionSeals(5) / CONTROL.ossuaryHoursPerRuin).toBeCloseTo(
+      RUINS_SEALS.championPerRank / 144,
+    );
     expect(bronze).toBeGreaterThan(0);
   });
   it('les sceaux sont au rang du héros', () => {

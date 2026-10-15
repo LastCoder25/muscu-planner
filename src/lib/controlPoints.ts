@@ -205,7 +205,9 @@ export const CONTROL = {
    *  🪬 Depuis la bascule des runes multicolores (2026-09-30, spec § 3) : 24 → 16 h, et il
    *  recopie une rune MULTICOLORE (la couleur se tire à l'ouverture). Sa réserve tient UNE
    *  rune (une seule attend d'être ramassée), quel que soit l'effectif. */
-  runeHoursPerItem: 16,
+  //  ⚠️ 16 → 24 h en v1.218 (audit 2026-10-15, décision de l'utilisateur) : avec l'Éveil et les
+  //  lieux réussis, le Scriptorium faisait des runes la ressource la moins rare du jeu.
+  runeHoursPerItem: 24,
   /** 🕯️ Hospice (île 3, 2026-10-04) : il ne produit rien. Tenu, la convalescence d'un champion
    *  blessé sur l'île est DIVISÉE par `1 + hospiceCut × part` (part = `garrisonShare` rapportée
    *  à la garnison pleine) : ÷2 au complet, rien sans personne (`hospiceHealMult`). */
@@ -217,7 +219,9 @@ export const CONTROL = {
    *  60 · 100 à trois, soit ~+14 % de tirages au niveau 30 pour qui ferme deux failles par jour
    *  (et prend son tirage offert). Un COMPLÉMENT, comme le Scriptorium : les failles restent la
    *  source principale du mana, et le seul puits du mana est le gacha. */
-  manaSourceShare: 0.5,
+  //  ⚠️ 0,5 → 0,3 en v1.218 (audit 2026-10-15, décision de l'utilisateur) : tenue en continu,
+  //  la Source dispensait de refermer des failles, la boucle principale du mana.
+  manaSourceShare: 0.3,
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,

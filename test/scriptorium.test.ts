@@ -39,18 +39,18 @@ describe('📜 le Scriptorium', () => {
     return { n: runeStock(q, h * H), prog: runeProgress(q, h * H) };
   };
 
-  it('une rune en 16 h à trois copistes, 20 h à deux, 32 h à un seul (bascule des runes, spec § 3)', () => {
-    expect(CONTROL.runeHoursPerItem).toBe(16);
-    expect(runeHoursFor(3)).toBe(16);
-    expect(runeHoursFor(2)).toBe(20);
-    expect(runeHoursFor(1)).toBe(32);
+  it('une rune en 24 h à trois copistes, 30 h à deux, 48 h à un seul (v1.218 ; 16 h avant)', () => {
+    expect(CONTROL.runeHoursPerItem).toBe(24);
+    expect(runeHoursFor(3)).toBe(24);
+    expect(runeHoursFor(2)).toBe(30);
+    expect(runeHoursFor(1)).toBe(48);
     expect(runeHoursFor(0)).toBeNull();
-    expect(at(['a', 'b', 'c'], 8)).toEqual({ n: 0, prog: 0.5 });
-    expect(at(['a', 'b', 'c'], 16).n).toBe(1);
-    expect(at(['a', 'b'], 19).n).toBe(0);
-    expect(at(['a', 'b'], 20).n).toBe(1);
-    expect(at(['a'], 16)).toEqual({ n: 0, prog: 0.5 });
-    expect(at(['a'], 32).n).toBe(1);
+    expect(at(['a', 'b', 'c'], 12)).toEqual({ n: 0, prog: 0.5 });
+    expect(at(['a', 'b', 'c'], 24).n).toBe(1);
+    expect(at(['a', 'b'], 29).n).toBe(0);
+    expect(at(['a', 'b'], 30).n).toBe(1);
+    expect(at(['a'], 24)).toEqual({ n: 0, prog: 0.5 });
+    expect(at(['a'], 48).n).toBe(1);
     expect(at([], 100).prog).toBe(0);
   });
 

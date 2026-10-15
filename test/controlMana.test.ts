@@ -60,9 +60,9 @@ describe('⛲ la Source de mana', () => {
       );
   });
 
-  it('mesuré : 11 · 18 · 37 · 69 · 111 💠 par jour à trois, du niveau 5 au 100', () => {
+  it('mesuré : 6 · 11 · 22 · 41 · 66 💠 par jour à trois, du niveau 5 au 100 (v1.218 ; 11 · 18 · 37 · 69 · 111 avant)', () => {
     const perDay = [5, 12, 30, 60, 100].map((L) => Math.round(controlManaPerHour(3, L) * 24));
-    expect(perDay).toEqual([11, 18, 37, 69, 111]);
+    expect(perDay).toEqual([6, 11, 22, 41, 66]);
   });
 
   it('un COMPLÉMENT : à cinq, toujours sous une faille refermée par jour', () => {
@@ -94,7 +94,9 @@ describe('⛲ la Source de mana', () => {
     const p = { ...p0, control: { ...p0.control!, attackAt: 9e15 } };
     // 🏅 Chaque jour tenu à SON cran (+1 par 24 h, 2026-09-30).
     const days = 24 * (tierYieldMult(0) + tierYieldMult(1) + tierYieldMult(2));
-    expect(controlManaStock(p, 72 * H, 30)).toBe(Math.floor(controlManaPerHour(3, 30) * days + 1e-9));
+    expect(controlManaStock(p, 72 * H, 30)).toBe(
+      Math.floor(controlManaPerHour(3, 30) * days + 1e-9),
+    );
     expect(controlManaStock(p, 72 * H, 30)).toBeGreaterThan(controlManaStock(p, 24 * H, 30));
     // Plus de jauge de réserve (versé directement) : le bout de ligne dit le débit du jour.
     expect(controlProgress(p, 40 * H, 30)).toEqual({

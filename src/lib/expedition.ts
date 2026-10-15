@@ -724,7 +724,12 @@ const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
 // items ») : faire monter un champion d'un rang coûte autant de sceaux de champion (4 × rang)
 // que de sceaux d'objet pour ses 4 pièces (4 × rang). L'offre s'aligne : 9 × (1 + rang) des
 // deux côtés (c'était 3 côté champion, soit 3 fois moins pour le même besoin).
-export const RUINS_SEALS = { championPerRank: 9, gearPerRank: 9 } as const;
+// ⚠️ v1.218 (audit 2026-10-15, décision de l'utilisateur) : 9 → 6 côté champion. Mesuré
+// (`ascensionRhythm`) : à 4, 37 % du vivier d'un joueur très actif bute ; à 6, moins de
+// 5 % — la règle « offre = besoin » du 2026-10-08 tient encore. Les ruines
+// cumulées à l'Éveil (runes) et au Scriptorium rendaient l'ascension d'un champion presque
+// gratuite en sceaux ; on garde le côté objet (les pièces ont moins d'autres sources).
+export const RUINS_SEALS = { championPerRank: 6, gearPerRank: 9 } as const;
 /** 🔱 Les sceaux de champion d'une ruine de ce niveau : 3 × (1 + son rang). */
 export function ruinsChampionSeals(level: number): number {
   return RUINS_SEALS.championPerRank * (1 + characterRank(Math.max(1, level)).rankIndex);

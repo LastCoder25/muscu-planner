@@ -331,7 +331,8 @@ export function pullChampion(
   // pour le jour où quelqu'un vide une lettre, pas une règle de jeu.
   if (!all.length) throw new Error(`Aucun champion de lettre ${r.grade}`);
   // Au hasard parmi ceux qu'on n'a pas ET ceux qu'on peut encore éveiller. Toute la lettre au
-  // maximum : on tire dans la lettre entière, et la copie se convertit en mana (`grantChampion`).
+  // maximum : on tire dans la lettre entière, et le tirage rend une PIÈCE de cette lettre
+  // (`saturatedPull`, v1.218 ; une demi-mise en mana avant).
   // ⚠️ UN SEUL `rng()` dans les deux cas : le flux ne décale pas.
   const open = all.filter((c) => !maxed.has(c.id));
   const pool = open.length ? open : all;
@@ -402,6 +403,20 @@ export function pullMany(
  *  tirage : assez pour que « un tirage n'est jamais perdu » soit vrai, jamais assez pour
  *  qu'on y gagne — sinon farmer le même commun deviendrait une source de mana. */
 export const OVERFLOW_MANA = Math.round(GACHA.pullCost / 2);
+
+/**
+ * 🗡️ LA LETTRE SATURÉE (audit 2026-10-15, décision de l'utilisateur) : quand tous les
+ * champions d'une lettre sont au maximum de l'Éveil, un tirage de cette lettre ne rend plus
+ * une demi-mise en mana (`OVERFLOW_MANA`) mais une PIÈCE d'équipement de la même lettre — un
+ * A ou un S n'est jamais une déception. `pullChampion` ne tire un champion au maximum QUE
+ * dans ce cas (toute la lettre bloquée), donc ce prédicat le reconnaît exactement.
+ */
+export function saturatedPull(
+  roster: readonly Pick<Adventurer, 'championId' | 'copies'>[],
+  champ: Pick<Champion, 'id'>,
+): boolean {
+  return maxedChampions(roster).has(champ.id);
+}
 
 export interface Granted {
   advs: Adventurer[];

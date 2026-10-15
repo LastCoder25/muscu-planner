@@ -199,7 +199,9 @@ export const BUILDING_TYPES: BuildingType[] = [
     category: 'utility',
     effect: { bossRollFloorPerLvl: 0.005 },
     resource: 'summon',
-    prodPerHrPerLvl: 0.03, // niv.20 ≈ 0,6/h → ~10 pierres / 18 h (complément)
+    // ⚠️ 0,03 → 0,012 en v1.218 (audit 2026-10-15, décision de l'utilisateur) : un Autel au
+    // niveau 30 rendait ~22 pierres par jour, plus que les donjons d'une journée type.
+    prodPerHrPerLvl: 0.012, // niv.20 ≈ 0,24/h → ~4 pierres / 18 h (complément)
     buildGold: 700,
     unlockLevel: 4,
     unique: true,

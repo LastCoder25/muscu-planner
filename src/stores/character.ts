@@ -538,6 +538,7 @@ import {
   GACHA,
   dailyFreeMana,
   grantChampion,
+  saturatedPull,
   wipeLegacyAdventurers,
   type GachaState,
   GACHA_VERSION,
@@ -545,6 +546,7 @@ import {
   pullMany,
   rollGearGrade,
 } from '@/lib/gacha';
+import type { GearGrade } from '@/data/champions';
 import {
   addSeals,
   advGearAscensionBlocker,
@@ -1852,7 +1854,9 @@ export const useCharacterStore = defineStore('character', () => {
     const pieces: Omit<AdvGear, 'id'>[] = [];
     const results: LotItem[] = [];
     for (const r of lot.results) {
-      if (r.champion) {
+      // 🗡️ Lettre saturée (tous ses champions au maximum de l'Éveil) : une pièce de la MÊME
+      // lettre au lieu d'une demi-mise en mana (audit 2026-10-15).
+      if (r.champion && !saturatedPull(advs, r.champion)) {
         const g = grantChampion(advs, r.champion, {
           id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
         });
@@ -1864,7 +1868,13 @@ export const useCharacterStore = defineStore('character', () => {
         }
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
-        const piece = gachaPiece(advs, cur.adv_gear?.stock ?? [], pieces);
+        const piece = gachaPiece(
+          advs,
+          cur.adv_gear?.stock ?? [],
+          pieces,
+          // ⚠️ L'équipement s'arrête à S : une lettre X saturée rend une pièce S.
+          r.champion ? (r.grade === 'X' ? 'S' : r.grade) : rollGearGrade(Math.random),
+        );
         pieces.push(piece);
         results.push({
           grade: piece.grade,
@@ -1896,9 +1906,10 @@ export const useCharacterStore = defineStore('character', () => {
     advs: Adventurer[],
     stock: AdvGear[],
     pending: Omit<AdvGear, 'id'>[],
+    grade: GearGrade,
   ): Omit<AdvGear, 'id'> {
     return rollGachaPiece(Math.random, advs, {
-      grade: rollGearGrade(Math.random),
+      grade,
       stock,
       pending,
     });
