@@ -346,6 +346,19 @@ export function firstAidChance(escort: Adventurer[]): number {
 }
 
 /**
+ * ⛑️🎓🐫 LES SOUTIENS D'ATTAQUE d'une garnison, 0..1 (« Répartir », 2026-10-15, demandé par
+ * l'utilisateur). Premiers secours (moins de blessés), Mentor (plus d'XP) et Cargaison (plus de
+ * butin), chacun ramené à 0..1 À RENDEMENT DÉCROISSANT, puis moyennés : un porteur de plus là
+ * où il n'y en a pas vaut plus qu'un second au même endroit — c'est ce qui les étale.
+ * ⚠️ Les valeurs viennent de `roleCut` / `roleShare`, la règle des missions : rien recopié.
+ */
+export function attackSupport(advs: Adventurer[]): number {
+  if (!advs.length) return 0;
+  const sat = (x: number) => x / (1 + x);
+  return (firstAidChance(advs) + sat(roleShare(advs, 'mentor')) + sat(roleShare(advs, 'haul'))) / 3;
+}
+
+/**
  * ⛑️ Les blessés que les PREMIERS SECOURS de la troupe remettent sur pied : chaque id de `ids`
  * a `firstAidChance(escort)` d'être épargné. SOURCE UNIQUE, appliquée là où les blessés sont
  * DÉSIGNÉS (convoi, camp, point fixe, armée en campagne, récolte gardée, faille, interception,

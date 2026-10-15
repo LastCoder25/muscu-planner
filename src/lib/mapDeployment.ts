@@ -14,6 +14,19 @@
  * importe où chacun se trouve. La DÉFENSE n'est pas l'affaire de cette fonction : la garde de
  * base d'un lieu fixe, ce sont les miliciens ; les champions y sont un plus qu'on ignore ici.
  *
+ * 🧭 SOUTIENS (2026-10-15, demandé : « des garnisons les plus efficaces et fortes possibles pour
+ * couvrir le plus de carte, attaquer le plus de lieux et avec la meilleure vitesse ») :
+ * - la VITESSE de chaque garnison vient de ceux qui y sont postés (`keep`, injecté : la règle des
+ *   missions). Un porteur 🧭 accélère toute sa garnison, et deux se cumulent moins bien qu'un dans
+ *   chacune : le calcul les ÉTALE de lui-même ;
+ * - OBJECTIF MIXTE (`easyForce`) : la moitié du coût vient d'un lieu DUR (`force`, réunie depuis
+ *   les garnisons voisines), l'autre d'un lieu FACILE (`easyForce`, réunie de même) : une garnison
+ *   qui suffit seule pour un lieu facile n'attend personne, d'où des garnisons capables de partir
+ *   chacune de leur côté — plusieurs attaques en parallèle ;
+ * - les autres SOUTIENS d'attaque (⛑️ premiers secours, 🎓 mentor, 🐫 cargaison, `support`
+ *   injecté, 0..1, à rendement décroissant) allègent un peu le temps de la garnison pour un lieu
+ *   facile : un porteur de plus là où il n'y en a pas vaut plus qu'un second au même endroit.
+ *
  * On ne juge PAS sur les lieux présents sur la carte : ils changent toutes les heures, la
  * géographie non. ⚠️ Aucune règle de jeu ici : forces et trajets sont INJECTÉS.
  */
@@ -40,9 +53,19 @@ export interface DeploySpot {
 }
 
 export interface DeployDeps {
-  /** Trajet (minutes, aller) de l'endroit `spot` vers le point d'échantillon n° `point`. */
+  /** Trajet (minutes, aller) de l'endroit `spot` vers le point d'échantillon n° `point`, pour
+   *  une équipe SANS compétence de vitesse. */
   trip: (spot: string, point: number) => number;
+  /** Ce que la garnison `members` fait du trajet ci-dessus (multiplicateur ; 1 par défaut). */
+  keep?: (members: readonly DeployUnit[]) => number;
+  /** Ses soutiens d'attaque, 0..1 (0 par défaut). */
+  support?: (members: readonly DeployUnit[]) => number;
 }
+
+/** 🧭 Part du coût portée par les lieux FACILES (le reste : les lieux durs). */
+export const DEPLOY_SOLO_SHARE = 0.5;
+/** ⛑️🎓🐫 Ce que des soutiens complets retirent au temps d'une garnison, pour un lieu facile. */
+export const DEPLOY_SUPPORT_W = 0.2;
 
 interface DeployMove {
   unit: DeployUnit;
@@ -81,24 +104,30 @@ export function reachTime(
 ): number {
   if (!order.length || force <= 0) return 0;
   let sum = 0;
-  for (let p = 0; p < order.length; p++) {
-    let cum = 0;
-    let t = 0;
-    let mass = 0;
-    for (const s of order[p]!) {
-      const pw = power.get(s) ?? 0;
-      if (pw <= 0) continue;
-      t = trips.get(s)![p]!;
-      mass += Math.min(pw, force - cum) * t;
-      cum += pw;
-      if (cum >= force) break;
-    }
-    if (cum <= 0) continue;
-    const last = cum >= force ? t : (t * force) / cum;
-    if (cum < force) mass += (force - cum) * last;
-    sum += (last + mass / force) / 2;
-  }
+  for (let p = 0; p < order.length; p++)
+    sum += pointReach(
+      order[p]!.map((s) => ({ pw: power.get(s) ?? 0, t: trips.get(s)![p]! })),
+      force,
+    );
   return sum / order.length;
+}
+
+/** ⏱️ Le temps d'UN point (cf. `reachTime`), les endroits déjà triés du plus proche au plus loin. */
+function pointReach(near: readonly { pw: number; t: number }[], force: number): number {
+  let cum = 0;
+  let t = 0;
+  let mass = 0;
+  for (const x of near) {
+    if (x.pw <= 0) continue;
+    t = x.t;
+    mass += Math.min(x.pw, force - cum) * t;
+    cum += x.pw;
+    if (cum >= force) break;
+  }
+  if (cum <= 0) return 0;
+  const last = cum >= force ? t : (t * force) / cum;
+  if (cum < force) mass += (force - cum) * last;
+  return (last + mass / force) / 2;
 }
 
 /** 🧭 La répartition : où mettre chacun (cf. l'en-tête). */
@@ -106,15 +135,36 @@ export function planStations(
   units: readonly DeployUnit[],
   spots: readonly DeploySpot[],
   points: number,
-  opts: { force: number; deps: DeployDeps },
+  opts: {
+    force: number;
+    /** La force d'un lieu FACILE, qu'une garnison doit pouvoir prendre seule (objectif mixte).
+     *  Absente : seule l'attaque combinée compte. */
+    easyForce?: number;
+    deps: DeployDeps;
+  },
 ): DeployResult {
   const byId = new Map(spots.map((s) => [s.id, s]));
   const trips = new Map(
     spots.map((s) => [s.id, Array.from({ length: points }, (_, p) => opts.deps.trip(s.id, p))]),
   );
-  const order = Array.from({ length: points }, (_, p) =>
-    spots.map((s) => s.id).sort((a, b) => trips.get(a)![p]! - trips.get(b)![p]!),
-  );
+  const keepOf = opts.deps.keep ?? (() => 1);
+  const supportOf = opts.deps.support ?? (() => 0);
+  // Une garnison donnée a toujours la même vitesse et les mêmes soutiens : on ne les recalcule
+  // pas à chaque essai (la recherche en fait des milliers).
+  const memo = new Map<string, { k: number; sup: number }>();
+  const traitsOf = (members: DeployUnit[]) => {
+    const key = members
+      .map((m) => m.id)
+      .sort()
+      .join('|');
+    let v = memo.get(key);
+    if (!v) {
+      v = { k: keepOf(members), sup: supportOf(members) };
+      memo.set(key, v);
+    }
+    return v;
+  };
+  const easy = opts.easyForce;
   const at = new Map<string, string>();
   const used = new Map<string, number>();
   const put = (u: DeployUnit, s: string) => {
@@ -127,15 +177,48 @@ export function planStations(
   const fits = (u: DeployUnit, s: string) =>
     (!u.hero || byId.get(s)!.heroOk) && room(s) >= deployWeight(u);
 
-  const powers = () => {
-    const m = new Map<string, number>();
+  /** Les garnisons occupées : force, vitesse, soutiens. */
+  const garrisons = () => {
+    const m = new Map<string, DeployUnit[]>();
     for (const u of units) {
       const s = at.get(u.id);
-      if (s) m.set(s, (m.get(s) ?? 0) + u.power);
+      if (s) m.set(s, [...(m.get(s) ?? []), u]);
     }
-    return m;
+    return [...m].map(([id, members]) => ({
+      id,
+      pw: members.reduce((a, u) => a + u.power, 0),
+      ...traitsOf(members),
+    }));
   };
-  const cost = () => reachTime(powers(), order, trips, opts.force);
+  /** ⏱️ Le coût d'une répartition : par point, l'attaque combinée et (objectif mixte) la
+   *  garnison la plus vite prête SEULE, allégée de ses soutiens. `combinedOnly` = le temps
+   *  rendu au joueur (`reach`). */
+  const evaluate = (combinedOnly: boolean) => {
+    const gs = garrisons();
+    if (!gs.length || !points) return 0;
+    let sum = 0;
+    for (let p = 0; p < points; p++) {
+      const near = gs
+        .map((g) => ({ pw: g.pw, t: trips.get(g.id)![p]! * g.k, sup: g.sup }))
+        .sort((a, b) => a.t - b.t);
+      const combined = pointReach(near, opts.force);
+      if (combinedOnly || !easy || easy <= 0) {
+        sum += combined;
+        continue;
+      }
+      // 🌱 Un lieu facile : la petite force se réunit aussi depuis les plus proches — une
+      // garnison qui suffit seule n'attend personne. Ses soutiens l'allègent un peu.
+      const light = near
+        .map((g) => ({
+          pw: g.pw,
+          t: g.t * (1 - DEPLOY_SUPPORT_W * Math.min(1, Math.max(0, g.sup))),
+        }))
+        .sort((a, b) => a.t - b.t);
+      sum += (1 - DEPLOY_SOLO_SHARE) * combined + DEPLOY_SOLO_SHARE * pointReach(light, easy);
+    }
+    return sum / points;
+  };
+  const cost = () => evaluate(false);
   const strongFirst = [...units].sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
 
   // 🧹 Départ de ZÉRO : tous les lieux sont vides. Le plus fort d'abord, chacun là où il fait
@@ -198,7 +281,7 @@ export function planStations(
   const moves: DeployMove[] = units
     .filter((u) => at.get(u.id) !== u.loc)
     .map((u) => ({ unit: u, from: u.loc, to: at.get(u.id)! }));
-  return { spotOf: at, moves, reach: reachTime(powers(), order, trips, opts.force) };
+  return { spotOf: at, moves, reach: evaluate(true) };
 }
 
 /**
@@ -222,6 +305,15 @@ export function deploymentPoints(
       out.push({ x, y });
     }
   return out;
+}
+
+/**
+ * 🌱 Le niveau d'un lieu FACILE de la carte : le BAS du rang du joueur, borné par l'île. C'est
+ * ce qu'une garnison doit pouvoir prendre SEULE (objectif mixte de `planStations`).
+ */
+export function deployEasyLevel(heroLevel: number, floor: number, cap: number): number {
+  const bottom = rankStartLevel(characterRank(Math.max(1, heroLevel)).rankIndex);
+  return Math.max(Math.max(1, floor), Math.min(cap, bottom));
 }
 
 /**
