@@ -1170,6 +1170,13 @@
                 {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
               </button>
             </div>
+            <!-- ↻ La dernière équipe envoyée, filtrée par les règles d'envoi (disponibilité, plafond). -->
+            <div v-if="lastTeam" class="last-team">
+              <button type="button" class="car-auto" @click="restoreTeam">
+                {{ lastTeamLabel }}
+              </button>
+              <p v-if="lastTeamNote" class="car-cap">{{ lastTeamNote }}</p>
+            </div>
             <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
             <!-- 🧝 Le héros peut tenir garnison partout (étape 6 bis) : il défend le lieu, ne
                rentre pas, et se rappelle depuis la fiche du lieu. -->
@@ -6230,6 +6237,10 @@ const {
   partySendLabel,
   doSendParty,
   prefillTeam,
+  lastTeam,
+  lastTeamLabel,
+  lastTeamNote,
+  restoreTeam,
 } = useExpeditionParty({
   selected,
   now,
@@ -6611,6 +6622,18 @@ onUnmounted(() => {
   color: var(--text);
   font-size: 13px;
   cursor: pointer;
+}
+.last-team {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 6px;
+}
+.last-team .car-cap {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
 }
 .car-auto:disabled {
   opacity: 0.45;

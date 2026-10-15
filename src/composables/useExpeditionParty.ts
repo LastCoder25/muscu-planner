@@ -49,6 +49,13 @@ import {
 } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
+import {
+  droppedLabel,
+  parseLastTeam,
+  restoreLastTeam,
+  serializeLastTeam,
+  type LastTeam,
+} from '@/lib/lastTeam';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
 import { advUnavailableReason, sortByGradeThenRank, type Adventurer } from '@/lib/adventurers';
 import {
@@ -333,6 +340,54 @@ export function useExpeditionParty(ctx: PartyCtx) {
       pendingTeam = null;
     } else pendingTeam = t;
   }
+  /** ↻ La dernière équipe ENVOYÉE, mémorisée par appareil (confort : pas de migration). */
+  const lastTeamKey = () => `muscu:lastTeam:${auth.user?.id ?? ''}`;
+  const lastTeam = ref<LastTeam | null>(null);
+  const lastTeamNote = ref('');
+  function refreshLastTeam() {
+    try {
+      lastTeam.value = auth.user?.id ? parseLastTeam(localStorage.getItem(lastTeamKey())) : null;
+    } catch {
+      lastTeam.value = null;
+    }
+  }
+  function rememberTeam(t: LastTeam) {
+    lastTeam.value = t;
+    try {
+      localStorage.setItem(lastTeamKey(), serializeLastTeam(t));
+    } catch {
+      /* stockage indisponible : le confort s'en passe */
+    }
+  }
+  refreshLastTeam();
+  watch(selected, () => {
+    lastTeamNote.value = '';
+    refreshLastTeam();
+  });
+  /** La dernière équipe, posée sur le lieu ouvert — filtrée par les règles d'envoi existantes. */
+  function restoreTeam() {
+    const last = lastTeam.value;
+    if (!last || !selected.value) return;
+    const r = restoreLastTeam(last, {
+      allIds: char.advList.map((a) => a.id),
+      poolIds: partyPool.value.map((a) => a.id),
+      max: partyMax.value,
+      heroOk: heroPickShown.value && !partyHeroBlock.value,
+      stock: char.row?.supplies ?? {},
+    });
+    partyEscort.value = r.advs;
+    partyHero.value = r.hero;
+    chosenSupplies.value = r.supplies;
+    const why = droppedLabel(r.dropped);
+    lastTeamNote.value = why ? `Pas repris : ${why}` : '';
+  }
+  /** Libellé du bouton : combien de champions la dernière équipe comptait. */
+  const lastTeamLabel = computed(() => {
+    const t = lastTeam.value;
+    if (!t) return '';
+    const n = t.advs.length + (t.hero ? 1 : 0);
+    return `↻ Même équipe (${n})`;
+  });
   /** Le stock, tuile par tuile, et POURQUOI un consommable ne servirait à rien ici. */
   const supplyRows = computed(() => {
     const p = selected.value;
@@ -1077,6 +1132,11 @@ export function useExpeditionParty(ctx: PartyCtx) {
     lateAsk.value = false;
     await settleDueSiege();
     busyParty.value = true;
+    const sentTeam: LastTeam = {
+      advs: partyAdvs.value.map((a) => a.id),
+      hero: partyHeroOn.value,
+      supplies: [...activeSupplies.value],
+    };
     try {
       const refused = combined.value
         ? await char.sendCombinedAttack(uid, poi, {
@@ -1105,7 +1165,10 @@ export function useExpeditionParty(ctx: PartyCtx) {
             ...(partyHeroOn.value ? { heroStays: heroStays.value } : {}),
             ...(lateOk ? { lateOk: true } : {}),
           });
-      if (!refused) selected.value = null;
+      if (!refused) {
+        rememberTeam(sentTeam);
+        selected.value = null;
+      }
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
       // 🔕 Un départ réussi ne se confirme plus par un toast : la tuile du voyage le montre.
       if (refused) $q.notify({ type: 'negative', message: `Départ impossible : ${refused}.` });
@@ -1275,5 +1338,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partySendLabel,
     doSendParty,
     prefillTeam,
+    lastTeam,
+    lastTeamLabel,
+    lastTeamNote,
+    restoreTeam,
   };
 }
