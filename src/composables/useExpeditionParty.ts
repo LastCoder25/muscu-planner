@@ -36,6 +36,7 @@ import {
 import { champSeatsWithHero, holdSeats, garrisonHold, defendsControl } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { memberTripDelta } from '@/lib/tripDelta';
+import { formatHaulDelta, haulDelta, poiTeamHaul } from '@/lib/poiYield';
 import { heroPostOf, heroSpotOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
@@ -663,6 +664,46 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
     return out;
   });
+  /** 💰 Ce que chaque champion et chaque consommable change à la RÉCOLTE si le lieu est pris
+   *  (demandé : « comme le % de réussite et le temps »), en texte signé (« +120 🪙 »). Même
+   *  convention que le 🎯 et le ⏱️ : coché, ce qu'on perdrait sans lui ; non coché, ce qu'on
+   *  gagnerait en l'ajoutant. `poiTeamHaul` = la règle de la fiche et de la résolution (bâts,
+   *  porteurs 🐫, pièces de cargaison) ; un lieu qui ne se récolte pas ne bouge jamais. */
+  const haulOf = (escort: Adventurer[], supplies: readonly SupplyId[]) => {
+    const p = selected.value!;
+    const heroGoes = partyHeroOn.value;
+    return poiTeamHaul(p, {
+      playerLevel: heroGoes ? progressionLevel.value : heroLevel.value,
+      heroGoes,
+      escort,
+      kit: { ...roadCtx.value, supplies },
+    }).total;
+  };
+  const partyHaulDelta = computed(() => {
+    const out: Record<string, string> = {};
+    if (!selected.value || !partyTarget.value) return out;
+    const sup = activeSupplies.value;
+    for (const a of partyPool.value) {
+      const without = partyAdvs.value.filter((b) => b.id !== a.id);
+      out[a.id] = formatHaulDelta(haulDelta(haulOf([...without, a], sup), haulOf(without, sup)));
+    }
+    return out;
+  });
+  const supplyHaulDelta = computed(() => {
+    const out: Partial<Record<SupplyId, string>> = {};
+    if (!selected.value || !partyTarget.value) return out;
+    const others = (id: SupplyId) => activeSupplies.value.filter((x) => x !== id);
+    for (const r of supplyRows.value) {
+      if (r.why) continue;
+      out[r.id] = formatHaulDelta(
+        haulDelta(
+          haulOf(partyAdvs.value, [...others(r.id), r.id]),
+          haulOf(partyAdvs.value, others(r.id)),
+        ),
+      );
+    }
+    return out;
+  });
   /** 🧭 Les champions PAR LIEU de départ, du lieu le plus proche de la cible au plus loin
    *  (demandé) — dès qu'un point fixe tenu a des champions prêts, ou que le héros y est
    *  posté ; sinon la liste habituelle. */
@@ -1173,6 +1214,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
   return {
     partyGain,
     partyTripDelta,
+    partyHaulDelta,
+    supplyHaulDelta,
     combined,
     wingPlan,
     combinedBlock,

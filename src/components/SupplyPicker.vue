@@ -27,6 +27,8 @@
           <span class="sup-main">
             <span class="sup-name">{{ r.def.name }} ×{{ r.n }}</span>
             <span class="sup-what">{{ r.why ?? r.def.what }}</span>
+            <!-- 💰 Ce qu'il change à la récolte ici (demandé : « comme le % et le temps »). -->
+            <span v-if="haul?.[r.id]" class="sup-haul">🎒 {{ haul[r.id] }}</span>
           </span>
           <span class="sup-check">{{ r.on && !r.why ? '✓' : '＋' }}</span>
         </button>
@@ -64,7 +66,12 @@ interface SupplyRow {
   why: string | null;
 }
 
-const props = defineProps<{ rows: SupplyRow[]; startOpen?: boolean }>();
+const props = defineProps<{
+  rows: SupplyRow[];
+  startOpen?: boolean;
+  /** 💰 Ce que chaque consommable change à la récolte (`formatHaulDelta`), vide = rien. */
+  haul?: Partial<Record<SupplyId, string>>;
+}>();
 const emit = defineEmits<{ toggle: [id: SupplyId] }>();
 
 const open = ref(props.startOpen ?? false);
@@ -185,6 +192,11 @@ const supplyUseless = computed(() => props.rows.filter((r) => !!r.why));
 .sup-name {
   font-size: 12px;
   font-weight: 700;
+}
+.sup-haul {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--d1, #7bc86c);
 }
 .sup-what {
   display: -webkit-box;

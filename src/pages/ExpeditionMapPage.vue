@@ -1271,6 +1271,7 @@
                   :xp="partyXp[a.id]"
                   :gain="partyGain[a.id]"
                   :trip-delta="partyTripDelta[a.id]"
+                  :haul-delta="partyHaulDelta[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
                 <p
@@ -1310,6 +1311,7 @@
                 :xp="partyXp[a.id]"
                 :gain="partyGain[a.id]"
                 :trip-delta="partyTripDelta[a.id]"
+                :haul-delta="partyHaulDelta[a.id]"
                 @toggle="togglePartyAdv(a.id)"
               />
               <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
@@ -1360,7 +1362,12 @@
                dans le kit du groupe (`partyRoad`), donc le 🎯 % ci-dessus les voit comme le
                combat les verra. Ceux qui ne servent à rien ICI sont grisés AVEC la raison. -->
             <!-- 🎒 Ravitaillement (cf. `SupplyPicker`) : le 🎯 % ci-dessus en tient compte. -->
-            <SupplyPicker :key="selected?.id" :rows="supplyRows" @toggle="toggleSupply" />
+            <SupplyPicker
+              :key="selected?.id"
+              :rows="supplyRows"
+              :haul="supplyHaulDelta"
+              @toggle="toggleSupply"
+            />
             <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
             <details class="sh-rules">
               <summary>ⓘ Règles de cette expédition</summary>
@@ -6163,6 +6170,8 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 const {
   partyGain,
   partyTripDelta,
+  partyHaulDelta,
+  supplyHaulDelta,
   stayCap,
   stayHold,
   stayHoldOf,

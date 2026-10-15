@@ -54,7 +54,10 @@
          selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
-      <span v-if="(xp || gain != null || travelMin != null || tripDelta) && !reason" class="ca-row">
+      <span
+        v-if="(xp || gain != null || travelMin != null || tripDelta || haulDelta) && !reason"
+        class="ca-row"
+      >
         <!-- 🧭 SON TRAJET jusqu'au lieu visé (demandé : on le choisissait sans savoir quand il
              arriverait). -->
         <span v-if="travelMin != null" class="ca-trip" title="Trajet jusqu’au lieu"
@@ -70,6 +73,16 @@
              Rien quand il ne change rien (un champion sans compétence de vitesse). -->
         <span v-if="tripDelta" class="ca-gain" :class="{ neg: tripDelta > 0 }" :title="tripWhy"
           >⏱️ {{ tripDelta < 0 ? '−' : '+' }}{{ formatDurationMin(Math.abs(tripDelta)) }}</span
+        >
+        <!-- 💰 CE QU'IL CHANGE À LA RÉCOLTE si le lieu est pris (demandé : « comme le % et le
+             temps ») — porteur 🐫, pièce de cargaison. Rien quand il ne change rien. -->
+        <span
+          v-if="haulDelta"
+          class="ca-gain"
+          :title="
+            on ? 'Ce que la récolte perdrait sans lui.' : 'Ce que la récolte gagnerait avec lui.'
+          "
+          >🎒 {{ haulDelta }}</span
         >
         <!-- 🎯 CE QU'IL APPORTE À LA RÉUSSITE, par rapport à l'équipe cochée (demandé) : coché,
              ce qu'on perdrait en le retirant ; non coché, ce qu'on gagnerait en l'ajoutant. -->
@@ -133,6 +146,8 @@ const props = defineProps<{
   /** ⏱️ Ce qu'il change à l'aller-retour de son lieu, en minutes (`memberTripDelta`).
    *  Négatif = plus rapide avec lui. */
   tripDelta?: number | null;
+  /** 💰 Ce qu'il change à la récolte, déjà mis en forme (`formatHaulDelta`) ; vide = rien. */
+  haulDelta?: string | null;
   /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
   readonly?: boolean;
 }>();

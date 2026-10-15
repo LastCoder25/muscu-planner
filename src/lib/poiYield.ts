@@ -170,3 +170,22 @@ const RATE_EMOJI: Record<keyof PoiHaul, string> = {
   keys: '🗝️',
   mana: '💠',
 };
+
+/**
+ * ➕ CE QU'UN CHOIX CHANGE À LA RÉCOLTE (demandé : « comme le % de réussite et le temps, voir
+ * les ressources aussi »). `withIt` et `without` sont deux `poiTeamHaul(...).total` — la même
+ * équipe avec et sans le champion (ou le consommable) : aucune règle de plus ici.
+ */
+export function haulDelta(withIt: PoiHaul, without: PoiHaul): PoiHaul {
+  const out = { ...withIt };
+  for (const k of Object.keys(out) as (keyof PoiHaul)[]) out[k] = withIt[k] - without[k];
+  return out;
+}
+
+/** « +120 🪙 · −1 ⚡ » : seulement ce qui bouge, signé ; vide si rien ne change. */
+export function formatHaulDelta(d: PoiHaul): string {
+  return (Object.keys(RATE_EMOJI) as (keyof PoiHaul)[])
+    .filter((k) => d[k] !== 0)
+    .map((k) => `${d[k] > 0 ? '+' : '−'}${Math.abs(d[k]).toLocaleString('fr-FR')} ${RATE_EMOJI[k]}`)
+    .join(' · ');
+}
