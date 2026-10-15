@@ -40,6 +40,7 @@ import {
   defenderCount,
   graceOnCapture,
   holdGrace,
+  heroSeatsIn,
 } from './controlPoints';
 import { islandTerrain } from './islandTerrain';
 import { FIELD_ARMY } from './fieldArmy';
@@ -1122,6 +1123,17 @@ export function heroPostOf(map: Pick<ExpeditionMap, 'pois'> | null | undefined):
 }
 const heroPostPoi = (p: Poi) => p.control?.owner === 'player' && !!p.control.hero;
 
+/**
+ * 🧝 Le lieu tenu où le héros a SA PLACE : posté, en route pour l'être (`heroComing`) ou parti
+ * en sortie avec sa place gardée (`heroAway`) — les trois cas où il y prend 2 places
+ * (`heroSeatsIn`). ⚠️ « Répartir » le lisait par `heroPostOf` seul (2026-10-15, signalé :
+ * un champion proposé vers l'Arsenal « plein ») : le héros en sortie était compté à la base,
+ * ses 2 places gardées passaient pour libres, et l'envoi était refusé (« plus assez de places »).
+ */
+export function heroSeatOf(map: Pick<ExpeditionMap, 'pois'> | null | undefined): Poi | undefined {
+  return map?.pois.find((p) => p.control?.owner === 'player' && heroSeatsIn(p.control) > 0);
+}
+
 /** 🧝 Le héros est-il posté sur un lieu tenu ? */
 export function heroPosted(map: Pick<ExpeditionMap, 'pois'> | null | undefined): boolean {
   return !!heroPostOf(map);
@@ -1409,7 +1421,9 @@ export function unpostHero(
       void _h;
       return {
         ...p,
-        control: keepSeat ? { ...c, heroAway: true as const, ...(u ? { heroAwayUnit: u } : {}) } : c,
+        control: keepSeat
+          ? { ...c, heroAway: true as const, ...(u ? { heroAwayUnit: u } : {}) }
+          : c,
       };
     }),
   };

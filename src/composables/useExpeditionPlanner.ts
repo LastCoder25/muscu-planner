@@ -22,7 +22,7 @@ import {
   type PlannedTrip,
   type PlanUnit,
 } from '@/lib/expeditionPlanner';
-import { heroPostOf } from '@/lib/islandConquest';
+import { heroPostOf, heroSeatOf } from '@/lib/islandConquest';
 import { type DeployUnit } from '@/lib/mapDeployment';
 import {
   partyHeroBlocker,
@@ -461,7 +461,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         fixed: deployAnchors(map, char.advList, ready),
         hero: {
           party: heroObj(),
-          loc: heroPostOf(map)?.id ?? 'base',
+          // 🧝 Là où il a SA PLACE (posté, en route, ou en sortie qui la lui garde) : elle compte.
+          loc: heroSeatOf(map)?.id ?? 'base',
           ...(heroFree.value ? {} : { fixed: true }),
         },
         road,
