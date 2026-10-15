@@ -67,6 +67,9 @@
           <ResourceTray part="rest" :energy="c.energy" interactive @pick="pickResource" />
         </div>
       </div>
+      <!-- ✨ Ce qui vient d'arriver (lieux fixes, retours, coffres…) : « +N » sous le
+           plateau, à la place des toasts du bas. Le détail est dans la boîte 📬. -->
+      <ResourceGains :energy="c.energy" :ready="progress.ready.value" @details="openInbox" />
 
       <!-- 🗺️ LA CARTE VIT ICI (demandé : « switcher juste cette partie, sans perdre le haut
            de la page ») : le haut — ressources, effectifs, boîte — reste en place, et seul le
@@ -137,1526 +140,1559 @@
       <!-- 🔄 LE PLATEAU PIVOTE quand on passe de l'Aventure à la carte : `shownMap` suit
            `mapView` avec un temps de retard, le temps que la tuile ait tourné de profil. -->
       <div class="board" :class="flip">
-      <div v-if="!shownMap" class="seg">
-        <button class="seg-b" :class="{ on: tab === 'hero' }" @click="tab = 'hero'">
-          <q-icon name="person" size="18px" /> Héros
-        </button>
-        <button class="seg-b" :class="{ on: tab === 'gear' }" @click="tab = 'gear'">
-          <q-icon name="checkroom" size="18px" /> Équipement
-        </button>
-        <button class="seg-b" :class="{ on: tab === 'explore' }" @click="tab = 'explore'">
-          <q-icon name="castle" size="18px" /> Explorer
-        </button>
-        <button class="seg-b" :class="{ on: tab === 'base' }" @click="tab = 'base'">
-          <q-icon name="shield" size="18px" /> Base
-          <!-- Pastille d'alerte : une armée en route, des corps à fouiller ou une
+        <div v-if="!shownMap" class="seg">
+          <button class="seg-b" :class="{ on: tab === 'hero' }" @click="tab = 'hero'">
+            <q-icon name="person" size="18px" /> Héros
+          </button>
+          <button class="seg-b" :class="{ on: tab === 'gear' }" @click="tab = 'gear'">
+            <q-icon name="checkroom" size="18px" /> Équipement
+          </button>
+          <button class="seg-b" :class="{ on: tab === 'explore' }" @click="tab = 'explore'">
+            <q-icon name="castle" size="18px" /> Explorer
+          </button>
+          <button class="seg-b" :class="{ on: tab === 'base' }" @click="tab = 'base'">
+            <q-icon name="shield" size="18px" /> Base
+            <!-- Pastille d'alerte : une armée en route, des corps à fouiller ou une
                production gelée doivent se voir SANS ouvrir l'onglet. -->
-          <span v-if="baseAlert" class="seg-dot" :class="{ warn: !!baseRaid }" />
-        </button>
-      </div>
+            <span v-if="baseAlert" class="seg-dot" :class="{ warn: !!baseRaid }" />
+          </button>
+        </div>
 
-      <!-- ONGLET HÉROS — accès Talents/Familier UNIQUEMENT par clic sur l'avatar
+        <!-- ONGLET HÉROS — accès Talents/Familier UNIQUEMENT par clic sur l'avatar
            (familier à droite, badge talent en bas-gauche), ticket d06b6998. -->
-      <!-- La carte, hébergée : le haut de page est celui de l'Aventure, et c'est l'Aventure qui
+        <!-- La carte, hébergée : le haut de page est celui de l'Aventure, et c'est l'Aventure qui
            fait tourner la boucle de mise à jour (une seule pour les deux). -->
-      <ExpeditionMapPage v-if="shownMap" />
-      <template v-else-if="tab === 'hero'">
-        <template v-if="persoSub === 'perso'">
-          <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
+        <ExpeditionMapPage v-if="shownMap" />
+        <template v-else-if="tab === 'hero'">
+          <template v-if="persoSub === 'perso'">
+            <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
                d'ÉTOILES (pleines = gagnées) au premier plan sur l'anneau. Niveau (bas-gauche)
                et Puissance (bas-droite) flanquent le cercle sur la même ligne. -->
-          <!-- CARRÉ : perso au centre, 4 cercles aux COINS (gauche alignés, haut calés sur le
+            <!-- CARRÉ : perso au centre, 4 cercles aux COINS (gauche alignés, haut calés sur le
                bas → carré). Voie ↖ · Prestige ↗ · Niveau ↙ · Puissance ↘. -->
-          <div class="portrait" :style="{ '--rank-c': rank.color }">
-            <div class="pt-square">
-              <!-- ↖ VOIE : elle SE DÉDUIT du set porté (2026-09-22), elle ne se choisit plus. -->
-              <div
-                class="pt-mini corner tl voie"
-                role="img"
-                :title="
-                  currentVoie
-                    ? `Voie : ${currentVoie.name} (celle du set que tu portes)`
-                    : 'Pas de voie : porte au moins 2 pièces d’un même set'
-                "
-              >
-                <svg viewBox="0 0 44 44" aria-hidden="true">
-                  <circle class="ptm-track full" cx="22" cy="22" r="18" />
-                  <text
-                    class="ptm-emo"
-                    x="22"
-                    y="23"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >
-                    {{ currentVoie ? currentVoie.emoji : '—' }}
-                  </text>
-                </svg>
-                <span class="ptm-ic">🧭</span>
-              </div>
-              <!-- ↗ PRESTIGE (rang cosmétique) -->
-              <button
-                class="pt-mini corner tr prestige"
-                type="button"
-                :title="`${rank.name} · ${rank.star}/5 ★ — voir tous les rangs`"
-                @click="ranksOpen = true"
-              >
-                <svg viewBox="0 0 44 44" aria-hidden="true">
-                  <circle class="ptm-track full" cx="22" cy="22" r="18" />
-                  <text
-                    class="ptm-emo"
-                    x="22"
-                    y="23"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >
-                    {{ rank.emoji }}
-                  </text>
-                </svg>
-                <span class="ptm-ic txt font-display">{{ rank.star }}★</span>
-              </button>
+            <div class="portrait" :style="{ '--rank-c': rank.color }">
+              <div class="pt-square">
+                <!-- ↖ VOIE : elle SE DÉDUIT du set porté (2026-09-22), elle ne se choisit plus. -->
+                <div
+                  class="pt-mini corner tl voie"
+                  role="img"
+                  :title="
+                    currentVoie
+                      ? `Voie : ${currentVoie.name} (celle du set que tu portes)`
+                      : 'Pas de voie : porte au moins 2 pièces d’un même set'
+                  "
+                >
+                  <svg viewBox="0 0 44 44" aria-hidden="true">
+                    <circle class="ptm-track full" cx="22" cy="22" r="18" />
+                    <text
+                      class="ptm-emo"
+                      x="22"
+                      y="23"
+                      text-anchor="middle"
+                      dominant-baseline="central"
+                    >
+                      {{ currentVoie ? currentVoie.emoji : '—' }}
+                    </text>
+                  </svg>
+                  <span class="ptm-ic">🧭</span>
+                </div>
+                <!-- ↗ PRESTIGE (rang cosmétique) -->
+                <button
+                  class="pt-mini corner tr prestige"
+                  type="button"
+                  :title="`${rank.name} · ${rank.star}/5 ★ — voir tous les rangs`"
+                  @click="ranksOpen = true"
+                >
+                  <svg viewBox="0 0 44 44" aria-hidden="true">
+                    <circle class="ptm-track full" cx="22" cy="22" r="18" />
+                    <text
+                      class="ptm-emo"
+                      x="22"
+                      y="23"
+                      text-anchor="middle"
+                      dominant-baseline="central"
+                    >
+                      {{ rank.emoji }}
+                    </text>
+                  </svg>
+                  <span class="ptm-ic txt font-display">{{ rank.star }}★</span>
+                </button>
 
-              <!-- Toucher le perso ouvre ses stats de combat ; le familier et le talent
+                <!-- Toucher le perso ouvre ses stats de combat ; le familier et le talent
                    (`.hotspot`) gardent leur propre clic. -->
-              <div
-                class="pt-frame clickable"
-                role="button"
-                tabindex="0"
-                :title="`${rank.name} ${rank.star}/5 — stats de combat`"
-                @click="onFrameClick"
-                @keydown.enter="combatOpen = true"
-              >
-                <AventureAvatar
-                  class="pt-avatar"
-                  :profile="c.profile"
-                  :equipped="char.row.equipped"
-                  :talent-icon="firstTalentIcon"
-                  @familiar-click="familiarsOpen = true"
-                  @talent-click="talentsOpen = true"
-                />
-                <svg class="pt-stars" viewBox="0 0 100 100" aria-hidden="true">
-                  <path
-                    v-for="i in 5"
-                    :key="i"
-                    class="pt-star"
-                    :class="{ on: i <= rank.star }"
-                    :d="STAR_PATH"
-                    :transform="starTf(i - 1)"
+                <div
+                  class="pt-frame clickable"
+                  role="button"
+                  tabindex="0"
+                  :title="`${rank.name} ${rank.star}/5 — stats de combat`"
+                  @click="onFrameClick"
+                  @keydown.enter="combatOpen = true"
+                >
+                  <AventureAvatar
+                    class="pt-avatar"
+                    :profile="c.profile"
+                    :equipped="char.row.equipped"
+                    :talent-icon="firstTalentIcon"
+                    @familiar-click="familiarsOpen = true"
+                    @talent-click="talentsOpen = true"
                   />
-                </svg>
-              </div>
+                  <svg class="pt-stars" viewBox="0 0 100 100" aria-hidden="true">
+                    <path
+                      v-for="i in 5"
+                      :key="i"
+                      class="pt-star"
+                      :class="{ on: i <= rank.star }"
+                      :d="STAR_PATH"
+                      :transform="starTf(i - 1)"
+                    />
+                  </svg>
+                </div>
 
-              <!-- ↙ NIVEAU (anneau de progression) -->
-              <div
-                class="pt-mini corner bl lvl"
-                :title="`Niveau ${c.level.level} · ${c.level.progressPct}%`"
-              >
-                <svg viewBox="0 0 44 44" aria-hidden="true">
-                  <circle class="ptm-track" cx="22" cy="22" r="18" />
-                  <circle
-                    class="ptm-arc"
-                    cx="22"
-                    cy="22"
-                    r="18"
-                    stroke-dasharray="113.1"
-                    :stroke-dashoffset="113.1 * (1 - c.level.progressPct / 100)"
-                    transform="rotate(-90 22 22)"
-                  />
-                  <text
-                    class="ptm-v font-display"
-                    x="22"
-                    y="22"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >
-                    {{ c.level.level }}
-                  </text>
-                </svg>
-                <span class="ptm-ic txt font-display">LvL</span>
+                <!-- ↙ NIVEAU (anneau de progression) -->
+                <div
+                  class="pt-mini corner bl lvl"
+                  :title="`Niveau ${c.level.level} · ${c.level.progressPct}%`"
+                >
+                  <svg viewBox="0 0 44 44" aria-hidden="true">
+                    <circle class="ptm-track" cx="22" cy="22" r="18" />
+                    <circle
+                      class="ptm-arc"
+                      cx="22"
+                      cy="22"
+                      r="18"
+                      stroke-dasharray="113.1"
+                      :stroke-dashoffset="113.1 * (1 - c.level.progressPct / 100)"
+                      transform="rotate(-90 22 22)"
+                    />
+                    <text
+                      class="ptm-v font-display"
+                      x="22"
+                      y="22"
+                      text-anchor="middle"
+                      dominant-baseline="central"
+                    >
+                      {{ c.level.level }}
+                    </text>
+                  </svg>
+                  <span class="ptm-ic txt font-display">LvL</span>
+                </div>
+                <!-- ↘ PUISSANCE -->
+                <button
+                  type="button"
+                  class="pt-mini corner br pow"
+                  :title="`Puissance ${fmtPow(combatPowerVal)} — stats de combat`"
+                  @click="combatOpen = true"
+                >
+                  <svg viewBox="0 0 44 44" aria-hidden="true">
+                    <circle class="ptm-track full" cx="22" cy="22" r="18" />
+                    <text
+                      class="ptm-v font-display"
+                      x="22"
+                      y="22"
+                      text-anchor="middle"
+                      dominant-baseline="central"
+                    >
+                      {{ fmtPow(combatPowerVal) }}
+                    </text>
+                  </svg>
+                  <span class="ptm-ic">⚔️</span>
+                </button>
               </div>
-              <!-- ↘ PUISSANCE -->
-              <button
-                type="button"
-                class="pt-mini corner br pow"
-                :title="`Puissance ${fmtPow(combatPowerVal)} — stats de combat`"
-                @click="combatOpen = true"
-              >
-                <svg viewBox="0 0 44 44" aria-hidden="true">
-                  <circle class="ptm-track full" cx="22" cy="22" r="18" />
-                  <text
-                    class="ptm-v font-display"
-                    x="22"
-                    y="22"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >
-                    {{ fmtPow(combatPowerVal) }}
-                  </text>
-                </svg>
-                <span class="ptm-ic">⚔️</span>
-              </button>
-            </div>
-            <!-- Le nom du rang n'est plus répété sous le portrait : le coin haut-droit (★) le
+              <!-- Le nom du rang n'est plus répété sous le portrait : le coin haut-droit (★) le
                  porte déjà et ouvre la liste des rangs. -->
-          </div>
+            </div>
 
-          <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
-          <q-dialog v-model="ranksOpen" position="bottom">
+            <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
+            <q-dialog v-model="ranksOpen" position="bottom">
+              <q-card class="adv-modal">
+                <button
+                  class="adv-modal-x"
+                  aria-label="Fermer"
+                  type="button"
+                  @click="ranksOpen = false"
+                >
+                  ✕
+                </button>
+                <div class="sec-title">Rangs de prestige</div>
+                <div class="sec-hint">
+                  Cosmétique, dérivé de ton <b>niveau</b> (1 rang = 10 niveaux, 5 étoiles).
+                  N'affecte ni les stats ni le combat.
+                </div>
+                <div class="ranks-list">
+                  <div
+                    v-for="r in rankList"
+                    :key="r.name"
+                    class="rank-row"
+                    :class="{ current: r.current }"
+                    :style="{ '--rank-c': r.color }"
+                  >
+                    <span class="rank-emo">{{ r.emoji }}</span>
+                    <span class="rank-name font-display">{{ r.name }}</span>
+                    <span class="rank-lv">Niv. {{ r.fromLevel }}–{{ r.toLevel }}</span>
+                    <span v-if="r.current" class="rank-cur">Actuel · {{ rank.star }}/5 ★</span>
+                  </div>
+                </div>
+              </q-card>
+            </q-dialog>
+
+            <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
+             le chiffre au centre = la valeur réelle (jamais « pleine » à tort). -->
+            <div class="stats-circles">
+              <div v-for="s in statCircles" :key="s.key" class="statc" :class="s.key">
+                <svg
+                  class="ring"
+                  viewBox="0 0 36 36"
+                  role="img"
+                  :aria-label="`${s.name} ${s.value}`"
+                >
+                  <circle class="track" cx="18" cy="18" r="15.9155" />
+                  <circle
+                    class="arc"
+                    cx="18"
+                    cy="18"
+                    r="15.9155"
+                    transform="rotate(-90 18 18)"
+                    :stroke-dasharray="`${s.share} 100`"
+                  />
+                  <text class="rc-emo" x="18" y="13" text-anchor="middle">{{ s.emo }}</text>
+                  <text class="rc-n font-display" x="18" y="26.5" text-anchor="middle">
+                    {{ s.value }}
+                  </text>
+                </svg>
+                <div class="statc-nm font-display">{{ s.name }}</div>
+                <div class="statc-inf">{{ s.inf }}</div>
+              </div>
+            </div>
+            <div class="pv-line">
+              ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
+              <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
+            </div>
+          </template>
+
+          <!-- Stats de combat : modale ouverte en touchant le perso ou sa puissance. -->
+          <q-dialog v-model="combatOpen" position="bottom">
             <q-card class="adv-modal">
               <button
                 class="adv-modal-x"
                 aria-label="Fermer"
                 type="button"
-                @click="ranksOpen = false"
+                @click="combatOpen = false"
               >
                 ✕
               </button>
-              <div class="sec-title">Rangs de prestige</div>
-              <div class="sec-hint">
-                Cosmétique, dérivé de ton <b>niveau</b> (1 rang = 10 niveaux, 5 étoiles). N'affecte
-                ni les stats ni le combat.
-              </div>
-              <div class="ranks-list">
-                <div
-                  v-for="r in rankList"
-                  :key="r.name"
-                  class="rank-row"
-                  :class="{ current: r.current }"
-                  :style="{ '--rank-c': r.color }"
-                >
-                  <span class="rank-emo">{{ r.emoji }}</span>
-                  <span class="rank-name font-display">{{ r.name }}</span>
-                  <span class="rank-lv">Niv. {{ r.fromLevel }}–{{ r.toLevel }}</span>
-                  <span v-if="r.current" class="rank-cur">Actuel · {{ rank.star }}/5 ★</span>
+              <div class="sec-title">Combat : base → équipé</div>
+              <div class="gear-fx">
+                <div class="gfx">
+                  <span class="gfx-l">❤️ PV</span>
+                  <span class="gfx-v"
+                    >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
+                  >
                 </div>
+                <div class="gfx">
+                  <span class="gfx-l">⚔️ Dégâts/coup</span>
+                  <span class="gfx-v"
+                    >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
+                  >
+                </div>
+                <div class="gfx">
+                  <span class="gfx-l">⚡ Frappes/tour</span>
+                  <span class="gfx-v"
+                    >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
+                    <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
+                  >
+                </div>
+                <div class="gfx">
+                  <span class="gfx-l">🎯 Crit</span>
+                  <span class="gfx-v"
+                    >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
+                  >
+                </div>
+                <div class="gfx">
+                  <span class="gfx-l">💨 Esquive</span>
+                  <span class="gfx-v"
+                    >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
+                  >
+                </div>
+                <div class="gfx">
+                  <span class="gfx-l">🛡️ Défense</span>
+                  <span class="gfx-v"
+                    >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
+                    <b>{{ pctA(fighter.dmgReduction) }}</b></span
+                  >
+                </div>
+                <div class="gfx">
+                  <span class="gfx-l">🩸 Vol de vie</span>
+                  <span class="gfx-v"
+                    >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
+                    <b>{{ pctA(fighter.lifesteal) }}</b></span
+                  >
+                </div>
+                <!-- Barrière de départ : la VRAIE part des PV (après rendement décroissant), et
+                   son équivalent en PV — la note « +X % » de l'objet n'est pas cette part. -->
+                <div class="gfx">
+                  <span class="gfx-l">🔰 Barrière de départ</span>
+                  <span class="gfx-v"
+                    >{{ pctA(baseFighter.startShield) }} <i>→</i>
+                    <b>{{ pctA(fighter.startShield) }}</b>
+                    <template v-if="shieldPv > 0"> ({{ shieldPv }} PV)</template></span
+                  >
+                </div>
+                <div class="gfx total">
+                  <span class="gfx-l">Puissance de combat</span>
+                  <span class="gfx-v"
+                    >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
+                    <b>{{ fmtPow(combatPowerVal) }}</b></span
+                  >
+                </div>
+              </div>
+              <div class="gear-fx-note">
+                Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent
+                les effets (→).
+              </div>
+              <div class="gear-fx-note">
+                🔰 <b>Barrière de départ</b> : au début de chaque combat, une réserve de PV en plus
+                qui encaisse les coups avant tes PV, puis disparaît. La note « +X % » d'un objet
+                passe par un rendement décroissant (plafond 60 %) : c'est la ligne ci-dessus qui
+                compte.
               </div>
             </q-card>
           </q-dialog>
 
-          <!-- 3 stats en CERCLES sur une ligne. L'anneau = part du build (somme=100 %),
-             le chiffre au centre = la valeur réelle (jamais « pleine » à tort). -->
-          <div class="stats-circles">
-            <div v-for="s in statCircles" :key="s.key" class="statc" :class="s.key">
-              <svg class="ring" viewBox="0 0 36 36" role="img" :aria-label="`${s.name} ${s.value}`">
-                <circle class="track" cx="18" cy="18" r="15.9155" />
-                <circle
-                  class="arc"
-                  cx="18"
-                  cy="18"
-                  r="15.9155"
-                  transform="rotate(-90 18 18)"
-                  :stroke-dasharray="`${s.share} 100`"
-                />
-                <text class="rc-emo" x="18" y="13" text-anchor="middle">{{ s.emo }}</text>
-                <text class="rc-n font-display" x="18" y="26.5" text-anchor="middle">
-                  {{ s.value }}
-                </text>
-              </svg>
-              <div class="statc-nm font-display">{{ s.name }}</div>
-              <div class="statc-inf">{{ s.inf }}</div>
-            </div>
-          </div>
-          <div class="pv-line">
-            ❤️ <b class="font-display">{{ c.pv + bonusPv }} PV</b>
-            <span v-if="bonusPv" class="pv-bonus">(+{{ bonusPv }} bonus)</span>
-          </div>
-        </template>
+          <!-- Sélecteur de VOIE (ouvert depuis le cercle 🧭 en haut-gauche du carré) -->
 
-        <!-- Stats de combat : modale ouverte en touchant le perso ou sa puissance. -->
-        <q-dialog v-model="combatOpen" position="bottom">
-          <q-card class="adv-modal">
-            <button
-              class="adv-modal-x"
-              aria-label="Fermer"
-              type="button"
-              @click="combatOpen = false"
-            >
-              ✕
-            </button>
-            <div class="sec-title">Combat : base → équipé</div>
-            <div class="gear-fx">
-              <div class="gfx">
-                <span class="gfx-l">❤️ PV</span>
-                <span class="gfx-v"
-                  >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
-                >
+          <q-dialog v-model="talentsOpen" position="bottom">
+            <q-card class="adv-modal">
+              <button class="adv-modal-x" aria-label="Fermer" @click="talentsOpen = false">
+                ✕
+              </button>
+              <div class="sec-title">
+                Talents
+                <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
               </div>
-              <div class="gfx">
-                <span class="gfx-l">⚔️ Dégâts/coup</span>
-                <span class="gfx-v"
-                  >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
-                >
+              <div class="sec-hint">
+                Les talents <b>droppent à un grade</b> (rang + qualité) fixé au drop. Tu en équipes
+                <b>un seul</b>, dès le niveau {{ TALENT_SLOT_LEVEL }} (change quand tu veux) ;
+                fusionne les doublons (3 de la même rareté → 1 au-dessus).
               </div>
-              <div class="gfx">
-                <span class="gfx-l">⚡ Frappes/tour</span>
-                <span class="gfx-v"
-                  >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
-                  <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
-                >
-              </div>
-              <div class="gfx">
-                <span class="gfx-l">🎯 Crit</span>
-                <span class="gfx-v"
-                  >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
-                >
-              </div>
-              <div class="gfx">
-                <span class="gfx-l">💨 Esquive</span>
-                <span class="gfx-v"
-                  >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
-                >
-              </div>
-              <div class="gfx">
-                <span class="gfx-l">🛡️ Défense</span>
-                <span class="gfx-v"
-                  >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
-                  <b>{{ pctA(fighter.dmgReduction) }}</b></span
-                >
-              </div>
-              <div class="gfx">
-                <span class="gfx-l">🩸 Vol de vie</span>
-                <span class="gfx-v"
-                  >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
-                  <b>{{ pctA(fighter.lifesteal) }}</b></span
-                >
-              </div>
-              <!-- Barrière de départ : la VRAIE part des PV (après rendement décroissant), et
-                   son équivalent en PV — la note « +X % » de l'objet n'est pas cette part. -->
-              <div class="gfx">
-                <span class="gfx-l">🔰 Barrière de départ</span>
-                <span class="gfx-v"
-                  >{{ pctA(baseFighter.startShield) }} <i>→</i>
-                  <b>{{ pctA(fighter.startShield) }}</b>
-                  <template v-if="shieldPv > 0"> ({{ shieldPv }} PV)</template></span
-                >
-              </div>
-              <div class="gfx total">
-                <span class="gfx-l">Puissance de combat</span>
-                <span class="gfx-v"
-                  >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
-                  <b>{{ fmtPow(combatPowerVal) }}</b></span
-                >
-              </div>
-            </div>
-            <div class="gear-fx-note">
-              Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
-              effets (→).
-            </div>
-            <div class="gear-fx-note">
-              🔰 <b>Barrière de départ</b> : au début de chaque combat, une réserve de PV en plus
-              qui encaisse les coups avant tes PV, puis disparaît. La note « +X % » d'un objet passe
-              par un rendement décroissant (plafond 60 %) : c'est la ligne ci-dessus qui compte.
-            </div>
-          </q-card>
-        </q-dialog>
 
-        <!-- Sélecteur de VOIE (ouvert depuis le cercle 🧭 en haut-gauche du carré) -->
+              <div v-if="!char.row.talents.length" class="talents-empty">
+                Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
+              </div>
 
-        <q-dialog v-model="talentsOpen" position="bottom">
-          <q-card class="adv-modal">
-            <button class="adv-modal-x" aria-label="Fermer" @click="talentsOpen = false">✕</button>
-            <div class="sec-title">
-              Talents <span class="tal-slots">{{ equippedTalents.length }}/{{ talentSlots }}</span>
-            </div>
-            <div class="sec-hint">
-              Les talents <b>droppent à un grade</b> (rang + qualité) fixé au drop. Tu en équipes
-              <b>un seul</b>, dès le niveau {{ TALENT_SLOT_LEVEL }} (change quand tu veux) ;
-              fusionne les doublons (3 de la même rareté → 1 au-dessus).
-            </div>
-
-            <div v-if="!char.row.talents.length" class="talents-empty">
-              Aucun talent pour l'instant — vaincs des donjons pour en faire tomber.
-            </div>
-
-            <!-- ── LES CASES ────────────────────────────────────────────────────
+              <!-- ── LES CASES ────────────────────────────────────────────────────
                  Une case par emplacement, occupée ou vide, comme au chenil. La liste
                  seule obligeait à la parcourir pour savoir ce qu'on portait ; ici
                  l'état se lit d'un coup, et une case libérée reste VISIBLE. -->
-            <div v-if="char.row.talents.length" class="tslots">
-              <button
-                v-for="(t, i) in talentSlotsView"
-                :key="i"
-                type="button"
-                class="tslot"
-                :class="t ? 'p-' + t.rarity : 'empty'"
-                :title="
-                  t
-                    ? t.def.name + ' — toucher pour remplacer'
-                    : 'Emplacement libre — toucher pour équiper'
-                "
-                @click="talPick = i"
-              >
-                <span v-if="t" class="ts-emo">{{ t.def.icon }}</span>
-                <span v-else class="ts-plus">＋</span>
-              </button>
-            </div>
+              <div v-if="char.row.talents.length" class="tslots">
+                <button
+                  v-for="(t, i) in talentSlotsView"
+                  :key="i"
+                  type="button"
+                  class="tslot"
+                  :class="t ? 'p-' + t.rarity : 'empty'"
+                  :title="
+                    t
+                      ? t.def.name + ' — toucher pour remplacer'
+                      : 'Emplacement libre — toucher pour équiper'
+                  "
+                  @click="talPick = i"
+                >
+                  <span v-if="t" class="ts-emo">{{ t.def.icon }}</span>
+                  <span v-else class="ts-plus">＋</span>
+                </button>
+              </div>
 
-            <!-- ── CE QUE ÇA DONNE ──────────────────────────────────────────────
+              <!-- ── CE QUE ÇA DONNE ──────────────────────────────────────────────
                  La SOMME des talents équipés. Chaque talent était bien décrit, mais
                  leur total n'apparaissait nulle part — or c'est lui qui entre en combat. -->
-            <div v-if="char.row.talents.length" class="tbonus">
-              <div class="tb-h">Ce que tes talents équipés apportent</div>
-              <div v-if="talentSummary.length" class="tb-list">
-                <span v-for="(g, i) in talentSummary" :key="i" class="tb-chip">{{ g }}</span>
+              <div v-if="char.row.talents.length" class="tbonus">
+                <div class="tb-h">Ce que tes talents équipés apportent</div>
+                <div v-if="talentSummary.length" class="tb-list">
+                  <span v-for="(g, i) in talentSummary" :key="i" class="tb-chip">{{ g }}</span>
+                </div>
+                <p v-else class="tb-empty">
+                  Aucun talent équipé — les cases ci-dessus sont libres.
+                </p>
               </div>
-              <p v-else class="tb-empty">Aucun talent équipé — les cases ci-dessus sont libres.</p>
-            </div>
-            <!-- Talents conseillés (ticket 9f2c6a42) : équipe d'un coup la meilleure combi
+              <!-- Talents conseillés (ticket 9f2c6a42) : équipe d'un coup la meilleure combi
                  pour ta puissance ; ils sont encadrés en doré dans la liste (08b10b7f). -->
-            <button
-              v-if="char.row.talents.length"
-              class="voie-btn talent-reco-btn"
-              @click="doEquipRecommendedTalents"
-            >
-              🪄 Équiper les talents conseillés
-            </button>
-            <!-- 🔀 FUSION (remplace la vente auto des doublons) : 3 de la même rareté → 1 au-dessus. -->
-            <FusionPanel
-              v-if="char.row.talents.length >= FUSION_SIZE"
-              noun="talents"
-              :active="fuseMode === 'talent'"
-              :counts="fuseCounts"
-              :selected="fuseSel.length"
-              :rank="fuseRank"
-              :to="fuseRank ? fusionResultRank(fuseRank, c.level.level) : null"
-              :busy="fusing"
-              @start="startFuse('talent')"
-              @stop="stopFuse"
-              @pick="pickFuseRank"
-              @fuse="doFuse"
-            />
-            <!-- Les exemplaires identiques sont RANGÉS ensemble, du meilleur au pire, sous
+              <button
+                v-if="char.row.talents.length"
+                class="voie-btn talent-reco-btn"
+                @click="doEquipRecommendedTalents"
+              >
+                🪄 Équiper les talents conseillés
+              </button>
+              <!-- 🔀 FUSION (remplace la vente auto des doublons) : 3 de la même rareté → 1 au-dessus. -->
+              <FusionPanel
+                v-if="char.row.talents.length >= FUSION_SIZE"
+                noun="talents"
+                :active="fuseMode === 'talent'"
+                :counts="fuseCounts"
+                :selected="fuseSel.length"
+                :rank="fuseRank"
+                :to="fuseRank ? fusionResultRank(fuseRank, c.level.level) : null"
+                :busy="fusing"
+                @start="startFuse('talent')"
+                @stop="stopFuse"
+                @pick="pickFuseRank"
+                @fuse="doFuse"
+              />
+              <!-- Les exemplaires identiques sont RANGÉS ensemble, du meilleur au pire, sous
                  un titre « ×N ». -->
-            <div v-if="char.row.talents.length" class="talents-grid">
-              <template v-for="t in talentsView" :key="t.id">
-                <!-- ⚠️ REPLIÉ PAR DÉFAUT (demande de l'utilisateur) : on voit un TYPE par
+              <div v-if="char.row.talents.length" class="talents-grid">
+                <template v-for="t in talentsView" :key="t.id">
+                  <!-- ⚠️ REPLIÉ PAR DÉFAUT (demande de l'utilisateur) : on voit un TYPE par
                      ligne — son meilleur exemplaire, rang et stat compris — et on déplie
                      pour les autres. Le titre est le bouton. -->
-                <button
-                  v-if="t.groupStart && t.groupSize > 1"
-                  type="button"
-                  class="tal-group"
-                  :aria-expanded="openGroups.has(t.groupKey)"
-                  @click="toggleGroup(t.groupKey)"
-                >
-                  <span class="mf-chev" :class="{ open: openGroups.has(t.groupKey) }">▸</span>
-                  {{ t.def.icon }} {{ t.def.name }} <span class="tg-n">×{{ t.groupSize }}</span>
-                  <span class="tg-hint">{{
-                    openGroups.has(t.groupKey) ? 'replier' : `+${t.groupSize - 1} autre(s)`
-                  }}</span>
-                </button>
-                <div
-                  v-if="fuseMode === 'talent' || groupRowVisible(t, openGroups, t.equipped)"
-                  class="tal-card"
-                  :class="[
-                    'p-' + t.rarity,
-                    {
-                      eq: t.equipped,
-                      reco: recommendedTalentIds.has(t.id),
-                      fusing: fuseMode === 'talent',
-                      fsel: fuseMode === 'talent' && fuseSel.includes(t.id),
-                      fdim: fuseMode === 'talent' && !!fuseWhy(t),
-                    },
-                  ]"
-                  :style="{ '--rk': rarityRank(t.rarity).color }"
-                  :role="fuseMode === 'talent' ? 'button' : undefined"
-                  :tabindex="fuseMode === 'talent' ? 0 : undefined"
-                  :title="fuseMode === 'talent' ? fuseWhy(t) || 'Toucher pour choisir' : undefined"
-                  @click="fuseMode === 'talent' && toggleFuse(t)"
-                  @keydown.enter="fuseMode === 'talent' && toggleFuse(t)"
-                >
-                  <div class="tal-icon">
-                    <button
-                      class="tal-emo"
-                      title="Explication du talent"
-                      aria-label="Expliquer ce talent"
-                      @click="explainTalent(t)"
-                    >
-                      {{ t.def.icon }}
-                    </button>
-                  </div>
-                  <div class="tal-body">
-                    <div class="tal-name font-display">
-                      <span class="tal-nm">{{ t.def.name }}</span>
-                      <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
-                      <!-- ⚠️ RANG ET ÉTOILES ENSEMBLE (`gradeLabel`), comme les objets, les
+                  <button
+                    v-if="t.groupStart && t.groupSize > 1"
+                    type="button"
+                    class="tal-group"
+                    :aria-expanded="openGroups.has(t.groupKey)"
+                    @click="toggleGroup(t.groupKey)"
+                  >
+                    <span class="mf-chev" :class="{ open: openGroups.has(t.groupKey) }">▸</span>
+                    {{ t.def.icon }} {{ t.def.name }} <span class="tg-n">×{{ t.groupSize }}</span>
+                    <span class="tg-hint">{{
+                      openGroups.has(t.groupKey) ? 'replier' : `+${t.groupSize - 1} autre(s)`
+                    }}</span>
+                  </button>
+                  <div
+                    v-if="fuseMode === 'talent' || groupRowVisible(t, openGroups, t.equipped)"
+                    class="tal-card"
+                    :class="[
+                      'p-' + t.rarity,
+                      {
+                        eq: t.equipped,
+                        reco: recommendedTalentIds.has(t.id),
+                        fusing: fuseMode === 'talent',
+                        fsel: fuseMode === 'talent' && fuseSel.includes(t.id),
+                        fdim: fuseMode === 'talent' && !!fuseWhy(t),
+                      },
+                    ]"
+                    :style="{ '--rk': rarityRank(t.rarity).color }"
+                    :role="fuseMode === 'talent' ? 'button' : undefined"
+                    :tabindex="fuseMode === 'talent' ? 0 : undefined"
+                    :title="
+                      fuseMode === 'talent' ? fuseWhy(t) || 'Toucher pour choisir' : undefined
+                    "
+                    @click="fuseMode === 'talent' && toggleFuse(t)"
+                    @keydown.enter="fuseMode === 'talent' && toggleFuse(t)"
+                  >
+                    <div class="tal-icon">
+                      <button
+                        class="tal-emo"
+                        title="Explication du talent"
+                        aria-label="Expliquer ce talent"
+                        @click="explainTalent(t)"
+                      >
+                        {{ t.def.icon }}
+                      </button>
+                    </div>
+                    <div class="tal-body">
+                      <div class="tal-name font-display">
+                        <span class="tal-nm">{{ t.def.name }}</span>
+                        <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
+                        <!-- ⚠️ RANG ET ÉTOILES ENSEMBLE (`gradeLabel`), comme les objets, les
                            trophées et les pièces d'aventurier : le rang seul laissait deux
                            talents du même rang mais de jets opposés se lire pareil, alors que
                            le jet décide d'une part de leur valeur. -->
-                      <span
-                        class="rk-grade"
-                        :style="{ '--rk': rarityRank(t.rarity).color }"
-                        :title="'Rang ' + rarityRank(t.rarity).name"
-                        >{{ gradeLabel(t) }}</span
-                      >
-                      <span class="lvl-badge">Nv {{ t.level }}</span>
-                    </div>
-                    <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-                    <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
+                        <span
+                          class="rk-grade"
+                          :style="{ '--rk': rarityRank(t.rarity).color }"
+                          :title="'Rang ' + rarityRank(t.rarity).name"
+                          >{{ gradeLabel(t) }}</span
+                        >
+                        <span class="lvl-badge">Nv {{ t.level }}</span>
+                      </div>
+                      <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
+                      <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
                        équipé. Rien si +0 ou déjà équipé. -->
-                    <span
-                      v-if="talDeltaMap.get(t.id)"
-                      class="cmp-pill"
-                      :class="talDeltaMap.get(t.id)! > 0 ? 'up' : 'down'"
-                    >
-                      {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
-                      }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
                       <span
-                        v-if="talDeltaMap.get(t.id)! > 0 && talReplaceIcon(t.id)"
-                        class="repl-ic"
-                        title="Remplacerait ce talent"
-                        >⟵ {{ talReplaceIcon(t.id) }}</span
+                        v-if="talDeltaMap.get(t.id)"
+                        class="cmp-pill"
+                        :class="talDeltaMap.get(t.id)! > 0 ? 'up' : 'down'"
                       >
-                    </span>
-                  </div>
-                  <div v-if="fuseMode === 'talent'" class="fz-mark">
-                    {{ fuseSel.includes(t.id) ? '✓' : fuseWhy(t) }}
-                  </div>
-                  <div v-else class="tal-actions">
-                    <!-- Équiper : emplacement libre (rien à remplacer). -->
-                    <button
-                      v-if="!t.equipped && !talReplaceId(t.id) && canEquipMore"
-                      class="tal-b"
-                      @click="doEquipTalent(t.id)"
-                    >
-                      Équiper
-                    </button>
-                    <!-- Remplacer : UNIQUEMENT si le swap AUGMENTE la puissance (sinon rien —
-                       inutile de proposer un remplacement qui baisse la puissance). -->
-                    <button
-                      v-else-if="
-                        !t.equipped && talReplaceId(t.id) && (talDeltaMap.get(t.id) ?? 0) > 0
-                      "
-                      class="tal-b"
-                      title="Remplacer le talent indiqué (⟵ sur la pastille)"
-                      @click="doSwapTalent(t.id)"
-                    >
-                      Remplacer
-                    </button>
-                    <button v-if="t.equipped" class="tal-b" @click="doUnequipTalent(t.id)">
-                      Retirer
-                    </button>
-                    <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
-                      🪙 Vendre
-                    </button>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </q-card>
-        </q-dialog>
-
-        <!-- FAMILIERS — recycle les surplus → poussière d'âme, puis 🔧 grade (rang/qualité). -->
-        <q-dialog v-model="familiarsOpen" position="bottom">
-          <q-card class="adv-modal">
-            <button class="adv-modal-x" aria-label="Fermer" @click="familiarsOpen = false">
-              ✕
-            </button>
-            <div class="sec-title">
-              🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
-            </div>
-            <div class="sec-hint">
-              Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Les familiers
-              <b>droppent à un grade</b> fixé au drop ; équipe-en un ; fusionne les doublons (3 de
-              la même rareté → 1 au-dessus).
-            </div>
-
-            <div v-if="!allFamiliars.length" class="talents-empty">
-              Aucun familier — <b>clear le Labyrinthe 🗝️</b> pour en trouver un garanti.
-            </div>
-            <button
-              v-if="allFamiliars.length"
-              class="voie-btn talent-reco-btn"
-              @click="doEquipRecommendedFamiliar"
-            >
-              🪄 Équiper le familier conseillé
-            </button>
-            <FusionPanel
-              v-if="allFamiliars.length >= FUSION_SIZE"
-              noun="familiers"
-              :active="fuseMode === 'familiar'"
-              :counts="fuseCounts"
-              :selected="fuseSel.length"
-              :rank="fuseRank"
-              :to="fuseRank ? fusionResultRank(fuseRank, c.level.level) : null"
-              :busy="fusing"
-              @start="startFuse('familiar')"
-              @stop="stopFuse"
-              @pick="pickFuseRank"
-              @fuse="doFuse"
-            />
-            <!-- Les familiers d'une même race sont RANGÉS ensemble, du meilleur au pire. -->
-            <div v-if="allFamiliars.length" class="talents-grid">
-              <template v-for="f in allFamiliars" :key="f.id">
-                <button
-                  v-if="f.groupStart && f.groupSize > 1"
-                  type="button"
-                  class="tal-group"
-                  :aria-expanded="openGroups.has(f.groupKey)"
-                  @click="toggleGroup(f.groupKey)"
-                >
-                  <span class="mf-chev" :class="{ open: openGroups.has(f.groupKey) }">▸</span>
-                  {{ famSpeciesLabel(f) }} <span class="tg-n">×{{ f.groupSize }}</span>
-                  <span class="tg-hint">{{
-                    openGroups.has(f.groupKey) ? 'replier' : `+${f.groupSize - 1} autre(s)`
-                  }}</span>
-                </button>
-                <div
-                  v-if="fuseMode === 'familiar' || groupRowVisible(f, openGroups, f.equipped)"
-                  class="tal-card"
-                  :class="[
-                    'p-' + f.rarity,
-                    {
-                      eq: f.equipped,
-                      reco: recommendedFamiliarId === f.id,
-                      fusing: fuseMode === 'familiar',
-                      fsel: fuseMode === 'familiar' && fuseSel.includes(f.id),
-                      fdim: fuseMode === 'familiar' && !!fuseWhy(f),
-                    },
-                  ]"
-                  :style="{ '--rk': rarityRank(f.rarity).color }"
-                  :role="fuseMode === 'familiar' ? 'button' : undefined"
-                  :tabindex="fuseMode === 'familiar' ? 0 : undefined"
-                  :title="
-                    fuseMode === 'familiar' ? fuseWhy(f) || 'Toucher pour choisir' : undefined
-                  "
-                  @click="fuseMode === 'familiar' && toggleFuse(f)"
-                  @keydown.enter="fuseMode === 'familiar' && toggleFuse(f)"
-                >
-                  <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
-                  <div class="tal-body">
-                    <div class="tal-name font-display">
-                      <span class="tal-nm">{{ f.name }}</span>
-                      <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
-                      <span
-                        class="rk-grade"
-                        :style="{ '--rk': rarityRank(f.rarity).color }"
-                        :title="'Rang ' + rarityRank(f.rarity).name"
-                        >{{ gradeLabel(f) }}</span
-                      >
-                      <span class="lvl-badge">Nv {{ f.level }}</span>
-                      <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
+                        {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
+                        }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
+                        <span
+                          v-if="talDeltaMap.get(t.id)! > 0 && talReplaceIcon(t.id)"
+                          class="repl-ic"
+                          title="Remplacerait ce talent"
+                          >⟵ {{ talReplaceIcon(t.id) }}</span
+                        >
+                      </span>
                     </div>
-                    <div class="tal-eff">{{ itemEffects(f) }}</div>
-                    <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
-                       équipé à la place du familier actuel. Rien si +0 ou déjà équipé. -->
-                    <span
-                      v-if="famDeltaMap.get(f.id)"
-                      class="cmp-pill"
-                      :class="famDeltaMap.get(f.id)! > 0 ? 'up' : 'down'"
-                    >
-                      {{ famDeltaMap.get(f.id)! > 0 ? '+' : '−'
-                      }}{{ fmtPow(Math.abs(famDeltaMap.get(f.id)!)) }}
-                    </span>
+                    <div v-if="fuseMode === 'talent'" class="fz-mark">
+                      {{ fuseSel.includes(t.id) ? '✓' : fuseWhy(t) }}
+                    </div>
+                    <div v-else class="tal-actions">
+                      <!-- Équiper : emplacement libre (rien à remplacer). -->
+                      <button
+                        v-if="!t.equipped && !talReplaceId(t.id) && canEquipMore"
+                        class="tal-b"
+                        @click="doEquipTalent(t.id)"
+                      >
+                        Équiper
+                      </button>
+                      <!-- Remplacer : UNIQUEMENT si le swap AUGMENTE la puissance (sinon rien —
+                       inutile de proposer un remplacement qui baisse la puissance). -->
+                      <button
+                        v-else-if="
+                          !t.equipped && talReplaceId(t.id) && (talDeltaMap.get(t.id) ?? 0) > 0
+                        "
+                        class="tal-b"
+                        title="Remplacer le talent indiqué (⟵ sur la pastille)"
+                        @click="doSwapTalent(t.id)"
+                      >
+                        Remplacer
+                      </button>
+                      <button v-if="t.equipped" class="tal-b" @click="doUnequipTalent(t.id)">
+                        Retirer
+                      </button>
+                      <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
+                        🪙 Vendre
+                      </button>
+                    </div>
                   </div>
-                  <div v-if="fuseMode === 'familiar'" class="fz-mark">
-                    {{ fuseSel.includes(f.id) ? '✓' : fuseWhy(f) }}
-                  </div>
-                  <div v-else class="tal-actions">
-                    <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
-                      Retirer
-                    </button>
-                    <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                    <button
-                      v-if="!f.equipped"
-                      class="tal-b ghost"
-                      title="Céder ce familier contre de l’or"
-                      @click="doSellFamiliar(f)"
-                    >
-                      🪙{{ sellValue(f) }}
-                    </button>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </q-card>
-        </q-dialog>
+                </template>
+              </div>
+            </q-card>
+          </q-dialog>
 
-        <template v-if="persoSub === 'perso'">
-          <div class="foot">
-            <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
-            sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
-          </div>
-        </template>
-      </template>
+          <!-- FAMILIERS — recycle les surplus → poussière d'âme, puis 🔧 grade (rang/qualité). -->
+          <q-dialog v-model="familiarsOpen" position="bottom">
+            <q-card class="adv-modal">
+              <button class="adv-modal-x" aria-label="Fermer" @click="familiarsOpen = false">
+                ✕
+              </button>
+              <div class="sec-title">
+                🐾 Familiers <span class="tal-slots">{{ equippedFamiliar ? 1 : 0 }}/1</span>
+              </div>
+              <div class="sec-hint">
+                Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Les
+                familiers <b>droppent à un grade</b> fixé au drop ; équipe-en un ; fusionne les
+                doublons (3 de la même rareté → 1 au-dessus).
+              </div>
 
-      <!-- ONGLET ÉQUIPEMENT -->
-      <template v-else-if="tab === 'gear'">
-        <!-- En-tête Équipement : titre + accès Sac / Loadouts par ICÔNES
-             (plus de sous-onglets ; les stats de combat sont sur la fiche Héros). -->
-        <div class="gear-head">
-          <div class="sec-title gh-title">Équipement</div>
-          <div class="gear-icons">
-            <!-- ⚠️ Le calcul prend ~3 s sur un gros sac (il essaie toutes les voies).
-                 Sans retour immédiat, le clic paraît sans effet et on reclique. -->
-            <button
-              class="gi-b"
-              :class="{ working: optimizing }"
-              :disabled="optimizing"
-              title="Équipement conseillé — équipe automatiquement la meilleure combinaison de ton stuff (sets inclus)"
-              @click="doOptimizeGear()"
-            >
-              {{ optimizing ? '⏳' : '🪄' }}
-            </button>
-            <button class="gi-b" title="Sac — ton butin" @click="openBag()">
-              🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
-            </button>
-            <!-- 🏆 Sac à trophées : à part du butin (ils ne tombent que du boss entre amis,
-                 et « Tout vendre » ne doit jamais les fondre). Visible dès qu'on en a un. -->
-            <button
-              v-if="ownsTrophy"
-              class="gi-b"
-              title="Trophées — tes trophées de boss entre amis"
-              @click="openTrophyBag()"
-            >
-              🏆<span v-if="trophyBag.length" class="gi-badge">{{ trophyBag.length }}</span>
-            </button>
-            <!-- 🔮 Sac à reliques (demandé par l'utilisateur) : une relique porte un POUVOIR, elle
-                 se choisit sur son effet, pas sur une puissance — elle a donc son propre sac. -->
-            <button
-              v-if="relicBag.length"
-              class="gi-b"
-              title="Reliques — tes reliques en réserve"
-              @click="openRelicBag()"
-            >
-              🔮<span class="gi-badge">{{ relicBag.length }}</span>
-            </button>
-            <button
-              class="gi-b"
-              :title="
-                onExpedition
-                  ? '🧭 Indisponible en expédition'
-                  : 'Loadouts — ranger un set d\'équipement'
-              "
-              @click="loadoutOpen = true"
-            >
-              📦<span
-                v-if="setUpgradeCount"
-                class="gi-badge"
-                :aria-label="`${setUpgradeCount} set(s) en stock augmentent ta puissance`"
-                >{{ setUpgradeCount }}</span
+              <div v-if="!allFamiliars.length" class="talents-empty">
+                Aucun familier — <b>clear le Labyrinthe 🗝️</b> pour en trouver un garanti.
+              </div>
+              <button
+                v-if="allFamiliars.length"
+                class="voie-btn talent-reco-btn"
+                @click="doEquipRecommendedFamiliar"
               >
-            </button>
+                🪄 Équiper le familier conseillé
+              </button>
+              <FusionPanel
+                v-if="allFamiliars.length >= FUSION_SIZE"
+                noun="familiers"
+                :active="fuseMode === 'familiar'"
+                :counts="fuseCounts"
+                :selected="fuseSel.length"
+                :rank="fuseRank"
+                :to="fuseRank ? fusionResultRank(fuseRank, c.level.level) : null"
+                :busy="fusing"
+                @start="startFuse('familiar')"
+                @stop="stopFuse"
+                @pick="pickFuseRank"
+                @fuse="doFuse"
+              />
+              <!-- Les familiers d'une même race sont RANGÉS ensemble, du meilleur au pire. -->
+              <div v-if="allFamiliars.length" class="talents-grid">
+                <template v-for="f in allFamiliars" :key="f.id">
+                  <button
+                    v-if="f.groupStart && f.groupSize > 1"
+                    type="button"
+                    class="tal-group"
+                    :aria-expanded="openGroups.has(f.groupKey)"
+                    @click="toggleGroup(f.groupKey)"
+                  >
+                    <span class="mf-chev" :class="{ open: openGroups.has(f.groupKey) }">▸</span>
+                    {{ famSpeciesLabel(f) }} <span class="tg-n">×{{ f.groupSize }}</span>
+                    <span class="tg-hint">{{
+                      openGroups.has(f.groupKey) ? 'replier' : `+${f.groupSize - 1} autre(s)`
+                    }}</span>
+                  </button>
+                  <div
+                    v-if="fuseMode === 'familiar' || groupRowVisible(f, openGroups, f.equipped)"
+                    class="tal-card"
+                    :class="[
+                      'p-' + f.rarity,
+                      {
+                        eq: f.equipped,
+                        reco: recommendedFamiliarId === f.id,
+                        fusing: fuseMode === 'familiar',
+                        fsel: fuseMode === 'familiar' && fuseSel.includes(f.id),
+                        fdim: fuseMode === 'familiar' && !!fuseWhy(f),
+                      },
+                    ]"
+                    :style="{ '--rk': rarityRank(f.rarity).color }"
+                    :role="fuseMode === 'familiar' ? 'button' : undefined"
+                    :tabindex="fuseMode === 'familiar' ? 0 : undefined"
+                    :title="
+                      fuseMode === 'familiar' ? fuseWhy(f) || 'Toucher pour choisir' : undefined
+                    "
+                    @click="fuseMode === 'familiar' && toggleFuse(f)"
+                    @keydown.enter="fuseMode === 'familiar' && toggleFuse(f)"
+                  >
+                    <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
+                    <div class="tal-body">
+                      <div class="tal-name font-display">
+                        <span class="tal-nm">{{ f.name }}</span>
+                        <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
+                        <span
+                          class="rk-grade"
+                          :style="{ '--rk': rarityRank(f.rarity).color }"
+                          :title="'Rang ' + rarityRank(f.rarity).name"
+                          >{{ gradeLabel(f) }}</span
+                        >
+                        <span class="lvl-badge">Nv {{ f.level }}</span>
+                        <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature"
+                          >✦</span
+                        >
+                      </div>
+                      <div class="tal-eff">{{ itemEffects(f) }}</div>
+                      <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
+                       équipé à la place du familier actuel. Rien si +0 ou déjà équipé. -->
+                      <span
+                        v-if="famDeltaMap.get(f.id)"
+                        class="cmp-pill"
+                        :class="famDeltaMap.get(f.id)! > 0 ? 'up' : 'down'"
+                      >
+                        {{ famDeltaMap.get(f.id)! > 0 ? '+' : '−'
+                        }}{{ fmtPow(Math.abs(famDeltaMap.get(f.id)!)) }}
+                      </span>
+                    </div>
+                    <div v-if="fuseMode === 'familiar'" class="fz-mark">
+                      {{ fuseSel.includes(f.id) ? '✓' : fuseWhy(f) }}
+                    </div>
+                    <div v-else class="tal-actions">
+                      <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
+                        Retirer
+                      </button>
+                      <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
+                      <button
+                        v-if="!f.equipped"
+                        class="tal-b ghost"
+                        title="Céder ce familier contre de l’or"
+                        @click="doSellFamiliar(f)"
+                      >
+                        🪙{{ sellValue(f) }}
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </q-card>
+          </q-dialog>
+
+          <template v-if="persoSub === 'perso'">
+            <div class="foot">
+              <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent
+              du sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
+            </div>
+          </template>
+        </template>
+
+        <!-- ONGLET ÉQUIPEMENT -->
+        <template v-else-if="tab === 'gear'">
+          <!-- En-tête Équipement : titre + accès Sac / Loadouts par ICÔNES
+             (plus de sous-onglets ; les stats de combat sont sur la fiche Héros). -->
+          <div class="gear-head">
+            <div class="sec-title gh-title">Équipement</div>
+            <div class="gear-icons">
+              <!-- ⚠️ Le calcul prend ~3 s sur un gros sac (il essaie toutes les voies).
+                 Sans retour immédiat, le clic paraît sans effet et on reclique. -->
+              <button
+                class="gi-b"
+                :class="{ working: optimizing }"
+                :disabled="optimizing"
+                title="Équipement conseillé — équipe automatiquement la meilleure combinaison de ton stuff (sets inclus)"
+                @click="doOptimizeGear()"
+              >
+                {{ optimizing ? '⏳' : '🪄' }}
+              </button>
+              <button class="gi-b" title="Sac — ton butin" @click="openBag()">
+                🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
+              </button>
+              <!-- 🏆 Sac à trophées : à part du butin (ils ne tombent que du boss entre amis,
+                 et « Tout vendre » ne doit jamais les fondre). Visible dès qu'on en a un. -->
+              <button
+                v-if="ownsTrophy"
+                class="gi-b"
+                title="Trophées — tes trophées de boss entre amis"
+                @click="openTrophyBag()"
+              >
+                🏆<span v-if="trophyBag.length" class="gi-badge">{{ trophyBag.length }}</span>
+              </button>
+              <!-- 🔮 Sac à reliques (demandé par l'utilisateur) : une relique porte un POUVOIR, elle
+                 se choisit sur son effet, pas sur une puissance — elle a donc son propre sac. -->
+              <button
+                v-if="relicBag.length"
+                class="gi-b"
+                title="Reliques — tes reliques en réserve"
+                @click="openRelicBag()"
+              >
+                🔮<span class="gi-badge">{{ relicBag.length }}</span>
+              </button>
+              <button
+                class="gi-b"
+                :title="
+                  onExpedition
+                    ? '🧭 Indisponible en expédition'
+                    : 'Loadouts — ranger un set d\'équipement'
+                "
+                @click="loadoutOpen = true"
+              >
+                📦<span
+                  v-if="setUpgradeCount"
+                  class="gi-badge"
+                  :aria-label="`${setUpgradeCount} set(s) en stock augmentent ta puissance`"
+                  >{{ setUpgradeCount }}</span
+                >
+              </button>
+            </div>
           </div>
-        </div>
-        <div class="sec-hint">
-          Ton stuff équipé. Ton butin est dans le <b>🎒 Sac</b> (icône en haut à droite).
-        </div>
-        <div v-if="equippedSet" class="equipped-set-banner">
-          🧭 Set <b>{{ equippedSet.emoji }} {{ equippedSet.name }}</b> en cours ·
-          {{ equippedSet.count }}/{{ SET_SIZE }} pièces
-        </div>
-        <!-- UNE PIÈCE PAR LIGNE : icône à gauche, nom entier + toutes les stats au milieu,
+          <div class="sec-hint">
+            Ton stuff équipé. Ton butin est dans le <b>🎒 Sac</b> (icône en haut à droite).
+          </div>
+          <div v-if="equippedSet" class="equipped-set-banner">
+            🧭 Set <b>{{ equippedSet.emoji }} {{ equippedSet.name }}</b> en cours ·
+            {{ equippedSet.count }}/{{ SET_SIZE }} pièces
+          </div>
+          <!-- UNE PIÈCE PAR LIGNE : icône à gauche, nom entier + toutes les stats au milieu,
              « Retirer » et le badge 🎒 dans une colonne fixe à droite. La grille 2×2 coupait
              le nom dès ~16 caractères et masquait la 3ᵉ stat d'un objet Épique+. -->
-        <div class="gear">
-          <div
-            v-for="slot in SLOTS"
-            :key="slot"
-            class="slot"
-            :class="[
-              char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty',
-              { clickable: !!char.row.equipped[slot] },
-            ]"
-            :role="char.row.equipped[slot] ? 'button' : undefined"
-            :title="char.row.equipped[slot] ? 'Voir le détail' : undefined"
-            @click="char.row.equipped[slot] && (inspectItem = char.row.equipped[slot]!)"
-          >
-            <div class="slot-ico">
-              <!-- Tuile NEUTRE : le rang se lit déjà sur la barre et la pastille de la ligne. -->
-              <ItemIcon
-                v-if="char.row.equipped[slot]"
-                :item="char.row.equipped[slot]!"
-                :size="44"
-                plain
-              />
-              <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
-            </div>
-            <div class="slot-main">
-              <div class="slot-head">
-                <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
-                <span
-                  v-if="char.row.equipped[slot]?.setId"
-                  class="slot-set-corner"
-                  :title="'Pièce de set — ' + setVoieName(char.row.equipped[slot]?.setId ?? '')"
-                  >🧩</span
-                >
+          <div class="gear">
+            <div
+              v-for="slot in SLOTS"
+              :key="slot"
+              class="slot"
+              :class="[
+                char.row.equipped[slot] ? 'r-' + char.row.equipped[slot]!.rarity : 'empty',
+                { clickable: !!char.row.equipped[slot] },
+              ]"
+              :role="char.row.equipped[slot] ? 'button' : undefined"
+              :title="char.row.equipped[slot] ? 'Voir le détail' : undefined"
+              @click="char.row.equipped[slot] && (inspectItem = char.row.equipped[slot]!)"
+            >
+              <div class="slot-ico">
+                <!-- Tuile NEUTRE : le rang se lit déjà sur la barre et la pastille de la ligne. -->
+                <ItemIcon
+                  v-if="char.row.equipped[slot]"
+                  :item="char.row.equipped[slot]!"
+                  :size="44"
+                  plain
+                />
+                <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
               </div>
-              <template v-if="char.row.equipped[slot]">
-                <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-                <div class="pills">
-                  <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
-                    gradeLabel(char.row.equipped[slot]!)
-                  }}</span>
-                  <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
-                </div>
-                <div class="slot-eff">
+              <div class="slot-main">
+                <div class="slot-head">
+                  <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
                   <span
-                    v-for="(p, si) in itemStatRows(char.row.equipped[slot]!)"
-                    :key="si"
-                    class="stat-line"
-                    >{{ p.pre }}<b v-if="p.value" class="st-v">{{ p.value }}</b
-                    >{{ p.post }}</span
+                    v-if="char.row.equipped[slot]?.setId"
+                    class="slot-set-corner"
+                    :title="'Pièce de set — ' + setVoieName(char.row.equipped[slot]?.setId ?? '')"
+                    >🧩</span
                   >
                 </div>
-              </template>
-              <div v-else class="slot-vide">
-                Emplacement vide<template v-if="bagCountForSlot(slot) > 0">
-                  ·
-                  <b
-                    >{{ bagCountForSlot(slot) }}
-                    {{ slot === 'relic' ? 'en réserve 🔮' : 'au sac' }}</b
-                  ></template
-                >
-              </div>
-            </div>
-            <div v-if="char.row.equipped[slot]" class="slot-actions">
-              <button class="slot-remove" @click.stop="doUnequip(slot)">Retirer</button>
-              <!-- Badge : nb d'objets du SAC (même slot) au potentiel supérieur. Tap →
-                     filtre le sac dessus. Cercle avec le 🎒 en fond. -->
-              <button
-                v-if="betterInBagCount(slot) > 0"
-                class="slot-better"
-                :title="
-                  betterInBagCount(slot) +
-                  ' objet(s) du sac meilleur(s) que CELUI-CI, sur ton build actuel. ' +
-                  '🪄 L’équipement conseillé compare autre chose : le meilleur build POSSIBLE — ' +
-                  'un objet peut donc battre ta pièce actuelle sans figurer dans le build optimal.'
-                "
-                @click.stop="showBetterForSlot(slot)"
-              >
-                <span class="sb-n">{{ betterInBagCount(slot) }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 🏆 VITRINE DU TROPHÉE : pas une 5ᵉ tuile de la grille — un trophée se MONTRE.
-             Il ne tombe que du boss entre amis, donc on ne l'affiche qu'une fois possédé. -->
-        <div
-          v-if="ownsTrophy"
-          class="trophy-case"
-          :class="equippedTrophy ? 'r-' + equippedTrophy.rarity : 'empty'"
-        >
-          <div class="tc-plinth">
-            <div class="tc-glow" aria-hidden="true"></div>
-            <ItemIcon v-if="equippedTrophy" :item="equippedTrophy" :size="54" />
-            <span v-else class="tc-emo">🏆</span>
-          </div>
-          <div class="tc-body">
-            <div class="tc-kicker">{{ equippedTrophy ? 'Trophée exposé' : 'Vitrine' }}</div>
-            <template v-if="equippedTrophy">
-              <button
-                class="tc-name font-display"
-                title="Voir le détail"
-                @click="inspectItem = equippedTrophy"
-              >
-                {{ equippedTrophy.name }}
-              </button>
-              <div class="pills">
-                <span class="gpill" :class="'p-' + equippedTrophy.rarity">{{
-                  gradeLabel(equippedTrophy)
-                }}</span>
-                <span class="lvl-badge">Nv {{ equippedTrophy.level }}</span>
-              </div>
-              <div class="tc-stats">
-                <div v-for="(ln, si) in itemStatLines(equippedTrophy)" :key="si" class="stat-line">
-                  {{ ln }}
+                <template v-if="char.row.equipped[slot]">
+                  <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+                  <div class="pills">
+                    <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
+                      gradeLabel(char.row.equipped[slot]!)
+                    }}</span>
+                    <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
+                  </div>
+                  <div class="slot-eff">
+                    <span
+                      v-for="(p, si) in itemStatRows(char.row.equipped[slot]!)"
+                      :key="si"
+                      class="stat-line"
+                      >{{ p.pre }}<b v-if="p.value" class="st-v">{{ p.value }}</b
+                      >{{ p.post }}</span
+                    >
+                  </div>
+                </template>
+                <div v-else class="slot-vide">
+                  Emplacement vide<template v-if="bagCountForSlot(slot) > 0">
+                    ·
+                    <b
+                      >{{ bagCountForSlot(slot) }}
+                      {{ slot === 'relic' ? 'en réserve 🔮' : 'au sac' }}</b
+                    ></template
+                  >
                 </div>
               </div>
-            </template>
-            <div v-else class="tc-empty">
-              Socle vide — {{ trophyBag.length }} trophée{{ trophyBag.length > 1 ? 's' : '' }}
-              dans ton sac à trophées.
-            </div>
-            <div class="tc-actions">
-              <button class="tc-b" @click="openTrophyBag()">
-                🏆 {{ equippedTrophy ? 'Changer' : 'Exposer un trophée' }}
-              </button>
-              <button v-if="equippedTrophy" class="tc-b ghost" @click="doUnequip(TROPHY_SLOT)">
-                Retirer
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Sets d'équipement (bonus 2/4/6 pièces) — rattachés à l'équipement -->
-        <template v-if="activeSets.length">
-          <div class="sec-title">Sets</div>
-          <div
-            v-for="s in activeSets"
-            :key="s.id"
-            class="setcard"
-            :class="{ full: s.count >= SET_SIZE && s.mine }"
-          >
-            <div class="set-top">
-              <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
-              <span v-if="s.mine" class="set-mine">🧭 ta voie</span>
-              <span class="set-count font-display">{{ s.count }}/{{ SET_SIZE }}</span>
-            </div>
-            <div class="set-theme">{{ s.theme }}</div>
-            <div class="set-tiers">
-              <span
-                v-for="t in s.tiers"
-                :key="t.pieces"
-                class="set-tier"
-                :class="{ on: t.on, locked: t.locked }"
-              >
-                {{ t.pieces }} pièces : {{ t.label }}<template v-if="t.capstone"> ⭐</template>
-                <template v-if="t.locked"> 🔒 voie</template>
-              </span>
-              <!-- ⭐ SIGNATURE (v0.835) : l'effet de combat unique du set complet dans sa voie. -->
-              <span
-                v-if="s.signature"
-                class="set-tier set-sig"
-                :class="{
-                  on: s.count >= SET_SIZE && s.mine,
-                  locked: s.count >= SET_SIZE && !s.mine,
-                }"
-              >
-                ⭐ {{ s.signature.emoji }} <b>{{ s.signature.name }}</b> — {{ s.signature.desc }}
-                <template v-if="s.count >= SET_SIZE && !s.mine"> 🔒 voie</template>
-              </span>
-            </div>
-          </div>
-        </template>
-
-        <!-- TOTAL de l'équipement porté (objets + familier + trophée + bonus de set) : la
-             somme que le combat applique, via `aggregateEffects` — jamais recalculée ici. -->
-        <template v-if="gearTotal.length">
-          <div class="sec-title">Total de l'équipement</div>
-          <div class="gear-total">
-            <div class="gt-sub">Objets, familier, trophée et bonus de set réunis</div>
-            <div class="tb-list">
-              <span v-for="(g, i) in gearTotal" :key="i" class="tb-chip">{{ g }}</span>
-            </div>
-          </div>
-        </template>
-
-        <!-- Sac : MODALE ouverte par l'icône 🎒 en haut à droite (plus d'inline). -->
-        <div v-if="bagOpen" class="shop-backdrop" @click.self="bagOpen = false">
-          <div class="shop-card bag-card">
-            <div class="shop-head">
-              <div class="shop-title font-display">
-                <template v-if="bagMode === 'trophies'"
-                  >🏆 Trophées ({{ trophyBag.length }})</template
+              <div v-if="char.row.equipped[slot]" class="slot-actions">
+                <button class="slot-remove" @click.stop="doUnequip(slot)">Retirer</button>
+                <!-- Badge : nb d'objets du SAC (même slot) au potentiel supérieur. Tap →
+                     filtre le sac dessus. Cercle avec le 🎒 en fond. -->
+                <button
+                  v-if="betterInBagCount(slot) > 0"
+                  class="slot-better"
+                  :title="
+                    betterInBagCount(slot) +
+                    ' objet(s) du sac meilleur(s) que CELUI-CI, sur ton build actuel. ' +
+                    '🪄 L’équipement conseillé compare autre chose : le meilleur build POSSIBLE — ' +
+                    'un objet peut donc battre ta pièce actuelle sans figurer dans le build optimal.'
+                  "
+                  @click.stop="showBetterForSlot(slot)"
                 >
-                <template v-else-if="bagMode === 'relics'"
-                  >🔮 Reliques ({{ relicBag.length }})</template
-                >
-                <template v-else>🎒 Sac ({{ bagCount }})</template>
+                  <span class="sb-n">{{ betterInBagCount(slot) }}</span>
+                </button>
               </div>
-              <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
             </div>
-            <!-- ⚠️ Le classement du sac demande le MEILLEUR BUILD, soit ~3 s. Il rend la
+          </div>
+
+          <!-- 🏆 VITRINE DU TROPHÉE : pas une 5ᵉ tuile de la grille — un trophée se MONTRE.
+             Il ne tombe que du boss entre amis, donc on ne l'affiche qu'une fois possédé. -->
+          <div
+            v-if="ownsTrophy"
+            class="trophy-case"
+            :class="equippedTrophy ? 'r-' + equippedTrophy.rarity : 'empty'"
+          >
+            <div class="tc-plinth">
+              <div class="tc-glow" aria-hidden="true"></div>
+              <ItemIcon v-if="equippedTrophy" :item="equippedTrophy" :size="54" />
+              <span v-else class="tc-emo">🏆</span>
+            </div>
+            <div class="tc-body">
+              <div class="tc-kicker">{{ equippedTrophy ? 'Trophée exposé' : 'Vitrine' }}</div>
+              <template v-if="equippedTrophy">
+                <button
+                  class="tc-name font-display"
+                  title="Voir le détail"
+                  @click="inspectItem = equippedTrophy"
+                >
+                  {{ equippedTrophy.name }}
+                </button>
+                <div class="pills">
+                  <span class="gpill" :class="'p-' + equippedTrophy.rarity">{{
+                    gradeLabel(equippedTrophy)
+                  }}</span>
+                  <span class="lvl-badge">Nv {{ equippedTrophy.level }}</span>
+                </div>
+                <div class="tc-stats">
+                  <div
+                    v-for="(ln, si) in itemStatLines(equippedTrophy)"
+                    :key="si"
+                    class="stat-line"
+                  >
+                    {{ ln }}
+                  </div>
+                </div>
+              </template>
+              <div v-else class="tc-empty">
+                Socle vide — {{ trophyBag.length }} trophée{{ trophyBag.length > 1 ? 's' : '' }}
+                dans ton sac à trophées.
+              </div>
+              <div class="tc-actions">
+                <button class="tc-b" @click="openTrophyBag()">
+                  🏆 {{ equippedTrophy ? 'Changer' : 'Exposer un trophée' }}
+                </button>
+                <button v-if="equippedTrophy" class="tc-b ghost" @click="doUnequip(TROPHY_SLOT)">
+                  Retirer
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sets d'équipement (bonus 2/4/6 pièces) — rattachés à l'équipement -->
+          <template v-if="activeSets.length">
+            <div class="sec-title">Sets</div>
+            <div
+              v-for="s in activeSets"
+              :key="s.id"
+              class="setcard"
+              :class="{ full: s.count >= SET_SIZE && s.mine }"
+            >
+              <div class="set-top">
+                <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
+                <span v-if="s.mine" class="set-mine">🧭 ta voie</span>
+                <span class="set-count font-display">{{ s.count }}/{{ SET_SIZE }}</span>
+              </div>
+              <div class="set-theme">{{ s.theme }}</div>
+              <div class="set-tiers">
+                <span
+                  v-for="t in s.tiers"
+                  :key="t.pieces"
+                  class="set-tier"
+                  :class="{ on: t.on, locked: t.locked }"
+                >
+                  {{ t.pieces }} pièces : {{ t.label }}<template v-if="t.capstone"> ⭐</template>
+                  <template v-if="t.locked"> 🔒 voie</template>
+                </span>
+                <!-- ⭐ SIGNATURE (v0.835) : l'effet de combat unique du set complet dans sa voie. -->
+                <span
+                  v-if="s.signature"
+                  class="set-tier set-sig"
+                  :class="{
+                    on: s.count >= SET_SIZE && s.mine,
+                    locked: s.count >= SET_SIZE && !s.mine,
+                  }"
+                >
+                  ⭐ {{ s.signature.emoji }} <b>{{ s.signature.name }}</b> — {{ s.signature.desc }}
+                  <template v-if="s.count >= SET_SIZE && !s.mine"> 🔒 voie</template>
+                </span>
+              </div>
+            </div>
+          </template>
+
+          <!-- TOTAL de l'équipement porté (objets + familier + trophée + bonus de set) : la
+             somme que le combat applique, via `aggregateEffects` — jamais recalculée ici. -->
+          <template v-if="gearTotal.length">
+            <div class="sec-title">Total de l'équipement</div>
+            <div class="gear-total">
+              <div class="gt-sub">Objets, familier, trophée et bonus de set réunis</div>
+              <div class="tb-list">
+                <span v-for="(g, i) in gearTotal" :key="i" class="tb-chip">{{ g }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Sac : MODALE ouverte par l'icône 🎒 en haut à droite (plus d'inline). -->
+          <div v-if="bagOpen" class="shop-backdrop" @click.self="bagOpen = false">
+            <div class="shop-card bag-card">
+              <div class="shop-head">
+                <div class="shop-title font-display">
+                  <template v-if="bagMode === 'trophies'"
+                    >🏆 Trophées ({{ trophyBag.length }})</template
+                  >
+                  <template v-else-if="bagMode === 'relics'"
+                    >🔮 Reliques ({{ relicBag.length }})</template
+                  >
+                  <template v-else>🎒 Sac ({{ bagCount }})</template>
+                </div>
+                <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
+              </div>
+              <!-- ⚠️ Le classement du sac demande le MEILLEUR BUILD, soit ~3 s. Il rend la
                  main entre chaque voie, donc l’écran reste vivant — encore faut-il DIRE
                  qu’il travaille, sinon on croit à un gel (constaté). -->
-            <div v-if="optimizing" class="bag-ranking">
-              ⏳ Classement en cours — je compare ton sac à ton meilleur build possible…
-            </div>
-            <template
-              v-if="
-                bagMode === 'trophies'
-                  ? trophyBag.length
-                  : bagMode === 'relics'
-                    ? relicBag.length
-                    : bagCount
-              "
-            >
-              <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
-              <div v-if="betterFilterSlot && bagMode !== 'trophies'" class="better-banner">
-                🔼 Meilleurs si équipés pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
-                <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
+              <div v-if="optimizing" class="bag-ranking">
+                ⏳ Classement en cours — je compare ton sac à ton meilleur build possible…
               </div>
-              <!-- Filtre par type d'objet -->
-              <div v-if="bagMode === 'items'" class="inv-filter">
-                <button
-                  class="if-chip"
-                  :class="{ on: invFilter === 'all' && !betterFilterSlot }"
-                  @click="setInvFilter('all')"
-                >
-                  Tous
-                </button>
-                <button
-                  v-for="slot in BAG_SLOTS"
-                  :key="slot"
-                  class="if-chip"
-                  :class="{ on: invFilter === slot && !betterFilterSlot }"
-                  @click="setInvFilter(slot)"
-                >
-                  {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
-                </button>
-              </div>
-              <!-- Filtre par SET (ticket 986a50b6) — visible seulement si le sac contient des pièces de set. -->
-              <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
+              <template
+                v-if="
+                  bagMode === 'trophies'
+                    ? trophyBag.length
+                    : bagMode === 'relics'
+                      ? relicBag.length
+                      : bagCount
+                "
+              >
+                <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
+                <div v-if="betterFilterSlot && bagMode !== 'trophies'" class="better-banner">
+                  🔼 Meilleurs si équipés pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
+                  <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
+                </div>
+                <!-- Filtre par type d'objet -->
+                <div v-if="bagMode === 'items'" class="inv-filter">
+                  <button
+                    class="if-chip"
+                    :class="{ on: invFilter === 'all' && !betterFilterSlot }"
+                    @click="setInvFilter('all')"
+                  >
+                    Tous
+                  </button>
+                  <button
+                    v-for="slot in BAG_SLOTS"
+                    :key="slot"
+                    class="if-chip"
+                    :class="{ on: invFilter === slot && !betterFilterSlot }"
+                    @click="setInvFilter(slot)"
+                  >
+                    {{ SLOT_EMOJI[slot] }} {{ SLOT_LABEL[slot] }}
+                  </button>
+                </div>
+                <!-- Filtre par SET (ticket 986a50b6) — visible seulement si le sac contient des pièces de set. -->
+                <!-- Casse/vente en masse : objets qui n'améliorent pas ta puissance (pas
                ⚠️ TOUT, sans condition de puissance (décision de l'utilisateur) : décider
                quoi jeter demandait un calcul de 3 s et ralentissait l'ouverture du Sac. Le
                tri se fait au 🔒. Épargnés : familiers, porté, et les pièces que le 🪄
                retient si l'optimum est déjà connu. Respecte le filtre type. -->
-              <div v-if="bagMode !== 'trophies' && belowCount > 0" class="bulk">
-                <span class="bulk-lbl"
-                  >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à vendre
-                  <span class="bulk-note"
-                    >(tout, sauf 🔒 · familiers · porté · retenus par le 🪄)</span
-                  ></span
-                >
-                <!-- ⚠️ Les deux boutons annoncent le GAIN, jamais le compte : le nombre
+                <div v-if="bagMode !== 'trophies' && belowCount > 0" class="bulk">
+                  <span class="bulk-lbl"
+                    >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à vendre
+                    <span class="bulk-note"
+                      >(tout, sauf 🔒 · familiers · porté · retenus par le 🪄)</span
+                    ></span
+                  >
+                  <!-- ⚠️ Les deux boutons annoncent le GAIN, jamais le compte : le nombre
                      d'objets est déjà dit juste au-dessus, et c'est le montant qui
                      TRANCHE (or ou métal ?). Un bouton qui comptait les objets et
                      l'autre la ferraille laissait croire à deux barèmes différents. -->
-                <div class="bulk-btns">
-                  <button v-if="belowGold > 0" class="bulk-b" @click="doSellBelow">
-                    🪙 Tout vendre (+{{ fmtPow(belowGold) }})
-                  </button>
-                </div>
-              </div>
-              <div v-if="!filteredInventory.length" class="inv-empty-filter">
-                Aucun objet de ce type dans le sac.
-              </div>
-              <div class="inv">
-                <div
-                  v-for="it in filteredInventory"
-                  :key="it.id"
-                  class="inv-item"
-                  :class="['r-' + it.rarity, { locked: it.locked }]"
-                >
-                  <!-- Ligne 1 : visuel + nom + VERDICT de puissance (la décision) -->
-                  <div class="ii-head">
-                    <ItemIcon :item="it" :size="40" />
-                    <div class="ii-name">{{ it.name }}</div>
-                    <!-- 🏆🔮 Trophée et relique ne se comparent pas en puissance : ce sont des pouvoirs. -->
-                    <span v-if="!noPowerCmp(it)" class="ii-verdict" :class="powerVerdict(it).cls">{{
-                      powerVerdict(it).label
-                    }}</span>
+                  <div class="bulk-btns">
+                    <button v-if="belowGold > 0" class="bulk-b" @click="doSellBelow">
+                      🪙 Tout vendre (+{{ fmtPow(belowGold) }})
+                    </button>
                   </div>
-                  <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
+                </div>
+                <div v-if="!filteredInventory.length" class="inv-empty-filter">
+                  Aucun objet de ce type dans le sac.
+                </div>
+                <div class="inv">
+                  <div
+                    v-for="it in filteredInventory"
+                    :key="it.id"
+                    class="inv-item"
+                    :class="['r-' + it.rarity, { locked: it.locked }]"
+                  >
+                    <!-- Ligne 1 : visuel + nom + VERDICT de puissance (la décision) -->
+                    <div class="ii-head">
+                      <ItemIcon :item="it" :size="40" />
+                      <div class="ii-name">{{ it.name }}</div>
+                      <!-- 🏆🔮 Trophée et relique ne se comparent pas en puissance : ce sont des pouvoirs. -->
+                      <span
+                        v-if="!noPowerCmp(it)"
+                        class="ii-verdict"
+                        :class="powerVerdict(it).cls"
+                        >{{ powerVerdict(it).label }}</span
+                      >
+                    </div>
+                    <!-- Ligne 2 : méta grisée (rang · niveau · slot · qualité · set). Le rang et
                      la qualité sont CLIQUABLES → explication (ticket d094eac6). -->
-                  <div class="ii-meta">
-                    <span
-                      class="ii-rar clk"
-                      :class="'p-' + it.rarity"
-                      role="button"
-                      title="Qu’est-ce que le rang ?"
-                      @click="helpRank = true"
-                      >{{ gradeLabel(it) }}</span
-                    >
-                    <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
+                    <div class="ii-meta">
+                      <span
+                        class="ii-rar clk"
+                        :class="'p-' + it.rarity"
+                        role="button"
+                        title="Qu’est-ce que le rang ?"
+                        @click="helpRank = true"
+                        >{{ gradeLabel(it) }}</span
+                      >
+                      <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
                          plus de badge de qualité redondant à côté du rang (ticket UI). -->
-                    <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
-                    <span class="lvl-badge">Nv {{ it.level }}</span>
-                    <span v-if="it.setId" class="gpill set">🧩 Set</span>
-                  </div>
-                  <!-- Comparaison : cet objet vs l'équipé — en-tête (rang/niv/jet) puis stats
+                      <span class="ii-dot">·</span> {{ SLOT_LABEL[it.slot] }}
+                      <span class="lvl-badge">Nv {{ it.level }}</span>
+                      <span v-if="it.setId" class="gpill set">🧩 Set</span>
+                    </div>
+                    <!-- Comparaison : cet objet vs l'équipé — en-tête (rang/niv/jet) puis stats
                        une par ligne dessous (ticket lisibilité). -->
-                  <div class="ii-compare">
-                    <div class="cmp-item this">
-                      <div class="cmp-head">
-                        <span class="cmp-lbl">Cet objet</span>
-                        <span class="ii-rar" :class="'p-' + it.rarity">{{ gradeLabel(it) }}</span>
-                        <span class="lvl-badge">Nv {{ it.level }}</span>
+                    <div class="ii-compare">
+                      <div class="cmp-item this">
+                        <div class="cmp-head">
+                          <span class="cmp-lbl">Cet objet</span>
+                          <span class="ii-rar" :class="'p-' + it.rarity">{{ gradeLabel(it) }}</span>
+                          <span class="lvl-badge">Nv {{ it.level }}</span>
+                        </div>
+                        <div class="cmp-stats">
+                          <div
+                            v-for="(s, li) in itemStatCmp(it, equippedInSlot(it.slot))"
+                            :key="li"
+                            class="stat-line"
+                            :class="s.cls"
+                          >
+                            {{ s.text }}
+                          </div>
+                        </div>
                       </div>
-                      <div class="cmp-stats">
-                        <div
-                          v-for="(s, li) in itemStatCmp(it, equippedInSlot(it.slot))"
-                          :key="li"
-                          class="stat-line"
-                          :class="s.cls"
-                        >
-                          {{ s.text }}
+                      <div class="cmp-item eq">
+                        <div class="cmp-head">
+                          <span class="cmp-lbl">Équipé</span>
+                          <template v-if="equippedInSlot(it.slot)">
+                            <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
+                              gradeLabel(equippedInSlot(it.slot)!)
+                            }}</span>
+                            <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
+                          </template>
+                          <span v-else class="cmp-free">— emplacement libre</span>
+                        </div>
+                        <div v-if="equippedInSlot(it.slot)" class="cmp-stats">
+                          <div
+                            v-for="(s, li) in itemStatCmp(equippedInSlot(it.slot)!, it)"
+                            :key="li"
+                            class="stat-line eq"
+                            :class="s.cls"
+                          >
+                            {{ s.text }}
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <div class="cmp-item eq">
-                      <div class="cmp-head">
-                        <span class="cmp-lbl">Équipé</span>
-                        <template v-if="equippedInSlot(it.slot)">
-                          <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
-                            gradeLabel(equippedInSlot(it.slot)!)
-                          }}</span>
-                          <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
-                        </template>
-                        <span v-else class="cmp-free">— emplacement libre</span>
-                      </div>
-                      <div v-if="equippedInSlot(it.slot)" class="cmp-stats">
-                        <div
-                          v-for="(s, li) in itemStatCmp(equippedInSlot(it.slot)!, it)"
-                          :key="li"
-                          class="stat-line eq"
-                          :class="s.cls"
-                        >
-                          {{ s.text }}
-                        </div>
-                      </div>
+                    <!-- PUISSANCE si équipé (rang + qualité) vs l'objet équipé du même slot. -->
+                    <div v-if="!noPowerCmp(it)" class="ii-cmp2">
+                      <span class="ii-cmp2-ic">⚔️</span>
+                      <span
+                        class="ii-cmp2-chip"
+                        :class="powerIfEquip(it) >= refPower ? 'up' : 'down'"
+                      >
+                        <b>{{ fmtDelta(refPower, powerIfEquip(it)) }}</b
+                        ><i>{{
+                          inOptimum(it) ? 'retenu par ton meilleur build' : 'vs ton meilleur build'
+                        }}</i>
+                      </span>
                     </div>
-                  </div>
-                  <!-- PUISSANCE si équipé (rang + qualité) vs l'objet équipé du même slot. -->
-                  <div v-if="!noPowerCmp(it)" class="ii-cmp2">
-                    <span class="ii-cmp2-ic">⚔️</span>
-                    <span
-                      class="ii-cmp2-chip"
-                      :class="powerIfEquip(it) >= refPower ? 'up' : 'down'"
-                    >
-                      <b>{{ fmtDelta(refPower, powerIfEquip(it)) }}</b
-                      ><i>{{
-                        inOptimum(it) ? 'retenu par ton meilleur build' : 'vs ton meilleur build'
-                      }}</i>
-                    </span>
-                  </div>
-                  <!-- 🎯 Les chances RÉELLES si on la porte (pas la note brute de l'objet). -->
-                  <div v-if="chanceLinesFor(it).length" class="ii-chances">
-                    🎯 si portée : {{ chanceLinesFor(it).join(' · ') }}
-                  </div>
-                  <!-- Actions : Équiper · icônes vendre/lock -->
-                  <div class="ii-actions">
-                    <button class="equip-btn" @click="doEquip(it.id)">
-                      {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
-                    </button>
-                    <!-- 🪙 LA VENTE REVIENT (v0.890) : le recyclage en ferraille en donnait
+                    <!-- 🎯 Les chances RÉELLES si on la porte (pas la note brute de l'objet). -->
+                    <div v-if="chanceLinesFor(it).length" class="ii-chances">
+                      🎯 si portée : {{ chanceLinesFor(it).join(' · ') }}
+                    </div>
+                    <!-- Actions : Équiper · icônes vendre/lock -->
+                    <div class="ii-actions">
+                      <button class="equip-btn" @click="doEquip(it.id)">
+                        {{ equippedInSlot(it.slot) ? 'Remplacer' : 'Équiper' }}
+                      </button>
+                      <!-- 🪙 LA VENTE REVIENT (v0.890) : le recyclage en ferraille en donnait
                          bien trop. -->
-                    <button
-                      v-if="canSell(it)"
-                      class="ii-ic"
-                      :disabled="it.locked"
-                      :title="'Vendre (' + sellValue(it) + ' 🪙)'"
-                      @click="doSell(it)"
-                    >
-                      🪙
-                    </button>
-                    <button
-                      class="ii-ic lock"
-                      :class="{ on: it.locked }"
-                      :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
-                      @click="doToggleLock(it)"
-                    >
-                      {{ it.locked ? '🔒' : '🔓' }}
-                    </button>
+                      <button
+                        v-if="canSell(it)"
+                        class="ii-ic"
+                        :disabled="it.locked"
+                        :title="'Vendre (' + sellValue(it) + ' 🪙)'"
+                        @click="doSell(it)"
+                      >
+                        🪙
+                      </button>
+                      <button
+                        class="ii-ic lock"
+                        :class="{ on: it.locked }"
+                        :title="it.locked ? 'Déverrouiller' : 'Garder pour plus tard (protéger)'"
+                        @click="doToggleLock(it)"
+                      >
+                        {{ it.locked ? '🔒' : '🔓' }}
+                      </button>
+                    </div>
                   </div>
                 </div>
+              </template>
+              <div v-else-if="bagMode === 'relics'" class="empty-inv">
+                Aucune relique en réserve. Elles tombent des donjons et des boss 🔮
               </div>
-            </template>
-            <div v-else-if="bagMode === 'relics'" class="empty-inv">
-              Aucune relique en réserve. Elles tombent des donjons et des boss 🔮
+              <div v-else-if="bagMode === 'trophies'" class="empty-inv">
+                Aucun trophée en réserve — ton trophée est exposé. Abats un boss entre amis pour en
+                gagner d’autres 🐉
+              </div>
+              <div v-else class="empty-inv">
+                Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
+              </div>
             </div>
-            <div v-else-if="bagMode === 'trophies'" class="empty-inv">
-              Aucun trophée en réserve — ton trophée est exposé. Abats un boss entre amis pour en
-              gagner d’autres 🐉
-            </div>
-            <div v-else class="empty-inv">
-              Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- ONGLET EXPLORER — sous-onglet Donjons (carte) -->
-      <template v-else-if="tab === 'explore' && exploreSub === 'donjons'">
-        <div class="gear-sub">
-          <button class="gs-b on" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
-          <button class="gs-b" @click="exploreSub = 'boss'">👑 Boss de palier</button>
-        </div>
-        <!-- Arène : mode DIRECT (on lance, on regarde les vagues). Complète l'arène
-             idle de la carte, qui ne rend qu'un nombre sans rien à voir.
-             MASQUÉE pour l'instant (cf. ARENA_ENABLED) — le mini-jeu ne convainc pas
-             encore. Tout le code reste en place : repasser le drapeau à true suffit. -->
-        <button
-          v-if="ARENA_ENABLED"
-          class="expe-card arena-card"
-          :disabled="c.energy < arenaCost || busy"
-          @click="enterArena"
-        >
-          <span class="expe-emo">⚔️</span>
-          <span class="expe-main">
-            <span class="expe-name font-display">Arène</span>
-            <span class="expe-sub">
-              Des monstres surgissent tout autour de toi, vague après vague. Tu tiens jusqu'à la
-              mort. Butin tous les {{ ARENA_PLAY.dropEvery }} paliers.
-            </span>
-          </span>
-          <span class="expe-go">{{ arenaCost }} ⚡</span>
-        </button>
-        <!-- Labyrinthe (donjon à étages exploré, débloqué par la Porte du Labyrinthe) -->
-        <button
-          class="expe-card"
-          :class="{ locked: !hasLabyGate }"
-          :disabled="onExpedition"
-          @click="openLabyrinth"
-        >
-          <span class="expe-emo">{{ hasLabyGate ? '🗝️' : '🔒' }}</span>
-          <span class="expe-main">
-            <span class="expe-name font-display">Labyrinthe</span>
-            <span class="expe-sub">
-              <template v-if="!hasLabyGate">
-                🚪 Construis la <b>Porte du Labyrinthe</b> (carte) pour le débloquer
-              </template>
-              <template v-else>
-                Donjon à étages à explorer ·
-                <b>{{ char.row?.keys ?? 0 }}</b> clé{{ (char.row?.keys ?? 0) > 1 ? 's' : '' }}
-              </template>
-            </span>
-          </span>
-          <span class="expe-go">›</span>
-        </button>
-
-        <!-- Bandeau de RÉGION : où tu es + ce qui t'attend après (biomes).
-             ⚠️ C'est LUI qui plie/déplie la carte des mondes (demande de l'utilisateur) :
-             le bloc qui dit « où j'en suis » est aussi celui qu'on touche pour voir le
-             reste du monde — plus de titre « Carte des mondes » séparé qui doublonnait. -->
-        <div
-          class="region-banner"
-          :class="{ foldable: !regionView }"
-          :style="{ '--rc': curRegion.color }"
-          v-bind="foldAttrs"
-          @click="foldToggle"
-          @keydown.enter.prevent="foldToggle"
-          @keydown.space.prevent="foldToggle"
-        >
-          <div class="rb-top">
-            <span class="rb-emo">{{ curRegion.emoji }}</span>
-            <div class="rb-main">
-              <div class="rb-name font-display">{{ curRegion.name }}</div>
-              <div class="rb-blurb">{{ curRegion.blurb }}</div>
-            </div>
-            <span class="rb-prog">{{ curRegionProg.done }}/{{ curRegionProg.total }}</span>
-          </div>
-          <div class="rb-bar">
-            <span :style="{ width: (curRegionProg.done / curRegionProg.total) * 100 + '%' }" />
-          </div>
-          <div v-if="nxtRegion" class="rb-next">
-            ⟶ Prochaine région :
-            <span :style="{ color: nxtRegion.color }"
-              >{{ nxtRegion.emoji }} {{ nxtRegion.name }}</span
-            >
-          </div>
-          <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
-          <!-- Le repère du pli vit DANS le bandeau de la région courante (demande de
-               l'utilisateur) : il n'a pas de geste propre — c'est le bandeau entier qui
-               plie/déplie, un second gestionnaire basculerait deux fois. -->
-          <div v-if="!regionView" class="rb-fold">
-            <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
-            <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
-          </div>
-        </div>
-        <template v-if="!regionView && worldOpen">
-          <div class="sec-hint map-hint">
-            Touche une région pour ouvrir ses donjons.
-            <button
-              v-if="currentRegionIndex > 1"
-              class="map-toggle"
-              @click="showAllRegions = !showAllRegions"
-            >
-              {{ showAllRegions ? '➖ Réduire' : '🗺️ Voir toutes les zones' }}
-            </button>
-          </div>
-          <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
-          <div ref="worldmapEl" class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
-            <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
-              <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
-                 accessible (les deux zones ouvertes), NOIR vers une zone verrouillée. -->
-              <path
-                v-for="(seg, i) in mapGeom.segments"
-                :key="i"
-                :d="seg"
-                class="wm-seg"
-                :class="{ open: segmentOpen(i) }"
-                vector-effect="non-scaling-stroke"
-              />
-            </svg>
-            <button
-              v-for="(r, i) in visibleRegions"
-              :key="r.id"
-              class="wm-node"
-              :class="[regionState(r), { sel: selRegion.id === r.id, shatter: shatterId === r.id }]"
-              :style="{ ...nodeStyle(i), '--rc': r.color }"
-              @click="tapRegion(r)"
-            >
-              <span class="wm-disc">
-                <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo"
-                  >🔒</span
-                >
-                <span v-else class="wm-emo">{{ r.emoji }}</span>
-                <span v-if="regionState(r) === 'done'" class="wm-star">★</span>
-                <!-- Chaînes + cadenas (verrou / explosion) -->
-                <span
-                  v-if="regionState(r) === 'locked' || shatterId === r.id"
-                  class="wm-chains"
-                  aria-hidden="true"
-                >
-                  <i class="wm-link l1" />
-                  <i class="wm-link l2" />
-                  <i class="wm-lock">🔒</i>
-                </span>
-              </span>
-              <span class="wm-cap">{{ regionState(r) === 'locked' ? '???' : r.name }}</span>
-              <span class="wm-pips">
-                <i v-for="n in r.dungeonIds.length" :key="n" :class="{ on: n <= regionDone(r) }" />
-              </span>
-            </button>
           </div>
         </template>
 
-        <!-- Vue région : arbre des donjons de la région tapée (remplace la carte). -->
-        <div
-          v-if="regionView"
-          ref="drawerEl"
-          class="region-drawer"
-          :style="{ '--rc': selRegion.color }"
-        >
-          <div class="rd-head">
-            <button class="rd-back" title="Retour à la carte" @click="closeRegion">‹ Carte</button>
-            <span class="rd-emo">{{ selRegion.emoji }}</span>
-            <span class="rd-name font-display">{{ selRegion.name }}</span>
-            <span class="rd-prog"
-              >{{ regionDone(selRegion) }}/{{ selRegion.dungeonIds.length }}</span
-            >
+        <!-- ONGLET EXPLORER — sous-onglet Donjons (carte) -->
+        <template v-else-if="tab === 'explore' && exploreSub === 'donjons'">
+          <div class="gear-sub">
+            <button class="gs-b on" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
+            <button class="gs-b" @click="exploreSub = 'boss'">👑 Boss de palier</button>
           </div>
-        </div>
-        <div v-if="regionView && selectedRegionItems.length" class="dungeons">
-          <div
-            v-for="it in selectedRegionItems"
-            :key="it.key"
-            class="dgn"
-            :class="{ locked: !dungeonUnlocked(it.dungeon) }"
-            :style="{ '--rc': regionOfDungeon(it.dungeon.id)?.color ?? 'var(--line)' }"
+          <!-- Arène : mode DIRECT (on lance, on regarde les vagues). Complète l'arène
+             idle de la carte, qui ne rend qu'un nombre sans rien à voir.
+             MASQUÉE pour l'instant (cf. ARENA_ENABLED) — le mini-jeu ne convainc pas
+             encore. Tout le code reste en place : repasser le drapeau à true suffit. -->
+          <button
+            v-if="ARENA_ENABLED"
+            class="expe-card arena-card"
+            :disabled="c.energy < arenaCost || busy"
+            @click="enterArena"
           >
-            <div class="dgn-hd">
-              <span class="dgn-emo">{{
-                dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
-              }}</span>
-              <div class="dgn-hd-main">
-                <div class="dgn-name font-display">{{ it.dungeon.name }}</div>
-              </div>
-              <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
-            </div>
+            <span class="expe-emo">⚔️</span>
+            <span class="expe-main">
+              <span class="expe-name font-display">Arène</span>
+              <span class="expe-sub">
+                Des monstres surgissent tout autour de toi, vague après vague. Tu tiens jusqu'à la
+                mort. Butin tous les {{ ARENA_PLAY.dropEvery }} paliers.
+              </span>
+            </span>
+            <span class="expe-go">{{ arenaCost }} ⚡</span>
+          </button>
+          <!-- Labyrinthe (donjon à étages exploré, débloqué par la Porte du Labyrinthe) -->
+          <button
+            class="expe-card"
+            :class="{ locked: !hasLabyGate }"
+            :disabled="onExpedition"
+            @click="openLabyrinth"
+          >
+            <span class="expe-emo">{{ hasLabyGate ? '🗝️' : '🔒' }}</span>
+            <span class="expe-main">
+              <span class="expe-name font-display">Labyrinthe</span>
+              <span class="expe-sub">
+                <template v-if="!hasLabyGate">
+                  🚪 Construis la <b>Porte du Labyrinthe</b> (carte) pour le débloquer
+                </template>
+                <template v-else>
+                  Donjon à étages à explorer ·
+                  <b>{{ char.row?.keys ?? 0 }}</b> clé{{ (char.row?.keys ?? 0) > 1 ? 's' : '' }}
+                </template>
+              </span>
+            </span>
+            <span class="expe-go">›</span>
+          </button>
 
-            <div class="dgn-meta">
-              <span class="dgn-chip">⚡ {{ it.dungeon.energyCost }}</span>
-              <span class="dgn-chip">👾 {{ it.dungeon.monsterIds.length }}</span>
-              <span class="dgn-chip gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
-              <span
-                v-if="dungeonUnlocked(it.dungeon)"
-                class="dgn-chip winpct"
-                :class="powClass(it.dungeon.recoLevel)"
-                :title="powTitle(it.dungeon.recoLevel)"
-                >⚔️ {{ fmtPow(recoPow(it.dungeon.recoLevel)) }}</span
+          <!-- Bandeau de RÉGION : où tu es + ce qui t'attend après (biomes).
+             ⚠️ C'est LUI qui plie/déplie la carte des mondes (demande de l'utilisateur) :
+             le bloc qui dit « où j'en suis » est aussi celui qu'on touche pour voir le
+             reste du monde — plus de titre « Carte des mondes » séparé qui doublonnait. -->
+          <div
+            class="region-banner"
+            :class="{ foldable: !regionView }"
+            :style="{ '--rc': curRegion.color }"
+            v-bind="foldAttrs"
+            @click="foldToggle"
+            @keydown.enter.prevent="foldToggle"
+            @keydown.space.prevent="foldToggle"
+          >
+            <div class="rb-top">
+              <span class="rb-emo">{{ curRegion.emoji }}</span>
+              <div class="rb-main">
+                <div class="rb-name font-display">{{ curRegion.name }}</div>
+                <div class="rb-blurb">{{ curRegion.blurb }}</div>
+              </div>
+              <span class="rb-prog">{{ curRegionProg.done }}/{{ curRegionProg.total }}</span>
+            </div>
+            <div class="rb-bar">
+              <span :style="{ width: (curRegionProg.done / curRegionProg.total) * 100 + '%' }" />
+            </div>
+            <div v-if="nxtRegion" class="rb-next">
+              ⟶ Prochaine région :
+              <span :style="{ color: nxtRegion.color }"
+                >{{ nxtRegion.emoji }} {{ nxtRegion.name }}</span
               >
-              <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1116), comme les boss. -->
-              <span
-                v-if="dungeonUnlocked(it.dungeon)"
-                class="dgn-chip succ"
-                :class="
-                  dungeonSuccess(it.dungeon) === null
-                    ? 'none'
-                    : successTier(dungeonSuccess(it.dungeon)!)
-                "
-                title="Tes nettoyages de ce donjon, parmi tes tentatives"
-                >🎯
-                {{
-                  dungeonSuccess(it.dungeon) === null
-                    ? 'jamais tenté'
-                    : `${dungeonSuccess(it.dungeon)} % réussis (${dungeonRuns(it.dungeon)} essai${dungeonRuns(it.dungeon) > 1 ? 's' : ''})`
-                }}</span
-              >
+            </div>
+            <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
+            <!-- Le repère du pli vit DANS le bandeau de la région courante (demande de
+               l'utilisateur) : il n'a pas de geste propre — c'est le bandeau entier qui
+               plie/déplie, un second gestionnaire basculerait deux fois. -->
+            <div v-if="!regionView" class="rb-fold">
+              <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
+              <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
+            </div>
+          </div>
+          <template v-if="!regionView && worldOpen">
+            <div class="sec-hint map-hint">
+              Touche une région pour ouvrir ses donjons.
               <button
-                v-if="dungeonUnlocked(it.dungeon)"
-                class="dgn-loot"
-                aria-label="Butin possible"
-                @click.stop="openDrops(it.dungeon)"
+                v-if="currentRegionIndex > 1"
+                class="map-toggle"
+                @click="showAllRegions = !showAllRegions"
               >
-                🎁 Butin
+                {{ showAllRegions ? '➖ Réduire' : '🗺️ Voir toutes les zones' }}
               </button>
             </div>
-
-            <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
-            <div v-else class="dgn-hint dgn-lock">
-              🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
-            </div>
-
-            <button
-              v-if="dungeonUnlocked(it.dungeon)"
-              class="fight"
-              :disabled="c.energy < it.dungeon.energyCost || busy"
-              @click="explore(it.dungeon)"
-            >
-              Explorer ({{ it.dungeon.energyCost }} ⚡)
-            </button>
-            <button v-else class="fight" disabled>Verrouillé</button>
-          </div>
-
-          <!-- Portail sans fin (end-game infini) — visible sur la dernière région -->
-          <div v-if="endlessUnlocked && selRegion.id === endRegionId" class="dgn mboss endless">
-            <div class="dgn-hd">
-              <span class="dgn-emo">🌀</span>
-              <div class="dgn-hd-main">
-                <div class="mboss-eyebrow">♾️ End-game · sans fin</div>
-                <div class="dgn-name mboss-name font-display">{{ ENDLESS_NAME }}</div>
-              </div>
-              <span class="lvl-pill avail">Palier {{ nextEndlessTier }}</span>
-            </div>
-            <div class="dgn-meta">
-              <span class="dgn-chip">⚡ {{ endlessEnergy(nextEndlessTier) }}</span>
-              <span class="dgn-chip gold">+{{ endlessGold(nextEndlessTier) }} 🪙</span>
-              <span class="dgn-chip">🎁 niv. {{ endlessDropLevel(nextEndlessTier) }}</span>
-              <span class="dgn-chip">🏆 record {{ endlessBest }}</span>
-            </div>
-            <div class="dgn-hint">
-              Chaque palier est plus dur — pousse aussi loin que ton build le permet.
-            </div>
-            <button
-              class="fight mboss-fight"
-              :disabled="c.energy < endlessEnergy(nextEndlessTier) || busy"
-              @click="fightEndless()"
-            >
-              🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
-              ⚡)
-            </button>
-          </div>
-        </div>
-      </template>
-
-      <!-- ONGLET EXPLORER — sous-onglet Boss de palier -->
-      <template v-else-if="tab === 'explore' && exploreSub === 'boss'">
-        <div class="gear-sub">
-          <button class="gs-b" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
-          <button class="gs-b on" @click="exploreSub = 'boss'">👑 Boss de palier</button>
-        </div>
-        <div class="sec-title mboss-title">👑 Boss de palier</div>
-        <div class="sec-hint">
-          Un boss tous les 5 niveaux — chacun lâche une <b>pièce de set de voie</b> (au hasard parmi
-          les 8). Complète le set de <b>ta voie</b> pour débloquer son capstone. Débloqués en chaîne
-          (bats le précédent). Tenter un boss coûte des <b>pierres d’invocation 🔮</b>
-          <b>farmées dans les donjons</b>.
-        </div>
-        <button class="sets-catalog-btn" @click="setsCatalogOpen = true">
-          📖 Voir les 8 sets de voie et leurs bonus
-        </button>
-        <div v-if="hasBossAltar" class="summon-forge">
-          <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s) d’invocation</span>
-        </div>
-        <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
-        <button v-if="!hasBossAltar" class="boss-gate-cta" @click="tab = 'base'">
-          <span class="bg-emo">🔮</span>
-          <span class="bg-txt">
-            <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> dans ton village
-            pour les affronter.
-          </span>
-          <span class="bg-go">Aller à ma base →</span>
-        </button>
-        <div class="dungeons">
-          <div
-            v-for="b in visibleBosses"
-            :key="b.id"
-            class="dgn mboss"
-            :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
-          >
-            <div class="dgn-hd">
-              <!-- 🐉 L'illustration du boss (v0.1011) ; verrouillé → sa SILHOUETTE et un
-                   cadenas (on voit ce qui attend, pas qui c'est). Emoji en secours. -->
-              <span v-if="bestArt(b.name)" class="mboss-art-wrap">
-                <img
-                  :src="bestArt(b.name)!"
-                  :alt="bossUnlocked(b) ? b.name : ''"
-                  class="mboss-art"
-                  :class="{ shadow: !bossUnlocked(b) }"
-                  loading="lazy"
-                  draggable="false"
-                  @error="bestArtFailed.add(bestArt(b.name)!)"
+            <!-- Carte-monde serpentine : un nœud par région, fil énergisé, cadenas. -->
+            <div ref="worldmapEl" class="worldmap" :style="{ height: mapGeom.viewH + 'px' }">
+              <svg class="wm-svg" :viewBox="`0 0 100 ${mapGeom.viewH}`" preserveAspectRatio="none">
+                <!-- Un segment par paire de zones : BLEU si la zone d'arrivée est
+                 accessible (les deux zones ouvertes), NOIR vers une zone verrouillée. -->
+                <path
+                  v-for="(seg, i) in mapGeom.segments"
+                  :key="i"
+                  :d="seg"
+                  class="wm-seg"
+                  :class="{ open: segmentOpen(i) }"
+                  vector-effect="non-scaling-stroke"
                 />
-                <span v-if="!bossUnlocked(b)" class="mboss-lock">🔒</span>
-              </span>
-              <span v-else class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
-              <div class="dgn-hd-main">
-                <div class="dgn-name mboss-name font-display">
-                  {{ b.name }}
-                  <span v-if="isBossBeaten(b)" class="mboss-badge">⭐</span>
-                </div>
-              </div>
-              <span class="lvl-pill" :class="itemState({ boss: b })">Niv {{ b.unlockLevel }}</span>
-            </div>
-
-            <div class="dgn-meta">
-              <span
-                class="dgn-chip"
-                :class="{ short: (char.row?.summon_stones ?? 0) < summonCostFor(b) }"
-                title="Coût en pierres d’invocation · réserve dont tu disposes"
-                >🔮 {{ summonCostFor(b) }}
-                <span class="chip-reserve">/ {{ char.row.summon_stones }} en réserve</span></span
+              </svg>
+              <button
+                v-for="(r, i) in visibleRegions"
+                :key="r.id"
+                class="wm-node"
+                :class="[
+                  regionState(r),
+                  { sel: selRegion.id === r.id, shatter: shatterId === r.id },
+                ]"
+                :style="{ ...nodeStyle(i), '--rc': r.color }"
+                @click="tapRegion(r)"
               >
-              <span class="dgn-chip gold">+{{ b.gold }} 🪙</span>
-              <span
-                v-if="bossUnlocked(b)"
-                class="dgn-chip winpct"
-                :class="powClass(b.unlockLevel, true)"
-                :title="powTitle(b.unlockLevel, true)"
-                >⚔️ {{ fmtPow(recoPow(b.unlockLevel, true)) }}</span
-              >
-              <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1061), comme le Labyrinthe. -->
-              <span
-                v-if="bossUnlocked(b)"
-                class="dgn-chip succ"
-                :class="bossSuccess(b) === null ? 'none' : successTier(bossSuccess(b)!)"
-                title="Tes victoires sur ce boss, parmi tes tentatives"
-                >🎯
-                {{
-                  bossSuccess(b) === null
-                    ? 'jamais tenté'
-                    : `${bossSuccess(b)} % réussis (${bossRuns(b)} essai${bossRuns(b) > 1 ? 's' : ''})`
-                }}</span
+                <span class="wm-disc">
+                  <span v-if="regionState(r) === 'locked' && shatterId !== r.id" class="wm-lockemo"
+                    >🔒</span
+                  >
+                  <span v-else class="wm-emo">{{ r.emoji }}</span>
+                  <span v-if="regionState(r) === 'done'" class="wm-star">★</span>
+                  <!-- Chaînes + cadenas (verrou / explosion) -->
+                  <span
+                    v-if="regionState(r) === 'locked' || shatterId === r.id"
+                    class="wm-chains"
+                    aria-hidden="true"
+                  >
+                    <i class="wm-link l1" />
+                    <i class="wm-link l2" />
+                    <i class="wm-lock">🔒</i>
+                  </span>
+                </span>
+                <span class="wm-cap">{{ regionState(r) === 'locked' ? '???' : r.name }}</span>
+                <span class="wm-pips">
+                  <i
+                    v-for="n in r.dungeonIds.length"
+                    :key="n"
+                    :class="{ on: n <= regionDone(r) }"
+                  />
+                </span>
+              </button>
+            </div>
+          </template>
+
+          <!-- Vue région : arbre des donjons de la région tapée (remplace la carte). -->
+          <div
+            v-if="regionView"
+            ref="drawerEl"
+            class="region-drawer"
+            :style="{ '--rc': selRegion.color }"
+          >
+            <div class="rd-head">
+              <button class="rd-back" title="Retour à la carte" @click="closeRegion">
+                ‹ Carte
+              </button>
+              <span class="rd-emo">{{ selRegion.emoji }}</span>
+              <span class="rd-name font-display">{{ selRegion.name }}</span>
+              <span class="rd-prog"
+                >{{ regionDone(selRegion) }}/{{ selRegion.dungeonIds.length }}</span
               >
             </div>
-
-            <div class="mboss-set">
-              🧩 Butin : une <b>pièce de set de voie</b> au hasard (complète le set de ta voie)
-            </div>
-            <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
-            <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
-
-            <button
-              v-if="bossUnlocked(b)"
-              class="fight mboss-fight"
-              :disabled="(char.row?.summon_stones ?? 0) < summonCostFor(b) || busy"
-              @click="fightBoss(b)"
+          </div>
+          <div v-if="regionView && selectedRegionItems.length" class="dungeons">
+            <div
+              v-for="it in selectedRegionItems"
+              :key="it.key"
+              class="dgn"
+              :class="{ locked: !dungeonUnlocked(it.dungeon) }"
+              :style="{ '--rc': regionOfDungeon(it.dungeon.id)?.color ?? 'var(--line)' }"
             >
-              ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ summonCostFor(b) }} 🔮)
-            </button>
-            <!-- ⚠️ Rien ne doit s'intercaler entre le bouton ci-dessus et les deux v-else
+              <div class="dgn-hd">
+                <span class="dgn-emo">{{
+                  dungeonUnlocked(it.dungeon) ? it.dungeon.emoji : '🔒'
+                }}</span>
+                <div class="dgn-hd-main">
+                  <div class="dgn-name font-display">{{ it.dungeon.name }}</div>
+                </div>
+                <span class="lvl-pill" :class="itemState(it)">Niv {{ it.dungeon.recoLevel }}</span>
+              </div>
+
+              <div class="dgn-meta">
+                <span class="dgn-chip">⚡ {{ it.dungeon.energyCost }}</span>
+                <span class="dgn-chip">👾 {{ it.dungeon.monsterIds.length }}</span>
+                <span class="dgn-chip gold">+{{ dungeonGold(it.dungeon) }} 🪙</span>
+                <span
+                  v-if="dungeonUnlocked(it.dungeon)"
+                  class="dgn-chip winpct"
+                  :class="powClass(it.dungeon.recoLevel)"
+                  :title="powTitle(it.dungeon.recoLevel)"
+                  >⚔️ {{ fmtPow(recoPow(it.dungeon.recoLevel)) }}</span
+                >
+                <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1116), comme les boss. -->
+                <span
+                  v-if="dungeonUnlocked(it.dungeon)"
+                  class="dgn-chip succ"
+                  :class="
+                    dungeonSuccess(it.dungeon) === null
+                      ? 'none'
+                      : successTier(dungeonSuccess(it.dungeon)!)
+                  "
+                  title="Tes nettoyages de ce donjon, parmi tes tentatives"
+                  >🎯
+                  {{
+                    dungeonSuccess(it.dungeon) === null
+                      ? 'jamais tenté'
+                      : `${dungeonSuccess(it.dungeon)} % réussis (${dungeonRuns(it.dungeon)} essai${dungeonRuns(it.dungeon) > 1 ? 's' : ''})`
+                  }}</span
+                >
+                <button
+                  v-if="dungeonUnlocked(it.dungeon)"
+                  class="dgn-loot"
+                  aria-label="Butin possible"
+                  @click.stop="openDrops(it.dungeon)"
+                >
+                  🎁 Butin
+                </button>
+              </div>
+
+              <div v-if="dungeonUnlocked(it.dungeon)" class="dgn-hint">{{ it.dungeon.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">
+                🔒 Nettoie d’abord « {{ prevDungeonName(it.dungeon) }} » pour débloquer ce donjon.
+              </div>
+
+              <button
+                v-if="dungeonUnlocked(it.dungeon)"
+                class="fight"
+                :disabled="c.energy < it.dungeon.energyCost || busy"
+                @click="explore(it.dungeon)"
+              >
+                Explorer ({{ it.dungeon.energyCost }} ⚡)
+              </button>
+              <button v-else class="fight" disabled>Verrouillé</button>
+            </div>
+
+            <!-- Portail sans fin (end-game infini) — visible sur la dernière région -->
+            <div v-if="endlessUnlocked && selRegion.id === endRegionId" class="dgn mboss endless">
+              <div class="dgn-hd">
+                <span class="dgn-emo">🌀</span>
+                <div class="dgn-hd-main">
+                  <div class="mboss-eyebrow">♾️ End-game · sans fin</div>
+                  <div class="dgn-name mboss-name font-display">{{ ENDLESS_NAME }}</div>
+                </div>
+                <span class="lvl-pill avail">Palier {{ nextEndlessTier }}</span>
+              </div>
+              <div class="dgn-meta">
+                <span class="dgn-chip">⚡ {{ endlessEnergy(nextEndlessTier) }}</span>
+                <span class="dgn-chip gold">+{{ endlessGold(nextEndlessTier) }} 🪙</span>
+                <span class="dgn-chip">🎁 niv. {{ endlessDropLevel(nextEndlessTier) }}</span>
+                <span class="dgn-chip">🏆 record {{ endlessBest }}</span>
+              </div>
+              <div class="dgn-hint">
+                Chaque palier est plus dur — pousse aussi loin que ton build le permet.
+              </div>
+              <button
+                class="fight mboss-fight"
+                :disabled="c.energy < endlessEnergy(nextEndlessTier) || busy"
+                @click="fightEndless()"
+              >
+                🌀 Descendre au palier {{ nextEndlessTier }} ({{ endlessEnergy(nextEndlessTier) }}
+                ⚡)
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- ONGLET EXPLORER — sous-onglet Boss de palier -->
+        <template v-else-if="tab === 'explore' && exploreSub === 'boss'">
+          <div class="gear-sub">
+            <button class="gs-b" @click="exploreSub = 'donjons'">🗺️ Donjons</button>
+            <button class="gs-b on" @click="exploreSub = 'boss'">👑 Boss de palier</button>
+          </div>
+          <div class="sec-title mboss-title">👑 Boss de palier</div>
+          <div class="sec-hint">
+            Un boss tous les 5 niveaux — chacun lâche une <b>pièce de set de voie</b> (au hasard
+            parmi les 8). Complète le set de <b>ta voie</b> pour débloquer son capstone. Débloqués
+            en chaîne (bats le précédent). Tenter un boss coûte des <b>pierres d’invocation 🔮</b>
+            <b>farmées dans les donjons</b>.
+          </div>
+          <button class="sets-catalog-btn" @click="setsCatalogOpen = true">
+            📖 Voir les 8 sets de voie et leurs bonus
+          </button>
+          <div v-if="hasBossAltar" class="summon-forge">
+            <span class="sf-have">🔮 {{ char.row.summon_stones }} pierre(s) d’invocation</span>
+          </div>
+          <!-- Prérequis : les boss exigent l'Autel des boss (bâtiment) → CTA « où aller ». -->
+          <button v-if="!hasBossAltar" class="boss-gate-cta" @click="tab = 'base'">
+            <span class="bg-emo">🔮</span>
+            <span class="bg-txt">
+              <b>Les boss sont verrouillés</b> — construis l’<b>Autel des boss</b> dans ton village
+              pour les affronter.
+            </span>
+            <span class="bg-go">Aller à ma base →</span>
+          </button>
+          <div class="dungeons">
+            <div
+              v-for="b in visibleBosses"
+              :key="b.id"
+              class="dgn mboss"
+              :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
+            >
+              <div class="dgn-hd">
+                <!-- 🐉 L'illustration du boss (v0.1011) ; verrouillé → sa SILHOUETTE et un
+                   cadenas (on voit ce qui attend, pas qui c'est). Emoji en secours. -->
+                <span v-if="bestArt(b.name)" class="mboss-art-wrap">
+                  <img
+                    :src="bestArt(b.name)!"
+                    :alt="bossUnlocked(b) ? b.name : ''"
+                    class="mboss-art"
+                    :class="{ shadow: !bossUnlocked(b) }"
+                    loading="lazy"
+                    draggable="false"
+                    @error="bestArtFailed.add(bestArt(b.name)!)"
+                  />
+                  <span v-if="!bossUnlocked(b)" class="mboss-lock">🔒</span>
+                </span>
+                <span v-else class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
+                <div class="dgn-hd-main">
+                  <div class="dgn-name mboss-name font-display">
+                    {{ b.name }}
+                    <span v-if="isBossBeaten(b)" class="mboss-badge">⭐</span>
+                  </div>
+                </div>
+                <span class="lvl-pill" :class="itemState({ boss: b })"
+                  >Niv {{ b.unlockLevel }}</span
+                >
+              </div>
+
+              <div class="dgn-meta">
+                <span
+                  class="dgn-chip"
+                  :class="{ short: (char.row?.summon_stones ?? 0) < summonCostFor(b) }"
+                  title="Coût en pierres d’invocation · réserve dont tu disposes"
+                  >🔮 {{ summonCostFor(b) }}
+                  <span class="chip-reserve">/ {{ char.row.summon_stones }} en réserve</span></span
+                >
+                <span class="dgn-chip gold">+{{ b.gold }} 🪙</span>
+                <span
+                  v-if="bossUnlocked(b)"
+                  class="dgn-chip winpct"
+                  :class="powClass(b.unlockLevel, true)"
+                  :title="powTitle(b.unlockLevel, true)"
+                  >⚔️ {{ fmtPow(recoPow(b.unlockLevel, true)) }}</span
+                >
+                <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1061), comme le Labyrinthe. -->
+                <span
+                  v-if="bossUnlocked(b)"
+                  class="dgn-chip succ"
+                  :class="bossSuccess(b) === null ? 'none' : successTier(bossSuccess(b)!)"
+                  title="Tes victoires sur ce boss, parmi tes tentatives"
+                  >🎯
+                  {{
+                    bossSuccess(b) === null
+                      ? 'jamais tenté'
+                      : `${bossSuccess(b)} % réussis (${bossRuns(b)} essai${bossRuns(b) > 1 ? 's' : ''})`
+                  }}</span
+                >
+              </div>
+
+              <div class="mboss-set">
+                🧩 Butin : une <b>pièce de set de voie</b> au hasard (complète le set de ta voie)
+              </div>
+              <div v-if="bossUnlocked(b)" class="dgn-hint">{{ b.hint }}</div>
+              <div v-else class="dgn-hint dgn-lock">🔒 {{ bossLockReason(b) }}</div>
+
+              <button
+                v-if="bossUnlocked(b)"
+                class="fight mboss-fight"
+                :disabled="(char.row?.summon_stones ?? 0) < summonCostFor(b) || busy"
+                @click="fightBoss(b)"
+              >
+                ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ summonCostFor(b) }} 🔮)
+              </button>
+              <!-- ⚠️ Rien ne doit s'intercaler entre le bouton ci-dessus et les deux v-else
                  qui suivent : un élément glissé ici devenait la tête de la chaîne, et un
                  boss DÉBLOQUÉ affichait en plus le bouton grisé « 🔒 ». -->
-            <!-- Verrouillé par l'Autel manquant → bouton qui EMMÈNE le construire. -->
-            <button
-              v-else-if="!hasBossAltar"
-              class="fight mboss-fight lock-go"
-              @click="tab = 'base'"
-            >
-              🔮 Construire l’Autel →
-            </button>
-            <!-- Verrouillé par la chaîne → on dit quel boss battre d'abord (juste au-dessus). -->
-            <button v-else class="fight mboss-fight" disabled>🔒 {{ bossLockReason(b) }}</button>
-            <!-- Pas assez de pierres → on dit d'où elles viennent (nettoyage de donjon). -->
-            <div
-              v-if="bossUnlocked(b) && (char.row?.summon_stones ?? 0) < summonCostFor(b)"
-              class="dgn-hint summon-hint"
-            >
-              🔮 Nettoie des donjons pour gagner des pierres d'invocation ↓
+              <!-- Verrouillé par l'Autel manquant → bouton qui EMMÈNE le construire. -->
+              <button
+                v-else-if="!hasBossAltar"
+                class="fight mboss-fight lock-go"
+                @click="tab = 'base'"
+              >
+                🔮 Construire l’Autel →
+              </button>
+              <!-- Verrouillé par la chaîne → on dit quel boss battre d'abord (juste au-dessus). -->
+              <button v-else class="fight mboss-fight" disabled>🔒 {{ bossLockReason(b) }}</button>
+              <!-- Pas assez de pierres → on dit d'où elles viennent (nettoyage de donjon). -->
+              <div
+                v-if="bossUnlocked(b) && (char.row?.summon_stones ?? 0) < summonCostFor(b)"
+                class="dgn-hint summon-hint"
+              >
+                🔮 Nettoie des donjons pour gagner des pierres d'invocation ↓
+              </div>
             </div>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- ONGLET BASE — l'enceinte, le village et les sièges. La page vit ici en
+        <!-- ONGLET BASE — l'enceinte, le village et les sièges. La page vit ici en
            `in-tab` : elle n'affiche pas son propre en-tête, la barre de navigation
            de l'Aventure suffit. -->
-      <template v-else-if="tab === 'base'">
-        <!-- ⚠️ `hero` est PASSÉ, jamais recalculé côté Base : c'est le même combattant
+        <template v-else-if="tab === 'base'">
+          <!-- ⚠️ `hero` est PASSÉ, jamais recalculé côté Base : c'est le même combattant
              que celui qui défend réellement (cf. `ctx.hero` du tick). Deux calculs
              divergeraient au premier réglage d'équipement. -->
-        <BasePage
-          in-tab
-          :embedded="embedded"
-          :siege="siegeReport"
-          :hero="fighter"
-          :hero-profile="c.profile"
-          @siege-seen="onSiegeSeen"
-        />
-      </template>
+          <BasePage
+            in-tab
+            :embedded="embedded"
+            :siege="siegeReport"
+            :hero="fighter"
+            :hero-profile="c.profile"
+            @siege-seen="onSiegeSeen"
+          />
+        </template>
       </div>
     </template>
 
@@ -3134,6 +3170,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ResourceTray from '@/components/ResourceTray.vue';
+import ResourceGains from '@/components/ResourceGains.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import FusionPanel from '@/components/FusionPanel.vue';
 import SetPieceCmp from '@/components/SetPieceCmp.vue';
@@ -5860,27 +5897,16 @@ async function expeLifecycle() {
   if (!uid || expeBusy) return;
   expeBusy = true;
   try {
-    const msg = await char.expeTick(uid, Date.now(), activeDays7.value);
-    if (msg)
-      $q.notify({
-        type: msg.win ? 'positive' : 'warning',
-        message: '📬 Nouveau rapport d’expédition.',
-      });
+    // 📬 Le rapport tombe dans la boîte, SANS toast : il annonçait l'issue (vert = gagné)
+    // avant qu'on ait ouvert le rapport, et s'empilait avec les autres à l'ouverture.
+    await char.expeTick(uid, Date.now(), activeDays7.value);
     // Le héros rentre : il redevient disponible tout de suite.
     await char.expeSettle(uid, Date.now(), activeDays7.value);
     // ⚔️ Les groupes partis sans le héros vivent leur voyage ici aussi : rapport à l'arrivée
     // sur le camp, retour en ville.
     const partyMsgs = await char.partyTick(uid, Date.now(), activeDays7.value);
-    if (partyMsgs.length) {
-      // Un rapport déposé AVANT le retour se dit ; un retour, c'est l'encaissement qui le dit.
-      if (!partyMsgs.every((m) => isClaimable(m, Date.now())))
-        $q.notify({
-          type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-          message: '📬 Rapport de ton groupe — le butin arrivera avec lui.',
-        });
-      // Un groupe en route a changé : l'échéance de son retour se réaligne.
-      void syncPush(true);
-    }
+    // Un groupe en route a changé : l'échéance de son retour se réaligne.
+    if (partyMsgs.length) void syncPush(true);
     // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).
     for (const done of await char.expeAutoClaim(uid, Date.now())) announceClaim(done);
     // ⚠️ `progress.ready` OBLIGATOIRE pour la suite : tout ce qui suit lit le NIVEAU du héros,
@@ -5896,17 +5922,9 @@ async function expeLifecycle() {
     await attackStep(uid);
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
     const ctl = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
-    for (const message of ctl.notices) $q.notify({ type: 'positive', message });
-    const ctlMsgs = ctl.attacks;
-    if (ctlMsgs.length) {
-      $q.notify({
-        type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
-        message: ctlMsgs.every((m) => m.win)
-          ? '🏰 Attaque repoussée sur ton point de contrôle.'
-          : '🏰 Un point de contrôle a été repris par l’ennemi.',
-      });
-      void syncPush(true);
-    }
+    // 🏰 Production des lieux fixes et issue des reprises : plus de toast. Les ressources
+    // s'affichent en « +N » sous le plateau (`ResourceGains`), le récit est dans la boîte 📬.
+    if (ctl.attacks.length) void syncPush(true);
     await char.expeSyncMap(uid, Date.now(), c.value.level.level);
     await baseLifecycle();
   } finally {
@@ -5942,12 +5960,9 @@ function announceClaim(done: NonNullable<Awaited<ReturnType<typeof char.expeClai
           .join(' · ') || undefined,
       rarity: 'legendary',
     });
-  } else {
-    $q.notify({
-      type: done.win ? 'positive' : 'warning',
-      message: `🎉 ${messageTitle(done)} — de retour. Butin : ${haul || 'rien cette fois'}`,
-    });
   }
+  // Hors coffre, pas de toast : le butin monte en « +N » sous le plateau (`ResourceGains`)
+  // et le rapport, dans la boîte, dit d'où il vient.
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
   const top = drops.slice().sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity])[0];
   if (top) celebrateRareDrop({ ...top, id: '' }); // même éclat que les drops de donjon
