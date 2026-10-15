@@ -2013,20 +2013,10 @@ function repairLeft(id: DefenseId): number {
   const d = defenses.value.find((x) => x.typeId === id);
   return isRepairing(d, now.value) ? d!.repairUntil! - now.value : 0;
 }
-const doHeal = () =>
-  guard(async () => {
-    const cost = await char.healHero(uid.value, Date.now(), heroLevel.value);
-    if (cost) $q.notify({ type: 'positive', message: '⛑️ Ton héros est de nouveau sur pied.' });
-  });
+// 🔕 Soins et récolte sans toast : la fiche se met à jour et la récolte monte en « +N ».
+const doHeal = () => guard(() => char.healHero(uid.value, Date.now(), heroLevel.value));
 const doHealAdv = (ids: string[]) =>
-  guard(async () => {
-    const cost = await char.healAdventurers(uid.value, ids, Date.now(), heroLevel.value);
-    if (cost)
-      $q.notify({
-        type: 'positive',
-        message: ids.length > 1 ? '⛑️ Tes champions sont sur pied.' : '⛑️ De nouveau sur pied.',
-      });
-  });
+  guard(() => char.healAdventurers(uid.value, ids, Date.now(), heroLevel.value));
 /** RÉCOLTE des bâtiments — ce que la barre du haut affiche.
  *
  *  ⚠️ Tout est DÉRIVÉ de `buildings.ts` (`collectable`, `buildingProdPerHour`,
@@ -2076,7 +2066,6 @@ function doHarvest() {
   if (!anyReady.value) return;
   void guard(async () => {
     await char.collectFilons(uid.value, Date.now());
-    $q.notify({ type: 'positive', message: '🧺 Récolte encaissée.' });
   });
 }
 </script>

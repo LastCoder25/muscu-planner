@@ -996,11 +996,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
     lateAsk.value = false;
     await settleDueSiege();
-    // ⚠️ Retenu AVANT l’envoi : `selected` est remis à null au succès, donc le lire après
-    // coup pour choisir le message dirait toujours « camp ».
-    const isRift = !!selectedRift.value;
-    const isHarvest = !teamOnly.value;
-    const isCombined = combined.value;
     busyParty.value = true;
     try {
       const refused = combined.value
@@ -1032,20 +1027,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
           });
       if (!refused) selected.value = null;
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
-      $q.notify(
-        refused
-          ? { type: 'negative', message: `Départ impossible : ${refused}.` }
-          : {
-              type: 'positive',
-              message: isCombined
-                ? '⚔️🧭 Attaque combinée lancée : chaque groupe partira à son heure.'
-                : isHarvest
-                  ? '🧺 L’équipe part en récolte.'
-                  : isRift
-                    ? '🌀 L’équipe s’enfonce dans la faille.'
-                    : '⚔️ L’équipe marche sur le camp.',
-            },
-      );
+      // 🔕 Un départ réussi ne se confirme plus par un toast : la tuile du voyage le montre.
+      if (refused) $q.notify({ type: 'negative', message: `Départ impossible : ${refused}.` });
     } finally {
       busyParty.value = false;
     }

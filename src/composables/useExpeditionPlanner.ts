@@ -426,17 +426,12 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     const h = repoHealable.value;
     if (!uid || !h.advs.length) return repartir();
     try {
-      const paid = await char.healAdventurers(
+      await char.healAdventurers(
         uid,
         h.advs.map((a) => a.id),
         ctx.now.value,
         ctx.heroLevel.value,
       );
-      if (paid)
-        $q.notify({
-          type: 'positive',
-          message: `⛑️ ${h.advs.length} champion(s) soigné(s) · −${paid} 🪙`,
-        });
     } catch (e) {
       $q.notify({ type: 'negative', message: e instanceof Error ? e.message : String(e) });
       return;
@@ -560,9 +555,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       $q.notify({ type: 'negative', message: `Répartition impossible : ${refused}.` });
       return;
     }
-    const n = repoMoves.value.reduce((k, m) => k + m.advs.length + (m.hero ? 1 : 0), 0);
     repoMoves.value = [];
-    $q.notify({ type: 'positive', message: `🧭 ${n} en route vers leur nouvel endroit.` });
   }
 
   /** Oublie la proposition (la carte a bougé, ou un réglage a changé). */
@@ -634,14 +627,11 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     } finally {
       launching.value = null;
     }
-    $q.notify(
-      refusals.length
-        ? {
-            type: ok ? 'warning' : 'negative',
-            message: `${ok} expédition(s) lancée(s), ${refusals.length} refusée(s) : ${refusals[0]}.`,
-          }
-        : { type: 'positive', message: `🪄 ${ok} expédition(s) lancée(s).` },
-    );
+    if (refusals.length)
+      $q.notify({
+        type: ok ? 'warning' : 'negative',
+        message: `${ok} expédition(s) lancée(s), ${refusals.length} refusée(s) : ${refusals[0]}.`,
+      });
   }
 
   /** 🕳️ Combien de failles le mode « Failles » peut viser (l'écran le dit s'il n'y en a aucune). */

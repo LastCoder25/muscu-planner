@@ -2200,10 +2200,6 @@ async function shipToPoint(
       Date.now(),
       heroLevel.value,
     );
-    $q.notify({
-      type: 'positive',
-      message: `⛵ ${e.n} milicien${e.n > 1 ? 's' : ''} en mer vers ${e.label} (île ${e.island}) : arrivée dans 2 h.`,
-    });
   } catch (err) {
     $q.notify({ type: 'negative', message: (err as Error).message });
   } finally {
@@ -2217,10 +2213,6 @@ async function shipMilitiaFrom(e: { island: number; n: number }) {
   archBusy.value = true;
   try {
     await char.shipIslandMilitia(uid, e.island, e.n, Date.now(), heroLevel.value);
-    $q.notify({
-      type: 'positive',
-      message: `⛵ ${e.n} milicien${e.n > 1 ? 's' : ''} en mer : arrivée dans 2 h.`,
-    });
   } catch (err) {
     $q.notify({ type: 'negative', message: (err as Error).message });
   } finally {
@@ -2307,13 +2299,8 @@ async function confirmCross(pick: { hero: boolean; ids: string[]; militiaPlan?: 
   try {
     if (pick.hero) {
       await char.crossIsland(uid, a.to, Date.now(), pick.ids, pick.militiaPlan);
-      $q.notify({ type: 'positive', message: `⛵ Traversée réservée vers l'île ${a.to}` });
     } else {
       await char.sailChampions(uid, a.from, a.to, pick.ids, Date.now());
-      $q.notify({
-        type: 'positive',
-        message: `⛵ ${pick.ids.length} champion${pick.ids.length > 1 ? 's naviguent' : ' navigue'} vers l'île ${a.to}`,
-      });
     }
     crossOpen.value = false;
   } catch (e) {
@@ -3248,11 +3235,7 @@ async function sendHeroTo(id: string | undefined) {
   ctlBusy.value = true;
   try {
     const why = await heroToPost(uid, id);
-    $q.notify(
-      why
-        ? { type: 'warning', message: `Le héros ne part pas : ${why}.` }
-        : { type: 'positive', message: '🦸 Ton héros part tenir le lieu.' },
-    );
+    if (why) $q.notify({ type: 'warning', message: `Le héros ne part pas : ${why}.` });
     if (!why && quickId.value === id) quickId.value = null;
   } finally {
     ctlBusy.value = false;
@@ -3266,7 +3249,6 @@ async function recallHero() {
   ctlBusy.value = true;
   try {
     await char.recallHeroFromPost(uid, Date.now());
-    $q.notify({ type: 'positive', message: '🦸 Ton héros rentre à la base.' });
   } finally {
     ctlBusy.value = false;
   }
@@ -3609,13 +3591,7 @@ async function swapCtl(r: { inId: string; fromId: string | null; name: string; m
       heroLevel.value,
     );
     if (why) $q.notify({ type: 'warning', message: `Échange impossible : ${why}` });
-    else {
-      ctlRecallSel.value = [];
-      $q.notify({
-        type: 'positive',
-        message: `⇄ ${r.name} remplace ${out.name} — arrivée dans ${formatDurationMin(r.min)}`,
-      });
-    }
+    else ctlRecallSel.value = [];
   } finally {
     ctlBusy.value = false;
   }
@@ -3694,13 +3670,7 @@ async function transferCtl(toId: string) {
       heroLevel.value,
     );
     if (why) $q.notify({ type: 'warning', message: `Transfert impossible : ${why}` });
-    else {
-      ctlRecallSel.value = [];
-      $q.notify({
-        type: 'positive',
-        message: `⇄ En route vers ${t.label} — arrivée dans ${formatDurationMin(t.min)}`,
-      });
-    }
+    else ctlRecallSel.value = [];
   } finally {
     ctlBusy.value = false;
   }
@@ -3773,13 +3743,8 @@ async function releaseCtl() {
   );
   ctlBusy.value = true;
   try {
-    if (turning.length) {
+    if (turning.length)
       await char.releaseControlChampions(uid, p.id, turning, Date.now(), heroLevel.value);
-      $q.notify({
-        type: 'positive',
-        message: `🔙 ${turning.length} renfort${turning.length > 1 ? 's font' : ' fait'} demi-tour.`,
-      });
-    }
     if (onPoint.length && !wholeGarrison)
       await char.releaseControlChampions(uid, p.id, onPoint, Date.now(), heroLevel.value);
     ctlRecallSel.value = [];
@@ -3925,14 +3890,7 @@ async function doPlaceWard(id: string) {
   busyWard.value = true;
   try {
     const refused = await char.placeControlWard(uid, p.id, id, Date.now());
-    $q.notify(
-      refused
-        ? { type: 'negative', message: `Impossible : ${refused}.` }
-        : {
-            type: 'positive',
-            message: `${SUPPLIES[id].emoji} ${SUPPLIES[id].name} posée : troupe ennemie −${Math.round(WARD_CUT[id] * 100)} % pendant 24 h.`,
-          },
-    );
+    if (refused) $q.notify({ type: 'negative', message: `Impossible : ${refused}.` });
   } finally {
     busyWard.value = false;
   }
@@ -3948,11 +3906,7 @@ async function doSeal() {
   busySeal.value = true;
   try {
     const refused = await char.sealRiftPoi(uid, p.id);
-    $q.notify(
-      refused
-        ? { type: 'negative', message: `Sceau impossible : ${refused}.` }
-        : { type: 'positive', message: '🧿 La faille est scellée : 24 h de répit.' },
-    );
+    if (refused) $q.notify({ type: 'negative', message: `Sceau impossible : ${refused}.` });
   } finally {
     busySeal.value = false;
   }
@@ -5311,10 +5265,6 @@ function boostTrip(key: string, id: BoostId) {
           );
           if (next && focusTrip.value === key) focusTrip.value = next.key;
         }
-        $q.notify({
-          type: 'positive',
-          message: `⚡ ${formatDuration(choice.gainMs)} de gagnées.`,
-        });
       }
     } finally {
       boostBusy.value = false;
@@ -5346,7 +5296,6 @@ async function confirmRecall() {
   try {
     const why = await char.recallTrip(uid, ask.target, Date.now());
     if (why) $q.notify({ type: 'warning', message: why });
-    else $q.notify({ type: 'positive', message: `🔙 ${ask.info.label} fait demi-tour.` });
     recallAsk.value = null;
   } finally {
     recallBusy.value = false;
@@ -5396,12 +5345,6 @@ async function quickSend() {
       if (why) return fail(why);
       sent += ids.length;
     }
-    $q.notify({
-      type: 'positive',
-      message: `➕ ${sent} renfort${sent > 1 ? 's' : ''} en route${
-        quickSelHold.value ? ` — tenue prévue ${quickSelHold.value.pct} %` : ''
-      }`,
-    });
     quickId.value = null;
   } finally {
     ctlBusy.value = false;
@@ -5541,8 +5484,6 @@ function baseLegMin(
 async function sendFromBase(id: string, champIds: string[], militia: number, hero = false) {
   const uid = auth.user?.id;
   if (!uid || ctlBusy.value) return;
-  const label = baseTargets.value.find((t) => t.id === id)?.label ?? 'ce lieu';
-  const min = baseLegMin(id, champIds, militia, hero);
   ctlBusy.value = true;
   try {
     // 🦸 Le héros d'abord : ses 2 places sont celles que `baseSendBlocker` lui a comptées.
@@ -5575,10 +5516,6 @@ async function sendFromBase(id: string, champIds: string[], militia: number, her
       }
     }
     baseOpen.value = false;
-    $q.notify({
-      type: 'positive',
-      message: `⇄ En route vers ${label} — arrivée dans ${formatDurationMin(min)}`,
-    });
   } finally {
     ctlBusy.value = false;
   }
@@ -6174,7 +6111,6 @@ async function send() {
   try {
     await char.expeSend(uid, p, fighter.value, Date.now(), progressionLevel.value);
     selected.value = null;
-    $q.notify({ type: 'positive', message: '🧭 Héros en route !' });
   } catch (e) {
     $q.notify({ type: 'warning', message: e instanceof Error ? e.message : 'Échec de l’envoi.' });
   }
