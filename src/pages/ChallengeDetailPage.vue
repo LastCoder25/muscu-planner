@@ -403,6 +403,12 @@
         <!-- Calendrier -->
         <div class="sec-h">Calendrier</div>
         <div class="cal" :class="{ week: weekCal }">
+          <!-- Rangé par semaine (lundi → dimanche) : un défi lancé un mercredi laisse les
+               deux premières cases vides, chaque colonne reste un jour de la semaine. -->
+          <template v-if="weekCal">
+            <span v-for="(w, i) in WEEK_DAYS" :key="'h' + i" class="wd">{{ w }}</span>
+            <span v-for="n in weekPad" :key="'p' + n" class="cell pad" aria-hidden="true" />
+          </template>
           <div v-for="(t, d) in ch.daily_targets" :key="d" class="cell" :class="dayState(d)">
             <span class="c-d">J{{ d + 1 }}</span>
             <!-- Jour passé/en cours (hors repos) → fait/cible « x/y » ; jour à venir → la
@@ -506,7 +512,7 @@ import { useChallengesStore } from '@/stores/challenges';
 import { useCardioStore } from '@/stores/cardio';
 import { useAuthStore } from '@/stores/auth';
 import { useFriendsStore } from '@/stores/friends';
-import { startLabel } from '@/lib/startDate';
+import { mondayOffset, startLabel } from '@/lib/startDate';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
@@ -567,6 +573,9 @@ const isCardioOuting = computed(
 // Seules les vraies sorties cardio restent en minutes/km (isCardioOuting → saisie de sortie).
 // Sortie cardio d'un mois ou plus : calendrier en semaines (7 cases par ligne).
 const weekCal = computed(() => isCardioOuting.value && (ch.value?.duration_days ?? 0) >= 28);
+const WEEK_DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+// Cases vides avant J1 : la colonne de chaque case est son jour de la semaine.
+const weekPad = computed(() => (ch.value ? mondayOffset(ch.value.start_date) : 0));
 const isGainageTime = computed(() => isTime.value && !isCardioOuting.value);
 // ⚠️ L'unité vient de la LIB : cette copie écrivait « sec » en dur sur un défi en
 // `time`, donc « 25 sec » sur une marche de 25 MINUTES (cf. `challengeUnitLabel`).
@@ -2118,6 +2127,16 @@ onBeforeUnmount(() => {
   }
   .c-xp {
     font-size: 8px;
+  }
+  .wd {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--dim);
+  }
+  .cell.pad {
+    border: none;
+    background: none;
   }
 }
 .cell {

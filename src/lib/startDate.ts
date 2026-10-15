@@ -135,3 +135,12 @@ export function daysAgoLabel(dateIso: string, todayIso: string): string {
   const ans = Math.floor(mois / 12);
   return `il y a ${ans} an${ans > 1 ? 's' : ''}`;
 }
+
+/** Cases vides avant le 1er jour d'un calendrier rangé du LUNDI au dimanche : 0 pour un
+ *  lundi, 2 pour un mercredi, 6 pour un dimanche. Lu en UTC explicite, comme le reste du
+ *  module (un aller-retour local↔UTC décalerait tout le calendrier d'une colonne). */
+export function mondayOffset(iso: string): number {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return 0;
+  return (d.getUTCDay() + 6) % 7;
+}
