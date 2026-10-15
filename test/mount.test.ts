@@ -906,7 +906,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const r = advRank(adv);
     let out = '';
     await mountIt(AdvPickTile, { adv, on: false }, ROW, undefined, '/', (h) => (out = h));
-    expect(out).toContain(`class="ca-rk-name">${r.name}<`);
+    expect(out).toContain(`class="ca-rk-name">rang ${r.name}<`);
     expect(out).toContain(`class="ca-rk-star">${r.star}★<`);
   }, 30_000);
 
@@ -1844,8 +1844,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // ⚠️ ON LIT LA PASTILLE ELLE-MÊME, pas « le mot est quelque part dans la page » : une
     // première version cherchait le nom n'importe où et passait au VERT alors que la
     // pastille était retirée — le mot apparaît aussi dans le `title` et le sous-titre.
-    const pastilles = [...out.matchAll(/class="ap-rar[^"]*"[^>]*>([^<]*)</g)].map((m) =>
-      m[1]!.trim(),
+    const pastilles = [...out.matchAll(/class="ap-rar font-display"[^>]*>([\s\S]*?)<\/div>/g)].map(
+      (m) =>
+        m[1]!
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
     );
     const champs = (ROW.adventurers as Parameters<typeof advGradeBadge>[0][]).filter(
       (a) => a.championId,
@@ -1853,7 +1857,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(pastilles).toHaveLength(ROW.adventurers.length);
     // ⚠️ EN LETTRE (S / A, refonte 2026-09-21), jamais en rang : un champion porte les
     // DEUX échelles, et les nommer pareil faisait lire « Or » à côté de « Bronze ★2 ».
-    for (const a of champs) expect(pastilles).toContain(advGradeBadge(a).label);
+    // …et la pastille dit QUE c'est une rareté (« rareté GOLD »), pour ne pas se lire comme un rang.
+    for (const a of champs) expect(pastilles).toContain('rareté ' + advGradeBadge(a).label);
   }, 30_000);
 
   it('🎰 GachaReveal se monte, et respecte prefers-reduced-motion', async () => {
@@ -2509,7 +2514,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(stockHtml).toMatch(/⬆️ Ascension <span[^>]*>0</);
     // Le séparateur dit le NOM de la rareté (B s'affiche SILVER), jamais le code brut.
     const { GRADE_LABEL: GL } = await import('@/data/champions');
-    expect(stockHtml).toMatch(new RegExp(`class="adv-rname[^"]*">${GL.B}<`));
+    expect(stockHtml).toMatch(new RegExp(`class="adv-rname[^"]*">Rareté ${GL.B}<`));
     // 📊 v0.1129 : la tuile porte le rang de la pièce et son avancement vers l'étoile
     // suivante (niveau 3 d'une Bronze = début de ★2, donc 0 %).
     expect(stockHtml).toContain('role="progressbar"');
@@ -2658,7 +2663,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // Un en-tête par lettre, et le compteur de chacun rendu à l'écran.
     expect(championGroups(advs).some((g) => g.owned > 0)).toBe(true);
     for (const g of championGroups(advs)) {
-      expect(out).toContain(`>${GRADE_LABEL[g.grade]}<`);
+      expect(out).toContain(`>Rareté ${GRADE_LABEL[g.grade]}<`);
       expect(out).toContain(g.owned + '/' + g.total);
     }
     expect(out.match(/class="cc-tile/g)?.length).toBe(CHAMPIONS.length);

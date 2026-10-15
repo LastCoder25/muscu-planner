@@ -14,9 +14,11 @@
         :title="r.title"
         @click="interactive && emit('pick', r.id)"
         @keyup.enter="interactive && emit('pick', r.id)"
-        ><span class="tb-ico"
-          ><RuneIcon v-if="r.id === 'runes'" /><template v-else>{{ r.ico }}</template></span
-        >{{ compactNumber(r.value) }}</span
+        ><span class="tb-top"
+          ><span class="tb-ico"
+            ><RuneIcon v-if="r.id === 'runes'" /><template v-else>{{ r.ico }}</template></span
+          >{{ compactNumber(r.value) }}</span
+        ><span class="tb-name">{{ r.name }}</span></span
       >
     </template>
   </div>
@@ -46,6 +48,8 @@ const fr = (n: number) => n.toLocaleString('fr-FR');
 
 interface Chip {
   id: ResourceId | 'runes';
+  /** Nom court affiché sous le pictogramme (le pictogramme seul ne se lit pas). */
+  name: string;
   ico: string;
   cls: string;
   value: number;
@@ -60,6 +64,7 @@ const chips = computed<Chip[]>(() => {
   return [
     {
       id: 'energy',
+      name: 'Énergie',
       ico: '⚡',
       cls: props.energy < 0 ? 'energy deficit' : 'energy',
       value: props.energy,
@@ -68,6 +73,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'mana',
+      name: 'Mana',
       ico: '💠',
       cls: 'mana',
       value: row.mana,
@@ -76,6 +82,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'gold',
+      name: 'Or',
       ico: '🪙',
       cls: 'gold',
       value: row.gold,
@@ -84,6 +91,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'summon',
+      name: 'Invoc.',
       ico: '🔮',
       cls: 'summon',
       value: row.summon_stones,
@@ -92,6 +100,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'keys',
+      name: 'Clés',
       ico: '🗝️',
       cls: 'keys',
       value: row.keys,
@@ -100,6 +109,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'sealsChamp',
+      name: 'Sceaux',
       ico: '🔱',
       cls: 'seals',
       value: sc.total,
@@ -108,6 +118,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'sealsGear',
+      name: 'Sceaux obj.',
       ico: '⚜️',
       cls: 'seals seals-gear',
       value: sg.total,
@@ -116,6 +127,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'tickets',
+      name: 'Tickets',
       ico: '🎟️',
       cls: 'tickets',
       value: row.gacha_tickets,
@@ -124,6 +136,7 @@ const chips = computed<Chip[]>(() => {
     },
     {
       id: 'runes',
+      name: 'Runes',
       ico: '',
       cls: 'runes',
       value: row.runes.runes,
@@ -140,31 +153,24 @@ const shown = computed(() =>
 </script>
 
 <style scoped>
-/* ⚠️ LES RESSOURCES SUR UNE SEULE LIGNE (demandé) : le plateau ne passe JAMAIS à la ligne.
-   Les nombres sont courts (`compactNumber`), la valeur exacte vit dans l'infobulle. Filet de
-   sécurité : si tout ne tient pas (Z Fold plié), la rangée DÉFILE sur le côté. */
+/* Chaque ressource porte son NOM sous le pictogramme ; avec ~9 puces le plateau passe sur deux
+   lignes à 344 px (plus de défilement latéral caché). Nombres courts (`compactNumber`). */
 .tb-tray {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: nowrap;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 22px;
   padding: 4px 12px;
-}
-.tb-tray::-webkit-scrollbar {
-  display: none;
 }
 /* ⚡ 💠 sur la ligne du pseudo : la pastille ne prend que sa place. */
 .tb-tray.tb-main {
   flex: 0 0 auto;
   width: auto;
-  overflow: visible;
 }
 @media (max-width: 420px) {
   .tb-tray {
@@ -179,14 +185,27 @@ const shown = computed(() =>
    même ligne de base selon la police du téléphone (⚜️ et 🔱 décrochaient de la rangée). */
 .tb-r {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   line-height: 1;
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+}
+.tb-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+/* Le nom : petit mais lisible, dans la couleur de la ressource. */
+.tb-name {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.85;
+  letter-spacing: 0.01em;
 }
 .tb-ico {
   display: inline-flex;

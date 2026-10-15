@@ -1,7 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { ADV_SCHEDULE, unlocksAtLevel, upcomingUnlocks } from '@/lib/advUnlocks';
+import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 
 describe('advUnlocks — calendrier des déblocages', () => {
+  it('annonce encore quelque chose après le niveau 71, calé sur le rang de héros', () => {
+    const late = ADV_SCHEDULE.filter((u) => u.level > 71);
+    expect(late.length).toBeGreaterThan(0);
+    for (const u of ADV_SCHEDULE.filter((x) => x.kind === 'rank')) {
+      const c = characterRank(u.level);
+      expect(c.star, 'toujours ★1 : début de rang').toBe(1);
+      expect(characterRank(u.level - 1).rankIndex).toBe(c.rankIndex - 1);
+      expect(u.title).toContain(CHARACTER_RANKS[c.rankIndex]!.name);
+    }
+    expect(upcomingUnlocks(72, 1)[0]?.kind).toBe('rank');
+  });
+
   it('le calendrier est trié par niveau croissant', () => {
     for (let i = 1; i < ADV_SCHEDULE.length; i++)
       expect(ADV_SCHEDULE[i]!.level).toBeGreaterThanOrEqual(ADV_SCHEDULE[i - 1]!.level);

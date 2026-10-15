@@ -39,6 +39,7 @@ import {
   rollGearGrade,
   apexRate,
   gachaOdds,
+  effectiveRates,
   pullMany,
   multiPullCost,
   nextGacha,
@@ -501,6 +502,31 @@ describe('📊 CE QUE L’ÉCRAN DIT DES CHANCES (v0.966)', () => {
   it('la chance du S SUIT le pity majeur', () => {
     expect(gachaOdds({ sinceTop: 0, sinceFloor: 0 }).topPct).toBeCloseTo(0.6, 9);
     expect(gachaOdds({ sinceTop: GACHA.hardPity - 1, sinceFloor: 0 }).topPct).toBe(100);
+  });
+});
+
+describe('📈 TAUX EFFECTIFS (garanties comprises)', () => {
+  it('le A effectif dépasse son taux de base, et colle à une simulation de pullChampion', () => {
+    const eff = effectiveRates();
+    expect(eff.A, 'la garantie relève nettement le A').toBeGreaterThan(GACHA_RATES.A * 100 + 3);
+    expect(eff.S).toBeGreaterThanOrEqual(GACHA_RATES.S * 100);
+    const rng = mulberry32(2024);
+    let pity = emptyPity();
+    const N = 300_000;
+    let a = 0;
+    let s = 0;
+    for (let i = 0; i < N; i++) {
+      const r = pullChampion(rng, pity, new Set<string>());
+      pity = r.pity;
+      if (r.grade === 'A') a++;
+      else if (r.grade === 'S') s++;
+    }
+    expect(Math.abs((a / N) * 100 - eff.A)).toBeLessThan(0.3);
+    expect(Math.abs((s / N) * 100 - eff.S)).toBeLessThan(0.15);
+  });
+
+  it('gachaOdds les expose', () => {
+    expect(gachaOdds(emptyPity()).effective.A).toBeCloseTo(effectiveRates().A, 9);
   });
 });
 

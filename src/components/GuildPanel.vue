@@ -98,6 +98,10 @@
               {{ ADV_STATUS_LABEL[s] }} <span class="g-tab-n">{{ rosterCounts.get(s) }}</span>
             </button>
           </div>
+          <p class="adv-legend">
+            <b>Rareté</b> = tirée à l'invocation, fixe · <b>rang</b> (★ en coin) = progression du
+            niveau.
+          </p>
           <!-- 🗂️ RANGÉ PAR LETTRE (S puis A) ; dans chacune, rang puis étoiles
                décroissants (`groupByGrade`). -->
           <section
@@ -107,7 +111,7 @@
             :style="{ '--c': GRADE_COLOR[g.grade] }"
           >
             <div class="adv-rhead">
-              <span class="adv-rname font-display">{{ GRADE_LABEL[g.grade] }}</span>
+              <span class="adv-rname font-display">Rareté {{ GRADE_LABEL[g.grade] }}</span>
               <span class="adv-rn">{{ g.advs.length }}</span>
             </div>
             <div class="adv-grid">
@@ -278,7 +282,7 @@
               :style="{ '--c': GRADE_COLOR[gg.grade] }"
             >
               <div class="adv-rhead">
-                <span class="adv-rname font-display">{{ GRADE_LABEL[gg.grade] }}</span>
+                <span class="adv-rname font-display">Rareté {{ GRADE_LABEL[gg.grade] }}</span>
                 <span class="adv-rn">{{ gg.gear.length }}</span>
               </div>
               <div class="gear-stock">
@@ -753,7 +757,9 @@
       <p class="g-note">Pièces permises pour son métier et sa classe.</p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
       <button v-if="gearHereId" class="cta ghost" @click="pickGear(null)">Retirer la pièce</button>
-      <p v-if="!gearPool.length" class="g-note">Aucune pièce en stock — elles viennent du tirage du Panthéon.</p>
+      <p v-if="!gearPool.length" class="g-note">
+        Aucune pièce en stock — elles viennent du tirage du Panthéon.
+      </p>
       <p v-else-if="!gearRows.rows.length" class="g-note">Aucune pièce disponible pour lui.</p>
       <p v-if="gearHidden" class="g-note dim">{{ gearHidden }}</p>
       <button
@@ -2539,6 +2545,12 @@ function leftOf(at: number): string {
   gap: 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+}
+.adv-legend {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--dim);
 }
 .adv-rname {
   color: var(--c);

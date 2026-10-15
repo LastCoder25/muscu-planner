@@ -6,8 +6,9 @@
 // signatures gatés en profondeur). Aucune dépendance Vue/Supabase.
 import { prestigeRankIndex, RANK_ORDER, rarityRank } from '@/lib/items';
 import { TALENT_SLOT_LEVEL } from '@/lib/talents';
+import { CHARACTER_RANKS, rankStartLevel } from '@/lib/characterRank';
 
-type AdvUnlockKind = 'talent' | 'effect' | 'rarity';
+type AdvUnlockKind = 'talent' | 'effect' | 'rarity' | 'rank';
 
 export interface AdvUnlock {
   level: number;
@@ -52,6 +53,24 @@ function buildSchedule(): AdvUnlock[] {
       });
       prev = c;
     }
+  }
+
+  // RANG DE PRESTIGE DU HÉROS — le calendrier s'arrêtait au dernier rang d'objets (71) alors
+  // que l'échelle de prestige court jusqu'au niveau 100 : plus rien n'était annoncé de 72 à 100.
+  // On ajoute les changements de rang au-delà, DÉRIVÉS de `characterRank.ts` (jamais écrits
+  // à la main). En deçà, le rang des objets suit déjà le même rythme (un rang tous les 10).
+  const lastObjectLevel = out.reduce((m, u) => (u.kind === 'rarity' ? Math.max(m, u.level) : m), 0);
+  for (let i = 1; i < CHARACTER_RANKS.length; i++) {
+    const lvl = rankStartLevel(i);
+    if (lvl <= lastObjectLevel) continue;
+    const r = CHARACTER_RANKS[i]!;
+    out.push({
+      level: lvl,
+      kind: 'rank',
+      emoji: r.emoji,
+      title: `Rang de héros : ${r.name}`,
+      detail: `Ton héros passe au rang ${r.name} (★1) : le prestige continue de grimper jusqu'au niveau 100.`,
+    });
   }
 
   // Effets & SIGNATURES gatés par la profondeur (items.ts EFFECT_MIN_LEVEL). Crit / vol de

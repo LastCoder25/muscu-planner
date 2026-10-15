@@ -75,13 +75,16 @@
                     ? 'Jamais tenté'
                     : `Tes runs nettoyés sur ce palier : ${t.success} % sur ${t.runs}`
                 "
-                >🎯 {{ t.success === null ? '—' : t.success + ' %' }}</span
+                >🎯 {{ t.success === null ? '—' : t.success + ' %' }} réussis</span
               >
               <span class="lt-fam" title="Rang du familier garanti au bout"
                 >🐾 <b :style="{ color: rankColorOf(t.laby) }">{{ famRankName(t.laby) }}</b></span
               >
-              <span class="lt-death" title="Part de l'or gardée si tu tombes"
-                >💀 {{ t.deathKeep }} %</span
+              <span
+                class="lt-death"
+                :class="pctClass(t.deathKeep)"
+                title="Part du butin (or, ressources) gardée si tu tombes : 100 % = rien de perdu"
+                >💀 {{ t.deathKeep }} % gardé si mort</span
               >
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
@@ -2188,8 +2191,15 @@ function returnToLobby() {
 .lt-pills .lt-pow.bad {
   color: color-mix(in srgb, #ff6a45 80%, var(--dim));
 }
-.lt-pills .lt-death {
-  color: color-mix(in srgb, #ff6a45 70%, var(--dim));
+/* 💀 La couleur suit la valeur : c'est la part GARDÉE, donc élevée = bon (comme le 🎯). */
+.lt-pills .lt-death.ok {
+  color: color-mix(in srgb, #7bc86c 85%, var(--dim));
+}
+.lt-pills .lt-death.mid {
+  color: color-mix(in srgb, #ffb23f 85%, var(--dim));
+}
+.lt-pills .lt-death.bad {
+  color: color-mix(in srgb, #ff6a45 80%, var(--dim));
 }
 .lt-lock {
   font-size: 11px;

@@ -42,7 +42,7 @@
           class="ca-rank"
           :style="{ '--rk': rank.color }"
           :title="`Rang ${rank.name} · ${rank.star}/5 ★`"
-          ><span class="ca-rk-name">{{ rank.name }}</span
+          ><span class="ca-rk-name">rang {{ rank.name }}</span
           ><span class="ca-rk-star">{{ rank.star }}★</span></span
         >
         <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se

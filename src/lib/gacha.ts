@@ -253,6 +253,8 @@ export function apexRate(sinceApex: number): number {
 export interface GachaOdds {
   /** Les taux de base, du plus bas au plus haut. */
   rates: { grade: PullGrade; pct: number }[];
+  /** Taux EFFECTIFS à long terme (%), garanties comprises — pas ceux de base. */
+  effective: Record<'A' | 'S' | 'X', number>;
   /** Un tirage sur N est garanti A ou mieux. */
   floorEvery: number;
   /** Tirages restants avant le prochain A garanti (1 = le prochain). */
@@ -265,8 +267,71 @@ export interface GachaOdds {
   nextApexIn: number;
 }
 
+/**
+ * 📈 LES TAUX EFFECTIFS À LONG TERME — ce que le joueur voit VRAIMENT sur beaucoup de tirages.
+ *
+ * ⚠️ Les taux de base mentent par omission : la garantie « un A ou mieux tous les 10 » porte
+ * le A réel bien au-dessus de ses 5,1 % de base (et le pity du S relève un peu le S).
+ * Calculés par la **distribution stationnaire** de la chaîne de Markov sur (tirages depuis le
+ * dernier S, tirages depuis le dernier A+), en appliquant EXACTEMENT les règles de
+ * `pullGrade` — jamais une formule recopiée. Rien n'est écrit en dur.
+ *
+ * ⚠️ Approximation assumée : la garantie ADAMANTIUM (300) n'est pas dans la chaîne, le X
+ * y vaut son taux de base. Son effet sur A et S est négligeable (un X sur ~1000 tirages) ;
+ * le test confronte le résultat à une simulation de `pullChampion` qui, elle, la porte.
+ */
+let effectiveCache: Record<'A' | 'S' | 'X', number> | null = null;
+export function effectiveRates(): Record<'A' | 'S' | 'X', number> {
+  if (effectiveCache) return effectiveCache;
+  const T = GACHA.hardPity; // sinceTop 0..T-1 (au-delà, S garanti → retombe à 0)
+  const F = GACHA.minorPity; // sinceFloor 0..F-1
+  const idx = (t: number, f: number) => t * F + f;
+  let dist = new Float64Array(T * F);
+  dist[idx(0, 0)] = 1;
+  const pA = new Float64Array(T * F);
+  const pS = new Float64Array(T * F);
+  // Pour chaque état : [prochain état, probabilité, lettre]
+  const trans: { from: number; to: number; p: number }[] = [];
+  const apex = GACHA_RATES[APEX_GRADE];
+  for (let t = 0; t < T; t++) {
+    for (let f = 0; f < F; f++) {
+      const top = topRate(t);
+      const floor = f + 1 >= GACHA.minorPity;
+      const pTop = Math.min(1 - apex, top);
+      const pFloorA = floor ? Math.max(0, 1 - apex - pTop) : GACHA_RATES.A;
+      const pB = Math.max(0, 1 - apex - pTop - pFloorA);
+      const from = idx(t, f);
+      pA[from] = pFloorA;
+      pS[from] = pTop;
+      // X : comme un S pour les compteurs (remet top et floor à 0)
+      if (apex > 0) trans.push({ from, to: idx(0, 0), p: apex });
+      if (pTop > 0) trans.push({ from, to: idx(0, 0), p: pTop });
+      if (pFloorA > 0) trans.push({ from, to: idx(Math.min(t + 1, T - 1), 0), p: pFloorA });
+      if (pB > 0)
+        trans.push({ from, to: idx(Math.min(t + 1, T - 1), Math.min(f + 1, F - 1)), p: pB });
+    }
+  }
+  for (let it = 0; it < 20000; it++) {
+    const next = new Float64Array(T * F);
+    for (const tr of trans) next[tr.to]! += dist[tr.from]! * tr.p;
+    let diff = 0;
+    for (let i = 0; i < next.length; i++) diff += Math.abs(next[i]! - dist[i]!);
+    dist = next;
+    if (diff < 1e-13) break;
+  }
+  let a = 0;
+  let s = 0;
+  for (let i = 0; i < dist.length; i++) {
+    a += dist[i]! * pA[i]!;
+    s += dist[i]! * pS[i]!;
+  }
+  effectiveCache = { A: a * 100, S: s * 100, X: apex * 100 };
+  return effectiveCache;
+}
+
 export function gachaOdds(pity: PityState): GachaOdds {
   return {
+    effective: effectiveRates(),
     rates: PULL_GRADES.map((g) => ({ grade: g, pct: GACHA_RATES[g] * 100 })),
     floorEvery: GACHA.minorPity,
     nextFloorIn: Math.max(1, GACHA.minorPity - pity.sinceFloor),

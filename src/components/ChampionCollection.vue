@@ -12,7 +12,7 @@
       :style="{ '--rk': GRADE_COLOR[g.grade] }"
     >
       <header class="cc-h">
-        <span class="cc-rar font-display">{{ GRADE_LABEL[g.grade] }}</span>
+        <span class="cc-rar font-display">Rareté {{ GRADE_LABEL[g.grade] }}</span>
         <span class="cc-bar" aria-hidden="true"
           ><i :style="{ width: (g.owned / g.total) * 100 + '%' }"
         /></span>
@@ -57,11 +57,15 @@
         </div>
         <div class="cc-zoom-name font-display">{{ zoomed.champ.name }}</div>
         <div class="cc-zoom-meta">
-          <span class="cc-zoom-grade font-display">{{ GRADE_LABEL[zoomed.champ.grade] }}</span>
+          <span class="cc-zoom-grade font-display"
+            >rareté {{ GRADE_LABEL[zoomed.champ.grade] }}</span
+          >
           <span v-if="zoomed.awaken > 0" class="cc-zoom-awk">✨ Éveil {{ zoomed.awaken }}</span>
         </div>
         <ul class="cc-zoom-skills">
-          <li>🪬 {{ SKILL_SLOTS[zoomed.champ.grade] }} emplacements de compétence — à remplir de runes</li>
+          <li>
+            🪬 {{ SKILL_SLOTS[zoomed.champ.grade] }} emplacements de compétence — à remplir de runes
+          </li>
         </ul>
       </q-card>
     </q-dialog>

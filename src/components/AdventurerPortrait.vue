@@ -32,6 +32,7 @@
         :name="rank.name"
         :color="rank.color"
         :star="rank.star"
+        :title="`Rang ${rank.name} · ${rank.star}/5 ★ : progression de son niveau`"
       />
 
       <div
@@ -185,7 +186,9 @@
          rien ne disait ce qu'on avait tiré. Dans un gacha, c'est L'information.
          ⚠️ Et elle ne vivait qu'en teinte + `title` — donc invisible sur un téléphone, qui
          n'a pas de survol. -->
-    <div class="ap-rar font-display">{{ nomLabel }}</div>
+    <div class="ap-rar font-display" :title="`Rareté ${nomLabel} : tirée à l'invocation, fixe`">
+      <span class="ap-rar-k">rareté</span> {{ nomLabel }}
+    </div>
     <!-- ⚠️ MASQUÉ QUAND IL RÉPÈTE LE NOM : `advTitle` rend le NOM d'un champion (il n'a pas
          de métier), donc cette ligne affichait « Aurore Première » sous « Aurore Première ».
          Elle ne sert plus qu'aux aventuriers legacy, dont elle donne bien la classe.
@@ -680,6 +683,12 @@ button.ap-mini {
    n'était qu'une ligne de texte nue. Et le banc de l'époque réécrivait la CSS à la main,
    donc il montrait une pilule qui n'existait pas dans le fichier. Un banc qui ne LIT pas
    la vraie feuille de style n'est pas un témoin. */
+.ap-rar-k {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  opacity: 0.8;
+}
 .ap-rar {
   margin-top: 2px;
   align-self: stretch;

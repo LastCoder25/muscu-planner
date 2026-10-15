@@ -157,7 +157,9 @@
         <div class="fx-title font-display">{{ cur.title }}</div>
         <div v-if="cur.subtitle" class="fx-sub">{{ cur.subtitle }}</div>
       </div>
-      <div class="fx-tap">Toucher pour continuer</div>
+      <!-- Un éclat `sticky` ne se ferme QUE au toucher (pas de minuteur) : « continuer » y est
+           vrai. Les autres se referment seuls — le toucher ne fait alors que les passer. -->
+      <div class="fx-tap">{{ cur.sticky ? 'Toucher pour continuer' : 'Toucher pour passer' }}</div>
     </div>
   </transition>
 </template>

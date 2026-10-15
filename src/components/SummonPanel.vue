@@ -94,6 +94,12 @@
             <span class="go-pct font-display">{{ fmtOdds(r.pct) }} %</span>
           </div>
           <p class="go-note">
+            📈 Taux <b>de base</b> ci-dessus, par tirage. Sur la durée, avec les garanties, tu
+            obtiens en moyenne <b>{{ GRADE_LABEL.A }} {{ fmtOdds(odds.effective.A) }} %</b> et
+            <b>{{ GRADE_LABEL.S }} {{ fmtOdds(odds.effective.S) }} %</b> des tirages (taux
+            <b>effectifs</b>).
+          </p>
+          <p class="go-note">
             🎁 Un tirage sur {{ odds.floorEvery }} est garanti <b>{{ GRADE_LABEL.A }}</b> ou mieux.
             Prochain dans <b>{{ odds.nextFloorIn }}</b> tirage{{ odds.nextFloorIn > 1 ? 's' : '' }}.
           </p>
