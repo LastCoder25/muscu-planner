@@ -38,11 +38,15 @@ export const useFeedbackStore = defineStore('feedback', () => {
   }
 
   // Upload des captures dans le bucket public `feedback` → URLs publiques.
+  // ⚠️ Le chemin commence par l'identifiant de l'auteur : la policy d'envoi (migr. 0105)
+  // l'exige, et n'accepte que des images de 5 Mo au plus, envoyées par un admin.
   async function uploadScreenshots(files: File[]): Promise<string[]> {
+    const uid = useAuthStore().user?.id;
+    if (!uid) throw new Error('Non connecté');
     const urls: string[] = [];
     for (const file of files) {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
-      const path = `${crypto.randomUUID()}.${ext}`;
+      const path = `${uid}/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage
         .from('feedback')
         .upload(path, file, { contentType: file.type });
