@@ -430,6 +430,8 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
     // dessous), 55 → 63 % (5 %). Borne haute 62 % → 66 % : 1 point au-dessus, dans le bruit
     // de la table (mesurée sur les donjons, ±0,04).
     // ⚠️ 2026-09-22 (référence avec son set, contenu recalé) : palier 40 → 59 %, 55 → 54 %.
+    // ⚠️ 2026-10-15 (budget redressé au début de chaque rang, `CONTENT_K.boss` ×1,28) : palier
+    // 40 → 55 %, 55 → 60 % (8 tirages × 30) ; avec ×1,17 le palier 55 passait à 72 %.
     for (const L of [40, 55]) {
       const at = bossWinPct(L, L);
       expect(at, `palier ${L}`).toBeLessThan(0.66);

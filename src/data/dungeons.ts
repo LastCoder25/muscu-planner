@@ -189,7 +189,11 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Ça monte crescendo jusqu’à l’hydre → des PV (Endurance) pour tenir la fin.',
     dropLevel: 13,
     dropLuck: 1,
-    foeMult: 0.8,
+    // ⚠️ 2026-10-15 (audit) : les écrits à la main 13 → 22 re-mesurés au niveau conseillé
+    // (16 tirages × 40 descentes) : 47 % au 13, 75-88 % de 15 à 22. Correction par donjon
+    // (bissection vers 70 %) : 13 ×0,8 → 0,7 · 15 → 0,82 · 17 → 0,83 · 19 → 0,91 · 20 → 0,82 ·
+    // 21 → 0,82 · 22 → 0,85. Après : 68 à 71 % (test `dungeonCurve`).
+    foeMult: 0.7,
   },
   {
     id: 'hydre_marais',
@@ -203,7 +207,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Des murs de PV de plus en plus épais → grosse Puissance (muscu) pour percer.',
     dropLevel: 15,
     dropLuck: 1,
-    foeMult: 0.8,
+    foeMult: 0.82,
   },
   {
     id: 'behemoth_caverne',
@@ -217,7 +221,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Colosses increvables, du plus rapide au plus lourd → Puissance pour percer, PV pour durer.',
     dropLevel: 17,
     dropLuck: 1,
-    foeMult: 0.8,
+    foeMult: 0.83,
   },
   {
     id: 'leviathan_fosse',
@@ -231,7 +235,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Ils frappent et encaissent, de pire en pire → build complet, beaucoup de PV.',
     dropLevel: 19,
     dropLuck: 1,
-    foeMult: 0.8,
+    foeMult: 0.91,
   },
   {
     id: 'kraken_abysses',
@@ -246,7 +250,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     dropLevel: 20,
     dropLuck: 1,
     // Refonte équipement (étape 7) : mesuré ×0.72 pour 70 % de nettoyage à son niveau.
-    foeMult: 0.72,
+    foeMult: 0.82,
   },
   {
     id: 'necropole',
@@ -262,7 +266,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     dropLuck: 1,
     // Refonte équipement (étape 7) : mesuré ×0.72 pour 70 % de nettoyage à son niveau
     // (÷0,95, la part invisible du budget de son rang).
-    foeMult: 0.76,
+    foeMult: 0.82,
   },
   {
     id: 'faille_chaos',
@@ -277,7 +281,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     dropLevel: 23,
     dropLuck: 1,
     // Refonte équipement (étape 7) : mesuré ×0.83 pour 70 % de nettoyage à son niveau.
-    foeMult: 0.83,
+    foeMult: 0.85,
   },
 ];
 

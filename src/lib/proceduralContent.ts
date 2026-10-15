@@ -98,13 +98,24 @@ const CALIB = {
 // plus profond et boss du palier) du multiplicateur qui ramène le joueur de référence à ~72 %
 // et ~57 % — donjon et boss concordent : ×0,94 (rangs 3-4) · ×0,96 (5) · ×1,20 (6) · ×1,21 (7) ·
 // ×1,29 (8) · ×1,27 (9-10). Rangs 1-2 inchangés (tutoriel et rampe d'amorçage, déjà testés).
+// ⚠️ 2026-10-15 (audit, LA COURBE EN DENTS DE SCIE) : mesuré au niveau conseillé de CHAQUE
+// donjon (16 tirages × 40 descentes), le joueur de référence nettoyait 74 % au reco 22 puis 58 %
+// au 25, 34 % au 34, 13 % au 52, 77 % au 58, 48 % au boss 55 contre 87 % au boss 60. Cause : un
+// rang S'OUVRE progressivement (v0.894), donc le joueur est bien plus faible au DÉBUT d'un rang
+// qu'à sa fin — un segment presque plat faisait du début de chaque rang un mur. Bissection du
+// multiplicateur de monstre qui ramène chaque donjon à 70 % (et chaque boss à 57 %, ramené à
+// l'échelle donjon), puis ajustement linéaire par rang, appliqué aux deux bouts du segment
+// (rangs 3 à 10 ; le début du rang 3 reste à ×1 : les donjons écrits à la main 21-22 y vivent).
+// Facteurs (début → fin) : ×1 → 0,97 · 0,88 → 0,97 · 0,91 → 0,94 · 0,65 → 1,13 · 0,88 → 0,94 ·
+// 0,99 → 1,04 · 1,00 → 0,95 · 1,02 → 0,96. Après : 57 à 77 % sur tout 25 → 94 (32 tirages,
+// multiplicateur résiduel 0,93 à 1,04), test `dungeonCurve` (calibration).
 // [premier niveau, dernier, attaque début, fin, survie début, fin, part invisible]
 const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, number][] = [
   [1, 10, 1.0, 1.27, 1.06, 1.38, 1],
   [11, 20, 1.27, 1.3, 1.38, 1.46, 1.07],
-  [21, 30, 1.3, 1.54, 1.5, 1.68, 1.01],
-  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.06],
-  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.085],
+  [21, 30, 1.3, 1.492, 1.5, 1.628, 1.01],
+  [31, 40, 1.491, 1.698, 1.552, 1.892, 1.06],
+  [41, 50, 1.774, 2.312, 1.81, 2.04, 1.085],
   // ⚠️ RECALÉE (v0.1087) après le conditionnement des procs qui amplifient une stat absente :
   // l'optimiseur cessant d'équiper un objet pour un pouvoir qui ne se déclenchera jamais, le
   // joueur de référence gagne 7 à 17 points de clear à partir du niveau 55. Facteur MESURÉ par
@@ -112,11 +123,11 @@ const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, numb
   // (rien), donjon 49 ×1,001 (rien), boss 55 ×1,061, boss 70 ×1,099, donjon 79 ×1,064,
   // boss 85 ×1,086. Sous le niveau 50, rien ne bouge — les effets légendaires n'arrivent
   // qu'au rang Légendaire. Le segment 91-100 n'est pas mesuré : il prend la moyenne (×1,08).
-  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.8],
-  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.99],
-  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.98],
-  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.98],
-  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.95],
+  [51, 60, 1.786, 3.167, 1.434, 2.782, 1.8],
+  [61, 70, 3.154, 3.527, 2.396, 2.923, 1.99],
+  [71, 80, 4.689, 5.039, 3.093, 3.917, 1.98],
+  [81, 90, 5.603, 5.361, 3.938, 3.959, 1.98],
+  [91, 100, 5.769, 5.918, 4.237, 4.015, 1.95],
 ];
 export function gearBudget(level: number): { off: number; pv: number } {
   const L = Math.min(100, Math.max(1, level));
@@ -145,10 +156,13 @@ export function bossGearExpect(level: number): { off: number; pv: number } {
  *  Mesuré (multiplicateur qui amène le joueur de référence à sa cible) : donjons ×1,0 sur toute
  *  la chaîne une fois le budget posé ; boss générés ×1,17 en moyenne (0,98 à 1,38, sans pente) —
  *  les 5 boss écrits à la main ont été ramenés à leur base dans `bosses.ts`.
+ *  ⚠️ 2026-10-15 : ×1,17 → ×1,28. Le budget redressé (début de rang plus clément) rendait les
+ *  boss plus faciles (moyenne 72 % au palier, 30 → 100) ; ×1,28 les ramène à 57 % de moyenne,
+ *  48 à 69 % selon le palier (avant : 48 à 87 %, moyenne 66 %).
  *  ⚠️ Pas `as const` : les sondes de calibration le font varier (sans effet en jeu). */
 export const CONTENT_K: { dungeon: number; boss: number; laby: number } = {
   dungeon: 1,
-  boss: 1.17,
+  boss: 1.28,
   laby: 1.47,
 };
 
