@@ -573,9 +573,6 @@ export function useProgress() {
    *  `activityDays.ts`). La règle vit dans la lib ; ici on ne fait que RÉUNIR les
    *  sources — et l'interface exhaustive garantit qu'on n'en oublie aucune. */
   function activeDaysInLast(days = 7): number {
-    // ⚠️ Jour UTC VOLONTAIRE : `activityDays` date chaque séance par les 10 premiers
-    // caractères de son horodatage `timestamptz`, donc en UTC. La borne doit parler la même
-    // langue (audit du 2026-10-15 : ce n'est pas le piège de `localDay.ts`).
     const from = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
     return activeDaysSince(
       {

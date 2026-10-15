@@ -5,7 +5,6 @@ import { ref } from 'vue';
 import type { Session } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from './auth';
-import { singleFlight } from '@/lib/singleFlight';
 
 export interface SessionRow {
   id: string;
@@ -17,7 +16,7 @@ export interface SessionRow {
 export const useSessionsStore = defineStore('sessions', () => {
   const list = ref<SessionRow[]>([]);
 
-  async function loadMine() {
+  async function fetchMine() {
     // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
     // jamais ce qu'on VEUT lire. Ce `.eq` est un no-op tant que la policy reste own-only ;
     // il existe pour que l'ajout d'une policy SELECT élargie (comme `challenges_read_friends`,
@@ -37,9 +36,6 @@ export const useSessionsStore = defineStore('sessions', () => {
     list.value = data ?? [];
     return list.value;
   }
-  // Deux écrans qui chargent en même temps partagent la même requête (audit : `sessions`
-  // était lu deux fois au démarrage).
-  const fetchMine = singleFlight(loadMine);
 
   // Insère une Session : on garde le même id pour la ligne et le payload.
   async function insert(userId: string, session: Session) {
@@ -97,7 +93,7 @@ export const useSessionsStore = defineStore('sessions', () => {
   async function replaceAll(userId: string, newSessions: Session[]) {
     await deleteAll(userId);
     for (const s of newSessions) await insert(userId, s);
-    await loadMine();
+    await fetchMine();
   }
 
   return { list, fetchMine, insert, updatePlan, remove, deleteAll, replaceAll };

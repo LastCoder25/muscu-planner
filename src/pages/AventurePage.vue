@@ -3308,7 +3308,7 @@ import {
   claimableCount,
   type InboxFilter,
 } from '@/lib/messageFilter';
-import { addDaysIso, logicalToday } from '@/lib/challenges';
+import { logicalToday } from '@/lib/challenges';
 import { islandPacified, plunderForecast } from '@/lib/archipelago';
 
 interface RunFight {
@@ -5726,9 +5726,7 @@ async function grantPendingComboChests() {
     // (`updated_at` existe en base mais pas dans le type métier : la date des séries est
     // à la fois disponible et plus juste.)
     const JOURS = 2;
-    // Les séries sont datées en jour LOCAL (`logicalToday`) : la borne aussi, sinon un jour
-    // UTC décalé raccourcit la fenêtre d'une soirée en France.
-    const limite = addDaysIso(logicalToday(), -JOURS);
+    const limite = new Date(Date.now() - JOURS * 86400_000).toISOString().slice(0, 10);
     for (const co of combo.list) {
       if (co.status !== 'done') continue;
       const dates = co.legs.flatMap((l) => (l.sets ?? []).map((x) => x.date)).filter(Boolean);

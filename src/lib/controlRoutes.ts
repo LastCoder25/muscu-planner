@@ -16,7 +16,9 @@
  *
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
+import type { Adventurer } from './adventurers';
 import {
+  type ActiveExpedition,
   distNormAt,
   type ControlState,
   type ExpeditionMap,
@@ -25,6 +27,7 @@ import {
 } from './expedition';
 import { heroPostOf, recallPostedHero, unpostHero } from './islandConquest';
 import { isMilitiaId } from './militia';
+import { voyageMemberIds } from './party';
 import {
   controlFreeSeats,
   freeAway,
@@ -354,6 +357,40 @@ export function rejoinHome(
   const more = rest.slice(0, controlFreeSeats(held(m, homeId)!.control));
   if (more.length) m = reinforceControl(m, homeId, more, at);
   return { map: m, back: [...owed, ...more], out: rest.slice(more.length) };
+}
+
+/**
+ * 🛡️ LES SORTANTS QUI REVIENDRONT DÉFENDRE `p`, avec l'heure de leur retour — à passer en
+ * renforts à `defendersAtAttack` (2026-10-15, demandé : « les champions en garnison partis en
+ * expédition, s'ils reviennent entre-temps, il faut les prendre en compte dans la défense »).
+ *
+ * ⚠️ LA RÈGLE DE LA BATAILLE, pas une autre : au retour d'une sortie, `rejoinHome` remet ses
+ * membres sur le point comme un renfort arrivé à `returnAt` — ceux dont la place était gardée
+ * (`away`) toujours, les autres dans la limite des places libres — et la reprise compte tout
+ * renfort arrivé au plus tard à l'attaque. Les membres d'un voyage sont ceux que
+ * `voyageMemberIds` y voit : un blessé renvoyé à la base (`splitSorties`) ou resté sur un point
+ * pris n'en fait plus partie, il ne revient donc pas défendre.
+ * ⚠️ Avant le rapport, on ne sait pas qui sera blessé (l'issue est tirée, mais la lire
+ * trahirait le combat) : tout le groupe est compté, comme le fait l'écran pour une équipe.
+ */
+export function sortieReturnsTo(
+  p: Pick<Poi, 'id' | 'control'>,
+  voyages: readonly Pick<ActiveExpedition, 'homeId' | 'returnAt' | 'crew' | 'outcome'>[],
+  advs: readonly Pick<Adventurer, 'id' | 'busyUntil' | 'posted'>[],
+): { id: string; at: number }[] {
+  const c = p.control;
+  if (!c || c.owner !== 'player') return [];
+  const kept = new Set(c.away ?? []);
+  const owed: { id: string; at: number }[] = [];
+  const rest: { id: string; at: number }[] = [];
+  for (const v of voyages) {
+    if (v.homeId !== p.id) continue;
+    for (const id of voyageMemberIds(v, advs))
+      (kept.has(id) ? owed : rest).push({ id, at: v.returnAt });
+  }
+  // Les sans place gardée ne reprennent que les places libres, dans l'ordre de retour.
+  rest.sort((a, b) => a.at - b.at);
+  return [...owed, ...rest.slice(0, controlFreeSeats(c))];
 }
 
 /**

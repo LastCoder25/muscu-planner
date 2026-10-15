@@ -1889,6 +1889,7 @@ import {
   championsAbleToGo,
   legFromSpot,
   readyGarrisons,
+  sortieReturnsTo,
   swapBlocker,
   transferBlocker,
   transferSourcesFor,
@@ -3323,8 +3324,12 @@ function defenseArgs(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const c = p?.control;
   if (!p || !c || c.owner !== 'player') return null;
   const at = knownAttackAt(p, coarseNow.value);
+  // ⚔️🏰 Les champions de la garnison partis en SORTIE qui rentrent avant l'attaque la
+  // défendent (`sortieReturnsTo`, la règle de `rejoinHome`) ; après, ils comptent « en retard ».
+  const voyages = [...char.partyList, ...(active.value ? [active.value] : [])];
+  const back = sortieReturnsTo(p, voyages, char.advList);
   // 🧝 Le héros posté (ou en route, arrivé à temps) défend aussi : la règle de la bataille.
-  const { present, late, hero, heroLate } = defendersAtAttack(c, at, extra);
+  const { present, late, hero, heroLate } = defendersAtAttack(c, at, [...back, ...extra]);
   const map = char.row?.expedition_map;
   const vsArmy =
     !!map && pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
