@@ -6,6 +6,7 @@ import ResourceGains from '@/components/ResourceGains.vue';
 import { useCharacterStore } from '@/stores/character';
 
 async function setup() {
+  localStorage.clear();
   const pinia = createPinia();
   setActivePinia(pinia);
   const char = useCharacterStore() as unknown as { row: Record<string, unknown> };
@@ -55,5 +56,22 @@ describe('ResourceGains — les « +N » sous le plateau', () => {
     await nextTick();
     await nextTick();
     expect(host.querySelector('.rg')).toBeNull();
+  });
+  it('l’or ne revient pas avant une heure', async () => {
+    const { char, props, host } = await setup();
+    props.ready = true;
+    await nextTick();
+    char.row = { ...char.row, gold: 2000 };
+    await nextTick();
+    await nextTick();
+    expect(host.textContent ?? '').toContain('🪙');
+    (host.querySelector('.rg-chips') as HTMLElement).click();
+    await nextTick();
+    char.row = { ...char.row, gold: 3000 };
+    await nextTick();
+    await nextTick();
+    // Le bandeau fermé s'efface (transition) en restant un instant dans le DOM : seuls les vivants comptent.
+    const live = host.querySelectorAll('.rg:not(.rg-leave-active) .rg-chip');
+    expect(live.length).toBe(0);
   });
 });

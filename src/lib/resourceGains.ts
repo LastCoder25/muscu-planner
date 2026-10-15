@@ -40,3 +40,31 @@ export function mergeGains(acc: ResourceGain[], add: ResourceGain[]): ResourceGa
   }
   return out;
 }
+
+/** ⚠️ L'OR NE S'ANNONCE QU'UNE FOIS PAR HEURE (demandé : « il revient régulièrement et ça
+ *  gêne l'affichage ») : les mines et lieux fixes le créditent à chaque récolte, et le
+ *  bandeau réapparaissait sans cesse pour lui. Il s'ACCUMULE en silence (`held`), puis sort
+ *  d'un bloc avec les autres gains dès qu'une heure a passé depuis sa dernière annonce. */
+export const GOLD_GAIN_EVERY_MS = 3_600_000;
+
+export interface GoldGate {
+  /** Or retenu, pas encore annoncé. */
+  held: number;
+  /** Dernière annonce d'or (ms), 0 = jamais. */
+  shownAt: number;
+}
+
+/** Filtre l'or des gains : le retient, ou l'annonce (cumulé) si l'heure est passée. */
+export function gateGold(
+  add: ResourceGain[],
+  gate: GoldGate,
+  now: number,
+): { show: ResourceGain[]; gate: GoldGate } {
+  const gold = add.find((g) => g.id === 'gold');
+  const rest = add.filter((g) => g.id !== 'gold');
+  const held = gate.held + (gold?.n ?? 0);
+  if (held > 0 && now - gate.shownAt >= GOLD_GAIN_EVERY_MS) {
+    return { show: [...rest, { id: 'gold', n: held }], gate: { held: 0, shownAt: now } };
+  }
+  return { show: rest, gate: { held, shownAt: gate.shownAt } };
+}

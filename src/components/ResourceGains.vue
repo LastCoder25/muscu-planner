@@ -33,7 +33,13 @@ import RuneIcon from '@/components/RuneIcon.vue';
 import { useCharacterStore } from '@/stores/character';
 import { compactNumber } from '@/lib/compactNumber';
 import { emptySeals, sealsSummary } from '@/lib/ascension';
-import { mergeGains, resourceGains, type ResourceGain } from '@/lib/resourceGains';
+import {
+  gateGold,
+  mergeGains,
+  resourceGains,
+  type GoldGate,
+  type ResourceGain,
+} from '@/lib/resourceGains';
 import type { ResourceSnapshot } from '@/lib/resourceGains';
 
 const props = defineProps<{
@@ -83,6 +89,19 @@ const gains = ref<ResourceGain[]>([]);
 let last: ResourceSnapshot | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
+// 🪙 L'or est retenu et ne s'annonce qu'une fois par heure (`gateGold`). La dernière annonce
+// est retenue par appareil : sinon chaque remontage de l'écran la ré-autoriserait.
+const GOLD_KEY = 'muscu:gains:gold-at';
+function readShownAt(): number {
+  try {
+    const v = Number(localStorage.getItem(GOLD_KEY));
+    return Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+let goldGate: GoldGate = { held: 0, shownAt: readShownAt() };
+
 // ⚠️ La référence ne se pose qu'une fois TOUT chargé (ligne ET XP de fond), et sans rien
 // annoncer : ce qu'on avait déjà en ouvrant n'est pas un gain.
 watch(
@@ -94,8 +113,17 @@ watch(
       last = snap;
       return;
     }
-    const add = resourceGains(last, snap);
+    const gated = gateGold(resourceGains(last, snap), goldGate, Date.now());
     last = snap;
+    if (gated.gate.shownAt !== goldGate.shownAt) {
+      try {
+        localStorage.setItem(GOLD_KEY, String(gated.gate.shownAt));
+      } catch {
+        /* stockage indisponible : l'heure reste en mémoire */
+      }
+    }
+    goldGate = gated.gate;
+    const add = gated.show;
     if (!add.length) return;
     gains.value = mergeGains(gains.value, add);
     if (timer) clearTimeout(timer);

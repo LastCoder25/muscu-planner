@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resourceGains, mergeGains } from '@/lib/resourceGains';
+import { gateGold, GOLD_GAIN_EVERY_MS } from '@/lib/resourceGains';
 
 describe('resourceGains — ce qui vient d’arriver', () => {
   it('ne rend que les hausses, arrondies', () => {
@@ -28,5 +29,24 @@ describe('mergeGains — plusieurs ticks, une ligne par ressource', () => {
       { id: 'mana', n: 2 },
     ]);
     expect(a).toEqual([{ id: 'gold', n: 10 }]); // pas de mutation
+  });
+});
+
+describe('gateGold — l’or une fois par heure', () => {
+  const H = GOLD_GAIN_EVERY_MS;
+  it('annonce le premier or, puis le retient une heure, puis sort le cumul', () => {
+    let r = gateGold([{ id: 'gold', n: 100 }], { held: 0, shownAt: 0 }, 10 * H);
+    expect(r.show).toEqual([{ id: 'gold', n: 100 }]);
+    r = gateGold([{ id: 'gold', n: 50 }, { id: 'keys', n: 1 }], r.gate, 10 * H + 1000);
+    expect(r.show).toEqual([{ id: 'keys', n: 1 }]);
+    r = gateGold([{ id: 'gold', n: 30 }], r.gate, 10 * H + 2000);
+    expect(r.show).toEqual([]);
+    r = gateGold([{ id: 'gold', n: 20 }], r.gate, 11 * H);
+    expect(r.show).toEqual([{ id: 'gold', n: 100 }]);
+    expect(r.gate).toEqual({ held: 0, shownAt: 11 * H });
+  });
+  it('les autres ressources passent toujours', () => {
+    const r = gateGold([{ id: 'mana', n: 3 }], { held: 0, shownAt: 5 }, 6);
+    expect(r.show).toEqual([{ id: 'mana', n: 3 }]);
   });
 });
