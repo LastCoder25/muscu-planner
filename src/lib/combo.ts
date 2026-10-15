@@ -263,6 +263,21 @@ export function legSetsDone(leg: ComboLeg): number {
  * 🎯 Défi 360) n’en proposait aucun.
  */
 export function comboStopPlan(c: ComboChallenge): StopPlan {
+  // 🗑 DÉJÀ ABANDONNÉ : le seul geste qui reste est de le SUPPRIMER (audit 2026-10-15 : le 🗑
+  // le ré-abandonnait, donc un 360 abandonné ne pouvait plus quitter la liste). ⚠️ Ses séries
+  // ont rapporté de l'XP et de l'énergie : les effacer les retire, et on le DIT avant.
+  if (c.status === 'abandoned') {
+    const n = (c.legs ?? []).reduce((a, l) => a + legSetsDone(l), 0);
+    return {
+      kind: 'delete',
+      title: 'Supprimer ce Défi 360 ?',
+      message:
+        n > 0
+          ? `Il est effacé définitivement, avec ses ${n} série${n > 1 ? 's' : ''} : l'XP et l'énergie qu'elles ont rapportées te sont retirées.`
+          : 'Aucune série faite : il est supprimé définitivement, sans laisser de trace.',
+      ok: 'Supprimer',
+    };
+  }
   // ⚠️ `legSetsDone` et non `legDone` : il compte les ENTRÉES, donc il voit la progression
   // dans les deux modes (séries ET reps, `legSets` repliant l’ancien `progress`). Avec
   // `legDone`, un exo en mode reps dont toutes les entrées valent 0 passerait pour vierge.
@@ -587,7 +602,12 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
   const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.start_date}T00:00:00Z`);
   const ecoules = today < c.start_date ? 0 : Math.round(ms / 86400000) + 1;
   const onTimePct = Math.round((Math.max(0, Math.min(jours, ecoules)) / jours) * 100);
-  const latePct = Math.max(0, onTimePct - donePct);
+  // ⚠️ LE PREMIER JOUR, PERSONNE N'EST EN RETARD (audit 2026-10-15) : « en retard » à
+  // l'ouverture d'un défi tout neuf décourage pour rien. Le trait de l'attendu reste (il dit
+  // où on devrait être ce soir), le rose et l'alerte attendent demain. Sauf pour un défi d'un
+  // seul jour : ce premier jour est aussi le dernier.
+  const day1 = ecoules <= 1 && jours > 1;
+  const latePct = day1 ? 0 : Math.max(0, onTimePct - donePct);
   return {
     onTimePct,
     donePct,
@@ -595,8 +615,8 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
     showMark: onTimePct > 0 && onTimePct < 100,
     // ⚠️ Pas de `< 100` ici : c’était le défaut. On se tait quand le défi n’a pas commencé,
     // et quand il est bouclé — plus rien n’est en retard, la barre est pleine.
-    showPace: c.status === 'active' && onTimePct > 0 && donePct < 100,
-    state: donePct >= onTimePct ? 'ahead' : 'behind',
+    showPace: c.status === 'active' && !day1 && onTimePct > 0 && donePct < 100,
+    state: day1 || donePct >= onTimePct ? 'ahead' : 'behind',
   };
 }
 
