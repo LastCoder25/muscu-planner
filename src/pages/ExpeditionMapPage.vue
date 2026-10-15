@@ -6379,13 +6379,9 @@ let resizeObs: ResizeObserver | null = null;
 async function initialFit() {
   if (contW.value < 50) return;
   fitted = true;
-  // Vue de départ : le disque révélé tient dans la largeur (la carte grandit avec
-  // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie),
-  // puis UN CRAN de plus (demandé par l'utilisateur : le disque entier était un cran trop
-  // dézoomé — on voit la ville et ses abords, le reste se trouve en faisant glisser ou au −).
-  // 🏝️ Sur une île, le village du port est AU BORD : on cadre l'île entière, centrée sur elle.
-  const fitR = island.value ? V.value.size / 2 - 20 : reveal.value;
-  mapPx.value = clampPx(Math.round((contW.value * V.value.size) / (2 * (fitR + 6))) + ZOOM_STEP);
+  // Vue de départ : DÉZOOM MAXIMAL (demandé par l'utilisateur) — on voit toute la carte d'un
+  // coup, on zoome au + ou en pinçant. 🏝️ Sur une île on centre sur l'île, sinon sur la ville.
+  mapPx.value = minPx.value;
   await nextTick();
   if (island.value) centerOn(V.value.x + V.value.size / 2, V.value.y + V.value.size / 2);
   else centerTown();
