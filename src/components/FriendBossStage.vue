@@ -315,6 +315,22 @@ function centerOf(el: HTMLElement | null | undefined): { x: number; y: number } 
 
 const FLIGHT_MS = 420;
 
+/** Point de départ d'une attaque : le BORD du médaillon de l'auteur, côté boss — pas son
+ *  centre (le projectile semblait sortir du visage). Repli sur le centre de la tuile. */
+function launchFrom(
+  userId: string,
+  to: { x: number; y: number },
+): { x: number; y: number } | null {
+  const tile = allyEls.get(userId);
+  const av = tile?.querySelector<HTMLElement>('.fbs-ally-av') ?? tile;
+  const c = centerOf(av);
+  if (!c || !av) return null;
+  const r = Math.min(av.offsetWidth, av.offsetHeight) / 2;
+  const d = Math.hypot(to.x - c.x, to.y - c.y);
+  if (d <= r) return c;
+  return { x: c.x + ((to.x - c.x) / d) * r, y: c.y + ((to.y - c.y) / d) * r };
+}
+
 /** Retire un élément d'une liste réactive au bout de `ms`. */
 function expire<T extends { key: number }>(list: { value: T[] }, key: number, ms: number) {
   setTimeout(() => (list.value = list.value.filter((x) => x.key !== key)), ms);
@@ -395,8 +411,8 @@ async function volley(
   for (const dmg of hits) {
     if (!live(token)) return;
     await hop(s.userId);
-    const from = centerOf(allyEls.get(s.userId));
     const to = centerOf(bossEl.value);
+    const from = to && launchFrom(s.userId, to);
     if (from && to) {
       const key = ++seq;
       const dx = to.x - from.x;
@@ -434,8 +450,8 @@ async function laser(s: BossStrike, hits: number[], gap: number, token: number) 
   await hop(s.userId);
   await wait(380); // charge
   if (!live(token)) return;
-  const from = centerOf(allyEls.get(s.userId));
   const to = centerOf(bossEl.value);
+  const from = to && launchFrom(s.userId, to);
   if (from && to) {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
