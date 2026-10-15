@@ -9,6 +9,18 @@ import { fileURLToPath } from 'node:url';
 // libs, elles, restent pures et tournent en `node`. Un environnement par fichier
 // (`// @vitest-environment happy-dom`) évite de payer un DOM pour 1800 tests qui n'en
 // veulent pas.
+// ⚖️ Les simulations d'ÉCONOMIE sur un an (camps, puits d'or, rythme des ascensions) prennent
+// ~6 min à elles trois — plus que tout le reste de la suite (mesuré à l'audit du 2026-10-15 :
+// 181 s, 104 s et 102 s). Elles ne changent qu'avec un réglage d'équilibrage : `npm test` les
+// saute, `npm run test:calib` les joue (CALIB=1), et toute modification d'équilibrage DOIT
+// passer par lui avant d'être annoncée.
+const CALIBRATION = [
+  'test/campEconomy.test.ts',
+  'test/goldSink.test.ts',
+  'test/ascensionRhythm.test.ts',
+];
+const calib = process.env.CALIB === '1';
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -21,7 +33,9 @@ export default defineConfig({
     // Le client Supabase est construit à l'import : sans URL il jette, et tout montage
     // d'un composant qui touche un store échouerait avant d'avoir rien prouvé.
     env: { SUPABASE_URL: 'http://localhost:54321', SUPABASE_ANON_KEY: 'test-anon-key' },
-    include: ['test/**/*.test.ts'],
+    include: calib ? CALIBRATION : ['test/**/*.test.ts'],
+    exclude: calib ? [] : CALIBRATION,
+    setupFiles: ['test/setup/offlineSupabase.ts'],
     // ⚠️ 30 s au lieu de 5 : les tests de CALIBRATION simulent des centaines de combats
     // (~1-3 s seuls) et, sous la charge de la suite complète sur ce poste, dépassaient
     // 5 s au hasard — un fichier différent à chaque passage, jamais seul. Le délai avait

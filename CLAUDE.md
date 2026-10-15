@@ -3486,6 +3486,11 @@ lu, prop manquante — qu'aucune des cinq autres ne peut voir. Y ajouter un écr
 touche la logique : `mountIt(composant, props, row)`. ⚠️ **Pas de SSR** : `renderToString`
 rend les `watch` inertes, donc il passe au vert sur ce genre de défaut.
 
+⚖️ **Les 3 simulations d'économie sur un an** (`campEconomy`, `goldSink`, `ascensionRhythm`,
+~6 min) sont **hors de `npm test`** depuis la v1.210.1 : `npm run test:calib` les joue. **Tout
+réglage d'équilibrage passe par `test:calib` avant d'être annoncé.** Les tests ne touchent
+jamais le réseau : `test/setup/offlineSupabase.ts` répond 503 à l'URL Supabase factice.
+
 Rapporter fidèlement : un test rouge se dit avec sa sortie, une étape sautée se dit.
 
 **⚠️ Un test VERT ne prouve rien tant qu'il n'a pas été vu ROUGE.** Pour toute logique de calcul
