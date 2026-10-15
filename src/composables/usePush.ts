@@ -61,6 +61,11 @@ async function readyRegistration(): Promise<ServiceWorkerRegistration | null> {
 
 const busy = ref(false);
 const enabled = ref(false);
+/** Dernier plan ÉCRIT (utilisateur + messages). La synchro tourne toutes les 5 min : sans
+ *  ce repère, elle réécrivait le même plan à chaque fois (~24 requêtes par heure pour rien,
+ *  mesuré à l'audit du 2026-10-15). Mémoire de session seulement : la première synchro
+ *  après un rechargement écrit toujours. */
+let syncedSig = '';
 
 export function usePush() {
   async function refresh() {
@@ -149,9 +154,12 @@ export function usePush() {
     if (!enabled.value) return;
     const plans = planPushes(ctx, now);
     const vivantes = plans.map((p) => p.dedupe);
+    const sig = JSON.stringify([userId, plans]);
+    if (sig === syncedSig) return;
 
+    let upsertFailed = false;
     if (plans.length) {
-      await supabase.from('scheduled_pushes').upsert(
+      const up = await supabase.from('scheduled_pushes').upsert(
         plans.map((p) => ({
           user_id: userId,
           kind: p.kind,
@@ -164,12 +172,15 @@ export function usePush() {
         })),
         { onConflict: 'user_id,dedupe' },
       );
+      upsertFailed = !!up.error;
     }
     // Les lignes PAS ENCORE ENVOYÉES qui ne correspondent plus à rien.
     // ⚠️ On ne touche jamais aux lignes déjà envoyées : elles sont l'historique.
     let q = supabase.from('scheduled_pushes').delete().eq('user_id', userId).is('sent_at', null);
     if (vivantes.length) q = q.not('dedupe', 'in', `(${vivantes.map((d) => `"${d}"`).join(',')})`);
-    await q;
+    const { error } = await q;
+    // Retenu seulement si tout est passé : un échec réessaiera à la synchro suivante.
+    if (!error && !upsertFailed) syncedSig = sig;
   }
 
   return { enabled, busy, refresh, enable, disable, sync };
