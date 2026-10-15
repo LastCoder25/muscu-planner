@@ -5,6 +5,7 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
+import { singleFlight } from '@/lib/singleFlight';
 import { useCharacterStore } from '@/stores/character';
 import {
   bossFromRow,
@@ -36,7 +37,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
   const loaded = ref(false);
   const uid = computed(() => useAuthStore().user?.id ?? null);
 
-  async function fetchMine() {
+  async function loadMine() {
     const me = uid.value;
     if (!me) {
       bosses.value = [];
@@ -90,6 +91,9 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     }));
     loaded.value = true;
   }
+  // Cinq écrans l'appellent (accueil, layout, progression, agenda, boss) : en vol, ils
+  // partagent la même requête (audit : `friend_boss_members` lu trois fois au démarrage).
+  const fetchMine = singleFlight(loadMine);
 
   const myMembership = (bossId: string) =>
     members.value.find((m) => m.bossId === bossId && m.userId === uid.value) ?? null;
@@ -137,12 +141,12 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     });
     // Le serveur a dépensé les jetons : on le reflète avant qu'un gain ne réécrive l'ancienne réserve.
     useCharacterStore().spentBossTokens(bossTokenCost(tier));
-    await fetchMine();
+    await loadMine();
   }
 
   async function respond(bossId: string, accept: boolean) {
     await rpc('fboss_respond', { p_boss: bossId, p_accept: accept });
-    await fetchMine();
+    await loadMine();
   }
 
   /** Frappe : le serveur retient ce qui passe les plafonds et rend ce qu'il a accepté. */
@@ -159,7 +163,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       reason?: string;
     }>('fboss_hit', { p_boss: bossId, p_units: Math.floor(units) });
     if (!res.ok) throw new FriendBossError(res.reason ?? '');
-    await fetchMine();
+    await loadMine();
     const accepted = res.accepted ?? 0;
     // ⚠️ Un serveur d'avant la 0092 ne renvoie pas `damage` : tout y faisait des dégâts.
     const damage = res.damage ?? accepted;
