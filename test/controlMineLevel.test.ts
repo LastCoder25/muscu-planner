@@ -20,7 +20,7 @@ describe('⛏️ la mine d’un lieu fixe suit le niveau du héros, sans palier'
   it('la courbe ne dépend pas de l’id du lieu', () => {
     expect(controlGoldPerHour({ id: 'x' }, 3, 37)).toBe(gold(37));
   });
-  it('une garnison de 3 produit un filon de son niveau toutes les 8 h', () => {
-    expect(gold(37) * 8).toBeCloseTo(mineVeinGold(controlMineLevel(37)), 6);
+  it('une garnison de 3 produit un filon de son niveau toutes les 24 h (v1.217, 8 h avant)', () => {
+    expect(gold(37) * 24).toBeCloseTo(mineVeinGold(controlMineLevel(37)), 6);
   });
 });

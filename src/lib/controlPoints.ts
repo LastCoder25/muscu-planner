@@ -158,7 +158,11 @@ export const CONTROL = {
   /** ⛏️ Une garnison complète produit l'or d'une mission de mine de son rang toutes les
    *  `mineHoursPerHaul` heures. ⚠️ Ces champions ne font pas de missions pendant ce temps :
    *  le débit est calé pour valoir à peu près ce qu'ils auraient ramené en allant et venant. */
-  mineHoursPerHaul: 8,
+  //  ⚠️ 8 → 24 h en v1.217 (décision de l'utilisateur, mesuré) : à 8 h une seule mine tenue
+  //  rapportait 40 à 165 % de TOUT le reste du revenu d'une journée (donjons, revente, boss,
+  //  convois, camps, sièges) et sortait le puits d'or de sa bande. Le mode archipel, déjà calé
+  //  sur 24 h (`ISLAND_CONQUEST.mineHours`), ne change pas.
+  mineHoursPerHaul: 24,
   /** Part de production selon l'effectif posté (index = nombre de présents, champions ET
    *  miliciens). ⚠️ 2026-09-28 (demandé : « chaque lieu qui produit ou a un effet doit
    *  s'améliorer selon le nombre en garnison, jusqu'à 5 ») : elle monte jusqu'à 5, à

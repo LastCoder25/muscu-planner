@@ -26,6 +26,7 @@ import { engageCap } from '@/lib/adventurers';
 import { rollRaid } from '@/lib/raid';
 import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
+import { controlGoldPerHour } from '@/lib/controlPoints';
 
 export const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
 /** ~4 séances de sport par semaine : le jeu est annexe. */
@@ -253,9 +254,20 @@ const siegeGold = memo((L) => {
   return g / N;
 });
 
+/** ⛏️ La rente d'une MINE FIXE tenue par 3 champions, une journée (v1.217). */
+export const controlRentPerDay = (L: number): number => controlGoldPerHour({ id: 'm' }, 3, L) * 24;
+
 /** Le revenu d'or COMPLET d'une journée type. `comptoir` = niveau de l'Avant-poste (il
- *  règle le nombre et la vitesse des convois) ; `siegesPerDay` suit le rythme sportif. */
-export function fullGoldPerDay(L: number, comptoir = L, siegesPerDay = 0.5): number {
+ *  règle le nombre et la vitesse des convois) ; `siegesPerDay` suit le rythme sportif.
+ *  ⚠️ `withMine` ajoute la rente de la mine fixe. HORS de l'étalon par défaut : la tenir en
+ *  permanence à 3 champions dès le niveau 5 est un joueur optimal, pas la journée type — elle
+ *  se mesure à part (goldSink, « avec la mine fixe »). */
+export function fullGoldPerDay(
+  L: number,
+  comptoir = L,
+  siegesPerDay = 0.5,
+  withMine = false,
+): number {
   const runs = dungeonGold(bestDungeon(L)) * RUNS_PER_DAY;
   const mines = 2 * mineNet(L);
   return (
@@ -266,6 +278,7 @@ export function fullGoldPerDay(L: number, comptoir = L, siegesPerDay = 0.5): num
     convoyGoldPerDay(L, comptoir) +
     campShare(L) * (runs + mines) +
     siegeGold(L) * siegesPerDay +
-    comboChestReward(40, L).gold / 7
+    comboChestReward(40, L).gold / 7 +
+    (withMine ? controlRentPerDay(L) : 0)
   );
 }

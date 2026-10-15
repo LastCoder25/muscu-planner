@@ -202,12 +202,12 @@ describe('🕊️ île pacifiée', () => {
     expect(islandPacified(m)).toBe(false);
   });
 
-  it('la mine tenue sur une île produit au rythme de 24 h (le tiers de 8 h)', () => {
+  it('la mine tenue sur une île produit au rythme de 24 h (celui de la carte depuis la v1.217)', () => {
     const m = held();
-    expect(poi(m, controlIdOf('mine'))!.control!.yieldMult).toBeCloseTo(
+    expect(poi(m, controlIdOf('mine'))!.control!.yieldMult ?? 1).toBeCloseTo(
       CONTROL.mineHoursPerHaul / ISLAND_CONQUEST.mineHours,
     );
-    // Hors du mode archipel, la mine garde son rythme.
+    // Hors du mode archipel, même rythme : les deux sont à 24 h depuis la v1.217.
     const plain = captureControl(
       ensureControls(createMap(7, NOW, LV, 3), NOW, LV, 3),
       controlIdOf('mine'),
@@ -222,7 +222,7 @@ describe('🕊️ île pacifiée', () => {
       LV,
     ).gold;
     const b = collectControl(m, controlIdOf('mine'), NOW + 24 * H, LV).gold;
-    expect(b / a).toBeCloseTo(1 / 3, 1);
+    expect(b / a).toBeCloseTo(CONTROL.mineHoursPerHaul / ISLAND_CONQUEST.mineHours, 1);
   });
 
   it('pacifiée, île 1 : le socle garde 100 %, la production déjà faite reste au débit d’avant', () => {
@@ -247,7 +247,7 @@ describe('🕊️ île pacifiée', () => {
     expect(islandYieldRule(pac(2), 'mine').yieldMult).toBeCloseTo(
       mine * ISLAND_CONQUEST.socleShare,
     );
-    expect(islandYieldRule(pac(1), 'mine').yieldMult).toBeCloseTo(mine);
+    expect(islandYieldRule(pac(1), 'mine').yieldMult ?? 1).toBeCloseTo(mine);
     expect(islandYieldRule(pac(1), 'mine').flatTier).toBe(true);
     expect(islandYieldRule(pac(2), 'garden').yieldMult).toBeUndefined();
   });

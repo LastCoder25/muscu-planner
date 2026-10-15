@@ -3,13 +3,20 @@ import { buildingUpgradeCost, BUILDING_TYPES, plotsForLevel } from '@/lib/buildi
 import { goldCost, resolveOutcome } from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
-import { PROFILS, partDuPlafond, yearOfPlay } from './helpers/buildSim';
+import { PROFILS, PROFILS_LEGERS, partDuPlafond, yearOfPlay } from './helpers/buildSim';
 import { DEFENSE_TYPES, healCost } from '@/lib/raid';
 // ⚠️ LE MODÈLE DE REVENU VIT DANS UN HELPER PARTAGÉ (`test/helpers/goldModel`) : le débit
 // des CAMPS DE FACTION se mesure contre LE MÊME dénominateur, et deux copies auraient
 // divergé — c'est par un mauvais dénominateur que ce fichier a déjà laissé passer un puits
 // qui débordait (v0.684) puis un puits devenu mur (v0.733).
-import { LEVELS, goldPerDay, fullGoldPerDay, mineNet, bestPlaceLevel } from './helpers/goldModel';
+import {
+  LEVELS,
+  goldPerDay,
+  fullGoldPerDay,
+  controlRentPerDay,
+  mineNet,
+  bestPlaceLevel,
+} from './helpers/goldModel';
 import { harvestGuardOf } from '@/lib/expedition';
 import { levelForDifficulty } from '@/lib/poiDifficulty';
 
@@ -80,7 +87,9 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       // …et un cran d'un SEUL bâtiment reste au-dessus d'une journée : un bâtiment qu'on
       // monte sans y penser n'est pas un puits.
       // ⚠️ 1 → 0,9 en v1.51 (prix ×0,75) : ~1 jour au niveau 15, le point le plus bas.
-      expect(parBat, `niveau ${L} : ${parBat.toFixed(2)} jour(s) par bâtiment`).toBeGreaterThan(0.9);
+      expect(parBat, `niveau ${L} : ${parBat.toFixed(2)} jour(s) par bâtiment`).toBeGreaterThan(
+        0.9,
+      );
     }
   });
 
@@ -230,6 +239,31 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       expect(y.spentShare, spent).toBeGreaterThan(0.95);
     }
   });
+
+  it('🐢 un joueur peu actif n’est jamais en retard sur ses bâtiments (accepté : il sature)', () => {
+    // 100 et 200 XP par jour : il monte si lentement que l’or rattrape tout. Mesuré (v1.217) :
+    // 100 % du plafond, et 80 / 1 jours de revenu qui dorment. Décision de l’utilisateur : on
+    // ne baisse pas le coût pour lui — ce test garde seulement qu’il ne prend aucun RETARD.
+    for (const [nom, xp] of PROFILS_LEGERS) expect(partDuPlafond(xp), nom).toBeGreaterThan(0.95);
+  }, 180_000);
+
+  it('⛏️ la mine fixe reste un complément, pas la première source d’or (v1.217)', () => {
+    // À une récolte toutes les 8 h elle valait 40 à 165 % de tout le reste d’une journée.
+    // À 24 h : 14 à 55 %. Au-delà de 60 %, tenir une mine dispenserait du reste du jeu.
+    for (const L of [5, 10, 20, 30, 50, 70])
+      expect(controlRentPerDay(L) / fullGoldPerDay(L), 'niveau ' + L).toBeLessThan(0.6);
+  });
+
+  it('⛏️ un joueur qui TIENT sa mine en permanence frôle le plafond, sans le dépasser (accepté)', () => {
+    // Mesuré (v1.217, mine à 24 h, prix de la v1.51) : 93,2 / 82,8 / 77,0 % du plafond en un an
+    // (tranquille / régulier / très actif), 91 / 81 / 75 % avec 13 champions qui montent. Décision
+    // de l'utilisateur : garder la baisse de prix plutôt que remonter `BUILD.upBase` à ~740.
+    for (const [nom, xp] of PROFILS) {
+      const y = yearOfPlay(xp, undefined, 0, true);
+      expect(y.part, nom).toBeLessThan(0.95);
+      expect(y.bankDays, nom).toBeLessThan(3);
+    }
+  }, 180_000);
 
   it('⚠️ LE REVENU COMPLET COMPTE VRAIMENT LES AUTRES SOURCES', () => {
     // Revente du butin, boss, convois, camps, sièges, coffre du 360 : sans elles le puits

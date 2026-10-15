@@ -22,6 +22,13 @@ export const PROFILS: [string, number][] = [
   ['régulier', 700],
   ['très actif', 1066],
 ];
+/** 🐢 Les profils PEU ACTIFS (audit 2026-10-15) : 100 et 200 XP par jour. Hors de la bande
+ *  du puits d'or par construction — ils montent si lentement de niveau que l'or rattrape
+ *  toujours les bâtiments. Accepté par l'utilisateur : on ne baisse pas le coût pour eux. */
+export const PROFILS_LEGERS: [string, number][] = [
+  ['occasionnel', 100],
+  ['léger', 200],
+];
 
 export interface YearOfPlay {
   /** Part du plafond des bâtiments atteinte (niveaux bâtis ÷ (emplacements × niveau)). */
@@ -46,6 +53,7 @@ export function yearOfPlay(
   xpParJour: number,
   nbTypes = BUILDING_TYPES.length,
   ascendK = 0,
+  withMine = false,
 ): YearOfPlay {
   const types = BUILDING_TYPES.slice(0, nbTypes);
   const niv = types.map(() => 0);
@@ -63,7 +71,7 @@ export function yearOfPlay(
   for (let j = 0; j < 365; j++) {
     xp += xpParJour;
     const L = computeLevel(xp).level;
-    last = fullGoldPerDay(L, outpost < 0 ? 0 : niv[outpost]!, siegesPerDay);
+    last = fullGoldPerDay(L, outpost < 0 ? 0 : niv[outpost]!, siegesPerDay, withMine);
     or += last;
     earned += last;
     for (; rang < characterRank(L).rankIndex; rang++)
