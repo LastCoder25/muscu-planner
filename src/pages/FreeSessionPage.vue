@@ -7,7 +7,7 @@
         <div class="top-sub">
           {{ clock
           }}<template v-if="run">
-            · {{ run.exercises.length }} exos · vol {{ totalVolume }} kg</template
+            · {{ run.exercises.length }} exo{{ run.exercises.length > 1 ? 's' : '' }} · vol {{ totalVolume }} kg</template
           >
         </div>
       </div>
@@ -364,7 +364,7 @@
 
         <div v-else-if="pickerView === 'tiles'" class="tiles">
           <button
-            v-for="e in filteredLib"
+            v-for="{ ex: e, tag } in filteredLib"
             :key="e.id"
             class="tile"
             :style="{ borderTopColor: exColor(e) }"
@@ -383,7 +383,9 @@
               :style="{ background: exColor(e) + '22', color: exColor(e) }"
               ><q-icon :name="exIcon(e)" size="26px"
             /></span>
-            <div class="tile-name">{{ e.name }}</div>
+            <div class="tile-name">
+              <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span>{{ e.name }}
+            </div>
             <div v-if="e.muscle_primary" class="tile-mus" :style="{ color: exColor(e) }">
               {{ e.muscle_primary }}
             </div>
@@ -399,14 +401,23 @@
         </div>
 
         <template v-else>
-          <button v-for="e in filteredLib" :key="e.id" class="alt" @click="pick(e)">
+          <button
+            v-for="{ ex: e, tag } in filteredLib"
+            :key="e.id"
+            class="alt"
+            @click="pick(e)"
+          >
             <span class="alt-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"
               ><q-icon :name="exIcon(e)" size="20px"
             /></span>
             <div class="alt-main">
-              <div class="alt-name">{{ e.name }}</div>
+              <div class="alt-name">
+                <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span>{{ e.name }}
+              </div>
               <div class="alt-meta">
-                {{ e.muscle_primary }}<template v-if="e.equipment"> · {{ e.equipment }}</template>
+                {{ e.muscle_primary }}<template v-if="e.equipment">
+                  · {{ equipmentLabel(e.equipment) }}</template
+                >
               </div>
             </div>
             <q-icon
@@ -498,6 +509,7 @@ import { setAdvice, instancesOf, verdictLabel, type SetAdvice } from '@/lib/prog
 import { repRangeForExercise, repRangeLabel } from '@/lib/repScheme';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
+import { equipmentLabel, isUnloadedEquipment, pickerOrder, recentExerciseIds } from '@/lib/freePicker';
 
 const router = useRouter();
 const $q = useQuasar();
@@ -670,7 +682,13 @@ const filteredLib = computed(() => {
     base = base.filter(
       (e) => e.name.toLowerCase().includes(n) || (e.muscle_primary ?? '').toLowerCase().includes(n),
     );
-  return base.slice(0, 60);
+  // ★ Favoris puis 🕘 faits récemment devant (audit 2026-10-15) : on retrouve ses exos
+  // habituels sans les chercher parmi la centaine de la bibliothèque.
+  return pickerOrder(
+    base,
+    profileStore.profile?.favorite_exercises ?? [],
+    recentExerciseIds(logs.all.map((r) => r.payload)),
+  ).slice(0, 60);
 });
 function exIcon(e: ExerciseRow): string {
   const q = (e.equipment ?? '').toLowerCase();
@@ -721,7 +739,7 @@ function adviceFor(e: ExerciseRow): SetAdvice {
     range,
     scheme: profileStore.levelConfig?.default_progression ?? 'double',
     musclePrimary: e.muscle_primary,
-    bodyweight: e.equipment === 'poids_du_corps' || e.equipment === 'élastique',
+    bodyweight: isUnloadedEquipment(e.equipment),
   });
 }
 function pick(e: ExerciseRow) {
@@ -1705,6 +1723,12 @@ onBeforeUnmount(() => {
 .alt-main {
   flex: 1;
   min-width: 0;
+}
+/* ★ favori · 🕘 fait récemment, devant le nom. */
+.pk-tag {
+  margin-right: 4px;
+  color: var(--accent);
+  font-size: 0.9em;
 }
 .alt-name {
   font-weight: 600;

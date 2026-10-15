@@ -14,6 +14,7 @@ import type {
 import { SCHEMA_VERSION } from '@/lib/types';
 import { isWorkSet, warmupSets, workSets } from '@/lib/warmup';
 import { savedRuns, type SavedRunSummary } from '@/lib/liveResume';
+import { isUnloadedEquipment } from '@/lib/freePicker';
 
 export interface LiveSet {
   uid: string; // clé stable (évite les décalages de liste à la suppression)
@@ -99,8 +100,7 @@ export const useLiveStore = defineStore('live', () => {
         // (poids du corps, élastique/assisté) → charge affichée « PdC », lest optionnel.
         const bodyweight =
           ex.target.load === 'bodyweight' ||
-          ex.equipment === 'poids_du_corps' ||
-          ex.equipment === 'élastique';
+          isUnloadedEquipment(ex.equipment);
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
         const blank = (load: number, reps: number, rest?: number): LiveSet => {
           const set: LiveSet = {
@@ -219,7 +219,7 @@ export const useLiveStore = defineStore('live', () => {
     start?: { load: number; reps: number };
   }) {
     if (!run.value) return;
-    const bodyweight = def.equipment === 'poids_du_corps' || def.equipment === 'élastique';
+    const bodyweight = isUnloadedEquipment(def.equipment);
     const isTime = def.unit === 'time';
     run.value.exercises.push({
       id: def.id,

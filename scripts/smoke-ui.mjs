@@ -65,6 +65,13 @@ const ECRANS = [
       { nom: 'live', clic: '.ready-page .skip', attendu: '.live-page' },
     ],
   },
+  // 🏋️ Le sélecteur d'exercices de la séance libre (v1.212.4) : favoris et récents devant,
+  // matériel en français. Rien n'est enregistré tant qu'on n'ajoute rien.
+  {
+    route: '/free',
+    nom: 'libre',
+    gestes: [{ nom: 'choix', clic: '.cta:has-text("Choisir un exercice")', attendu: '.sheet' }],
+  },
   { route: '/history', nom: 'historique' },
   { route: '/stats', nom: 'stats' },
   { route: '/trophies', nom: 'trophees' },
