@@ -44,6 +44,17 @@ describe('⚙️ vercel.json', () => {
       expect(cacheOf(p)).toMatch(/max-age=86400/);
   });
 
+  // Exhaustif par construction : un dossier d'images ajouté à public/ sans règle de cache
+  // retombe sur le cache par défaut de Vercel (oubli constaté pour powers/ et militia/).
+  it('chaque dossier de public/ est en cache', () => {
+    const dirs = fs
+      .readdirSync('public', { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    expect(dirs.length).toBeGreaterThan(0);
+    for (const d of dirs) expect(cacheOf(`/${d}/x.webp`), d).toMatch(/max-age=86400/);
+  });
+
   it('index.html, le service worker et le manifeste ne sont JAMAIS mis en cache', () => {
     for (const p of ['/', '/index.html', '/pwa-sw.js', '/manifest.webmanifest'])
       expect(cacheOf(p)).toBeUndefined();
