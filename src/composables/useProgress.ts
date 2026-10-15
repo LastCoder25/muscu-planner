@@ -617,9 +617,13 @@ export function useProgress() {
     muscuXp: computed(() => muscuTotal.value),
     cardioXp: computed(() => cardioXp.value),
     // 3 réservoirs de stats (répartis par signature de sport) → stats du perso.
-    powerXp: computed(() => Math.round(statBuckets.value.power)),
-    enduranceXp: computed(() => Math.round(statBuckets.value.endurance)),
-    agilityXp: computed(() => Math.round(statBuckets.value.agility)),
+    // ⚠️ NON ARRONDIS : `computeCharacter` en tire le niveau du héros (somme des trois),
+    // qui doit être EXACTEMENT le niveau Global. Arrondis un par un, leur somme s'écartait
+    // du total d'un XP — à un XP d'un palier, l'Aventure disait 41 et l'accueil 42.
+    // `computeLevel` arrondit UNE fois, sur la somme.
+    powerXp: computed(() => statBuckets.value.power),
+    enduranceXp: computed(() => statBuckets.value.endurance),
+    agilityXp: computed(() => statBuckets.value.agility),
     // Piliers Force / Endurance = niveaux des réservoirs (bénéfices de TOUT le sport).
     force: computed(() => computeLevel(Math.round(statBuckets.value.power))),
     endurance: computed(() => computeLevel(Math.round(statBuckets.value.endurance))),

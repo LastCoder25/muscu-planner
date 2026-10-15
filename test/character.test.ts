@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   statFromXp,
   computeCharacter,
@@ -27,6 +28,18 @@ describe('computeCharacter', () => {
     expect(c.pv).toBe(100 + c.endurance * 10);
     expect(c.energy).toBe(1200);
     expect(c.level.level).toBe(computeLevel(900 + 600 + 300).level);
+  });
+  it('le niveau arrondit la SOMME des réservoirs, une seule fois (même niveau que le Global)', () => {
+    // 3 réservoirs fractionnaires qui somment pile au palier du niveau 2 (200 XP) :
+    // arrondis un par un ils vaudraient 199 → niveau 1, alors que le Global dit 2.
+    const c = computeCharacter(66.4, 66.4, 67.2, 0);
+    expect(c.level.level).toBe(computeLevel(200).level);
+    expect(c.level.level).toBe(2);
+  });
+  it('useProgress passe les réservoirs NON arrondis (sinon 41 ici, 42 sur l’accueil)', () => {
+    const src = readFileSync('src/composables/useProgress.ts', 'utf8');
+    for (const k of ['power', 'endurance', 'agility'])
+      expect(src).toMatch(new RegExp(`${k}Xp: computed\\(\\(\\) => statBuckets\\.value\\.${k}\\)`));
   });
   it('énergie = dispo − dépensée (déficit possible, négatif)', () => {
     expect(computeCharacter(0, 0, 0, 30, 10).energy).toBe(20);
