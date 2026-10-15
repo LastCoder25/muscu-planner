@@ -58,7 +58,12 @@
           >
             📖
           </button>
-          <button class="inbox-btn" aria-label="Aide" title="Revoir le guide de l'Aventure" @click="showIntro = true">
+          <button
+            class="inbox-btn"
+            aria-label="Aide"
+            title="Revoir le guide de l'Aventure"
+            @click="showIntro = true"
+          >
             ❔
           </button>
         </div>
@@ -126,10 +131,22 @@
         <div class="intro-h font-display">⚔️ Bienvenue dans l'Aventure</div>
         <ul class="intro-list">
           <li>💪 Ton <b>niveau et tes stats</b> viennent de ton SPORT réel — rien à répartir.</li>
-          <li>⚡ Le sport donne de l'<b>énergie</b> : elle paie les donjons, le Labyrinthe et le Portail.</li>
-          <li>🦸 <b>Héros</b> : ta fiche et tes talents. 🎒 <b>Équipement</b> : le 🪄 équipe le meilleur build.</li>
-          <li>🗺️ <b>Explorer</b> : donjons et boss de palier (les boss lâchent les pièces de <b>set</b>), et la <b>carte</b> où partent héros et champions.</li>
-          <li>🛡️ <b>Base</b> : bâtiments, enceinte contre les sièges, et le <b>Panthéon</b> où l'on invoque des champions avec 💠 et 🎟️.</li>
+          <li>
+            ⚡ Le sport donne de l'<b>énergie</b> : elle paie les donjons, le Labyrinthe et le
+            Portail.
+          </li>
+          <li>
+            🦸 <b>Héros</b> : ta fiche et tes talents. 🎒 <b>Équipement</b> : le 🪄 équipe le
+            meilleur build.
+          </li>
+          <li>
+            🗺️ <b>Explorer</b> : donjons et boss de palier (les boss lâchent les pièces de
+            <b>set</b>), et la <b>carte</b> où partent héros et champions.
+          </li>
+          <li>
+            🛡️ <b>Base</b> : bâtiments, enceinte contre les sièges, et le <b>Panthéon</b> où l'on
+            invoque des champions avec 💠 et 🎟️.
+          </li>
         </ul>
         <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
       </div>
@@ -4475,35 +4492,40 @@ const levelBurstUnlocks = computed(() => {
 // à 0), pas parce qu'elle est simplement la plus haute. (Remplace les barres
 // relatives où la plus haute stat semblait « au max » alors qu'elle monte encore.)
 function statShare(v: number): number {
-  const total = c.value.puissance + c.value.endurance + c.value.agilite;
+  // Les stats du SPORT, pas celles du combat (plancher) : la fiche dit ce qu'on a construit.
+  const st = c.value.sport;
+  const total = st.puissance + st.endurance + st.agilite;
   return total > 0 ? Math.round((v / total) * 100) : 0;
 }
-const statCircles = computed(() => [
-  {
-    key: 's-pui',
-    emo: '💪',
-    name: 'Puissance',
-    inf: 'Muscu · dégâts',
-    value: c.value.puissance,
-    share: statShare(c.value.puissance),
-  },
-  {
-    key: 's-end',
-    emo: '❤️',
-    name: 'Endurance',
-    inf: 'Muscu+Cardio · PV',
-    value: c.value.endurance,
-    share: statShare(c.value.endurance),
-  },
-  {
-    key: 's-agi',
-    emo: '⚡',
-    name: 'Agilité',
-    inf: 'Cardio · esquive/crit',
-    value: c.value.agilite,
-    share: statShare(c.value.agilite),
-  },
-]);
+const statCircles = computed(() => {
+  const st = c.value.sport;
+  return [
+    {
+      key: 's-pui',
+      emo: '💪',
+      name: 'Puissance',
+      inf: 'Muscu · dégâts',
+      value: st.puissance,
+      share: statShare(st.puissance),
+    },
+    {
+      key: 's-end',
+      emo: '❤️',
+      name: 'Endurance',
+      inf: 'Muscu+Cardio · PV',
+      value: st.endurance,
+      share: statShare(st.endurance),
+    },
+    {
+      key: 's-agi',
+      emo: '⚡',
+      name: 'Agilité',
+      inf: 'Cardio · esquive/crit',
+      value: st.agilite,
+      share: statShare(st.agilite),
+    },
+  ];
+});
 
 const busy = ref(false);
 const run = ref<RunView | null>(null);

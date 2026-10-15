@@ -333,7 +333,21 @@ function dungeonDifficultyMult(recoLevel: number): number {
   // (Caverne 2 %, Repaire 1 %). Étalée jusqu'au niveau 12 (avec `dungeonGearExpect` plein au
   // niveau 8) : Caverne 64 %, Repaire 48 %, Cryptes 45 %, Fournaise 49 %, et toujours
   // ≤ 21 % sans équipement. Au-delà du niveau 12 la valeur est inchangée (×1,5).
-  return 1 + 0.5 * Math.min(1, Math.max(0, (recoLevel - 2) / (DIFFICULTY_FULL_AT - 2)));
+  const ramp = 1 + 0.5 * Math.min(1, Math.max(0, (recoLevel - 2) / (DIFFICULTY_FULL_AT - 2)));
+  return ramp * (1 + EARLY_FLOOR_K * earlyFloorFade(recoLevel));
+}
+
+/** ⚖️ LE PLANCHER DE STATS DU HÉROS (v1.213.2) relève les sportifs déséquilibrés au niveau
+ *  d'un build équilibré. Les premiers donjons étaient calés sur la MOYENNE de trois profils
+ *  dont deux s'effondraient (un pur muscu gagnait 0 % de la Fournaise équipé) : sans eux, le
+ *  joueur médian devient plus fort et le début de partie n'est plus gaté par l'équipement.
+ *  Ce supplément, MESURÉ, le ramène là où il était. Plein des donjons 4 à 8, il s'efface
+ *  jusqu'au niveau 12 : le contenu profond, calibré ailleurs, ne bouge pas. */
+const EARLY_FLOOR_K = 0.12;
+function earlyFloorFade(recoLevel: number): number {
+  if (recoLevel < 4) return 0;
+  if (recoLevel <= 8) return 1;
+  return Math.max(0, (DIFFICULTY_FULL_AT - recoLevel) / (DIFFICULTY_FULL_AT - 8));
 }
 
 /** Convertit les ids de monstres d'un donjon en adversaires pour le moteur. PV/dégâts mis

@@ -2,6 +2,7 @@
 // Aucune répartition manuelle : les stats se déduisent de l'XP muscu/cardio.
 // Pur/testable, aucune dépendance Vue/Supabase.
 import { computeLevel, type LevelInfo } from './levels';
+import { floorStats } from './combat';
 
 // Courbe des stats : LINÉAIRE (stat = XP / 15) → la stat reflète fidèlement
 // l'effort (2× d'XP = 2× de stat) ; un exo à peine commencé reste bas.
@@ -17,6 +18,9 @@ export interface Character {
   puissance: number; // 💪 muscu → dégâts
   endurance: number; // ❤️ muscu + cardio → PV / résistance / énergie max
   agilite: number; // ⚡ cardio → esquive / vitesse / critiques / initiative
+  /** Les stats VRAIES, telles que le sport les donne (fiche, barres). Les trois champs
+   *  au-dessus sont celles du COMBAT, plancher compris (`floorStats`). */
+  sport: { puissance: number; endurance: number; agilite: number };
   pv: number; // dérivé de l'endurance
   energy: number; // énergie disponible (minutes de sport − dépensée)
   profile: CharacterProfile; // orientation dominante (libellé)
@@ -45,9 +49,14 @@ export function computeCharacter(
   energy: number,
   energySpent = 0,
 ): Character {
-  const puissance = statFromXp(powerXp);
-  const endurance = statFromXp(enduranceXp);
-  const agilite = statFromXp(agilityXp);
+  const sport = {
+    puissance: statFromXp(powerXp),
+    endurance: statFromXp(enduranceXp),
+    agilite: statFromXp(agilityXp),
+  };
+  // ⚖️ Le plancher de combat (audit 2026-10-15) : un build très déséquilibré se rapproche de
+  // l'équilibre, total conservé. Tout ce qui construit le héros lit ces trois champs.
+  const { puissance, endurance, agilite } = floorStats(sport);
   // Niveau de fond = total réparti dans les 3 réservoirs (= XP de fond).
   const fondXp = Math.max(0, powerXp) + Math.max(0, enduranceXp) + Math.max(0, agilityXp);
   return {
@@ -55,11 +64,12 @@ export function computeCharacter(
     puissance,
     endurance,
     agilite,
-    pv: 100 + endurance * 10,
+    sport,
+    pv: Math.round(100 + endurance * 10),
     // Peut être NÉGATIF (déficit) : si on retire des séances/séries après avoir
     // dépensé l'énergie, il faut la regagner par du sport avant de rejouer.
     energy: Math.round(energy) - Math.round(energySpent),
-    profile: characterProfile(puissance, agilite),
+    profile: characterProfile(sport.puissance, sport.agilite),
   };
 }
 

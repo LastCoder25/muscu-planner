@@ -516,7 +516,36 @@ function specW(c: Pick<Combatant, 'specRules'>, base: number, spec: number): num
   return c.specRules ? spec : base;
 }
 
-/** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
+/** ⚖️ PLANCHER DE STATS AU COMBAT (audit 2026-10-15, décision de l'utilisateur). Chaque stat
+ *  vaut au moins `STAT_FLOOR_SHARE` du total, PRISE SUR LES STATS EN EXCÈS : un sportif qui
+ *  ne fait que de la musculation (agilité ~0) ne frappait qu'une fois par tour, sans critique
+ *  ni esquive, et calait face à des contenus calibrés sur un build équilibré.
+ *
+ *  ⚠️ LE TOTAL EST CONSERVÉ — ce n'est pas un bonus. Le combattant de référence (trois stats
+ *  égales) n'est donc pas touché, et aucune calibration ne bouge pour lui ; seul un build très
+ *  déséquilibré se rapproche de l'équilibre. Posé par `computeCharacter` pour le HÉROS
+ *  seul ; les stats AFFICHÉES restent les vraies (`Character.sport`). */
+export const STAT_FLOOR_SHARE = 0.2;
+export function floorStats(stats: { puissance: number; endurance: number; agilite: number }): {
+  puissance: number;
+  endurance: number;
+  agilite: number;
+} {
+  const keys = ['puissance', 'endurance', 'agilite'] as const;
+  const v = keys.map((k) => Math.max(0, stats[k]));
+  const total = v[0]! + v[1]! + v[2]!;
+  const floor = total * STAT_FLOOR_SHARE;
+  const deficit = v.reduce((a, x) => a + Math.max(0, floor - x), 0);
+  if (deficit <= 0) return { puissance: v[0]!, endurance: v[1]!, agilite: v[2]! };
+  // Ce qui manque aux petites stats est pris aux grandes, au prorata de leur excès sur le plancher.
+  const excess = v.reduce((a, x) => a + Math.max(0, x - floor), 0);
+  const out = v.map((x) => (x < floor ? floor : x - (deficit * (x - floor)) / excess));
+  return { puissance: out[0]!, endurance: out[1]!, agilite: out[2]! };
+}
+
+/** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU.
+ *  ⚠️ Sert aussi aux CHAMPIONS (escorte), dont les formes déséquilibrées sont voulues : le
+ *  plancher du héros (`floorStats`) est posé en amont, par `computeCharacter`. */
 export function playerCombatant(
   name: string,
   stats: { puissance: number; endurance: number; agilite: number },
@@ -1488,7 +1517,12 @@ export function simulateCombat(
           pPv = Math.max(0, pBefore - Math.round(dmg * (1 - Math.min(0.9, player.lastStand ?? 0))));
           lastStandReady = false;
           lastStandUsed = true;
-        } else if (!fatalHandled && pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
+        } else if (
+          !fatalHandled &&
+          pPv > 0 &&
+          secondWindReady &&
+          pPv / maxPPv < COMBAT.secondWindThreshold
+        ) {
           // Second souffle : sous 30 % PV pour la 1re fois → soin.
           const heal =
             rid === 'second_souffle'
