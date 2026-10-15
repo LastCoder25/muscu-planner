@@ -6,7 +6,9 @@ import { skillValue, type SkillId } from '@/lib/skillRunes';
 import {
   deployEasyLevel,
   planStations,
+  planStationsAsync,
   type DeployDeps,
+  type DeployTune,
   type DeploySpot,
   type DeployUnit,
 } from '@/lib/mapDeployment';
@@ -128,5 +130,66 @@ describe('⛑️🎓🐫 attackSupport — la règle des missions, à rendement 
       champ('b', [{ id: 'mentor', level: 3 }]),
     ]);
     expect(two - one).toBeLessThan(one);
+  });
+});
+
+describe('🔁 la garnison de secours et la recherche à deux départs', () => {
+  // Cinq champions de force 4 : aucun ne prend seul un lieu facile (10). Sans la garnison de
+  // secours, deux garnisons suffisent ; avec elle (réglage par défaut), une troisième est
+  // prête quand les deux premières sont parties.
+  const xs: Record<string, number> = { base: -30, ouest: 2, centre: 5, est: 8 };
+  const spots = ['base', 'ouest', 'centre', 'est'].map((id) =>
+    spot(id, id === 'base' ? Infinity : 5),
+  );
+  const team = Array.from({ length: 5 }, (_, i) => u(`c${i}`, 4));
+  const go = (tune?: DeployTune) =>
+    planStations(team, spots, PTS.length, {
+      force: 20,
+      easyForce: 10,
+      deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
+      ...(tune ? { tune } : {}),
+    });
+  const garrisonCount = (r: ReturnType<typeof go>) => new Set(r.spotOf.values()).size;
+
+  it('par défaut, une garnison de plus est prête pour une seconde attaque', () => {
+    expect(garrisonCount(go({ backup: 0 }))).toBe(2);
+    expect(garrisonCount(go())).toBe(3);
+  });
+
+  it('le départ étalé débloque ce que le seul départ glouton manque', () => {
+    // Quatre champions de force 6 : tous au centre est un piège dont on ne sort qu’en en
+    // déplaçant deux d’un coup.
+    const four = Array.from({ length: 4 }, (_, i) => u(`s${i}`, 6));
+    const run = (tune: DeployTune) =>
+      planStations(four, spots, PTS.length, {
+        force: 20,
+        easyForce: 10,
+        deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
+        tune,
+      });
+    expect(new Set(run({ singleStart: true }).spotOf.values()).size).toBe(1);
+    expect(new Set(run({}).spotOf.values()).size).toBe(2);
+  });
+
+  it('la version qui rend la main à l’écran trouve la même répartition', async () => {
+    const sync = go();
+    let ticks = 0;
+    const timer = setInterval(() => ticks++, 0);
+    const async = await planStationsAsync(
+      team,
+      spots,
+      PTS.length,
+      {
+        force: 20,
+        easyForce: 10,
+        deps: { trip: (s, p) => 10 * Math.abs(xs[s]! - PTS[p]!) },
+      },
+      0,
+    );
+    clearInterval(timer);
+    expect([...async.spotOf].sort()).toEqual([...sync.spotOf].sort());
+    expect(async.reach).toBeCloseTo(sync.reach, 9);
+    // Elle a vraiment rendu la main : le minuteur a pu tourner pendant le calcul.
+    expect(ticks).toBeGreaterThan(0);
   });
 });
