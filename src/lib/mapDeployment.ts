@@ -19,10 +19,11 @@
  * - la VITESSE de chaque garnison vient de ceux qui y sont postés (`keep`, injecté : la règle des
  *   missions). Un porteur 🧭 accélère toute sa garnison, et deux se cumulent moins bien qu'un dans
  *   chacune : le calcul les ÉTALE de lui-même ;
- * - OBJECTIF MIXTE (`easyForce`) : la moitié du coût vient d'un lieu DUR (`force`, réunie depuis
- *   les garnisons voisines), l'autre d'un lieu FACILE (`easyForce`, réunie de même) : une garnison
- *   qui suffit seule pour un lieu facile n'attend personne, d'où des garnisons capables de partir
- *   chacune de leur côté — plusieurs attaques en parallèle ;
+ * - OBJECTIF MIXTE (`easyForce`) : 15 % du coût vient d'un lieu DUR (`force`, réunie depuis les
+ *   garnisons voisines), 85 % d'un lieu FACILE (`easyForce`, réunie de même) : une garnison qui
+ *   suffit seule pour un lieu facile n'attend personne. On y compte aussi (30 %) la DEUXIÈME
+ *   garnison la plus proche, celle qui part si la première est engagée : de quoi lancer
+ *   plusieurs attaques en parallèle. Les poids sont MESURÉS (`DEPLOY_SOLO_SHARE`) ;
  * - les autres SOUTIENS d'attaque (⛑️ premiers secours, 🎓 mentor, 🐫 cargaison, `support`
  *   injecté, 0..1, à rendement décroissant) allègent un peu le temps de la garnison pour un lieu
  *   facile : un porteur de plus là où il n'y en a pas vaut plus qu'un second au même endroit.
@@ -62,10 +63,29 @@ export interface DeployDeps {
   support?: (members: readonly DeployUnit[]) => number;
 }
 
-/** 🧭 Part du coût portée par les lieux FACILES (le reste : les lieux durs). */
-export const DEPLOY_SOLO_SHARE = 0.5;
+/** 🧭 Part du coût portée par les lieux FACILES (le reste : les lieux durs). ⚠️ MESURÉE
+ *  (2026-10-15, banc d'attaques jouées sur le roster réel, cf. CLAUDE.md) : 0,85 avec une
+ *  garnison de secours à 0,3 bat 0,5 sans secours sur les 12 scénarios. */
+export const DEPLOY_SOLO_SHARE = 0.85;
+/** 🔁 Part du temps « lieu facile » portée par la DEUXIÈME garnison la plus proche (celle qui
+ *  part si la première est déjà engagée) : c'est ce qui permet plusieurs attaques à la fois. */
+export const DEPLOY_BACKUP = 0.3;
 /** ⛑️🎓🐫 Ce que des soutiens complets retirent au temps d'une garnison, pour un lieu facile. */
 export const DEPLOY_SUPPORT_W = 0.2;
+
+/** 🔧 Réglages de la recherche (le banc de mesure en compare plusieurs ; le jeu garde les
+ *  valeurs par défaut). Couper vitesse, soutiens et lieu facile rend le calcul de la v1.199
+ *  (`backup` n'agit que sur le lieu facile). */
+export interface DeployTune {
+  soloShare?: number;
+  supportW?: number;
+  noSpeed?: boolean;
+  noSupport?: boolean;
+  noEasy?: boolean;
+  backup?: number;
+  /** Le seul départ glouton (la recherche d'avant la v1.202). */
+  singleStart?: boolean;
+}
 
 interface DeployMove {
   unit: DeployUnit;
@@ -130,7 +150,9 @@ function pointReach(near: readonly { pw: number; t: number }[], force: number): 
   return (last + mass / force) / 2;
 }
 
-/** 🧭 La répartition : où mettre chacun (cf. l'en-tête). */
+type PlanArgs = Parameters<typeof planStations>;
+
+/** 🧭 La répartition : où mettre chacun (cf. l'en-tête). D'une traite (tests, banc). */
 export function planStations(
   units: readonly DeployUnit[],
   spots: readonly DeploySpot[],
@@ -141,14 +163,61 @@ export function planStations(
      *  Absente : seule l'attaque combinée compte. */
     easyForce?: number;
     deps: DeployDeps;
+    tune?: DeployTune;
   },
 ): DeployResult {
+  const run = planSteps(units, spots, points, opts);
+  for (;;) {
+    const r = run.next();
+    if (r.done) return r.value;
+  }
+}
+
+/**
+ * ⏳ La même répartition, en RENDANT LA MAIN à l'écran toutes les `sliceMs` : le calcul prend
+ * ~1 s sur un roster complet, et un calcul qui bloque l'affichage fige l'app sans même laisser
+ * le ⏳ se dessiner (leçon de l'équipement conseillé, v0.744). Résultat identique.
+ */
+export async function planStationsAsync(
+  ...args: [...PlanArgs, sliceMs?: number]
+): Promise<DeployResult> {
+  const [units, spots, points, opts, sliceMs = 40] = args;
+  const run = planSteps(units, spots, points, opts);
+  let since = Date.now();
+  for (;;) {
+    const r = run.next();
+    if (r.done) return r.value;
+    if (Date.now() - since >= sliceMs) {
+      await new Promise((res) => setTimeout(res, 0));
+      since = Date.now();
+    }
+  }
+}
+
+/** Le calcul, découpé : un `yield` après chaque essai de répartition. */
+function* planSteps(
+  units: readonly DeployUnit[],
+  spots: readonly DeploySpot[],
+  points: number,
+  opts: {
+    force: number;
+    /** La force d'un lieu FACILE, qu'une garnison doit pouvoir prendre seule (objectif mixte).
+     *  Absente : seule l'attaque combinée compte. */
+    easyForce?: number;
+    deps: DeployDeps;
+    tune?: DeployTune;
+  },
+): Generator<void, DeployResult> {
   const byId = new Map(spots.map((s) => [s.id, s]));
   const trips = new Map(
     spots.map((s) => [s.id, Array.from({ length: points }, (_, p) => opts.deps.trip(s.id, p))]),
   );
-  const keepOf = opts.deps.keep ?? (() => 1);
-  const supportOf = opts.deps.support ?? (() => 0);
+  const tune = opts.tune ?? {};
+  const keepOf = (!tune.noSpeed && opts.deps.keep) || (() => 1);
+  const supportOf = (!tune.noSupport && opts.deps.support) || (() => 0);
+  const soloShare = tune.soloShare ?? DEPLOY_SOLO_SHARE;
+  const supportW = tune.supportW ?? DEPLOY_SUPPORT_W;
+  const backup = tune.backup ?? DEPLOY_BACKUP;
   // Une garnison donnée a toujours la même vitesse et les mêmes soutiens : on ne les recalcule
   // pas à chaque essai (la recherche en fait des milliers).
   const memo = new Map<string, { k: number; sup: number }>();
@@ -164,7 +233,7 @@ export function planStations(
     }
     return v;
   };
-  const easy = opts.easyForce;
+  const easy = tune.noEasy ? undefined : opts.easyForce;
   const at = new Map<string, string>();
   const used = new Map<string, number>();
   const put = (u: DeployUnit, s: string) => {
@@ -182,7 +251,10 @@ export function planStations(
     const m = new Map<string, DeployUnit[]>();
     for (const u of units) {
       const s = at.get(u.id);
-      if (s) m.set(s, [...(m.get(s) ?? []), u]);
+      if (!s) continue;
+      const list = m.get(s);
+      if (list) list.push(u);
+      else m.set(s, [u]);
     }
     return [...m].map(([id, members]) => ({
       id,
@@ -190,31 +262,91 @@ export function planStations(
       ...traitsOf(members),
     }));
   };
+  // ⚡ Tampons réutilisés : `evaluate` tourne des milliers de fois (chaque essai de la
+  // recherche), sur des centaines de points — aucune allocation dans la boucle des points
+  // (mesuré sur le roster réel, 19 unités : 6,8 s → 1,1 s, résultat identique).
+  const nSpots = spots.length;
+  const tBuf = new Float64Array(nSpots);
+  const lBuf = new Float64Array(nSpots);
+  const pwBuf = new Float64Array(nSpots);
+  const nearIdx = new Int32Array(nSpots);
+  const lightIdx = new Int32Array(nSpots);
+  /** Tri par insertion des `n` indices selon `t` (quelques garnisons : plus rapide qu'un tri). */
+  const sortBy = (idx: Int32Array, n: number, t: Float64Array) => {
+    for (let i = 0; i < n; i++) idx[i] = i;
+    for (let i = 1; i < n; i++) {
+      const v = idx[i]!;
+      let j = i - 1;
+      while (j >= 0 && t[idx[j]!]! > t[v]!) {
+        idx[j + 1] = idx[j]!;
+        j--;
+      }
+      idx[j + 1] = v;
+    }
+  };
+  /** `pointReach` sur des indices triés, en sautant la position `skip` (-1 : aucune). */
+  const reachIdx = (
+    idx: Int32Array,
+    n: number,
+    t: Float64Array,
+    force: number,
+    skipFirst: boolean,
+  ) => {
+    let cum = 0;
+    let tt = 0;
+    let mass = 0;
+    let skip = skipFirst;
+    for (let i = 0; i < n; i++) {
+      const g = idx[i]!;
+      const pw = pwBuf[g]!;
+      if (pw <= 0) continue;
+      // La garnison de secours : on écarte la PREMIÈRE qui a de la force (celle déjà partie).
+      if (skip) {
+        skip = false;
+        continue;
+      }
+      tt = t[g]!;
+      mass += Math.min(pw, force - cum) * tt;
+      cum += pw;
+      if (cum >= force) break;
+    }
+    if (cum <= 0) return 0;
+    const last = cum >= force ? tt : (tt * force) / cum;
+    if (cum < force) mass += (force - cum) * last;
+    return (last + mass / force) / 2;
+  };
   /** ⏱️ Le coût d'une répartition : par point, l'attaque combinée et (objectif mixte) la
    *  garnison la plus vite prête SEULE, allégée de ses soutiens. `combinedOnly` = le temps
    *  rendu au joueur (`reach`). */
   const evaluate = (combinedOnly: boolean) => {
     const gs = garrisons();
-    if (!gs.length || !points) return 0;
+    const n = gs.length;
+    if (!n || !points) return 0;
+    const tr = gs.map((g) => trips.get(g.id)!);
+    const lightMult = gs.map((g) => 1 - supportW * Math.min(1, Math.max(0, g.sup)));
+    for (let i = 0; i < n; i++) pwBuf[i] = gs[i]!.pw;
+    const mixed = !combinedOnly && !!easy && easy > 0;
     let sum = 0;
     for (let p = 0; p < points; p++) {
-      const near = gs
-        .map((g) => ({ pw: g.pw, t: trips.get(g.id)![p]! * g.k, sup: g.sup }))
-        .sort((a, b) => a.t - b.t);
-      const combined = pointReach(near, opts.force);
-      if (combinedOnly || !easy || easy <= 0) {
+      for (let i = 0; i < n; i++) tBuf[i] = tr[i]![p]! * gs[i]!.k;
+      sortBy(nearIdx, n, tBuf);
+      const combined = reachIdx(nearIdx, n, tBuf, opts.force, false);
+      if (!mixed) {
         sum += combined;
         continue;
       }
       // 🌱 Un lieu facile : la petite force se réunit aussi depuis les plus proches — une
       // garnison qui suffit seule n'attend personne. Ses soutiens l'allègent un peu.
-      const light = near
-        .map((g) => ({
-          pw: g.pw,
-          t: g.t * (1 - DEPLOY_SUPPORT_W * Math.min(1, Math.max(0, g.sup))),
-        }))
-        .sort((a, b) => a.t - b.t);
-      sum += (1 - DEPLOY_SOLO_SHARE) * combined + DEPLOY_SOLO_SHARE * pointReach(light, easy);
+      for (let i = 0; i < n; i++) lBuf[i] = tBuf[i]! * lightMult[i]!;
+      sortBy(lightIdx, n, lBuf);
+      let easyT = reachIdx(lightIdx, n, lBuf, easy, false);
+      if (backup > 0) {
+        // 🔁 Une seconde garnison prête pour un lieu facile, si la première est déjà partie.
+        // Personne d'autre n'a de force : le secours vaut le double du premier.
+        const second = reachIdx(lightIdx, n, lBuf, easy, true);
+        easyT = (1 - backup) * easyT + backup * (second > 0 ? second : easyT * 2);
+      }
+      sum += (1 - soloShare) * combined + soloShare * easyT;
     }
     return sum / points;
   };
@@ -223,60 +355,106 @@ export function planStations(
 
   // 🧹 Départ de ZÉRO : tous les lieux sont vides. Le plus fort d'abord, chacun là où il fait
   // le plus gagner (à égalité, la base : pas de déplacement inutile).
-  for (const u of strongFirst) {
-    let pick: string | null = null;
-    let pickCost = Infinity;
-    for (const s of spots) {
-      if (!fits(u, s.id)) continue;
-      put(u, s.id);
-      const c = cost();
-      if (c < pickCost - 1e-6 || (Math.abs(c - pickCost) <= 1e-6 && s.id === 'base')) {
-        pickCost = c;
-        pick = s.id;
+  function* greedyStart() {
+    for (const u of strongFirst) {
+      let pick: string | null = null;
+      let pickCost = Infinity;
+      for (const s of spots) {
+        if (!fits(u, s.id)) continue;
+        put(u, s.id);
+        const c = cost();
+        yield;
+        if (c < pickCost - 1e-6 || (Math.abs(c - pickCost) <= 1e-6 && s.id === 'base')) {
+          pickCost = c;
+          pick = s.id;
+        }
+        at.delete(u.id);
+        used.set(s.id, (used.get(s.id) ?? 0) - deployWeight(u));
       }
-      at.delete(u.id);
-      used.set(s.id, (used.get(s.id) ?? 0) - deployWeight(u));
+      put(u, pick ?? 'base');
     }
-    put(u, pick ?? 'base');
+  }
+  // 🌐 Un second départ ÉTALÉ : les plus forts répartis tour à tour sur les lieux tenus.
+  // ⚠️ Nécessaire (mesuré, 2026-10-15) : la recherche ne bouge qu'un membre à la fois, et
+  // passer de « tous au centre » à « deux garnisons » demande d'en bouger deux d'un coup —
+  // depuis le seul départ glouton, elle restait bloquée sur une répartition plus lente.
+  function* spreadStart() {
+    const held = spots.filter((s) => s.id !== 'base');
+    let i = 0;
+    for (const u of strongFirst) {
+      let placed = false;
+      for (let k = 0; k < held.length && !placed; k++) {
+        const s = held[(i + k) % held.length]!;
+        if (fits(u, s.id)) {
+          put(u, s.id);
+          i = (i + k + 1) % held.length;
+          placed = true;
+        }
+      }
+      if (!placed) put(u, 'base');
+    }
+    yield;
   }
 
   // 🔁 Amélioration locale : déplacer un membre, ou en échanger deux, tant que ça fait gagner.
-  let best = cost();
-  for (let round = 0; round < 200; round++) {
-    let improved = false;
-    for (const u of strongFirst) {
-      const from = at.get(u.id)!;
-      for (const s of spots) {
-        if (s.id === from || !fits(u, s.id)) continue;
-        put(u, s.id);
-        const c = cost();
-        if (c < best - 1e-6) {
-          best = c;
-          improved = true;
-          break;
+  function* improve(): Generator<void, number> {
+    let best = cost();
+    for (let round = 0; round < 200; round++) {
+      let improved = false;
+      for (const u of strongFirst) {
+        const from = at.get(u.id)!;
+        for (const s of spots) {
+          if (s.id === from || !fits(u, s.id)) continue;
+          put(u, s.id);
+          const c = cost();
+          yield;
+          if (c < best - 1e-6) {
+            best = c;
+            improved = true;
+            break;
+          }
+          put(u, from);
         }
-        put(u, from);
-      }
-      if (improved) break;
-      for (const v of strongFirst) {
-        const to = at.get(v.id)!;
-        if (to === from || deployWeight(u) !== deployWeight(v)) continue;
-        if ((u.hero && !byId.get(to)!.heroOk) || (v.hero && !byId.get(from)!.heroOk)) continue;
-        put(u, to);
-        put(v, from);
-        const c = cost();
-        if (c < best - 1e-6) {
-          best = c;
-          improved = true;
-          break;
+        if (improved) break;
+        for (const v of strongFirst) {
+          const to = at.get(v.id)!;
+          if (to === from || deployWeight(u) !== deployWeight(v)) continue;
+          if ((u.hero && !byId.get(to)!.heroOk) || (v.hero && !byId.get(from)!.heroOk)) continue;
+          put(u, to);
+          put(v, from);
+          const c = cost();
+          yield;
+          if (c < best - 1e-6) {
+            best = c;
+            improved = true;
+            break;
+          }
+          put(u, from);
+          put(v, to);
         }
-        put(u, from);
-        put(v, to);
+        if (improved) break;
       }
-      if (improved) break;
+      if (!improved) break;
     }
-    if (!improved) break;
+    return best;
   }
+
+  // Les deux départs, chacun amélioré ; on garde le meilleur (le glouton à égalité).
+  let bestAt: Map<string, string> | null = null;
+  let bestCost = Infinity;
+  for (const start of tune.singleStart ? [greedyStart] : [greedyStart, spreadStart]) {
+    at.clear();
+    used.clear();
+    yield* start();
+    const c = yield* improve();
+    if (!bestAt || c < bestCost - 1e-6) {
+      bestCost = c;
+      bestAt = new Map(at);
+    }
+  }
+  at.clear();
+  used.clear();
+  for (const u of units) put(u, bestAt?.get(u.id) ?? u.loc);
 
   const moves: DeployMove[] = units
     .filter((u) => at.get(u.id) !== u.loc)

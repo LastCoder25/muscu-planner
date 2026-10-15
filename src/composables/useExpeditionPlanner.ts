@@ -5,26 +5,17 @@ import { useCharacterStore } from '@/stores/character';
 import { advGearRoles } from '@/lib/advGear';
 import { advXpRoom, type Adventurer } from '@/lib/adventurers';
 import {
-  attackSupport,
   heroPartyCombatant,
   missionXpFor,
   partyAllies,
-  refEscortUnits,
   type EscortKit,
   type PartyHero,
 } from '@/lib/caravan';
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
-import { seatsOf } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import {
-  ARCHIPEL_TRAVEL_LEVEL,
-  archipelFloor,
-  EXPE,
-  HERO_GARRISON_SEATS,
-  distNormAt,
-  type Poi,
-} from '@/lib/expedition';
+import { type Poi } from '@/lib/expedition';
 import { mapOutpostLevel } from '@/lib/archipelago';
+import { buildDeploymentAsync } from '@/lib/deployPlan';
 import {
   planExpeditions,
   type PlanMode,
@@ -32,14 +23,7 @@ import {
   type PlanUnit,
 } from '@/lib/expeditionPlanner';
 import { heroPostOf } from '@/lib/islandConquest';
-import {
-  deployEasyLevel,
-  deployRefLevel,
-  deploymentPoints,
-  planStations,
-  type DeploySpot,
-  type DeployUnit,
-} from '@/lib/mapDeployment';
+import { type DeployUnit } from '@/lib/mapDeployment';
 import {
   partyHeroBlocker,
   partyLegMin,
@@ -426,128 +410,23 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       if (me !== repoRun) return;
       const map = char.row?.expedition_map;
       const road = ctx.roadCtx.value;
-      const byId = new Map<string, Adventurer>();
-      const units: DeployUnit[] = [];
-      const add = (a: Adventurer, at: string) => {
-        byId.set(a.id, a);
-        units.push({
-          id: a.id,
-          hero: false,
-          loc: at,
-          power: combatPowerRaw(partyAllies([a], road, null)[0]!.combatant),
-        });
-      };
-      for (const a of ctx.freeStable.value) add(a, 'base');
-      for (const [pid, ready] of readyGarrisons(map, char.advList, ctx.now.value))
-        for (const a of ready) add(a, pid);
-      const hero = heroFree.value ? heroObj() : null;
-      if (hero)
-        units.push({
-          id: '__hero',
-          hero: true,
-          loc: heroPostOf(map)?.id ?? 'base',
-          power: combatPowerRaw(heroPartyCombatant(hero)),
-        });
-      if (!units.length) {
+      const out = await buildDeploymentAsync({
+        map,
+        atBase: ctx.freeStable.value,
+        garrisons: readyGarrisons(map, char.advList, ctx.now.value),
+        hero: heroFree.value ? { party: heroObj(), loc: heroPostOf(map)?.id ?? 'base' } : null,
+        road,
+        heroLevel: ctx.heroLevel.value,
+        travelMult: ctx.travelMult.value,
+        outpostLevel: mapOutpostLevel(map, char.comptoirLevel),
+      });
+      // Un autre calcul a pu partir pendant celui-ci (il rend la main à l'écran) : on se tait.
+      if (me !== repoRun) return;
+      if (!out) {
         repoTeams.value = [];
         return;
       }
-
-      // Les endroits : la base, et tout lieu tenu qui reçoit des champions (`seatsOf` > 0).
-      // ⚠️ On part de ZÉRO : tout le monde bouge en même temps, chaque lieu est considéré VIDE,
-      // donc ses places sont toutes ses places de champions. La défense n'entre pas en compte :
-      // ce sont les miliciens qui gardent les lieux fixes.
-      const held = (map?.pois ?? []).filter(
-        (p) => p.control?.owner === 'player' && seatsOf(p.control.kind) > 0,
-      );
-      const points = new Map(held.map((p) => [p.id, p]));
-      const spots: DeploySpot[] = [
-        { id: 'base', seats: Infinity, heroOk: true },
-        ...held.map((p) => ({
-          id: p.id,
-          seats: seatsOf(p.control!.kind),
-          heroOk: seatsOf(p.control!.kind) >= HERO_GARRISON_SEATS,
-        })),
-      ];
-
-      // 🎯 La force à réunir : l'escorte de RÉFÉRENCE (celle sur laquelle camps et failles se
-      // calibrent) au plus haut rang de l'île — de quoi prendre un lieu dur courant.
-      const level = deployRefLevel(
-        ctx.heroLevel.value,
-        archipelFloor(map),
-        map?.archipel?.levelCap ?? Infinity,
-      );
-      const forceAt = (lv: number) =>
-        refEscortUnits(lv).reduce((s, x) => s + combatPowerRaw(x.combatant), 0);
-      const force = forceAt(level);
-      // 🌱 Objectif mixte : chaque garnison doit aussi pouvoir prendre SEULE un lieu facile.
-      const easyForce = forceAt(
-        deployEasyLevel(
-          ctx.heroLevel.value,
-          archipelFloor(map),
-          map?.archipel?.levelCap ?? Infinity,
-        ),
-      );
-
-      // L'île, échantillonnée : un trajet de chaque endroit vers chaque point.
-      const island = map?.archipel?.island ?? null;
-      const pts = deploymentPoints(island, mapOutpostLevel(map, char.comptoirLevel));
-      const legOf = (p: Poi) =>
-        partyLegMin(p, [], { hero: false, travelMult: ctx.travelMult.value, gearSpeed: 0 });
-      const ptPoi = pts.map(
-        (q, i): Poi => ({
-          id: `deploy-${i}`,
-          type: 'camp',
-          level,
-          x: q.x,
-          y: q.y,
-          distNorm: distNormAt(Math.hypot(q.x - EXPE.town.x, q.y - EXPE.town.y)),
-          travelLevel: map?.archipel ? ARCHIPEL_TRAVEL_LEVEL : level,
-          spawnedAt: 0,
-          expiresAt: Number.MAX_SAFE_INTEGER,
-        }),
-      );
-      const trip = (spot: string, p: number) => {
-        const from = points.get(spot);
-        const q = ptPoi[p]!;
-        return from ? legFromSpot(q, from, legOf) : legOf(q);
-      };
-
-      // 🧭 La vitesse d'une garnison : la RÈGLE DES MISSIONS (`partyLegMin` : compétences 🧭,
-      // pièces de vitesse, héros), rapportée au trajet d'une équipe sans compétence, mesurée
-      // sur un lieu lointain pour que l'arrondi à la minute ne pèse rien.
-      const far: Poi = {
-        id: 'deploy-far',
-        type: 'camp',
-        level,
-        x: EXPE.town.x,
-        y: EXPE.town.y,
-        distNorm: 1,
-        travelLevel: map?.archipel ? ARCHIPEL_TRAVEL_LEVEL : level,
-        spawnedAt: 0,
-        expiresAt: Number.MAX_SAFE_INTEGER,
-      };
-      const plain = Math.max(1, legOf(far));
-      const champsOf = (members: readonly DeployUnit[]) =>
-        members.filter((u) => !u.hero).map((u) => byId.get(u.id)!);
-      const keep = (members: readonly DeployUnit[]) => {
-        const advs = champsOf(members);
-        return (
-          partyLegMin(far, advs, {
-            hero: members.some((u) => u.hero),
-            travelMult: ctx.travelMult.value,
-            gearSpeed: advs.length ? advGearRoles(advs, road.advGear).speed : 0,
-          }) / plain
-        );
-      };
-      const support = (members: readonly DeployUnit[]) => attackSupport(champsOf(members));
-
-      const plan = planStations(units, spots, pts.length, {
-        force,
-        easyForce,
-        deps: { trip, keep, support },
-      });
-      if (me !== repoRun) return;
+      const { plan, units, spots, points, byId } = out;
       repoTeams.value = spots
         .map((s) => {
           const here = units.filter((u) => plan.spotOf.get(u.id) === s.id);
