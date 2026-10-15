@@ -1218,7 +1218,8 @@ export function heroWalkVoyage(
 export function heroBackToPost(
   map: ExpeditionMap,
   homeId: string,
-  unit: PostedHero,
+  /** Son instantané ; absent (voyage reconstruit), celui gardé avec sa place (`heroAwayUnit`). */
+  unit0: PostedHero | undefined,
   at: number,
   legMin: number,
 ): ExpeditionMap {
@@ -1226,14 +1227,19 @@ export function heroBackToPost(
   // rappelé) : il ne peut pas en même temps reprendre son ancien poste.
   if (heroPosted(map) || heroComing(map) || (map.heroReturnAt ?? 0) > at) return map;
   // ⚔️ Sa place gardée se rend AVANT de vérifier qu'il en a une : c'est elle qu'il reprend.
-  const p = withoutHeroAway(map.pois.find((q) => q.id === homeId));
+  const kept = map.pois.find((q) => q.id === homeId);
+  const unit = unit0 ?? kept?.control?.heroAwayUnit;
+  const p = withoutHeroAway(kept);
   if (!p) return map;
   // 🛡️ Il reprend une place de CHAMPION ; les miliciens ont les leurs à part (2026-10-08) :
   // personne ne lui cède rien.
   if (!heroPostBlocker(p.control)) {
     // 💰 La production faite sans lui est mise de côté AVANT qu'il ne compte à nouveau.
-    const banked = { ...p, control: bankForHero(map, p, at, unit.level) };
-    const posted = { ...p, control: { ...banked.control, hero: true, heroUnit: unit } };
+    const banked = { ...p, control: bankForHero(map, p, at, unit?.level) };
+    const posted = {
+      ...p,
+      control: { ...banked.control, hero: true as const, ...(unit ? { heroUnit: unit } : {}) },
+    };
     const done = posted;
     return { ...map, pois: map.pois.map((q) => (q.id === homeId ? done : q)) };
   }
@@ -1251,7 +1257,10 @@ export function heroBackToPost(
 export function heroHomePostId(
   exp: Pick<ActiveExpedition, 'homeId' | 'homeHero' | 'reported' | 'outcome'> | null | undefined,
 ): string | null {
-  if (!exp?.homeId || !exp.homeHero) return null;
+  // ⚠️ `homeId` suffit : le voyage du HÉROS qui en porte un est parti de ce poste. Exiger
+  // aussi `homeHero` libérait sa place au moindre voyage reconstruit sans lui (demi-tour
+  // d'une attaque combinée, 2026-10-15) — et il rentrait à la base.
+  if (!exp?.homeId) return null;
   if (exp.reported && exp.outcome.party?.heroHurt) return null;
   return exp.homeId;
 }
@@ -1294,8 +1303,9 @@ export function heroKeepPostId(
 /** Le lieu sans la place gardée au héros (même objet s'il n'en avait pas). */
 function withoutHeroAway(p: Poi | undefined): Poi | undefined {
   if (!p?.control?.heroAway) return p;
-  const { heroAway: _a, ...c } = p.control;
+  const { heroAway: _a, heroAwayUnit: _u, ...c } = p.control;
   void _a;
+  void _u;
   return { ...p, control: c };
 }
 
@@ -1395,10 +1405,12 @@ export function unpostHero(
     pois: map.pois.map((p) => {
       if (!heroPostPoi(p)) return p;
       // 💰 Ce qu'il a fait produire jusqu'ici reste acquis (comme un champion qui part).
-      const { hero: _h, heroUnit: _u, ...c } = bankForHero(map, p, at, p.control!.heroUnit?.level);
+      const { hero: _h, heroUnit: u, ...c } = bankForHero(map, p, at, p.control!.heroUnit?.level);
       void _h;
-      void _u;
-      return { ...p, control: keepSeat ? { ...c, heroAway: true as const } : c };
+      return {
+        ...p,
+        control: keepSeat ? { ...c, heroAway: true as const, ...(u ? { heroAwayUnit: u } : {}) } : c,
+      };
     }),
   };
 }

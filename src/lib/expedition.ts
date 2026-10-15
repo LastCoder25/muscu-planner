@@ -171,6 +171,10 @@ export interface ControlState {
    *  GARDÉES (2026-10-07, demandé : « comme les champions », `away`). Levé à son retour
    *  (`heroBackToPost`), ou s'il ne revient plus ici (`syncHeroAway`). */
   heroAway?: true;
+  /** 🧝⚔️ Son instantané de combat, gardé AVEC sa place (2026-10-15, signalé : rappelé d'une
+   *  interception, il « finissait à la base » au lieu de son poste). Un voyage reconstruit
+   *  sans `homeHero` (demi-tour d'une attaque combinée) le retrouve ici. Levé avec `heroAway`. */
+  heroAwayUnit?: PostedHero;
   /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
    *  référence — re-tirées à chaque reprise. */
   faction: RaidFaction;

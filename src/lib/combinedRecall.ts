@@ -103,6 +103,11 @@ export function recallAttack(
       seed: a.seed,
       outcome: idleOutcome(a.poi, crew, hero),
       ...(home ? { origin: { x: home.x, y: home.y }, homeId: home.id } : {}),
+      // 🧝 Parti de son poste, le héros y reprend sa place au retour (`heroBackToPost`) —
+      // sans `homeHero`, ce voyage reconstruit le renvoyait à la base (2026-10-15).
+      ...(home && hero && home.control?.heroAwayUnit
+        ? { homeHero: home.control.heroAwayUnit }
+        : {}),
       crew,
     };
     const back = recallVoyage(leg, now, { group: true });

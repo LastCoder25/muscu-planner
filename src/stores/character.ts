@@ -2791,7 +2791,7 @@ export const useCharacterStore = defineStore('character', () => {
       : heroMissionWound(exp, woundMs, base0.wound, now);
     const map = hurtWalk
       ? hurtWalk
-      : !hurtHero && exp.homeHero && exp.homeId && map2 && homePoi
+      : !hurtHero && exp.homeId && map2 && homePoi
         ? heroBackToPost(
             map2,
             exp.homeId,

@@ -69,7 +69,9 @@ describe('la place ne reste gardée que là où il revient', () => {
     expect(
       heroHomePostId(exp({ reported: true, outcome: { party: { heroHurt: true } } })),
     ).toBeNull();
-    expect(heroHomePostId(exp({ homeHero: undefined }))).toBeNull();
+    // ⚠️ homeId suffit (2026-10-15) : exiger homeHero libérait sa place au retour d’un
+    // voyage reconstruit, et il rentrait à la base.
+    expect(heroHomePostId(exp({ homeHero: undefined }))).toBe('p');
     expect(heroHomePostId(null)).toBeNull();
   });
   it('syncHeroAway libère ailleurs et sur un lieu perdu, garde sur son poste', () => {
