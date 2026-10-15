@@ -231,18 +231,16 @@
       <!-- CTA collant -->
       <div class="cta-wrap">
         <!-- Note de difficulté de la série courante (visible sans scroller) -->
-        <div v-if="curSet && !resting && editIdx < 0" class="diff-zone">
-          <div v-if="!curSet.difficulty" class="diff-hint">
-            👇 Note ton ressenti pour valider la série
-          </div>
-          <div class="cta-diff" :class="{ pulse: !curSet.difficulty }">
+        <div v-if="rateTarget && editIdx < 0" class="diff-zone">
+          <div class="diff-hint">Ressenti de la série faite (facultatif)</div>
+          <div class="cta-diff">
             <button
               v-for="d in DIFFS"
               :key="d.n"
               class="diff-btn"
-              :class="['d' + d.n, { sel: curSet.difficulty === d.n }]"
+              :class="['d' + d.n, { sel: rateTarget.difficulty === d.n }]"
               @click="
-                curSet.difficulty = d.n;
+                rateTarget.difficulty = d.n;
                 live.persist();
               "
             >
@@ -255,9 +253,7 @@
         <button v-else-if="editIdx >= 0" class="cta" @click="editIdx = -1">
           Terminer la modification
         </button>
-        <button v-else-if="curSet" class="cta" :disabled="!curSet.difficulty" @click="validateSet">
-          {{ curSet.difficulty ? 'Valider la série' : 'Note ton ressenti ↑' }}
-        </button>
+        <button v-else-if="curSet" class="cta" @click="validateSet">Valider la série</button>
         <button
           v-else-if="run!.exIndex < run!.exercises.length - 1"
           class="cta"
@@ -363,6 +359,12 @@ function setName(i: number): string {
   return `${sets[i].warmup ? 'approche' : 'série'} ${setOrdinal(sets, i)}`;
 }
 const curSet = computed(() => (curSetIndex.value >= 0 ? ex.value!.sets[curSetIndex.value]! : null));
+// Dernière série validée : c'est elle qu'on note, pendant le repos ou une fois l'exo fini.
+const lastDone = computed(() => {
+  const done = ex.value?.sets.filter((x) => x.done) ?? [];
+  return done.length ? done[done.length - 1]! : null;
+});
+const rateTarget = computed(() => (resting.value || !curSet.value ? lastDone.value : null));
 // ⚠️ Les approches sont HORS du volume, comme elles sont hors du log : sinon l'écran
 // annoncerait un tonnage (ici +745 kg sur un développé couché à 80 kg) que le bilan
 // ne confirmerait jamais — deux chiffres pour la même chose.
@@ -490,7 +492,7 @@ function skipExercise() {
 }
 function validateSet() {
   const s = curSet.value;
-  if (!s || !s.difficulty) return;
+  if (!s) return; // pas de note requise : elle se pose pendant le repos (une série non notée est loggée « modéré », 2)
   const restSec = s.rest_seconds ?? ex.value?.rest_seconds; // repos propre à la série
   s.done = true;
   editIdx.value = -1;
@@ -643,7 +645,14 @@ onMounted(async () => {
     .fetchAll()
     .then((all) => {
       const r = live.run;
-      if (r && prefillLoads(r.exercises, all.map((l) => l.payload))) live.persist();
+      if (
+        r &&
+        prefillLoads(
+          r.exercises,
+          all.map((l) => l.payload),
+        )
+      )
+        live.persist();
     })
     .catch(() => undefined);
   clockInt = setInterval(() => {
@@ -1412,25 +1421,6 @@ onBeforeUnmount(() => {
   gap: 6px;
   margin-bottom: 10px;
   border-radius: 13px;
-}
-.cta-diff.pulse {
-  padding: 3px;
-  border: 1.5px solid var(--accent);
-  animation: diff-pulse 1.5s ease-in-out infinite;
-}
-@keyframes diff-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cta-diff.pulse {
-    animation: none;
-  }
 }
 .cta-diff .diff-btn {
   padding: 7px 4px 6px;

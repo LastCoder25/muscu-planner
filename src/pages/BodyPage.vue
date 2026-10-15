@@ -2,67 +2,6 @@
   <component :is="embedded ? 'div' : 'q-page'" class="body-page" :class="{ embedded }">
     <h1 class="p-title font-display">Suivi corporel</h1>
 
-    <!-- Fréquence de saisie -->
-    <section class="block">
-      <div class="lbl">Fréquence de saisie</div>
-      <div class="freq">
-        <button
-          v-for="f in FREQ"
-          :key="f.value"
-          class="choice small"
-          :class="{ active: frequency === f.value }"
-          @click="setFrequency(f.value)"
-        >
-          {{ f.label }}
-        </button>
-      </div>
-
-      <template v-if="frequency === 'week'">
-        <div class="lbl q-mt-md">Jour de la semaine</div>
-        <div class="days">
-          <button
-            v-for="d in WEEKDAYS"
-            :key="d.value"
-            class="choice small"
-            :class="{ active: trackingDay === d.value }"
-            @click="setTrackingDay(d.value)"
-          >
-            {{ d.label }}
-          </button>
-        </div>
-      </template>
-      <template v-else-if="frequency === 'month'">
-        <div class="lbl q-mt-md">Jour du mois</div>
-        <q-input
-          :model-value="trackingDay ?? 1"
-          type="number"
-          min="1"
-          max="28"
-          filled
-          dense
-          @update:model-value="setTrackingDay(Math.min(28, Math.max(1, Number($event) || 1)))"
-        />
-      </template>
-
-      <div class="lbl q-mt-md">Heure du rappel</div>
-      <div class="row items-center" style="gap: 10px">
-        <q-input
-          :model-value="trackingTime"
-          type="time"
-          filled
-          dense
-          style="max-width: 140px"
-          @update:model-value="setTrackingTime(String($event))"
-        />
-        <button v-if="!notifGranted" class="choice small" style="flex: 1" @click="enableNotif">
-          Activer les rappels
-        </button>
-        <span v-else class="notif-ok"
-          ><q-icon name="check_circle" size="16px" /> Rappels activés</span
-        >
-      </div>
-    </section>
-
     <!-- Rappel -->
     <div v-if="due" class="due">
       <q-icon name="event_available" size="20px" />
@@ -151,6 +90,78 @@
           :disable="!hasInput"
           @click="save"
         />
+      </div>
+    </div>
+
+    <!-- Réglages du rappel (repliés : la saisie passe d’abord) -->
+    <div class="grp">
+      <button
+        class="grp-head"
+        :class="{ open: reminderOpen }"
+        @click="reminderOpen = !reminderOpen"
+      >
+        <q-icon name="notifications_active" size="20px" />
+        <span class="grp-title">Rappel de saisie</span>
+        <q-icon class="chev" name="expand_more" size="22px" />
+      </button>
+      <div v-show="reminderOpen" class="grp-body">
+        <div class="lbl">Fréquence de saisie</div>
+        <div class="freq">
+          <button
+            v-for="f in FREQ"
+            :key="f.value"
+            class="choice small"
+            :class="{ active: frequency === f.value }"
+            @click="setFrequency(f.value)"
+          >
+            {{ f.label }}
+          </button>
+        </div>
+
+        <template v-if="frequency === 'week'">
+          <div class="lbl q-mt-md">Jour de la semaine</div>
+          <div class="days">
+            <button
+              v-for="d in WEEKDAYS"
+              :key="d.value"
+              class="choice small"
+              :class="{ active: trackingDay === d.value }"
+              @click="setTrackingDay(d.value)"
+            >
+              {{ d.label }}
+            </button>
+          </div>
+        </template>
+        <template v-else-if="frequency === 'month'">
+          <div class="lbl q-mt-md">Jour du mois</div>
+          <q-input
+            :model-value="trackingDay ?? 1"
+            type="number"
+            min="1"
+            max="28"
+            filled
+            dense
+            @update:model-value="setTrackingDay(Math.min(28, Math.max(1, Number($event) || 1)))"
+          />
+        </template>
+
+        <div class="lbl q-mt-md">Heure du rappel</div>
+        <div class="row items-center" style="gap: 10px">
+          <q-input
+            :model-value="trackingTime"
+            type="time"
+            filled
+            dense
+            style="max-width: 140px"
+            @update:model-value="setTrackingTime(String($event))"
+          />
+          <button v-if="!notifGranted" class="choice small" style="flex: 1" @click="enableNotif">
+            Activer les rappels
+          </button>
+          <span v-else class="notif-ok"
+            ><q-icon name="check_circle" size="16px" /> Rappels activés</span
+          >
+        </div>
       </div>
     </div>
 
@@ -305,6 +316,7 @@ type Freq = (typeof FREQ)[number]['value'];
 const loading = ref(true);
 const saving = ref(false);
 const formOpen = ref(true);
+const reminderOpen = ref(false);
 const howtoOpen = ref(false);
 const entries = computed(() => body.entries);
 const reversed = computed(() => entries.value.slice().reverse());
@@ -589,7 +601,7 @@ onMounted(async () => {
     if (userId && !profileStore.profile) await profileStore.fetch(userId);
     await body.fetchRecent();
     syncForm(); // pré-remplit si une saisie existe déjà aujourd'hui
-    formOpen.value = todayEntry.value ? false : due.value || entries.value.length === 0;
+    formOpen.value = !todayEntry.value; // saisie dépliée par défaut ; repliée si déjà faite aujourd’hui
   } catch (e) {
     $q.notify({
       type: 'negative',

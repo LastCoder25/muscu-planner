@@ -10,14 +10,44 @@ const MUSCLE_ALIASES: Record<string, string> = {
   avant_bras: 'avant-bras',
 };
 
+/** LIBELLÉS des muscles (clés normalisées) — UNE seule table, lue par la silhouette, le graphe
+ *  d'équilibre, le radar et les priorités du profil : un même muscle porte le même nom partout.
+ *  ⚠️ « Abdos » (court) : il tient sur l'axe du radar à 344 px, et c'est la valeur déjà
+ *  enregistrée dans les profils (priority_muscles). */
+export const MUSCLE_LABELS: Readonly<Record<string, string>> = {
+  pectoraux: 'Pectoraux',
+  épaules: 'Épaules',
+  biceps: 'Biceps',
+  triceps: 'Triceps',
+  'avant-bras': 'Avant-bras',
+  dos: 'Dos',
+  abdominaux: 'Abdos',
+  quadriceps: 'Quadriceps',
+  'ischio-jambiers': 'Ischio / fessiers',
+  fessiers: 'Fessiers',
+  mollets: 'Mollets',
+};
+
+/** Libellés des GROUPES de plusieurs muscles (radar, priorités du profil). */
+export const GROUP_LABELS = { arms: 'Bras', legs: 'Jambes' } as const;
+
+/** Libellé d'un muscle (nom brut ou normalisé) ; à défaut, le nom tel quel. */
+export function muscleLabel(m: string | null | undefined): string {
+  const k = normMuscle(m);
+  return MUSCLE_LABELS[k] ?? m ?? '';
+}
+
 /** Les 6 RÉGIONS du radar d'équilibre (façon stats de RPG), muscles normalisés. */
 export const MUSCLE_REGIONS: readonly { key: string; muscles: readonly string[] }[] = [
-  { key: 'Poitrine', muscles: ['pectoraux'] },
-  { key: 'Épaules', muscles: ['épaules'] },
-  { key: 'Bras', muscles: ['biceps', 'triceps', 'avant-bras'] },
-  { key: 'Jambes', muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'fessiers'] },
-  { key: 'Core', muscles: ['abdominaux'] },
-  { key: 'Dos', muscles: ['dos'] },
+  { key: MUSCLE_LABELS.pectoraux!, muscles: ['pectoraux'] },
+  { key: MUSCLE_LABELS['épaules']!, muscles: ['épaules'] },
+  { key: GROUP_LABELS.arms, muscles: ['biceps', 'triceps', 'avant-bras'] },
+  {
+    key: GROUP_LABELS.legs,
+    muscles: ['quadriceps', 'ischio-jambiers', 'mollets', 'fessiers'],
+  },
+  { key: MUSCLE_LABELS.abdominaux!, muscles: ['abdominaux'] },
+  { key: MUSCLE_LABELS.dos!, muscles: ['dos'] },
 ];
 
 /** Séries par région, dans l'ordre de `MUSCLE_REGIONS` (clés du relevé normalisées). */

@@ -87,11 +87,14 @@
             </button>
           </div>
           <div class="chip-row">
-            <span class="info-chip on">🎯 {{ repRangeLabel(objRange) }}</span>
+            <span class="info-chip on">🎯 repère {{ repRangeLabel(objRange) }}</span>
             <span class="info-chip">⏱️ repos ~{{ objRange.rest }} s</span>
             <span v-if="sportsHint" class="info-chip">🏃 allégé pour {{ sportsHint }}</span>
           </div>
-          <div class="set-hint">La fourchette est rappelée sur chaque exo pendant le défi.</div>
+          <div class="set-hint">
+            La fourchette exacte dépend de l’exercice (isolation, gainage, poids du corps,
+            conditionnement) : elle est affichée sur chaque exo au récap et pendant le défi.
+          </div>
         </section>
 
         <section class="set-card">
@@ -197,10 +200,15 @@
               unelevated
               icon-right="arrow_forward"
               label="Choisir mes exercices"
-              :disable="activeCount === 0"
+              :disable="activeCount === 0 || !profileReady"
               @click="startDraft"
             />
-            <button type="button" class="cta-auto" :disabled="creating" @click="createCombo">
+            <button
+              type="button"
+              class="cta-auto"
+              :disabled="creating || !profileReady"
+              @click="createCombo"
+            >
               Ou créer avec une sélection auto
             </button>
           </div>
@@ -430,7 +438,7 @@
             icon="check"
             label="Créer le Défi 360"
             :loading="creating"
-            :disable="!recapKeys.length"
+            :disable="!recapKeys.length || !profileReady"
             @click="createCombo"
           />
         </div>
@@ -501,6 +509,9 @@ const challenges = useChallengesStore();
 
 const lib = ref<ExerciseRow[]>([]);
 const loading = ref(true);
+// Profil chargé (objectif réel du joueur) : tant que faux, `objective` vaut le défaut et on
+// ne crée rien — sinon la fourchette figée dans le défi ne serait pas celle de son objectif.
+const profileReady = ref(false);
 const creating = ref(false);
 // Niveau : pré-réglé sur le profil mais MODIFIABLE ici (pilote volume/variété/
 // groupes accessoires). Ne change pas le profil.
@@ -830,7 +841,7 @@ watch([level, zone, volume, variety, objective], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
-  if (!uid) return;
+  if (!uid || !profileReady.value) return;
   // EXCLUSIVITÉ PAR EXERCICE : aucun exo sélectionné ne peut être déjà dans un défi MUSCU
   // actif (le draft les masque déjà ; garde-fou au cas où). Un 360 et des challenges sur
   // d'AUTRES exos coexistent sans souci.
@@ -907,6 +918,7 @@ onMounted(async () => {
     lib.value = await library.fetchAll();
     level.value = profileStore.profile?.experience?.level ?? 'intermediaire';
     objective.value = profileStore.profile?.objective ?? DEFAULT_OBJECTIVE;
+    profileReady.value = true;
     applyPlan();
   } catch (e) {
     $q.notify({

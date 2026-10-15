@@ -1,6 +1,7 @@
 // profileOptions.ts — listes d'options partagées par l'onboarding et le profil.
 // Source unique pour rester synchrones (notamment SPORTS, dont les libellés
 // sont mappés en muscles par le générateur, cf. programBuilder.ts).
+import { MUSCLE_LABELS, GROUP_LABELS } from '@/lib/muscles';
 import type { Level, EquipmentItem, SportPractice } from '@/lib/types';
 
 // Objectifs guidés : source unique dans objectives.ts, ré-exportée ici.
@@ -95,13 +96,13 @@ export const EQUIPMENT_ITEMS: EquipmentOption[] = EQUIPMENT_GROUPS.flatMap((g) =
 
 export const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 export const PRIORITY_MUSCLES = [
-  'Pectoraux',
-  'Dos',
-  'Épaules',
-  'Bras',
-  'Jambes',
-  'Fessiers',
-  'Abdos',
+  MUSCLE_LABELS.pectoraux!,
+  MUSCLE_LABELS.dos!,
+  MUSCLE_LABELS['épaules']!,
+  GROUP_LABELS.arms,
+  GROUP_LABELS.legs,
+  MUSCLE_LABELS.fessiers!,
+  MUSCLE_LABELS.abdominaux!,
 ];
 export const SPORTS = [
   'Course',

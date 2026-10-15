@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { normMuscle, muscleRole, regionTotals, MUSCLE_REGIONS } from '@/lib/muscles';
+import { readFileSync } from 'node:fs';
+import { normMuscle, muscleRole, regionTotals, MUSCLE_REGIONS, muscleLabel } from '@/lib/muscles';
+import { PRIORITY_MUSCLES } from '@/data/profileOptions';
 
 describe('regionTotals', () => {
   it('additionne les muscles de chaque région, dans l’ordre des régions', () => {
     expect(MUSCLE_REGIONS.map((r) => r.key)).toEqual([
-      'Poitrine',
+      'Pectoraux',
       'Épaules',
       'Bras',
       'Jambes',
-      'Core',
+      'Abdos',
       'Dos',
     ]);
     const t = regionTotals({
@@ -50,5 +52,29 @@ describe('muscleRole', () => {
 
   it("un muscle vide n'est jamais reconnu, même sur un exo sans muscle", () => {
     expect(muscleRole({ muscle_primary: null }, '')).toBeNull();
+  });
+});
+
+describe('libellés : une seule table', () => {
+  const src = (p: string) => readFileSync(p, 'utf8');
+  it('silhouette, graphe d’équilibre, radar et profil lisent la même table', () => {
+    expect(src('src/components/MuscleBody.vue')).toContain('muscleLabel');
+    expect(src('src/components/BodyBalance.vue')).toContain('muscleLabel(r.muscle)');
+    // pas de table locale de libellés qui dériverait
+    expect(src('src/components/MuscleBody.vue')).not.toContain("pectoraux: 'Pectoraux'");
+    expect(src('src/data/profileOptions.ts')).toContain('MUSCLE_LABELS');
+  });
+  it('mêmes noms partout pour un même muscle', () => {
+    expect(muscleLabel('pectoraux')).toBe('Pectoraux');
+    expect(muscleLabel('Abdominaux')).toBe('Abdos');
+    expect(MUSCLE_REGIONS.find((r) => r.muscles.includes('pectoraux'))!.key).toBe(
+      muscleLabel('pectoraux'),
+    );
+    expect(MUSCLE_REGIONS.find((r) => r.muscles.includes('abdominaux'))!.key).toBe(
+      muscleLabel('abdominaux'),
+    );
+    expect(PRIORITY_MUSCLES).toContain(muscleLabel('pectoraux'));
+    expect(PRIORITY_MUSCLES).toContain(muscleLabel('abdominaux'));
+    expect(PRIORITY_MUSCLES).toContain(muscleLabel('fessiers'));
   });
 });

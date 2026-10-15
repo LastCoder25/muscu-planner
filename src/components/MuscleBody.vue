@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { fmtSets, muscleColor } from '@/lib/volume';
+import { muscleLabel } from '@/lib/muscles';
 
 const props = defineProps<{ series: Record<string, number> }>();
 const view = ref<'front' | 'back'>('front');
@@ -126,18 +127,7 @@ const BACK_NUMS = [
   { m: 'ischio-jambiers', x: 60, y: 140 },
   { m: 'mollets', x: 60, y: 188 },
 ];
-const LABELS: Record<string, string> = {
-  pectoraux: 'Pectoraux',
-  épaules: 'Épaules',
-  biceps: 'Biceps',
-  triceps: 'Triceps',
-  dos: 'Dos',
-  abdominaux: 'Abdominaux',
-  quadriceps: 'Quadriceps',
-  'ischio-jambiers': 'Ischio / fessiers',
-  mollets: 'Mollets',
-};
-const label = (m: string) => LABELS[m] ?? m;
+const label = (m: string) => muscleLabel(m);
 </script>
 
 <style scoped>

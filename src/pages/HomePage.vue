@@ -675,6 +675,14 @@
           </button>
         </div>
       </div>
+
+      <!-- Suivi corporel : entrée discrète (poids, sommeil, mensurations) -->
+      <button class="body-entry" type="button" @click="router.push('/body')">
+        <span class="bd-emo">⚖️</span>
+        <span class="bd-t">Suivi corporel</span>
+        <span class="bd-s">poids · sommeil · mensurations</span>
+        <span class="be-go">›</span>
+      </button>
     </template>
 
     <!-- Sélecteur de saisie : choix du sport, puis le type de séance disponible -->
@@ -1971,6 +1979,38 @@ async function saveAutre() {
 .boss-entry.hot {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.body-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.bd-emo {
+  font-size: 18px;
+  line-height: 1;
+}
+.bd-t {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bd-s {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .be-emo {
   font-size: 26px;

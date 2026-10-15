@@ -23,8 +23,8 @@
     <template v-else>
       <p class="bb-lead">
         <template v-if="deficits">
-          <b>{{ deficits }}</b> groupe{{ deficits > 1 ? 's' : '' }} sous la cible, même en
-          tenant ce que tu as prévu : un challenge peut combler l’écart.
+          <b>{{ deficits }}</b> groupe{{ deficits > 1 ? 's' : '' }} sous la cible, même en tenant ce
+          que tu as prévu : un challenge peut combler l’écart.
         </template>
         <template v-else>Tous tes groupes sont couverts par ce que tu fais et prévois.</template>
         Touche un groupe pour voir d’où viennent ses séries.
@@ -43,7 +43,7 @@
           <span class="bb-name">
             <span class="bb-dot" :style="{ background: muscleColor(r.muscle) }" /><span
               class="bb-txt"
-              >{{ r.muscle }}</span
+              >{{ muscleLabel(r.muscle) }}</span
             >
           </span>
           <!-- Le FAIT en vert et plus épais que la piste : il se distingue du prévu (hachuré, à
@@ -125,6 +125,7 @@ import {
   type BalanceSource,
 } from '@/lib/bodyBalance';
 import { muscleColor, fmtSets } from '@/lib/volume';
+import { muscleLabel } from '@/lib/muscles';
 import { computeMuscleTargets } from '@/lib/programBuilder';
 
 const PERIODS: { key: BalancePeriod; label: string }[] = [

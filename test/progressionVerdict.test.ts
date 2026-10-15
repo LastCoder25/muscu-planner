@@ -262,3 +262,16 @@ describe('verdictLabel — dire le verdict, sans le reconstruire', () => {
     }
   });
 });
+
+describe('série non notée (validation en 1 geste)', () => {
+  // buildLog range une série sans note à 2 (« modéré ») : cette valeur neutre ne doit
+  // ni bloquer la montée en double progression, ni la forcer.
+  it('une série loggée « modéré » (non notée) laisse monter quand le haut est atteint', () => {
+    const v = verdict('double', [seance(100, [12, 12, 12], 2)]);
+    expect(v.kind).toBe<ProgressionKind>('up');
+  });
+  it('mais elle ne remplace pas un vrai « dur » : 3 = maintien', () => {
+    const v = verdict('double', [seance(100, [12, 12, 12], 3)]);
+    expect(v.kind).toBe<ProgressionKind>('hold');
+  });
+});
