@@ -1159,7 +1159,7 @@ onBeforeUnmount(() => {
 
 .set {
   display: grid;
-  grid-template-columns: 28px 1fr 1fr 36px;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 36px;
   align-items: center;
   gap: 10px;
   padding: 10px 0;
@@ -1201,7 +1201,15 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 7px;
 }
+/* Cible de 44 px : la ligne de série est serrée (4 colonnes), le dessin reste à 30 px et un
+   halo invisible de 7 px (l’écart avec le champ voisin) porte la cible à 44. */
+.stepper::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
 .stepper {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -1226,6 +1234,13 @@ onBeforeUnmount(() => {
     color: var(--dim);
     font-weight: 400;
   }
+}
+/* Le champ prend la place entre les deux steppers de 36 px : une largeur fixe débordait à 344 px. */
+.val-line .valin {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 64px;
 }
 .valin {
   width: 64px;

@@ -13,6 +13,7 @@ import type {
 } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 import { isWorkSet, warmupSets, workSets } from '@/lib/warmup';
+import { savedRuns, type SavedRunSummary } from '@/lib/liveResume';
 
 export interface LiveSet {
   uid: string; // clé stable (évite les décalages de liste à la suppression)
@@ -157,6 +158,21 @@ export const useLiveStore = defineStore('live', () => {
   }
 
   // Abandonne une séance sauvegardée sans la charger (ex. depuis la Home).
+  /** Les séances de PROGRAMME interrompues, reprenables depuis l'accueil (la séance libre a
+   *  sa propre carte). ⚠️ Le stockage peut être inaccessible (navigation privée) : rien. */
+  function savedPlannedRuns(now: number): SavedRunSummary[] {
+    try {
+      const entries: [string, string | null][] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) entries.push([k, localStorage.getItem(k)]);
+      }
+      return savedRuns(entries, now);
+    } catch {
+      return [];
+    }
+  }
+
   function discardSaved(sessionId: string) {
     localStorage.removeItem(keyFor(sessionId));
     if (run.value?.session_id === sessionId) run.value = null;
@@ -349,6 +365,7 @@ export const useLiveStore = defineStore('live', () => {
     current,
     persist,
     hasSaved,
+    savedPlannedRuns,
     start,
     clear,
     discardSaved,

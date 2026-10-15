@@ -383,6 +383,21 @@
         </div>
       </div>
 
+      <!-- ▶️ Une séance de PROGRAMME interrompue (audit 2026-10-15 : seule la séance libre
+           se reprenait depuis l'accueil). -->
+      <div v-for="r in plannedRuns" :key="r.sessionId" class="free-ongoing">
+        <div class="fo-main">
+          <q-icon name="fitness_center" size="20px" />
+          <span>{{ r.name }} · {{ r.done }}/{{ r.total }} séries</span>
+        </div>
+        <div class="fo-actions">
+          <button class="fo-resume" @click="resumePlanned(r.sessionId)">Reprendre</button>
+          <button class="fo-cancel" aria-label="Abandonner" @click="discardPlanned(r.sessionId)">
+            Abandonner
+          </button>
+        </div>
+      </div>
+
       <div v-if="courtResume" class="free-ongoing">
         <div class="fo-main">
           <q-icon name="sports_tennis" size="20px" />
@@ -784,6 +799,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLogsStore } from '@/stores/logs';
 import { useLiveStore } from '@/stores/live';
+import type { SavedRunSummary } from '@/lib/liveResume';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
@@ -983,6 +999,7 @@ const doneTodayPct = computed(() => {
 const loading = ref(true);
 
 const hasFree = ref(false);
+const plannedRuns = ref<SavedRunSummary[]>([]);
 
 // Boss entre amis : chargé en fond, silencieux (la carte n'apparaît que s'il y a du nouveau).
 const bossEntry = useFriendBossEntry();
@@ -1005,6 +1022,7 @@ onMounted(() => {
 
 onMounted(async () => {
   hasFree.value = live.hasSaved('free');
+  plannedRuns.value = live.savedPlannedRuns(Date.now());
   try {
     await sessionsStore.fetchMine();
   } catch (e) {
@@ -1036,6 +1054,20 @@ function discardFree() {
     live.discardSaved('free');
     hasFree.value = false;
     $q.notify({ type: 'positive', message: 'Séance libre supprimée.' });
+  });
+}
+async function resumePlanned(sessionId: string) {
+  await router.push(`/session/${sessionId}`);
+}
+function discardPlanned(sessionId: string) {
+  $q.dialog({
+    title: 'Abandonner la séance',
+    message: 'La séance en cours sera supprimée (rien ne sera enregistré). Continuer ?',
+    cancel: { label: 'Retour', flat: true },
+    ok: { label: 'Abandonner', color: 'negative' },
+  }).onOk(() => {
+    live.discardSaved(sessionId);
+    plannedRuns.value = plannedRuns.value.filter((r) => r.sessionId !== sessionId);
   });
 }
 async function resumeCourt() {

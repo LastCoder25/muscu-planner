@@ -54,7 +54,17 @@ const MIME = {
 /** Les écrans parcourus une fois connecté. `onglets` = onglets internes à cliquer ensuite. */
 const ECRANS = [
   { route: '/', nom: 'accueil' },
-  { route: '/program', nom: 'programme' },
+  // 🏋️ Démarrer une séance du programme jusqu'à la séance live (v1.211.2) : steppers de 44 px
+  // et charge reprise du dernier bilan. Rien n'est enregistré : la séance ne vit que dans le
+  // localStorage du navigateur de test.
+  {
+    route: '/program',
+    nom: 'programme',
+    gestes: [
+      { nom: 'forme', clic: '[aria-label="Démarrer"]', attendu: '.ready-page' },
+      { nom: 'live', clic: '.ready-page .skip', attendu: '.live-page' },
+    ],
+  },
   { route: '/history', nom: 'historique' },
   { route: '/stats', nom: 'stats' },
   { route: '/trophies', nom: 'trophees' },

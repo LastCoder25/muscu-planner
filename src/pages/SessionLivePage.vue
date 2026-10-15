@@ -12,7 +12,9 @@
             {{ run!.exercises.length - run!.exIndex - 1 }} exos restants
           </div>
         </div>
-        <button class="iconbtn" aria-label="Terminer" @click="openFinish">⏹</button>
+        <!-- ⏹ Un bouton ÉCRIT (audit 2026-10-15) : il remplace le « Terminer ▸ » flottant, qui
+             recouvrait l'éditeur de série à 344 px. -->
+        <button class="finbtn" @click="openFinish">⏹ Terminer</button>
       </header>
 
       <!-- Progression des exercices (🟩 fait · 🟨 en cours · 🟥 à faire) -->
@@ -228,9 +230,6 @@
 
       <!-- CTA collant -->
       <div class="cta-wrap">
-        <button v-if="!resting && curSet && editIdx < 0" class="cta-mini" @click="openFinish">
-          Terminer ▸
-        </button>
         <!-- Note de difficulté de la série courante (visible sans scroller) -->
         <div v-if="curSet && !resting && editIdx < 0" class="diff-zone">
           <div v-if="!curSet.difficulty" class="diff-hint">
@@ -323,6 +322,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
+import { prefillLoads } from '@/lib/livePrefill';
 import { firstWorkIndex, isWorkSet, setOrdinal, workSets } from '@/lib/warmup';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
@@ -637,6 +637,15 @@ onMounted(async () => {
     return;
   }
   live.start(row.payload, { resume: true });
+  // 🏋️ Les séries encore à 0 kg reprennent la charge de la dernière fois (audit 2026-10-15).
+  // Après le démarrage, jamais avant : l'écran ne doit pas attendre l'historique pour s'ouvrir.
+  void logs
+    .fetchAll()
+    .then((all) => {
+      const r = live.run;
+      if (r && prefillLoads(r.exercises, all.map((l) => l.payload))) live.persist();
+    })
+    .catch(() => undefined);
   clockInt = setInterval(() => {
     now.value = Date.now();
   }, 1000);
@@ -675,6 +684,18 @@ onBeforeUnmount(() => {
   place-items: center;
   cursor: pointer;
   flex: none;
+}
+.finbtn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .top-mid {
   flex: 1;
@@ -1042,7 +1063,7 @@ onBeforeUnmount(() => {
 }
 .editor-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
 }
 .ed-cell {
@@ -1051,6 +1072,14 @@ onBeforeUnmount(() => {
 .ed-cell .val-line {
   justify-content: center;
   margin-top: 4px;
+}
+/* ⚠️ Le champ prend la place qui reste entre les deux steppers de 36 px : à 344 px une
+   cellule ne fait que ~135 px, une largeur fixe de 64 px poussait le « + » hors de l'écran. */
+.ed-cell .valin {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 64px;
 }
 .editor .edit-diff {
   margin-top: 12px;
@@ -1099,14 +1128,23 @@ onBeforeUnmount(() => {
   color: var(--text);
   margin-bottom: 1px;
 }
+.stepper::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
 .val-line {
   display: flex;
   align-items: center;
   gap: 7px;
 }
+/* ⚠️ Cible tactile de 44 px (audit 2026-10-15 : 28 px, en salle, mains moites) : le dessin
+   fait 36 px et un halo invisible porte la cible à 44 sans élargir la ligne — l'écart de 7 px
+   avec le champ voisin couvre les 4 px de débord. */
 .stepper {
-  width: 28px;
-  height: 28px;
+  position: relative;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -1429,20 +1467,6 @@ onBeforeUnmount(() => {
   color: var(--text);
   border: 1px solid var(--line);
   box-shadow: none;
-}
-.cta-mini {
-  position: absolute;
-  right: 18px;
-  top: -42px;
-  height: 38px;
-  padding: 0 16px;
-  border-radius: 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--dim);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .finish-sheet {
