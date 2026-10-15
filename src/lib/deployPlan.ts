@@ -47,8 +47,12 @@ export interface DeployPlanInput {
   atBase: readonly Adventurer[];
   /** Les garnisons prêtes (lieu tenu → champions). */
   garrisons: ReadonlyMap<string, readonly Adventurer[]>;
-  /** Le héros, s'il est libre, et où il se trouve (`'base'` ou l'id du lieu). */
-  hero: { party: PartyHero; loc: string } | null;
+  /** ⏳ Les champions qu'on ne peut pas bouger (en route, à l'infirmerie, en sortie…) et
+   *  l'endroit où ils seront (`deployAnchors`) : ils y comptent, sans être déplacés. */
+  fixed?: readonly { adv: Adventurer; loc: string }[];
+  /** Le héros et où il se trouve (`'base'` ou l'id du lieu) ; `fixed` = pas disponible, il y
+   *  compte sans être déplacé. */
+  hero: { party: PartyHero; loc: string; fixed?: boolean } | null;
   road: EscortKit;
   heroLevel: number;
   travelMult: number;
@@ -76,29 +80,34 @@ function prepare(input: DeployPlanInput) {
   const { map, road } = input;
   const byId = new Map<string, Adventurer>();
   const units: DeployUnit[] = [];
-  const add = (a: Adventurer, at: string) => {
+  const add = (a: Adventurer, at: string, fixed = false) => {
     byId.set(a.id, a);
     units.push({
       id: a.id,
       hero: false,
       loc: at,
       power: combatPowerRaw(partyAllies([a], road, null)[0]!.combatant),
+      ...(fixed ? { fixed } : {}),
     });
   };
   for (const a of input.atBase) add(a, 'base');
   for (const [pid, ready] of input.garrisons) for (const a of ready) add(a, pid);
+  for (const f of input.fixed ?? []) if (!byId.has(f.adv.id)) add(f.adv, f.loc, true);
   if (input.hero)
     units.push({
       id: DEPLOY_HERO_ID,
       hero: true,
       loc: input.hero.loc,
       power: combatPowerRaw(heroPartyCombatant(input.hero.party)),
+      ...(input.hero.fixed ? { fixed: true } : {}),
     });
-  if (!units.length) return null;
+  // Personne à placer : rien à proposer (les immobiles seuls ne bougent pas).
+  if (!units.some((u) => !u.fixed)) return null;
 
   // Les endroits : la base, et tout lieu tenu qui reçoit des champions (`seatsOf` > 0).
   // ⚠️ On part de ZÉRO : tout le monde bouge en même temps, chaque lieu est considéré VIDE,
-  // donc ses places sont toutes ses places de champions. La défense n'entre pas en compte :
+  // donc ses places sont toutes ses places de champions — moins celles des immobiles
+  // (`fixed`), que la recherche y pose d'office. La défense n'entre pas en compte :
   // ce sont les miliciens qui gardent les lieux fixes.
   const held = (map?.pois ?? []).filter(
     (p) => p.control?.owner === 'player' && seatsOf(p.control.kind) > 0,

@@ -4852,16 +4852,16 @@ const mapTabs = computed<MapTab[]>(() => [
     ...(planner.anyForceFree.value ? {} : { blocked: planBlockedWhy.value }),
   },
   // 👥 La répartition des effectifs sur les lieux fixes, à part du planificateur (demandé).
-  // ⚠️ Utilisable seulement quand TOUT l'effectif est disponible (demandé) : la répartition
-  // laisse de côté qui est en route ou à l'infirmerie. Sinon le rond reste VISIBLE mais
-  // grisé, et le toucher dit qui manque (demandé : un rond qui disparaît ne dit rien).
+  // ⏳ Utilisable dès qu'UN effectif est libre (2026-10-15, demandé, override « tout l'effectif
+  // disponible ») : ceux qui ne le sont pas restent là où ils seront, la répartition se fait
+  // autour d'eux. Personne de libre : le rond reste VISIBLE mais grisé, et le dit.
   {
     id: 'repart',
     emo: '👥',
     label: 'Répartir l’effectif',
     n: 0,
     alert: false,
-    ...(allForcesFree.value ? {} : { blocked: repartBlockedWhy.value }),
+    ...(planner.anyForceFree.value ? {} : { blocked: repartBlockedWhy }),
   },
 ]);
 /** 🏝️ La production des îles rangées, pour la liste des places fortes (un bloc par île). */
@@ -6308,21 +6308,11 @@ const planner = useExpeditionPlanner({
   cap,
   settleDueSiege,
 });
-/** 👥 Héros et champions tous disponibles : la règle exacte de `repoMissing` (qui dit, dans
- *  le panneau, qui la répartition laisserait de côté). */
-const allForcesFree = computed(
-  () => !planner.repoMissing.value.hero && planner.repoMissing.value.advs.length === 0,
-);
-/** Pourquoi la répartition est grisée : qui n'est pas disponible (même liste que `repoMissing`). */
-const repartBlockedWhy = computed(() => {
-  const m = planner.repoMissing.value;
-  const who = [...(m.hero ? ['ton héros'] : []), ...m.advs.map((a) => a.name)];
-  const list =
-    who.length > 4 ? who.slice(0, 4).join(', ') + ` et ${who.length - 4} autre(s)` : who.join(', ');
-  return `Tout ton effectif doit être disponible pour le répartir. Pas encore là (en route, à l’infirmerie…) : ${list}.`;
-});
-// Le panneau ouvert se referme si quelqu'un part entre-temps (son rond passe au gris).
-watch(allForcesFree, (ok) => {
+/** Pourquoi la répartition est grisée : personne n'est libre à déplacer. */
+const repartBlockedWhy =
+  'Personne à répartir : ton héros et tous tes champions sont en route, à l’infirmerie ou retenus ailleurs. Le bouton revient dès que l’un d’eux est libre.';
+// Le panneau ouvert se referme si plus personne n'est libre (son rond passe au gris).
+watch(planner.anyForceFree, (ok) => {
   if (!ok && overlay.value === 'repart') overlay.value = null;
 });
 /** Pourquoi le planificateur est grisé : personne à envoyer (héros et champions indisponibles). */

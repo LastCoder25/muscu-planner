@@ -12,7 +12,7 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
-import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
+import { deployAnchors, legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { type Poi } from '@/lib/expedition';
 import { mapOutpostLevel } from '@/lib/archipelago';
 import { buildDeploymentAsync } from '@/lib/deployPlan';
@@ -32,7 +32,7 @@ import {
   usefulSupplies,
 } from '@/lib/party';
 import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
-import type { BaseState } from '@/lib/raid';
+import { healableForDeploy, type BaseState } from '@/lib/raid';
 import { riftsByUrgency, withRiftCut } from '@/lib/rift';
 import { SUPPLIES, SUPPLY_IDS, type SupplyId } from '@/lib/supplies';
 
@@ -112,6 +112,8 @@ export interface RepoTeamRow {
   spot: Poi | null;
   advs: Adventurer[];
   hero: boolean;
+  /** ⏳ Ceux qui y sont déjà attendus et qu'on ne bouge pas (ids ; héros compris). */
+  fixed: Set<string>;
 }
 /** 🧭 Ce qui manque pour une répartition complète. */
 export interface RepoMissing {
@@ -385,8 +387,10 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
    * 🧭 RÉPARTIR TOUT L'EFFECTIF SUR LA CARTE — SANS RÉGLAGE (refonte 2026-10-14, demandé :
    * « quand je fais auto, ça me répartit les effectifs au mieux »). Les plus forts là où ils
    * rejoignent le plus vite n'importe quel point de l'île en attaque combinée — seul objectif.
-   * On part de ZÉRO : lieux vidés, tout le monde redispatché (cf. `mapDeployment.ts`). La défense
-   * des lieux, ce sont les miliciens. Le héros en fait partie s'il est libre. Il n'attaque rien.
+   * On part de ZÉRO : lieux vidés, tout le monde redispatché (cf. `mapDeployment.ts`) — sauf ceux
+   * qu'on ne peut pas bouger (en route, à l'infirmerie, en sortie : `deployAnchors`), comptés là
+   * où ils seront ; la répartition se fait autour d'eux (2026-10-15, demandé). La défense des
+   * lieux, ce sont les miliciens. Le héros est déplacé s'il est libre. Il n'attaque rien.
    */
   const repoTeams = ref<RepoTeamRow[] | null>(null);
   const repoMoves = ref<RepoMoveRow[]>([]);
@@ -404,6 +408,42 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     return { hero: !heroFree.value, advs: char.advList.filter((a) => !ok.has(a.id)) };
   });
 
+  /** 🏥 Ceux qu'un soin d'urgence rendrait disponibles pour la répartition, et son prix. */
+  const repoHealable = computed(() => {
+    const h = healableForDeploy(char.advList, ctx.now.value, ctx.heroLevel.value);
+    const gold = char.row?.gold ?? 0;
+    return { ...h, gold, afford: gold >= h.cost };
+  });
+
+  /**
+   * 🏥 SOIGNER PUIS RÉPARTIR (2026-10-15, demandé : « s'il accepte, on les soigne en payant avec
+   * l'or s'il en a suffisamment, et on les répartit ; s'il refuse, on les laisse à
+   * l'infirmerie »). Le soin passe par `char.healAdventurers`, le geste de l'Infirmerie (mêmes
+   * prix, même refus faute d'or). Soignés à `ctx.now` : la carte les voit libres aussitôt.
+   */
+  async function healThenRepartir() {
+    const uid = auth.user?.id;
+    const h = repoHealable.value;
+    if (!uid || !h.advs.length) return repartir();
+    try {
+      const paid = await char.healAdventurers(
+        uid,
+        h.advs.map((a) => a.id),
+        ctx.now.value,
+        ctx.heroLevel.value,
+      );
+      if (paid)
+        $q.notify({
+          type: 'positive',
+          message: `⛑️ ${h.advs.length} champion(s) soigné(s) · −${paid} 🪙`,
+        });
+    } catch (e) {
+      $q.notify({ type: 'negative', message: e instanceof Error ? e.message : String(e) });
+      return;
+    }
+    await repartir();
+  }
+
   async function repartir() {
     const me = ++repoRun;
     repoRunning.value = true;
@@ -415,11 +455,20 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       if (me !== repoRun) return;
       const map = char.row?.expedition_map;
       const road = ctx.roadCtx.value;
+      const garrisons = readyGarrisons(map, char.advList, ctx.now.value);
+      // ⏳ Ceux qu'on ne peut pas bouger restent là où ils seront : on place les autres autour.
+      const ready = new Set(ctx.freeStable.value.map((a) => a.id));
+      for (const list of garrisons.values()) for (const a of list) ready.add(a.id);
       const out = await buildDeploymentAsync({
         map,
         atBase: ctx.freeStable.value,
-        garrisons: readyGarrisons(map, char.advList, ctx.now.value),
-        hero: heroFree.value ? { party: heroObj(), loc: heroPostOf(map)?.id ?? 'base' } : null,
+        garrisons,
+        fixed: deployAnchors(map, char.advList, ready),
+        hero: {
+          party: heroObj(),
+          loc: heroPostOf(map)?.id ?? 'base',
+          ...(heroFree.value ? {} : { fixed: true }),
+        },
         road,
         heroLevel: ctx.heroLevel.value,
         travelMult: ctx.travelMult.value,
@@ -443,6 +492,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
               .sort((a, b) => b.power - a.power)
               .map((u) => byId.get(u.id)!),
             hero: here.some((u) => u.hero),
+            fixed: new Set(here.filter((u) => u.fixed).map((u) => u.id)),
           };
         })
         .filter((t) => t.advs.length || t.hero);
@@ -621,6 +671,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     repoMoves,
     repoRunning,
     repoMissing,
+    repoHealable,
+    healThenRepartir,
     repartir,
     launchAllMoves,
   };

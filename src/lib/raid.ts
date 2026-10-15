@@ -2047,6 +2047,22 @@ export function woundedAdventurers(advs: readonly Adventurer[], now: number): Ad
     .sort((a, b) => advHurtMs(b, now) - advHurtMs(a, now));
 }
 
+/**
+ * 🏥 Ceux qu'un soin d'urgence rendrait DISPONIBLES (2026-10-15, demandé : avant de répartir,
+ * proposer de soigner les champions à l'infirmerie pour les prendre en compte) : ceux qui sont
+ * À L'INFIRMERIE (`woundedAdventurers` — un blessé encore en chemin n'y est pas, on ne lui fait
+ * pas payer sa marche) et sur cette île. Rend aussi le coût total (`advHealCost`, le tarif de
+ * l'Infirmerie).
+ */
+export function healableForDeploy(
+  advs: readonly Adventurer[],
+  now: number,
+  playerLevel: number,
+): { advs: Adventurer[]; cost: number } {
+  const list = woundedAdventurers(advs, now).filter((a) => a.elsewhere == null);
+  return { advs: list, cost: list.reduce((s, a) => s + advHealCost(a, now, playerLevel), 0) };
+}
+
 // ── Résolution ──
 
 /** Le siège. Les groupes arrivent l'un après l'autre et les PV de la base se reportent :

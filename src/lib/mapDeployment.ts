@@ -11,7 +11,11 @@
  * les forts finissent là où ils servent le plus.
  *
  * ⚠️ ON PART DE ZÉRO : tout le monde bouge en même temps, chaque lieu est vide au départ, peu
- * importe où chacun se trouve. La DÉFENSE n'est pas l'affaire de cette fonction : la garde de
+ * importe où chacun se trouve — SAUF les unités IMMOBILES (`DeployUnit.fixed`, 2026-10-15,
+ * demandé : « disponible même si tous les effectifs ne sont pas rentrés : des champions ne
+ * peuvent pas être bougés, on affecte les autres en fonction de l'état actuel »). Une unité
+ * immobile (en route, à l'infirmerie, en sortie…) reste à l'endroit où elle sera : elle y
+ * compte (force, vitesse, soutiens) et y occupe sa place ; seuls les autres sont placés. La DÉFENSE n'est pas l'affaire de cette fonction : la garde de
  * base d'un lieu fixe, ce sont les miliciens ; les champions y sont un plus qu'on ignore ici.
  *
  * 🧭 SOUTIENS (2026-10-15, demandé : « des garnisons les plus efficaces et fortes possibles pour
@@ -42,6 +46,8 @@ export interface DeployUnit {
   loc: string;
   /** Sa force (même unité pour tous, ADDITIVE : celle d'un groupe = la somme). */
   power: number;
+  /** ⏳ Immobile : il reste à `loc` (il y compte et y prend sa place), jamais déplacé. */
+  fixed?: boolean;
 }
 
 export interface DeploySpot {
@@ -386,9 +392,17 @@ function* planSteps(
     return sum / points;
   };
   const cost = () => evaluate(false);
-  const strongFirst = [...units].sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
+  // ⏳ Les immobiles restent où ils seront (s'il s'agit d'un endroit de la répartition) ; seuls
+  // les autres sont essayés, déplacés, échangés.
+  const anchored = units.filter((u) => u.fixed && byId.has(u.loc));
+  const placeFixed = () => {
+    for (const u of anchored) put(u, u.loc);
+  };
+  const strongFirst = units
+    .filter((u) => !u.fixed)
+    .sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
 
-  // 🧹 Départ de ZÉRO : tous les lieux sont vides. Le plus fort d'abord, chacun là où il fait
+  // 🧹 Départ de ZÉRO : les lieux ne portent que les immobiles. Le plus fort d'abord, chacun là où il fait
   // le plus gagner (à égalité, la base : pas de déplacement inutile).
   function* greedyStart() {
     for (const u of strongFirst) {
@@ -481,6 +495,7 @@ function* planSteps(
     for (const start of tune.singleStart ? [greedyStart] : [greedyStart, spreadStart]) {
       at.clear();
       used.clear();
+      placeFixed();
       yield* start();
       const c = yield* improve();
       if (!bestAt || c < bestCost - 1e-6) {
@@ -493,7 +508,11 @@ function* planSteps(
   const place = (m: Map<string, string> | null) => {
     at.clear();
     used.clear();
-    for (const u of units) put(u, m?.get(u.id) ?? u.loc);
+    for (const u of units) {
+      const s = m?.get(u.id) ?? u.loc;
+      // ⏳ Un immobile hors des endroits de la répartition (lieu sans place) n'y compte pas.
+      if (byId.has(s)) put(u, s);
+    }
   };
   let best = yield* searchAll();
   if (guard !== null && backup > 0 && easy) {
@@ -507,7 +526,7 @@ function* planSteps(
   place(best.at);
 
   const moves: DeployMove[] = units
-    .filter((u) => at.get(u.id) !== u.loc)
+    .filter((u) => !u.fixed && at.get(u.id) !== u.loc)
     .map((u) => ({ unit: u, from: u.loc, to: at.get(u.id)! }));
   return { spotOf: at, moves, reach: evaluate(true) };
 }

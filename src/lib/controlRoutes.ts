@@ -318,6 +318,35 @@ export function readyGarrisons<A extends { id: string; hurtUntil?: number; busyU
   return out;
 }
 
+/**
+ * ⏳ OÙ SERONT CEUX QU'ON NE PEUT PAS BOUGER (2026-10-15, demandé : « la répartition disponible
+ * même si tous les effectifs ne sont pas rentrés ») — la répartition les compte à cet endroit
+ * sans les déplacer. Un champion de garnison (même blessé), en renfort vers un point ou parti en
+ * sortie d'un point qui lui garde sa place (`away`) : ce point. Tous les autres (en mission
+ * depuis la base, ramenés vers la base, à l'infirmerie) : la base. Ceux restés sur une autre
+ * île (`elsewhere`) ne comptent pas. Les champions PRÊTS (`ready`) ne sont pas rendus.
+ */
+export function deployAnchors<A extends { id: string; elsewhere?: number }>(
+  map: ExpeditionMap | null | undefined,
+  advs: readonly A[],
+  ready: ReadonlySet<string>,
+): { adv: A; loc: string }[] {
+  const home = new Map<string, string>();
+  for (const p of map?.pois ?? []) {
+    const c = p.control;
+    if (c?.owner !== 'player') continue;
+    for (const id of [
+      ...c.garrison.filter((x) => !isMilitiaId(x)),
+      ...(c.reinforcing ?? []).map((r) => r.id),
+      ...(c.away ?? []),
+    ])
+      if (!home.has(id)) home.set(id, p.id);
+  }
+  return advs
+    .filter((a) => !ready.has(a.id) && a.elsewhere == null)
+    .map((adv) => ({ adv, loc: home.get(adv.id) ?? 'base' }));
+}
+
 /** 👥 Combien de champions peuvent partir vers `poiId` : ceux libres à la base, plus les
  *  garnisons prêtes des AUTRES points tenus (on ne sort pas d'un point pour l'attaquer). */
 export function championsAbleToGo(

@@ -117,11 +117,37 @@
         class="pl-go"
         :disabled="repoRunning"
         title="Répartir tout ton effectif sur la base et tes lieux tenus pour couvrir l’île"
-        @click="repartir"
+        @click="onRepartir"
       >
         <span v-if="repoRunning">⏳ Calcul…</span>
         <span v-else>👥 {{ repoTeams ? 'Recalculer' : 'Répartir l’effectif' }}</span>
       </button>
+    </div>
+    <!-- 🏥 Des champions à l'infirmerie : on propose de les soigner pour les inclure (demandé). -->
+    <div v-if="section === 'repart' && healAsk && repoHealable.advs.length" class="pl-heal">
+      <p class="ph-txt">
+        🏥 À l’infirmerie : {{ repoHealable.advs.map((a) => a.name).join(', ') }}. Les soigner pour
+        les inclure dans la répartition ?
+      </p>
+      <div class="ph-btns">
+        <button
+          type="button"
+          class="pl-go"
+          :disabled="!repoHealable.afford || repoRunning"
+          :title="
+            repoHealable.afford ? '' : `Il te manque ${repoHealable.cost - repoHealable.gold} 🪙`
+          "
+          @click="chooseHeal(true)"
+        >
+          ⛑️ Soigner et répartir · {{ repoHealable.cost }} 🪙
+        </button>
+        <button type="button" class="pl-chip" @click="chooseHeal(false)">
+          Les laisser à l’infirmerie
+        </button>
+      </div>
+      <p v-if="!repoHealable.afford" class="ph-miss">
+        Pas assez d’or : il te manque {{ repoHealable.cost - repoHealable.gold }} 🪙.
+      </p>
     </div>
     <div v-if="section === 'plan' && running" class="pl-bar">
       <div class="pl-fill" :style="{ width: Math.round(progress * 100) + '%' }" />
@@ -205,8 +231,8 @@
       ⏳ Pas encore disponibles :
       <template v-if="repoMissing.hero"
         >🧝 héros<template v-if="repoMissing.advs.length">, </template></template
-      >{{ repoMissing.advs.map((a) => a.name).join(', ') }} — « Répartir » les laisse de côté :
-      attends leur retour pour placer tout l’effectif.
+      >{{ repoMissing.advs.map((a) => a.name).join(', ') }} — ils restent là où ils sont attendus
+      (⏳), et « Répartir » place les autres autour d’eux.
     </p>
     <template v-if="section === 'repart' && repoTeams && !repoRunning">
       <p v-if="!repoTeams.length" class="pl-empty">Personne n’est disponible à répartir.</p>
@@ -217,9 +243,23 @@
               <span class="pt-name">{{ placeOf(g.spot) }}</span>
             </div>
             <div class="pt-team">
-              <span v-if="g.hero" class="pt-mem hero">🧝 Héros</span>
-              <span v-for="a in g.advs" :key="a.id" class="pt-mem">
-                {{ advTitle(a)?.emoji ?? '🗡️' }} {{ a.name }}
+              <span
+                v-if="g.hero"
+                class="pt-mem hero"
+                :class="{ fixed: g.fixed.has(DEPLOY_HERO_ID) }"
+                :title="g.fixed.has(DEPLOY_HERO_ID) ? FIXED_TITLE : undefined"
+              >
+                <template v-if="g.fixed.has(DEPLOY_HERO_ID)">⏳ </template>🧝 Héros
+              </span>
+              <span
+                v-for="a in g.advs"
+                :key="a.id"
+                class="pt-mem"
+                :class="{ fixed: g.fixed.has(a.id) }"
+                :title="g.fixed.has(a.id) ? FIXED_TITLE : undefined"
+              >
+                <template v-if="g.fixed.has(a.id)">⏳ </template>{{ advTitle(a)?.emoji ?? '🗡️' }}
+                {{ a.name }}
                 <span v-if="skillsOf(a)" class="pt-sk" :title="skillsTitle(a)">{{
                   skillsOf(a)
                 }}</span>
@@ -269,7 +309,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { useExpeditionPlanner } from '@/composables/useExpeditionPlanner';
 import { advRuneSkills, advTitle, type Adventurer } from '@/lib/adventurers';
 import { SKILLS, skillLevelTag } from '@/lib/skillRunes';
@@ -277,6 +317,7 @@ import { characterRank } from '@/lib/characterRank';
 import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import type { PlanMode } from '@/lib/expeditionPlanner';
+import { DEPLOY_HERO_ID } from '@/lib/deployPlan';
 import { SUPPLIES } from '@/lib/supplies';
 
 const props = defineProps<{
@@ -306,6 +347,8 @@ const {
   repoMoves,
   repoRunning,
   repoMissing,
+  repoHealable,
+  healThenRepartir,
   repartir,
   launchAllMoves,
 } = props.planner;
@@ -316,6 +359,18 @@ const MODES: { id: PlanMode; emo: string; title: string; sub: string }[] = [
   { id: 'rifts', emo: '🕳️', title: 'Failles', sub: 'les plus proches, la plus urgente d’abord' },
 ];
 const THRESHOLDS = [70, 80, 90, 95, 99];
+const FIXED_TITLE = 'Pas disponible : compté ici, il n’est pas déplacé';
+
+/** 🏥 Avant de répartir : des blessés qu'un soin rendrait disponibles ? On demande d'abord. */
+const healAsk = ref(false);
+function onRepartir() {
+  if (repoHealable.value.advs.length) healAsk.value = true;
+  else void repartir();
+}
+function chooseHeal(heal: boolean) {
+  healAsk.value = false;
+  void (heal ? healThenRepartir() : repartir());
+}
 
 /** 🔮 Ses compétences, en pictogrammes (🎓 Mentor, 🧭 Vitesse…) : elles comptent dans le
  *  pronostic, le trajet et l'XP proposés — on voit pourquoi il est dans l'équipe. */
@@ -533,6 +588,11 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
     background: color-mix(in srgb, #2f6bff 20%, transparent);
     border-color: #2f6bff;
   }
+  // ⏳ Immobile (en route, à l'infirmerie…) : compté là, pas déplacé.
+  &.fixed {
+    border-style: dashed;
+    opacity: 0.7;
+  }
 }
 .pt-foot {
   display: flex;
@@ -596,6 +656,31 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
   font-size: 12px;
   background: color-mix(in srgb, var(--d3) 14%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--d3) 55%, var(--line));
+}
+.pl-heal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--d4) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--d4) 50%, var(--line));
+}
+.ph-txt,
+.ph-miss {
+  margin: 0;
+  font-size: 12.5px;
+}
+.ph-miss {
+  color: var(--d4);
+}
+.ph-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  > * {
+    min-height: 44px;
+  }
 }
 .pl-tile.spot {
   border-color: color-mix(in srgb, #5fd0ff 45%, var(--line));

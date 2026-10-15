@@ -353,6 +353,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       repoMoves: ref([]),
       repoRunning: ref(false),
       repoMissing: ref({ hero: false, advs: [] }),
+      repoHealable: ref({ advs: [], cost: 0, gold: 0, afford: true }),
+      healThenRepartir: () => undefined,
       repartir: () => undefined,
       launchAllMoves: () => undefined,
     };
@@ -424,8 +426,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       { key: 'base>f1', from: null, to: fort, advs: [argus], hero: false, min: 20 },
     ] as never;
     planner.repoTeams.value = [
-      { key: 'f1', spot: fort, advs: [argus], hero: false },
-      { key: 'base', spot: null, advs: [], hero: true },
+      { key: 'f1', spot: fort, advs: [argus], hero: false, fixed: new Set<string>() },
+      { key: 'base', spot: null, advs: [], hero: true, fixed: new Set(['__hero']) },
     ] as never;
     planner.repoMissing.value = {
       hero: false,
@@ -444,6 +446,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).not.toContain('Proposer des expéditions');
     expect(html).not.toContain('Événements');
     expect(html).toContain('🏠 Base');
+    // ⏳ Un immobile (ici le héros) est marqué, pas déplacé.
+    expect(html).toContain('⏳ 🧝 Héros');
+    expect(html).toContain('ils restent là où ils sont attendus');
     // 🧭 Sans réglage (demandé) : ni seuil de réussite, ni pourcentage, ni bouton du héros.
     expect(html.replace(/<!--[\s\S]*?-->/g, '')).not.toContain('%');
     expect(html).not.toContain('Réussite au moins');
