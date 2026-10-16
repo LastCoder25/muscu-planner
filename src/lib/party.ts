@@ -957,7 +957,7 @@ export function settleParties(
     if (now >= p.midAt && !p.reported && !p.wingOf) {
       const msg = buildMessage(p);
       // ⚠️ `depositMessages` : jamais un doublon, jamais un encaissement dégradé.
-      const next = depositMessages(box, [msg], cap);
+      const next = depositMessages(box, [msg], cap, now);
       if (next !== box) {
         box = next;
         fresh.push(msg);

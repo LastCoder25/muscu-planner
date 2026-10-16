@@ -40,6 +40,8 @@ import {
   type Poi,
 } from '@/lib/expedition';
 import { poiDifficultyLevel } from '@/lib/poiRank';
+import { RETENTION } from '@/lib/privacy';
+const DAY = 86_400_000;
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
 // éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
@@ -571,9 +573,9 @@ describe('📬 le rapport de groupe et la boîte', () => {
       base('m3', false),
       base('m4', true),
     ];
-    const kept = keepMessages(list, 2);
+    const kept = keepMessages(list, 2, 0);
     expect(kept.map((m) => m.id)).toEqual(['m0', 'm1', 'm3']);
-    expect(keepMessages(list, 10)).toEqual(list);
+    expect(keepMessages(list, 10, 0)).toEqual(list);
   });
 
   it('🗒️ les notes de production ne chassent pas les rapports (notifications → bon rapport)', () => {
@@ -589,7 +591,7 @@ describe('📬 le rapport de groupe et la boîte', () => {
       base('r3', true),
     ];
     // 2 rapports, 2 notes : les rapports gardés sont les 2 plus récents, peu importe les notes.
-    expect(keepMessages(list, 2, 2).map((m) => m.id)).toEqual([
+    expect(keepMessages(list, 2, 0, 2).map((m) => m.id)).toEqual([
       'ctlloot_a',
       'ctlgold_b',
       'r1',
@@ -597,8 +599,32 @@ describe('📬 le rapport de groupe et la boîte', () => {
     ]);
     // Une note en trop non encaissée reste, comme un rapport.
     expect(
-      keepMessages([base('ctlloot_x', true), base('ctlgold_y', false)], 5, 1).map((m) => m.id),
+      keepMessages([base('ctlloot_x', true), base('ctlgold_y', false)], 5, 0, 1).map((m) => m.id),
     ).toEqual(['ctlloot_x', 'ctlgold_y']);
+  });
+
+  it(`⏳ un rapport part après ${RETENTION.reportDays} jours, une note après ${RETENTION.reportNoteDays}, jamais un butin à prendre`, () => {
+    const now = 100 * DAY;
+    const at = (m: ExpeditionMessage, days: number) => ({ ...m, resolvedAt: now - days * DAY });
+    const list = [
+      at(base('ctlgold_jeune'), RETENTION.reportNoteDays),
+      at(base('ctlloot_vieille', true), RETENTION.reportNoteDays + 0.01),
+      at(base('r_jeune', true), RETENTION.reportDays),
+      at(base('r_vieux', true), RETENTION.reportDays + 0.01),
+      at(base('r_ancien_credite'), 60),
+      at(base('r_butin', false), 60),
+      at(base('ctlgold_butin', false), 60),
+    ];
+    expect(keepMessages(list, 40, now).map((m) => m.id)).toEqual([
+      'ctlgold_jeune',
+      'r_jeune',
+      'r_butin',
+      'ctlgold_butin',
+    ]);
+    // La boîte écrite se purge aussi sans rien de neuf, puis ne se réécrit plus.
+    const out = depositMessages(list, [], 40, now);
+    expect(out.map((m) => m.id)).toEqual(['ctlgold_jeune', 'r_jeune', 'r_butin', 'ctlgold_butin']);
+    expect(depositMessages(out, [], 40, now)).toBe(out);
   });
 
   describe('⚠️ depositMessages — le double encaissement (revue finale des camps)', () => {
@@ -606,7 +632,7 @@ describe('📬 le rapport de groupe et la boîte', () => {
       // Le défaut : `expeSettle` remplaçait le rapport par `buildMessage(...)` (claimed: false),
       // et un butin encaissé entre le retour et ce tick redevenait encaissable.
       const box = [base('r', true), base('x', false)];
-      const out = depositMessages(box, [base('r', false)], 20);
+      const out = depositMessages(box, [base('r', false)], 20, 0);
       expect(out.find((m) => m.id === 'r')!.claimed).toBe(true);
       expect(out.filter((m) => m.id === 'r')).toHaveLength(1);
       // Rien de neuf : la MÊME référence — le store n'écrit pas à vide.
@@ -614,26 +640,26 @@ describe('📬 le rapport de groupe et la boîte', () => {
     });
     it('un encaissement PARTI (pas encore relu) reste encaissé, même si la boîte dit false', () => {
       const box = [base('r', false), base('x', false)];
-      const out = depositMessages(box, [], 20, new Set(['r']));
+      const out = depositMessages(box, [], 20, 0, new Set(['r']));
       expect(out.find((m) => m.id === 'r')).toMatchObject({ claimed: true, read: true });
       expect(out.find((m) => m.id === 'x')!.claimed).toBe(false);
       expect(out).not.toBe(box);
       // Un message legacy (claimed absent = déjà crédité) n'est pas touché.
       const legacy = [base('old')];
-      expect(depositMessages(legacy, [], 20, new Set(['old']))).toBe(legacy);
+      expect(depositMessages(legacy, [], 20, 0, new Set(['old']))).toBe(legacy);
     });
     it('un nouveau rapport est ajouté UNE fois, devant ; doublons de `fresh` ignorés', () => {
       const box = [base('a', true)];
-      const out = depositMessages(box, [base('n', false), base('n', false)], 20);
+      const out = depositMessages(box, [base('n', false), base('n', false)], 20, 0);
       expect(out.map((m) => m.id)).toEqual(['n', 'a']);
-      const twice = depositMessages(out, [base('n', false)], 20);
+      const twice = depositMessages(out, [base('n', false)], 20, 0);
       expect(twice).toBe(out);
       // Plusieurs nouveaux : le dernier déposé passe devant, comme `[msg, ...box]` enchaînés.
-      expect(depositMessages([], [base('p'), base('q')], 20).map((m) => m.id)).toEqual(['q', 'p']);
+      expect(depositMessages([], [base('p'), base('q')], 20, 0).map((m) => m.id)).toEqual(['q', 'p']);
     });
     it('la boîte reste taillée par keepMessages — jamais un butin à récupérer jeté', () => {
       const box = [base('lu1', true), base('lu2', true), base('attend', false)];
-      const out = depositMessages(box, [base('n', false)], 2);
+      const out = depositMessages(box, [base('n', false)], 2, 0);
       expect(out.map((m) => m.id)).toEqual(['n', 'lu1', 'attend']);
     });
     it('📬 une boîte trop pleine se taille SANS rien de neuf — les butins à prendre restent', () => {
@@ -646,10 +672,10 @@ describe('📬 le rapport de groupe et la boîte', () => {
         base('attend', false),
         base('e', true),
       ];
-      const out = depositMessages(box, [], 3);
+      const out = depositMessages(box, [], 3, 0);
       expect(out.map((m) => m.id)).toEqual(['a', 'b', 'c', 'attend']);
       // Déjà à la bonne taille : la MÊME référence (le store n'écrit pas à vide).
-      expect(depositMessages(out, [], 3)).toBe(out);
+      expect(depositMessages(out, [], 3, 0)).toBe(out);
     });
     it('📬 la boîte garde l’historique : les 40 derniers rapports, notes à part (v1.68.2)', () => {
       expect(MESSAGES_CAP).toBe(40);

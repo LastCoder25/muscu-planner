@@ -52,7 +52,7 @@ function report(i: number, withDuel = true): ExpeditionMessage {
 describe('📉 la boîte allège les vieux rapports', () => {
   it(`seuls les ${REPLAY_KEEP} plus récents gardent le duel du gardien`, () => {
     const box = Array.from({ length: 15 }, (_, i) => report(i));
-    const kept = keepMessages(box, 40);
+    const kept = keepMessages(box, 40, 0);
     expect(kept).toHaveLength(15);
     kept.forEach((m, i) => {
       expect(!!m.party?.rift?.boss).toBe(i < REPLAY_KEEP);
@@ -65,16 +65,16 @@ describe('📉 la boîte allège les vieux rapports', () => {
   it('les notes de production ne prennent pas la place des rapports', () => {
     const notes = Array.from({ length: 4 }, (_, i) => ({ ...report(100 + i), id: `ctlgold_${i}` }));
     const box = [...notes, ...Array.from({ length: REPLAY_KEEP }, (_, i) => report(i))];
-    const kept = keepMessages(box, 40);
+    const kept = keepMessages(box, 40, 0);
     expect(kept.filter((m) => m.party?.rift?.boss)).toHaveLength(box.length);
   });
 
   it('une boîte à alléger est réécrite, même sans rien de neuf', () => {
     const box = Array.from({ length: 12 }, (_, i) => report(i));
-    const out = depositMessages(box, [], 40);
+    const out = depositMessages(box, [], 40, 0);
     expect(out).not.toBe(box);
     expect(out.filter((m) => m.party?.rift?.boss)).toHaveLength(REPLAY_KEEP);
     // et une fois allégée, plus rien à écrire : même référence
-    expect(depositMessages(out, [], 40)).toBe(out);
+    expect(depositMessages(out, [], 40, 0)).toBe(out);
   });
 });
