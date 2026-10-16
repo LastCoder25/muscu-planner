@@ -462,6 +462,23 @@ export function toggleOriginGroupWithHero(
   return { escort: addGroup(selected, groupIds, max), hero: true };
 }
 
+/**
+ * ✨ « Tous » de TOUT le vivier (signalé : il cochait les champions du lieu fixe où le héros
+ * est posté, mais pas le héros). Même règle que `toggleOriginGroupWithHero` : `heroHere` = il
+ * est posté sur un lieu fixe et peut partir, il est alors coché et décoché avec les autres ;
+ * sinon (base, dehors, bloqué) son choix ne bouge pas. `advsOn` = tous les champions possibles
+ * sont déjà cochés ; « tout coché » exige aussi le héros, sinon toucher compléterait.
+ */
+export function togglePoolWithHero(
+  allIds: readonly string[],
+  advsOn: boolean,
+  heroHere: boolean,
+  heroOn: boolean,
+): { escort: string[]; hero: boolean } {
+  if (advsOn && (!heroHere || heroOn)) return { escort: [], hero: heroHere ? false : heroOn };
+  return { escort: [...allIds], hero: heroHere || heroOn };
+}
+
 /** État d'un lieu pour son titre : le héros posté y compte comme un membre du lieu. */
 export function originGroupState(
   selected: readonly string[],

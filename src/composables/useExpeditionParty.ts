@@ -45,6 +45,7 @@ import {
   originGroupState,
   originGroupsWithSomeone,
   toggleOriginGroupWithHero,
+  togglePoolWithHero,
   wingOriginId,
 } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
@@ -1102,12 +1103,24 @@ export function useExpeditionParty(ctx: PartyCtx) {
       .slice(0, partyMax.value)
       .map((a) => a.id),
   );
-  const partyAllOn = computed(
+  const partyAllAdvsOn = computed(
     () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
+  );
+  /** 🧝 Posté sur un lieu fixe, le héros part avec « tous », comme avec le « tous » du lieu. */
+  const partyAllHero = computed(() => heroPostedAt(heroOriginId.value));
+  const partyAllOn = computed(
+    () => partyAllAdvsOn.value && (!partyAllHero.value || partyHeroOn.value),
   );
   function togglePartyAll() {
     // ⚠️ Bornée par le lieu : sur une faille, « tout le vivier » ne peut pas en envoyer dix.
-    partyEscort.value = partyAllOn.value ? [] : [...partyAllIds.value];
+    const r = togglePoolWithHero(
+      partyAllIds.value,
+      partyAllAdvsOn.value,
+      partyAllHero.value,
+      partyHeroOn.value,
+    );
+    partyEscort.value = r.escort;
+    partyHero.value = r.hero;
   }
   /** Le bouton dit OÙ l’on va : un camp se prend, une faille se referme. */
   const partySendLabel = computed(() => {
@@ -1334,6 +1347,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     heroPostedAt,
     partyAllIds,
     partyAllOn,
+    partyAllHero,
     togglePartyAll,
     partySendLabel,
     doSendParty,

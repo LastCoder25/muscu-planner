@@ -1167,7 +1167,11 @@
                 :disabled="!partyPoolSorted.length"
                 @click="togglePartyAll"
               >
-                {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
+                {{
+                  partyAllOn
+                    ? 'Retirer tous'
+                    : `✨ Tous (${partyAllIds.length}${partyAllHero ? ' + 🧝' : ''})`
+                }}
               </button>
             </div>
             <!-- ↻ La dernière équipe envoyée, filtrée par les règles d'envoi (disponibilité, plafond). -->
@@ -6236,6 +6240,7 @@ const {
   heroPostedAt,
   partyAllIds,
   partyAllOn,
+  partyAllHero,
   togglePartyAll,
   partySendLabel,
   doSendParty,
