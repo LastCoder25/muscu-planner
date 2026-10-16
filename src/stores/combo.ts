@@ -104,11 +104,8 @@ export const useComboStore = defineStore('combo', () => {
   const activeOne = () => activeCombo(list.value, logicalToday());
 
   async function create(input: NewCombo): Promise<ComboRow> {
-    // TODO(cleanup avant release) : retirer le bypass `!isAdmin` — débridage
-    // TEMPORAIRE pour tester la nouvelle génération avec plusieurs Défis 360 actifs
-    // (compte admin). En prod : 1 Défi 360 actif max. Cf. [[combo360-admin-bypass-temporaire]].
-    const isAdmin = useAuthStore().isAdmin;
-    if (!isAdmin && list.value.some((c) => c.status === 'active')) throw new ComboActiveError();
+    // Un seul Défi 360 actif à la fois, pour tout le monde.
+    if (list.value.some((c) => c.status === 'active')) throw new ComboActiveError();
     const { data, error } = await supabase
       .from('combo_challenges')
       .insert({ ...input, status: 'active' })

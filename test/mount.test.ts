@@ -65,7 +65,10 @@ async function mountIt(
   // harnais qu'il faut élargir, pas l'écran qu'il faut contourner.
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/:all(.*)*', component: { render: () => null } }],
+    routes: [
+      { path: '/session/:id', component: { render: () => null } }, // écrans à paramètre d'URL
+      { path: '/:all(.*)*', component: { render: () => null } },
+    ],
   });
   await router.replace(route);
   await router.isReady();
@@ -953,6 +956,99 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(main).toContain('💠');
     expect(main).not.toContain('🪙');
   }, 30_000);
+
+  // 📖 Le guide de l'Aventure (2026-10-16) : 1re visite, mémoire « déjà vu », réouverture.
+  describe('GameTutorial', () => {
+    async function harness() {
+      const { default: GameTutorial } = await import('@/components/GameTutorial.vue');
+      const { ref } = await import('vue');
+      return {
+        render: () => null,
+        setup() {
+          const t = ref<{ open: () => void } | null>(null);
+          return () =>
+            h('div', [
+              h('button', { class: 'rouvrir', onClick: () => t.value?.open() }, '?'),
+              h(GameTutorial, { ref: t }),
+            ]);
+        },
+      } as Component;
+    }
+    const seen = async () => {
+      localStorage.setItem('muscu:adv:intro', '1');
+    };
+
+    it("s'ouvre à la première visite, sur la carte 1/4, et défile", async () => {
+      let out = '';
+      let after = '';
+      expect(
+        await mountIt(
+          await harness(),
+          {},
+          undefined,
+          undefined,
+          '/',
+          undefined,
+          async (host) => {
+            out = host.innerHTML;
+            (host.querySelector('.gt-btn:not(.ghost)') as HTMLElement).click();
+            await nextTick();
+            after = host.innerHTML;
+          },
+        ),
+      ).toBeNull();
+      expect(out).toContain('gt-card');
+      expect(out).toContain('1 / 4');
+      expect(after).toContain('2 / 4');
+    }, 30_000);
+
+    it('ne se rouvre pas tout seul quand il a déjà été vu', async () => {
+      let out = '';
+      await mountIt(await harness(), {}, undefined, seen, '/', (hh) => (out = hh));
+      expect(out).not.toContain('gt-card');
+    }, 30_000);
+
+    it('se rouvre par le bouton, et fermer le mémorise', async () => {
+      let out = '';
+      let closed = '';
+      await mountIt(
+        await harness(),
+        {},
+        undefined,
+        seen,
+        '/',
+        undefined,
+        async (host) => {
+          (host.querySelector('.rouvrir') as HTMLElement).click();
+          await nextTick();
+          out = host.innerHTML;
+          (host.querySelector('.gt-x') as HTMLElement).click();
+          await nextTick();
+          closed = host.innerHTML;
+        },
+      );
+      expect(out).toContain('gt-card');
+      expect(closed).not.toContain('gt-card');
+    }, 30_000);
+
+    it('fermer à la première visite écrit la mémoire de l’ancienne intro', async () => {
+      let stored: string | null = 'x';
+      await mountIt(
+        await harness(),
+        {},
+        undefined,
+        undefined,
+        '/',
+        undefined,
+        async (host) => {
+          (host.querySelector('.gt-x') as HTMLElement).click();
+          await nextTick();
+          stored = localStorage.getItem('muscu:adv:intro');
+        },
+      );
+      expect(stored).toBe('1');
+    }, 30_000);
+  });
 
   // 🛡️ v1.49.8 : les miliciens ne sont plus dans la ligne des effectifs (on les voit sur
   // la carte : points sous la base et garnison des lieux fixes). Seuls héros et champions.
@@ -4814,4 +4910,65 @@ describe('💰 la récompense sur la tuile d’un voyage', () => {
     expect(out).toMatch(/58 % → <b[^>]*>71 %/);
     expect(out).toContain('plafond de 30 % atteint');
   });
+
+  // 🕘🏆 La séance live : « dernière fois » sous la série, record en direct, repos.
+  it('SessionLivePage montre la dernière fois, fête un record et lance le repos', async () => {
+    const { default: SessionLivePage } = await import('@/pages/SessionLivePage.vue');
+    const { useSessionsStore } = await import('@/stores/sessions');
+    const { useLogsStore } = await import('@/stores/logs');
+    const session = {
+      id: 's1',
+      name: 'Pecs',
+      exercises: [
+        {
+          id: 'bench',
+          name: 'Développé couché',
+          rest_seconds: 90,
+          target: { sets: 3, reps_min: 5, reps_max: 8, load_kg: 15 },
+        },
+      ],
+    };
+    const past = {
+      id: 'l1',
+      exercises: [
+        {
+          id: 'bench',
+          name: 'Développé couché',
+          performed: [
+            { set: 1, load_kg: 12.5, reps: 5, difficulty: 2 },
+            { set: 2, load_kg: 10, reps: 6, difficulty: 2 },
+          ],
+        },
+      ],
+    };
+    let before = '';
+    let after = '';
+    const err = await mountIt(
+      SessionLivePage,
+      {},
+      undefined,
+      async () => {
+        (useSessionsStore() as unknown as { list: unknown[] }).list = [
+          { id: 's1', name: 'Pecs', payload: session, created_at: '' },
+        ];
+        const logs = useLogsStore() as unknown as { all: unknown[]; allLoaded: boolean };
+        logs.all = [{ id: 'l1', name: 'x', performed_at: '2026-10-01T10:00:00Z', payload: past }];
+        logs.allLoaded = true;
+      },
+      '/session/s1',
+      undefined,
+      async (host) => {
+        await new Promise((r) => setTimeout(r, 30)); // onMounted → fetchAll (cache) → rendu
+        before = host.innerHTML;
+        host.querySelector<HTMLElement>('.cta')?.click(); // 15 × 5 > 12,5 × 5 : record
+        await new Promise((r) => setTimeout(r, 30));
+        after = host.innerHTML;
+      },
+    );
+    expect(err).toBeNull();
+    expect(before).toContain('dernière fois : 12,5 kg × 5');
+    expect(before).not.toContain('live-record');
+    expect(after).toContain('live-record'); // 🏆 Nouveau record
+    expect(after).toContain('class="timer"'); // le repos démarre
+  }, 30_000);
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ISLANDS } from '../src/lib/archipelago';
-import { islandRules, NEST, RISE } from '../src/lib/islandConquest';
+import { islandRules, EMBER, NEST } from '../src/lib/islandConquest';
 import { SORTIE_EVENTS } from '../src/lib/sortieClock';
 
 const isl = (id: number) => ISLANDS.find((i) => i.id === id)!;
@@ -15,9 +15,12 @@ describe('islandRules', () => {
       expect(r.at(-1)!.text).toContain('pacifiée');
     }
   });
-  it('île 3 : les cimetières pris sont attaqués, la citadelle arrête tout', () => {
+  it('île 3 : un objectif battu s’éteint et se rallume au fil des sorties', () => {
     const t = text(3);
-    expect(t).toContain(`${Math.round(RISE.riseMs / 86400000)} jours`);
+    expect(t).toContain('s’éteint');
+    expect(t).toContain(`${EMBER.cemetery.min} à ${EMBER.cemetery.max}`);
+    expect(t).toContain(`${EMBER.keystone.min} à ${EMBER.keystone.max}`);
+    expect(t).toContain(`${Math.round(EMBER.floorMs / 3600_000)} h`);
     expect(t).toContain('Citadelle des morts');
   });
   it('les rythmes viennent des constantes du jeu', () => {

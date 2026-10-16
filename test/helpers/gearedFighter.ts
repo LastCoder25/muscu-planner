@@ -13,7 +13,8 @@ import {
 } from '@/lib/items';
 import { VOIES } from '@/lib/voies';
 import { BOSSES } from '@/data/bosses';
-import { refBalancedStat } from '@/lib/proceduralContent';
+import { refBalancedStat, cumXpForLevel } from '@/lib/proceduralContent';
+import { computeCharacter } from '@/lib/character';
 import { rollTalentDrop, talentEffects, talentsEarned, pickBestTalents } from '@/lib/talents';
 import { rollActivityFamiliar } from '@/data/familiars';
 import { DUNGEONS } from '@/data/dungeons';
@@ -54,9 +55,33 @@ export interface GearedBuild {
   voie: string | null;
 }
 
-export function gearedFighter(L: number, seed = 1, companions = true, sets = true): Combatant {
-  const b = gearedBuild(L, seed, companions, sets);
+/** Répartition de l'XP de fond entre puissance / endurance / agilité. Le joueur de référence
+ *  est équilibré ; `MUSCU_PURE` est le sportif qui ne fait QUE de la musculation (audit
+ *  2026-10-15 : la muscu donne ≈ 60/30/10). Les stats de combat passent par le VRAI chemin du
+ *  héros (`computeCharacter`, plancher compris). */
+export type StatShape = readonly [number, number, number];
+export const BALANCED: StatShape = [1 / 3, 1 / 3, 1 / 3];
+export const MUSCU_PURE: StatShape = [0.6, 0.3, 0.1];
+
+export function gearedFighter(
+  L: number,
+  seed = 1,
+  companions = true,
+  sets = true,
+  shape: StatShape = BALANCED,
+): Combatant {
+  const b = gearedBuild(L, seed, companions, sets, shape);
   return playerWithGear('geared', b.stats, b.eq, b.fx, L, b.voie);
+}
+
+function statsFor(L: number, shape: StatShape) {
+  if (shape === BALANCED) {
+    const s = refBalancedStat(L);
+    return { puissance: s, endurance: s, agilite: s };
+  }
+  const xp = cumXpForLevel(L);
+  const c = computeCharacter(xp * shape[0], xp * shape[1], xp * shape[2], 0);
+  return { puissance: c.puissance, endurance: c.endurance, agilite: c.agilite };
 }
 
 /** Pièces du set de `voie` qu'un joueur ramasse sur ses 13 derniers niveaux, au volume
@@ -83,13 +108,18 @@ function voieSetPool(L: number, rng: () => number, voie: string): Item[] {
   return out;
 }
 
-export function gearedBuild(L: number, seed = 1, companions = true, sets = true): GearedBuild {
-  const key = `${L}:${seed}:${companions}:${sets}`;
+export function gearedBuild(
+  L: number,
+  seed = 1,
+  companions = true,
+  sets = true,
+  shape: StatShape = BALANCED,
+): GearedBuild {
+  const key = `${L}:${seed}:${companions}:${sets}:${shape.join(',')}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const rng = mulberry32(seed * 7919 + L);
-  const s = refBalancedStat(L);
-  const stats = { puissance: s, endurance: s, agilite: s };
+  const stats = statsFor(L, shape);
   // Top KEEP_PER_SLOT par emplacement, gardé TRIÉ (décroissant) : chaque objet est noté une
   // fois, et rejeté d'emblée s'il ne bat pas le dernier gardé.
   const top = new Map<string, { it: Item; v: number }[]>();

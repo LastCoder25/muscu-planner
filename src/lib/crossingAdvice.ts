@@ -30,7 +30,7 @@ import { characterRank, rankStartLevel } from './characterRank';
 import { CONTROL, controlGoldPerHour, garrisonHoldChance } from './controlPoints';
 import { enemyLevelFor, mineVeinGold, type Poi, type PoiType } from './expedition';
 import { partyWinChance } from './partyForecast';
-import { ISLAND_CONQUEST, fortressForce } from './islandConquest';
+import { EMBER, ISLAND_CONQUEST, NEST, fortressForce } from './islandConquest';
 import { MILITIA, MILITIA_PREFIX, militiaUnits } from './militia';
 import { adventurerPowers } from './raid';
 import { trialXpBase } from './skirmish';
@@ -436,10 +436,14 @@ export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
     pool,
     (k) => campWinPct(obj, { faction: hereIsl.faction, size }, allies(k), samples) >= ADVICE.takeOk,
   );
-  const objHold = fewest(
-    pool,
-    (k) => garrisonHoldChance(obj, allies(k), 1, samples, i.fort) >= ADVICE.holdOk,
-  );
+  // Sur une île où les objectifs s'abattent (nids, braises), il n'y a rien à tenir.
+  const razing = NEST.islands.has(hereIsl.id) || EMBER.islands.has(hereIsl.id);
+  const objHold = razing
+    ? null
+    : fewest(
+        pool,
+        (k) => garrisonHoldChance(obj, allies(k), 1, samples, i.fort) >= ADVICE.holdOk,
+      );
   // 🏰 La forteresse telle qu'elle serait UNE FOIS OUVERTE (au moins `unlockAfter` objectifs
   // tenus) : verrouillée, elle n'en reste pas moins le but — savoir si on pourra la prendre
   // dit si tenir des objectifs vaut le coup.
@@ -507,7 +511,13 @@ export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
       reasons.push(
         `reprendre un objectif rapporte ~${Math.round(objXp)} XP par champion (×${times(objXp, here.xpPerChamp)} une mission ordinaire) : fais-le quand ${objTake} champions sont libres`,
       );
-  } else if (fort.locked)
+  } else if (fort.locked && razing)
+    reasons.push(
+      EMBER.islands.has(hereIsl.id)
+        ? `éteins ${ISLAND_CONQUEST.unlockAfter} objectifs (ils se rallument au fil des sorties) pour ouvrir la forteresse, puis prends-la à ${fortNeed}`
+        : `abats ${ISLAND_CONQUEST.unlockAfter} objectifs pour ouvrir la forteresse, puis prends-la à ${fortNeed}`,
+    );
+  else if (fort.locked)
     reasons.push(
       `tiens ${ISLAND_CONQUEST.unlockAfter} objectifs à la fois${objHold !== null ? ` (${objHold} champions postés sur chacun)` : ''} pour ouvrir la forteresse, puis prends-la à ${fortNeed}`,
     );

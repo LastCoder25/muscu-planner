@@ -16,10 +16,9 @@ import {
 import {
   ensureIslandConquest,
   FORTRESS_ID,
+  heldRazedObjectives,
   islandConquest,
   objectiveIdOf,
-  raiseDead,
-  RISE,
   redirectIslandAttacks,
   regainIslandTarget,
   takeObjective,
@@ -136,37 +135,60 @@ describe('🎯 la forteresse vise d’abord les objectifs qu’on tient', () => 
   });
 });
 
-describe('🪦 un cimetière tenu ne se relève pas : ses morts l’attaquent', () => {
-  it('il reste à nous, son attaque tombe à l’heure où il se serait relevé', () => {
-    const m0 = takeObjective(island(3), OBJ, ['a'], NOW);
-    const due = NOW + RISE.riseMs;
-    const m = raiseDead(m0, due + 1);
-    expect(poi(m, OBJ)!.control!.owner).toBe('player');
+// 🕯️ Île 3 (décision de l'utilisateur, 2026-10-16) : un objectif battu ne se TIENT plus, il
+// s'éteint (cf. `islandDead.test.ts` pour le rallumage). Restent les cimetières TENUS d'avant :
+// le store rappelle leur garnison (`heldRazedObjectives`), puis la carte les retire.
+describe('🕯️ un cimetière battu ne se tient pas : il s’éteint', () => {
+  it('takeObjective n’ajoute aucun lieu tenu : il quitte la carte, compte abattu, a une braise', () => {
+    const m = takeObjective(island(3), OBJ, ['a'], NOW);
+    expect(poi(m, OBJ)).toBeUndefined();
+    expect(m.pois.some((p) => p.control?.owner === 'player' && p.id === OBJ)).toBe(false);
     expect(islandConquest(m)!.objectivesDown).toBe(1);
-    expect(poi(m, OBJ)!.control!.attackAt).toBe(due);
-    expect(m.archipel!.razedAt?.[OBJ]).toBeUndefined();
+    expect(m.archipel!.destroyed).toContain(OBJ);
+    expect(m.archipel!.embers?.[OBJ]).toMatchObject({ at: NOW, charge: 0 });
+  });
+  it('un cimetière tenu d’avant : rappelé (garnison), puis retiré avec une braise neuve', () => {
+    const base = island(3);
+    const razed = takeObjective(base, OBJ, [], NOW);
+    // Reliquat : l'ancienne règle le laissait sur la carte, à nous, garnison dedans.
+    const old = base.pois.find((p) => p.id === OBJ)!;
+    const holder = (garrison: string[]): ExpeditionMap => ({
+      ...razed,
+      archipel: { ...razed.archipel!, embers: undefined },
+      pois: [
+        ...razed.pois,
+        { ...old, control: { ...old.control!, owner: 'player', razes: undefined, garrison } },
+      ],
+    });
+    const held = holder(['a']);
+    expect(heldRazedObjectives(held).map((p) => p.id)).toEqual([OBJ]);
+    // Tant que quelqu'un y reste, la carte le garde.
+    expect(poi(ensureIslandConquest(held, NOW + H, 50), OBJ)!.control!.owner).toBe('player');
+    // Vidé : il quitte la carte et reçoit sa braise, comptée à partir de maintenant.
+    const empty = holder([]);
+    expect(heldRazedObjectives(empty)).toEqual([]);
+    const t = ensureIslandConquest(empty, NOW + H, 50);
+    expect(poi(t, OBJ)).toBeUndefined();
+    expect(t.archipel!.embers?.[OBJ]).toMatchObject({ at: NOW + H, charge: 0 });
+    // Les autres îles n'ont rien de tel.
+    expect(heldRazedObjectives(takeObjective(island(1), OBJ, ['a'], NOW))).toEqual([]);
   });
 });
 
-// 🪦 Signalé (2026-10-13) : « une attaque qui vient de nulle part ». Les morts se relèvent sous
-// le cimetière, à une heure CONNUE dès la prise ; aucune armée ne marche ; la reprise ordinaire
-// d'un cimetière part de la forteresse.
-describe('🪦 les morts qui se relèvent se voient venir', () => {
-  const due = NOW + RISE.riseMs;
-  const withAttack = (m: ExpeditionMap, at: number): ExpeditionMap => ({
-    ...m,
-    pois: m.pois.map((p) =>
-      p.id === OBJ ? { ...p, control: { ...p.control!, attackAt: at } } : p,
-    ),
-  });
-  const taken = () => takeObjective(island(3), OBJ, ['a'], NOW);
-  it('posée dès la prise, connue d’avance, et sans armée en marche', () => {
-    const m = raiseDead(withAttack(taken(), due + 10 * H), NOW + H);
-    const c = poi(m, OBJ)!;
-    expect(c.control!.attackAt).toBe(due);
+// 🪦 Signalé (2026-10-13) : « une attaque qui vient de nulle part ». Des morts qui se relèvent
+// (`riseAt` = `attackAt`) ont une heure CONNUE d'avance ; aucune armée ne marche. Ces fonctions
+// restent génériques sur `riseAt` (plus posé par l'île 3 : construit ici à la main).
+describe('🪦 une relève datée (riseAt) se voit venir', () => {
+  const due = NOW + 72 * H;
+  const rising = (attackAt = due, riseAt = due): Poi => {
+    const o = island(3).pois.find((p) => p.id === OBJ)!;
+    return { ...o, control: { ...o.control!, owner: 'player', attackAt, riseAt } };
+  };
+  it('connue d’avance, sans armée en marche', () => {
+    const c = rising();
     expect(deadRisingAt(c)).toBe(due);
     expect(knownAttackAt(c, NOW + H)).toBe(due);
-    expect(m.archipel!.razedAt?.[OBJ]).toBe(NOW);
+    const m = { ...island(3), pois: [...island(3).pois.filter((p) => p.id !== OBJ), c] };
     const armies = syncFieldArmies(m, {
       raid: null,
       detectR: 999,
@@ -178,16 +200,11 @@ describe('🪦 les morts qui se relèvent se voient venir', () => {
       false,
     );
   });
-  it('une reprise déjà prévue avant passe d’abord', () => {
-    const m0 = withAttack(taken(), NOW + 5 * H);
-    expect(raiseDead(m0, NOW + H)).toBe(m0);
-  });
-  it('jouée une fois : une défense à cette heure ne se rejoue pas', () => {
-    const m1 = raiseDead(withAttack(taken(), due + 10 * H), NOW + H);
-    const m2 = withAttack(m1, due + 40 * H);
-    const m3 = raiseDead(m2, due + 1);
-    expect(poi(m3, OBJ)!.control!.attackAt).toBe(due + 40 * H);
-    expect(deadRisingAt(poi(m3, OBJ)!)).toBeNull();
+  it('une échéance déplacée depuis (attackAt ≠ riseAt) n’est plus celle des morts', () => {
+    expect(deadRisingAt(rising(due + 4 * H, due))).toBeNull();
+    const enemy = rising();
+    enemy.control!.owner = 'enemy';
+    expect(deadRisingAt(enemy)).toBeNull();
   });
   it('la carte affiche le délai et un cercle qui se resserre', () => {
     expect(riseShortLabel(45 * 60_000)).toBe('45 min');
@@ -195,7 +212,7 @@ describe('🪦 les morts qui se relèvent se voient venir', () => {
     expect(riseShortLabel(72 * H)).toBe('3 j');
     expect(riseCloseness(NOW + 48 * H, NOW)).toBe(0);
     expect(riseCloseness(NOW, NOW)).toBe(10);
-    const m = raiseDead(withAttack(taken(), due + 10 * H), NOW + H);
+    const m = { ...island(3), pois: [...island(3).pois.filter((p) => p.id !== OBJ), rising()] };
     expect(risingControlKey(m, due - 2 * H)).toBe(`${OBJ}:2 h:9`);
   });
 });
@@ -219,10 +236,10 @@ describe('🏝️ une reprise sur une île part d’un lieu ennemi', () => {
 
 // 🏝️ Signalé (2026-10-13) : partie de la forteresse toute proche, la reprise n'était visible
 // que quelques minutes. Elle apparaît à son départ, au moins `islandLeadMs` avant l'attaque.
-describe('🏝️ la reprise d’un cimetière se voit venir depuis la forteresse', () => {
+describe('🏝️ la reprise d’un objectif tenu se voit venir depuis la forteresse', () => {
   const T = NOW + 30 * H;
   const map = () => {
-    const m = takeObjective(island(3), OBJ, ['a'], NOW);
+    const m = takeObjective(island(1), OBJ, ['a'], NOW);
     return {
       ...m,
       pois: m.pois.map((p) =>
@@ -254,24 +271,5 @@ describe('🏝️ la reprise d’un cimetière se voit venir depuis la forteress
     };
     const a = army(m, T - 60_000)!;
     expect(a.spawnedAt).toBe(T - FIELD_ARMY.islandLeadMs);
-  });
-});
-
-// 🕊️🪦 Signalé (2026-10-14) : la fin d'une trêve décale une relève retenue ; `raiseDead` ne
-// doit pas la ramener à son heure d'origine (elle tomberait alors sans préavis).
-describe('🪦 une relève décalée par la fin de la trêve garde sa nouvelle heure', () => {
-  it('riseAt plus tard que l’échéance : raiseDead n’y touche pas', () => {
-    const due = NOW + RISE.riseMs;
-    const later = due + 4 * H;
-    const m0 = takeObjective(island(3), OBJ, ['a'], NOW);
-    const shifted: ExpeditionMap = {
-      ...m0,
-      pois: m0.pois.map((p) =>
-        p.id === OBJ ? { ...p, control: { ...p.control!, attackAt: later, riseAt: later } } : p,
-      ),
-    };
-    const m = raiseDead(shifted, NOW + H);
-    expect(poi(m, OBJ)!.control!.attackAt).toBe(later);
-    expect(poi(m, OBJ)!.control!.riseAt).toBe(later);
   });
 });

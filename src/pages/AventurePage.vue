@@ -62,7 +62,7 @@
             class="inbox-btn"
             aria-label="Aide"
             title="Revoir le guide de l'Aventure"
-            @click="showIntro = true"
+            @click="tutorial?.open()"
           >
             ❔
           </button>
@@ -125,31 +125,8 @@
         <span class="lc-cta font-display">Récupérer</span>
       </button>
 
-      <!-- Onboarding : mini-guide affiché à la 1re visite, et rouvrable par le ❔ du bandeau
-           (audit 2026-10-15 : il parlait d'onglets « Donjons » et « Boss » qui n'existent plus). -->
-      <div v-if="showIntro" class="intro-card">
-        <div class="intro-h font-display">⚔️ Bienvenue dans l'Aventure</div>
-        <ul class="intro-list">
-          <li>💪 Ton <b>niveau et tes stats</b> viennent de ton SPORT réel — rien à répartir.</li>
-          <li>
-            ⚡ Le sport donne de l'<b>énergie</b> : elle paie les donjons, le Labyrinthe et le
-            Portail.
-          </li>
-          <li>
-            🦸 <b>Héros</b> : ta fiche et tes talents. 🎒 <b>Équipement</b> : le 🪄 équipe le
-            meilleur build.
-          </li>
-          <li>
-            🗺️ <b>Explorer</b> : donjons et boss de palier (les boss lâchent les pièces de
-            <b>set</b>), et la <b>carte</b> où partent héros et champions.
-          </li>
-          <li>
-            🛡️ <b>Base</b> : bâtiments, enceinte contre les sièges, et le <b>Panthéon</b> où l'on
-            invoque des champions avec 💠 et 🎟️.
-          </li>
-        </ul>
-        <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
-      </div>
+      <!-- 📖 Guide de l'Aventure : s'ouvre à la 1re visite, et se rouvre par le ❔ du bandeau. -->
+      <GameTutorial ref="tutorial" />
 
       <!-- 🔄 LE PLATEAU PIVOTE quand on passe de l'Aventure à la carte : `shownMap` suit
            `mapView` avec un temps de retard, le temps que la tuile ait tourné de profil. -->
@@ -3186,6 +3163,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ResourceTray from '@/components/ResourceTray.vue';
+import GameTutorial from '@/components/GameTutorial.vue';
 import ResourceGains from '@/components/ResourceGains.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import FusionPanel from '@/components/FusionPanel.vue';
@@ -7115,17 +7093,7 @@ watch(
   { immediate: true },
 );
 
-// Onboarding : mini-guide affiché une seule fois (persisté en localStorage).
-const INTRO_KEY = 'muscu:adv:intro';
-const showIntro = ref(false);
-function dismissIntro() {
-  showIntro.value = false;
-  try {
-    localStorage.setItem(INTRO_KEY, '1');
-  } catch {
-    /* ignore */
-  }
-}
+const tutorial = ref<InstanceType<typeof GameTutorial> | null>(null);
 
 onMounted(async () => {
   try {
@@ -7138,11 +7106,6 @@ onMounted(async () => {
   // ⚠️ Démontée pendant le chargement : l'intervalle posé ensuite ne serait jamais arrêté,
   // et il écrit en base chaque seconde (`expeLifecycle`).
   if (disposed) return;
-  try {
-    showIntro.value = !localStorage.getItem(INTRO_KEY);
-  } catch {
-    /* ignore */
-  }
   // Expédition idle : synchro carte + cycle de vie (rapport/collecte) au fil du temps.
   void expeLifecycle();
   expeTimer = setInterval(() => {
@@ -11138,45 +11101,6 @@ button.pt-mini:active {
 }
 
 /* Carte de récompense de connexion */
-.intro-card {
-  margin-bottom: 14px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--accent) 10%, var(--surface)),
-    var(--surface) 75%
-  );
-}
-.intro-h {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--accent);
-  margin-bottom: 8px;
-}
-.intro-list {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text);
-}
-.intro-ok {
-  width: 100%;
-  margin-top: 12px;
-  border: none;
-  background: var(--accent);
-  color: var(--accent-ink, #15120e);
-  border-radius: 10px;
-  padding: 10px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  cursor: pointer;
-}
 .login-card {
   display: flex;
   align-items: center;

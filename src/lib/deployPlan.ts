@@ -18,6 +18,7 @@ import {
 } from './caravan';
 import { combatPowerRaw } from './combat';
 import { seatsOf } from './controlPoints';
+import { isHeldRazed } from './islandConquest';
 import { legFromSpot } from './controlRoutes';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -109,8 +110,14 @@ function prepare(input: DeployPlanInput) {
   // donc ses places sont toutes ses places de champions — moins celles des immobiles
   // (`fixed`), que la recherche y pose d'office. La défense n'entre pas en compte :
   // ce sont les miliciens qui gardent les lieux fixes.
+  // 🪺🕯️ Jamais un objectif qui s'abat (nid, objectif éteint de l'île 3) : un reliquat tenu
+  // est rappelé, personne n'y va.
   const held = (map?.pois ?? []).filter(
-    (p) => p.control?.owner === 'player' && seatsOf(p.control.kind) > 0,
+    (p) =>
+      p.control?.owner === 'player' &&
+      seatsOf(p.control.kind) > 0 &&
+      !p.control.razes &&
+      !(map && isHeldRazed(map, p)),
   );
   const points = new Map(held.map((p) => [p.id, p]));
   const spots: DeploySpot[] = [

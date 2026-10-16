@@ -524,8 +524,16 @@ function specW(c: Pick<Combatant, 'specRules'>, base: number, spec: number): num
  *  ⚠️ LE TOTAL EST CONSERVÉ — ce n'est pas un bonus. Le combattant de référence (trois stats
  *  égales) n'est donc pas touché, et aucune calibration ne bouge pour lui ; seul un build très
  *  déséquilibré se rapproche de l'équilibre. Posé par `computeCharacter` pour le HÉROS
- *  seul ; les stats AFFICHÉES restent les vraies (`Character.sport`). */
-export const STAT_FLOOR_SHARE = 0.2;
+ *  seul ; les stats AFFICHÉES restent les vraies (`Character.sport`).
+ *
+ *  📏 28 % (2026-10-16, mesuré ; 20 % en v1.215). Unité : part des descentes nettoyées au niveau
+ *  conseillé de chaque donjon (16 tirages d'équipement × 40), muscu pure 60/30/10 contre joueur
+ *  équilibré, même butin. À 20 % le muscu pur (52/28/20 au combat) nettoyait 39 % de moyenne
+ *  au-delà du reco 25 (25 à 54 %) contre 69 % pour l'équilibré, et battait 31 % des boss de palier
+ *  (19 à 48 %) contre 57 %. À 28 % (43/29/28) : 60 % (47 à 74 %) et 45 % (37 à 53 %), toujours
+ *  sous l'équilibré — varier ses sports reste utile. 25 % : 52 / 40 ; 30 % : 63 / 49 ; 1/3
+ *  l'égalerait. Garanti par `test/dungeonCurve.test.ts`. */
+export const STAT_FLOOR_SHARE = 0.28;
 export function floorStats(stats: { puissance: number; endurance: number; agilite: number }): {
   puissance: number;
   endurance: number;

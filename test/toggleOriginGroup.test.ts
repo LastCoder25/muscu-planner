@@ -4,7 +4,31 @@ import {
   originGroupsWithSomeone,
   toggleOriginGroup,
   toggleOriginGroupWithHero,
+  togglePoolWithHero,
 } from '@/lib/combinedAttack';
+
+describe('« ✨ Tous » du vivier — le héros posté sur un lieu fixe part aussi', () => {
+  it('coche le héros posté avec tous les champions', () => {
+    expect(togglePoolWithHero(['a', 'b'], false, true, false)).toEqual({
+      escort: ['a', 'b'],
+      hero: true,
+    });
+  });
+  it('tout coché, héros compris : tout se décoche', () => {
+    expect(togglePoolWithHero(['a', 'b'], true, true, true)).toEqual({ escort: [], hero: false });
+  });
+  it('champions cochés mais pas le héros posté : on complète', () => {
+    expect(togglePoolWithHero(['a', 'b'], true, true, false)).toEqual({
+      escort: ['a', 'b'],
+      hero: true,
+    });
+  });
+  it('héros à la base ou indisponible : son choix ne bouge pas', () => {
+    expect(togglePoolWithHero(['a'], false, false, false)).toEqual({ escort: ['a'], hero: false });
+    expect(togglePoolWithHero(['a'], false, false, true)).toEqual({ escort: ['a'], hero: true });
+    expect(togglePoolWithHero(['a'], true, false, true)).toEqual({ escort: [], hero: true });
+  });
+});
 
 describe('toggleOriginGroup — toucher un lieu coche ou décoche tous ses champions', () => {
   it('coche tous ceux du lieu, sans toucher aux autres lieux', () => {

@@ -103,9 +103,9 @@
                     : `Il manque ${labyKeyCost(t.laby.id) - keys} 🗝️`
                 }}
               </button>
-              <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
-                   Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
-              <template v-if="t.cleared || auth.isAdmin">
+              <!-- Auto : pour tout le monde, dès qu'un palier est débloqué (le run se joue
+                   tout seul). -->
+              <template v-if="t.unlocked">
                 <!-- Combien de runs à la suite : borné par les clés (prix payé au lancement
                      de chaque run, donc arrêter en route garde les clés restantes). -->
                 <div v-if="batchOf(t.laby).max > 1" class="lt-batch">
@@ -210,36 +210,33 @@
         </div>
       </div>
 
-      <!-- Contrôles AUTO flottants (téléportés au body → TOUJOURS au-dessus des modales de
-           combat/coffre/piège). Vitesse ⏩ + stop en mode AUTO ; en mode MANUEL (après avoir
-           repris la main), bouton pour RELANCER l'auto (si le palier est nettoyé). -->
+      <!-- Contrôles flottants (téléportés au body → TOUJOURS au-dessus des modales de
+           combat/coffre/piège). En AUTO : seulement le run en cours sur le nombre lancé
+           (vitesse maximale, pas de reprise en main — demandé par l'utilisateur). En MANUEL :
+           la vitesse des déplacements, et l'auto à lancer. -->
       <Teleport to="body">
         <div v-if="phase === 'running' && !over" class="auto-float">
-          <button
-            type="button"
-            class="af-speed"
-            :class="{ on: autoSpeed > 1 }"
-            title="Vitesse de l'auto (touche pour accélérer ; jusqu'à ×20 → retour ×1)"
-            @click="toggleSpeed"
+          <span v-if="autoMode" class="af-txt"
+            >⚡ Auto · run {{ (series?.done ?? 0) + 1 }}/{{ series?.total ?? 1 }}</span
           >
-            ⏩ ×{{ autoSpeed }}
-          </button>
-          <template v-if="autoMode">
-            <span class="af-txt"
-              >⚡ Auto<template v-if="series">
-                · run {{ series.done + 1 }}/{{ series.total }}</template
-              ></span
+          <template v-else>
+            <button
+              type="button"
+              class="af-speed"
+              :class="{ on: autoSpeed > 1 }"
+              title="Vitesse des déplacements (touche pour accélérer ; jusqu'à ×20 → retour ×1)"
+              @click="toggleSpeed"
             >
-            <button type="button" class="af-stop" @click="takeBack">✋ Reprendre la main</button>
+              ⏩ ×{{ autoSpeed }}
+            </button>
+            <button
+              type="button"
+              class="af-stop af-resume"
+              @click="resumeAuto"
+            >
+              ⚡ Lancer l'auto
+            </button>
           </template>
-          <button
-            v-else-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
-            type="button"
-            class="af-stop af-resume"
-            @click="resumeAuto"
-          >
-            ⚡ Relancer l'auto
-          </button>
         </div>
       </Teleport>
 
@@ -644,7 +641,6 @@
             @click="replay"
           />
           <q-btn
-            v-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
             flat
             no-caps
             :label="
@@ -950,7 +946,7 @@ const hiddenTiers = computed(() => Math.max(0, tiers.value.length - firstLocked.
 // Palier en cours d'exploration (choisi dans le lobby).
 const selectedLaby = ref<Labyrinth | null>(null);
 
-// ── Mode AUTO (paliers déjà nettoyés) : le run se joue TOUT SEUL, visuellement en
+// ── Mode AUTO (tout palier débloqué) : le run se joue TOUT SEUL, visuellement en
 // temps réel (clique chaque salle, avance d'étage, combat le boss), puis affiche
 // l'écran de fin. On enchaîne les salles via un timer qui appelle les MÊMES actions
 // que le joueur (onRoomClick/goDown/finish), en fermant automatiquement les modales.
@@ -984,6 +980,10 @@ function toggleSpeed() {
   const i = SPEED_STEPS.indexOf(autoSpeed.value);
   setSpeed(SPEED_STEPS[(i + 1) % SPEED_STEPS.length] ?? 1);
 }
+// L'AUTO (et l'enchaînement d'une série) tourne toujours à la vitesse maximale : il n'a plus
+// de sélecteur. Le réglage mémorisé ne vaut que pour le jeu manuel.
+const MAX_SPEED = SPEED_STEPS[SPEED_STEPS.length - 1]!;
+const speed = computed(() => (autoMode.value || series.value ? MAX_SPEED : autoSpeed.value));
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -1107,7 +1107,7 @@ const roomPulse = ref<{
 let pulseSeq = 0;
 let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 // Durée de l'effet, raccourcie avec la vitesse de l'auto (jamais sous 250 ms : on doit le voir).
-const pulseMs = computed(() => Math.max(250, Math.round(1100 / autoSpeed.value)));
+const pulseMs = computed(() => Math.max(250, Math.round(1100 / speed.value)));
 function pulse(id: number, kind: 'chest' | 'trap' | 'vault', text: string) {
   roomPulse.value = { id, kind, text, n: ++pulseSeq };
   if (pulseTimer) clearTimeout(pulseTimer);
@@ -1265,7 +1265,7 @@ const heroPos = computed(() => {
   };
 });
 // Le pas du héros suit celui du déplacement automatique (et la vitesse de l'auto).
-const walkMs = computed(() => Math.round(WALK_STEP_MS / autoSpeed.value));
+const walkMs = computed(() => Math.round(WALK_STEP_MS / speed.value));
 // Illustration du gardien d'un palier, ou null (repli sur son emoji). Un fichier qui ne
 // charge pas retombe aussi sur l'emoji.
 const artFailed = ref(new Set<string>());
@@ -1343,7 +1343,7 @@ function fightRoom(id: number, isBoss: boolean) {
   ];
   // En AUTO à vitesse élevée (≥ ×3), on SAUTE l'animation de combat (le vrai goulot au ×20 :
   // le pacing entre salles était accéléré mais pas le rejeu) → résultat direct, on enchaîne.
-  const skip = autoMode.value && autoSpeed.value >= 3;
+  const skip = autoMode.value && speed.value >= 3;
   combatSkipped.value = skip;
   fxDone.value = skip; // skip → résultat déjà « révélé » → autoTick ferme tout de suite
   roomFx.value = { kind: 'combat', win: res.win };
@@ -1505,7 +1505,7 @@ function walkTo(path: number[]) {
     run.value = enterRoom(run.value, floor.value, id);
     lastEvent.value = null;
     i++;
-    walkTimer = setTimeout(step, Math.round(WALK_STEP_MS / autoSpeed.value)); // ÷ vitesse
+    walkTimer = setTimeout(step, Math.round(WALK_STEP_MS / speed.value)); // ÷ vitesse
   };
   step();
 }
@@ -1682,23 +1682,22 @@ async function start(tier?: Labyrinth, inSeries = false): Promise<boolean> {
   return true;
 }
 
-// ── Auto-run (paliers nettoyés) ──
+// ── Auto-run ──
 function stopAuto() {
   autoMode.value = false;
   if (autoTimer) clearTimeout(autoTimer);
   autoTimer = undefined;
 }
-// Reprend l'AUTO sur le run EN COURS (après « reprendre la main ») → re-enclenche la boucle
-// (sans fermer/relancer le run). Dispo si le palier est déjà nettoyé (auto-éligible).
+// Passe en AUTO le run manuel EN COURS → enclenche la boucle (sans fermer/relancer le run).
+// Dispo sur tout palier débloqué.
 function resumeAuto() {
   if (over.value || phase.value !== 'running') return;
-  if (!labyrinthCleared(selectedLaby.value?.id ?? '', clearedSet.value)) return;
   autoMode.value = true;
   scheduleAuto(200);
 }
 function scheduleAuto(ms = AUTO_STEP_MS) {
   if (autoTimer) clearTimeout(autoTimer);
-  autoTimer = setTimeout(autoTick, Math.round(ms / autoSpeed.value)); // ÷ vitesse (x2 = 2× plus rapide)
+  autoTimer = setTimeout(autoTick, Math.round(ms / speed.value)); // ÷ vitesse (x2 = 2× plus rapide)
 }
 // Seuil de PV bas : en dessous, si une SORTIE sûre est trouvée, l'auto sort (retraite)
 // plutôt que de risquer la mort (qui fait perdre les objets).
@@ -1817,12 +1816,7 @@ function autoTick() {
 }
 // Lance un palier NETTOYÉ en mode auto (mêmes règles/coût qu'un run manuel).
 async function startAuto(tier: Labyrinth, inSeries = false): Promise<boolean> {
-  // ⚠️ Sur un palier DÉJÀ NETTOYÉ, regarder le run n'a plus d'intérêt : c'est du farm.
-  // On propose donc la vitesse MAXIMALE d'emblée — elle existait, mais à six appuis du
-  // départ et annoncée nulle part. Le sélecteur reste là pour ralentir à volonté.
-  // En série, on garde la vitesse que le joueur a peut-être baissée entre deux runs.
-  if (!inSeries && labyrinthCleared(tier.id, clearedSet.value))
-    setSpeed(SPEED_STEPS[SPEED_STEPS.length - 1]!);
+  // Vitesse : toujours la maximale en auto (`speed`), sans sélecteur.
   const ok = await start(tier, inSeries);
   if (ok && phase.value === 'running') {
     autoMode.value = true;
@@ -1838,12 +1832,6 @@ async function startSeries(tier: Labyrinth, n: number) {
   series.value = total > 1 ? { total, done: 0, cleared: 0, dead: 0, gold: 0, loot: [] } : null;
   const ok = await startAuto(tier, total > 1);
   if (!ok) series.value = null;
-}
-// « Reprendre la main » : coupe l'auto, et le run en cours devient le DERNIER de la série
-// (on ne relance pas un run auto derrière un joueur qui a repris les commandes).
-function takeBack() {
-  stopAuto();
-  if (series.value) series.value.total = series.value.done + 1;
 }
 function clearSeriesTimer() {
   if (seriesTimer) clearTimeout(seriesTimer);
@@ -1937,7 +1925,7 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
     const cost = selectedLaby.value ? labyKeyCost(selectedLaby.value.id) : Infinity;
     if (keys.value >= cost) {
       clearSeriesTimer();
-      seriesTimer = setTimeout(() => void nextSeriesRun(), Math.round(1200 / autoSpeed.value));
+      seriesTimer = setTimeout(() => void nextSeriesRun(), Math.round(1200 / speed.value));
       return;
     }
     return closeSeries(`Plus assez de clés pour les ${s.total - s.done} run(s) restant(s).`);

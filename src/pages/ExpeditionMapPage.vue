@@ -1167,7 +1167,11 @@
                 :disabled="!partyPoolSorted.length"
                 @click="togglePartyAll"
               >
-                {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
+                {{
+                  partyAllOn
+                    ? 'Retirer tous'
+                    : `✨ Tous (${partyAllIds.length}${partyAllHero ? ' + 🧝' : ''})`
+                }}
               </button>
             </div>
             <!-- ↻ La dernière équipe envoyée, filtrée par les règles d'envoi (disponibilité, plafond). -->
@@ -1597,6 +1601,7 @@ import {
   heroPostOf,
   heroWalk,
   heroWalkVoyage,
+  emberStatus,
   islandConquest,
   islandTargetLabel,
   isIslandTargetId,
@@ -2179,6 +2184,7 @@ const archBind = computed(() => ({
   island: island.value,
   shown: viewed.value?.island.id ?? null,
   conquest: islandProgress.value,
+  embers: emberStatus(char.row?.expedition_map),
   busy: archBusy.value,
   openIds: crossInfo.value.open,
   visitedIds: crossInfo.value.visited,
@@ -6242,6 +6248,7 @@ const {
   heroPostedAt,
   partyAllIds,
   partyAllOn,
+  partyAllHero,
   togglePartyAll,
   partySendLabel,
   doSendParty,
