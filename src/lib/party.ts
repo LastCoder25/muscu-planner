@@ -546,6 +546,49 @@ export function heroStayedSplit(
   return { party: { ...rest, crew, id, reported: true } };
 }
 
+/**
+ * 🤕 LE HÉROS BLESSÉ RENTRE À LA BASE DEPUIS LE LIEU DU COMBAT (2026-10-16, signalé : « renvoyé
+ * sur son lieu de départ, mais je ne vois plus ses deux boules »). Parti d'un poste (`homeId`),
+ * il revenait d'abord au poste — dont la place était déjà libérée au rapport
+ * (`heroHomePostId`) — puis repartait à pied vers la base : la carte le montrait rentrer
+ * « chez lui » comme s'il avait gagné. Même règle que ses champions blessés (`baseWalkers`,
+ * décision du 2026-09-29) : son voyage perd son poste et finit à la base, `legMin` minutes
+ * après le rapport (`midAt`). Ses champions continuent vers le poste en groupe ORDINAIRE
+ * (rapport déjà déposé) : `splitSorties` y renvoie leurs blessés à la base, comme toujours.
+ * `null` : rien à séparer (pas blessé, rapport pas encore tombé, voyage parti de la base).
+ */
+export function heroHurtSplit(
+  exp: ActiveExpedition,
+  legMin: number,
+  now: number,
+  id: string,
+): { expedition: ActiveExpedition; party: ActiveParty | null } | null {
+  if (!exp.homeId || !exp.reported || !exp.outcome.party?.heroHurt) return null;
+  const crew = tripCrew(exp);
+  const { homeId: _i, origin: _o, homeHero: _h, returnLegs: _l, ...hero } = exp;
+  void _i;
+  void _o;
+  void _h;
+  void _l;
+  const { homeHero: _hh, ...trip } = exp;
+  void _hh;
+  // (Ses champions n'en sont plus : au retour, un voyage ne compte que ceux dont le
+  // `busyUntil` est SON retour — `voyageMemberIds` —, et le leur reste celui du groupe.)
+  return {
+    expedition: { ...hero, returnAt: exp.midAt + Math.max(0, Math.round(legMin)) * 60_000 },
+    party: crew.length && exp.returnAt > now ? { ...trip, crew, id } : null,
+  };
+}
+
+/** 🤕 Le héros RENTRE-T-IL BLESSÉ de ce voyage ? Seulement une fois le rapport tombé
+ *  (`midAt`) : l'issue est tirée au départ, la montrer à l'aller la dévoilerait. */
+export function heroReturnsHurt(
+  v: Pick<ActiveExpedition, 'midAt' | 'outcome'>,
+  now: number,
+): boolean {
+  return now >= v.midAt && !!v.outcome.party?.heroHurt;
+}
+
 /** Les champions encore en route du voyage (retour prévu à `oldAt`) rentrent désormais à
  *  `newAt`. Ceux déjà postés (`busyUntil` 0) ne bougent pas. Même référence si rien. */
 export function rescheduleReturners(

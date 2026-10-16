@@ -1710,6 +1710,7 @@ import {
   type RecallTarget,
   partyCarriesHero,
   returningHurt,
+  heroReturnsHurt,
 } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -4361,7 +4362,8 @@ const trips = computed(() => {
     out.push({
       key: 'hero',
       kind: 'hero',
-      who: '🧝',
+      // 🤕 Blessé, il rentre à l'infirmerie : la tuile le dit dès le rapport.
+      who: heroReturnsHurt(a, now.value) ? '🤕' : '🧝',
       cat: poiTripCategory(a.poi.type),
       poi: a.poi,
       time: tripTimeLabel(h).time,

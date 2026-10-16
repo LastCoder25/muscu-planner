@@ -324,6 +324,7 @@ import {
   voyageMemberIds,
   shortenWonReturn,
   heroStayedSplit,
+  heroHurtSplit,
   rescheduleReturners,
   baseWalkers,
   medkitHeal,
@@ -2705,10 +2706,22 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       `party_${now.toString(36)}`,
     );
+    // 🤕 Blessé, il rentre à la base depuis le lieu du combat, pas par son poste
+    // (`heroHurtSplit`) ; ses champions continuent vers le poste.
+    const hurt =
+      !split && mapOut
+        ? heroHurtSplit(
+            exp2,
+            heroHomeLegMin(cur, mapOut, exp.poi, exp.midAt),
+            now,
+            `party_${now.toString(36)}`,
+          )
+        : null;
+    const parted = split?.party ?? hurt?.party;
     await persist(userId, {
       ...(dw.base ? { base: dw.base } : {}),
-      expedition: split ? null : exp2,
-      ...(split?.party ? { parties: [...partyList.value, split.party] } : {}),
+      expedition: split ? null : (hurt?.expedition ?? exp2),
+      ...(parted ? { parties: [...partyList.value, parted] } : {}),
       messages: dw.tag(x.messages),
       ...x.patch,
       ...(ctl ? { adventurers: ctl.adventurers } : {}),
@@ -2775,14 +2788,11 @@ export const useCharacterStore = defineStore('character', () => {
     const hurtHero = !!exp.outcome.party?.heroHurt;
     // 🧭 Blessé au retour d'une sortie depuis son poste : il rentre À PIED de son poste à la
     // base, comme ses champions blessés ; sa convalescence ne court qu'à son arrivée.
+    // ⚠️ Depuis le LIEU DU COMBAT, à l'heure du rapport (`heroHurtSplit`, ici quand l'app
+    // était fermée au rapport) : jamais de détour par son poste.
     const hurtWalk =
       hurtHero && map2 && homePoi
-        ? heroWalksHomeFrom(
-            map2,
-            homePoi,
-            exp.returnAt,
-            heroHomeLegMin(cur, map2, homePoi, exp.returnAt),
-          )
+        ? heroWalksHomeFrom(map2, exp.poi, exp.midAt, heroHomeLegMin(cur, map2, exp.poi, exp.midAt))
         : null;
     const woundMs = woundMsFor(
       defenseLevel(base0.defenses, 'infirmary'),
