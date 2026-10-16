@@ -22,11 +22,17 @@ describe('le store applique les règles du héros posté', () => {
   it('resté sur le point pris, son voyage est séparé à l’arrivée', () => {
     const b = body('expeTick');
     expect(b).toMatch(/heroStayedSplit\(/);
-    expect(b).toMatch(/expedition: split \? null : exp2/);
+    expect(b).toMatch(/expedition: split \? null : \(hurt\?\.expedition \?\? exp2\)/);
+  });
+  it('blessé, il rentre à la base depuis le lieu du combat, ses champions vers le poste', () => {
+    const b = body('expeTick');
+    expect(b).toMatch(/heroHurtSplit\(\s*exp2,\s*heroHomeLegMin\(cur, mapOut, exp\.poi, exp\.midAt\)/);
+    expect(b).toMatch(/const parted = split\?\.party \?\? hurt\?\.party/);
   });
   it('blessé au retour d’une sortie, il rentre à pied (convalescence à l’arrivée)', () => {
     const b = body('expeSettle');
-    expect(b).toMatch(/heroWalksHomeFrom\(/);
+    // ⚠️ Depuis le lieu du combat, jamais depuis son poste (2026-10-16).
+    expect(b).toMatch(/heroWalksHomeFrom\(map2, exp\.poi, exp\.midAt,/);
     expect(b).toMatch(/heroWoundAfter\(hurtWalk\.heroReturnAt/);
   });
   it('le rappel complet d’un lieu ramène aussi le héros posté ou en route', () => {
