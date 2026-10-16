@@ -155,6 +155,7 @@ import {
 } from '@/lib/militiaSea';
 import { basculeToArchipel } from '@/lib/archipelBascule';
 import {
+  EMBER,
   FORTRESS_ID,
   brigandPillage,
   ensureIslandConquest,
@@ -163,7 +164,7 @@ import {
   razeIslandTarget,
   takeFortress,
   takeObjective,
-  heldNests,
+  heldRazedObjectives,
   regainIslandTarget,
   redirectIslandAttacks,
   ENDLESS_ID,
@@ -2262,8 +2263,8 @@ export const useCharacterStore = defineStore('character', () => {
     // 🗼 Un point d'un type RETIRÉ encore tenu (la tour de guet) : sa garnison et le héros
     // rentrent à pied d'abord ; il quitte la carte au tick suivant, une fois vide.
     if (cur.expedition_map) {
-      // 🪺 De même un nid tenu d'avant la règle « on l'abat » (`heldNests`).
-      const old = [...retiredHeld(cur.expedition_map), ...heldNests(cur.expedition_map)];
+      // 🪺🕯️ De même un nid ou un objectif éteint tenu d’avant la règle « on l’abat » (`heldRazedObjectives`).
+      const old = [...retiredHeld(cur.expedition_map), ...heldRazedObjectives(cur.expedition_map)];
       if (old.length) {
         // 🧝 `recallControl` ramène aussi le héros posté là (ou en route vers ce lieu).
         for (const p of old) await recallControl(userId, p.id, now, level);
@@ -5179,8 +5180,11 @@ export const useCharacterStore = defineStore('character', () => {
         useGameFx().celebrate({
           kind: 'unlock',
           emoji: isl.objectiveEmoji,
-          title: `${isl.objective} pris !`,
-          subtitle: 'Un pas vers la forteresse portuaire',
+          // 🕯️ Île 3 : un objectif battu s'éteint, il se rallumera au fil des sorties.
+          title: EMBER.islands.has(isl.id) ? `${isl.objective} éteint !` : `${isl.objective} pris !`,
+          subtitle: EMBER.islands.has(isl.id)
+            ? 'Il se rallumera au fil de tes sorties · un pas vers la forteresse'
+            : 'Un pas vers la forteresse portuaire',
           rarity: 'epic',
         });
     }

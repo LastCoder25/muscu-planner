@@ -932,9 +932,14 @@ export interface ExpeditionMap {
     nestCharge?: number;
     /** 🪺 LEGACY (pontes d'avant le 2026-10-04) : retiré à la première apparition. */
     nestLaid?: Record<string, number>;
-    /** 🪦 Île 3 : quand chaque cimetière a été abattu (id → instant) — il se relève
-     *  `RISE.riseMs` plus tard tant que la citadelle des morts tient. */
+    /** 🪦 LEGACY (île 3, avant les objectifs éteints) : l'heure de chute de chaque cimetière,
+     *  qui se relevait 3 jours plus tard. Plus écrit. */
     razedAt?: Record<string, number>;
+    /** 🕯️ Île 3 : les objectifs ÉTEINTS (id → braise), qui se rallument au fil des sorties
+     *  (`relightObjectives`). */
+    embers?: Record<string, ObjectiveEmber>;
+    /** 🕯️ La dernière sortie comptée pour les braises. */
+    emberFrom?: number;
     /** LEGACY (îles 4 et 5, avant les v1.66.0 / v1.67.0) : la prochaine sortie de l'armée ou de
      *  l'invasion, à l'horloge. Elles partent aux sorties (`sorties`) ; effacé au premier tick. */
     warAt?: number;
@@ -1004,6 +1009,11 @@ export const ARCHIPEL_TRAVEL_LEVEL = 0;
  *  les sorties comptées depuis le dernier départ (`charge`), le nombre de départs (`fired`) et
  *  l'instant du dernier (`last`, pour l'écart minimal). */
 export type SortieClock = { from: number; charge: number; fired: number; last?: number };
+
+/** 🕯️ Un objectif d'île ÉTEINT (`EMBER`) : abattu à `at`, il se rallume après `need` sorties
+ *  (`charge` comptées) ; `ready` = la sortie qui a atteint le compte (il attend alors le
+ *  plancher `EMBER.floorMs`, ou que la citadelle se rallume). */
+export type ObjectiveEmber = { at: number; need: number; charge: number; ready?: number };
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;

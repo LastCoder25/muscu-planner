@@ -59,6 +59,7 @@ import {
   type ExpeditionMap,
   type PostedHero,
   type ExpeditionMessage,
+  type ObjectiveEmber,
   type Poi,
   type SortieClock,
 } from './expedition';
@@ -150,35 +151,50 @@ export function nestLevel(
   return isl.minLevel + Math.min(span - 1, Math.floor(r * span));
 }
 
-/** 🪺 Un nid que le joueur TIENT : un reliquat d'avant la règle « on l'abat ». */
-function isHeldNest(map: Pick<ExpeditionMap, 'archipel'>, p: Poi): boolean {
+/** 🪺🕯️ Les îles dont les objectifs s'ABATTENT, jamais tenus (`ControlState.razes`). */
+function razesOn(islandId: number): boolean {
+  return NEST.islands.has(islandId) || EMBER.islands.has(islandId);
+}
+
+/** 🪺🕯️ Un objectif que le joueur TIENT sur une île où ils s'abattent : un reliquat d'avant
+ *  la règle (nids de l'île 2, cimetières de l'île 3). */
+export function isHeldRazed(map: Pick<ExpeditionMap, 'archipel'>, p: Poi): boolean {
   const isl = activeIsland(map);
   return (
     !!isl &&
-    NEST.islands.has(isl.id) &&
+    razesOn(isl.id) &&
     p.control?.kind === 'objective' &&
     p.control.owner === 'player' &&
     p.id !== ENDLESS_ID
   );
 }
 
-/** 🪺 Les nids tenus où il reste quelqu'un (garnison ou héros) : le store les rappelle, après
- *  quoi `ensureIslandConquest` les retire de la carte — comme un lieu d'un type retiré. */
-export function heldNests(map: ExpeditionMap): Poi[] {
+/** 🪺🕯️ Ces objectifs tenus où il reste quelqu'un (garnison ou héros) : le store les rappelle,
+ *  après quoi `ensureIslandConquest` les retire de la carte — comme un lieu d'un type retiré. */
+export function heldRazedObjectives(map: ExpeditionMap): Poi[] {
   return map.pois.filter(
-    (p) => isHeldNest(map, p) && (p.control!.garrison.length > 0 || !!p.control!.hero),
+    (p) => isHeldRazed(map, p) && (p.control!.garrison.length > 0 || !!p.control!.hero),
   );
 }
 
 /**
- * 🪦 LES MORTS SE RELÈVENT (île 3, roadmap : « 2 cimetières + la citadelle ») : un cimetière
- * abattu se RELÈVE `riseMs` plus tard tant que la CITADELLE DES MORTS (le dernier objectif,
- * `Island.keystone`) tient. Abattre la citadelle arrête tout : ce qui est à terre y reste.
- * D'où deux façons de faire : la citadelle d'abord (troupe 4), ou les trois en moins de 3 jours.
+ * 🕯️ LES OBJECTIFS ÉTEINTS (île 3, décision de l'utilisateur, 2026-10-16 ; remplace « les
+ * morts se relèvent 3 jours plus tard » et les cimetières tenus) : un objectif battu ne se
+ * prend pas, il s'ÉTEINT — il quitte la carte, compte comme abattu (verrou et force de la
+ * forteresse), et personne n'y reste. Il se RALLUME après un nombre de SORTIES tiré à
+ * l'extinction (`cemetery` / `keystone`), comptées à leur ARRIVÉE comme les nids : le même
+ * nombre d'expéditions pour tous, qu'on joue peu ou beaucoup. Jamais avant `floorMs` (un
+ * joueur qui enchaîne dix sorties dans la soirée ne voit pas tout se rallumer la nuit).
+ * - tant que la CITADELLE (`Island.keystone`) est éteinte, les cimetières ne comptent plus
+ *   rien et ne se rallument pas (gelés) ;
+ * - la forteresse abattue PACIFIE l'île pour de bon : plus rien ne se rallume ;
+ * - les objectifs tenus d'avant sont rappelés puis éteints, à compteur neuf.
  */
-export const RISE = {
+export const EMBER = {
   islands: new Set([3]) as ReadonlySet<number>,
-  riseMs: 3 * 24 * 3600_000,
+  cemetery: { min: 6, max: 10 },
+  keystone: { min: 10, max: 15 },
+  floorMs: 24 * 3600_000,
 } as const;
 
 /** L'id de l'objectif-clé (la citadelle des morts), `null` si l'île n'en a pas. */
@@ -196,61 +212,152 @@ function objectiveLook(
     : { name: isl.objective, emoji: isl.objectiveEmoji };
 }
 
+/** 🕯️ Combien de sorties avant que l'objectif `id`, éteint à `at`, se rallume (tiré sur la
+ *  carte, l'objectif et l'instant : déterministe). */
+export function emberNeed(seed: number, id: string, at: number, keystone: boolean): number {
+  const c = keystone ? EMBER.keystone : EMBER.cemetery;
+  const r = mulberry32((seedOf(`${seed}:ember:${id}:${at}`) ^ 0x7f4a7c15) >>> 0 || 1)();
+  const span = c.max - c.min + 1;
+  return c.min + Math.min(span - 1, Math.floor(r * span));
+}
+
+/** 🕯️ Une braise neuve pour l'objectif `id` éteint à `at`. */
+function newEmber(
+  map: Pick<ExpeditionMap, 'seed'>,
+  isl: Pick<Island, 'objectives' | 'keystone'>,
+  id: string,
+  at: number,
+): ObjectiveEmber {
+  return { at, need: emberNeed(map.seed, id, at, id === keystoneIdOf(isl)), charge: 0 };
+}
+
+/** 🕯️ L'instant où une braise prête se rallume (le plancher compris), `Infinity` sinon. */
+const emberDue = (e: ObjectiveEmber): number =>
+  e.ready === undefined ? Infinity : Math.max(e.ready, e.at + EMBER.floorMs);
+
 /**
- * 🪦 Relève les cimetières abattus depuis `RISE.riseMs` tant que la citadelle tient. Rend la
- * MÊME carte si rien ne change.
+ * 🕯️ LE RALLUMAGE (`EMBER`) : chaque sortie arrivée depuis la dernière lue (`emberFrom`)
+ * charge les braises éteintes AVANT elle — sauf les cimetières tant que la citadelle est
+ * éteinte. Au compte, la braise est prête ; elle se rallume au plancher (`floorMs`), la
+ * citadelle d'abord, les cimetières seulement une fois elle rallumée. Un objectif rallumé
+ * quitte `destroyed` : `expectedTargets` le repose, la forteresse se reverrouille au besoin.
+ * Rend la MÊME carte si rien ne change.
  */
-export function raiseDead(map: ExpeditionMap, now: number): ExpeditionMap {
+function relightObjectives(map: ExpeditionMap, now: number): ExpeditionMap {
   const isl = activeIsland(map);
   const a = map.archipel;
-  if (!isl || !a || !RISE.islands.has(isl.id) || a.pacifiedAt !== undefined) return map;
+  if (!isl || !a || !EMBER.islands.has(isl.id) || a.pacifiedAt !== undefined) return map;
+  if (!a.embers || !Object.keys(a.embers).length) return map;
   const key = keystoneIdOf(isl);
-  const gone = destroyedOf(map);
-  if (!key || gone.has(key)) return map;
-  const razed = a.razedAt ?? {};
-  const up = Object.keys(razed).filter((id) => gone.has(id) && razed[id]! + RISE.riseMs <= now);
-  // 🏳️ Un cimetière TENU ne se relève pas tout seul : ses morts ATTAQUENT la garnison à
-  // l'heure où il se serait relevé (la reprise décide). 🪦 Posée DÈS LA PRISE, pas à
-  // l'échéance (signalé : posée trop tard, elle se résolvait aussitôt sans jamais se voir) :
-  // l'heure est connue d'avance, de quoi prévoir sa défense (`deadRisingAt`).
-  // ⚠️ UNE SEULE FOIS par échéance (`riseAt`) : une défense déjà jouée à cette heure ne se rejoue
-  // pas, même si le relevé passe après la bataille.
-  const held = new Set(map.pois.filter((p) => heldIslandTarget(p)).map((p) => p.id));
-  let marked = false;
-  const pois = map.pois.map((p) => {
-    if (!held.has(p.id) || razed[p.id] === undefined || !gone.has(p.id)) return p;
-    const t = razed[p.id]! + RISE.riseMs;
-    // ⚠️ Une relève déjà posée, ou décalée PLUS TARD par la fin d'une trêve (`holdGrace`), est
-    // traitée : la ramener à `t` la ferait tomber sans préavis.
-    if (p.control!.riseAt !== undefined && p.control!.riseAt >= t) return p;
-    // Une reprise déjà prévue AVANT passe d'abord : on remarquera les morts après elle.
-    if (t > (p.control!.attackAt ?? Infinity)) return p;
-    marked = true;
-    return { ...p, control: { ...p.control!, attackAt: t, riseAt: t } };
-  });
-  if (!up.length && !marked) return map;
-  const back = new Set(up.filter((id) => !held.has(id)));
-  const razedAt = { ...razed };
-  for (const id of up) delete razedAt[id];
+  const embers: Record<string, ObjectiveEmber> = {};
+  for (const [id, e] of Object.entries(a.embers)) embers[id] = { ...e };
+  const relit: string[] = [];
+  const keyDark = () => !!key && embers[key] !== undefined;
+  /** Rallume ce qui est dû à `t` : la citadelle d'abord, puis les cimetières si elle brûle. */
+  const settle = (t: number) => {
+    if (key && embers[key] && emberDue(embers[key]) <= t) {
+      delete embers[key];
+      relit.push(key);
+    }
+    if (keyDark()) return;
+    for (const id of Object.keys(embers))
+      if (emberDue(embers[id]!) <= t) {
+        delete embers[id];
+        relit.push(id);
+      }
+  };
+  const from = a.emberFrom ?? -Infinity;
+  const fresh = (map.departures ?? []).filter((t) => t > from && t <= now).sort((x, y) => x - y);
+  for (const t of fresh) {
+    settle(t);
+    for (const [id, e] of Object.entries(embers)) {
+      if (e.ready !== undefined || t <= e.at) continue;
+      if (id !== key && keyDark()) continue; // 🕯️ gelé : la citadelle est éteinte
+      e.charge += 1;
+      if (e.charge >= e.need) e.ready = t;
+    }
+  }
+  settle(now);
+  if (!fresh.length && !relit.length) return map;
+  const back = new Set(relit);
   return {
     ...map,
-    pois,
-    archipel: { ...a, destroyed: (a.destroyed ?? []).filter((x) => !back.has(x)), razedAt },
+    archipel: {
+      ...a,
+      destroyed: (a.destroyed ?? []).filter((x) => !back.has(x)),
+      embers,
+      ...(fresh.length ? { emberFrom: fresh[fresh.length - 1]! } : {}),
+    },
   };
 }
 
-/** 🪦 Quand le prochain cimetière se relève, `null` si aucun. */
-export function nextRiseAt(map: Pick<ExpeditionMap, 'archipel'>): number | null {
+/** 🕯️ Ce qu'il reste à un objectif éteint pour se rallumer, pour l'écran. */
+export interface EmberStatus {
+  id: string;
+  name: string;
+  emoji: string;
+  /** Sorties encore à faire (0 = prêt, il attend le plancher ou la citadelle). */
+  left: number;
+  /** Gelé : la citadelle est éteinte, il ne compte rien. */
+  frozen: boolean;
+  /** Prêt mais retenu par le plancher : il se rallume à cet instant. */
+  dueAt: number | null;
+}
+
+/** 🕯️ Les objectifs éteints de l'île active (la citadelle d'abord), vide hors île à braises. */
+export function emberStatus(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): EmberStatus[] {
   const isl = activeIsland(map);
-  const a = map.archipel;
-  if (!isl || !a || !RISE.islands.has(isl.id) || a.pacifiedAt !== undefined) return null;
+  const a = map?.archipel;
+  if (!isl || !a?.embers || !EMBER.islands.has(isl.id) || a.pacifiedAt !== undefined) return [];
   const key = keystoneIdOf(isl);
-  const gone = destroyedOf(map);
-  if (!key || gone.has(key)) return null;
-  const ts = Object.entries(a.razedAt ?? {})
-    .filter(([id]) => gone.has(id))
-    .map(([, t]) => t + RISE.riseMs);
-  return ts.length ? Math.min(...ts) : null;
+  const keyDark = !!key && a.embers[key] !== undefined;
+  return Object.entries(a.embers)
+    .map(([id, e]) => {
+      const i = Number(id.slice('isl_obj_'.length));
+      const frozen = id !== key && keyDark;
+      const due = emberDue(e);
+      return {
+        id,
+        ...objectiveLook(isl, i),
+        left: Math.max(0, e.need - e.charge),
+        frozen,
+        dueAt: !frozen && Number.isFinite(due) ? due : null,
+      };
+    })
+    .sort((x, y) => (x.id === key ? -1 : y.id === key ? 1 : x.id.localeCompare(y.id)));
+}
+
+/** 🕯️ « se rallume dans ~7 sorties » / « gelé tant que la citadelle est éteinte ». */
+export function emberText(s: EmberStatus, now: number): string {
+  if (s.frozen) return 'gelé tant que la citadelle est éteinte';
+  if (s.left > 0) return `se rallume dans ${s.left} sortie${s.left > 1 ? 's' : ''}`;
+  if (s.dueAt !== null && s.dueAt > now) {
+    const h = Math.max(1, Math.ceil((s.dueAt - now) / 3600_000));
+    return `se rallume dans ${h} h`;
+  }
+  return 'se rallume';
+}
+
+/** 🕯️ Les objectifs comptés abattus mais sans braise ni place sur la carte (reliquats : un
+ *  cimetière tenu rappelé, un cimetière rasé sous l'ancienne règle) reçoivent une braise
+ *  neuve, comptée à partir de `now`. Rend le MÊME état si rien ne manque. */
+function withMissingEmbers(
+  map: ExpeditionMap,
+  isl: Island,
+  pois: readonly Poi[],
+  now: number,
+): ExpeditionMap['archipel'] {
+  const a = map.archipel;
+  if (!a || !EMBER.islands.has(isl.id) || a.pacifiedAt !== undefined) return a;
+  const missing = objectiveIds(isl).filter(
+    (id) => a.destroyed?.includes(id) && !a.embers?.[id] && !pois.some((p) => p.id === id),
+  );
+  if (!missing.length && a.razedAt === undefined) return a;
+  const embers = { ...(a.embers ?? {}) };
+  for (const id of missing) embers[id] = newEmber(map, isl, id, now);
+  const { razedAt: _r, ...rest } = a;
+  void _r;
+  return { ...rest, embers };
 }
 
 /** Les ids de TOUS les objectifs de l'île : ceux d'origine et les nids nés en route. */
@@ -620,10 +727,11 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
   const lv = isl.maxLevel;
   // 🏝️ Les objectifs ne s'attaquent qu'une fois deux lieux fixes tenus.
   const objLocked = heldPoints(map).length < OBJECTIVES_AFTER_HELD;
-  // 🪺 Île des nids : chacun à un niveau tiré sur l'île (`nestLevel`), et il s'abat (`ControlState.razes`).
+  // 🪺 Île des nids : chacun à un niveau tiré sur l'île (`nestLevel`). 🪺🕯️ Nids et objectifs
+  // éteints s'abattent (`ControlState.razes`).
   const nesting = NEST.islands.has(isl.id);
   const objLv = (i: number) => (nesting ? nestLevel(i, map.seed, isl) : lv);
-  const razesOn = nesting ? { razes: true as const } : {};
+  const razing = razesOn(isl.id) ? { razes: true as const } : {};
   objectiveAngles(isl.objectives).forEach((_, i) => {
     const id = objectiveIdOf(i);
     if (gone.has(id)) return;
@@ -633,7 +741,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
         faction: isl.faction,
         size: objectiveSize(i, isl.objectives),
         ...objectiveLook(isl, i),
-        ...razesOn,
+        ...razing,
         ...(objLocked ? { locked: true } : {}),
       }),
     );
@@ -647,7 +755,7 @@ function expectedTargets(map: ExpeditionMap, isl: Island, now: number): Poi[] {
         kind: 'objective',
         faction: isl.faction,
         size: NEST.size,
-        ...razesOn,
+        ...razing,
         name: isl.objective,
         emoji: isl.objectiveEmoji,
         ...(objLocked ? { locked: true } : {}),
@@ -720,9 +828,9 @@ export function ensureIslandConquest(
    *  tant qu'elle n'est pas rentrée, sinon son trajet partirait d'un endroit vide. */
   anchored: ReadonlySet<string> = new Set(),
 ): ExpeditionMap {
-  // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🪦 De même les
-  // cimetières qui se relèvent.
-  const map = raiseDead(spawnNests(map0, now), now);
+  // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🕯️ De même les
+  // objectifs éteints qui se rallument.
+  const map = relightObjectives(spawnNests(map0, now), now);
   const isl = activeIsland(map);
   const want = isl ? expectedTargets(map, isl, now) : [];
   const wantIds = new Set(want.map((p) => p.id));
@@ -730,13 +838,13 @@ export function ensureIslandConquest(
   let changed = map !== map0;
   // 1. Ce qui ne doit plus être là (île abattue, mode quitté). ⚠️ La forteresse PRISE
   // reste : elle se tient (`takeFortress`).
-  // 🪺 Un nid TENU d'avant la règle « on l'abat » quitte la carte une fois vide (le store
-  // rappelle d'abord sa garnison, `heldNests`).
+  // 🪺🕯️ Un objectif TENU d'avant la règle « on l'abat » quitte la carte une fois vide (le
+  // store rappelle d'abord sa garnison, `heldRazedObjectives`).
   const nestGone = (p: Poi) => {
     const c = p.control;
     return (
       !!c &&
-      isHeldNest(map, p) &&
+      isHeldRazed(map, p) &&
       !c.garrison.length &&
       !c.hero &&
       !c.reinforcing?.length &&
@@ -755,6 +863,9 @@ export function ensureIslandConquest(
     pois = [...pois, ...restored];
     changed = true;
   }
+  // 1 ter. 🕯️ Les objectifs comptés abattus sans braise (reliquats) en reçoivent une neuve.
+  const archipel = isl ? withMissingEmbers(map, isl, pois, now) : map.archipel;
+  if (archipel !== map.archipel) changed = true;
   // 2. Posés s'ils manquent, rafraîchis sinon (niveau, troupe, verrou ; la place ne bouge pas).
   for (const w of want) {
     const k = pois.findIndex((p) => p.id === w.id);
@@ -869,7 +980,11 @@ export function ensureIslandConquest(
   // 9. 🕊️ Les trêves des lieux fraîchement pris : APRÈS tout ce qui avance une attaque.
   return withTownDistance(
     holdGrace(
-      warlordConvoys(warlordRaids(changed ? { ...map, pois } : map, now), now, vanquished),
+      warlordConvoys(
+        warlordRaids(changed ? { ...map, pois, archipel } : map, now),
+        now,
+        vanquished,
+      ),
       now,
     ),
   );
@@ -893,17 +1008,32 @@ export function razeIslandTarget(map: ExpeditionMap, id: string, at: number): Ex
       pois: map.pois.filter((p) => p.id !== id),
     };
   }
-  const destroyed = [...new Set([...(map.archipel.destroyed ?? []), id])];
   const all = [...objectiveIds(isl), FORTRESS_ID];
+  // 🕯️ Sur une île à braises, la forteresse abattue pacifie pour de bon : les objectifs encore
+  // allumés tombent avec elle, plus rien ne se rallume.
+  const embering = EMBER.islands.has(isl.id);
+  const final = embering && id === FORTRESS_ID;
+  const destroyed = [...new Set([...(map.archipel.destroyed ?? []), id, ...(final ? all : [])])];
   const pacified = all.every((x) => destroyed.includes(x));
-  // 🪦 Un cimetière abattu garde l'heure de sa chute : il se relève 3 jours plus tard.
-  const rises = RISE.islands.has(isl.id) && id !== FORTRESS_ID && id !== keystoneIdOf(isl);
+  // 🕯️ Un objectif éteint reçoit sa braise : il se rallumera au fil des sorties.
+  const ember = embering && id !== FORTRESS_ID && !pacified;
+  const { embers: _e, emberFrom: _f, ...arch } = map.archipel;
+  void _e;
+  void _f;
   const next: ExpeditionMap = {
     ...map,
     archipel: {
-      ...map.archipel,
+      ...(pacified ? arch : map.archipel),
       destroyed,
-      ...(rises ? { razedAt: { ...(map.archipel.razedAt ?? {}), [id]: at } } : {}),
+      // ⚠️ Un rapport retraité (écriture en vol) garde la braise déjà posée et ses sorties.
+      ...(ember
+        ? {
+            embers: {
+              ...(map.archipel.embers ?? {}),
+              [id]: map.archipel.embers?.[id] ?? newEmber(map, isl, id, at),
+            },
+          }
+        : {}),
       ...(pacified && map.archipel.pacifiedAt === undefined ? { pacifiedAt: at } : {}),
     },
     pois: map.pois
@@ -1013,8 +1143,8 @@ function restoreRazedObjectives(
   playerLevel: number,
 ): Poi[] {
   const isl = activeIsland(map);
-  // 🪺 Un nid abattu l'est pour de bon : il ne revient pas tenu.
-  if (!isl || NEST.islands.has(isl.id)) return [];
+  // 🪺🕯️ Un nid abattu, un objectif éteint : ils ne reviennent pas tenus.
+  if (!isl || razesOn(isl.id)) return [];
   const gone = destroyedOf(map);
   const lv = Math.max(1, Math.min(playerLevel, isl.maxLevel));
   const out: Poi[] = [];
@@ -1496,25 +1626,23 @@ export function islandTargetLabel(
     };
   }
   const isKey = p.id === keystoneIdOf(isl);
-  const rise = RISE.islands.has(isl.id);
-  const riseAt = rise && isKey ? nextRiseAt(map!) : null;
+  const ember = EMBER.islands.has(isl.id);
+  const embers = Object.keys(map!.archipel?.embers ?? {}).length;
   if (p.control.kind === 'objective')
     return {
       title: p.control.locked
         ? `🔒 Objectif de l’île · verrouillé (${Math.min(st.pointsHeld, OBJECTIVES_AFTER_HELD)}/${OBJECTIVES_AFTER_HELD} lieux fixes tenus)`
-        : `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} pris`,
+        : `${p.control.emoji ?? isl.objectiveEmoji} Objectif de l’île · ${down}/${n} ${ember ? 'éteints' : 'pris'}`,
       detail:
         (p.control.locked
           ? `tiens d’abord ${OBJECTIVES_AFTER_HELD} lieux fixes de l’île (n’importe lesquels) pour l’attaquer · `
           : '') +
         `${troopText(p.control)} · ` +
-        (rise && !isKey
-          ? 'pris, il se tient — mais ses morts l’attaquent 3 jours plus tard tant que la citadelle des morts tient'
-          : rise
-            ? 'prise, plus aucun cimetière ne se relève' +
-              (riseAt
-                ? ` (le prochain se relève ${new Date(riseAt).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })})`
-                : '')
+        (ember && !isKey
+          ? `battu, il s’ÉTEINT : personne n’y reste, il se rallume après ${EMBER.cemetery.min} à ${EMBER.cemetery.max} sorties sur la carte (gelé tant que la ${isl.keystone?.name ?? 'citadelle'} est éteinte)`
+          : ember
+            ? `battue, elle s’ÉTEINT : personne n’y reste, elle se rallume après ${EMBER.keystone.min} à ${EMBER.keystone.max} sorties ; éteinte, les cimetières ne se rallument plus` +
+              (embers ? ` (${embers} éteint${embers > 1 ? 's' : ''} en ce moment)` : '')
             : NEST.islands.has(isl.id)
               ? 'abattu, il quitte la carte : personne n’y reste'
               : 'pris, il se tient : la forteresse viendra le reprendre EN PRIORITÉ, avant tes lieux fixes') +
@@ -1527,7 +1655,9 @@ export function islandTargetLabel(
               : WARLORD.islands.has(isl.id)
                 ? ` · tant qu’il tient, son armée mobile marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties sur la carte avec trois camps debout, plus rarement avec moins) et ses convois de ravitaillement marchent sur la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties ; chacun arrivé la renforce : intercepte-les)`
                 : ' · tant qu’il tient, il attaque tes lieux fixes') +
-        ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} pris ouvrent la forteresse, tous l’affaiblissent au plus bas (repris, ils la reverrouillent).`,
+        (ember
+          ? ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} éteints ouvrent la forteresse, tous l’affaiblissent au plus bas (rallumés, ils la reverrouillent).`
+          : ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} pris ouvrent la forteresse, tous l’affaiblissent au plus bas (repris, ils la reverrouillent).`),
     };
   const bonus = convoyBonus(map!);
   const f = fortressForce(isl, down, bonus);
@@ -1538,10 +1668,12 @@ export function islandTargetLabel(
     detail:
       `troupe de ${f.size} champions de référence` +
       (down < n
-        ? ` · chaque objectif pris l’affaiblit (${down}/${n})`
+        ? ` · chaque objectif ${ember ? 'éteint' : 'pris'} l’affaiblit (${down}/${n})`
         : ' · affaiblie au plus bas') +
       (bonus ? ` · renforcée par ${bonus} convoi${bonus > 1 ? 's' : ''} de ravitaillement` : '') +
-      ' · prise avec tous les objectifs : l’île est pacifiée, plus aucune attaque.',
+      (ember
+        ? ' · prise : l’île est pacifiée pour de bon, plus rien ne se rallume, plus aucune attaque.'
+        : ' · prise avec tous les objectifs : l’île est pacifiée, plus aucune attaque.'),
   };
 }
 
@@ -2042,7 +2174,7 @@ export interface IslandRule {
  * 📜 LES RÈGLES D'UNE ÎLE, en clair (demandé le 2026-10-12 : « sur chaque île, où sont
  * expliquées les règles ? »). Elles ne vivaient que dans la fiche de chaque objectif
  * (`islandTargetNote`) : on ne les lisait qu'en touchant un cimetière ou un nid. ⚠️ Écrites à
- * partir des MÊMES constantes que les mécaniques (RISE, NEST, SORTIE_EVENTS…) : un réglage
+ * partir des MÊMES constantes que les mécaniques (EMBER, NEST, SORTIE_EVENTS…) : un réglage
  * qui bouge change le texte avec lui.
  */
 export function islandRules(isl: Island): IslandRule[] {
@@ -2054,10 +2186,15 @@ export function islandRules(isl: Island): IslandRule[] {
       emoji: '🏳️',
       text: `Tiens ${OBJECTIVES_AFTER_HELD} lieux fixes de l’île pour pouvoir attaquer ses ${obj} (${n} à prendre${isl.keystone ? `, dont la ${isl.keystone.emoji} ${isl.keystone.name}` : ''}).`,
     },
-    {
-      emoji: '🏰',
-      text: `${Math.min(ISLAND_CONQUEST.unlockAfter, n)} objectifs pris ouvrent ${isl.fortress} ; tous pris, elle tombe à son plus bas. Elle reprend en priorité les objectifs que tu tiens.`,
-    },
+    EMBER.islands.has(isl.id)
+      ? {
+          emoji: '🏰',
+          text: `${Math.min(ISLAND_CONQUEST.unlockAfter, n)} objectifs éteints ouvrent ${isl.fortress} ; tous éteints, elle tombe à son plus bas. Abattue, elle pacifie l’île pour de bon.`,
+        }
+      : {
+          emoji: '🏰',
+          text: `${Math.min(ISLAND_CONQUEST.unlockAfter, n)} objectifs pris ouvrent ${isl.fortress} ; tous pris, elle tombe à son plus bas. Elle reprend en priorité les objectifs que tu tiens.`,
+        },
   ];
   if (PILLAGE_ISLANDS.has(isl.id))
     rules.push({
@@ -2075,10 +2212,10 @@ export function islandRules(isl: Island): IslandRule[] {
         text: 'Les routes autour d’un nid sont dangereuses (embuscades doublées). Un nid pris est abattu, personne n’y reste.',
       },
     );
-  if (RISE.islands.has(isl.id))
+  if (EMBER.islands.has(isl.id))
     rules.push({
-      emoji: '🔁',
-      text: `Un ${isl.objective.toLowerCase()} pris se tient, mais ses morts l’attaquent ${days(RISE.riseMs)} jours plus tard tant que la ${isl.keystone?.name ?? 'citadelle'} tient. Prends-la d’abord, ou prends les ${n} en moins de ${days(RISE.riseMs)} jours.`,
+      emoji: '🕯️',
+      text: `Un objectif battu ne se prend pas : il s’éteint, personne n’y reste. Il se rallume au fil de tes sorties sur la carte (un ${isl.objective.toLowerCase()} après ${EMBER.cemetery.min} à ${EMBER.cemetery.max}, la ${isl.keystone?.name ?? 'citadelle'} après ${EMBER.keystone.min} à ${EMBER.keystone.max}), jamais avant ${Math.round(EMBER.floorMs / 3600_000)} h. Tant que la ${isl.keystone?.name ?? 'citadelle'} est éteinte, les ${isl.objective.toLowerCase()}s restent éteints.`,
     });
   if (WARLORD.islands.has(isl.id))
     rules.push(
@@ -2109,7 +2246,9 @@ export function islandRules(isl: Island): IslandRule[] {
     });
   rules.push({
     emoji: '🕊️',
-    text: 'Forteresse et objectifs tous pris : l’île est pacifiée, plus aucune attaque. Tes lieux fixes continuent de produire.',
+    text: EMBER.islands.has(isl.id)
+      ? 'Forteresse abattue : l’île est pacifiée, plus rien ne se rallume, plus aucune attaque. Tes lieux fixes continuent de produire.'
+      : 'Forteresse et objectifs tous pris : l’île est pacifiée, plus aucune attaque. Tes lieux fixes continuent de produire.',
   });
   return rules;
 }

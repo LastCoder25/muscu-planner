@@ -98,3 +98,12 @@ describe('🧭 rester ou reculer', () => {
     expect(a.here.xpPerChamp).toBe(Math.round(want));
   });
 });
+
+describe('🕯️ île 3 : rien à tenir, les objectifs s’éteignent', () => {
+  it('hold est null sur l’île 3 et le conseil dit d’éteindre', () => {
+    const a = stayOrBackAdvice(input(3, 50, 30, 0, { objectivesDown: 0 }))!;
+    expect(a.objective.hold).toBeNull();
+    expect(a.reasons.join(' ')).toMatch(/éteins/);
+    expect(a.reasons.join(' ')).not.toMatch(/postés sur chacun/);
+  });
+});

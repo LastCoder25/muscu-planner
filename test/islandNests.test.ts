@@ -8,7 +8,7 @@ import {
   NEST,
   nestLevel,
   nestThreshold,
-  heldNests,
+  heldRazedObjectives,
   takeObjective,
   nestSpot,
   nestZones,
@@ -414,7 +414,7 @@ describe('🪺 un nid pris est abattu, jamais tenu', () => {
         },
       ],
     };
-    expect(heldNests(held).map((p) => p.id)).toEqual([nest.id]);
+    expect(heldRazedObjectives(held).map((p) => p.id)).toEqual([nest.id]);
     // Garnison encore là : il reste (le store la rappelle d'abord).
     expect(tick(held, NOW + 1).pois.some((p) => p.id === nest.id)).toBe(true);
     const empty: ExpeditionMap = {
@@ -423,7 +423,7 @@ describe('🪺 un nid pris est abattu, jamais tenu', () => {
         p.id === nest.id ? { ...p, control: { ...p.control!, garrison: [] } } : p,
       ),
     };
-    expect(heldNests(empty)).toEqual([]);
+    expect(heldRazedObjectives(empty)).toEqual([]);
     expect(tick(empty, NOW + 1).pois.some((p) => p.id === nest.id)).toBe(false);
   });
 });
