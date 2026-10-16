@@ -13,19 +13,6 @@
           @click="goHome"
         />
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
-        <q-btn
-          v-if="auth.isAdmin"
-          flat
-          round
-          dense
-          icon="inbox"
-          aria-label="Backlog"
-          @click="goBacklog"
-        >
-          <q-badge v-if="feedback.openCount > 0" color="primary" text-color="dark" floating>{{
-            feedback.openCount
-          }}</q-badge>
-        </q-btn>
         <!-- Notifications d'amis : n'apparaît que s'il y a à traiter ou à annoncer.
              Avant, l'info était enfouie dans le menu ⋮, donc invisible. -->
         <q-btn
@@ -222,7 +209,6 @@ const AventurePage = defineAsyncComponent(() => import('@/pages/AventurePage.vue
 const ExpeditionPage = defineAsyncComponent(() => import('@/pages/ExpeditionPage.vue'));
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
-import { useFeedbackStore } from '@/stores/feedback';
 import { useFriendsStore } from '@/stores/friends';
 import { useFriendBossStore } from '@/stores/friendBoss';
 import { bossTitle } from '@/lib/friendBoss';
@@ -242,7 +228,6 @@ function goBoss() {
   void router.push('/boss-amis');
 }
 const profileStore = useProfileStore();
-const feedback = useFeedbackStore();
 const { isIOS, isStandalone, hasNativePrompt, promptInstall } = useInstallPrompt();
 
 // Proposer l'installation tant que l'app n'est pas déjà lancée en standalone.
@@ -288,7 +273,6 @@ const GAME_PANES = {
 const gamePaneComponent = computed(() => GAME_PANES[gameView.value]);
 
 onMounted(() => {
-  if (auth.isAdmin) feedback.fetchOpenCount().catch(() => undefined);
   const uid = auth.user?.id;
   if (!uid) return;
   friends.fetchMine(uid).catch(() => undefined);
@@ -377,9 +361,6 @@ async function answer(otherId: string, accept: boolean) {
 }
 async function goLeaderboard() {
   await router.push('/leaderboard');
-}
-async function goBacklog() {
-  await router.push('/backlog');
 }
 async function goFormulas() {
   await router.push('/formulas');

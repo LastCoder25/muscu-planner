@@ -103,9 +103,9 @@
                     : `Il manque ${labyKeyCost(t.laby.id) - keys} 🗝️`
                 }}
               </button>
-              <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
-                   Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
-              <template v-if="t.cleared || auth.isAdmin">
+              <!-- Auto : pour tout le monde, dès qu'un palier est débloqué (le run se joue
+                   tout seul). -->
+              <template v-if="t.unlocked">
                 <!-- Combien de runs à la suite : borné par les clés (prix payé au lancement
                      de chaque run, donc arrêter en route garde les clés restantes). -->
                 <div v-if="batchOf(t.laby).max > 1" class="lt-batch">
@@ -213,7 +213,7 @@
       <!-- Contrôles flottants (téléportés au body → TOUJOURS au-dessus des modales de
            combat/coffre/piège). En AUTO : seulement le run en cours sur le nombre lancé
            (vitesse maximale, pas de reprise en main — demandé par l'utilisateur). En MANUEL :
-           la vitesse des déplacements, et l'auto à lancer si le palier est nettoyé. -->
+           la vitesse des déplacements, et l'auto à lancer. -->
       <Teleport to="body">
         <div v-if="phase === 'running' && !over" class="auto-float">
           <span v-if="autoMode" class="af-txt"
@@ -230,7 +230,6 @@
               ⏩ ×{{ autoSpeed }}
             </button>
             <button
-              v-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
               type="button"
               class="af-stop af-resume"
               @click="resumeAuto"
@@ -642,7 +641,6 @@
             @click="replay"
           />
           <q-btn
-            v-if="labyrinthCleared(selectedLaby?.id ?? '', clearedSet)"
             flat
             no-caps
             :label="
@@ -948,7 +946,7 @@ const hiddenTiers = computed(() => Math.max(0, tiers.value.length - firstLocked.
 // Palier en cours d'exploration (choisi dans le lobby).
 const selectedLaby = ref<Labyrinth | null>(null);
 
-// ── Mode AUTO (paliers déjà nettoyés) : le run se joue TOUT SEUL, visuellement en
+// ── Mode AUTO (tout palier débloqué) : le run se joue TOUT SEUL, visuellement en
 // temps réel (clique chaque salle, avance d'étage, combat le boss), puis affiche
 // l'écran de fin. On enchaîne les salles via un timer qui appelle les MÊMES actions
 // que le joueur (onRoomClick/goDown/finish), en fermant automatiquement les modales.
@@ -1684,17 +1682,16 @@ async function start(tier?: Labyrinth, inSeries = false): Promise<boolean> {
   return true;
 }
 
-// ── Auto-run (paliers nettoyés) ──
+// ── Auto-run ──
 function stopAuto() {
   autoMode.value = false;
   if (autoTimer) clearTimeout(autoTimer);
   autoTimer = undefined;
 }
 // Passe en AUTO le run manuel EN COURS → enclenche la boucle (sans fermer/relancer le run).
-// Dispo si le palier est déjà nettoyé (auto-éligible).
+// Dispo sur tout palier débloqué.
 function resumeAuto() {
   if (over.value || phase.value !== 'running') return;
-  if (!labyrinthCleared(selectedLaby.value?.id ?? '', clearedSet.value)) return;
   autoMode.value = true;
   scheduleAuto(200);
 }

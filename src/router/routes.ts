@@ -132,10 +132,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'tennis', component: () => import('@/pages/TennisPage.vue') },
       { path: 'cardio', component: () => import('@/pages/CardioPage.vue') },
       { path: 'body', component: () => import('@/pages/BodyPage.vue') },
-      { path: 'backlog', component: () => import('@/pages/BacklogPage.vue') },
       { path: 'formulas', component: () => import('@/pages/FormulasPage.vue') },
       // Banc d'essai admin : volontairement SANS entrée de menu ni lien. On y accède
-      // en tapant l'URL. Gardé dans boot/auth.ts comme /backlog et /formulas.
+      // en tapant l'URL. Gardé dans boot/auth.ts comme /formulas.
       { path: 'labo', component: () => import('@/pages/LabPage.vue') },
     ],
   },

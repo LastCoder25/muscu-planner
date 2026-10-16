@@ -6,8 +6,8 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { consentMeta, hasConsented } from '@/lib/privacy';
 
-// Comptes autorisés à gérer le backlog. La vérification fait aussi autorité
-// côté Postgres (fonction is_admin() + RLS feedback) — ceci n'est que l'UI.
+// Comptes admin (pages Calculs XP et Labo). Côté Postgres, is_admin() fait autorité
+// — ceci n'est que l'UI.
 const ADMIN_EMAILS = ['martinez.alban25@gmail.com'];
 
 export const useAuthStore = defineStore('auth', () => {

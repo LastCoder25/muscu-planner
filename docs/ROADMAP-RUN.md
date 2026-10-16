@@ -78,5 +78,5 @@ vérifie le vercel.json (routing SPA) et teste la version prod.
 
 ## Après la roadmap
 
-Le développement courant passe par le **backlog** : tu remontes des tickets depuis l'app, puis tu lances
-`docs/BACKLOG-RUN.md` pour que Claude Code les traite un par un. La roadmap pose le socle ; le backlog fait vivre l'app.
+Le backlog in-app (tickets + page `/backlog`) a été retiré le 2026-10-16 (v1.231.2) : les demandes passent
+désormais directement par Claude Code en remote-control. La roadmap pose le socle.
