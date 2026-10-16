@@ -982,20 +982,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       let out = '';
       let after = '';
       expect(
-        await mountIt(
-          await harness(),
-          {},
-          undefined,
-          undefined,
-          '/',
-          undefined,
-          async (host) => {
-            out = host.innerHTML;
-            (host.querySelector('.gt-btn:not(.ghost)') as HTMLElement).click();
-            await nextTick();
-            after = host.innerHTML;
-          },
-        ),
+        await mountIt(await harness(), {}, undefined, undefined, '/', undefined, async (host) => {
+          out = host.innerHTML;
+          (host.querySelector('.gt-btn:not(.ghost)') as HTMLElement).click();
+          await nextTick();
+          after = host.innerHTML;
+        }),
       ).toBeNull();
       expect(out).toContain('gt-card');
       expect(out).toContain('1 / 4');
@@ -1011,41 +1003,25 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     it('se rouvre par le bouton, et fermer le mémorise', async () => {
       let out = '';
       let closed = '';
-      await mountIt(
-        await harness(),
-        {},
-        undefined,
-        seen,
-        '/',
-        undefined,
-        async (host) => {
-          (host.querySelector('.rouvrir') as HTMLElement).click();
-          await nextTick();
-          out = host.innerHTML;
-          (host.querySelector('.gt-x') as HTMLElement).click();
-          await nextTick();
-          closed = host.innerHTML;
-        },
-      );
+      await mountIt(await harness(), {}, undefined, seen, '/', undefined, async (host) => {
+        (host.querySelector('.rouvrir') as HTMLElement).click();
+        await nextTick();
+        out = host.innerHTML;
+        (host.querySelector('.gt-x') as HTMLElement).click();
+        await nextTick();
+        closed = host.innerHTML;
+      });
       expect(out).toContain('gt-card');
       expect(closed).not.toContain('gt-card');
     }, 30_000);
 
     it('fermer à la première visite écrit la mémoire de l’ancienne intro', async () => {
       let stored: string | null = 'x';
-      await mountIt(
-        await harness(),
-        {},
-        undefined,
-        undefined,
-        '/',
-        undefined,
-        async (host) => {
-          (host.querySelector('.gt-x') as HTMLElement).click();
-          await nextTick();
-          stored = localStorage.getItem('muscu:adv:intro');
-        },
-      );
+      await mountIt(await harness(), {}, undefined, undefined, '/', undefined, async (host) => {
+        (host.querySelector('.gt-x') as HTMLElement).click();
+        await nextTick();
+        stored = localStorage.getItem('muscu:adv:intro');
+      });
       expect(stored).toBe('1');
     }, 30_000);
   });
@@ -3478,6 +3454,48 @@ describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () 
     expect(out).toContain('×2');
     expect(out).toContain('role="tooltip"');
     expect(out).toContain(SUPPLIES.trousse.what);
+  }, 30_000);
+
+  it('🎾 la saisie libre d’une partie de tennis montre les jauges Tennis + Global', async () => {
+    // Signalé : « saisie libre, ça ne me met pas les jauges d'XP de mon niveau global et de
+    // mon niveau tennis ». Le parcours des drills les montrait, pas la saisie libre.
+    const { default: TennisPage } = await import('@/pages/TennisPage.vue');
+    const { useXpFx } = await import('@/composables/useXpFx');
+    useXpFx().dismiss();
+    let rings: string[] = [];
+    expect(
+      await mountIt(
+        TennisPage,
+        {},
+        undefined,
+        async () => {
+          const { useAuthStore } = await import('@/stores/auth');
+          const { useTennisStore } = await import('@/stores/tennis');
+          (useAuthStore() as unknown as { user: unknown }).user = { id: 'me' };
+          const t = useTennisStore() as unknown as {
+            logs: unknown[];
+            addLog: (u: string, log: { ended_at: string }) => Promise<void>;
+          };
+          // Pas de réseau : l'enregistrement pose la séance dans le cache, comme le vrai store.
+          t.addLog = async (_u, log) => {
+            t.logs = [{ id: 'l1', performed_at: log.ended_at, payload: log }, ...t.logs];
+          };
+        },
+        '/tennis',
+        undefined,
+        async (host) => {
+          const save = [...host.querySelectorAll('q-btn')].find(
+            (b) => b.getAttribute('label') === 'Enregistrer la séance',
+          ) as HTMLElement;
+          save.click();
+          await new Promise((r) => setTimeout(r, 0));
+          await nextTick();
+          rings = (useXpFx().current.value?.rings ?? []).map((r) => r.label);
+        },
+      ),
+    ).toBeNull();
+    expect(rings).toEqual(['Tennis', 'Global']);
+    useXpFx().dismiss();
   }, 30_000);
 
   it('🎯 la séance générée du Défi 360 se monte (anneaux d’XP branchés au setup)', async () => {

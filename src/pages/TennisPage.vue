@@ -365,7 +365,7 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { localDayIso } from '@/lib/localDay';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -379,6 +379,8 @@ import { buildPrepaSession } from '@/lib/prepaBuilder';
 import { buildPrepaPrompt } from '@/lib/tennisCoach';
 import { parseImportedSession } from '@/lib/importSession';
 import { useLogsStore } from '@/stores/logs';
+import { useProgress } from '@/composables/useProgress';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 import type { DrillLog, SessionLog, Difficulty } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 
@@ -395,6 +397,9 @@ const library = useLibraryStore();
 const tennis = useTennisStore();
 const live = useLiveCourtStore();
 const logs = useLogsStore();
+// 🎾 Les jauges d'XP (activité + Global) après une saisie libre, comme en fin de drills.
+const progress = useProgress();
+const xpFx = useXpFx();
 
 const duration = ref<number>(30);
 const generating = ref(false);
@@ -450,8 +455,21 @@ async function saveCross() {
       ...(crossComment.value.trim() ? { global_comment: crossComment.value.trim() } : {}),
       exercises: [],
     };
+    const tile = `disc:${crossType.value}`;
+    const beforeT = progress.tileSnapshot(tile);
+    const beforeG = progress.global.value;
     await logs.insert(uid, log);
-    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP spécifique gagné.' });
+    await nextTick();
+    xpFx.show([
+      xpRing(
+        'sport',
+        '🏋️',
+        crossType.value === 'hyrox' ? 'Hyrox' : 'Crossfit',
+        beforeT,
+        progress.tileSnapshot(tile),
+      ),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
+    ]);
     crossDate.value = todayIso();
     crossHours.value = 1;
     crossMinutes.value = 0;
@@ -488,8 +506,14 @@ async function saveSession() {
       ...(logComment.value.trim() ? { global_comment: logComment.value.trim() } : {}),
       drills: [],
     };
+    const beforeT = progress.tileSnapshot('tennis');
+    const beforeG = progress.global.value;
     await tennis.addLog(userId, log);
-    $q.notify({ type: 'positive', message: 'Séance enregistrée — XP tennis gagné.' });
+    await nextTick();
+    xpFx.show([
+      xpRing('tennis', '🎾', 'Tennis', beforeT, progress.tileSnapshot('tennis')),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
+    ]);
     logDate.value = todayIso();
     logHours.value = 1;
     logMinutes.value = 0;
