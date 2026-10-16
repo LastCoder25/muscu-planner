@@ -213,6 +213,12 @@ await rest('characters', {
   },
   expedition_map: null,
   messages: [],
+  // 🧹 Tout ce qu'une partie a pu laisser (siège en cours, groupes, attaques combinées) : sans
+  // ça, un siège resté dû ouvre son rejeu par-dessus l'écran et le smoke ne clique plus rien.
+  base: null,
+  parties: [],
+  attacks: [],
+  adv_gear: null,
 });
 
 console.log(`✓ compte de smoke prêt — ${EMAIL}`);

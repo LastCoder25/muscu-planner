@@ -3924,6 +3924,42 @@ export function orphanPosts(
 }
 
 /**
+ * 🩹 LES GARDES SANS POSTE — l'inverse de `orphanPosts` (signalé, 2026-10-16 : Thessa était dans
+ * la garnison du cimetière mais n'était plus marquée postée ; elle s'affichait deux fois au
+ * choix d'une équipe — au cimetière ET à la base —, la toucher la cochait deux fois et l'envoi
+ * était refusé). Une vieille copie de l'app, restée ouverte, réécrivait la liste des champions
+ * par-dessus. La GARNISON fait foi : elle dit où le champion se tient. Rend, pour chaque
+ * champion présent dans la garnison d'UN point de la carte active sans y être posté, ce point.
+ * ⚠️ Prudente : jamais un champion resté sur une autre île (`elsewhere`), jamais un champion
+ * présent dans DEUX garnisons (on ne devine pas), jamais un poste qui le porte déjà ailleurs
+ * (garnison, renfort, retour : c'est alors l'autre point qui a raison).
+ */
+export function garrisonWithoutPost(
+  advs: readonly { id: string; posted?: string; elsewhere?: number }[],
+  map: ExpeditionMap | null,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!map) return out;
+  const where = new Map<string, string[]>();
+  for (const p of map.pois) {
+    for (const id of p.control?.garrison ?? []) where.set(id, [...(where.get(id) ?? []), p.id]);
+  }
+  const byId = new Map(map.pois.map((p) => [p.id, p.control]));
+  for (const a of advs) {
+    const at = where.get(a.id);
+    if (!at || at.length !== 1 || a.elsewhere !== undefined || a.posted === at[0]) continue;
+    const c = a.posted ? byId.get(a.posted) : undefined;
+    const carried =
+      !!c &&
+      (c.garrison.includes(a.id) ||
+        (c.reinforcing ?? []).some((r) => r.id === a.id) ||
+        (c.returning ?? []).some((r) => r.id === a.id));
+    if (!carried) out.set(a.id, at[0]!);
+  }
+  return out;
+}
+
+/**
  * ⚔️🏰 Ne garde que les places dont le sortant revient VRAIMENT ici. `stillAway(point, id)`
  * est la vérité du store (un voyage en cours revient sur ce point avec lui) : un blessé
  * renvoyé à la base, un champion posté ailleurs par la mission, un voyage disparu libèrent

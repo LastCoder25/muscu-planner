@@ -455,6 +455,7 @@ import {
   applyLapis,
   setLapisSkill,
   orphanPosts,
+  garrisonWithoutPost,
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
@@ -4976,17 +4977,20 @@ export const useCharacterStore = defineStore('character', () => {
     const m = cur.expedition_map;
     if (!m) return;
     const synced = syncAwayOf(cur, m, parties, advList.value);
-    // 🩹 Un champion posté qu'aucun point ne porte plus redevient libre (`orphanPosts`).
-    const orphans = new Set(orphanPosts(advList.value, synced, Date.now()));
-    if (synced === m && !orphans.size) return;
-    if (orphans.size && !tickMayWrite(cur)) return;
+    // 🩹 Un champion présent dans une garnison sans y être posté y est re-posté
+    // (`garrisonWithoutPost`) ; PUIS un posté qu'aucun point ne porte redevient libre.
+    const repost = garrisonWithoutPost(advList.value, synced);
+    const healed = repost.size
+      ? advList.value.map((a) => (repost.has(a.id) ? { ...a, posted: repost.get(a.id)! } : a))
+      : advList.value;
+    const orphans = new Set(orphanPosts(healed, synced, Date.now()));
+    if (synced === m && !orphans.size && !repost.size) return;
+    if ((orphans.size || repost.size) && !tickMayWrite(cur)) return;
     await persist(userId, {
       ...(synced !== m ? { expedition_map: synced } : {}),
-      ...(orphans.size
+      ...(orphans.size || repost.size
         ? {
-            adventurers: advList.value.map((a) =>
-              orphans.has(a.id) ? { ...a, posted: undefined } : a,
-            ),
+            adventurers: healed.map((a) => (orphans.has(a.id) ? { ...a, posted: undefined } : a)),
           }
         : {}),
     });
