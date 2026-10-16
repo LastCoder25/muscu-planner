@@ -128,7 +128,7 @@
               >{{ selTile.objectiveEmoji }} {{ conquest.objectivesDown }}/{{
                 conquest.objectivesTotal
               }}
-              pris</span
+              {{ EMBER.islands.has(selTile.id) ? 'éteints' : 'pris' }}</span
             >
             <span class="at-pill" :class="{ done: conquest.fortressDown, dim: conquest.locked }">{{
               conquest.fortressDown
@@ -137,6 +137,13 @@
                   ? '🔒 forteresse verrouillée'
                   : '🏰 forteresse à abattre'
             }}</span>
+            <span
+              v-for="e in embers ?? []"
+              :key="e.id"
+              class="at-pill"
+              :class="{ dim: e.frozen }"
+              >{{ e.emoji }} {{ e.name }} · 🕯️ {{ emberText(e, now) }}</span
+            >
             <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
           </div>
           <!-- ⛵ Les champions restés sur cette île, et la traversée pour la rejoindre. -->
@@ -359,7 +366,13 @@ import { CROSSING, nextCrossingDeparture, type RemotePoint } from '@/lib/crossin
 import { formatDuration } from '@/lib/duration';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
-import { islandRules, OBJECTIVES_AFTER_HELD } from '@/lib/islandConquest';
+import {
+  EMBER,
+  emberText,
+  islandRules,
+  OBJECTIVES_AFTER_HELD,
+  type EmberStatus,
+} from '@/lib/islandConquest';
 import type {
   AdviceVerdict,
   CrossingAdvice,
@@ -379,6 +392,8 @@ const props = defineProps<{
     locked: boolean;
     pacified: boolean;
   } | null;
+  /** 🕯️ Les objectifs éteints de l'île active et leur rallumage (`emberStatus`). */
+  embers?: EmberStatus[];
   /** ⛵ Les îles ouvertes à la traversée (`openIslands`) et celles déjà visitées. */
   openIds?: number[];
   visitedIds?: number[];

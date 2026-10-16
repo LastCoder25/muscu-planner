@@ -11,11 +11,11 @@ import {
 } from '@/lib/controlPoints';
 import {
   FORTRESS_ID,
-  RISE,
+  EMBER,
   ensureIslandConquest,
   islandConquest,
+  emberStatus,
   islandTargetLabel,
-  nextRiseAt,
   razeIslandTarget,
 } from '@/lib/islandConquest';
 import { characterRank } from '@/lib/characterRank';
@@ -35,7 +35,14 @@ const objectives = (m: ExpeditionMap): Poi[] =>
   m.pois.filter((p) => p.control?.kind === 'objective' && p.control.owner === 'enemy');
 const KEY = 'isl_obj_2';
 
-describe('🪦 l’île 3 : les morts se relèvent', () => {
+describe('🕯️ l’île 3 : les objectifs battus s’éteignent', () => {
+  /** `n` sorties arrivées, une par minute à partir de `from`. */
+  const withDepartures = (m: ExpeditionMap, from: number, n: number): ExpeditionMap => ({
+    ...m,
+    departures: [...(m.departures ?? []), ...Array.from({ length: n }, (_, i) => from + i * 60_000)],
+  });
+  const ember = (m: ExpeditionMap, id: string) => m.archipel!.embers?.[id];
+
   it('deux cimetières et la citadelle des morts (troupe 4)', () => {
     const o = objectives(islandMap());
     expect(o.map((p) => p.control!.name)).toEqual([
@@ -45,48 +52,89 @@ describe('🪦 l’île 3 : les morts se relèvent', () => {
     ]);
     expect(o.find((p) => p.id === KEY)!.control!.size).toBe(4);
     expect(o.filter((p) => p.id !== KEY).every((p) => p.control!.size === 3)).toBe(true);
+    expect(o.every((p) => p.control!.razes === true)).toBe(true);
   });
-  it('un cimetière abattu (rasé, ancienne règle) revient à nous et ses morts l’attaquent 3 jours plus tard', () => {
+  it('un cimetière battu s’éteint : il quitte la carte, compte abattu, reçoit une braise', () => {
     let m = razeIslandTarget(islandMap(), 'isl_obj_0', NOW + H);
     m = tick(m, NOW + H);
     expect(objectives(m)).toHaveLength(2);
-    expect(nextRiseAt(m)).toBe(NOW + H + RISE.riseMs);
-    m = tick(m, NOW + H + RISE.riseMs - 1);
-    expect(objectives(m)).toHaveLength(2);
-    m = tick(m, NOW + H + RISE.riseMs);
-    // 🏳️ Il est tenu (`restoreRazedObjectives`) : ses morts le reprennent par une ATTAQUE.
-    expect(objectives(m)).toHaveLength(2);
-    const held = m.pois.find((p) => p.id === 'isl_obj_0')!;
-    expect(held.control!.owner).toBe('player');
-    expect(held.control!.attackAt).toBe(NOW + H + RISE.riseMs);
-    // Rend la même carte au tick suivant.
-    expect(tick(m, NOW + H + RISE.riseMs)).toBe(m);
+    expect(m.pois.some((p) => p.id === 'isl_obj_0')).toBe(false);
+    expect(m.archipel!.destroyed).toContain('isl_obj_0');
+    const e = ember(m, 'isl_obj_0')!;
+    expect(e.at).toBe(NOW + H);
+    expect(e.charge).toBe(0);
+    expect(e.need).toBeGreaterThanOrEqual(EMBER.cemetery.min);
+    expect(e.need).toBeLessThanOrEqual(EMBER.cemetery.max);
+    expect(tick(m, NOW + H)).toBe(m);
   });
-  it('la citadelle abattue, plus rien ne se relève', () => {
+  it('il se rallume après `need` sorties, jamais avant le plancher de 24 h', () => {
+    let m = tick(razeIslandTarget(islandMap(), 'isl_obj_0', NOW + H), NOW + H);
+    const need = ember(m, 'isl_obj_0')!.need;
+    // need - 1 sorties : encore éteint, même longtemps après.
+    const short = tick(withDepartures(m, NOW + 2 * H, need - 1), NOW + 10 * DAY);
+    expect(objectives(short).map((p) => p.id)).not.toContain('isl_obj_0');
+    expect(ember(short, 'isl_obj_0')!.charge).toBe(need - 1);
+    // need sorties dans la foulée : prêt, mais retenu par le plancher.
+    m = withDepartures(m, NOW + 2 * H, need);
+    const early = tick(m, NOW + 5 * H);
+    expect(objectives(early).map((p) => p.id)).not.toContain('isl_obj_0');
+    expect(emberStatus(early).find((s) => s.id === 'isl_obj_0')!.left).toBe(0);
+    expect(early.archipel!.destroyed).toContain('isl_obj_0');
+    // le plancher passé : il revient, debout, ennemi, hors de `destroyed`, sans braise.
+    const late = tick(m, NOW + H + EMBER.floorMs);
+    const back = late.pois.find((p) => p.id === 'isl_obj_0')!;
+    expect(back.control!.owner).toBe('enemy');
+    expect(late.archipel!.destroyed ?? []).not.toContain('isl_obj_0');
+    expect(ember(late, 'isl_obj_0')).toBeUndefined();
+    expect(tick(late, NOW + H + EMBER.floorMs)).toBe(late);
+  });
+  it('les sorties d’avant l’extinction ne comptent pas', () => {
+    let m = withDepartures(islandMap(), NOW - 12 * H, 20);
+    m = tick(razeIslandTarget(m, 'isl_obj_0', NOW + H), NOW + 5 * DAY);
+    expect(ember(m, 'isl_obj_0')!.charge).toBe(0);
+    expect(objectives(m).map((p) => p.id)).not.toContain('isl_obj_0');
+  });
+  it('la citadelle éteinte gèle les cimetières ; rallumée, ils recomptent', () => {
     let m = razeIslandTarget(islandMap(), 'isl_obj_0', NOW + H);
-    m = razeIslandTarget(m, KEY, NOW + 2 * H);
-    expect(nextRiseAt(m)).toBeNull();
-    m = tick(m, NOW + 30 * DAY);
-    expect(objectives(m).map((p) => p.id)).toEqual(['isl_obj_1']);
+    m = tick(razeIslandTarget(m, KEY, NOW + H), NOW + H);
+    expect(emberStatus(m).find((s) => s.id === 'isl_obj_0')!.frozen).toBe(true);
+    // 30 sorties : la citadelle (10 à 15) est prête, les cimetières n'ont rien compté.
+    m = withDepartures(m, NOW + 2 * H, 30);
+    const frozen = tick(m, NOW + 6 * H);
+    expect(ember(frozen, 'isl_obj_0')!.charge).toBe(0);
+    expect(objectives(frozen).map((p) => p.id)).toEqual(['isl_obj_1']);
+    // le plancher passé : la citadelle revient, le cimetière reste éteint (charge 0).
+    const later = tick(m, NOW + 3 * DAY);
+    expect(objectives(later).map((p) => p.id)).toEqual(['isl_obj_1', KEY]);
+    expect(ember(later, 'isl_obj_0')!.charge).toBe(0);
+    expect(emberStatus(later).find((s) => s.id === 'isl_obj_0')!.frozen).toBe(false);
   });
-  it('les trois abattus en moins de 3 jours : pacifiable, rien ne revient', () => {
-    let m = islandMap();
-    for (const id of ['isl_obj_0', 'isl_obj_1', KEY]) m = razeIslandTarget(m, id, NOW + DAY);
+  it('la forteresse abattue pacifie : tout compté abattu, braises effacées, rien ne revient', () => {
+    let m = razeIslandTarget(islandMap(), 'isl_obj_0', NOW + DAY);
     m = razeIslandTarget(m, FORTRESS_ID, NOW + 2 * DAY);
     expect(islandPacified(m)).toBe(true);
-    m = tick(m, NOW + 30 * DAY);
+    expect(m.archipel!.embers).toBeUndefined();
+    expect(m.archipel!.destroyed).toEqual(
+      expect.arrayContaining(['isl_obj_0', 'isl_obj_1', KEY, FORTRESS_ID]),
+    );
+    m = tick(withDepartures(m, NOW + 3 * DAY, 40), NOW + 30 * DAY);
     expect(objectives(m)).toHaveLength(0);
+    expect(emberStatus(m)).toEqual([]);
   });
-  it('les autres îles ne relèvent rien', () => {
+  it('les autres îles n’ont pas de braises', () => {
     let m = razeIslandTarget(islandMap(1, 20), 'isl_obj_0', NOW + H);
     m = tick(m, NOW + 30 * DAY);
     expect(m.archipel!.destroyed).toContain('isl_obj_0');
+    expect(m.archipel!.embers).toBeUndefined();
     expect(m.archipel!.razedAt).toBeUndefined();
+    expect(emberStatus(m)).toEqual([]);
   });
   it('la fiche le dit', () => {
     const m = razeIslandTarget(islandMap(), 'isl_obj_0', NOW + H);
-    expect(islandTargetLabel(m, 'isl_obj_1')!.detail).toContain('ses morts l’attaquent 3 jours');
-    expect(islandTargetLabel(m, KEY)!.detail).toContain('plus aucun cimetière');
+    expect(islandTargetLabel(m, 'isl_obj_1')!.detail).toContain('s’ÉTEINT');
+    expect(islandTargetLabel(m, 'isl_obj_1')!.detail).toContain('éteints ouvrent la forteresse');
+    expect(islandTargetLabel(m, KEY)!.detail).toContain('s’ÉTEINT');
+    expect(islandTargetLabel(m, KEY)!.detail).toContain('cimetières ne se rallument plus');
   });
 });
 
