@@ -316,7 +316,9 @@ export interface EmberStatus {
 }
 
 /** 🕯️ Les objectifs éteints de l'île active (la citadelle d'abord), vide hors île à braises. */
-export function emberStatus(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): EmberStatus[] {
+export function emberStatus(
+  map: Pick<ExpeditionMap, 'archipel'> | null | undefined,
+): EmberStatus[] {
   const isl = activeIsland(map);
   const a = map?.archipel;
   if (!isl || !a?.embers || !EMBER.islands.has(isl.id) || a.pacifiedAt !== undefined) return [];
@@ -369,7 +371,11 @@ export function emberGhosts(
 ): (EmberStatus & { x: number; y: number; short: string })[] {
   const isl = activeIsland(map);
   if (!isl) return [];
-  return emberStatus(map).map((s) => ({ ...s, ...emberSpot(isl, s.id), short: emberShort(s, now) }));
+  return emberStatus(map).map((s) => ({
+    ...s,
+    ...emberSpot(isl, s.id),
+    short: emberShort(s, now),
+  }));
 }
 
 /** 🕯️ Les objectifs comptés abattus mais sans braise ni place sur la carte (reliquats : un
@@ -913,8 +919,21 @@ export function ensureIslandConquest(
     }
     const p = pois[k]!;
     const c = p.control!;
-    if (c.assault) continue;
     const wc = w.control!;
+    if (c.assault) {
+      // 🕯️ La troupe affrontée ne bouge pas pendant un assaut, mais la RÈGLE « on l'abat »
+      // suit l'île même là : un lieu assiégé depuis avant la règle n'avait jamais son drapeau
+      // (signalé : un cimetière abattu restait sur la carte, tenu et vide, garnison envoyable).
+      if (!!wc.razes !== !!c.razes) {
+        const { razes: _z, ...rest } = c;
+        void _z;
+        pois = pois.map((q, j) =>
+          j === k ? { ...p, control: wc.razes ? { ...rest, razes: true } : rest } : q,
+        );
+        changed = true;
+      }
+      continue;
+    }
     const next: ControlState = { ...c, size: wc.size, faction: wc.faction };
     // 🪦 Le nom et l'icône suivent l'île : un lieu posé avant gardait l'ancienne icône.
     if (wc.name !== undefined) next.name = wc.name;
@@ -1119,8 +1138,12 @@ export function takeObjective(
   const before = map.pois.find((p) => p.id === id);
   if (id === FORTRESS_ID || id === ENDLESS_ID) return map;
   const razed = razeIslandTarget(map, id, at);
-  // 🪺 Un nid pris est ABATTU : il quitte la carte, personne n'y reste.
-  if (!before?.control || razed === map || before.control.razes) return razed;
+  // 🪺🕯️ Un nid ou un objectif éteint est ABATTU : il quitte la carte, personne n'y reste.
+  // ⚠️ La règle de l'ÎLE décide, pas le drapeau du lieu : un lieu posé avant la règle peut ne
+  // pas le porter, et il revenait tenu (vide) à côté de sa braise.
+  const isl = activeIsland(map);
+  const razes = !!before?.control?.razes || (!!isl && razesOn(isl.id));
+  if (!before?.control || razed === map || razes) return razed;
   return {
     ...razed,
     pois: [...razed.pois, heldObjective(before, garrison, at, hero, graceOnCapture(razed, at))],

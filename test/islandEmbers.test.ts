@@ -66,6 +66,30 @@ describe('🕯️ un objectif battu s’éteint', () => {
     expect(onMap(m, C0)).toBe(false);
     expect(m.archipel!.embers![C0]).toBeDefined();
   });
+  // Signalé (2026-10-16) : un cimetière assiégé depuis avant la règle n'avait pas le drapeau
+  // `razes` ; battu, il revenait TENU et vide à côté de sa braise, et on pouvait y envoyer une
+  // garnison pendant que la troupe rentrait.
+  const noFlag = (m: ExpeditionMap, assault: boolean): ExpeditionMap => ({
+    ...m,
+    pois: m.pois.map((p) => {
+      if (p.id !== C0) return p;
+      const { razes: _z, ...c } = p.control!;
+      void _z;
+      return { ...p, control: { ...c, assault } };
+    }),
+  });
+  it('un lieu sans le drapeau s’abat quand même : il quitte la carte dès la victoire', () => {
+    const m = takeObjective(noFlag(island3(), true), C0, ['a', 'b', 'c'], NOW);
+    expect(onMap(m, C0)).toBe(false);
+    expect(heldRazedObjectives(m)).toEqual([]);
+    expect(m.archipel!.embers![C0]).toBeDefined();
+  });
+  it('le drapeau est remis même pendant un assaut', () => {
+    const m = tick(noFlag(island3(), true), NOW);
+    const c = m.pois.find((p) => p.id === C0)!.control!;
+    expect(c.razes).toBe(true);
+    expect(c.assault).toBe(true);
+  });
   it('les fourchettes de sorties sont bien tirées dans toute leur largeur', () => {
     const got = new Set(Array.from({ length: 400 }, (_, i) => emberNeed(i, C0, NOW, false)));
     expect(Math.min(...got)).toBe(EMBER.cemetery.min);
