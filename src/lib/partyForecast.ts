@@ -1,5 +1,11 @@
 import { campWinPct } from './camp';
-import { partyAllies, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
+import {
+  firstAidChance,
+  partyAllies,
+  resolveCaravan,
+  type EscortKit,
+  type PartyHero,
+} from './caravan';
 import {
   HARVEST_TYPES,
   isFieldArmyPoi,
@@ -161,14 +167,84 @@ export function winGain(
   road: EscortKit,
   now: number,
   samples = FORECAST_SAMPLES,
+  /** 🛣️ Compter la route (défaut, comme `partyWinChance`). ⚠️ L'équipe de récolte affiche
+   *  « 🎯 Gardes » et « 🛣️ Route » À PART : sa tuile passe `false` et lit la route avec
+   *  `roadGain` — un apport « gardes × route » n'était affiché nulle part (signalé : la tuile
+   *  annonçait +2 % quand la pastille des gardes bougeait de 6 points). */
+  withRoad = true,
 ): number | null {
-  const empty = (t: GainTeam) => !t.escort.length && !t.hero;
-  const pct = (t: GainTeam) =>
-    empty(t) ? null : partyWinChance(poi, t.escort, road, t.hero, now, samples);
-  const a = pct(withMember);
-  const b = pct(withoutMember);
-  // Rien ne se simule du côté qui a du monde : pas d'apport à annoncer (pas « 0 % »).
-  if ((a === null && !empty(withMember)) || (b === null && !empty(withoutMember))) return null;
-  // Chaque côté arrondi COMME L'ÉCRAN l'affiche : l'apport est l'écart entre deux % lisibles.
-  return Math.round((a ?? 0) * 100) - Math.round((b ?? 0) * 100);
+  return pctGain(
+    teamWinPct(poi, withMember, road, now, samples, withRoad),
+    teamWinPct(poi, withoutMember, road, now, samples, withRoad),
+  );
+}
+
+/** Le 🎯 % d'une équipe TEL QUE L'ÉCRAN L'AFFICHE (arrondi) ; `'empty'` si personne ne part
+ *  (elle vaut 0 %), `null` si rien ne se combat. ⚠️ Calculé UNE fois pour l'équipe cochée,
+ *  il sert de base à l'apport de toutes les tuiles (`pctGain`). */
+export type TeamPct = number | null | 'empty';
+export function teamWinPct(
+  poi: Poi,
+  t: GainTeam,
+  road: EscortKit,
+  now: number,
+  samples = FORECAST_SAMPLES,
+  withRoad = true,
+): TeamPct {
+  if (!t.escort.length && !t.hero) return 'empty';
+  const w = partyWinChance(poi, t.escort, road, t.hero, now, samples, withRoad);
+  return w === null ? null : Math.round(w * 100);
+}
+/** Avec lui moins sans lui. Rien ne se simule du côté qui a du monde : pas d'apport à annoncer
+ *  (`null`, pas « 0 % »). */
+export function pctGain(withPct: TeamPct, withoutPct: TeamPct): number | null {
+  if (withPct === null || withoutPct === null) return null;
+  return (withPct === 'empty' ? 0 : withPct) - (withoutPct === 'empty' ? 0 : withoutPct);
+}
+
+/**
+ * 🛣️ La pastille « 🛣️ Route … % sûre » d'une équipe, arrondie comme l'écran
+ * (`partyRoadOdds().clear`, le même appel) ; `null` quand la route ne se joue pas (héros du
+ * groupe, lieu hors récolte, escorte vide) — la règle de la pastille, pas une copie.
+ */
+export function roadSurePct(
+  poi: Poi,
+  escort: Adventurer[],
+  road: EscortKit,
+  hero: PartyHero | null,
+  combined = false,
+  samples = FORECAST_SAMPLES,
+): number | null {
+  const o = partyRoadOdds(poi, escort, road, hero, samples, combined);
+  return o ? Math.round(o.clear * 100) : null;
+}
+/** 🛣️➕ Ce qu'un champion apporte à la route (deux `roadSurePct`) : `null` quand elle ne se
+ *  joue pas AVEC lui ; sans lui, une escorte vide vaut 0 % (elle ne part pas). */
+export function roadPctGain(withPct: number | null, withoutPct: number | null): number | null {
+  return withPct === null ? null : withPct - (withoutPct ?? 0);
+}
+/** 🛣️➕ CE QU'UN CHAMPION APPORTE À LA ROUTE d'une récolte sans le héros, en points. */
+export function roadGain(
+  poi: Poi,
+  withEscort: Adventurer[],
+  withoutEscort: Adventurer[],
+  road: EscortKit,
+  hero: PartyHero | null = null,
+  combined = false,
+): number | null {
+  return roadPctGain(
+    roadSurePct(poi, withEscort, road, hero, combined),
+    roadSurePct(poi, withoutEscort, road, hero, combined),
+  );
+}
+
+/**
+ * ⛑️➕ CE QU'UN CHAMPION APPORTE AUX PREMIERS SECOURS de la troupe, en points : la chance
+ * qu'un membre tombé évite l'infirmerie (`firstAidChance`, la règle de `spareInjured`), avec
+ * lui moins sans lui. Le soin ne change PAS le 🎯 % : il ne joue qu'après le combat.
+ */
+export function firstAidGain(withEscort: Adventurer[], withoutEscort: Adventurer[]): number {
+  return (
+    Math.round(firstAidChance(withEscort) * 100) - Math.round(firstAidChance(withoutEscort) * 100)
+  );
 }

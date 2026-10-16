@@ -55,7 +55,16 @@
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
       <span
-        v-if="(xp || gain != null || travelMin != null || tripDelta || haulDelta) && !reason"
+        v-if="
+          (xp ||
+            gain != null ||
+            travelMin != null ||
+            tripDelta ||
+            haulDelta ||
+            roadGain ||
+            healGain) &&
+          !reason
+        "
         class="ca-row"
       >
         <!-- 🧭 SON TRAJET jusqu'au lieu visé (demandé : on le choisissait sans savoir quand il
@@ -91,7 +100,32 @@
           class="ca-gain"
           :class="{ zero: gain === 0, neg: gain < 0 }"
           :title="gainWhy"
-          >🎯 {{ gain > 0 ? '+' : gain < 0 ? '−' : '' }}{{ Math.abs(gain) }} %</span
+          >🎯 {{ signed(gain) }} %</span
+        >
+        <!-- 🛣️ CE QU'IL CHANGE À LA ROUTE d'une récolte sans le héros : en points de la pastille
+             « 🛣️ … % sûre » (le 🎯 ci-dessus ne compte alors que les gardes, comme « 🎯 Gardes »). -->
+        <span
+          v-if="roadGain"
+          class="ca-gain"
+          :class="{ neg: roadGain < 0 }"
+          :title="
+            on
+              ? 'Ce que la route perdrait en sûreté sans lui (trajets sans embuscade perdue).'
+              : 'Ce que la route gagnerait en sûreté avec lui (trajets sans embuscade perdue).'
+          "
+          >🛣️ {{ signed(roadGain) }} %</span
+        >
+        <!-- ⛑️ SES PREMIERS SECOURS (demandé) : la chance qu'un membre tombé évite l'infirmerie.
+             Ils ne changent pas le 🎯 : ils jouent après le combat. -->
+        <span
+          v-if="healGain"
+          class="ca-gain heal"
+          :title="
+            on
+              ? 'Chance qu’un blessé de la troupe évite l’infirmerie : ce qu’elle perdrait sans lui.'
+              : 'Chance qu’un blessé de la troupe évite l’infirmerie : ce qu’elle gagnerait avec lui.'
+          "
+          >⛑️ {{ signed(healGain) }} %</span
         >
       </span>
       <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
@@ -99,17 +133,24 @@
       <span v-if="reason" class="ca-why">{{ reason }}</span>
       <!-- ⏱️ Un avertissement qui ne BLOQUE pas (ex. trop tard pour croiser une armée sans boost). -->
       <span v-if="warn && !reason" class="ca-warn">{{ warn }}</span>
-      <span v-else-if="badges.length" class="ca-skills">
-        <span
-          v-for="(b, i) in badges"
-          :key="i"
-          class="ca-skill"
-          :class="{ sig: !b.role }"
-          :title="b.what"
-          >{{ b.emoji }}<b>{{ b.level }}</b></span
-        >
-      </span>
-      <span v-else class="ca-none">stat brute</span>
+    </span>
+    <!-- 🔮 SES COMPÉTENCES EN PASTILLES, en bas de la tuile et sur toute sa largeur (demandé :
+         « pour que ça se voie bien ») : emoji, nom et niveau, au contour de la couleur de sa
+         rune. Ce qu'elle fait, valeur comprise, au survol. Toujours affichées, même avec un
+         avertissement (elles disparaissaient derrière lui). -->
+    <span class="ca-pills">
+      <span v-if="!badges.length" class="ca-none">stat brute</span>
+      <span
+        v-for="(b, i) in badges"
+        :key="i"
+        class="ca-pill"
+        :class="{ sig: !b.role }"
+        :style="b.color ? { '--sk': b.color } : undefined"
+        :title="b.effect ? `${b.what} niv. ${skillLevelTag(b.level)} : ${b.effect}` : b.what"
+        ><span class="ca-pill-emo">{{ b.emoji }}</span
+        ><span class="ca-pill-name">{{ b.what }}</span
+        ><b>{{ skillLevelTag(b.level) }}</b></span
+      >
     </span>
   </button>
 </template>
@@ -125,7 +166,9 @@ import {
   advTitle,
   type Adventurer,
 } from '@/lib/adventurers';
+import { signedInt as signed } from '@/lib/compactNumber';
 import { formatDurationMin } from '@/lib/duration';
+import { skillLevelTag } from '@/lib/skillRunes';
 import type { MissionXpPreview } from '@/lib/caravan';
 
 const props = defineProps<{
@@ -148,6 +191,10 @@ const props = defineProps<{
   tripDelta?: number | null;
   /** 💰 Ce qu'il change à la récolte, déjà mis en forme (`formatHaulDelta`) ; vide = rien. */
   haulDelta?: string | null;
+  /** 🛣️ Ce qu'il change à la route d'une récolte sans le héros, en points (`roadGain`). */
+  roadGain?: number | null;
+  /** ⛑️ Ce qu'il change aux premiers secours de la troupe, en points (`firstAidGain`). */
+  healGain?: number | null;
   /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
   readonly?: boolean;
 }>();
@@ -200,8 +247,9 @@ const rar = computed(() => advGradeBadge(props.adv));
 <style scoped lang="scss">
 .car-adv {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   min-width: 0;
   padding: 7px 8px;
   text-align: left;
@@ -244,8 +292,9 @@ const rar = computed(() => advGradeBadge(props.adv));
   font-size: 40px;
   line-height: 1;
 }
+/* Base 0 : les infos restent à côté du portrait, seule la rangée de pastilles passe dessous. */
 .ca-body {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -305,26 +354,55 @@ const rar = computed(() => advGradeBadge(props.adv));
   font-family: 'Oswald', sans-serif;
   font-weight: 600;
 }
-/* Les compétences en icônes : à 344 px, seule l’icône tient. Le libellé complet reste
-   au survol, et la fiche de la Guilde le donne en toutes lettres. */
-.ca-skills {
+/* 🔮 Les compétences en PASTILLES, sur toute la largeur du bas de la tuile (sous le portrait) :
+   le nom se lit, et se tronque avant le niveau quand la tuile est étroite (344 px). */
+.ca-pills {
+  flex: 0 0 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  line-height: 1;
+  min-width: 0;
 }
-.ca-skill {
-  font-size: 15px;
+.ca-pill {
+  --sk: var(--line);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--sk) 70%, transparent);
+  background: color-mix(in srgb, var(--sk) 14%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  white-space: nowrap;
 }
-.ca-skill b {
-  font-size: 10px;
-  color: var(--accent);
-  vertical-align: super;
+.ca-pill-emo {
+  flex: none;
+  font-size: 12px;
+}
+.ca-pill-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ca-pill b {
+  flex: none;
+  font-family: 'Oswald', sans-serif;
+  font-size: 11px;
+  color: var(--sk);
 }
 /* Une signature ne sert qu’en cas d’embuscade : elle compte moins qu’un rôle sur un
    convoi, et son opacité le dit sans ajouter un mot. */
-.ca-skill.sig {
+.ca-pill.sig {
   opacity: 0.65;
+}
+/* ⛑️ Les premiers secours : le bleu des soins, à part du vert de la réussite. */
+.ca-gain.heal {
+  color: #7fd3ff;
 }
 /* L'XP à gagner : c'est le chiffre qui décide d'une destination, il se lit avant les
    compétences. Accent = plein tarif ; atténué = le lieu est sous son niveau. */

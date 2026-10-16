@@ -167,7 +167,7 @@ import {
   RUNE_INFO,
   RUNE_TIERS,
   SKILLS,
-  skillValue,
+  skillEffectText,
   type RuneTier,
   type SkillId,
 } from '@/lib/skillRunes';
@@ -263,7 +263,7 @@ const reduced = (): boolean =>
   !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 function whatOf(id: SkillId, level: number): string {
-  return SKILLS[id].what.replace('{v}', String(skillValue(id, level)).replace('.', ','));
+  return skillEffectText(id, level);
 }
 const stockOf = (id: SkillId): number => props.stock.filter((s) => s.id === id).length;
 

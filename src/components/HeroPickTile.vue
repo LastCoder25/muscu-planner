@@ -25,7 +25,7 @@
             ? 'Ce que l’équipe perdrait en réussite sans lui.'
             : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'
         "
-        >🎯 {{ gain > 0 ? '+' : gain < 0 ? '−' : '' }}{{ Math.abs(gain) }} %</span
+        >🎯 {{ signedInt(gain) }} %</span
       >
     </span>
     <span class="ph-check">{{ on && !block ? '✓' : '＋' }}</span>
@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { signedInt } from '@/lib/compactNumber';
 defineProps<{
   on: boolean;
   /** Pourquoi il ne peut pas partir (null = disponible). */

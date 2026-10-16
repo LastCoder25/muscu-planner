@@ -54,7 +54,15 @@ import {
 // documente qu'aucun runtime ne traverse — les signatures sont des `EffectType` et des
 // `CombatSkill` NOMMÉS là où ils vivent, jamais une seconde nomenclature.
 import { type CombatSkill } from './combat';
-import { SKILLS, SKILL_SLOTS, skillValue, type ChampSkill, type SkillId } from './skillRunes';
+import {
+  RUNE_COLOR,
+  SKILLS,
+  SKILL_SLOTS,
+  skillEffectText,
+  skillValue,
+  type ChampSkill,
+  type SkillId,
+} from './skillRunes';
 import type { ChampionSlots } from './runeBank';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
@@ -2137,6 +2145,10 @@ export interface AdvBadge {
   what: string;
   level: number;
   role: boolean;
+  /** 🔮 Compétence de rune : la teinte de sa rune et ce qu'elle fait, valeur comprise
+   *  (« 33 % de chances qu'un blessé de la troupe l'évite »). Absent pour un aventurier legacy. */
+  color?: string;
+  effect?: string;
 }
 export function advBadges(adv: Adventurer): AdvBadge[] {
   // 🔮 Un champion : ses compétences de runes, les rôles de convoi d'abord.
@@ -2146,6 +2158,8 @@ export function advBadges(adv: Adventurer): AdvBadge[] {
       what: SKILLS[s.id].name,
       level: s.level,
       role: roleOfSkill(s.id) !== undefined,
+      color: RUNE_COLOR[SKILLS[s.id].tier],
+      effect: skillEffectText(s.id, s.level),
     }));
     return [...list.filter((b) => b.role), ...list.filter((b) => !b.role)];
   }

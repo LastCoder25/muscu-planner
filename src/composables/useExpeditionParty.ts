@@ -28,10 +28,15 @@ import {
 } from '@/lib/party';
 import {
   FORECAST_SAMPLES,
+  firstAidGain,
   partyRoadOdds,
   partyWinChance,
-  winGain,
+  pctGain,
+  roadPctGain,
+  roadSurePct,
+  teamWinPct,
   type GainTeam,
+  type TeamPct,
 } from '@/lib/partyForecast';
 import { champSeatsWithHero, holdSeats, garrisonHold, defendsControl } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
@@ -484,8 +489,16 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  ou une faille), deux par tuile, et un vivier en compte des dizaines — d'un bloc, l'écran
    *  se figerait plus d'une seconde à chaque case cochée. On rend la main entre deux tuiles,
    *  les chiffres apparaissent au fil de l'eau, et un nouveau changement d'équipe annule le
-   *  calcul en cours (`gainRun`). Horloge grossière, comme le 🎯 %. */
+   *  calcul en cours (`gainRun`). Horloge grossière, comme le 🎯 %.
+   *  ⚠️ LES GARDES SEULS (`winGain(…, false)`) : sur une récolte sans le héros, l'écran affiche
+   *  « 🎯 Gardes » et « 🛣️ Route » à part, et la tuile annonçait leur PRODUIT, un chiffre montré
+   *  nulle part (signalé : +2 % sur la tuile, 6 points sur la pastille). La route a son apport à
+   *  elle, `partyRoadGain`. Ailleurs la route ne se joue pas : le chiffre ne change pas.
+   *  ⚠️ La cible est `aimed` (la bande de faille amputée), celle du 🎯 % de l'équipe. */
   const partyGain = ref<Record<string, number | null>>({});
+  /** 🛣️➕ Ce que chaque champion change à la route d'une récolte sans le héros (`roadGain`), en
+   *  points de la pastille « 🛣️ … % sûre ». Absent quand la route ne se joue pas. */
+  const partyRoadGain = ref<Record<string, number | null>>({});
   const heroCandidate = computed<PartyHero | null>(() =>
     partyHeroBlock.value
       ? null
@@ -502,6 +515,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
       activeSupplies.value.join(','),
       partyPoolSorted.value.map((a) => a.id).join(','),
       coarseNow.value,
+      combined.value,
+      aimed.value?.riftCut ?? 0,
     ].join('|');
   });
   let gainRun = 0;
@@ -510,45 +525,77 @@ export function useExpeditionParty(ctx: PartyCtx) {
     async (key) => {
       const run = ++gainRun;
       partyGain.value = {};
-      const p = selected.value;
+      partyRoadGain.value = {};
+      const p = aimed.value;
       if (!key || !p) return;
       const cur: GainTeam = { escort: partyAdvs.value, hero: heroForParty.value };
       const road = partyRoad.value;
       const now = coarseNow.value;
-      const jobs: [string, () => number | null][] = [];
+      const isCombined = combined.value;
+      const pctOf = (t: GainTeam) => teamWinPct(p, t, road, now, undefined, false);
+      // 🛣️ `null` quand la route ne se joue pas : la règle de la pastille (`partyRoadOdds`).
+      const roadOf = (e: Adventurer[]) => roadSurePct(p, e, road, cur.hero, isCombined);
+      // ⚠️ L'équipe COCHÉE est l'un des deux côtés de chaque apport : simulée UNE fois (premier
+      // morceau), pas une fois par tuile.
+      let baseWin: TeamPct = null;
+      let baseRoad: number | null = null;
+      const jobs: (() => void)[] = [
+        () => {
+          baseWin = pctOf(cur);
+          baseRoad = roadOf(cur.escort);
+        },
+      ];
+      // Avec lui moins sans lui : coché, l'équipe cochée est le côté « avec ».
+      const swing = (inTeam: boolean, other: TeamPct) =>
+        inTeam ? pctGain(baseWin, other) : pctGain(other, baseWin);
       const hero = heroCandidate.value;
-      if (hero)
-        jobs.push([
-          'hero',
-          () =>
-            partyHeroOn.value
-              ? winGain(p, cur, { escort: cur.escort, hero: null }, road, now)
-              : winGain(p, { escort: cur.escort, hero }, cur, road, now),
-        ]);
+      if (hero) {
+        const heroOn = partyHeroOn.value;
+        jobs.push(() => {
+          partyGain.value.hero = swing(
+            heroOn,
+            pctOf({ escort: cur.escort, hero: heroOn ? null : hero }),
+          );
+        });
+      }
       for (const a of partyPoolSorted.value) {
         const inTeam = cur.escort.some((x) => x.id === a.id);
-        jobs.push([
-          a.id,
-          () =>
-            inTeam
-              ? winGain(
-                  p,
-                  cur,
-                  { escort: cur.escort.filter((x) => x.id !== a.id), hero: cur.hero },
-                  road,
-                  now,
-                )
-              : winGain(p, { escort: [...cur.escort, a], hero: cur.hero }, cur, road, now),
-        ]);
+        const { without, withA } = teamsAround(a);
+        const other = inTeam ? without : withA;
+        jobs.push(() => {
+          partyGain.value[a.id] = swing(inTeam, pctOf({ escort: other, hero: cur.hero }));
+          const r = roadOf(other);
+          partyRoadGain.value[a.id] = inTeam ? roadPctGain(baseRoad, r) : roadPctGain(r, baseRoad);
+        });
       }
-      for (const [id, job] of jobs) {
+      for (const job of jobs) {
         await new Promise((r) => setTimeout(r, 0));
         if (run !== gainRun) return;
-        partyGain.value = { ...partyGain.value, [id]: job() };
+        job();
       }
     },
     { immediate: true },
   );
+  /** L'équipe cochée SANS `a` et AVEC `a`, dans l'ordre du vivier (celui de `partyAdvs` une fois
+   *  la case touchée) : la paire dont chaque apport de la tuile est l'écart. */
+  function teamsAround(a: Adventurer): { without: Adventurer[]; withA: Adventurer[] } {
+    const ids = new Set(partyEscort.value).add(a.id);
+    return {
+      without: partyAdvs.value.filter((x) => x.id !== a.id),
+      withA: partyPool.value.filter((x) => ids.has(x.id)),
+    };
+  }
+  /** ⛑️➕ Ce que chaque champion change aux PREMIERS SECOURS de la troupe (`firstAidGain`), en
+   *  points de « chance qu'un blessé évite l'infirmerie ». Instantané : aucun combat à rejouer. */
+  const partyHealGain = computed(() => {
+    const out: Record<string, number> = {};
+    if (!selected.value) return out;
+    for (const a of partyPool.value) {
+      const { without, withA } = teamsAround(a);
+      out[a.id] = firstAidGain(withA, without);
+    }
+    return out;
+  });
   /** 💀 Le refus « perdu d'avance » : les GARDES seuls (la route coûte de la cargaison, elle
    *  ne rend pas un lieu imprenable) — le même nombre que le store. */
   const partyGuardWin = computed(() => {
@@ -1276,6 +1323,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
 
   return {
     partyGain,
+    partyRoadGain,
+    partyHealGain,
     partyTripDelta,
     partyHaulDelta,
     supplyHaulDelta,

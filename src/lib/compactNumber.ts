@@ -20,6 +20,11 @@ export function compactNumber(n: number): string {
   return unit(Math.floor(a / 100_000_000) / 10, 'G');
 }
 
+/** Un écart entier signé, avec le vrai signe moins : 6 → « +6 », −2 → « −2 », 0 → « 0 ». */
+export function signedInt(n: number): string {
+  return `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n)}`;
+}
+
 /** « 12,0 » → « 12 » ; « 12,3 » → « 12,3 » (virgule française). */
 function trim(s: string): string {
   return s.replace(/\.0$/, '').replace('.', ',');

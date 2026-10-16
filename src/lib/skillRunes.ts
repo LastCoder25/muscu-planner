@@ -187,6 +187,12 @@ export function skillValue(id: SkillId, level: number): number {
   return Math.round(SKILLS[id].base * LEVEL_CURVE[l - 1]! * boost * 10) / 10;
 }
 
+/** Ce que fait une compétence à un niveau donné, valeur comprise, en virgule française
+ *  (« 33 % de chances qu’un blessé de la troupe l’évite »). Source unique des écrans. */
+export function skillEffectText(id: SkillId, level: number): string {
+  return SKILLS[id].what.replace('{v}', String(skillValue(id, level)).replace('.', ','));
+}
+
 /** ⚡ Ce que la surcharge change, en clair : « 32,4 % → 48,6 % ». */
 export function overclockGain(id: SkillId): string {
   const f = (v: number) => `${String(v).replace('.', ',')} %`;

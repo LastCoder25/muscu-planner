@@ -1279,6 +1279,8 @@
                   :gain="partyGain[a.id]"
                   :trip-delta="partyTripDelta[a.id]"
                   :haul-delta="partyHaulDelta[a.id]"
+                  :road-gain="partyRoadGain[a.id]"
+                  :heal-gain="partyHealGain[a.id]"
                   @toggle="togglePartyAdv(a.id)"
                 />
                 <p
@@ -1319,6 +1321,8 @@
                 :gain="partyGain[a.id]"
                 :trip-delta="partyTripDelta[a.id]"
                 :haul-delta="partyHaulDelta[a.id]"
+                :road-gain="partyRoadGain[a.id]"
+                :heal-gain="partyHealGain[a.id]"
                 @toggle="togglePartyAdv(a.id)"
               />
               <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
@@ -6179,6 +6183,8 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).
 const {
   partyGain,
+  partyRoadGain,
+  partyHealGain,
   partyTripDelta,
   partyHaulDelta,
   supplyHaulDelta,

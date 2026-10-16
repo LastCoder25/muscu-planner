@@ -4,7 +4,7 @@
 //
 // ⚠️ LA COULEUR EST CELLE DE LA COMPÉTENCE TIRÉE (`SKILLS[id].tier`), jamais celle qu'on
 // devinerait ailleurs ; sa teinte est `RUNE_COLOR`, la même que partout ailleurs.
-import { RUNE_COLOR, SKILLS, skillValue, type RuneTier, type SkillId } from './skillRunes';
+import { RUNE_COLOR, SKILLS, skillEffectText, type RuneTier, type SkillId } from './skillRunes';
 
 /** Intensité 0..3 : plus la compétence est rare, plus ça éclate (particules, éclair, rayons). */
 export const RUNE_FX_INTENSITY: Record<RuneTier, number> = {
@@ -37,7 +37,7 @@ export function runeApplyFx(
 ): RuneFx {
   const k = SKILLS[drawn];
   const lvl = Math.max(1, level);
-  const effect = k.what.replace('{v}', String(skillValue(drawn, lvl)).replace('.', ','));
+  const effect = skillEffectText(drawn, lvl);
   const title =
     kind === 'open'
       ? `${k.name} · Nv ${lvl}`

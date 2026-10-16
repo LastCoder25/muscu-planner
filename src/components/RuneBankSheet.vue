@@ -196,7 +196,7 @@ import {
   RUNE_TIERS,
   SKILLS,
   SKILL_MAX_LEVEL,
-  skillValue,
+  skillEffectText,
   type SkillId,
 } from '@/lib/skillRunes';
 import {
@@ -256,7 +256,7 @@ const sortedSkills = computed(() =>
 );
 
 function whatOf(id: SkillId, level: number): string {
-  return SKILLS[id].what.replace('{v}', String(skillValue(id, level)).replace('.', ','));
+  return skillEffectText(id, level);
 }
 
 interface GiveRow {

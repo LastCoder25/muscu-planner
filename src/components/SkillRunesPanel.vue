@@ -50,7 +50,7 @@ import {
   SKILL_MAX_LEVEL,
   isOverclocked,
   skillLevelTag,
-  skillValue,
+  skillEffectText,
   type SkillId,
 } from '@/lib/skillRunes';
 import { advRuneSkills, advSkillSlots, type Adventurer } from '@/lib/adventurers';
@@ -67,7 +67,7 @@ const cells = computed(() =>
   ),
 );
 function whatOf(id: SkillId, level: number): string {
-  return SKILLS[id].what.replace('{v}', String(skillValue(id, level)).replace('.', ','));
+  return skillEffectText(id, level);
 }
 </script>
 
