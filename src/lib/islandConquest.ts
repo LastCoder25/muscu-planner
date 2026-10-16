@@ -378,6 +378,25 @@ export function emberGhosts(
   }));
 }
 
+/**
+ * 🎯 LES OBJECTIFS ENNEMIS PRÈS DESQUELS « RÉPARTIR » GARDE UNE GARNISON (2026-10-16, demandé :
+ * « prendre en compte mes objectifs ennemis qui peuvent réapparaître », pour intercepter leurs
+ * armées, renforcer contre elles ou les désactiver) : ceux qui sont sur la carte et ceux qui
+ * sont ÉTEINTS (ils se rallumeront à leur place). Ni la forteresse ni les objectifs tenus.
+ */
+export function deployTargetsOf(
+  map: Pick<ExpeditionMap, 'archipel' | 'pois'> | null | undefined,
+): { id: string; x: number; y: number }[] {
+  const isl = activeIsland(map);
+  if (!map || !isl) return [];
+  const out = map.pois
+    .filter((p) => p.control?.kind === 'objective' && p.control.owner === 'enemy')
+    .map((p) => ({ id: p.id, x: p.x, y: p.y }));
+  for (const s of emberStatus(map))
+    if (!out.some((o) => o.id === s.id)) out.push({ id: s.id, ...emberSpot(isl, s.id) });
+  return out;
+}
+
 /** 🕯️ Les objectifs comptés abattus mais sans braise ni place sur la carte (reliquats : un
  *  cimetière tenu rappelé, un cimetière rasé sous l'ancienne règle) reçoivent une braise
  *  neuve, comptée à partir de `now`. Rend le MÊME état si rien ne manque. */

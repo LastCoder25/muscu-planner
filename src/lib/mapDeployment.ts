@@ -63,6 +63,9 @@ export interface DeployDeps {
   /** Trajet (minutes, aller) de l'endroit `spot` vers le point d'échantillon n° `point`, pour
    *  une équipe SANS compétence de vitesse. */
   trip: (spot: string, point: number) => number;
+  /** Trajet (minutes, aller) de l'endroit `spot` vers l'objectif ennemi n° `target`
+   *  (`opts.targets` objectifs). */
+  targetTrip?: (spot: string, target: number) => number;
   /** Ce que la garnison `members` fait du trajet ci-dessus (multiplicateur ; 1 par défaut). */
   keep?: (members: readonly DeployUnit[]) => number;
   /** Ses soutiens d'attaque, 0..1 (0 par défaut). */
@@ -96,6 +99,21 @@ export const DEPLOY_EASY_K = 0.5;
 export const DEPLOY_HARD_K = 0.6;
 /** ⛑️🎓🐫 Ce que des soutiens complets retirent au temps d'une garnison, pour un lieu facile. */
 const DEPLOY_SUPPORT_W = 0.2;
+/** 🗺️ LES LIEUX QUI ATTENDENT (2026-10-16, signalé : « entre mes lieux fixes et la base presque
+ *  plus de lieux à attaquer, entre la forteresse et mes lieux fixes beaucoup »). ⚠️ MESURÉ (5 îles,
+ *  une semaine simulée) : les lieux APPARAISSENT uniformément sur la terre (côté ville 46-55 %
+ *  pour 46-59 % de la terre), mais ceux qui ATTENDENT sont à ~90 % du côté de la forteresse —
+ *  les plus proches sont pris aussitôt. Part du coût de couverture portée par les lieux présents
+ *  sur la carte (`pointWeights`) ; le reste couvre l'île uniformément (ceux qui vont apparaître). */
+export const DEPLOY_STOCK_SHARE = 0.7;
+/** 🎯 LES OBJECTIFS ENNEMIS, présents ou éteints — en SECOND (même demande : « la priorité, c'est
+ *  de prendre des lieux ; avoir aussi des effectifs pas trop loin des objectifs, pour intercepter
+ *  leurs armées, renforcer contre leurs attaques ou les désactiver »). Part du coût portée par
+ *  le temps d'y amener UNE GARNISON (la force d'un lieu facile) : de quoi intercepter ou
+ *  renforcer. ⚠️ MESURÉ : viser la force de leur TROUPE (70 à 130 % du vivier entier) vidait la
+ *  couverture (+12 % de temps sur l'île) et remplissait la base, la seule sans limite de places.
+ *  Une garnison atteinte, un champion de plus près d'un objectif ne fait plus rien gagner. */
+export const DEPLOY_TARGET_SHARE = 0.15;
 
 /** 🔧 Réglages de la recherche (le banc de mesure en compare plusieurs ; le jeu garde les
  *  valeurs par défaut). Couper vitesse, soutiens et lieu facile, le second départ et l'échelle
@@ -117,6 +135,10 @@ export interface DeployTune {
   hardK?: number;
   /** Le seul départ glouton (la recherche d'avant la v1.202). */
   singleStart?: boolean;
+  /** Part de la couverture portée par les LIEUX QUI ATTENDENT (`DEPLOY_STOCK_SHARE`). */
+  stockShare?: number;
+  /** Part du coût portée par les OBJECTIFS ennemis (`DEPLOY_TARGET_SHARE`). */
+  targetShare?: number;
 }
 
 interface DeployMove {
@@ -131,6 +153,10 @@ export interface DeployResult {
   moves: DeployMove[];
   /** Temps moyen (minutes, aller) pour réunir la force voulue sur un point de l'île. */
   reach: number;
+  /** 🗺️ Le même, pesé par les lieux qui attendent (`pointWeights`) ; `reach` sans eux. */
+  stockReach: number;
+  /** 🎯 Par objectif (dans l'ordre de `deps.targetTrip`) : le temps pour y amener une garnison. */
+  targetReach: number[];
 }
 
 /** Ce qu'un membre occupe sur un lieu : le héros en prend 2. */
@@ -194,6 +220,10 @@ export function planStations(
     /** La force d'un lieu FACILE, qu'une garnison doit pouvoir prendre seule (objectif mixte).
      *  Absente : seule l'attaque combinée compte. */
     easyForce?: number;
+    /** 🎯 Le nombre d'objectifs ennemis (trajets : `deps.targetTrip`). */
+    targets?: number;
+    /** 🗺️ Le nombre de lieux qui attendent près de chaque point (même ordre) ; absent : aucun. */
+    pointWeights?: readonly number[];
     deps: DeployDeps;
     tune?: DeployTune;
   },
@@ -236,6 +266,8 @@ function* planSteps(
     /** La force d'un lieu FACILE, qu'une garnison doit pouvoir prendre seule (objectif mixte).
      *  Absente : seule l'attaque combinée compte. */
     easyForce?: number;
+    targets?: number;
+    pointWeights?: readonly number[];
     deps: DeployDeps;
     tune?: DeployTune;
   },
@@ -245,6 +277,23 @@ function* planSteps(
     spots.map((s) => [s.id, Array.from({ length: points }, (_, p) => opts.deps.trip(s.id, p))]),
   );
   const tune = opts.tune ?? {};
+  // 🎯 Les objectifs : un trajet de chaque endroit.
+  const nTargets = opts.deps.targetTrip ? (opts.targets ?? 0) : 0;
+  const tTrips = new Map(
+    spots.map((s) => [
+      s.id,
+      Array.from({ length: nTargets }, (_, i) => opts.deps.targetTrip!(s.id, i)),
+    ]),
+  );
+  const targetShare = nTargets ? (tune.targetShare ?? DEPLOY_TARGET_SHARE) : 0;
+  // 🗺️ Le poids de chaque point : une part uniforme (ce qui va apparaître) et une part pour les
+  // lieux qui attendent déjà (ce qui reste à prendre). Sans lieu en attente : uniforme.
+  const stockW = opts.pointWeights ?? [];
+  const stockTotal = stockW.reduce((a, b) => a + Math.max(0, b), 0);
+  const stockShare = stockTotal > 0 ? (tune.stockShare ?? DEPLOY_STOCK_SHARE) : 0;
+  const wOf = Float64Array.from({ length: points }, (_, p) =>
+    stockTotal > 0 ? Math.max(0, stockW[p] ?? 0) / stockTotal : 0,
+  );
   const keepOf = (!tune.noSpeed && opts.deps.keep) || (() => 1);
   const supportOf = (!tune.noSupport && opts.deps.support) || (() => 0);
   const soloShare = tune.soloShare ?? DEPLOY_SOLO_SHARE;
@@ -269,7 +318,8 @@ function* planSteps(
     tune.noEasy || opts.easyForce === undefined
       ? undefined
       : opts.easyForce * (tune.easyK ?? DEPLOY_EASY_K);
-  const hardForce = opts.force * (tune.hardK ?? DEPLOY_HARD_K);
+  const hardK = tune.hardK ?? DEPLOY_HARD_K;
+  const hardForce = opts.force * hardK;
   const totalPw = units.reduce((s, u) => s + Math.max(0, u.power), 0);
   const pwRatio = easy && easy > 0 ? totalPw / easy : Infinity;
   const backupFrom = tune.backupFrom ?? DEPLOY_BACKUP_FROM;
@@ -356,40 +406,69 @@ function* planSteps(
     if (cum < force) mass += (force - cum) * last;
     return (last + mass / force) / 2;
   };
-  /** ⏱️ Le coût d'une répartition : par point, l'attaque combinée et (objectif mixte) la
-   *  garnison la plus vite prête SEULE, allégée de ses soutiens. `combinedOnly` = le temps
-   *  rendu au joueur (`reach`). */
-  const evaluate = (combinedOnly: boolean) => {
+  /** Le temps de chaque objectif (tampon réutilisé). */
+  const tgBuf = new Float64Array(nTargets);
+  /**
+   * ⏱️ Une répartition, mesurée. Par point, l'attaque combinée et (objectif mixte) la garnison
+   * la plus vite prête SEULE, allégée de ses soutiens ; `combinedOnly` = le temps rendu au
+   * joueur (`reach`). Rend la moyenne sur l'île, la même pesée par les lieux qui attendent, et
+   * le temps moyen pour amener une garnison à chaque objectif (rangé dans `tgBuf`).
+   */
+  const measure = (combinedOnly: boolean) => {
     const gs = garrisons();
     const n = gs.length;
-    if (!n || !points) return 0;
+    if (!n || !points) return { mean: 0, stock: 0, target: 0 };
     const tr = gs.map((g) => trips.get(g.id)!);
     const lightMult = gs.map((g) => 1 - supportW * Math.min(1, Math.max(0, g.sup)));
     for (let i = 0; i < n; i++) pwBuf[i] = gs[i]!.pw;
     const mixed = !combinedOnly && !!easy && easy > 0;
     let sum = 0;
+    let stock = 0;
     for (let p = 0; p < points; p++) {
       for (let i = 0; i < n; i++) tBuf[i] = tr[i]![p]! * gs[i]!.k;
       sortBy(nearIdx, n, tBuf);
       const combined = reachIdx(nearIdx, n, tBuf, hardForce, false);
-      if (!mixed) {
-        sum += combined;
-        continue;
+      let v = combined;
+      if (mixed) {
+        // 🌱 Un lieu facile : la petite force se réunit aussi depuis les plus proches — une
+        // garnison qui suffit seule n'attend personne. Ses soutiens l'allègent un peu.
+        for (let i = 0; i < n; i++) lBuf[i] = tBuf[i]! * lightMult[i]!;
+        sortBy(lightIdx, n, lBuf);
+        let easyT = reachIdx(lightIdx, n, lBuf, easy, false);
+        if (backup > 0) {
+          // 🔁 Une seconde garnison prête pour un lieu facile, si la première est déjà partie.
+          // Personne d'autre n'a de force : le secours vaut le double du premier.
+          const second = reachIdx(lightIdx, n, lBuf, easy, true);
+          easyT = (1 - backup) * easyT + backup * (second > 0 ? second : easyT * 2);
+        }
+        v = (1 - soloShare) * combined + soloShare * easyT;
       }
-      // 🌱 Un lieu facile : la petite force se réunit aussi depuis les plus proches — une
-      // garnison qui suffit seule n'attend personne. Ses soutiens l'allègent un peu.
-      for (let i = 0; i < n; i++) lBuf[i] = tBuf[i]! * lightMult[i]!;
-      sortBy(lightIdx, n, lBuf);
-      let easyT = reachIdx(lightIdx, n, lBuf, easy, false);
-      if (backup > 0) {
-        // 🔁 Une seconde garnison prête pour un lieu facile, si la première est déjà partie.
-        // Personne d'autre n'a de force : le secours vaut le double du premier.
-        const second = reachIdx(lightIdx, n, lBuf, easy, true);
-        easyT = (1 - backup) * easyT + backup * (second > 0 ? second : easyT * 2);
-      }
-      sum += (1 - soloShare) * combined + soloShare * easyT;
+      sum += v;
+      stock += wOf[p]! * v;
     }
-    return sum / points;
+    // 🎯 Chaque objectif : y amener UNE GARNISON (la force d'un lieu facile ; la force d'un lieu
+    // dur sans objectif mixte) depuis les plus proches. Au-delà, un champion de plus à côté ne
+    // change plus rien.
+    const garrisonForce = easy && easy > 0 ? easy : hardForce;
+    let tg = 0;
+    if (nTargets) {
+      const ttr = gs.map((g) => tTrips.get(g.id)!);
+      for (let t = 0; t < nTargets; t++) {
+        for (let i = 0; i < n; i++) tBuf[i] = ttr[i]![t]! * gs[i]!.k;
+        sortBy(nearIdx, n, tBuf);
+        tgBuf[t] = reachIdx(nearIdx, n, tBuf, garrisonForce, false);
+        tg += tgBuf[t]!;
+      }
+      tg /= nTargets;
+    }
+    return { mean: sum / points, stock, target: tg };
+  };
+  /** Le coût que la recherche minimise : la couverture (l'île entière et les lieux qui
+   *  attendent), puis les objectifs. */
+  const evaluate = (combinedOnly: boolean) => {
+    const m = measure(combinedOnly);
+    const cover = (1 - stockShare) * m.mean + stockShare * m.stock;
+    return (1 - targetShare) * cover + targetShare * m.target;
   };
   const cost = () => evaluate(false);
   // ⏳ Les immobiles restent où ils seront (s'il s'agit d'un endroit de la répartition) ; seuls
@@ -528,7 +607,14 @@ function* planSteps(
   const moves: DeployMove[] = units
     .filter((u) => !u.fixed && at.get(u.id) !== u.loc)
     .map((u) => ({ unit: u, from: u.loc, to: at.get(u.id)! }));
-  return { spotOf: at, moves, reach: evaluate(true) };
+  const shown = measure(true);
+  return {
+    spotOf: at,
+    moves,
+    reach: shown.mean,
+    stockReach: stockTotal > 0 ? shown.stock : shown.mean,
+    targetReach: Array.from(tgBuf),
+  };
 }
 
 /**

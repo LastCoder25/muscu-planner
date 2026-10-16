@@ -18,7 +18,7 @@ import {
 } from './caravan';
 import { combatPowerRaw } from './combat';
 import { seatsOf } from './controlPoints';
-import { isHeldRazed } from './islandConquest';
+import { deployTargetsOf, isHeldRazed } from './islandConquest';
 import { legFromSpot } from './controlRoutes';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -26,6 +26,7 @@ import {
   EXPE,
   HERO_GARRISON_SEATS,
   distNormAt,
+  isFieldArmyPoi,
   type ExpeditionMap,
   type Poi,
 } from './expedition';
@@ -75,6 +76,30 @@ export interface DeployPlanOutput {
 
 /** L'id de l'unité du héros dans la répartition. */
 export const DEPLOY_HERO_ID = '__hero';
+
+/** 🗺️ Les lieux qui ATTENDENT d'être pris (ni lieux fixes ni armées en marche), comptés chacun
+ *  sur le point d'échantillon le plus proche (`DEPLOY_STOCK_SHARE`). */
+export function waitingWeights(
+  pois: readonly Pick<Poi, 'type' | 'army' | 'x' | 'y'>[],
+  pts: readonly { x: number; y: number }[],
+): number[] {
+  const w = pts.map(() => 0);
+  if (!pts.length) return w;
+  for (const p of pois) {
+    if (p.type === 'control' || isFieldArmyPoi(p)) continue;
+    let k = 0;
+    let best = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const dd = Math.hypot(pts[i]!.x - p.x, pts[i]!.y - p.y);
+      if (dd < best) {
+        best = dd;
+        k = i;
+      }
+    }
+    w[k]!++;
+  }
+  return w;
+}
 
 /** Tout ce qu'il faut à la recherche, et ce que l'écran relit ensuite. */
 function prepare(input: DeployPlanInput) {
@@ -143,6 +168,7 @@ function prepare(input: DeployPlanInput) {
   // L'île, échantillonnée : un trajet de chaque endroit vers chaque point.
   const island = map?.archipel?.island ?? null;
   const pts = deploymentPoints(island, input.outpostLevel);
+  const pointWeights = waitingWeights(map?.pois ?? [], pts);
   const travelLevel = map?.archipel ? ARCHIPEL_TRAVEL_LEVEL : level;
   const legOf = (p: Poi) =>
     partyLegMin(p, [], { hero: false, travelMult: input.travelMult, gearSpeed: 0 });
@@ -159,11 +185,29 @@ function prepare(input: DeployPlanInput) {
       expiresAt: Number.MAX_SAFE_INTEGER,
     }),
   );
-  const trip = (spot: string, p: number) => {
+  const legTo = (spot: string, q: Poi) => {
     const from = points.get(spot);
-    const q = ptPoi[p]!;
     return from ? legFromSpot(q, from, legOf) : legOf(q);
   };
+  const trip = (spot: string, p: number) => legTo(spot, ptPoi[p]!);
+
+  // 🎯 Les objectifs ennemis, présents ou éteints : un trajet de chaque endroit
+  // (`DEPLOY_TARGET_SHARE` : y amener une garnison).
+  const objs = deployTargetsOf(map);
+  const objPoi = objs.map(
+    (o): Poi => ({
+      id: `deploy-obj-${o.id}`,
+      type: 'camp',
+      level,
+      x: o.x,
+      y: o.y,
+      distNorm: distNormAt(Math.hypot(o.x - EXPE.town.x, o.y - EXPE.town.y)),
+      travelLevel,
+      spawnedAt: 0,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    }),
+  );
+  const targetTrip = (spot: string, t: number) => legTo(spot, objPoi[t]!);
 
   // 🧭 La vitesse d'une garnison : la RÈGLE DES MISSIONS (`partyLegMin` : compétences 🧭,
   // pièces de vitesse, héros), rapportée au trajet d'une équipe sans compétence, mesurée
@@ -197,7 +241,9 @@ function prepare(input: DeployPlanInput) {
   const opts = {
     force,
     easyForce,
-    deps: { trip, keep, support },
+    targets: objs.length,
+    pointWeights,
+    deps: { trip, targetTrip, keep, support },
     tune: input.tune,
   };
   return { units, spots, points, byId, nPoints: pts.length, opts };
