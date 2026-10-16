@@ -106,6 +106,13 @@ const ECRANS = [
         attendu: '.inbox-list',
         ferme: '.shop-x[aria-label="Fermer"]',
       },
+      // 📖 Le guide (4 cartes) se rouvre par le ❔ du bandeau.
+      {
+        nom: 'guide',
+        clic: '.inbox-btn[aria-label="Aide"]',
+        attendu: '.gt-card',
+        ferme: '.gt-x',
+      },
     ],
   },
   // 🗺️ La carte d'expédition (v0.1202) : l'écran le plus lourd du projet, découpé en

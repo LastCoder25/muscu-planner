@@ -954,6 +954,99 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(main).not.toContain('🪙');
   }, 30_000);
 
+  // 📖 Le guide de l'Aventure (2026-10-16) : 1re visite, mémoire « déjà vu », réouverture.
+  describe('GameTutorial', () => {
+    async function harness() {
+      const { default: GameTutorial } = await import('@/components/GameTutorial.vue');
+      const { ref } = await import('vue');
+      return {
+        render: () => null,
+        setup() {
+          const t = ref<{ open: () => void } | null>(null);
+          return () =>
+            h('div', [
+              h('button', { class: 'rouvrir', onClick: () => t.value?.open() }, '?'),
+              h(GameTutorial, { ref: t }),
+            ]);
+        },
+      } as Component;
+    }
+    const seen = async () => {
+      localStorage.setItem('muscu:adv:intro', '1');
+    };
+
+    it("s'ouvre à la première visite, sur la carte 1/4, et défile", async () => {
+      let out = '';
+      let after = '';
+      expect(
+        await mountIt(
+          await harness(),
+          {},
+          undefined,
+          undefined,
+          '/',
+          undefined,
+          async (host) => {
+            out = host.innerHTML;
+            (host.querySelector('.gt-btn:not(.ghost)') as HTMLElement).click();
+            await nextTick();
+            after = host.innerHTML;
+          },
+        ),
+      ).toBeNull();
+      expect(out).toContain('gt-card');
+      expect(out).toContain('1 / 4');
+      expect(after).toContain('2 / 4');
+    }, 30_000);
+
+    it('ne se rouvre pas tout seul quand il a déjà été vu', async () => {
+      let out = '';
+      await mountIt(await harness(), {}, undefined, seen, '/', (hh) => (out = hh));
+      expect(out).not.toContain('gt-card');
+    }, 30_000);
+
+    it('se rouvre par le bouton, et fermer le mémorise', async () => {
+      let out = '';
+      let closed = '';
+      await mountIt(
+        await harness(),
+        {},
+        undefined,
+        seen,
+        '/',
+        undefined,
+        async (host) => {
+          (host.querySelector('.rouvrir') as HTMLElement).click();
+          await nextTick();
+          out = host.innerHTML;
+          (host.querySelector('.gt-x') as HTMLElement).click();
+          await nextTick();
+          closed = host.innerHTML;
+        },
+      );
+      expect(out).toContain('gt-card');
+      expect(closed).not.toContain('gt-card');
+    }, 30_000);
+
+    it('fermer à la première visite écrit la mémoire de l’ancienne intro', async () => {
+      let stored: string | null = 'x';
+      await mountIt(
+        await harness(),
+        {},
+        undefined,
+        undefined,
+        '/',
+        undefined,
+        async (host) => {
+          (host.querySelector('.gt-x') as HTMLElement).click();
+          await nextTick();
+          stored = localStorage.getItem('muscu:adv:intro');
+        },
+      );
+      expect(stored).toBe('1');
+    }, 30_000);
+  });
+
   // 🛡️ v1.49.8 : les miliciens ne sont plus dans la ligne des effectifs (on les voit sur
   // la carte : points sous la base et garnison des lieux fixes). Seuls héros et champions.
   it('AvailabilityLine ne compte plus les miliciens', async () => {
