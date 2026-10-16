@@ -144,6 +144,20 @@ function score<T>(c: Candidate<T>, mode: PlanMode): number {
   return -(Math.max(1, c.units.length) * c.tripMin);
 }
 
+/**
+ * ⚔️ LES PROPOSITIONS DONT LE LIEU EST DÉJÀ ATTAQUÉ S'EFFACENT (2026-10-16, demandé par
+ * l'utilisateur : « ne pas proposer d'attaques sur des lieux en cours d'attaque »). Un plan
+ * calculé reste affiché : si une équipe part entre-temps vers l'un de ses lieux (envoi manuel,
+ * « 🔎 Ouvrir », héros seul), ce lieu quitte les cibles du planificateur, et sa proposition aussi.
+ */
+export function withoutEngaged<R extends { poi: { id: string } }>(
+  rows: readonly R[],
+  targets: readonly { id: string }[],
+): R[] {
+  const ids = new Set(targets.map((t) => t.id));
+  return rows.filter((r) => ids.has(r.poi.id));
+}
+
 export async function planExpeditions<T extends { id: string }>(
   targets: readonly T[],
   units: readonly PlanUnit[],

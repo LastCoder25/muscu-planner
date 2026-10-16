@@ -18,6 +18,7 @@ import { mapOutpostLevel } from '@/lib/archipelago';
 import { buildDeploymentAsync } from '@/lib/deployPlan';
 import {
   planExpeditions,
+  withoutEngaged,
   type PlanMode,
   type PlannedTrip,
   type PlanUnit,
@@ -567,6 +568,14 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     unreachable.value = [];
   }
   watch([threshold, mode, withGarrisons, withHero, allowedSupplies], reset);
+  // ⚔️ Un lieu attaqué depuis le calcul (envoi manuel, héros seul) quitte les cibles : sa
+  // proposition s'efface, le reste du plan tient (`withoutEngaged`).
+  watch(
+    () => ctx.targets.value.map((p) => p.id).join('|'),
+    () => {
+      if (rows.value) rows.value = withoutEngaged(rows.value, ctx.targets.value);
+    },
+  );
 
   /** Lance UNE proposition. Rend la raison d'un refus (`null` = parti). */
   async function sendRow(r: PlannerRow): Promise<string | null> {

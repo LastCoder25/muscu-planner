@@ -6311,6 +6311,11 @@ const {
  *  calculé à l'envoi) : `placePois` exclut déjà les secondes. */
 const plannerTargets = computed(() => {
   const busy = new Set(travelersOnMap.value.map((v) => v.poi.id));
+  // 🧝 Le héros parti SEUL n'est pas dans `travelersOnMap` (il se dessine à part) : son lieu
+  // est attaqué tout autant (2026-10-16, signalé : « ne pas proposer d'attaques sur des lieux en
+  // cours d'attaque »).
+  const a = active.value;
+  if (a && coarseNow.value < a.returnAt) busy.add(a.poi.id);
   return placePois.value.filter(
     (p) => PARTY_TARGETS.has(p.type) && p.type !== 'control' && !busy.has(p.id) && !dimmed(p),
   );
