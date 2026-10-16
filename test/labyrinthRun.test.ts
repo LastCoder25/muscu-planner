@@ -16,10 +16,10 @@ const tier = (id: string) => LABYRINTHS.find((l) => l.id === id)!;
 
 /** Part des runs nettoyés, moyennée sur plusieurs tirages d'équipement : avec un seul, on
  *  mesure une anecdote (d'un tirage à l'autre, un même palier va de 45 % à 95 %). */
-function clearRate(laby: Labyrinth, level: number, companions = true): number {
+function clearRate(laby: Labyrinth, level: number, companions = true, draws = 6): number {
   let w = 0;
   let n = 0;
-  for (let g = 1; g <= 6; g++) {
+  for (let g = 1; g <= draws; g++) {
     const p = gearedFighter(level, g, companions);
     for (let s = 0; s < 20; s++) {
       if (simulateLabyrinthRun(p, laby, s * 977 + 13 + g * 31)) w++;
@@ -98,6 +98,18 @@ describe('Labyrinthe — calibration (v0.851, « le sport est le plafond »)', (
     );
     expect(Math.min(...rates)).toBeGreaterThan(0.85);
   }, 60000);
+
+  // ⚠️ 2026-10-16 : la moyenne ci-dessus ne voyait pas Astral. La v1.229 (budget d'équipement
+  // redressé) l'a fait passer de 41 % à 83 % et Néant de 70 % à 83 %, test vert. Chaque palier
+  // au-delà de l'initiation est donc borné SEUL (mesure 48 tirages × 40 : 64 à 75 %).
+  // 24 tirages d'équipement : à 6, un palier seul est une anecdote (Astral 97 % pour 68 %).
+  it('chaque palier au-delà du niveau 20 reste dans la bande, à son niveau', () => {
+    for (const id of ['sansfond', 'chaos', 'astral', 'neant', 'infini']) {
+      const r = clearRate(tier(id), tier(id).recoLevel, true, 24);
+      expect(r, id).toBeGreaterThan(0.5);
+      expect(r, id).toBeLessThan(0.8);
+    }
+  }, 120000);
 
   it("les paliers d'initiation se passent à leur niveau (rampe de début de partie)", () => {
     expect(clearRate(tier('novice'), 2)).toBeGreaterThan(0.75);

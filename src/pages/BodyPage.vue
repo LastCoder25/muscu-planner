@@ -25,7 +25,7 @@
         <div class="lbl opt-note">
           Tous les champs sont optionnels — remplis seulement ce que tu veux suivre.
         </div>
-        <div class="row-2">
+        <div class="first-fields">
           <q-input
             v-model.number="f.weight"
             type="number"
@@ -33,6 +33,7 @@
             filled
             label="Poids (kg)"
           />
+          <div class="lbl sleep-lbl">Sommeil</div>
           <div class="sleep-row">
             <q-input
               v-model.number="f.sleepH"
@@ -40,7 +41,8 @@
               inputmode="numeric"
               min="0"
               filled
-              label="Sommeil (h)"
+              label="heures"
+              aria-label="Sommeil, heures"
             />
             <q-input
               v-model.number="f.sleepMin"
@@ -50,6 +52,7 @@
               max="59"
               filled
               label="min"
+              aria-label="Sommeil, minutes"
             />
           </div>
         </div>
@@ -739,15 +742,20 @@ onMounted(async () => {
   padding: 6px 14px 14px;
 }
 
-.row-2 {
+/* Poids puis sommeil, chacun sur sa ligne, l'intitulé « Sommeil » au-dessus de ses deux
+   champs : côte à côte (344 px) ou dans le volet du cockpit (~280 px à 600 px),
+   « Sommeil (h) » était tronqué. */
+.first-fields {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
+}
+.sleep-lbl {
+  margin: 4px 0 0;
 }
 .sleep-row {
   display: grid;
-  grid-template-columns: 1.3fr 0.7fr;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 .opt-note {
   margin-bottom: 12px;

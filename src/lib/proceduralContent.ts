@@ -190,8 +190,10 @@ const LABY_SPEC_RELIEF: [number, number][] = [
   [20, 1],
   [28, 0.88],
   [40, 0.66],
-  [52, 0.5],
-  [66, 0.6],
+  // 52 et 66 recalés le 2026-10-16 après la v1.229 (budget redressé) : Astral 83 → 68 %,
+  // Néant 83 → 70 % (48 tirages × 40 descentes ; étaient 0,5 et 0,6).
+  [52, 0.564],
+  [66, 0.656],
   [85, 0.7],
 ];
 

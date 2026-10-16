@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 
 /**
  * ⚙️ LA CONFIGURATION VERCEL (v0.1033) — le quota Vercel arrivait au maximum.
@@ -46,11 +47,19 @@ describe('⚙️ vercel.json', () => {
 
   // Exhaustif par construction : un dossier d'images ajouté à public/ sans règle de cache
   // retombe sur le cache par défaut de Vercel (oubli constaté pour powers/ et militia/).
+  // On demande à git ce qui est DÉPLOYÉ (Vercel construit depuis le dépôt) : un dossier
+  // ignoré (public/models/, les modèles 3D bruts, locaux) faisait rougir le test sur le seul
+  // poste qui l'a.
   it('chaque dossier de public/ est en cache', () => {
-    const dirs = fs
-      .readdirSync('public', { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+    const dirs = [
+      ...new Set(
+        execSync('git ls-files public', { encoding: 'utf8' })
+          .split('\n')
+          .map((f) => f.split('/'))
+          .filter((p) => p.length > 2)
+          .map((p) => p[1]!),
+      ),
+    ];
     expect(dirs.length).toBeGreaterThan(0);
     for (const d of dirs) expect(cacheOf(`/${d}/x.webp`), d).toMatch(/max-age=86400/);
   });
