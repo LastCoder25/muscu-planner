@@ -18,7 +18,8 @@ const CALIBRATION = [
   'test/campEconomy.test.ts',
   'test/goldSink.test.ts',
   'test/ascensionRhythm.test.ts',
-  // ~45 s : la courbe des donjons 13 → 94 au niveau conseillé (8 tirages × 40 descentes × 31).
+  // ~2 min 20 : la courbe des donjons 13 → 94 au niveau conseillé (8 tirages × 40 descentes × 31),
+  // et le sportif « muscu pure » à son niveau (donjons 25 → 94, boss de palier 25 → 100).
   'test/dungeonCurve.test.ts',
 ];
 const calib = process.env.CALIB === '1';

@@ -28,9 +28,9 @@ describe('computeCharacter', () => {
     expect(c.energy).toBe(1200);
     expect(c.level.level).toBe(computeLevel(900 + 600 + 300).level);
   });
-  it('⚖️ les stats de COMBAT ont le plancher : 20 % du total, pris aux stats en excès', () => {
-    const c = computeCharacter(900, 600, 300, 0); // 60 / 40 / 20 → total 120, plancher 24
-    expect(c.agilite).toBeCloseTo(24, 6);
+  it('⚖️ les stats de COMBAT ont le plancher : 28 % du total, pris aux stats en excès', () => {
+    const c = computeCharacter(900, 600, 300, 0); // 60 / 40 / 20 → total 120, plancher 33,6
+    expect(c.agilite).toBeCloseTo(33.6, 6);
     expect(c.puissance + c.endurance + c.agilite).toBeCloseTo(120, 6); // total conservé
     expect(c.puissance).toBeLessThan(60);
     expect(c.endurance).toBeLessThan(40);
@@ -48,18 +48,18 @@ describe('⚖️ floorStats', () => {
       agilite: 30,
     });
   });
-  it('un pur muscu reçoit 20 % d’agilité, au prorata de l’excès des deux autres', () => {
-    const f = floorStats({ puissance: 60, endurance: 40, agilite: 0 }); // plancher 20
-    expect(f.agilite).toBeCloseTo(20, 6);
-    // Excès sur le plancher : 40 et 20 → on prend 2/3 à la puissance, 1/3 à l'endurance.
-    expect(f.puissance).toBeCloseTo(60 - (20 * 40) / 60, 6);
-    expect(f.endurance).toBeCloseTo(40 - (20 * 20) / 60, 6);
+  it('un pur muscu reçoit 28 % d’agilité, au prorata de l’excès des deux autres', () => {
+    const f = floorStats({ puissance: 60, endurance: 40, agilite: 0 }); // plancher 28
+    expect(f.agilite).toBeCloseTo(28, 6);
+    // Excès sur le plancher : 32 et 12 → 32/44 pris à la puissance, 12/44 à l'endurance.
+    expect(f.puissance).toBeCloseTo(60 - (28 * 32) / 44, 6);
+    expect(f.endurance).toBeCloseTo(40 - (28 * 12) / 44, 6);
   });
   it('deux stats sous le plancher montent toutes les deux, total conservé', () => {
     const f = floorStats({ puissance: 100, endurance: 0, agilite: 0 });
-    expect(f.endurance).toBeCloseTo(20, 6);
-    expect(f.agilite).toBeCloseTo(20, 6);
-    expect(f.puissance).toBeCloseTo(60, 6);
+    expect(f.endurance).toBeCloseTo(28, 6);
+    expect(f.agilite).toBeCloseTo(28, 6);
+    expect(f.puissance).toBeCloseTo(44, 6);
   });
   it('rien du tout → rien', () => {
     expect(floorStats({ puissance: 0, endurance: 0, agilite: 0 })).toEqual({
@@ -69,7 +69,7 @@ describe('⚖️ floorStats', () => {
     });
   });
   it('le plancher vaut STAT_FLOOR_SHARE', () => {
-    expect(STAT_FLOOR_SHARE).toBe(0.2);
+    expect(STAT_FLOOR_SHARE).toBe(0.28);
   });
   it('le niveau arrondit la SOMME des réservoirs, une seule fois (même niveau que le Global)', () => {
     // 3 réservoirs fractionnaires qui somment pile au palier du niveau 2 (200 XP) :
