@@ -78,5 +78,5 @@ vérifie le vercel.json (routing SPA) et teste la version prod.
 
 ## Après la roadmap
 
-Le backlog in-app (tickets + page `/backlog`) a été retiré le 2026-10-16 (v1.231.2) : les demandes passent
+Le backlog in-app (tickets + page `/backlog`) a été retiré le 2026-10-16 (v1.231.3) : les demandes passent
 désormais directement par Claude Code en remote-control. La roadmap pose le socle.
