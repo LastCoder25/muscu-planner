@@ -21,6 +21,7 @@ import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { islandSpan, islandVia, islandView, onIsland, LAND_MARGIN } from './islandShape';
+import { RETENTION } from './privacy';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -1351,15 +1352,25 @@ export function controlAttackReportId(pointId: string, attackAt: number): string
   return `ctl_${pointId}_${attackAt}`;
 }
 
+/** ⏳ Âge au-delà duquel un message quitte la boîte (demandé : « ne pas les garder très
+ *  longtemps ») — les durées annoncées sur la page Confidentialité (`RETENTION`). */
+const DAY_MS = 86_400_000;
+export const REPORT_KEEP_MS = RETENTION.reportDays * DAY_MS;
+export const NOTE_KEEP_MS = RETENTION.reportNoteDays * DAY_MS;
+
 /** Taille la boîte 📬 SANS jamais jeter un butin à récupérer. ⚠️ Un `slice` brut pouvait
  *  pousser dehors un rapport non encaissé — et avec lui l'XP d'un groupe entier.
  *  On garde les `cap` messages les plus récents (la liste est du plus récent au plus
- *  ancien), PLUS tout message plus ancien encore `claimed === false`. Ordre conservé.
+ *  ancien) et pas plus vieux que `REPORT_KEEP_MS` (`NOTE_KEEP_MS` pour une note), PLUS tout
+ *  message encore `claimed === false`, quel que soit son âge. Ordre conservé.
  *  ⚠️ Un butin en attente ne chasse donc JAMAIS un message récent : la boîte garde ce
- *  qu'elle montrait, elle ne fait que sauver ce qu'elle aurait perdu. */
+ *  qu'elle montrait, elle ne fait que sauver ce qu'elle aurait perdu.
+ *  ⚠️ La purge par l'âge n'a lieu qu'à une écriture de la boîte (ou à son affichage) : un
+ *  compte qui ne joue plus garde ses derniers rapports jusqu'à la purge des comptes inactifs. */
 export function keepMessages(
   list: ExpeditionMessage[],
   cap: number,
+  now: number,
   notesCap = NOTES_CAP,
 ): ExpeditionMessage[] {
   let reports = 0;
@@ -1367,7 +1378,9 @@ export function keepMessages(
   let rank = 0;
   return list
     .filter((m) => {
-      const fits = isMessageNote(m) ? notes++ < notesCap : reports++ < cap;
+      const note = isMessageNote(m);
+      const young = now - m.resolvedAt <= (note ? NOTE_KEEP_MS : REPORT_KEEP_MS);
+      const fits = young && (note ? notes++ < notesCap : reports++ < cap);
       return fits || m.claimed === false;
     })
     .map((m) => (isMessageNote(m) || rank++ < REPLAY_KEEP ? m : withoutDuel(m)));
@@ -1406,6 +1419,7 @@ export function depositMessages(
   box: ExpeditionMessage[],
   fresh: readonly ExpeditionMessage[],
   cap: number,
+  now: number,
   claimedIds: ReadonlySet<string> = new Set(),
 ): ExpeditionMessage[] {
   let marked = false;
@@ -1424,7 +1438,7 @@ export function depositMessages(
   // ⚠️ On taille AUSSI sans rien de neuf : une boîte écrite avec un plafond plus haut
   // (30 avant la v0.1127) redescend au prochain passage (lecture, encaissement) au lieu
   // d'attendre le prochain rapport. Rien à tailler → la même référence, comme avant.
-  const kept = keepMessages(added.length ? [...added, ...base] : base, cap);
+  const kept = keepMessages(added.length ? [...added, ...base] : base, cap, now);
   // ⚠️ Comparé élément par élément : une taille identique ne dit pas qu'aucun rapport n'a été
   // allégé (`keepMessages`).
   if (!added.length && !marked && kept.length === box.length && kept.every((m, i) => m === box[i]))

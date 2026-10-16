@@ -563,7 +563,7 @@ export const useCharacterStore = defineStore('character', () => {
   const claimedLocally = new Set<string>();
   /** La boîte à écrire : la boîte COURANTE + `fresh`, sans doublon ni encaissement dégradé. */
   const boxWith = (cur: CharacterRow, fresh: ExpeditionMessage[], cap: number) =>
-    depositMessages(cur.messages, fresh, cap, claimedLocally);
+    depositMessages(cur.messages, fresh, cap, Date.now(), claimedLocally);
   const loaded = ref(false);
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 

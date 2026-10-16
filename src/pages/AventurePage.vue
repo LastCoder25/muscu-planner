@@ -5628,7 +5628,9 @@ function expeBlocked(): boolean {
 const expeNow = ref(Date.now());
 /** 📬 Ce que la boîte montre : les `MESSAGES_CAP` derniers, plus tout butin encore à prendre (la même
  *  règle que l'écriture — une boîte d'avant, plus pleine, se lit déjà taillée). */
-const inboxMessages = computed(() => keepMessages(char.row?.messages ?? [], MESSAGES_CAP));
+const inboxMessages = computed(() =>
+  keepMessages(char.row?.messages ?? [], MESSAGES_CAP, expeNow.value),
+);
 const unreadMessages = computed(
   () => inboxMessages.value.filter((m) => !m.read || isClaimable(m, expeNow.value)).length,
 );
