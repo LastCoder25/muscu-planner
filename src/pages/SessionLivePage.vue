@@ -58,9 +58,25 @@
           </div>
         </div>
 
+        <!-- 🏆 Record battu en direct -->
+        <div v-if="recordMsg" class="pr-toast" role="status" data-test="live-record">
+          🏆 Nouveau record <span class="pr-sub">{{ recordMsg }}</span>
+        </div>
+
         <!-- Timer de repos -->
         <div v-if="resting" class="timer">
           <div class="timer-label">Repos</div>
+          <button
+            v-if="notifState !== 'unsupported'"
+            class="pill alert-pill"
+            :title="notifState === 'blocked' ? 'Notifications bloquées par le navigateur' : 'Alerte de fin de repos (notification)'"
+            :class="{ on: notifState === 'on' }"
+            :disabled="notifState === 'blocked'"
+            data-test="rest-alert"
+            @click="toggleRestAlert"
+          >
+            {{ alertLabel }}
+          </button>
           <div class="ring-wrap">
             <svg width="184" height="184" viewBox="0 0 184 184">
               <circle class="ring-bg" cx="92" cy="92" r="82" />
@@ -115,6 +131,7 @@
             <span v-if="s.done && s.difficulty" class="bt-d" :class="'d' + s.difficulty">{{
               s.difficulty
             }}</span>
+            <span v-if="recordUids.has(s.uid)" class="bt-pr" aria-label="Record">🏆</span>
           </button>
           <button class="btile add" aria-label="Ajouter une série" @click="live.addSet()">+</button>
         </div>
@@ -124,6 +141,10 @@
           <div class="editor-h">
             {{ editIdx >= 0 ? 'Modifier ' : '' }}{{ setName(activeIdx) }}
             <span v-if="activeSet?.warmup" class="warm-tag">échauffement · ne compte pas</span>
+          </div>
+          <!-- 🕘 La dernière fois, à la même position de série (rien sans historique). -->
+          <div v-if="lastTimeText" class="pills">
+            <span class="pill last" data-test="last-time">dernière fois : {{ lastTimeText }}</span>
           </div>
           <div class="editor-row">
             <div class="ed-cell">
@@ -319,6 +340,24 @@ import { useSessionsStore } from '@/stores/sessions';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import { prefillLoads } from '@/lib/livePrefill';
+import {
+  formatLastTime,
+  historicalBestE1RM,
+  isNewRecord,
+  lastTimeAt,
+  lastTimeSets,
+} from '@/lib/liveInsights';
+import { estimate1RM } from '@/lib/estimates';
+import {
+  REST_NOTIFY_KEY,
+  restNotice,
+  secondsLeft,
+  shouldAskPermission,
+  shouldSchedule,
+  type NotifPermission,
+  type RestNotice,
+} from '@/lib/restNotify';
+import type { SessionLog } from '@/lib/types';
 import { firstWorkIndex, isWorkSet, setOrdinal, workSets } from '@/lib/warmup';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
@@ -430,28 +469,166 @@ const resting = ref(false);
 const restLeft = ref(0);
 const restTotal = ref(0);
 let restInt: ReturnType<typeof setInterval> | undefined;
+let restNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+let restEnd = 0; // heure de FIN du repos (ms) : le décompte en dérive, il ne dérive plus
+let restWhat: RestNotice | null = null; // texte de la notification de ce repos
 const restDisplay = computed(() =>
   restLeft.value >= 60
     ? `${Math.floor(restLeft.value / 60)}:${String(restLeft.value % 60).padStart(2, '0')}`
     : String(restLeft.value),
 );
+function tickRest() {
+  restLeft.value = secondsLeft(restEnd, Date.now());
+  if (restLeft.value <= 0) endRest();
+}
 function startRest(seconds?: number) {
   resting.value = true;
   restTotal.value = restLeft.value = seconds ?? ex.value?.rest_seconds ?? 90;
+  restEnd = Date.now() + restTotal.value * 1000;
+  restWhat = ex.value ? restNotice(ex.value.name, setName(curSetIndex.value)) : null;
   clearInterval(restInt);
-  restInt = setInterval(() => {
-    restLeft.value--;
-    if (restLeft.value <= 0) skipRest();
-  }, 1000);
+  restInt = setInterval(tickRest, 1000);
+  scheduleRestNotice();
   nextTick(() => scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })).catch(() => undefined);
 }
 function addTime(n: number) {
-  restLeft.value += n;
+  restEnd += n * 1000;
+  restLeft.value = secondsLeft(restEnd, Date.now());
   restTotal.value = Math.max(restTotal.value, restLeft.value);
+  scheduleRestNotice();
 }
+/** Le joueur reprend ou saute le repos : tout s'arrête, y compris la notification. */
 function skipRest() {
   clearInterval(restInt);
+  clearTimeout(restNoticeTimer);
   resting.value = false;
+}
+/** Le repos va au bout : vibration, et notification si la page n'est pas à l'écran. */
+function endRest() {
+  if (!resting.value) return;
+  try {
+    navigator.vibrate?.([200, 100, 200]);
+  } catch {
+    /* pas de vibration : tant pis */
+  }
+  if (document.visibilityState === 'hidden' && restWhat && restAlertOn()) void showRestNotice(restWhat);
+  skipRest();
+}
+
+// ── 🔔 Alerte de fin de repos (notification locale, cf. lib/restNotify) ──
+const ALERT_LABEL = {
+  on: '🔔 Alerte',
+  off: '🔕 Alerte',
+  blocked: '🔕 Bloquée',
+  unsupported: '',
+};
+const restPref = ref<string | null>(readPref());
+const notifPerm = ref<NotifPermission>(readPerm());
+function readPref(): string | null {
+  try {
+    return localStorage.getItem(REST_NOTIFY_KEY);
+  } catch {
+    return null;
+  }
+}
+function readPerm(): NotifPermission {
+  return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+}
+function restAlertOn(): boolean {
+  return shouldSchedule(readPerm(), restPref.value);
+}
+const notifState = computed<'on' | 'off' | 'blocked' | 'unsupported'>(() => {
+  if (notifPerm.value === 'unsupported') return 'unsupported';
+  if (notifPerm.value === 'denied') return 'blocked';
+  return shouldSchedule(notifPerm.value, restPref.value) ? 'on' : 'off';
+});
+const alertLabel = computed(() => ALERT_LABEL[notifState.value]);
+function setPref(v: '0' | '1') {
+  restPref.value = v;
+  try {
+    localStorage.setItem(REST_NOTIFY_KEY, v);
+  } catch {
+    /* stockage inaccessible : le réglage vaut pour cette visite */
+  }
+}
+/** (Re)programme la notification à l'heure de fin. Rien si l'alerte est coupée/refusée. */
+function scheduleRestNotice() {
+  clearTimeout(restNoticeTimer);
+  if (!resting.value || !restAlertOn()) return;
+  restNoticeTimer = setTimeout(endRest, Math.max(0, restEnd - Date.now()));
+}
+async function askNotifPermission() {
+  try {
+    await Notification.requestPermission();
+  } catch {
+    /* refusé / indisponible : l'alerte reste coupée, rien d'autre ne change */
+  }
+  notifPerm.value = readPerm();
+  scheduleRestNotice();
+}
+async function toggleRestAlert() {
+  if (notifPerm.value === 'default') {
+    setPref('1');
+    await askNotifPermission();
+    return;
+  }
+  setPref(restPref.value === '0' ? '1' : '0');
+  scheduleRestNotice();
+}
+async function showRestNotice(n: RestNotice) {
+  // `renotify` / `vibrate` existent côté navigateur mais pas dans les types DOM.
+  const opts = {
+    body: n.body,
+    tag: n.tag,
+    renotify: true,
+    vibrate: [200, 100, 200],
+    icon: '/icons/pwa-192.png',
+    badge: '/icons/pwa-192.png',
+    data: { url: `/session/${run.value?.session_id ?? ''}` },
+  } as NotificationOptions;
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) await reg.showNotification(n.title, opts);
+    else new Notification(n.title, opts);
+  } catch {
+    /* la notification est un confort : jamais d'erreur à l'écran */
+  }
+}
+function onVisible() {
+  if (resting.value) tickRest(); // la page était figée : on se recale sur l'heure de fin
+}
+
+// ── 🕘 Dernière fois + 🏆 record en direct (cf. lib/liveInsights) ──
+// Même historique que le préremplissage de charge : `logs.fetchAll`, lu une fois au montage.
+const history = ref<SessionLog[]>([]);
+const lastSets = computed(() => (ex.value ? lastTimeSets(ex.value.id, history.value) : []));
+const lastTimeText = computed(() => {
+  const e = ex.value;
+  const s = activeSet.value;
+  if (!e || !s || s.warmup) return '';
+  const prev = lastTimeAt(lastSets.value, setOrdinal(e.sets, activeIdx.value));
+  return prev ? formatLastTime(prev, { time: !!isTimeEx.value, bodyweight: e.bodyweight }) : '';
+});
+const recordUids = ref(new Set<string>());
+const recordMsg = ref('');
+let recordTimer: ReturnType<typeof setTimeout> | undefined;
+/** Cette série (pas encore validée) bat-elle le record de l'exercice ? Exo en temps : jamais
+ *  (ses « reps » sont des secondes — pas de 1RM). */
+function checkRecord(s: LiveSet): boolean {
+  const e = ex.value;
+  if (!e || s.warmup || isTimeEx.value) return false;
+  const earlier = e.sets.filter((x) => x !== s && x.done && isWorkSet(x));
+  if (!isNewRecord(historicalBestE1RM(e.id, history.value), s, earlier)) return false;
+  recordUids.value.add(s.uid);
+  recordMsg.value = `${e.name} · ${s.load_kg} kg × ${s.reps} (1RM ≈ ${estimate1RM(s.load_kg, s.reps)} kg)`;
+  clearTimeout(recordTimer);
+  recordTimer = setTimeout(() => (recordMsg.value = ''), 7000);
+  try {
+    navigator.vibrate?.([60, 40, 120]);
+  } catch {
+    /* ignoré */
+  }
+  return true;
 }
 
 // ── Actions séries ──────────────────────────────────────
@@ -494,6 +671,9 @@ function validateSet() {
   const s = curSet.value;
   if (!s) return; // pas de note requise : elle se pose pendant le repos (une série non notée est loggée « modéré », 2)
   const restSec = s.rest_seconds ?? ex.value?.rest_seconds; // repos propre à la série
+  checkRecord(s); // AVANT `done` : la série ne se compare pas à elle-même
+  // 🔔 Première série validée : le bon moment pour demander la permission (un geste).
+  if (shouldAskPermission(readPerm(), restPref.value)) void askNotifPermission();
   s.done = true;
   editIdx.value = -1;
   live.persist();
@@ -644,6 +824,7 @@ onMounted(async () => {
   void logs
     .fetchAll()
     .then((all) => {
+      history.value = all.map((l) => l.payload);
       const r = live.run;
       if (
         r &&
@@ -658,11 +839,15 @@ onMounted(async () => {
   clockInt = setInterval(() => {
     now.value = Date.now();
   }, 1000);
+  document.addEventListener('visibilitychange', onVisible);
 });
 
 onBeforeUnmount(() => {
   clearInterval(clockInt);
   clearInterval(restInt);
+  clearTimeout(restNoticeTimer);
+  clearTimeout(recordTimer);
+  document.removeEventListener('visibilitychange', onVisible);
   rec?.stop();
 });
 </script>
@@ -838,6 +1023,7 @@ onBeforeUnmount(() => {
 }
 
 .timer {
+  position: relative;
   margin: 16px 0 4px;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -1047,6 +1233,92 @@ onBeforeUnmount(() => {
 .bt-d.d4 {
   background: var(--d4);
   color: #fff;
+}
+.bt-pr {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-size: 12px;
+  line-height: 1;
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+.pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--line-soft);
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+}
+.pill.last {
+  color: var(--text);
+}
+.alert-pill {
+  min-height: 44px;
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.alert-pill.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.alert-pill:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.pr-toast {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  background: #ffd23f1f;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  animation: pr-pop 0.5s ease-out;
+}
+.pr-sub {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-body, inherit);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+@keyframes pr-pop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pr-toast {
+    animation: none;
+  }
 }
 .btile.add {
   justify-content: center;

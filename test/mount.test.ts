@@ -65,7 +65,10 @@ async function mountIt(
   // harnais qu'il faut élargir, pas l'écran qu'il faut contourner.
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/:all(.*)*', component: { render: () => null } }],
+    routes: [
+      { path: '/session/:id', component: { render: () => null } }, // écrans à paramètre d'URL
+      { path: '/:all(.*)*', component: { render: () => null } },
+    ],
   });
   await router.replace(route);
   await router.isReady();
@@ -4907,4 +4910,65 @@ describe('💰 la récompense sur la tuile d’un voyage', () => {
     expect(out).toMatch(/58 % → <b[^>]*>71 %/);
     expect(out).toContain('plafond de 30 % atteint');
   });
+
+  // 🕘🏆 La séance live : « dernière fois » sous la série, record en direct, repos.
+  it('SessionLivePage montre la dernière fois, fête un record et lance le repos', async () => {
+    const { default: SessionLivePage } = await import('@/pages/SessionLivePage.vue');
+    const { useSessionsStore } = await import('@/stores/sessions');
+    const { useLogsStore } = await import('@/stores/logs');
+    const session = {
+      id: 's1',
+      name: 'Pecs',
+      exercises: [
+        {
+          id: 'bench',
+          name: 'Développé couché',
+          rest_seconds: 90,
+          target: { sets: 3, reps_min: 5, reps_max: 8, load_kg: 15 },
+        },
+      ],
+    };
+    const past = {
+      id: 'l1',
+      exercises: [
+        {
+          id: 'bench',
+          name: 'Développé couché',
+          performed: [
+            { set: 1, load_kg: 12.5, reps: 5, difficulty: 2 },
+            { set: 2, load_kg: 10, reps: 6, difficulty: 2 },
+          ],
+        },
+      ],
+    };
+    let before = '';
+    let after = '';
+    const err = await mountIt(
+      SessionLivePage,
+      {},
+      undefined,
+      async () => {
+        (useSessionsStore() as unknown as { list: unknown[] }).list = [
+          { id: 's1', name: 'Pecs', payload: session, created_at: '' },
+        ];
+        const logs = useLogsStore() as unknown as { all: unknown[]; allLoaded: boolean };
+        logs.all = [{ id: 'l1', name: 'x', performed_at: '2026-10-01T10:00:00Z', payload: past }];
+        logs.allLoaded = true;
+      },
+      '/session/s1',
+      undefined,
+      async (host) => {
+        await new Promise((r) => setTimeout(r, 30)); // onMounted → fetchAll (cache) → rendu
+        before = host.innerHTML;
+        host.querySelector<HTMLElement>('.cta')?.click(); // 15 × 5 > 12,5 × 5 : record
+        await new Promise((r) => setTimeout(r, 30));
+        after = host.innerHTML;
+      },
+    );
+    expect(err).toBeNull();
+    expect(before).toContain('dernière fois : 12,5 kg × 5');
+    expect(before).not.toContain('live-record');
+    expect(after).toContain('live-record'); // 🏆 Nouveau record
+    expect(after).toContain('class="timer"'); // le repos démarre
+  }, 30_000);
 });
