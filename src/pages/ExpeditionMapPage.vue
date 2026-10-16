@@ -225,6 +225,24 @@
                est retiré de la carte au départ, il doit se retrouver quand même. -->
           <circle v-if="tracePoi" :cx="tracePoi.x" :cy="tracePoi.y" r="8" class="trip-focus-halo" />
 
+          <!-- 🕯️ LES OBJECTIFS ÉTEINTS (île 3, demandé : « on les voit sur la carte en grisé, on
+               ne peut pas les cliquer ») : le fort à sa place, éteint, et au-dessus ce qu'il
+               lui reste avant de se rallumer (sorties, ❄️ gelé, heures du plancher). Sous les
+               lieux et en `pointer-events: none` : il ne vole aucun toucher. -->
+          <g
+            v-for="g in emberGhostList"
+            :key="'ember-' + g.id"
+            class="ember-ghost"
+            :class="{ frozen: g.frozen }"
+            :transform="`translate(${g.x} ${g.y}) scale(1.15)`"
+            aria-hidden="true"
+          >
+            <rect x="-5.2" y="-5.2" width="10.4" height="10.4" rx="2" class="eg-bg" />
+            <text y="1.6" class="eg-emo">{{ g.emoji }}</text>
+            <line x1="5.2" y1="-5.2" x2="5.2" y2="-10.4" class="eg-mast" />
+            <text y="10.2" class="eg-tag">🕯️ {{ g.short }}</text>
+          </g>
+
           <!-- 🗺️ Les lieux (à prendre, cible du héros, cibles des équipes) : un composant à part
                pour ne pas se re-diffuser à chaque seconde (cf. `MapPoiLayer`). -->
           <!-- ⚔️🗼 LES ARMÉES EN CAMPAGNE ET CE QU'ELLES VISENT (demandé) : la trajectoire en
@@ -1601,6 +1619,7 @@ import {
   heroPostOf,
   heroWalk,
   heroWalkVoyage,
+  emberGhosts,
   emberStatus,
   islandConquest,
   islandTargetLabel,
@@ -2790,6 +2809,8 @@ const ambushHalos = computed(() => {
   const nests = map ? nestZones(map.pois, map.archipel?.island ?? null, islandPacified(map)) : [];
   return [...rift, ...nests];
 });
+// 🕯️ Les objectifs ÉTEINTS de l'île 3, grisés à leur place (`emberGhosts`) : vus, jamais touchés.
+const emberGhostList = computed(() => emberGhosts(char.row?.expedition_map, coarseNow.value));
 /** Temps restant de l'embuscade qui harcèle le lieu sélectionné (la plus longue). */
 const selectedAmbushLeft = computed(() => {
   const p = selected.value;
@@ -7904,6 +7925,45 @@ onUnmounted(() => {
   stroke-width: 0.5;
   stroke-dasharray: 2 2;
   pointer-events: none;
+}
+/* 🕯️ Un objectif éteint : le fort en cendres, sans bannière, qu'on ne peut pas toucher. */
+.ember-ghost {
+  pointer-events: none;
+}
+/* Le fort s'efface, l'étiquette reste lisible. */
+.ember-ghost .eg-bg,
+.ember-ghost .eg-emo,
+.ember-ghost .eg-mast {
+  opacity: 0.55;
+}
+.ember-ghost .eg-bg {
+  fill: color-mix(in srgb, var(--dim) 18%, var(--surface));
+  stroke: var(--dim);
+  stroke-width: 0.8;
+  stroke-dasharray: 1.4 1;
+}
+.ember-ghost .eg-emo {
+  font-size: 4px;
+  text-anchor: middle;
+  filter: grayscale(1);
+}
+.ember-ghost .eg-mast {
+  stroke: var(--dim);
+  stroke-width: 0.5;
+}
+.ember-ghost .eg-tag {
+  font-size: 2.8px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 0.6px;
+}
+.ember-ghost.frozen .eg-bg,
+.ember-ghost.frozen .eg-emo,
+.ember-ghost.frozen .eg-mast {
+  opacity: 0.4;
 }
 .hero {
   fill: var(--accent);

@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, islandPacified, ISLAND_OUTPOST_LEVEL } from '@/lib/archipelago';
-import { createMap, type ExpeditionMap } from '@/lib/expedition';
+import { advanceWorld, createMap, EXPE, type ExpeditionMap } from '@/lib/expedition';
 import { ensureControls } from '@/lib/controlPoints';
 import {
   EMBER,
   FORTRESS_ID,
+  emberGhosts,
   emberNeed,
   emberStatus,
   emberText,
   ensureIslandConquest,
   heldRazedObjectives,
   islandConquest,
+  objectiveSpot,
   razeIslandTarget,
   takeObjective,
 } from '@/lib/islandConquest';
@@ -224,5 +226,74 @@ describe('🕯️ les cimetières tenus d’avant', () => {
       outpostLevel: 1,
     })!;
     expect(out.spots.map((s) => s.id)).not.toContain(C0);
+  });
+});
+
+// 🕯️ Demandé (2026-10-16) : « éteindre ne les fait pas disparaître, ça les désactive : on ne
+// peut pas les cliquer mais on les voit sur la carte en grisé ».
+describe('🕯️ un objectif éteint reste visible sur la carte', () => {
+  it('à la place exacte de l’objectif, avec ce qu’il lui reste', () => {
+    let m = tick(razeIslandTarget(island3(), C0, NOW), NOW);
+    const need = m.archipel!.embers![C0]!.need;
+    m = tick(sorties(m, NOW + 30 * H, 2), NOW + 40 * H);
+    const g = emberGhosts(m, NOW + 40 * H);
+    expect(g.map((x) => x.id)).toEqual([C0]);
+    const spot = objectiveSpot(3, 0);
+    expect([g[0]!.x, g[0]!.y]).toEqual([spot.x, spot.y]);
+    expect(g[0]!.emoji).toBe('🪦');
+    expect(g[0]!.short).toBe(String(need - 2));
+  });
+  it('gelé : ❄️ ; prêt sous le plancher : les heures', () => {
+    let m = razeIslandTarget(island3(), C0, NOW);
+    m = tick(razeIslandTarget(m, KEY, NOW), NOW);
+    const g = emberGhosts(m, NOW);
+    expect(g.map((x) => x.id)).toEqual([KEY, C0]);
+    expect(g.find((x) => x.id === C0)!.short).toBe('❄️');
+    const one = tick(razeIslandTarget(island3(), C1, NOW), NOW);
+    const need = one.archipel!.embers![C1]!.need;
+    const ready = tick(sorties(one, NOW + 60_000, need, 60_000), NOW + 2 * H);
+    expect(emberGhosts(ready, NOW + 2 * H)[0]!.short).toBe('22 h');
+  });
+  it('rallumé, il redevient un lieu à attaquer et n’est plus grisé', () => {
+    let m = tick(razeIslandTarget(island3(), C0, NOW), NOW);
+    const need = m.archipel!.embers![C0]!.need;
+    m = tick(sorties(m, NOW + 30 * H, need), NOW + 30 * H + need * H);
+    expect(emberGhosts(m, NOW + 60 * H)).toEqual([]);
+    expect(lit(m, C0)).toBe(true);
+  });
+  it('rien hors de l’île 3 ni sur une île pacifiée', () => {
+    expect(emberGhosts(razeIslandTarget(island3(1, 20), 'isl_obj_0', NOW), NOW)).toEqual([]);
+    let m = razeIslandTarget(island3(), C0, NOW);
+    m = razeIslandTarget(m, FORTRESS_ID, NOW);
+    expect(emberGhosts(m, NOW)).toEqual([]);
+  });
+});
+
+describe('🕯️ la place d’un objectif éteint reste libre', () => {
+  it('sur 20 jours, aucun lieu n’apparaît dessus (l’écart des îles est tenu)', () => {
+    let m = island3();
+    for (const id of [C0, C1, KEY]) m = razeIslandTarget(m, id, NOW);
+    m = tick(m, NOW);
+    const spots = Object.values(m.archipel!.embers!).map((e) => ({ x: e.x!, y: e.y! }));
+    expect(spots).toHaveLength(3);
+    let closest = Infinity;
+    for (let t = NOW; t < NOW + 20 * 24 * H; t += 2 * H) {
+      m = advanceWorld(m, t, LV, ISLAND_OUTPOST_LEVEL);
+      for (const p of m.pois)
+        if (!p.control && !p.army && p.type !== 'warband' && p.spawnedAt > NOW)
+          for (const s of spots) closest = Math.min(closest, Math.hypot(p.x - s.x, p.y - s.y));
+    }
+    expect(closest).toBeGreaterThanOrEqual(EXPE.islandMinDistPoi * 0.6);
+  });
+  it('une braise d’avant (sans place) la reçoit au tick suivant', () => {
+    const m0 = tick(razeIslandTarget(island3(), C0, NOW), NOW);
+    const { x: _x, y: _y, ...old } = m0.archipel!.embers![C0]!;
+    void _x;
+    void _y;
+    const legacy = { ...m0, archipel: { ...m0.archipel!, embers: { [C0]: old } } };
+    const m = tick(legacy, NOW + H);
+    const s = objectiveSpot(3, 0);
+    expect(m.archipel!.embers![C0]).toEqual({ ...old, x: s.x, y: s.y });
+    expect(tick(m, NOW + 2 * H)).toBe(m);
   });
 });

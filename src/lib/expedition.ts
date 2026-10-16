@@ -1012,8 +1012,17 @@ export type SortieClock = { from: number; charge: number; fired: number; last?: 
 
 /** 🕯️ Un objectif d'île ÉTEINT (`EMBER`) : abattu à `at`, il se rallume après `need` sorties
  *  (`charge` comptées) ; `ready` = la sortie qui a atteint le compte (il attend alors le
- *  plancher `EMBER.floorMs`, ou que la citadelle se rallume). */
-export type ObjectiveEmber = { at: number; need: number; charge: number; ready?: number };
+ *  plancher `EMBER.floorMs`, ou que la citadelle se rallume). `x`/`y` : sa place, où il
+ *  reste dessiné grisé et où rien d'autre n'apparaît (absente des braises d'avant la v1.233,
+ *  remise au tick suivant). */
+export type ObjectiveEmber = {
+  at: number;
+  need: number;
+  charge: number;
+  ready?: number;
+  x?: number;
+  y?: number;
+};
 
 /** 🗺️ La fenêtre sur laquelle on compte les départs. */
 const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
@@ -2801,8 +2810,13 @@ function placePoiOfType(
   const land = landOf(map);
   const minGap = land ? EXPE.islandMinDistPoi : EXPE.minDistPoi;
   let pos = placePoi(rng, reach, minFrac, band, land);
+  // 🕯️ Un objectif éteint garde sa place : on le voit grisé sur la carte, rien ne s'y pose.
+  const taken = [
+    ...map.pois,
+    ...Object.values(map.archipel?.embers ?? {}).filter((e) => e.x !== undefined),
+  ] as { x: number; y: number }[];
   const clearance = (p: { x: number; y: number }) =>
-    map.pois.length ? Math.min(...map.pois.map((q) => dist(q.x, q.y, p.x, p.y))) : Infinity;
+    taken.length ? Math.min(...taken.map((q) => dist(q.x, q.y, p.x, p.y))) : Infinity;
   let best = clearance(pos);
   for (let k = 0; k < 48 && best < minGap; k++) {
     const cand = placePoi(rng, reach, minFrac, band, land);

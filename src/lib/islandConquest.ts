@@ -221,14 +221,25 @@ export function emberNeed(seed: number, id: string, at: number, keystone: boolea
   return c.min + Math.min(span - 1, Math.floor(r * span));
 }
 
+/** 🕯️ La place d'un objectif éteint : celle où l'objectif ennemi se pose. */
+const emberSpot = (isl: Pick<Island, 'id'>, id: string) => {
+  const { x, y } = objectiveSpot(isl.id, Number(id.slice('isl_obj_'.length)));
+  return { x, y };
+};
+
 /** 🕯️ Une braise neuve pour l'objectif `id` éteint à `at`. */
 function newEmber(
   map: Pick<ExpeditionMap, 'seed'>,
-  isl: Pick<Island, 'objectives' | 'keystone'>,
+  isl: Pick<Island, 'id' | 'objectives' | 'keystone'>,
   id: string,
   at: number,
 ): ObjectiveEmber {
-  return { at, need: emberNeed(map.seed, id, at, id === keystoneIdOf(isl)), charge: 0 };
+  return {
+    at,
+    need: emberNeed(map.seed, id, at, id === keystoneIdOf(isl)),
+    charge: 0,
+    ...emberSpot(isl, id),
+  };
 }
 
 /** 🕯️ L'instant où une braise prête se rallume (le plancher compris), `Infinity` sinon. */
@@ -338,6 +349,29 @@ export function emberText(s: EmberStatus, now: number): string {
   return 'se rallume';
 }
 
+/** 🕯️ « 7 » sorties, « ❄️ » gelé, « 5 h » de plancher, « … » sur le point de se rallumer :
+ *  l’étiquette courte posée sur la carte sous un objectif éteint. */
+export function emberShort(s: EmberStatus, now: number): string {
+  if (s.frozen) return '❄️';
+  if (s.left > 0) return String(s.left);
+  if (s.dueAt !== null && s.dueAt > now)
+    return `${Math.max(1, Math.ceil((s.dueAt - now) / 3600_000))} h`;
+  return '…';
+}
+
+/** 🕯️ UN OBJECTIF ÉTEINT RESTE VISIBLE (demandé, 2026-10-16 : « éteindre ne les fait pas
+ *  disparaître, ça les désactive : on ne peut pas les cliquer mais on les voit sur la carte en
+ *  grisé ») : sa place (celle où l'objectif ennemi se pose, `objectiveSpot`), son icône et
+ *  son étiquette courte. Ce n'est PAS un lieu : rien ne le vise, rien ne le touche. */
+export function emberGhosts(
+  map: Pick<ExpeditionMap, 'archipel'> | null | undefined,
+  now: number,
+): (EmberStatus & { x: number; y: number; short: string })[] {
+  const isl = activeIsland(map);
+  if (!isl) return [];
+  return emberStatus(map).map((s) => ({ ...s, ...emberSpot(isl, s.id), short: emberShort(s, now) }));
+}
+
 /** 🕯️ Les objectifs comptés abattus mais sans braise ni place sur la carte (reliquats : un
  *  cimetière tenu rappelé, un cimetière rasé sous l'ancienne règle) reçoivent une braise
  *  neuve, comptée à partir de `now`. Rend le MÊME état si rien ne manque. */
@@ -352,9 +386,12 @@ function withMissingEmbers(
   const missing = objectiveIds(isl).filter(
     (id) => a.destroyed?.includes(id) && !a.embers?.[id] && !pois.some((p) => p.id === id),
   );
-  if (!missing.length && a.razedAt === undefined) return a;
+  // 🕯️ Une braise d'avant la v1.233 n'a pas sa place : on la lui donne (rien ne s'y pose).
+  const unplaced = Object.keys(a.embers ?? {}).filter((id) => a.embers![id]!.x === undefined);
+  if (!missing.length && !unplaced.length && a.razedAt === undefined) return a;
   const embers = { ...(a.embers ?? {}) };
   for (const id of missing) embers[id] = newEmber(map, isl, id, now);
+  for (const id of unplaced) embers[id] = { ...embers[id]!, ...emberSpot(isl, id) };
   const { razedAt: _r, ...rest } = a;
   void _r;
   return { ...rest, embers };
