@@ -40,9 +40,9 @@ export const RETENTION = {
   /** Journaux techniques des tâches planifiées. */
   jobLogDays: 3,
   /** Rapports de la boîte 📬 (combats, expéditions), une fois leur butin pris. */
-  reportDays: 7,
+  reportDays: 1,
   /** Notes de production de la boîte (récoltes, renforts), déjà créditées. */
-  reportNoteDays: 2,
+  reportNoteDays: 1,
 } as const;
 
 export interface DataItem {
@@ -122,7 +122,7 @@ export function retentionLines(): string[] {
     `Ton compte et ses données : tant que tu l’utilises. Sans connexion pendant ${Math.round(RETENTION.inactiveAccountDays / 365)} ans, il est supprimé automatiquement.`,
     `Notifications programmées : effacées ${RETENTION.sentPushDays} jours après leur envoi.`,
     `Journaux techniques : effacés après ${RETENTION.jobLogDays} jours.`,
-    `Rapports de l’Aventure (boîte 📬) : effacés après ${RETENTION.reportDays} jours (${RETENTION.reportNoteDays} jours pour les notes de récolte) — jamais tant qu’un butin reste à prendre.`,
+    `Rapports de l’Aventure (boîte 📬) : effacés après ${RETENTION.reportDays * 24} h, notes de récolte comprises — jamais tant qu’un butin reste à prendre.`,
     'Préférences d’affichage (thème, filtres) : stockées dans ton navigateur seulement.',
   ];
 }
