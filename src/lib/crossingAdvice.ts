@@ -25,7 +25,7 @@
 import type { Adventurer } from './adventurers';
 import { ISLANDS, type Island } from './archipelago';
 import { campWinPct } from './camp';
-import { dangerMult, missionXpSplit, partyAllies, type EscortKit } from './caravan';
+import { dangerMult, missionXpSplit, partyAllies, type EscortKit, type PartyHero } from './caravan';
 import { characterRank, rankStartLevel } from './characterRank';
 import { CONTROL, controlGoldPerHour, garrisonHoldChance } from './controlPoints';
 import { enemyLevelFor, mineVeinGold, type Poi, type PoiType } from './expedition';
@@ -324,6 +324,9 @@ export interface StayOrBackInput {
   militiaPosted: number;
   /** Objectifs secondaires abattus (`islandConquest`). */
   objectivesDown: number;
+  /** 🧝 Le héros, qui mène l'assaut de la forteresse (2 champions au plus) ; absent, la
+   *  forteresse se juge sur les champions seuls. */
+  hero?: PartyHero | null;
   samples?: number;
 }
 
@@ -440,21 +443,26 @@ export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
   const razing = NEST.islands.has(hereIsl.id) || EMBER.islands.has(hereIsl.id);
   const objHold = razing
     ? null
-    : fewest(
-        pool,
-        (k) => garrisonHoldChance(obj, allies(k), 1, samples, i.fort) >= ADVICE.holdOk,
-      );
-  // 🏰 La forteresse telle qu'elle serait UNE FOIS OUVERTE (au moins `unlockAfter` objectifs
-  // tenus) : verrouillée, elle n'en reste pas moins le but — savoir si on pourra la prendre
-  // dit si tenir des objectifs vaut le coup.
+    : fewest(pool, (k) => garrisonHoldChance(obj, allies(k), 1, samples, i.fort) >= ADVICE.holdOk);
+  // 🏰 La forteresse telle qu'elle serait AFFAIBLIE AU PLUS BAS (tous les objectifs abattus) :
+  // verrouillée, elle n'en reste pas moins le but — savoir si on pourra la prendre dit si
+  // tenir des objectifs vaut le coup. ⚠️ Depuis la v1.241.0 elle est calée pour tomber dans cet
+  // état-là, au plafond de l'île : la juger à `unlockAfter` objectifs la disait hors de portée
+  // de 30 champions au plafond.
   const fort = fortressForce(hereIsl, i.objectivesDown);
-  const open = fortressForce(hereIsl, Math.max(i.objectivesDown, ISLAND_CONQUEST.unlockAfter));
-  const fortPlace = enemyPlace(open.level, open.size, hereIsl);
+  const open = fortressForce(hereIsl, Math.max(i.objectivesDown, hereIsl.objectives));
+  // 🏰 Une FORTERESSE : l'assaut s'y fait à rendement décroissant (`fortressAssault.ts`).
+  const fortBase = enemyPlace(open.level, open.size, hereIsl);
+  const fortPlace: Poi = { ...fortBase, control: { ...fortBase.control!, kind: 'fortress' } };
   const fortNeed = fewest(
     pool,
     (k) =>
-      campWinPct(fortPlace, { faction: hereIsl.faction, size: open.size }, allies(k), samples) >=
-      ADVICE.takeOk,
+      campWinPct(
+        fortPlace,
+        { faction: hereIsl.faction, size: open.size },
+        partyAllies(best.slice(0, k), i.kit, i.hero ?? null),
+        samples,
+      ) >= ADVICE.takeOk,
   );
 
   // Verdict : rester tant qu'on y prend des lieux et qu'une vague y rapporte au moins autant,
@@ -505,7 +513,7 @@ export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
     : 0;
   if (fortNeed === null) {
     reasons.push(
-      `même ouverte, la forteresse reste hors de portée de tes ${pool} champions : inutile de garder tes objectifs pour l'instant`,
+      `même affaiblie au plus bas, la forteresse reste hors de portée de tes ${pool} champions : inutile de garder tes objectifs pour l'instant`,
     );
     if (objTake !== null && here.xpPerChamp > 0)
       reasons.push(
@@ -514,12 +522,12 @@ export function stayOrBackAdvice(i: StayOrBackInput): StayOrBackAdvice | null {
   } else if (fort.locked && razing)
     reasons.push(
       EMBER.islands.has(hereIsl.id)
-        ? `éteins ${ISLAND_CONQUEST.unlockAfter} objectifs (ils se rallument au fil des sorties) pour ouvrir la forteresse, puis prends-la à ${fortNeed}`
-        : `abats ${ISLAND_CONQUEST.unlockAfter} objectifs pour ouvrir la forteresse, puis prends-la à ${fortNeed}`,
+        ? `éteins tes ${hereIsl.objectives} objectifs (${ISLAND_CONQUEST.unlockAfter} ouvrent la forteresse, tous l'affaiblissent au plus bas ; ils se rallument au fil des sorties), puis prends-la à ${fortNeed}`
+        : `abats tes ${hereIsl.objectives} objectifs (${ISLAND_CONQUEST.unlockAfter} ouvrent la forteresse, tous l'affaiblissent au plus bas), puis prends-la à ${fortNeed}`,
     );
   else if (fort.locked)
     reasons.push(
-      `tiens ${ISLAND_CONQUEST.unlockAfter} objectifs à la fois${objHold !== null ? ` (${objHold} champions postés sur chacun)` : ''} pour ouvrir la forteresse, puis prends-la à ${fortNeed}`,
+      `tiens tes ${hereIsl.objectives} objectifs${objHold !== null ? ` (${objHold} champions postés sur chacun)` : ''} : ${ISLAND_CONQUEST.unlockAfter} ouvrent la forteresse, tous l'affaiblissent au plus bas, puis prends-la à ${fortNeed}`,
     );
   return {
     verdict,

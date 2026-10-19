@@ -14,6 +14,7 @@
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
 import { mulberry32 } from './combat';
 import { wearHitLabel } from './enemyWear';
+import { assaultGroup } from './fortressAssault';
 import { forceShare } from './poiDifficulty';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
@@ -393,7 +394,8 @@ export function fightCampForce(input: PartyInput): CampFight {
   const allies = [...partyAllies(escort, input.road, hero), ...(input.militia ?? [])];
   const foe = campFoe(poi, spec, supplyFx(input.road.supplies).guardMult);
   const bodies = campBodies(poi, spec, foe);
-  const group = fuseUnits(allies, 'Groupe');
+  // 🏰 Contre une forteresse ennemie, rendement décroissant au-delà des 6 meilleurs.
+  const group = assaultGroup(poi, allies, 'Groupe');
   const fight = simulateCombat(group, foe, { seed: partyFightSeed(seed), goldOnWin: 0 });
   const d = deriveSkirmish(
     { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
@@ -530,7 +532,7 @@ export function campWinPct(
   foeMult = 1,
 ): number {
   if (!allies.length) return 0;
-  const group = fuseUnits(allies, 'Groupe');
+  const group = assaultGroup(poi, allies, 'Groupe');
   const foe = campFoe(poi, spec, foeMult);
   const n = Math.max(1, samples);
   let w = 0;

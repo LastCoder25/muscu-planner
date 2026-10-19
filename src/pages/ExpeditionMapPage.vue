@@ -2138,6 +2138,8 @@ const stayAdvice = computed(() => {
     prog.objectivesDown,
     char.advList.map((a) => `${a.id}:${a.level}:${a.ascended ?? 0}`).join(','),
     char.escortKit.advGear.length,
+    // 🧝 Le héros mène l'assaut de la forteresse : son équipement change le conseil.
+    `${fighter.value.pv}:${fighter.value.damage}`,
   ].join('|');
   if (stayMemo?.key !== key)
     stayMemo = {
@@ -2152,6 +2154,11 @@ const stayAdvice = computed(() => {
         pointsHeld: held.length,
         militiaPosted,
         objectivesDown: prog.objectivesDown,
+        hero: {
+          name: char.row?.pseudo ?? 'Toi',
+          level: heroLevel.value,
+          combatant: fighter.value,
+        },
       }),
     };
   return stayMemo.v;

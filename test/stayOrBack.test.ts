@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { stayOrBackAdvice, type StayOrBackInput } from '@/lib/crossingAdvice';
-import { dangerMult, missionXpSplit, refAdvGear, refChampionAdv } from '@/lib/caravan';
+import {
+  dangerMult,
+  missionXpSplit,
+  refAdvGear,
+  refChampionAdv,
+  refEscortUnits,
+} from '@/lib/caravan';
 import { trialXpBase } from '@/lib/skirmish';
 
 /** 🧭 Rester ou reculer : une île non pacifiée comparée à celle d'avant. */
@@ -25,6 +31,12 @@ function input(
     pointsHeld: 3,
     militiaPosted: 15,
     objectivesDown: 1,
+    // 🧝 Un héros fort : il vaut ses 2 champions de référence dans l'assaut (`heroPartyCombatant`).
+    hero: {
+      name: 'Héros',
+      level: hero,
+      combatant: { ...refEscortUnits(hero)[0]!.combatant, pv: 1e7, damage: 1e6 },
+    },
     ...over,
   };
 }
@@ -76,9 +88,12 @@ describe('🧭 rester ou reculer', () => {
     expect(none.lose).toEqual({ points: 0, militia: 0 });
   });
 
+  // 🏰 Depuis la v1.241.0 (assaut à rendement décroissant, troupe 14/10), la forteresse de
+  // l'île 3 n'est plus à la portée de 30 champions au niveau 50 : ce test, qui juge le VERROU
+  // et non la calibration, prend des champions qui la dominent (8 niveaux au-dessus du héros).
   it('la forteresse se juge OUVERTE même verrouillée, et le verrou suit les objectifs', () => {
-    const locked = stayOrBackAdvice(input(3, 50, 30, 0, { objectivesDown: 0 }))!;
-    const open = stayOrBackAdvice(input(3, 50, 30, 0, { objectivesDown: 2 }))!;
+    const locked = stayOrBackAdvice(input(3, 60, 30, -8, { objectivesDown: 0 }))!;
+    const open = stayOrBackAdvice(input(3, 60, 30, -8, { objectivesDown: 2 }))!;
     expect(locked.objective.locked).toBe(true);
     expect(open.objective.locked).toBe(false);
     expect(open.objective.fortress).not.toBeNull();
@@ -101,7 +116,7 @@ describe('🧭 rester ou reculer', () => {
 
 describe('🕯️ île 3 : rien à tenir, les objectifs s’éteignent', () => {
   it('hold est null sur l’île 3 et le conseil dit d’éteindre', () => {
-    const a = stayOrBackAdvice(input(3, 50, 30, 0, { objectivesDown: 0 }))!;
+    const a = stayOrBackAdvice(input(3, 60, 30, -8, { objectivesDown: 0 }))!;
     expect(a.objective.hold).toBeNull();
     expect(a.reasons.join(' ')).toMatch(/éteins/);
     expect(a.reasons.join(' ')).not.toMatch(/postés sur chacun/);

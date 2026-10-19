@@ -47,6 +47,7 @@ import { FIELD_ARMY } from './fieldArmy';
 import { enemyWaitMs, sortieFires, SORTIE_EVENTS, type SortieKind } from './sortieClock';
 import { islandPoint, islandScatter } from './islandShape';
 import { troopSize, withoutWear, type EnemyWear } from './enemyWear';
+import { FORTRESS_ASSAULT } from './fortressAssault';
 import { isMilitiaId } from './militia';
 import {
   ARCHIPEL_TRAVEL_LEVEL,
@@ -69,8 +70,8 @@ export const ISLAND_CONQUEST = {
    *  des DERNIERS, en champions de référence. */
   firstSize: 3,
   lastSize: 4,
-  /** La forteresse intacte (troupe 12, un rang au-dessus du plafond) et affaiblie au maximum
-   *  (troupe 8, au plafond). */
+  /** La forteresse intacte et affaiblie au maximum, PAR ÎLE (`FORTRESS_SIZES`) ; ces deux
+   *  valeurs sont celles de l'île 1 (et d'une île inconnue). */
   fortressIntactSize: 12,
   fortressWeakSize: 8,
   /** Objectifs abattus avant que la forteresse ne s'attaque (le verrou). */
@@ -659,7 +660,9 @@ export const ENDLESS_ID = 'isl_endless';
 export const ENDLESS = {
   islands: new Set([5]) as ReadonlySet<number>,
   respawnMs: 3 * 24 * 3600_000,
-  /** La troupe de départ : celle de la forteresse affaiblie (`fortressWeakSize`). */
+  /** La troupe de départ (celle de l'ancienne forteresse affaiblie : la brèche n'est pas
+   *  une forteresse, elle ne passe pas par le rendement décroissant de l'assaut). */
+  baseSize: 8,
   perTier: 1,
   runesBase: 2,
   runesMax: 8,
@@ -670,7 +673,7 @@ export const ENDLESS = {
 
 /** 🌀 La troupe de la brèche après `tier` victoires. */
 export function endlessSize(tier: number): number {
-  return ISLAND_CONQUEST.fortressWeakSize + Math.max(0, tier) * ENDLESS.perTier;
+  return ENDLESS.baseSize + Math.max(0, tier) * ENDLESS.perTier;
 }
 
 /** Écarts d'angle des objectifs autour de la direction de la forteresse (radians). */
@@ -688,15 +691,40 @@ export function objectiveSize(i: number, n: number): number {
 /** ⚔️ La forteresse selon les objectifs pris (`down` sur `n`) : niveau, troupe et verrou.
  *  🏰 Son NIVEAU est le maximum de la carte de l'île (décision de l'utilisateur, 2026-10-02) ;
  *  sa troupe redescend LINÉAIREMENT de 12 à 8 champions de référence. */
+/**
+ * 🏰 LA TROUPE DE LA FORTERESSE, PAR ÎLE (v1.241.0, mesuré ; décision de l'utilisateur : « un
+ * objectif de fin d'île », « arriver lvl 55 ou 60 avec 10 ou 30 champions n'a pas le même
+ * impact »). Calée AVEC le rendement décroissant de l'assaut (`fortressAssault.ts`), champions
+ * de référence 3 niveaux sous le héros, héros compté 2 champions :
+ * - île 3 affaiblie (10) : 10 champions 0 % au niveau 45, 43 % au 55, 83 % au 60 ; 30 champions
+ *   0 %, 73 %, 95 % ; intacte (14) : 13 % et 28 % au niveau 60.
+ * - île 4 (10/14) : au plafond 10 champions 85 %, 30 champions 88 % ; intacte 11 % et 23 %.
+ * - île 5, la dernière, un cran plus dure (11/15) : à 10/14, 30 champions la prenaient à 25 %
+ *   quinze niveaux sous le plafond ; désormais 16 %, et 68 % / 79 % au plafond.
+ * - île 2 un cran plus bas (9/13) : à 10/14, 10 champions n'y prenaient que 67 % au plafond.
+ * - île 1 inchangée (8/12) : on y a peu de champions, 10/14 la rendait imprenable (4 % au 20).
+ * Avant : 8/12 partout, sans rendement décroissant — 30 champions prenaient la forteresse de
+ * l'île 3 à 92 % au niveau 41.
+ */
+const FORTRESS_SIZES: Record<number, { intact: number; weak: number }> = {
+  1: { intact: ISLAND_CONQUEST.fortressIntactSize, weak: ISLAND_CONQUEST.fortressWeakSize },
+  2: { intact: 13, weak: 9 },
+  3: { intact: 14, weak: 10 },
+  4: { intact: 14, weak: 10 },
+  5: { intact: 15, weak: 11 },
+};
+
 export function fortressForce(
-  isl: Pick<Island, 'maxLevel' | 'objectives'>,
+  isl: Pick<Island, 'id' | 'maxLevel' | 'objectives'>,
   down: number,
   /** 🐫 Champions de référence ajoutés par les convois arrivés (`convoyBonus`). */
   bonus = 0,
 ): { level: number; size: number; locked: boolean } {
   const n = Math.max(1, isl.objectives);
   const w = Math.min(1, Math.max(0, down) / n);
-  const { fortressIntactSize: big, fortressWeakSize: small } = ISLAND_CONQUEST;
+  const sizes = FORTRESS_SIZES[isl.id] ?? FORTRESS_SIZES[1]!;
+  const big = sizes.intact;
+  const small = sizes.weak;
   return {
     level: isl.maxLevel,
     size: Math.round((big - (big - small) * w + Math.max(0, bonus)) * 100) / 100,
@@ -1750,6 +1778,8 @@ export function islandTargetLabel(
         ? ` · chaque objectif ${ember ? 'éteint' : 'pris'} l’affaiblit (${down}/${n})`
         : ' · affaiblie au plus bas') +
       (bonus ? ` · renforcée par ${bonus} convoi${bonus > 1 ? 's' : ''} de ravitaillement` : '') +
+      // ⚖️ Le rendement décroissant de l'assaut (`fortressAssault.ts`), dit avant l'envoi.
+      ` · à l’assaut, tes ${FORTRESS_ASSAULT.full} meilleurs champions comptent en entier, chaque suivant ${Math.round((1 - FORTRESS_ASSAULT.decay) * 100)} % de moins que le précédent` +
       (ember
         ? ' · prise : l’île est pacifiée pour de bon, plus rien ne se rallume, plus aucune attaque.'
         : ' · prise avec tous les objectifs : l’île est pacifiée, plus aucune attaque.'),
