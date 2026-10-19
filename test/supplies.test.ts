@@ -3,7 +3,6 @@ import {
   SUPPLY,
   SUPPLY_IDS,
   CONSUMABLE_IDS,
-  RETIRED_PACK,
   isBoostId,
   isTomeId,
   addSupplies,
@@ -79,18 +78,18 @@ describe('🎒 le stock', () => {
     });
     expect(normalizeSupplies(null)).toEqual({});
   });
-  it('📯 un cor de retraite (retiré) devient un pack de consommables, toujours le même', () => {
+  it('📯 un cor de retraite (retiré) devient un autre consommable, 1 pour 1, toujours le même', () => {
     const total = (s: SupplyStock) => Object.values(s).reduce((t, n) => t + n, 0);
     const old = { rations: 1, cor: 2, tome100: 1 };
     const now = normalizeSupplies(old);
     expect(now).not.toHaveProperty('cor');
-    expect(total(now)).toBe(2 + 2 * RETIRED_PACK);
+    expect(total(now)).toBe(4);
     expect(now.tome100).toBe(1);
     for (const id of Object.keys(now) as SupplyId[])
       if (id !== 'tome100') expect(CONSUMABLE_IDS, id).toContain(id);
     expect(normalizeSupplies(old)).toEqual(now);
     // Un butin de la boîte 📬 qui contenait un cor le convertit aussi.
-    expect(total(addSupplies({ rations: 1 }, { cor: 1 }))).toBe(1 + RETIRED_PACK);
+    expect(total(addSupplies({ rations: 1 }, { cor: 1 }))).toBe(2);
     // Des packs différents d'un stock à l'autre : vraiment tirés (le pack seul, hors tomes).
     const packs = new Set(
       [1, 2, 3, 4, 5, 6].map((r) => {

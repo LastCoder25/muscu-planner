@@ -323,11 +323,11 @@ const isSupplyId = (s: unknown): s is SupplyId => typeof s === 'string' && IS_ID
 
 /** 📯 LE COR DE RETRAITE, RETIRÉ (v1.242.0, demandé : « ça n'a pas trop d'intérêt ») : il
  *  gardait 50 % du butin d'un camp perdu. Chaque cor encore en stock (ou dans un butin de la
- *  boîte 📬) devient, à la relecture, un pack de `RETIRED_PACK` consommables tirés comme un
+ *  boîte 📬) devient, à la relecture, UN consommable par cor (`RETIRED_PACK`), tiré comme un
  *  butin (`pickSupply`). ⚠️ Graine = le stock lui-même : relire deux fois le même stock avant
  *  son écriture rend le même pack. */
 const RETIRED_ID = 'cor';
-export const RETIRED_PACK = 3;
+const RETIRED_PACK = 1;
 
 function stockSeed(o: Record<string, unknown>): number {
   let h = 2166136261;
@@ -337,7 +337,7 @@ function stockSeed(o: Record<string, unknown>): number {
 }
 
 /** Relit un stock venu du JSONB : ids inconnus écartés, comptes entiers et positifs ; un cor
- *  de retraite (retiré) est converti en pack de consommables. */
+ *  de retraite (retiré) est converti en un autre consommable, 1 pour 1. */
 export function normalizeSupplies(v: unknown): SupplyStock {
   const out: SupplyStock = {};
   if (!v || typeof v !== 'object') return out;
