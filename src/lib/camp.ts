@@ -494,31 +494,22 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
 /**
  * 💰 CE QU'UNE FORCE LAISSE — camp comme gardes d'un lieu de récolte (`bodyLoot`).
  * - Victoire : ce que portaient TOUS les ennemis.
- * - Défaite : ce que portaient ceux qu'on a ABATTUS (décision de l'utilisateur) ; le 📯 cor de
- *   retraite garantit au moins `retreatShare` du butin entier, devise par devise.
+ * - Défaite : ce que portaient ceux qu'on a ABATTUS (décision de l'utilisateur).
  */
 export function forceHaul(
-  input: Pick<PartyInput, 'poi' | 'road' | 'seed'>,
+  input: Pick<PartyInput, 'poi' | 'seed'>,
   spec: CampSpec,
   d: Pick<SkirmishResult, 'win' | 'foesDown'>,
 ): BodyLoot {
   const all = campBodyIds(spec);
-  const full = bodyLoot(input.poi, spec, all, input.seed);
-  if (d.win) return full;
+  if (d.win) return bodyLoot(input.poi, spec, all, input.seed);
   const down = new Set(d.foesDown);
-  const got = bodyLoot(
+  return bodyLoot(
     input.poi,
     spec,
     all.filter((id) => down.has(id)),
     input.seed,
   );
-  const retreat = supplyFx(input.road.supplies).retreatShare;
-  if (retreat <= 0) return got;
-  return {
-    gold: Math.max(got.gold, Math.round(full.gold * retreat)),
-    summonStones: Math.max(got.summonStones, Math.round(full.summonStones * retreat)),
-    supplies: got.supplies,
-  };
 }
 
 /** 🎯 % de victoire affiché avant l'envoi — le MÊME combat fondu, rejoué sur des graines

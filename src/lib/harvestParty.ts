@@ -232,7 +232,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
       ? '💎 Aucun garde — le filon affleurait, il n’y avait qu’à creuser.'
       : '💠 Aucun garde — ses monstres sont partis vers ta base.';
   const raw: BodyLoot = spec
-    ? forceHaul({ poi, road, seed }, spec, g.skirmish)
+    ? forceHaul({ poi, seed }, spec, g.skirmish)
     : { gold: 0, summonStones: 0, supplies: {} };
   // 🔮 Sans le héros, les pierres des gardes passent à la PART d'équipe (v0.1210, décision de
   // l'utilisateur) : récolte et gardes ensemble, sinon les gardes morts-vivants apportaient à

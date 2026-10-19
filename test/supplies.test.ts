@@ -3,6 +3,7 @@ import {
   SUPPLY,
   SUPPLY_IDS,
   CONSUMABLE_IDS,
+  RETIRED_PACK,
   isBoostId,
   isTomeId,
   addSupplies,
@@ -13,6 +14,7 @@ import {
   supplyUselessWhy,
   takeSupplies,
   type SupplyId,
+  type SupplyStock,
 } from '@/lib/supplies';
 import {
   CARAVAN,
@@ -77,13 +79,34 @@ describe('🎒 le stock', () => {
     });
     expect(normalizeSupplies(null)).toEqual({});
   });
+  it('📯 un cor de retraite (retiré) devient un pack de consommables, toujours le même', () => {
+    const total = (s: SupplyStock) => Object.values(s).reduce((t, n) => t + n, 0);
+    const old = { rations: 1, cor: 2, tome100: 1 };
+    const now = normalizeSupplies(old);
+    expect(now).not.toHaveProperty('cor');
+    expect(total(now)).toBe(2 + 2 * RETIRED_PACK);
+    expect(now.tome100).toBe(1);
+    for (const id of Object.keys(now) as SupplyId[])
+      if (id !== 'tome100') expect(CONSUMABLE_IDS, id).toContain(id);
+    expect(normalizeSupplies(old)).toEqual(now);
+    // Un butin de la boîte 📬 qui contenait un cor le convertit aussi.
+    expect(total(addSupplies({ rations: 1 }, { cor: 1 }))).toBe(1 + RETIRED_PACK);
+    // Des packs différents d'un stock à l'autre : vraiment tirés (le pack seul, hors tomes).
+    const packs = new Set(
+      [1, 2, 3, 4, 5, 6].map((r) => {
+        const { tome100: _, ...pack } = normalizeSupplies({ tome100: r, cor: 1 });
+        return JSON.stringify(pack);
+      }),
+    );
+    expect(packs.size).toBeGreaterThan(1);
+  });
   it('un butin s’ajoute, et rien n’est réécrit quand il n’y a rien', () => {
     const s = { rations: 1 };
-    expect(addSupplies(s, { rations: 1, cor: 1 })).toEqual({ rations: 2, cor: 1 });
+    expect(addSupplies(s, { rations: 1, bats: 1 })).toEqual({ rations: 2, bats: 1 });
     expect(addSupplies(s, {})).toBe(s);
   });
   it('on n’emporte que ce qu’on a — et un seul de chaque', () => {
-    expect(takeSupplies({ rations: 2, cor: 1 }, ['rations', 'cor'])).toEqual({ rations: 1 });
+    expect(takeSupplies({ rations: 2, bats: 1 }, ['rations', 'bats'])).toEqual({ rations: 1 });
     expect(takeSupplies({ rations: 1 }, ['potion'])).toBeNull();
     expect(takeSupplies({ rations: 5 }, ['rations', 'rations'])).toBeNull();
   });
@@ -301,30 +324,6 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     expect(lit).toBeGreaterThan(plain);
   });
 
-  it('📯 le cor : un camp perdu rend la moitié de son butin au lieu de rien', () => {
-    const L = 26;
-    const spec = { faction: 'bandits' as const, size: 10 };
-    const poi = poiAt(L, 'lair');
-    const input = {
-      poi,
-      spec,
-      escort: team(1, L),
-      hero: null,
-      seed: 3,
-      playerLevel: L,
-      pantheonLevel: L,
-    };
-    const lost = resolveCamp({ ...input, road: kit(L, 1) });
-    expect(lost.win).toBe(false);
-    // v0.1166 : une défaite garde les bourses des bandits ABATTUS (ici presque aucun).
-    const full = forceLootPreview(poi, spec).gold;
-    expect(lost.gold).toBeLessThan(full * SUPPLY.retreatShare);
-    const withCor = resolveCamp({ ...input, road: kit(L, 1, ['cor']) });
-    expect(withCor.win).toBe(false);
-    expect(withCor.gold).toBe(Math.max(lost.gold, Math.round(full * SUPPLY.retreatShare)));
-    expect(withCor.gold).toBeGreaterThan(lost.gold);
-  });
-
   it('🩹 la trousse protège des blessures : personne à l’infirmerie, une sortie rentre à son point', () => {
     const escort = team(2, 20);
     const party: PartyResult = {
@@ -475,7 +474,7 @@ describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
     const vein = supplyTarget(poiAt(20, 'vein'), false, 2);
     for (const id of ['carte', 'bats', 'potion', 'pierre', 'trousse', 'rations'] as const)
       expect(supplyUselessWhy(id, vein), id).toBeNull();
-    for (const id of ['cor', 'fumigene', 'lanterne'] as const)
+    for (const id of ['fumigene', 'lanterne'] as const)
       expect(supplyUselessWhy(id, vein), id).not.toBeNull();
     // Et chaque lieu de récolte est reconnu comme tel : pas de liste à part qui oublie un type.
     for (const type of HARVEST_TYPES)
@@ -483,15 +482,18 @@ describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
   });
   it('le store refuse ce que l’écran grise — une seule règle', () => {
     const target = supplyTarget(poiAt(20, 'camp'), false, 2);
-    expect(suppliesBlocker(['potion', 'cor'], target)).toBeNull();
+    expect(suppliesBlocker(['potion', 'fumigene'], target)).toBeNull();
     expect(suppliesBlocker(['lanterne'], target)).toMatch(/Lanterne/);
     expect(suppliesBlocker(['potion', 'potion'], target)).not.toBeNull();
   });
 
   it('🪄 usefulSupplies (planificateur) : garde ceux qui servent, un de chaque, jamais refusé', () => {
     const camp = supplyTarget(poiAt(20, 'camp'), false, 2);
-    const kit = usefulSupplies(['potion', 'lanterne', 'cor', 'potion', 'sceau', 'boost5'], camp);
-    expect(kit).toEqual(['potion', 'cor']);
+    const kit = usefulSupplies(
+      ['potion', 'lanterne', 'fumigene', 'potion', 'sceau', 'boost5'],
+      camp,
+    );
+    expect(kit).toEqual(['potion', 'fumigene']);
     expect(suppliesBlocker(kit, camp)).toBeNull();
     // Sur chaque type de lieu, ce qu'il rend passe toujours le refus du store.
     for (const type of ['camp', 'rift', 'mine', 'well', 'lair'] as const)

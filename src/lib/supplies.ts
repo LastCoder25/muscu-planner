@@ -31,7 +31,6 @@ export type SupplyId =
   | 'potion'
   | 'pierre'
   | 'lanterne'
-  | 'cor'
   | 'sceau'
   | 'palissade'
   | 'bastion'
@@ -62,7 +61,6 @@ export const SUPPLY_IDS: readonly SupplyId[] = [
   'pierre',
   'trousse',
   'fumigene',
-  'cor',
   'carte',
   'bats',
   'lanterne',
@@ -124,7 +122,6 @@ export const SUPPLY_WEIGHT: Record<SupplyId, number> = {
   pierre: 1,
   trousse: 1,
   fumigene: 1,
-  cor: 1,
   carte: 1,
   bats: 1,
   lanterne: 1,
@@ -204,8 +201,6 @@ export const SUPPLY = {
    *  5 jours — un objet payé pour rien. Moins fort que sur les monstres : le gardien reste
    *  le verrou de la faille. */
   riftBossMult: 0.9,
-  /** 📯 part du butin d'un camp gardée malgré la défaite. */
-  retreatShare: 0.5,
   /** 🧿 répit rendu à une faille. */
   sealMs: 24 * 3600_000,
   /** Chance qu'un voyage rapporte un consommable (un seul, tiré uniformément). ⚠️ Visé :
@@ -267,12 +262,6 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
     what: `Monstres d'une faille −${pct(1 - SUPPLY.riftFoeMult)}, gardien −${pct(1 - SUPPLY.riftBossMult)}`,
     voyage: true,
   },
-  cor: {
-    emoji: '📯',
-    name: 'Cor de retraite',
-    what: `Camp perdu : on garde ${pct(SUPPLY.retreatShare)} du butin au lieu de rien`,
-    voyage: true,
-  },
   sceau: {
     emoji: '🧿',
     name: 'Sceau de brèche',
@@ -332,14 +321,40 @@ export type SupplyStock = Partial<Record<SupplyId, number>>;
 const IS_ID = new Set<string>(SUPPLY_IDS);
 const isSupplyId = (s: unknown): s is SupplyId => typeof s === 'string' && IS_ID.has(s);
 
-/** Relit un stock venu du JSONB : ids inconnus écartés, comptes entiers et positifs. */
+/** 📯 LE COR DE RETRAITE, RETIRÉ (v1.242.0, demandé : « ça n'a pas trop d'intérêt ») : il
+ *  gardait 50 % du butin d'un camp perdu. Chaque cor encore en stock (ou dans un butin de la
+ *  boîte 📬) devient, à la relecture, un pack de `RETIRED_PACK` consommables tirés comme un
+ *  butin (`pickSupply`). ⚠️ Graine = le stock lui-même : relire deux fois le même stock avant
+ *  son écriture rend le même pack. */
+const RETIRED_ID = 'cor';
+export const RETIRED_PACK = 3;
+
+function stockSeed(o: Record<string, unknown>): number {
+  let h = 2166136261;
+  for (const k of Object.keys(o).sort())
+    for (const ch of `${k}=${String(o[k])};`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0 || 1;
+}
+
+/** Relit un stock venu du JSONB : ids inconnus écartés, comptes entiers et positifs ; un cor
+ *  de retraite (retiré) est converti en pack de consommables. */
 export function normalizeSupplies(v: unknown): SupplyStock {
   const out: SupplyStock = {};
   if (!v || typeof v !== 'object') return out;
-  for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
+  const o = v as Record<string, unknown>;
+  for (const [k, n] of Object.entries(o)) {
     if (!isSupplyId(k) || typeof n !== 'number' || !Number.isFinite(n)) continue;
     const c = Math.floor(n);
     if (c > 0) out[k] = c;
+  }
+  const cor = o[RETIRED_ID];
+  const retired = typeof cor === 'number' && Number.isFinite(cor) ? Math.floor(cor) : 0;
+  if (retired > 0) {
+    const next = mulberry32(stockSeed(o));
+    for (let i = 0; i < retired * RETIRED_PACK; i++) {
+      const id = pickSupply(next());
+      out[id] = (out[id] ?? 0) + 1;
+    }
   }
   return out;
 }
@@ -381,7 +396,6 @@ export interface SupplyFx {
   dmg: number;
   riftFoeMult: number;
   riftBossMult: number;
-  retreatShare: number;
 }
 
 export function supplyFx(ids: readonly SupplyId[] | undefined): SupplyFx {
@@ -396,7 +410,6 @@ export function supplyFx(ids: readonly SupplyId[] | undefined): SupplyFx {
     dmg: on.has('pierre') ? SUPPLY.dmg : 0,
     riftFoeMult: on.has('lanterne') ? SUPPLY.riftFoeMult : 1,
     riftBossMult: on.has('lanterne') ? SUPPLY.riftBossMult : 1,
-    retreatShare: on.has('cor') ? SUPPLY.retreatShare : 0,
   };
 }
 
@@ -450,8 +463,6 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
       return combat ? null : 'aucun combat ici';
     case 'fumigene':
       return CAMPS.has(t.type) || (harvest && t.fights) ? null : 'ni camp ni gardes ici';
-    case 'cor':
-      return CAMPS.has(t.type) ? null : 'seulement sur un camp ou un repaire';
     case 'carte':
       return !harvest
         ? 'seulement sur la route d’une récolte'
