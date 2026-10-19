@@ -246,36 +246,120 @@ export function openRunes(
 
 // ── 🔗 FUSIONNER ────────────────────────────────────────────────────────────────────────
 
-export type FuseBlock = 'missing' | 'same' | 'different' | 'over';
+export type FuseBlock = 'few' | 'missing' | 'different' | 'over';
 
 export const FUSE_BLOCK_LABEL: Record<FuseBlock, string> = {
+  few: 'choisis au moins deux exemplaires',
   missing: 'compétence introuvable',
-  same: 'choisis un autre exemplaire',
-  different: 'seuls deux exemplaires de la même compétence fusionnent',
+  different: 'seuls les exemplaires d’une même compétence fusionnent',
   over: `la fusion dépasserait le niveau ${SKILL_MAX_LEVEL}`,
 };
 
-/** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de fusionner deux exemplaires. Les niveaux
- *  s'ADDITIONNENT : une fusion qui dépasserait 5 est refusée, jamais écrêtée en silence. */
-export function fuseBlocker(bank: RuneBank, uidA: string, uidB: string): FuseBlock | null {
-  if (uidA === uidB) return 'same';
-  const a = bank.skills.find((s) => s.uid === uidA);
-  const b = bank.skills.find((s) => s.uid === uidB);
-  if (!a || !b) return 'missing';
-  if (a.id !== b.id) return 'different';
-  return a.level + b.level > SKILL_MAX_LEVEL ? 'over' : null;
+/** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de fusionner CES exemplaires (deux ou plus,
+ *  choisis par le joueur). Les niveaux s'ADDITIONNENT : une fusion qui dépasserait 5 est
+ *  refusée, jamais écrêtée en silence. */
+export function fuseBlocker(bank: RuneBank, uids: readonly string[]): FuseBlock | null {
+  const picked = new Set(uids);
+  if (picked.size < 2) return 'few';
+  const copies = bank.skills.filter((s) => picked.has(s.uid));
+  if (copies.length !== picked.size) return 'missing';
+  if (copies.some((s) => s.id !== copies[0]!.id)) return 'different';
+  return copies.reduce((t, s) => t + s.level, 0) > SKILL_MAX_LEVEL ? 'over' : null;
 }
 
-/** Fusionne `uidB` dans `uidA` (A garde sa place). `null` si refusé. */
-export function fuseSkills(bank: RuneBank, uidA: string, uidB: string): RuneBank | null {
-  if (fuseBlocker(bank, uidA, uidB)) return null;
-  const b = bank.skills.find((s) => s.uid === uidB)!;
+/** Fusionne les exemplaires choisis en UN : le plus haut garde son `uid` et sa place, les
+ *  autres disparaissent. `null` si refusé. */
+export function fuseSkills(
+  bank: RuneBank,
+  uids: readonly string[],
+): { bank: RuneBank; group: FuseGroup } | null {
+  if (fuseBlocker(bank, uids)) return null;
+  const picked = new Set(uids);
+  const copies = bank.skills.filter((s) => picked.has(s.uid));
+  const keep = copies.reduce((a, b) => (b.level > a.level ? b : a));
+  const total = copies.reduce((t, s) => t + s.level, 0);
   return {
-    ...bank,
-    skills: bank.skills
-      .filter((s) => s.uid !== uidB)
-      .map((s) => (s.uid === uidA ? { ...s, level: s.level + b.level } : { ...s })),
+    bank: {
+      ...bank,
+      skills: bank.skills
+        .filter((s) => s.uid === keep.uid || !picked.has(s.uid))
+        .map((s) => (s.uid === keep.uid ? { ...s, level: total } : { ...s })),
+    },
+    group: {
+      id: keep.id,
+      before: copies.map((s) => s.level).sort((a, b) => b - a),
+      after: [total],
+    },
   };
+}
+
+/** Combien d'exemplaires de chaque niveau on AJOUTE à celui qu'on a choisi. */
+export type FuseTake = Record<number, number>;
+
+/** Les AUTRES exemplaires de la compétence de `uid`, par niveau (le plus haut d'abord). */
+function othersByLevel(bank: RuneBank, uid: string): { me: StockSkill; uids: Map<number, string[]> } | null {
+  const me = bank.skills.find((s) => s.uid === uid);
+  if (!me) return null;
+  const uids = new Map<number, string[]>();
+  for (const s of bank.skills) {
+    if (s.id !== me.id || s.uid === uid) continue;
+    const l = uids.get(s.level);
+    if (l) l.push(s.uid);
+    else uids.set(s.level, [s.uid]);
+  }
+  return { me, uids: new Map([...uids].sort((a, b) => b[0] - a[0])) };
+}
+
+/**
+ * 🔗 La fusion choisie « tout ou partie » : à l'exemplaire `uid` on ajoute `take[niveau]`
+ * exemplaires de chaque niveau (bornés à ce qu'il y a au stock). Rend les lignes à afficher
+ * (une par niveau), les exemplaires retenus (`uid` en tête) et le niveau obtenu.
+ */
+export function fusePick(
+  bank: RuneBank,
+  uid: string,
+  take: FuseTake,
+): { rows: { level: number; count: number; take: number }[]; uids: string[]; total: number } {
+  const o = othersByLevel(bank, uid);
+  if (!o) return { rows: [], uids: [], total: 0 };
+  const rows = [...o.uids].map(([level, list]) => ({
+    level,
+    count: list.length,
+    take: Math.max(0, Math.min(list.length, take[level] ?? 0)),
+  }));
+  return {
+    rows,
+    uids: [uid, ...rows.flatMap((r) => o.uids.get(r.level)!.slice(0, r.take))],
+    total: o.me.level + rows.reduce((t, r) => t + r.take * r.level, 0),
+  };
+}
+
+/**
+ * 🎯 « Jusqu'au plus haut » : ce qu'il faut ajouter à `uid` pour le PLUS HAUT niveau
+ * atteignable (5 au plus), avec le moins d'exemplaires possible à niveau égal. Les niveaux
+ * valent 1 à 5 : on essaie toutes les combinaisons de nombres par niveau (quelques centaines).
+ */
+export function bestFusePick(bank: RuneBank, uid: string): { take: FuseTake; total: number } {
+  const o = othersByLevel(bank, uid);
+  if (!o) return { take: {}, total: 0 };
+  const levels = [...o.uids.keys()];
+  let best = { total: o.me.level, n: 0, take: {} as FuseTake };
+  const cur: FuseTake = {};
+  const walk = (i: number, total: number, n: number) => {
+    if (i === levels.length) {
+      if (total > best.total || (total === best.total && n < best.n))
+        best = { total, n, take: { ...cur } };
+      return;
+    }
+    const l = levels[i]!;
+    const max = Math.min(o.uids.get(l)!.length, Math.floor((SKILL_MAX_LEVEL - total) / l));
+    for (let k = max; k >= 0; k--) {
+      cur[l] = k;
+      walk(i + 1, total + k * l, n + k);
+    }
+  };
+  walk(0, o.me.level, 0);
+  return { take: best.take, total: best.total };
 }
 
 /** Refus de « Tout fusionner » (aucune compétence n'a deux exemplaires qui tiennent ensemble). */

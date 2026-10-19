@@ -5,6 +5,8 @@ import {
   RUNE_LOT,
   RUNE_ODDS,
   ascensionRuneCount,
+  bestFusePick,
+  fusePick,
   emptyBank,
   fuseAllSkills,
   fuseBlocker,
@@ -98,24 +100,82 @@ describe('ouvrir', () => {
   });
 });
 
-describe('fusionner', () => {
-  it('les niveaux s’additionnent, l’exemplaire absorbé disparaît', () => {
-    const b = fuseSkills(
-      bank(0, [sk('a', 'crit', 2), sk('b', 'crit', 1), sk('c', 'pv')]),
-      'a',
-      'b',
+describe('fusionner au choix', () => {
+  it('les niveaux s’additionnent, le plus haut garde sa place, les autres disparaissent', () => {
+    const r = fuseSkills(
+      bank(0, [sk('a', 'crit', 1), sk('b', 'crit', 2), sk('c', 'pv'), sk('d', 'crit', 1)]),
+      ['a', 'b', 'd'],
     )!;
-    expect(b.skills).toEqual([sk('a', 'crit', 3), sk('c', 'pv')]);
+    expect(r.bank.skills).toEqual([sk('b', 'crit', 4), sk('c', 'pv')]);
+    expect(r.group).toEqual({ id: 'crit', before: [2, 1, 1], after: [4] });
   });
 
-  it('refuse au-delà de 5, deux compétences différentes, le même exemplaire, un absent', () => {
+  it('une partie seulement : les exemplaires non choisis restent au stock', () => {
+    const six = [1, 2, 3, 4, 5, 6].map((i) => sk('s' + i, 'speed', 1));
+    const r = fuseSkills(bank(0, six), ['s1', 's2', 's3'])!;
+    expect(r.bank.skills.map((s) => [s.uid, s.level])).toEqual([
+      ['s1', 3],
+      ['s4', 1],
+      ['s5', 1],
+      ['s6', 1],
+    ]);
+  });
+
+  it('refuse moins de deux, au-delà de 5, deux compétences différentes, un absent', () => {
     const b = bank(0, [sk('a', 'crit', 3), sk('b', 'crit', 3), sk('c', 'pv'), sk('d', 'crit', 2)]);
-    expect(fuseBlocker(b, 'a', 'b')).toBe('over');
-    expect(fuseBlocker(b, 'a', 'd')).toBeNull();
-    expect(fuseBlocker(b, 'a', 'c')).toBe('different');
-    expect(fuseBlocker(b, 'a', 'a')).toBe('same');
-    expect(fuseBlocker(b, 'a', 'z')).toBe('missing');
-    expect(fuseSkills(b, 'a', 'b')).toBeNull();
+    expect(fuseBlocker(b, ['a'])).toBe('few');
+    expect(fuseBlocker(b, ['a', 'a'])).toBe('few');
+    expect(fuseBlocker(b, ['a', 'b'])).toBe('over');
+    expect(fuseBlocker(b, ['a', 'd'])).toBeNull();
+    expect(fuseBlocker(b, ['a', 'c'])).toBe('different');
+    expect(fuseBlocker(b, ['a', 'z'])).toBe('missing');
+    expect(fuseSkills(b, ['a', 'b'])).toBeNull();
+  });
+});
+
+describe('choisir tout ou partie', () => {
+  it('ajoute à l’exemplaire choisi le nombre demandé par niveau, borné au stock', () => {
+    const b = bank(0, [sk('a', 'speed'), sk('b', 'speed'), sk('c', 'speed', 2), sk('d', 'speed'), sk('x', 'pv')]);
+    const r = fusePick(b, 'a', { 1: 9, 2: 0 });
+    expect(r.rows).toEqual([
+      { level: 2, count: 1, take: 0 },
+      { level: 1, count: 2, take: 2 },
+    ]);
+    expect(r.uids).toEqual(['a', 'b', 'd']);
+    expect(r.total).toBe(3);
+    expect(fusePick(b, 'a', { 2: 1 }).uids).toEqual(['a', 'c']);
+    expect(fusePick(b, 'z', {})).toEqual({ rows: [], uids: [], total: 0 });
+  });
+});
+
+describe('jusqu’au plus haut', () => {
+  /** Les exemplaires que « Jusqu’au plus haut » retient, comme l’écran les fusionne. */
+  const bestUids = (b: RuneBank, uid: string) => fusePick(b, uid, bestFusePick(b, uid).take).uids;
+
+  it('vise le plus haut niveau atteignable, pas le premier qui tient', () => {
+    // 1 + 3 = 4 en prenant le plus gros d'abord ; 1 + 2 + 2 = 5 existe.
+    const b = bank(0, [sk('a', 'crit', 1), sk('b', 'crit', 3), sk('c', 'crit', 2), sk('d', 'crit', 2)]);
+    const pick = bestUids(b, 'a');
+    expect(pick[0]).toBe('a');
+    expect(new Set(pick)).toEqual(new Set(['a', 'c', 'd']));
+  });
+
+  it('à niveau égal, le moins d’exemplaires ; jamais une autre compétence', () => {
+    const b = bank(0, [sk('a', 'pv', 1), sk('b', 'pv', 4), sk('c', 'pv', 1), sk('x', 'crit', 1)]);
+    expect(bestUids(b, 'a')).toEqual(['a', 'b']);
+    expect(bestUids(b, 'z')).toEqual([]);
+    expect(bestFusePick(b, 'a').total).toBe(5);
+    // 1 + 2 + 2 et 1 + 2 + 1 + 1 font tous deux 5 : on garde le moins d’exemplaires.
+    const tie = bank(0, [sk('s', 'pv', 1), sk('t', 'pv', 2), sk('u', 'pv', 2), sk('v', 'pv'), sk('w', 'pv')]);
+    expect(bestUids(tie, 's')).toEqual(['s', 't', 'u']);
+  });
+
+  it('sept Nv 1 : en prend cinq, le choisi compris', () => {
+    const seven = [1, 2, 3, 4, 5, 6, 7].map((i) => sk('s' + i, 'speed', 1));
+    const pick = bestUids(bank(0, seven), 's4');
+    expect(pick).toHaveLength(5);
+    expect(pick[0]).toBe('s4');
+    expect(fuseBlocker(bank(0, seven), pick)).toBeNull();
   });
 });
 

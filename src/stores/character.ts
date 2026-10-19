@@ -1015,18 +1015,18 @@ export const useCharacterStore = defineStore('character', () => {
     return { ok: true, opened: out.opened };
   }
 
-  /** 🪬 FUSIONNE deux exemplaires de la même compétence au stock. */
+  /** 🪬 FUSIONNE en un les exemplaires choisis d'une même compétence au stock. */
   async function fuseRuneSkills(
     userId: string,
-    uidA: string,
-    uidB: string,
-  ): Promise<string | null> {
+    uids: readonly string[],
+  ): Promise<{ ok: false; reason: string } | { ok: true; group: FuseGroup }> {
     const cur = row.value;
-    if (!cur) return 'ton personnage n’est pas chargé';
-    const block = fuseBlocker(cur.runes, uidA, uidB);
-    if (block) return FUSE_BLOCK_LABEL[block];
-    await persist(userId, { runes: fuseSkills(cur.runes, uidA, uidB)! });
-    return null;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    const block = fuseBlocker(cur.runes, uids);
+    if (block) return { ok: false, reason: FUSE_BLOCK_LABEL[block] };
+    const out = fuseSkills(cur.runes, uids)!;
+    await persist(userId, { runes: out.bank });
+    return { ok: true, group: out.group };
   }
 
   /** 🪬 FUSIONNE d'un geste tous les exemplaires d'une compétence (`only`), ou de toutes. */

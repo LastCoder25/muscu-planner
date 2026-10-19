@@ -3646,6 +3646,68 @@ describe('🪬 RuneBankSheet', () => {
     ).toBeNull();
     expect(out).toContain('rien à fusionner');
   }, 30_000);
+
+  it('fiche d’une compétence : on choisit combien d’exemplaires fusionner, par niveau', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const skills = [1, 1, 1, 2].map((level, i) => ({ uid: 'sk' + i, id: 'speed', level }));
+    const row = { ...ROW, runes: { runes: 0, skills, opened: 4, comp: 2 } };
+    let out = '';
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => {
+          const chip = [...host.querySelectorAll<HTMLElement>('.rb-chip.btn')].find((c) =>
+            c.textContent?.includes('×3'),
+          );
+          chip!.click();
+        },
+      ),
+    ).toBeNull();
+    expect(out).toContain('Fusionner avec');
+    // Une ligne par niveau des AUTRES exemplaires, chacune avec son compteur.
+    expect(out.match(/class="rb-row rb-pick/g)?.length).toBe(2);
+    expect(out).toContain('Jusqu’au Nv 5');
+    expect(out).toContain('choisis au moins deux exemplaires');
+  }, 30_000);
+});
+
+describe('🔗 RuneFuseFx', () => {
+  const groups = [
+    { id: 'speed', before: [1, 1, 1, 1, 1, 1, 1], after: [5, 2] },
+    { id: 'crit', before: [1, 1], after: [2] },
+  ];
+
+  it('la scène se monte : une pierre par exemplaire fusionné', async () => {
+    const { default: RuneFuseFx } = await import('@/components/RuneFuseFx.vue');
+    let out = '';
+    expect(
+      await mountIt(RuneFuseFx, { groups }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out.match(/class="rf-stone[ "]/g)?.length).toBe(7);
+    expect(out).toContain('Passer');
+  }, 30_000);
+
+  it('prefers-reduced-motion : le résumé tout de suite', async () => {
+    const { default: RuneFuseFx } = await import('@/components/RuneFuseFx.vue');
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia;
+    let out = '';
+    try {
+      expect(
+        await mountIt(RuneFuseFx, { groups }, undefined, undefined, '/', (h) => (out = h)),
+      ).toBeNull();
+    } finally {
+      window.matchMedia = mm;
+    }
+    expect(out).toContain('Fusion terminée');
+    expect(out).toContain('7 × Nv 1 → Nv 5 · Nv 2');
+    expect(out).not.toContain('rf-stone');
+  }, 30_000);
 });
 
 describe('🪬 RuneReveal', () => {

@@ -65,48 +65,83 @@
 
         <template v-else>
           <template v-if="fuseRows.length">
-            <div class="rb-sec">Fusionner</div>
+            <div class="rb-sec">Fusionner avec</div>
+            <p class="rb-note">
+              Choisis combien d’exemplaires ajouter à celui-ci : tout, ou seulement une partie.
+            </p>
             <div class="rb-list">
-              <button
-                v-if="selGroup && selGroup.before.length > 2"
-                type="button"
-                class="rb-row rb-all"
-                :class="'t-' + SKILLS[sel.id].tier"
-                :disabled="busy"
-                @click="askFuseAll(sel.id)"
-              >
-                <span class="rb-row-emo">🔗</span>
-                <span class="rb-row-main">
-                  <span class="rb-row-name"
-                    >Tous les exemplaires ({{ selGroup.before.length }})</span
-                  >
-                  <span class="rb-row-sub">{{ fuseGroupText(selGroup) }}</span>
-                </span>
-                <span class="rb-pill up">⬆️ Nv {{ selGroup.after[0] }}</span>
-              </button>
-              <button
+              <div
                 v-for="f in fuseRows"
-                :key="f.uid"
-                type="button"
-                class="rb-row"
-                :disabled="busy || !!f.block"
-                @click="fuse(f.uid)"
+                :key="f.level"
+                class="rb-row rb-pick"
+                :class="['t-' + SKILLS[sel.id].tier, { on: f.take > 0 }]"
               >
                 <span class="rb-row-emo">{{ SKILLS[sel.id].emoji }}</span>
                 <span class="rb-row-main">
-                  <span class="rb-row-name"
-                    >{{ SKILLS[sel.id].name }} · Nv {{ f.level
-                    }}<template v-if="f.count > 1"> ×{{ f.count }}</template></span
-                  >
-                  <span class="rb-row-sub">{{
-                    f.block ? FUSE_BLOCK_LABEL[f.block] : `Nv ${sel.level} + ${f.level}`
-                  }}</span>
+                  <span class="rb-row-name">{{ SKILLS[sel.id].name }} · Nv {{ f.level }}</span>
+                  <span class="rb-row-sub">{{ f.count }} au stock</span>
                 </span>
-                <span class="rb-pill" :class="f.block ? 'off' : 'up'">{{
-                  f.block ? '—' : `⬆️ Nv ${sel.level + f.level}`
-                }}</span>
+                <span class="rb-step">
+                  <button
+                    type="button"
+                    :aria-label="`Un Nv ${f.level} de moins`"
+                    :disabled="busy || f.take === 0"
+                    @click="setTake(f.level, f.take - 1)"
+                  >
+                    −
+                  </button>
+                  <b class="font-display">{{ f.take }}</b>
+                  <button
+                    type="button"
+                    :aria-label="`Un Nv ${f.level} de plus`"
+                    :disabled="busy || f.take >= f.count || pickTotal + f.level > SKILL_MAX_LEVEL"
+                    @click="setTake(f.level, f.take + 1)"
+                  >
+                    +
+                  </button>
+                </span>
+              </div>
+            </div>
+            <div class="rb-chips rb-pick-bar">
+              <button
+                type="button"
+                class="rb-chip btn"
+                :disabled="busy || bestTotal <= sel.level"
+                @click="pickBest"
+              >
+                🎯 Jusqu’au Nv {{ bestTotal }}
+              </button>
+              <button
+                v-if="selGroup && selGroup.after.length > 1"
+                type="button"
+                class="rb-chip btn"
+                :disabled="busy"
+                @click="askFuseAll(sel.id)"
+              >
+                🔗 Tous → {{ selGroup.after.map((l) => 'Nv ' + l).join(' · ') }}
+              </button>
+              <button
+                v-if="pickedUids.length > 1"
+                type="button"
+                class="rb-chip btn"
+                :disabled="busy"
+                @click="take = {}"
+              >
+                ✖ Effacer
               </button>
             </div>
+            <button
+              type="button"
+              class="rb-go font-display"
+              :class="'t-' + SKILLS[sel.id].tier"
+              :disabled="busy || !!pickBlock"
+              @click="fusePicked"
+            >
+              <template v-if="pickBlock">{{ FUSE_BLOCK_LABEL[pickBlock] }}</template>
+              <template v-else
+                >🔗 Fusionner {{ pickedUids.length }} → Nv {{ pickTotal }}</template
+              >
+            </button>
           </template>
           <div class="rb-sec">Donner à un champion</div>
           <p v-if="!giveRows.length" class="rb-note">Aucun champion pour l’instant.</p>
@@ -218,6 +253,7 @@
     @close="revealing = null"
     @again="doOpen(lastCount)"
   />
+  <RuneFuseFx :groups="fusing" @close="fusing = null" />
 </template>
 
 <script setup lang="ts">
@@ -228,6 +264,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useGameFx } from '@/composables/useGameFx';
 import RuneIcon from '@/components/RuneIcon.vue';
 import RuneReveal from '@/components/RuneReveal.vue';
+import RuneFuseFx from '@/components/RuneFuseFx.vue';
 import {
   RUNE_INFO,
   RUNE_TIERS,
@@ -246,11 +283,14 @@ import {
   fuseAllSkills,
   fuseBlocker,
   fuseGroupText,
+  bestFusePick,
+  fusePick,
   giveBlocker,
   giveKind,
   openBlocker,
   stackSkills,
-  type FuseBlock,
+  type FuseGroup,
+  type FuseTake,
   type GiveBlock,
   type GiveKind,
   type StockSkill,
@@ -273,6 +313,10 @@ const lastOpened = ref<StockSkill[]>([]);
 /** Ce que l'écran d'ouverture met en scène (null = fermé), et la taille du dernier tirage. */
 const revealing = ref<StockSkill[] | null>(null);
 const lastCount = ref(1);
+/** Ce que l'écran de fusion met en scène (null = fermé). */
+const fusing = ref<FuseGroup[] | null>(null);
+/** Combien d'exemplaires de chaque niveau on ajoute à celui qui est choisi. */
+const take = ref<FuseTake>({});
 
 const sel = computed(() => bank.value.skills.find((s) => s.uid === selUid.value) ?? null);
 // Une compétence donnée ou fusionnée quitte le stock : on revient à la liste.
@@ -281,6 +325,10 @@ watch(sel, (s) => {
     selUid.value = null;
     replaceFor.value = null;
   }
+});
+// Une autre compétence choisie : on repart d'une sélection vide.
+watch(selUid, () => {
+  take.value = {};
 });
 
 const blockOne = computed(() => openBlocker(bank.value, 1));
@@ -348,18 +396,23 @@ const giveRows = computed<GiveRow[]>(() => {
     .sort((x, y) => x.order - y.order || x.adv.name.localeCompare(y.adv.name, 'fr'));
 });
 
-const fuseRows = computed<
-  { uid: string; level: number; count: number; block: FuseBlock | null }[]
->(() => {
-  const s = sel.value;
-  if (!s) return [];
-  return stackSkills(bank.value.skills.filter((o) => o.uid !== s.uid && o.id === s.id)).map((o) => ({
-    uid: o.uid,
-    level: o.level,
-    count: o.count,
-    block: fuseBlocker(bank.value, s.uid, o.uid),
-  }));
-});
+/** La fusion choisie (lignes par niveau, exemplaires retenus, niveau obtenu) : `fusePick`. */
+const pick = computed(() => fusePick(bank.value, selUid.value ?? '', take.value));
+const fuseRows = computed(() => pick.value.rows);
+const pickedUids = computed(() => pick.value.uids);
+const pickTotal = computed(() => pick.value.total);
+const pickBlock = computed(() => fuseBlocker(bank.value, pickedUids.value));
+
+function setTake(level: number, n: number) {
+  take.value = { ...take.value, [level]: Math.max(0, n) };
+}
+
+/** 🎯 Le plus haut niveau atteignable à partir de la compétence choisie. */
+const best = computed(() => bestFusePick(bank.value, selUid.value ?? ''));
+const bestTotal = computed(() => best.value.total);
+function pickBest() {
+  take.value = { ...best.value.take };
+}
 
 /** Ce que « Tout fusionner » ferait, compétence par compétence (vide = rien à fusionner). */
 const fusePreview = computed(() => fuseAllSkills(bank.value).groups);
@@ -382,11 +435,8 @@ function askFuseAll(only: SkillId | null) {
     void run(async (uid) => {
       const r = await char.fuseAllRuneSkills(uid, only);
       if (!r.ok) throw new Error(r.reason);
-      const n = r.groups.length;
-      $q.notify({
-        type: 'positive',
-        message: `🔗 ${n} compétence${n > 1 ? 's' : ''} fusionnée${n > 1 ? 's' : ''}`,
-      });
+      back();
+      fusing.value = r.groups;
     });
   });
 }
@@ -425,12 +475,15 @@ function doOpen(count: number) {
   });
 }
 
-function fuse(other: string) {
-  const s = sel.value;
-  if (!s) return;
+/** Fusionne les exemplaires choisis : le store fusionne, l'écran de fusion le montre. */
+function fusePicked() {
+  const uids = pickedUids.value;
+  if (fuseBlocker(bank.value, uids)) return;
   void run(async (uid) => {
-    const err = await char.fuseRuneSkills(uid, s.uid, other);
-    if (err) throw new Error(err);
+    const r = await char.fuseRuneSkills(uid, uids);
+    if (!r.ok) throw new Error(r.reason);
+    back();
+    fusing.value = [r.group];
   });
 }
 
@@ -526,6 +579,58 @@ function confirmReplace(adv: Adventurer, index: number) {
 .rb-tile.ten {
   border-color: color-mix(in srgb, #ffd24a 55%, var(--line));
 }
+.rb-pick {
+  cursor: default;
+  border-color: var(--line);
+}
+.rb-pick.on {
+  border-color: var(--tier, #7bc86c);
+  background: color-mix(in srgb, var(--tier, #7bc86c) 10%, transparent);
+}
+.rb-step {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.rb-step button {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 22px;
+  cursor: pointer;
+}
+.rb-step button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.rb-step b {
+  min-width: 22px;
+  text-align: center;
+  font-size: 20px;
+}
+.rb-pick-bar {
+  margin-top: 8px;
+}
+.rb-go {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 10px;
+  border: 1px solid color-mix(in srgb, var(--tier, #7bc86c) 70%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tier, #7bc86c) 22%, var(--surface));
+  color: var(--text);
+  font-size: 19px;
+  cursor: pointer;
+}
+.rb-go:disabled {
+  opacity: 0.55;
+  cursor: default;
+  font-size: 15px;
+}
 .rb-count {
   margin-left: 2px;
   font-weight: 700;
@@ -537,9 +642,6 @@ function confirmReplace(adv: Adventurer, index: number) {
 .rb-t-ico {
   font-size: 32px;
   line-height: 40px;
-}
-.rb-all {
-  border-color: color-mix(in srgb, var(--tier, #7bc86c) 55%, var(--line));
 }
 .rb-tile:disabled {
   opacity: 0.5;
