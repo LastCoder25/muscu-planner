@@ -12,8 +12,8 @@
       <!-- ÉTAPE 1 — RÉGLAGES : on renforce TOUT le corps ; volume (+ variété) -->
       <template v-if="step === 'setup'">
         <p class="intro">
-          On renforce <b>tout le corps</b> sur 7 jours. Tu fais tes séries <b>quand tu veux</b> dans
-          la semaine.
+          On renforce <b>tout le corps</b> sur {{ duration }} jours. Tu fais tes séries
+          <b>quand tu veux</b> dans la période.
         </p>
 
         <!-- Une carte par réglage, titre numéroté ; les options une par ligne : en ligne,
@@ -151,7 +151,7 @@
         <section class="set-card">
           <div class="set-head">
             <span class="set-num">5</span>
-            <span class="set-title">Départ</span>
+            <span class="set-title">Départ et durée</span>
           </div>
           <div class="start-row">
             <button
@@ -177,6 +177,27 @@
             📅 Ce Défi 360 démarrera <b>{{ startTxt }}</b
             >.
           </div>
+          <!-- Durée : une semaine par défaut ; plus court quand on est en déplacement ou
+               pris un week-end. Objectifs et récompenses suivent au prorata. -->
+          <div class="set-sub">Durée</div>
+          <div class="dur-row">
+            <button
+              v-for="d in DURATION_OPTS"
+              :key="d"
+              class="opt-tile dur-tile"
+              :class="{ on: duration === d }"
+              type="button"
+              @click="pickDuration(d)"
+            >
+              <span class="ot-lbl font-display">{{ d }} j</span>
+            </button>
+          </div>
+          <div class="start-note">
+            🏁 Fin <b>{{ endTxt }}</b>
+            <span v-if="duration < COMBO_MAX_DAYS" class="dur-chip"
+              >🧳 objectifs et récompenses à {{ sharePct }} %</span
+            >
+          </div>
         </section>
         <div class="foot-bar cta-bar">
           <div class="cta-stack">
@@ -189,7 +210,7 @@
                 ><b>~{{ suggestedTotalExos }}</b> exos</span
               >
               <span class="sum-chip"
-                ><b>{{ totalSets }}</b> séries / sem.</span
+                ><b>{{ totalSets }}</b> séries / {{ periodShort }}</span
               >
             </div>
             <q-btn
@@ -403,7 +424,8 @@
             </div>
             <div class="cfg-row">
               <span class="cfg-lbl"
-                >{{ picks[key]?.count_mode === 'reps' ? 'Reps' : 'Séries' }} / semaine</span
+                >{{ picks[key]?.count_mode === 'reps' ? 'Reps' : 'Séries' }} /
+                {{ periodLong }}</span
               >
               <div class="stepper">
                 <button type="button" @click="bumpTarget(key, -1)">−</button>
@@ -474,6 +496,10 @@ import {
   objectiveToGoal,
   suggestComboTargetFromHistory,
   COMBO_PLAN_REPS,
+  COMBO_MIN_DAYS,
+  COMBO_MAX_DAYS,
+  comboDayShare,
+  comboProrata,
   type ComboVolume,
   type ComboVariety,
   type ComboZone,
@@ -537,6 +563,37 @@ const startTxt = computed(() => startLabel(startDate.value, today));
 const startMax = addDaysUtcIso(today, START_MAX_AHEAD_DAYS);
 function pickStart(d: string) {
   if (isStartAllowed(d, today)) startDate.value = d;
+}
+
+// Durée du défi (3 à 7 jours) : objectifs au prorata d'une semaine.
+const DURATION_OPTS = Array.from(
+  { length: COMBO_MAX_DAYS - COMBO_MIN_DAYS + 1 },
+  (_, i) => COMBO_MIN_DAYS + i,
+);
+const duration = ref(COMBO_MAX_DAYS);
+const sharePct = computed(() => Math.round(comboDayShare(duration.value) * 100));
+const endTxt = computed(() =>
+  startLabel(addDaysUtcIso(startDate.value, duration.value - 1), today),
+);
+const periodShort = computed(() =>
+  duration.value === COMBO_MAX_DAYS ? 'sem.' : `${duration.value} j`,
+);
+const periodLong = computed(() =>
+  duration.value === COMBO_MAX_DAYS ? 'semaine' : `${duration.value} jours`,
+);
+// Changer la durée REMET À L'ÉCHELLE les objectifs déjà réglés (exos choisis conservés).
+function pickDuration(d: number) {
+  const from = comboDayShare(duration.value);
+  duration.value = d;
+  const to = comboDayShare(d);
+  for (const p of Object.values(picks)) {
+    if (!p.target) continue;
+    p.target = Math.max(targetMin(p.count_mode), Math.round((p.target * to) / from));
+  }
+}
+// Plancher d'un objectif : 10 reps, ou 3 séries d'une semaine ramenées à la durée.
+function targetMin(mode: ComboCountMode): number {
+  return mode === 'reps' ? 10 : comboProrata(3, duration.value);
 }
 
 // Réglages : zone (full/haut/bas) + volume (séries/groupe) + variété (exos/groupe).
@@ -769,8 +826,7 @@ function bumpTarget(key: string, d: number) {
   if (!p) return;
   // Pas de 10 reps en mode 'reps', 1 série en mode 'sets'.
   const step = p.count_mode === 'reps' ? 10 : 1;
-  const min = p.count_mode === 'reps' ? 10 : 3;
-  p.target = Math.max(min, p.target + d * step);
+  p.target = Math.max(targetMin(p.count_mode), p.target + d * step);
 }
 // Bascule séries ↔ reps pour un emplacement. Cherche un défaut dans l'HISTORIQUE
 // (dernier Défi 360 avec cet exo), sinon convertit l'objectif courant (~10 reps/série).
@@ -786,7 +842,7 @@ function toggleMode(key: string) {
     ? hist * n
     : nextMode === 'reps'
       ? p.target * COMBO_PLAN_REPS
-      : Math.max(3, Math.round(p.target / COMBO_PLAN_REPS));
+      : Math.max(targetMin('sets'), Math.round(p.target / COMBO_PLAN_REPS));
   p.count_mode = nextMode;
 }
 const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
@@ -830,7 +886,7 @@ function applyPlan() {
     // vide pour les autres (le draft laisse choisir).
     picks[slot.key] = {
       exercise_ids: active ? cands.slice(0, Math.max(1, nExos)).map((e) => e.id) : [],
-      target: p?.weeklySets ?? 0,
+      target: p?.weeklySets ? comboProrata(p.weeklySets, duration.value) : 0,
       weight_kg: null,
       count_mode: 'sets',
     };
@@ -897,7 +953,7 @@ async function createCombo() {
     const c = await combo.create({
       name: 'Défi 360',
       start_date: startDate.value,
-      duration_days: 7,
+      duration_days: duration.value,
       legs,
     });
     $q.notify({ type: 'positive', message: 'Défi 360 lancé 💪' });
@@ -947,6 +1003,27 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+/* Durée : 5 tuiles d'égale largeur, jamais sous 44 px de haut. */
+.dur-row {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.dur-tile {
+  min-height: 44px;
+  justify-content: center;
+}
+.dur-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  font-size: 11.5px;
+  white-space: nowrap;
 }
 .start-input {
   flex: 1;

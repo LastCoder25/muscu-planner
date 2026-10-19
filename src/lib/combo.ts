@@ -115,6 +115,26 @@ interface ComboConfig {
 // Reps supposées par série pour l'estimation du volume planifié (prime de bouclage).
 export const COMBO_PLAN_REPS = 10;
 
+// ── DURÉE CHOISIE À LA CRÉATION (semaine en déplacement, week-end pris…) ─────────────
+// De 3 jours (un groupe peut encore être travaillé deux fois, 48 h d'écart) à 7. Les
+// objectifs hebdomadaires sont mis AU PRORATA des jours — tasser le volume d'une semaine
+// en 3 jours sauterait la récupération —, et donc la prime de bouclage, qui suit l'objectif.
+// Le coffre de fin aussi (`comboChestReward`) : deux défis de 3 jours ne doivent pas
+// rapporter plus qu'une semaine au même rythme.
+export const COMBO_MIN_DAYS = 3;
+export const COMBO_MAX_DAYS = 7;
+
+/** Part de semaine que couvre un défi de `days` jours (bornée 3/7 → 1). */
+export function comboDayShare(days: number): number {
+  const d = Math.min(COMBO_MAX_DAYS, Math.max(COMBO_MIN_DAYS, Math.round(days)));
+  return d / 7;
+}
+
+/** Objectif hebdomadaire ramené à la durée du défi, jamais sous `min`. */
+export function comboProrata(weekly: number, days: number, min = 1): number {
+  return Math.max(min, Math.round(weekly * comboDayShare(days)));
+}
+
 /** Retire UNE série précise (celle qu'on a touchée), pas forcément la dernière.
  *  Rend une NOUVELLE liste ; un index hors limites (négatif, trop grand, décimal) ne
  *  retire rien, par construction du filtre — un double tap sur une case qui vient de
@@ -1597,7 +1617,9 @@ export function comboTransferBlocker(
   // Le même mouvement déjà présent AILLEURS dans le défi (l'exo quitté, lui, s'en va : on
   // peut passer des dips aux dips assistés — sauf s'il RESTE, en ne basculant que le reste).
   const fam = variantFamilyKey(e.exercise_id);
-  if (c.legs.some((l) => (scope === 'rest' || l !== from) && variantFamilyKey(l.exercise_id) === fam))
+  if (
+    c.legs.some((l) => (scope === 'rest' || l !== from) && variantFamilyKey(l.exercise_id) === fam)
+  )
     return 'alreadyIn';
   return null;
 }

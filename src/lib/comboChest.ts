@@ -23,6 +23,7 @@
 // d'eux-mêmes tout rééquilibrage futur de ces sources.
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { comboTickets } from './sportTickets';
+import { comboDayShare } from './combo';
 
 /** Séries hebdomadaires d'un 360 « moyen » — le point où le facteur d'effort vaut 1.
  *  Médiane de l'éventail que le générateur produit (29 → 135). */
@@ -84,10 +85,15 @@ export function chestEffortMult(sets: number): number {
   return Math.min(CHEST_MAX_MULT, Math.max(CHEST_MIN_MULT, raw));
 }
 
-/** Le coffre : un peu de chaque ressource vivante, dimensionné par l'effort et le niveau. */
-export function comboChestReward(sets: number, playerLevel: number): ComboChest {
+/** Le coffre : un peu de chaque ressource vivante, dimensionné par l'effort et le niveau.
+ *  ⚠️ `days` = durée du défi (3 à 7) : l'effort est jugé sur la SEMAINE ÉQUIVALENTE (le
+ *  plancher 0,7 ne doit pas offrir un coffre presque plein à un défi de 3 jours), puis le
+ *  coffre entier est réduit à la part de semaine couverte — clé comprise, qui n'échoit
+ *  qu'à un facteur final ≥ 1. */
+export function comboChestReward(sets: number, playerLevel: number, days = 7): ComboChest {
   const L = Math.max(1, playerLevel);
-  const m = chestEffortMult(sets);
+  const share = comboDayShare(days);
+  const m = chestEffortMult(sets / share) * share;
   return {
     summonStones: Math.max(1, Math.round(sessionStones(L) * CHEST.sessionShare * m)),
     // Une clé n'a presque aucune source dédiée, et c'est la seule porte du Labyrinthe :
@@ -135,6 +141,8 @@ export function comboChestPlan(
   sets: number,
   playerLevel: number,
   now: number,
+  /** Durée du défi (jours) : le coffre est au prorata. */
+  days = 7,
 ): { grant: boolean; record: ComboChestRecord } | null {
   if (combo.chest) return null;
   const m = messages.find((x) => x.id === comboChestMessageId(combo.id));
@@ -153,5 +161,5 @@ export function comboChestPlan(
     };
   }
   const level = Math.max(1, playerLevel);
-  return { grant: true, record: { ...comboChestReward(sets, level), level, at: now } };
+  return { grant: true, record: { ...comboChestReward(sets, level, days), level, at: now } };
 }

@@ -191,7 +191,7 @@
       </div>
 
       <div class="foot">
-        Fais tes séries quand tu veux dans la semaine. Toutes les séries prévues pour
+        Fais tes séries quand tu veux pendant le défi. Toutes les séries prévues pour
         <b>tous</b> les exos = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps + poids).
       </div>
 
@@ -365,7 +365,7 @@ const daysLeftLabel = computed(() => {
   if (!c.value) return '';
   const end = addDaysIso(c.value.start_date, c.value.duration_days - 1);
   const today = logicalToday();
-  if (today > end) return 'semaine terminée';
+  if (today > end) return 'défi terminé';
   // jours restants inclus aujourd'hui
   let n = 0;
   for (let d = 0; d < c.value.duration_days; d++) {

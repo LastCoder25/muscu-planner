@@ -45,7 +45,7 @@ export async function depositComboChest(
   // temps le dimensionnent (la saisie reste ouverte après la fin).
   if (!comboChestEligible(c)) return false;
   const sets = comboCountedSets(comboInDeadline(c));
-  const plan = comboChestPlan(c, char.row.messages, sets, playerLevel, Date.now());
+  const plan = comboChestPlan(c, char.row.messages, sets, playerLevel, Date.now(), c.duration_days);
   if (!plan) return false;
   const pose = plan.grant
     ? await char.grantComboChest(uid, c.id, c.name || 'Défi 360', sets, plan.record)
