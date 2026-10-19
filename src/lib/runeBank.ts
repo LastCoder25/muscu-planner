@@ -278,6 +278,88 @@ export function fuseSkills(bank: RuneBank, uidA: string, uidB: string): RuneBank
   };
 }
 
+/** Refus de « Tout fusionner » (aucune compétence n'a deux exemplaires qui tiennent ensemble). */
+export const FUSE_ALL_NONE = 'rien à fusionner';
+
+/** Les exemplaires identiques (même compétence, même niveau) en une pile « ×N », dans l'ordre
+ *  du stock ; le premier exemplaire la représente. */
+export function stackSkills(skills: StockSkill[]): (StockSkill & { count: number })[] {
+  const out = new Map<string, StockSkill & { count: number }>();
+  for (const s of skills) {
+    const k = `${s.id}:${s.level}`;
+    const cur = out.get(k);
+    if (cur) cur.count++;
+    else out.set(k, { ...s, count: 1 });
+  }
+  return [...out.values()];
+}
+
+/** « 7 × Nv 1 → Nv 5 · Nv 2 », « Nv 3 + 2 × Nv 1 → Nv 5 ». */
+export function fuseGroupText(g: FuseGroup): string {
+  const n = new Map<number, number>();
+  for (const l of g.before) n.set(l, (n.get(l) ?? 0) + 1);
+  const parts = [...n].map(([l, k]) => (k > 1 ? `${k} × Nv ${l}` : `Nv ${l}`));
+  return `${parts.join(' + ')} → ${g.after.map((l) => `Nv ${l}`).join(' · ')}`;
+}
+
+/** Ce qu'une fusion groupée fait à une compétence : les niveaux d'avant, ceux d'après. */
+export interface FuseGroup {
+  id: SkillId;
+  before: number[];
+  after: number[];
+}
+
+/**
+ * 🔗 FUSIONNE D'UN GESTE tous les exemplaires d'une compétence (`only`), ou de toutes : les
+ * niveaux sont rangés du plus haut au plus bas et versés dans le premier exemplaire où ils
+ * tiennent (5 au plus, jamais écrêtés) — de quoi préparer des Nv 5 pour le prochain champion.
+ * Chaque exemplaire gardé garde son `uid` et sa place. Rend le stock et ce qui a changé
+ * (`groups` vide = rien à fusionner).
+ */
+export function fuseAllSkills(
+  bank: RuneBank,
+  only: SkillId | null = null,
+): { bank: RuneBank; groups: FuseGroup[] } {
+  const byId = new Map<SkillId, StockSkill[]>();
+  for (const s of bank.skills) {
+    if (only && s.id !== only) continue;
+    const copies = byId.get(s.id);
+    if (copies) copies.push(s);
+    else byId.set(s.id, [s]);
+  }
+  const level = new Map<string, number>();
+  const gone = new Set<string>();
+  const groups: FuseGroup[] = [];
+  for (const [id, copies] of byId) {
+    if (copies.length < 2) continue;
+    const bins: { uid: string; level: number }[] = [];
+    for (const s of [...copies].sort((a, b) => b.level - a.level)) {
+      const bin = bins.find((b) => b.level + s.level <= SKILL_MAX_LEVEL);
+      if (bin) {
+        bin.level += s.level;
+        gone.add(s.uid);
+      } else bins.push({ uid: s.uid, level: s.level });
+    }
+    if (bins.length === copies.length) continue;
+    for (const b of bins) level.set(b.uid, b.level);
+    groups.push({
+      id,
+      before: copies.map((s) => s.level).sort((a, b) => b - a),
+      after: bins.map((b) => b.level).sort((a, b) => b - a),
+    });
+  }
+  if (!groups.length) return { bank, groups };
+  return {
+    bank: {
+      ...bank,
+      skills: bank.skills
+        .filter((s) => !gone.has(s.uid))
+        .map((s) => ({ ...s, level: level.get(s.uid) ?? s.level })),
+    },
+    groups,
+  };
+}
+
 // ── 🎁 DONNER À UN CHAMPION ─────────────────────────────────────────────────────────────
 
 /** Ce que la compétence ferait à ce champion. */

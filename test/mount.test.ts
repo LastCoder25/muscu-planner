@@ -3613,6 +3613,39 @@ describe('🪬 RuneBankSheet', () => {
     // La plus rare en tête : la violette (Critique) avant la verte (Vitesse).
     expect(out.indexOf('Nv 2')).toBeLessThan(out.indexOf('Nv 1'));
   }, 30_000);
+
+  it('propose « Tout fusionner » dès que deux exemplaires d’une compétence attendent', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const skills = (ids: string[]) => ids.map((id, i) => ({ uid: 'sk' + i, id, level: 1 }));
+    let out = '';
+    const row = (ids: string[]) => ({
+      ...ROW,
+      runes: { runes: 0, skills: skills(ids), opened: ids.length, comp: 2 },
+    });
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row(['speed', 'speed', 'speed', 'crit']),
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Tout fusionner');
+    expect(out).toContain('1 compétence');
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row(['speed', 'crit']),
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('rien à fusionner');
+  }, 30_000);
 });
 
 describe('🪬 RuneReveal', () => {

@@ -64,6 +64,50 @@
         </template>
 
         <template v-else>
+          <template v-if="fuseRows.length">
+            <div class="rb-sec">Fusionner</div>
+            <div class="rb-list">
+              <button
+                v-if="selGroup && selGroup.before.length > 2"
+                type="button"
+                class="rb-row rb-all"
+                :class="'t-' + SKILLS[sel.id].tier"
+                :disabled="busy"
+                @click="askFuseAll(sel.id)"
+              >
+                <span class="rb-row-emo">🔗</span>
+                <span class="rb-row-main">
+                  <span class="rb-row-name"
+                    >Tous les exemplaires ({{ selGroup.before.length }})</span
+                  >
+                  <span class="rb-row-sub">{{ fuseGroupText(selGroup) }}</span>
+                </span>
+                <span class="rb-pill up">⬆️ Nv {{ selGroup.after[0] }}</span>
+              </button>
+              <button
+                v-for="f in fuseRows"
+                :key="f.uid"
+                type="button"
+                class="rb-row"
+                :disabled="busy || !!f.block"
+                @click="fuse(f.uid)"
+              >
+                <span class="rb-row-emo">{{ SKILLS[sel.id].emoji }}</span>
+                <span class="rb-row-main">
+                  <span class="rb-row-name"
+                    >{{ SKILLS[sel.id].name }} · Nv {{ f.level
+                    }}<template v-if="f.count > 1"> ×{{ f.count }}</template></span
+                  >
+                  <span class="rb-row-sub">{{
+                    f.block ? FUSE_BLOCK_LABEL[f.block] : `Nv ${sel.level} + ${f.level}`
+                  }}</span>
+                </span>
+                <span class="rb-pill" :class="f.block ? 'off' : 'up'">{{
+                  f.block ? '—' : `⬆️ Nv ${sel.level + f.level}`
+                }}</span>
+              </button>
+            </div>
+          </template>
           <div class="rb-sec">Donner à un champion</div>
           <p v-if="!giveRows.length" class="rb-note">Aucun champion pour l’instant.</p>
           <div class="rb-list">
@@ -84,33 +128,10 @@
             </button>
           </div>
 
-          <template v-if="fuseRows.length">
-            <div class="rb-sec">Fusionner avec</div>
-            <div class="rb-list">
-              <button
-                v-for="f in fuseRows"
-                :key="f.uid"
-                type="button"
-                class="rb-row"
-                :disabled="busy || !!f.block"
-                @click="fuse(f.uid)"
-              >
-                <span class="rb-row-emo">{{ SKILLS[sel.id].emoji }}</span>
-                <span class="rb-row-main">
-                  <span class="rb-row-name">{{ SKILLS[sel.id].name }} · Nv {{ f.level }}</span>
-                  <span class="rb-row-sub">{{
-                    f.block ? FUSE_BLOCK_LABEL[f.block] : `Nv ${sel.level} + ${f.level}`
-                  }}</span>
-                </span>
-                <span class="rb-pill" :class="f.block ? 'off' : 'up'">{{
-                  f.block ? '—' : `⬆️ Nv ${sel.level + f.level}`
-                }}</span>
-              </button>
-            </div>
-          </template>
           <p class="rb-note">
-            Une compétence donnée ne revient jamais au stock. Deux exemplaires de la même compétence
-            se fusionnent : leurs niveaux s’additionnent ({{ SKILL_MAX_LEVEL }} au plus).
+            Une compétence donnée ne revient jamais au stock. Les exemplaires d’une même compétence
+            se fusionnent : leurs niveaux s’additionnent ({{ SKILL_MAX_LEVEL }} au plus), de quoi
+            préparer une compétence haut niveau pour ton prochain champion.
           </p>
         </template>
       </template>
@@ -133,6 +154,21 @@
             <RuneIcon size="40px" />
             <span class="rb-t-x font-display">×{{ RUNE_LOT.size }}</span>
             <span class="rb-t-sub">{{ RUNE_LOT.cost }} runes</span>
+          </button>
+          <button
+            v-if="bank.skills.length >= 2"
+            type="button"
+            class="rb-tile fuse"
+            :disabled="busy || !fusePreview.length"
+            @click="askFuseAll(null)"
+          >
+            <span class="rb-t-ico">🔗</span>
+            <span class="rb-t-x font-display">Tout fusionner</span>
+            <span class="rb-t-sub">{{
+              fusePreview.length
+                ? `${fusePreview.length} compétence${fusePreview.length > 1 ? 's' : ''}`
+                : FUSE_ALL_NONE
+            }}</span>
           </button>
         </div>
         <p class="rb-note">
@@ -168,6 +204,7 @@
             @click="select(s.uid)"
           >
             {{ SKILLS[s.id].emoji }} {{ SKILLS[s.id].name }} <b>Nv {{ s.level }}</b>
+            <span v-if="s.count > 1" class="rb-count">×{{ s.count }}</span>
           </button>
         </div>
       </template>
@@ -200,15 +237,19 @@ import {
   type SkillId,
 } from '@/lib/skillRunes';
 import {
+  FUSE_ALL_NONE,
   FUSE_BLOCK_LABEL,
   GIVE_BLOCK_LABEL,
   OPEN_BLOCK_LABEL,
   RUNE_LOT,
   emptyBank,
+  fuseAllSkills,
   fuseBlocker,
+  fuseGroupText,
   giveBlocker,
   giveKind,
   openBlocker,
+  stackSkills,
   type FuseBlock,
   type GiveBlock,
   type GiveKind,
@@ -247,7 +288,7 @@ const blockLot = computed(() => openBlocker(bank.value, RUNE_LOT.size));
 
 /** Rangées par couleur (la plus rare en tête), puis par nom, puis par niveau. */
 const sortedSkills = computed(() =>
-  [...bank.value.skills].sort(
+  stackSkills(bank.value.skills).sort(
     (a, b) =>
       RUNE_TIERS.indexOf(SKILLS[b.id].tier) - RUNE_TIERS.indexOf(SKILLS[a.id].tier) ||
       SKILLS[a.id].name.localeCompare(SKILLS[b.id].name, 'fr') ||
@@ -307,13 +348,48 @@ const giveRows = computed<GiveRow[]>(() => {
     .sort((x, y) => x.order - y.order || x.adv.name.localeCompare(y.adv.name, 'fr'));
 });
 
-const fuseRows = computed<{ uid: string; level: number; block: FuseBlock | null }[]>(() => {
+const fuseRows = computed<
+  { uid: string; level: number; count: number; block: FuseBlock | null }[]
+>(() => {
   const s = sel.value;
   if (!s) return [];
-  return bank.value.skills
-    .filter((o) => o.uid !== s.uid && o.id === s.id)
-    .map((o) => ({ uid: o.uid, level: o.level, block: fuseBlocker(bank.value, s.uid, o.uid) }));
+  return stackSkills(bank.value.skills.filter((o) => o.uid !== s.uid && o.id === s.id)).map((o) => ({
+    uid: o.uid,
+    level: o.level,
+    count: o.count,
+    block: fuseBlocker(bank.value, s.uid, o.uid),
+  }));
 });
+
+/** Ce que « Tout fusionner » ferait, compétence par compétence (vide = rien à fusionner). */
+const fusePreview = computed(() => fuseAllSkills(bank.value).groups);
+/** Ce que la fusion de tous les exemplaires de la compétence choisie ferait. */
+const selGroup = computed(() => fusePreview.value.find((g) => g.id === sel.value?.id) ?? null);
+
+/** ⚠️ Une fusion ne se défait pas : on dit ce qui sera fusionné avant de le faire. */
+function askFuseAll(only: SkillId | null) {
+  const groups = fusePreview.value.filter((g) => !only || g.id === only);
+  if (!groups.length) return;
+  $q.dialog({
+    title: only ? 'Fusionner tous les exemplaires ?' : 'Tout fusionner ?',
+    message: groups
+      .map((g) => `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} : ${fuseGroupText(g)}`)
+      .join('\n'),
+    style: 'white-space: pre-line',
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: 'Fusionner', color: 'positive' },
+  }).onOk(() => {
+    void run(async (uid) => {
+      const r = await char.fuseAllRuneSkills(uid, only);
+      if (!r.ok) throw new Error(r.reason);
+      const n = r.groups.length;
+      $q.notify({
+        type: 'positive',
+        message: `🔗 ${n} compétence${n > 1 ? 's' : ''} fusionnée${n > 1 ? 's' : ''}`,
+      });
+    });
+  });
+}
 
 function select(uid: string) {
   selUid.value = uid;
@@ -449,6 +525,21 @@ function confirmReplace(adv: Adventurer, index: number) {
 }
 .rb-tile.ten {
   border-color: color-mix(in srgb, #ffd24a 55%, var(--line));
+}
+.rb-count {
+  margin-left: 2px;
+  font-weight: 700;
+  color: var(--text);
+}
+.rb-tile.fuse {
+  border-color: color-mix(in srgb, #7bc86c 55%, var(--line));
+}
+.rb-t-ico {
+  font-size: 32px;
+  line-height: 40px;
+}
+.rb-all {
+  border-color: color-mix(in srgb, var(--tier, #7bc86c) 55%, var(--line));
 }
 .rb-tile:disabled {
   opacity: 0.5;

@@ -6,7 +6,9 @@ import {
   RUNE_ODDS,
   ascensionRuneCount,
   emptyBank,
+  fuseAllSkills,
   fuseBlocker,
+  fuseGroupText,
   fuseSkills,
   giveBlocker,
   giveKind,
@@ -17,6 +19,7 @@ import {
   openRune,
   openRunes,
   placeRuneCount,
+  stackSkills,
   type GiveKind,
   type RuneBank,
   type StockSkill,
@@ -113,6 +116,46 @@ describe('fusionner', () => {
     expect(fuseBlocker(b, 'a', 'a')).toBe('same');
     expect(fuseBlocker(b, 'a', 'z')).toBe('missing');
     expect(fuseSkills(b, 'a', 'b')).toBeNull();
+  });
+});
+
+describe('tout fusionner', () => {
+  it('six Nv 1 deviennent un Nv 5 et un Nv 1 : de quoi préparer le prochain champion', () => {
+    const six = [1, 2, 3, 4, 5, 6].map((i) => sk('s' + i, 'speed', 1));
+    const r = fuseAllSkills(bank(0, [...six, sk('p', 'pv', 2)]));
+    expect(r.bank.skills).toEqual([sk('s1', 'speed', 5), sk('s6', 'speed', 1), sk('p', 'pv', 2)]);
+    expect(r.groups).toEqual([{ id: 'speed', before: [1, 1, 1, 1, 1, 1], after: [5, 1] }]);
+  });
+
+  it('les plus hauts niveaux d’abord, jamais au-delà de 5 ni écrêtés', () => {
+    const r = fuseAllSkills(
+      bank(0, [sk('a', 'crit', 3), sk('b', 'crit', 2), sk('c', 'crit', 3), sk('d', 'crit', 2)]),
+    );
+    expect(r.groups[0]!.after).toEqual([5, 5]);
+    const total = r.bank.skills.reduce((t, s) => t + s.level, 0);
+    expect(total).toBe(10);
+    expect(r.bank.skills.every((s) => s.level <= 5)).toBe(true);
+  });
+
+  it('une seule compétence si on la nomme ; rien à fusionner = stock inchangé', () => {
+    const b = bank(0, [sk('a', 'crit'), sk('b', 'crit'), sk('c', 'pv'), sk('d', 'pv')]);
+    const r = fuseAllSkills(b, 'pv');
+    expect(r.bank.skills).toEqual([sk('a', 'crit'), sk('b', 'crit'), sk('c', 'pv', 2)]);
+    const full = bank(0, [sk('a', 'crit', 5), sk('b', 'crit', 5), sk('c', 'pv')]);
+    expect(fuseAllSkills(full)).toEqual({ bank: full, groups: [] });
+  });
+
+  it('se lit « 7 × Nv 1 → Nv 5 · Nv 2 » ; le stock s’empile par compétence et niveau', () => {
+    expect(fuseGroupText({ id: 'speed', before: [1, 1, 1, 1, 1, 1, 1], after: [5, 2] })).toBe(
+      '7 × Nv 1 → Nv 5 · Nv 2',
+    );
+    expect(fuseGroupText({ id: 'crit', before: [3, 1, 1], after: [5] })).toBe('Nv 3 + 2 × Nv 1 → Nv 5');
+    const st = stackSkills([sk('a', 'crit'), sk('b', 'pv'), sk('c', 'crit'), sk('d', 'crit', 2)]);
+    expect(st.map((s) => [s.uid, s.count])).toEqual([
+      ['a', 2],
+      ['b', 1],
+      ['d', 1],
+    ]);
   });
 });
 

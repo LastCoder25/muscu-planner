@@ -270,12 +270,14 @@ import {
 import { RUNE_PLACE_OK, type SkillId } from '@/lib/skillRunes';
 import {
   AWAKEN_RUNE_COUNT,
+  FUSE_ALL_NONE,
   FUSE_BLOCK_LABEL,
   GIVE_BLOCK_LABEL,
   OPEN_BLOCK_LABEL,
   RUNE_BANK_VERSION,
   addRuneCount,
   ascensionRuneCount,
+  fuseAllSkills,
   fuseBlocker,
   fuseSkills,
   giveBlocker,
@@ -285,6 +287,7 @@ import {
   openRunes,
   rollPlaceRunes,
   runeCount,
+  type FuseGroup,
   type GiveKind,
   type StockSkill,
 } from '@/lib/runeBank';
@@ -1024,6 +1027,19 @@ export const useCharacterStore = defineStore('character', () => {
     if (block) return FUSE_BLOCK_LABEL[block];
     await persist(userId, { runes: fuseSkills(cur.runes, uidA, uidB)! });
     return null;
+  }
+
+  /** 🪬 FUSIONNE d'un geste tous les exemplaires d'une compétence (`only`), ou de toutes. */
+  async function fuseAllRuneSkills(
+    userId: string,
+    only: SkillId | null = null,
+  ): Promise<{ ok: false; reason: string } | { ok: true; groups: FuseGroup[] }> {
+    const cur = row.value;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    const out = fuseAllSkills(cur.runes, only);
+    if (!out.groups.length) return { ok: false, reason: FUSE_ALL_NONE };
+    await persist(userId, { runes: out.bank });
+    return { ok: true, groups: out.groups };
   }
 
   /** 🪬 DONNE une compétence du stock à un champion. ⚠️ Le stock et le champion partent dans
@@ -6919,6 +6935,7 @@ export const useCharacterStore = defineStore('character', () => {
     claimWeeklyQuests,
     openRuneBatch,
     fuseRuneSkills,
+    fuseAllRuneSkills,
     giveRuneSkill,
     row,
     loaded,
