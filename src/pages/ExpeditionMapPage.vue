@@ -316,7 +316,7 @@
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
               @click.stop="askRecall(v.recall, v.recallInfo)"
             />
-            <!-- 🏠 Une troupe qui RENTRE porte un anneau turquoise (demandé, v1.244.0) : on
+            <!-- 🏠 Une troupe qui RENTRE porte un anneau turquoise (demandé, v1.245.0) : on
                  distingue d'un coup d'œil les retours des départs. -->
             <circle
               v-if="v.homeward"
