@@ -17,8 +17,9 @@
     <!-- Configuration de la séance -->
     <template v-else-if="phase === 'config'">
       <p class="intro">
-        Choisis le nombre de séries <b>pour chaque exercice</b>. Chaque série ≈ 40 s d'exécution +
-        le repos choisi. <b>Décoche</b> un exo pour le <b>retirer</b> de cette séance.
+        Choisis le nombre de séries <b>pour chaque exercice</b>, ou une <b>durée</b> pour les exos
+        chronométrés (gainage, chaise…). Chaque série ≈ 40 s d'exécution + le repos choisi.
+        <b>Décoche</b> un exo pour le <b>retirer</b> de cette séance.
       </p>
       <div class="cfg">
         <div class="cfg-lbl">Exercices à faire</div>
@@ -45,7 +46,12 @@
             <span class="exo-name" :class="{ struck: !included[leg.exercise_id] }">{{
               leg.exercise_name
             }}</span>
-            <span class="exo-rem">reste {{ legRemaining(leg) }} {{ legUnitLabel(leg) }}</span>
+            <span class="exo-rem"
+              >reste {{ legRemaining(leg) }} {{ legUnitLabel(leg)
+              }}<template v-if="legMode(leg) === 'time' && included[leg.exercise_id]">
+                · {{ timeSplitLabel(leg) }}</template
+              ></span
+            >
           </div>
           <div class="stepper">
             <button
@@ -58,8 +64,7 @@
               −
             </button>
             <span class="stp-v font-display"
-              >{{ counts[leg.exercise_id] ?? 0
-              }}<span class="stp-u">{{ legMode(leg) === 'reps' ? 'r' : 's' }}</span></span
+              >{{ countLabel(leg).v }}<span class="stp-u">{{ countLabel(leg).u }}</span></span
             >
             <button
               type="button"
@@ -175,7 +180,11 @@
             {{ timerExo === i ? 'Pause' : 'Démarrer' }}
             <span class="ec-time">{{ timerLabel(i) }}</span>
           </button>
-          <span class="ec-prog">{{ doneCount(i) }}/{{ exo.sets.length }} séries</span>
+          <span class="ec-prog"
+            >{{ doneCount(i) }}/{{ exo.sets.length }} séries<template v-if="nextTimeTarget(i)">
+              · vise {{ nextTimeTarget(i) }} s</template
+            ></span
+          >
           <button
             class="s-adj"
             :disabled="!canAddSlot(i)"
@@ -265,6 +274,10 @@ import {
   legMode,
   legLastReps,
   comboStepMs,
+  comboTimeSets,
+  comboDefaultTimeSec,
+  legTimePerSet,
+  COMBO_TIME_STEP,
   type ComboLeg,
   type ComboSessionExo,
 } from '@/lib/combo';
@@ -307,13 +320,14 @@ const phase = ref<'config' | 'run'>('config');
 const availableLegs = computed(() =>
   legsByGroup((c.value?.legs ?? []).filter((l) => legRemaining(l) > 0)),
 );
-// Coché = à faire dans la séance ; compteur = nb de séries (mode 'sets') OU de reps
-// (mode 'reps') par exo. Clé = exercise_id.
+// Coché = à faire dans la séance ; compteur = nb de séries (mode 'sets'), de reps
+// (mode 'reps') OU une DURÉE en secondes (mode 'time', v1.250) par exo. Clé = exercise_id.
 const included = reactive<Record<string, boolean>>({});
 const counts = reactive<Record<string, number>>({});
-// Pas d'incrément selon le mode (1 série, ou 5 reps).
+// Pas d'incrément selon le mode (1 série, 5 reps, ou 15 s).
 function stepFor(leg: ComboLeg): number {
-  return legMode(leg) === 'reps' ? 5 : 1;
+  const m = legMode(leg);
+  return m === 'reps' ? 5 : m === 'time' ? COMBO_TIME_STEP : 1;
 }
 // Plafond dans l'unité de l'exo (séries ou reps restantes).
 function maxCount(leg: ComboLeg): number {
@@ -324,18 +338,47 @@ function bumpCount(exId: string, dir: number) {
   if (!leg) return;
   const step = stepFor(leg);
   const cur = counts[exId] ?? 0;
-  counts[exId] = Math.max(step, Math.min(maxCount(leg), cur + dir * step));
+  const max = maxCount(leg);
+  // Plancher = un pas, sauf s'il reste moins (ex. 10 s de gainage) : jamais au-delà du restant.
+  counts[exId] = Math.min(max, Math.max(Math.min(step, max), cur + dir * step));
 }
-// Défaut : tous cochés, ~2 séries (ou ~20 reps) par exo — ajustable, décochable.
+// Défaut : tous cochés, ~2 séries (ou ~20 reps, ou ~2 séries de durée) par exo —
+// ajustable, décochable.
 function initCounts() {
   for (const leg of availableLegs.value) {
     included[leg.exercise_id] = true;
-    const def = legMode(leg) === 'reps' ? 20 : 2;
-    counts[leg.exercise_id] = Math.min(def, maxCount(leg));
+    const m = legMode(leg);
+    counts[leg.exercise_id] =
+      m === 'time'
+        ? comboDefaultTimeSec(perSetOf(leg), maxCount(leg))
+        : Math.min(m === 'reps' ? 20 : 2, maxCount(leg));
   }
 }
-// Compteurs en SÉRIES pour la construction : exos cochés seulement ; en mode reps
-// on convertit les reps voulues en nb de séries (~reps de la dernière série).
+/** Durée d'une série d'un exo de durée (découpe la durée choisie en séries). */
+function perSetOf(leg: ComboLeg): number {
+  return legTimePerSet(leg, profileStore.profile?.objective);
+}
+/** Valeur du réglage, affichée : séries « s », reps « r », durée « 45 s » ou « 1:30 min ». */
+function countLabel(leg: ComboLeg): { v: string; u: string } {
+  const n = counts[leg.exercise_id] ?? 0;
+  const m = legMode(leg);
+  if (m !== 'time') return { v: String(n), u: m === 'reps' ? 'r' : 's' };
+  return n < 60
+    ? { v: String(n), u: 's' }
+    : { v: `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`, u: 'min' };
+}
+/** Comment la durée choisie se découpe : « 2 × 45 s » (ou « 30 s + 25 s » si inégal). */
+function timeSplitLabel(leg: ComboLeg): string {
+  const sets = comboTimeSets(counts[leg.exercise_id] ?? 0, perSetOf(leg));
+  if (!sets.length) return '';
+  const first = sets[0]!;
+  return sets.every((v) => v === first)
+    ? `${sets.length} × ${first} s`
+    : sets.map((v) => `${v} s`).join(' + ');
+}
+// Compteurs pour la construction : exos cochés seulement ; en mode reps on convertit les
+// reps voulues en nb de séries (~reps de la dernière série). Une DURÉE passe telle quelle
+// (secondes) : `buildComboSessionFromCounts` la découpe en séries.
 const buildCounts = computed<Record<string, number>>(() => {
   const out: Record<string, number> = {};
   for (const leg of availableLegs.value) {
@@ -355,7 +398,7 @@ const previewSession = computed(() =>
     : [],
 );
 const previewSets = computed(() => previewSession.value.reduce((a, e) => a + e.sets.length, 0));
-const previewMinutes = computed(() => comboSessionDurationMin(previewSets.value, restSec.value));
+const previewMinutes = computed(() => comboSessionDurationMin(previewSession.value, restSec.value));
 const previewExos = computed(() => previewSession.value.length);
 
 // Séance générée au démarrage. Les séries validées sont accumulées LOCALEMENT
@@ -559,6 +602,11 @@ function doneCount(i: number): number {
   const exo = session.value[i];
   if (!exo) return 0;
   return exo.sets.filter((_v: number, j: number) => isDone(i, j)).length;
+}
+/** Durée visée pour la prochaine série d'un exo de durée (la découpe de la durée choisie). */
+function nextTimeTarget(i: number): number | null {
+  const j = firstOpenSet(i);
+  return j >= 0 ? (session.value[i]?.sets[j] ?? null) : null;
 }
 function timerLabel(i: number): string {
   const s = timerExo.value === i ? timerSec.value : 0;

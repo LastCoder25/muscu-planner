@@ -37,6 +37,10 @@ import {
   type ComboSlotSpec,
   comboSessionDurationMin,
   buildComboSessionFromCounts,
+  comboTimeSets,
+  comboDefaultTimeSec,
+  legTimePerSet,
+  COMBO_TIME_STEP,
   legSets,
   legRepRange,
   type ComboChallenge,
@@ -331,14 +335,68 @@ describe('séance générée (séries choisies par exo)', () => {
       leg({ slot: 'squat', exercise_id: 'c', target: 40 }),
     ]);
   it('comboSessionDurationMin : durée estimée croît avec les séries et le repos', () => {
-    expect(comboSessionDurationMin(12, 60)).toBeGreaterThan(comboSessionDurationMin(6, 60));
-    expect(comboSessionDurationMin(12, 90)).toBeGreaterThan(comboSessionDurationMin(12, 30));
+    const reps = (n: number) => [{ sets: Array.from({ length: n }, () => 10) }];
+    expect(comboSessionDurationMin(reps(12), 60)).toBeGreaterThan(
+      comboSessionDurationMin(reps(6), 60),
+    );
+    expect(comboSessionDurationMin(reps(12), 90)).toBeGreaterThan(
+      comboSessionDurationMin(reps(12), 30),
+    );
+  });
+  it('comboSessionDurationMin : une série de DURÉE compte ses secondes, pas ~40 s', () => {
+    // 2 × 3 min de chaise + 60 s de repos chacune = 8 min (et non 2 × (40 + 60) s ≈ 3 min).
+    expect(comboSessionDurationMin([{ sets: [180, 180], time: true }], 60)).toBe(8);
   });
   it('buildComboSessionFromCounts : nb de séries choisi PAR EXO, exclut les 0', () => {
     const s = buildComboSessionFromCounts(bigCombo(), { a: 3, b: 0, c: 5 });
     expect(s.map((e) => e.exercise_id)).toEqual(['a', 'c']); // b (0) exclu, ordre des legs
     expect(s.find((e) => e.exercise_id === 'a')!.sets.length).toBe(3);
     expect(s.find((e) => e.exercise_id === 'c')!.sets.length).toBe(5);
+  });
+});
+
+describe('⏱️ séance générée : un exo de DURÉE se règle en durée (v1.250)', () => {
+  const gainage = (over: Partial<ComboLeg> = {}) =>
+    leg({
+      slot: 'core',
+      exercise_id: 'g',
+      count_mode: 'time',
+      target: 360,
+      rep_min: 30,
+      rep_max: 45,
+      ...over,
+    });
+  it('comboTimeSets : la durée se découpe en séries égales, dont la somme est exacte', () => {
+    expect(comboTimeSets(90, 45)).toEqual([45, 45]);
+    expect(comboTimeSets(120, 45)).toEqual([40, 40, 40]);
+    expect(comboTimeSets(100, 45)).toEqual([50, 50]);
+    expect(comboTimeSets(61, 30)).toEqual([31, 30]);
+    expect(comboTimeSets(20, 45)).toEqual([20]);
+    expect(comboTimeSets(165, 75)).toEqual([85, 80]); // par tranches de 5 s
+    expect(comboTimeSets(0, 45)).toEqual([]);
+    for (const t of [15, 37, 90, 135, 200, 360])
+      expect(comboTimeSets(t, 40).reduce((a, v) => a + v, 0)).toBe(t);
+  });
+  it('le compteur d’un exo de durée est une DURÉE (s), pas un nombre de séries', () => {
+    const s = buildComboSessionFromCounts(combo([gainage()]), { g: 90 });
+    expect(s[0]).toMatchObject({ time: true, sets: [45, 45] }); // haut de la fourchette : 45 s
+  });
+  it('la longueur d’une série suit la dernière faite', () => {
+    const l = gainage({ sets: [set(60)] });
+    expect(legTimePerSet(l)).toBe(60);
+    expect(buildComboSessionFromCounts(combo([l]), { g: 120 })[0]!.sets).toEqual([60, 60]);
+  });
+  it('un exo de reps garde son nombre de séries', () => {
+    const c = combo([leg({ slot: 'push', exercise_id: 'a', target: 10 }), gainage()]);
+    const s = buildComboSessionFromCounts(c, { a: 3, g: 45 });
+    expect(s.find((e) => e.exercise_id === 'a')!.sets).toHaveLength(3);
+    expect(s.find((e) => e.exercise_id === 'g')!.sets).toEqual([45]);
+  });
+  it('durée par défaut : ~2 séries au pas de 15 s, jamais plus que le restant', () => {
+    expect(comboDefaultTimeSec(45, 360)).toBe(90);
+    expect(comboDefaultTimeSec(40, 360)).toBe(75); // 80 → arrondi au pas de 15
+    expect(comboDefaultTimeSec(45, 50)).toBe(50);
+    expect(comboDefaultTimeSec(5, 360)).toBe(COMBO_TIME_STEP);
   });
 });
 

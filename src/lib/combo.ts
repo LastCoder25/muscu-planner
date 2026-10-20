@@ -1041,17 +1041,58 @@ export interface ComboSessionExo {
 
 const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
 
-/** Durée estimée (min) d'une séance de `sets` séries (exécution + repos) → affichage
- *  quand on choisit directement le nombre de séries. */
-export function comboSessionDurationMin(sets: number, restSec: number): number {
-  const perSet = COMBO_EXEC_SEC + Math.max(0, restSec);
-  return Math.max(1, Math.round((sets * perSet) / 60));
+/** Durée estimée (min) d'une séance (exécution + repos) : une série de reps compte
+ *  ~40 s d'exécution, une série de DURÉE compte ses secondes. */
+export function comboSessionDurationMin(
+  session: readonly Pick<ComboSessionExo, 'sets' | 'time'>[],
+  restSec: number,
+): number {
+  let sec = 0;
+  for (const e of session)
+    for (const v of e.sets)
+      sec += (e.time ? Math.max(0, v) : COMBO_EXEC_SEC) + Math.max(0, restSec);
+  return Math.max(1, Math.round(sec / 60));
 }
 
-/** Construit une séance à partir d'un nombre de séries CHOISI PAR EXO (indépendant).
- *  `counts` = { exercise_id: nb de séries }. Chaque série reprend les reps de la
- *  dernière faite, sinon le haut de la fourchette conseillée. Ordre = celui des legs
- *  du défi. Pur/testable. */
+/** Pas du réglage d'un exo de DURÉE dans la préparation de séance (secondes). */
+export const COMBO_TIME_STEP = 15;
+
+/** Durée d'UNE série d'un exo de durée : la dernière faite, sinon le haut de la fourchette
+ *  conseillée (secondes). C'est elle qui découpe la durée choisie en séries. */
+export function legTimePerSet(leg: ComboLeg, objective?: Objective | null): number {
+  return Math.max(5, legLastReps(leg, prescribedReps(legRepRange(leg, objective))));
+}
+
+/** Découpe une durée totale en séries de ~`perSetSec` (v1.250 : pour un exo de durée, on
+ *  choisit une DURÉE, pas un nombre de séries). Séries aussi égales que possible, par
+ *  tranches de 5 s quand la durée s'y prête (« 85 s + 80 s », pas « 83 s + 82 s »), dont
+ *  la somme vaut exactement la durée choisie (elle ne dépasse donc jamais le restant). */
+export function comboTimeSets(totalSec: number, perSetSec: number): number[] {
+  const total = Math.max(0, Math.round(totalSec));
+  if (!total) return [];
+  const n = Math.max(1, Math.round(total / Math.max(5, perSetSec)));
+  const unit = total % 5 === 0 ? 5 : 1;
+  const k = total / unit;
+  const base = Math.floor(k / n);
+  const extra = k - base * n;
+  return Array.from({ length: n }, (_v, i) => (base + (i < extra ? 1 : 0)) * unit);
+}
+
+/** Durée par défaut d'un exo de durée dans la séance : ~2 séries, au pas du réglage, sans
+ *  dépasser ce qu'il reste à faire. */
+export function comboDefaultTimeSec(perSetSec: number, remaining: number): number {
+  const want = Math.max(
+    COMBO_TIME_STEP,
+    Math.round((2 * perSetSec) / COMBO_TIME_STEP) * COMBO_TIME_STEP,
+  );
+  return Math.max(0, Math.min(remaining, want));
+}
+
+/** Construit une séance à partir de ce qui est CHOISI PAR EXO (indépendant).
+ *  `counts` = { exercise_id: nb de séries } — sauf un exo de DURÉE, pour qui c'est une
+ *  durée totale en SECONDES, découpée en séries (`comboTimeSets`). Chaque série reprend
+ *  les reps (ou secondes) de la dernière faite, sinon le haut de la fourchette conseillée.
+ *  Ordre = celui des legs du défi. Pur/testable. */
 export function buildComboSessionFromCounts(
   c: ComboChallenge,
   counts: Record<string, number>,
@@ -1062,13 +1103,16 @@ export function buildComboSessionFromCounts(
     const n = Math.max(0, Math.floor(counts[l.exercise_id] ?? 0));
     if (n <= 0) continue;
     const range = legRepRange(l, objective);
+    const time = legMode(l) === 'time';
     const reps = legLastReps(l, prescribedReps(range));
     out.push({
       exercise_id: l.exercise_id,
       exercise_name: l.exercise_name,
       weight_kg: legLastWeight(l),
-      sets: Array.from({ length: n }, () => reps),
-      time: legMode(l) === 'time',
+      sets: time
+        ? comboTimeSets(n, legTimePerSet(l, objective))
+        : Array.from({ length: n }, () => reps),
+      time,
       rep_min: range.min,
       rep_max: range.max,
     });
