@@ -592,11 +592,11 @@ const cardioKpis = computed(() => {
 
 onMounted(async () => {
   try {
-    cardio.fetchLogs(300).catch(() => undefined);
+    cardio.fetchLogs().catch(() => undefined);
     combo.fetchMine().catch(() => undefined);
     challenges.fetchMine().catch(() => undefined);
     tennis
-      .fetchLogs(300)
+      .fetchLogs()
       .then((l) => (drillLogs.value = l))
       .catch(() => undefined);
     // Tous les bilans (cache partagé avec l'XP et le graphe d'équilibre) + secondaires.

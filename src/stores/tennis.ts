@@ -5,6 +5,7 @@ import { ref } from 'vue';
 import type { DrillSession, DrillLog } from '@/lib/types';
 import type { DrillDef } from '@/lib/drills';
 import { supabase } from '@/lib/supabase';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { useAuthStore } from './auth';
 
 export interface DrillSessionRow {
@@ -114,14 +115,23 @@ export const useTennisStore = defineStore('tennis', () => {
     });
   }
 
-  async function fetchLogs(limit = 50) {
-    const { data, error } = await supabase
-      .from('drill_logs')
-      .select('id, name, performed_at, payload')
-      .order('performed_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
-    logs.value = data ?? [];
+  // ⚠️ TOUTES les séances, sans limite : le niveau Global (piste Tennis) les additionne.
+  // ⚠️ Filtre `user_id` explicite : la RLS borne ce qu'on a le DROIT de lire, pas ce qu'on VEUT lire.
+  async function fetchLogs() {
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      logs.value = [];
+      return logs.value;
+    }
+    logs.value = await fetchAllRows<DrillLogRow>((from, to) =>
+      supabase
+        .from('drill_logs')
+        .select('id, name, performed_at, payload')
+        .eq('user_id', uid)
+        .order('performed_at', { ascending: false })
+        .order('id')
+        .range(from, to),
+    );
     return logs.value;
   }
 
