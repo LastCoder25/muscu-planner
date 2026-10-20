@@ -4,6 +4,8 @@ import { ref } from 'vue';
 import type { CardioActivity, CardioLog } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { fetchAllRows } from '@/lib/fetchAllRows';
+import { useAuthStore } from './auth';
 import { challengeIdsForActivity } from '@/data/cardio';
 
 export interface CardioLogRow {
@@ -16,14 +18,24 @@ export interface CardioLogRow {
 export const useCardioStore = defineStore('cardio', () => {
   const logs = ref<CardioLogRow[]>([]);
 
-  async function fetchLogs(limit = 100) {
-    const { data, error } = await supabase
-      .from('cardio_logs')
-      .select('id, activity, performed_at, payload')
-      .order('performed_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
-    logs.value = data ?? [];
+  // ⚠️ TOUTES les sorties, sans limite : le niveau Global les additionne. Une limite (100,
+  // 300 sur la page Stats) faisait varier le niveau selon le dernier écran visité.
+  // ⚠️ Filtre `user_id` explicite : la RLS borne ce qu'on a le DROIT de lire, pas ce qu'on VEUT lire.
+  async function fetchLogs() {
+    const uid = useAuthStore().user?.id;
+    if (!uid) {
+      logs.value = [];
+      return logs.value;
+    }
+    logs.value = await fetchAllRows<CardioLogRow>((from, to) =>
+      supabase
+        .from('cardio_logs')
+        .select('id, activity, performed_at, payload')
+        .eq('user_id', uid)
+        .order('performed_at', { ascending: false })
+        .order('id')
+        .range(from, to),
+    );
     return logs.value;
   }
 
