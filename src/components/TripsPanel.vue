@@ -205,9 +205,9 @@
         <!-- ⚠️ Du TEXTE, pas `HaulPills` : la tuile était un <button>, et des boutons imbriqués
              ne sont pas du HTML valide (vu au banc : le navigateur referme la tuile avant les
              pastilles). Le détail de l'équipe, lui, garde les pastilles touchables. -->
-        <span v-if="t.back && t.haul.length" class="tr-loot" title="Ce que le voyage ramène"
-          >{{ haulText(t.haul) }}</span
-        >
+        <span v-if="t.back && t.haul.length" class="tr-loot" title="Ce que le voyage ramène">{{
+          haulText(t.haul)
+        }}</span>
         <span
           v-else-if="!t.back && t.expected"
           class="tr-loot est"
@@ -709,6 +709,11 @@ function facesOf(t: MapTrip) {
 /* ⛵ Une traversée en bateau prend TOUTE la ligne (demandé) : île de départ et d'arrivée aux
    deux coins, l'équipage entier au milieu. */
 .trips > .trip.sea {
+  flex-basis: 100%;
+}
+/* ⚔️ Une attaque ennemie a la largeur des voyages (demandé : « de la même largeur que les autres
+   tuiles ») — pleine ligne, plus de tiers isolé entre deux voyages. */
+.trips > .trip.attack {
   flex-basis: 100%;
 }
 /* 🧭 UNE TUILE PAR VOYAGE, pleine largeur, avec sa FRISE (concept B, choisi le 2026-10-09) :
