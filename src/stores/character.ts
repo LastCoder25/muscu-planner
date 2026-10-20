@@ -209,6 +209,7 @@ import {
   returnMilitia,
   takeMilitia,
 } from '@/lib/militia';
+import { militiaRelief, oweMilitia } from '@/lib/militiaRelief';
 import {
   advanceBase,
   markOverflow,
@@ -5518,6 +5519,24 @@ export const useCharacterStore = defineStore('character', () => {
         });
       return none;
     }
+    // 🛡️ LA RELÈVE : les miliciens tombés en défendant un point tenu sont remplacés d'eux-mêmes,
+    // dès que la Caserne en a à la base — même trajet qu'un envoi manuel.
+    const relief = cur.base
+      ? militiaRelief(
+          settled0,
+          cur.base.militia ?? emptyMilitia(now),
+          now,
+          (p) => caravanLegMin(p, [], 0, milMult) * 60_000,
+        )
+      : null;
+    if (relief && cur.base) {
+      if (tickMayWrite(cur))
+        await persist(userId, {
+          expedition_map: relief.map,
+          base: { ...cur.base, militia: relief.militia },
+        });
+      return none;
+    }
     // ⚔️🗼 Les chocs en rase campagne contre les armées de REPRISE, AVANT les reprises : une
     // armée amputée arrive amputée, une armée battue n'arrive pas (la reprise est repoussée).
     let settled = settled0;
@@ -5664,7 +5683,7 @@ export const useCharacterStore = defineStore('character', () => {
         title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
         text:
           (held
-            ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)}${lightHurtLabel(o?.party?.lightHurt)} Une nouvelle attaque se prépare.`
+            ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)}${o?.party?.militiaLost?.length ? ' 🛡️ La relève partira de la base dès qu’un milicien y sera prêt.' : ''}${lightHurtLabel(o?.party?.lightHurt)} Une nouvelle attaque se prépare.`
             : escort.length
               ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt, p.control)}`
               : militia.length
@@ -5683,7 +5702,9 @@ export const useCharacterStore = defineStore('character', () => {
       // ROUTE font demi-tour avec les champions (`loseControl` note leur trajet retour, et
       // `settleReturns` les rend à la base à leur arrivée — plus en un instant).
       const dead = o?.party?.militiaLost ?? [];
-      if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
+      // 🛡️ …et le point attend leur relève, que la base enverra d'elle-même (`militiaRelief`).
+      if (held && dead.length)
+        map = oweMilitia(releaseFromControl(map, p.id, dead, at, playerLevel), p.id, dead.length);
       // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel). BLESSÉ
       // seulement s'il a COMBATTU (partout sauf au lapidaire) — sinon il rentre indemne. L'infirmerie commence à son arrivée.
       if (!held && p.control!.hero) {

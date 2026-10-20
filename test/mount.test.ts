@@ -2742,9 +2742,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       'plus rien sous le centre',
     ).toBe(false);
     // ⏳ La Caserne affiche le temps avant le prochain milicien (demandé : « je ne vois pas le
-    // temps restant avant le nouveau milicien sur le bâtiment »).
+    // temps restant avant le nouveau milicien sur le bâtiment »). v1.247.0 : une PASTILLE
+    // (fond + contour) porte « 🛡️ 2 h 06 », plus un texte nu.
     expect(out, 'la Caserne montre son compte à rebours').toMatch(
-      /class="yard-timer"[^>]*>\s*\d+ h/,
+      /class="yard-timer"[^>]*>\s*<rect[^>]*>(?:<\/rect>)?\s*<text[^>]*>🛡️ \d+ h/,
     );
     // ⚠️ CE QUE CE TEST NE COUVRE PAS : l'affichage du BUTIN. Il vit dans l'écran de fin du
     // rejeu et dans la feuille de la Tour de guet — deux chemins qui demandent une

@@ -382,9 +382,18 @@
             r="2.6"
             class="yard-ready"
           />
-          <text v-if="y.timer" :x="y.x" :y="y.y + y.half + 3.8" class="yard-timer">
-            {{ y.timer }}
-          </text>
+          <!-- 🛡️ La Caserne porte une PASTILLE (demandé : le temps avant le prochain milicien
+               « sur le bâtiment caserne ») : fond sombre, contour accent, lisible sur la cour. -->
+          <g v-if="y.timer" class="yard-timer">
+            <rect
+              :x="y.x - timerW(y.timer) / 2"
+              :y="y.y + y.half + 0.8"
+              :width="timerW(y.timer)"
+              height="8.4"
+              rx="4.2"
+            />
+            <text :x="y.x" :y="y.y + y.half + 6.9">🛡️ {{ y.timer }}</text>
+          </g>
           <rect
             v-if="y.todo"
             :x="y.x - y.half - 2"
@@ -1197,9 +1206,7 @@ const merlons = computed(() =>
 );
 /** 🏥 À l'infirmerie, donc soignable. Blessé mais encore en route vers la base (retour à pied
  *  d'une sortie), il ne l'est pas encore : comme un champion, il se soigne une fois arrivé. */
-const wounded = computed(() =>
-  heroAtInfirmary(base.value, char.row?.expedition_map, now.value),
-);
+const wounded = computed(() => heroAtInfirmary(base.value, char.row?.expedition_map, now.value));
 const heroWalkingHurt = computed(() => isWounded(base.value, now.value) && !wounded.value);
 const heroHomeIn = computed(() =>
   fmtDelay((char.row?.expedition_map?.heroReturnAt ?? now.value) - now.value),
@@ -1482,6 +1489,8 @@ function militiaTimer(level: number): string {
   const ms = nextMilitiaMs(s, level, away, now.value, seats);
   return ms > 0 ? formatDuration(ms) : '…';
 }
+/** Largeur (unités du viewBox) de la pastille de la Caserne : 🛡️ + le texte, à 4 px. */
+const timerW = (label: string) => 11 + label.length * 3.2;
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
   const bs = char.row?.buildings ?? [];
@@ -2369,17 +2378,20 @@ function doHarvest() {
 .yard-ready {
   fill: var(--accent, #ffd23f);
 }
-/* ⏳ Compte à rebours sous une tuile (Caserne) : petit, en clair sur la terre de la cour,
-   contour sombre pour rester lisible sur le pavé comme sur l'herbe. */
+/* 🛡️ Pastille sous la Caserne : le temps avant le prochain milicien, ou « complet ». */
 .yard-timer {
-  font-size: 4.2px;
+  pointer-events: none;
+}
+.yard-timer rect {
+  fill: #14110c;
+  stroke: var(--accent, #ffd23f);
+  stroke-width: 0.6;
+}
+.yard-timer text {
+  font-size: 5.6px;
   font-weight: 700;
   text-anchor: middle;
   fill: var(--text, #f3eee6);
-  paint-order: stroke;
-  stroke: #14110c;
-  stroke-width: 1.2px;
-  pointer-events: none;
 }
 /* Pastille de niveau, lisible sur n'importe quel fond */
 .lvl-badge circle {

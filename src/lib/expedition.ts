@@ -294,6 +294,10 @@ export interface ControlState {
    *  ce qu'un autre a gagné en vingt. Absente sur les camps d'avant : `banked` y vaut
    *  alors pour chaque champion de la garnison. */
   perXp?: Record<string, number>;
+  /** 🛡️ LA RELÈVE : miliciens tombés en défendant ce point, que la base renverra d'elle-même
+   *  dès qu'elle en aura (`militiaRelief`). Absente = rien à remplacer. Effacée quand le point
+   *  est perdu (`loseControl` repart d'un état neuf). */
+  militiaOwed?: number;
 }
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
