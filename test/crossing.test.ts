@@ -452,7 +452,7 @@ describe('🛡️ une réserve de milice par île', () => {
     expect(islandMilitiaOf({})).toBeNull();
     expect(militiaCap(37, null)).toBe(37);
     // La production remplit jusqu'au plafond de l'île, pas au-delà.
-    const full = produceMilitia(emptyMilitia(0), 10, 0, 1e13, i1);
+    const full = produceMilitia(emptyMilitia(0), 10, 0, 1e13, i1, 0);
     expect(full.home).toBe(militiaCap(10, i1));
   });
 });

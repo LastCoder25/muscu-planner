@@ -209,7 +209,7 @@ import {
   returnMilitia,
   takeMilitia,
 } from '@/lib/militia';
-import { militiaRelief, oweMilitia } from '@/lib/militiaRelief';
+import { militiaOwedOn, militiaRelief } from '@/lib/militiaRelief';
 import {
   advanceBase,
   markOverflow,
@@ -3299,6 +3299,8 @@ export const useCharacterStore = defineStore('character', () => {
         militiaOnMap(cur.expedition_map),
         now,
         islandMilitiaOf(cur.expedition_map),
+        // 🛡️ Les morts à remplacer se refont même au-dessus du plafond de l'île.
+        militiaOwedOn(cur.expedition_map),
       );
       if (m1 !== t.base.militia) {
         t.base = { ...t.base, militia: m1 };
@@ -5702,9 +5704,8 @@ export const useCharacterStore = defineStore('character', () => {
       // ROUTE font demi-tour avec les champions (`loseControl` note leur trajet retour, et
       // `settleReturns` les rend à la base à leur arrivée — plus en un instant).
       const dead = o?.party?.militiaLost ?? [];
-      // 🛡️ …et le point attend leur relève, que la base enverra d'elle-même (`militiaRelief`).
-      if (held && dead.length)
-        map = oweMilitia(releaseFromControl(map, p.id, dead, at, playerLevel), p.id, dead.length);
+      // 🛡️ Leur relève se lit ensuite dans le rapport gardé sur le lieu (`militiaRelief`).
+      if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
       // 🧝 Délogé, le héros posté rentre à pied à la base (le trajet d'un rappel). BLESSÉ
       // seulement s'il a COMBATTU (partout sauf au lapidaire) — sinon il rentre indemne. L'infirmerie commence à son arrivée.
       if (!held && p.control!.hero) {

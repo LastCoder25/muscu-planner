@@ -1016,7 +1016,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { formatDuration } from '@/lib/duration';
-import { emptyMilitia, militiaCap, militiaOnMap, nextMilitiaMs } from '@/lib/militia';
+import { emptyMilitia, militiaOnMap, militiaRoomLeft, nextMilitiaMs } from '@/lib/militia';
+import { militiaOwedOn } from '@/lib/militiaRelief';
 import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
@@ -1485,8 +1486,10 @@ function militiaTimer(level: number): string {
   const s = char.row?.base?.militia ?? emptyMilitia(now.value);
   const away = militiaOnMap(char.row?.expedition_map);
   const seats = islandMilitiaOf(char.row?.expedition_map);
-  if (s.home + away >= militiaCap(level, seats)) return 'complet';
-  const ms = nextMilitiaMs(s, level, away, now.value, seats);
+  // 🛡️ Des morts à remplacer : la Caserne travaille encore, même au plafond de l'île.
+  const owed = militiaOwedOn(char.row?.expedition_map);
+  if (militiaRoomLeft(s, level, away, seats, owed) <= 0) return 'complet';
+  const ms = nextMilitiaMs(s, level, away, now.value, seats, owed);
   return ms > 0 ? formatDuration(ms) : '…';
 }
 /** Largeur (unités du viewBox) de la pastille de la Caserne : 🛡️ + le texte, à 4 px. */

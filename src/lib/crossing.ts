@@ -46,6 +46,7 @@ import {
   takeMilitia,
   type MilitiaState,
 } from './militia';
+import { militiaOwedOn } from './militiaRelief';
 import {
   bankAt,
   controlKindsOf,
@@ -604,7 +605,7 @@ export function produceIslandMilitia(
   for (const [k, im] of Object.entries(map.islands)) {
     if (!im.militia) continue;
     const seats = islandMilitiaOf({ archipel: archipelOn(Number(k)) });
-    const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now, seats);
+    const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now, seats, militiaOwedOn(im));
     if (m !== im.militia) islands = { ...islands, [k]: { ...im, militia: m } };
   }
   return islands === map.islands ? map : { ...map, islands };

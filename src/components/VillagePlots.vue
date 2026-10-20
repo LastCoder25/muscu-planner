@@ -274,6 +274,7 @@ import {
 } from '@/lib/buildings';
 import { buildingPreview, nextMilestone, previewNote } from '@/lib/buildingPreview';
 import { emptyMilitia, militiaCap, militiaOnMap, nextMilitiaMs } from '@/lib/militia';
+import { militiaOwedOn } from '@/lib/militiaRelief';
 import { islandMilitiaOf } from '@/lib/controlPoints';
 import { formatDuration } from '@/lib/duration';
 
@@ -341,7 +342,14 @@ const militia = computed(() => {
     home: s.home,
     away,
     cap: militiaCap(b.level, islandMilitiaOf(char.row?.expedition_map)),
-    next: nextMilitiaMs(s, b.level, away, props.now, islandMilitiaOf(char.row?.expedition_map)),
+    next: nextMilitiaMs(
+      s,
+      b.level,
+      away,
+      props.now,
+      islandMilitiaOf(char.row?.expedition_map),
+      militiaOwedOn(char.row?.expedition_map),
+    ),
   };
 });
 /** 🛕 Le Panthéon a sa propre feuille : plein écran, trois grandes tuiles. */

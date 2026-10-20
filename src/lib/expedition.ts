@@ -298,6 +298,9 @@ export interface ControlState {
    *  dès qu'elle en aura (`militiaRelief`). Absente = rien à remplacer. Effacée quand le point
    *  est perdu (`loseControl` repart d'un état neuf). */
   militiaOwed?: number;
+  /** 📜 Le dernier rapport de défense (`lastAttack.id`) dont les morts sont déjà comptés dans
+   *  `militiaOwed` : un rapport ne compte qu'une fois. */
+  reliefSeen?: string;
 }
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et

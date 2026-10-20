@@ -133,34 +133,52 @@ describe('la Caserne : cadence et effectif', () => {
 describe('la production', () => {
   it('produit un milicien par intervalle, et garde la fraction entamée', () => {
     const step = militiaIntervalH(10) * H;
-    const s = produceMilitia(emptyMilitia(0), 10, 0, step * 2.5, null);
+    const s = produceMilitia(emptyMilitia(0), 10, 0, step * 2.5, null, 0);
     expect(s.home).toBe(2);
     expect(s.producedAt).toBe(step * 2);
   });
   it('s’arrête au plafond, en comptant ceux partis sur la carte', () => {
     const step = militiaIntervalH(5) * H;
-    const s = produceMilitia(emptyMilitia(0), 5, 2, step * 50, null);
+    const s = produceMilitia(emptyMilitia(0), 5, 2, step * 50, null, 0);
     expect(s.home).toBe(militiaCap(5, null) - 2);
   });
   it('au plafond l’horloge avance : vider un point ne relance pas une rafale', () => {
     const step = militiaIntervalH(5) * H;
-    const full = produceMilitia(emptyMilitia(0), 5, 0, step * 50, null);
+    const full = produceMilitia(emptyMilitia(0), 5, 0, step * 50, null, 0);
     expect(full.home).toBe(militiaCap(5, null));
     const out = takeMilitia(full, militiaCap(5, null))!.state;
-    const next = produceMilitia(out, 5, militiaCap(5, null), step * 50 + step * 0.5, null);
+    const next = produceMilitia(out, 5, militiaCap(5, null), step * 50 + step * 0.5, null, 0);
     expect(next.home).toBe(0);
   });
   it('rend le MÊME objet quand rien ne change (pas d’écriture à vide)', () => {
     const s = emptyMilitia(0);
-    expect(produceMilitia(s, 10, 0, 1000, null)).toBe(s);
-    expect(produceMilitia(s, 0, 0, 1e12, null)).toBe(s);
+    expect(produceMilitia(s, 10, 0, 1000, null, 0)).toBe(s);
+    expect(produceMilitia(s, 0, 0, 1e12, null, 0)).toBe(s);
   });
   it('annonce le prochain milicien, et rien quand l’effectif est complet', () => {
     const step = militiaIntervalH(10) * H;
-    expect(nextMilitiaMs(emptyMilitia(0), 10, 0, step / 4, null)).toBeCloseTo(step * 0.75);
+    expect(nextMilitiaMs(emptyMilitia(0), 10, 0, step / 4, null, 0)).toBeCloseTo(step * 0.75);
     expect(
-      nextMilitiaMs({ home: militiaCap(10, null), producedAt: 0, seq: 0 }, 10, 0, 5, null),
+      nextMilitiaMs({ home: militiaCap(10, null), producedAt: 0, seq: 0 }, 10, 0, 5, null, 0),
     ).toBe(0);
+  });
+  // 🛡️ LA RELÈVE PASSE LE PLAFOND (2026-10-20, demandé : « ils doivent se refaire sur l'île en
+  // cours ») : sur une île, des miliciens venus des îles d'avant suffisent à dépasser le
+  // plafond de la Caserne, qui ne remplaçait alors plus aucun mort.
+  it('au-dessus du plafond, la Caserne produit encore les miliciens DUS (morts à remplacer)', () => {
+    const step = militiaIntervalH(5) * H;
+    const over = militiaCap(5, null) + 5; // déjà plus de miliciens sur la carte que le plafond
+    const s = produceMilitia(emptyMilitia(0), 5, over, step * 50, null, 3);
+    expect(s.home).toBe(3);
+    // Déjà 2 à la base : il n'en manque qu'un.
+    const two = { ...emptyMilitia(0), home: 2 };
+    expect(produceMilitia(two, 5, over, step * 50, null, 3).home).toBe(3);
+  });
+  it('le compte à rebours tourne tant que des morts sont à remplacer, même au plafond', () => {
+    const step = militiaIntervalH(10) * H;
+    const over = militiaCap(10, null) + 2;
+    expect(nextMilitiaMs(emptyMilitia(0), 10, over, step / 4, null, 0)).toBe(0);
+    expect(nextMilitiaMs(emptyMilitia(0), 10, over, step / 4, null, 1)).toBeCloseTo(step * 0.75);
   });
 });
 

@@ -115,6 +115,10 @@ export function militiaCap(barracks: number, isl: IslandMilitia | null): number 
  * repart de `now` — sinon vider un point relancerait une rafale de miliciens produits
  * pendant qu'on était au plafond. Rend le MÊME objet si rien ne change (le store n'écrit pas
  * à vide).
+ * 🛡️ LA RELÈVE PASSE LE PLAFOND (2026-10-20, demandé : « ils doivent se refaire sur l'île en
+ * cours pour retourner en garnison là où il y a eu les pertes ») : `owed` = les miliciens tombés
+ * que des points attendent (`militiaOwedOn`). Sur une île, ceux venus des îles d'avant
+ * suffisent à dépasser le plafond de la Caserne, qui ne remplaçait alors plus aucun mort.
  */
 export function produceMilitia(
   s: MilitiaState,
@@ -122,9 +126,11 @@ export function produceMilitia(
   away: number,
   now: number,
   isl: IslandMilitia | null,
+  /** Miliciens dus aux points (morts à remplacer), REQUIS. */
+  owed: number,
 ): MilitiaState {
   if (barracks <= 0) return s;
-  const room = militiaCap(barracks, isl) - s.home - away;
+  const room = militiaRoomLeft(s, barracks, away, isl, owed);
   const step = militiaIntervalH(barracks) * 3_600_000;
   const made = Math.floor(Math.max(0, now - s.producedAt) / step);
   if (made <= 0) return s;
@@ -136,15 +142,29 @@ export function produceMilitia(
   return { ...s, home: s.home + n, producedAt: s.producedAt + made * step };
 }
 
-/** Temps avant le prochain milicien (0 si la Caserne est pleine ou absente). */
+/** 🏭 Combien la Caserne peut encore produire : jusqu'au plafond, OU jusqu'à couvrir les morts
+ *  dus aux points (ceux déjà à la base partiront pour eux). */
+export function militiaRoomLeft(
+  s: MilitiaState,
+  barracks: number,
+  away: number,
+  isl: IslandMilitia | null,
+  owed: number,
+): number {
+  return Math.max(militiaCap(barracks, isl) - s.home - away, owed - s.home);
+}
+
+/** Temps avant le prochain milicien (0 si la Caserne n'a plus rien à produire ou est absente). */
 export function nextMilitiaMs(
   s: MilitiaState,
   barracks: number,
   away: number,
   now: number,
   isl: IslandMilitia | null,
+  /** Miliciens dus aux points (morts à remplacer), REQUIS. */
+  owed: number,
 ): number {
-  if (barracks <= 0 || s.home + away >= militiaCap(barracks, isl)) return 0;
+  if (barracks <= 0 || militiaRoomLeft(s, barracks, away, isl, owed) <= 0) return 0;
   const step = militiaIntervalH(barracks) * 3_600_000;
   return Math.max(0, s.producedAt + step - now);
 }
