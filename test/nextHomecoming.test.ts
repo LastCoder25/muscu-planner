@@ -10,7 +10,7 @@ const trip = (key: string, extra: Partial<NavTrip> = {}): NavTrip => ({
 });
 const NOW = 1000;
 
-describe('🏠 nextHomecoming : le prochain voyage à rentrer en ville', () => {
+describe('↩️ nextHomecoming : le prochain voyage à revenir à son point de départ', () => {
   it('le retour le plus proche gagne, quel que soit l’ordre reçu', () => {
     const r = nextHomecoming(
       [trip('a', { homeAt: 5000, endsAt: 1500 }), trip('b', { homeAt: 3000, endsAt: 2500 })],
@@ -19,13 +19,15 @@ describe('🏠 nextHomecoming : le prochain voyage à rentrer en ville', () => {
     expect(r?.trip.key).toBe('b');
     expect(r?.at).toBe(3000);
   });
-  it('un retour vers la base sans heure de retour se lit à son arrivée', () => {
+  // Override de la v1.246.0 (demandé : « pas la prochaine qui rentre à la base, celle qui
+  // rentre à son lieu de départ ») : quitter un poste pour la base n'est pas un retour.
+  it('un aller simple vers la base (poste quitté, héros à pied) ne compte pas', () => {
     const r = nextHomecoming(
       [trip('a', { homeAt: 5000 }), trip('walk', { toBase: true, back: true, endsAt: 2000 })],
       NOW,
     );
-    expect(r?.trip.key).toBe('walk');
-    expect(r?.at).toBe(2000);
+    expect(r?.trip.key).toBe('a');
+    expect(r?.at).toBe(5000);
   });
   it('un aller simple (renfort, traversée) ne rentre pas', () => {
     expect(nextHomecoming([trip('reinf', { endsAt: 1200 })], NOW)).toBeNull();

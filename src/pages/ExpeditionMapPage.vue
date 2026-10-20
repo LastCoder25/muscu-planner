@@ -465,9 +465,10 @@
            les îles avec la fiche de celle qu'on choisit. -->
       <ArchipelPanel v-if="!viewed" v-bind="archBind" v-on="archOn" />
 
-      <!-- 🏠 LE PROCHAIN RETOUR, toujours visible en bas à gauche de la carte (demandé : « voir
-           d'un coup d'œil le temps de la prochaine expédition qui va rentrer »). Turquoise comme
-           l'anneau des pions qui rentrent ; le toucher centre la carte sur ce voyage. -->
+      <!-- ↩️ LE PROCHAIN RETOUR AU POINT DE DÉPART (base ou poste), toujours visible en bas à
+           gauche de la carte (demandé : « voir d'un coup d'œil le temps de la prochaine
+           expédition qui va rentrer »). Turquoise comme l'anneau des pions qui rentrent ; le
+           toucher centre la carte sur ce voyage. -->
       <button
         v-if="homecoming && !viewed"
         type="button"
@@ -476,7 +477,7 @@
         :aria-label="'Prochain retour : ' + homecoming.trip.title"
         @click="pickOverlayTrip(homecoming.trip.key)"
       >
-        <span aria-hidden="true">🏠</span>
+        <span aria-hidden="true">↩️</span>
         <span aria-hidden="true">{{ homecoming.trip.who }}</span>
         <b class="hn-t">{{ formatCountdown(homecoming.at - now) }}</b>
       </button>
@@ -4613,7 +4614,7 @@ const trips = computed(() => {
   }
   return out.sort((x, y) => (x.endsAt ?? 0) - (y.endsAt ?? 0));
 });
-/** 🏠 Le prochain voyage à rentrer en ville (pastille en bas à gauche de la carte). */
+/** ↩️ Le prochain voyage à revenir à son point de départ (pastille en bas à gauche de la carte). */
 const homecoming = computed(() => nextHomecoming(trips.value, now.value));
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
@@ -7912,7 +7913,7 @@ onUnmounted(() => {
   pointer-events: none;
 }
 /* 🏠 Anneau des troupes qui rentrent : turquoise, couleur prise par aucun autre pion. */
-/* 🏠 Le prochain retour, en bas à gauche de la carte, à hauteur des boutons de zoom. */
+/* ↩️ Le prochain retour, en bas à gauche de la carte, à hauteur des boutons de zoom. */
 .home-next {
   position: absolute;
   left: 8px;

@@ -21,15 +21,14 @@ export interface NavTrip extends LegSource {
   homeAt?: number;
   /** Prochaine étape (ms) : l'heure où se range la tuile du voyage. */
   endsAt?: number;
-  /** 🏠 Aller simple VERS la base (retour d'un poste, héros qui rentre à pied). */
-  toBase?: boolean;
 }
 
-/** 🏠 LE PROCHAIN VOYAGE À RENTRER EN VILLE (demandé : « voir d'un coup d'œil sur la carte le
- *  temps de la prochaine expédition qui va rentrer »). Rentrent : ce qui a une heure de retour
- *  (`homeAt`) et les allers simples vers la base (`toBase`, à leur arrivée). Un renfort ou une
- *  traversée ne rentre pas ; un voyage programmé n'est pas encore parti. `null` sans retour à
- *  venir. */
+/** ↩️ LE PROCHAIN VOYAGE À REVENIR À SON POINT DE DÉPART (demandé : « voir d'un coup d'œil sur
+ *  la carte le temps de la prochaine expédition qui va rentrer » — « à son lieu de départ tout
+ *  court », pas à la base). Seuls les allers-retours comptent, à leur heure de retour (`homeAt` :
+ *  la base OU le poste d'où ils sont partis). Un aller simple (renfort, traversée, poste quitté
+ *  pour la base) ne revient pas ; un voyage programmé n'est pas encore parti. `null` sans retour
+ *  à venir. */
 export function nextHomecoming<T extends NavTrip>(
   trips: readonly T[],
   now: number,
@@ -37,7 +36,7 @@ export function nextHomecoming<T extends NavTrip>(
   let best: { trip: T; at: number } | null = null;
   for (const t of trips) {
     if (t.pending) continue;
-    const at = t.homeAt ?? (t.toBase ? t.endsAt : undefined);
+    const at = t.homeAt;
     if (at === undefined || at <= now) continue;
     if (!best || at < best.at) best = { trip: t, at };
   }
