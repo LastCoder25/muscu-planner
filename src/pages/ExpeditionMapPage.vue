@@ -465,6 +465,22 @@
            les îles avec la fiche de celle qu'on choisit. -->
       <ArchipelPanel v-if="!viewed" v-bind="archBind" v-on="archOn" />
 
+      <!-- 🏠 LE PROCHAIN RETOUR, toujours visible en bas à gauche de la carte (demandé : « voir
+           d'un coup d'œil le temps de la prochaine expédition qui va rentrer »). Turquoise comme
+           l'anneau des pions qui rentrent ; le toucher centre la carte sur ce voyage. -->
+      <button
+        v-if="homecoming && !viewed"
+        type="button"
+        class="home-next"
+        :title="homecoming.trip.title"
+        :aria-label="'Prochain retour : ' + homecoming.trip.title"
+        @click="pickOverlayTrip(homecoming.trip.key)"
+      >
+        <span aria-hidden="true">🏠</span>
+        <span aria-hidden="true">{{ homecoming.trip.who }}</span>
+        <b class="hn-t">{{ formatCountdown(homecoming.at - now) }}</b>
+      </button>
+
       <!-- Zoom -->
       <div class="zoom-ctl">
         <div class="zoom-col">
@@ -1898,6 +1914,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { formatCountdown, formatDuration, formatDurationMin } from '@/lib/duration';
+import { nextHomecoming } from '@/lib/tripNav';
 import {
   CONTROL_LABEL,
   CONTROL_YIELD,
@@ -4596,6 +4613,8 @@ const trips = computed(() => {
   }
   return out.sort((x, y) => (x.endsAt ?? 0) - (y.endsAt ?? 0));
 });
+/** 🏠 Le prochain voyage à rentrer en ville (pastille en bas à gauche de la carte). */
+const homecoming = computed(() => nextHomecoming(trips.value, now.value));
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
   const nMil = militiaIn(members).length;
@@ -7893,6 +7912,33 @@ onUnmounted(() => {
   pointer-events: none;
 }
 /* 🏠 Anneau des troupes qui rentrent : turquoise, couleur prise par aucun autre pion. */
+/* 🏠 Le prochain retour, en bas à gauche de la carte, à hauteur des boutons de zoom. */
+.home-next {
+  position: absolute;
+  left: 8px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  max-width: calc(100% - 64px);
+  padding: 0 12px;
+  border: 1.5px solid #3ec9d6;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: 0 0 6px rgba(62, 201, 214, 0.35);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.hn-t {
+  font-family: Oswald, sans-serif;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  color: #3ec9d6;
+}
 .home-ring {
   fill: none;
   stroke: #3ec9d6;
