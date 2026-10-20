@@ -97,6 +97,9 @@ export interface PartyInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+  /** 🧑‍✈️ REQUIS : le niveau du héros. Un champion au maximum (rang et étoiles du héros)
+   *  ne prend pas d'XP et le partage se fait entre les autres (`missionXpFor`). */
+  heroLevel: number;
   /** 🛡️ Des MILICIENS en plus des champions (`militiaUnits`) : ils combattent dans le
    *  groupe fondu mais n'apprennent rien. Absent = aucun. */
   militia?: readonly SkirmishUnit[];
@@ -453,7 +456,16 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero, d.foeDealt),
+    xp: missionXpFor(
+      escort,
+      poi,
+      d.win,
+      g.shares,
+      input.pantheonLevel,
+      !!hero,
+      d.foeDealt,
+      input.heroLevel,
+    ),
     hurt: spareInjured(escort, campHurt(d, escort), input.seed),
     ...(input.militia?.length
       ? {

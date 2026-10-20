@@ -4228,7 +4228,16 @@ export const useCharacterStore = defineStore('character', () => {
     // 🐺 Une tanière : une bête de force FIXE, qu'on peut attaquer en surnombre.
     const spec = campSpecOf(poi);
     const outcome = isRiftPoi(poi)
-      ? resolveIncursion({ poi, escort, road, hero, seed, now, pantheonLevel: pantheonLevel.value })
+      ? resolveIncursion({
+          poi,
+          escort,
+          road,
+          hero,
+          seed,
+          now,
+          pantheonLevel: pantheonLevel.value,
+          heroLevel: heroLevel.value,
+        })
       : isFieldArmyPoi(poi)
         ? resolveFieldArmy({
             poi,
@@ -4238,6 +4247,7 @@ export const useCharacterStore = defineStore('character', () => {
             seed,
             playerLevel: opts.playerLevel,
             pantheonLevel: pantheonLevel.value,
+            heroLevel: heroLevel.value,
           })
         : poi.convoy
           ? resolveConvoy({
@@ -4248,6 +4258,7 @@ export const useCharacterStore = defineStore('character', () => {
               seed,
               playerLevel: opts.playerLevel,
               pantheonLevel: pantheonLevel.value,
+              heroLevel: heroLevel.value,
             })
           : isWarbandPoi(poi)
             ? resolveInterception({
@@ -4259,6 +4270,7 @@ export const useCharacterStore = defineStore('character', () => {
                 seed,
                 playerLevel: opts.playerLevel,
                 pantheonLevel: pantheonLevel.value,
+                heroLevel: heroLevel.value,
               })
             : spec
               ? resolveCamp({
@@ -4270,6 +4282,7 @@ export const useCharacterStore = defineStore('character', () => {
                   seed,
                   playerLevel: opts.playerLevel,
                   pantheonLevel: pantheonLevel.value,
+                  heroLevel: heroLevel.value,
                 })
               : HARVEST_TYPES.has(poi.type)
                 ? resolveHarvestParty({
@@ -4280,6 +4293,7 @@ export const useCharacterStore = defineStore('character', () => {
                     seed,
                     playerLevel: opts.playerLevel,
                     pantheonLevel: pantheonLevel.value,
+                    heroLevel: heroLevel.value,
                     combined: a.combined,
                   })
                 : null;
@@ -5207,7 +5221,9 @@ export const useCharacterStore = defineStore('character', () => {
           kind: 'unlock',
           emoji: isl.objectiveEmoji,
           // 🕯️ Île 3 : un objectif battu s'éteint, il se rallumera au fil des sorties.
-          title: EMBER.islands.has(isl.id) ? `${isl.objective} éteint !` : `${isl.objective} pris !`,
+          title: EMBER.islands.has(isl.id)
+            ? `${isl.objective} éteint !`
+            : `${isl.objective} pris !`,
           subtitle: EMBER.islands.has(isl.id)
             ? 'Il se rallumera au fil de tes sorties · un pas vers la forteresse'
             : 'Un pas vers la forteresse portuaire',
@@ -5370,6 +5386,7 @@ export const useCharacterStore = defineStore('character', () => {
               seed,
               playerLevel: lvl,
               pantheonLevel: pantheonLevel.value,
+              heroLevel,
               militia,
             })
           : null;
@@ -5602,6 +5619,7 @@ export const useCharacterStore = defineStore('character', () => {
               seed,
               playerLevel,
               pantheonLevel: pantheonLevel.value,
+              heroLevel,
               militia,
             })
           : null;

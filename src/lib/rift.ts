@@ -894,6 +894,9 @@ export interface IncursionInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+  /** 🧑‍✈️ REQUIS : le niveau du héros. Un champion au maximum (rang et étoiles du héros)
+   *  ne prend pas d'XP et le partage se fait entre les autres (`missionXpFor`). */
+  heroLevel: number;
 }
 
 /**
@@ -1009,6 +1012,7 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     input.pantheonLevel,
     !!hero,
     incursionDealt(run, bodies),
+    input.heroLevel,
   );
 
   // ⚠️ MANA SEUL (2026-09-27, décision de l'utilisateur) : plus de sceaux, ils viennent
@@ -1234,6 +1238,9 @@ export interface InterceptionInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+  /** 🧑‍✈️ REQUIS : le niveau du héros. Un champion au maximum (rang et étoiles du héros)
+   *  ne prend pas d'XP et le partage se fait entre les autres (`missionXpFor`). */
+  heroLevel: number;
 }
 
 /**
@@ -1304,7 +1311,16 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
   const shares = skirmishXpShares(escort, bodies, { foesDown });
   // ⚔️ Ce que le groupe a réellement entamé : paie l'XP d'un échec ET ampute la bande.
   const part = dealtShare(run.log, army.pv, run.win);
-  const xp = missionXpFor(escort, poi, run.win, shares, input.pantheonLevel, !!hero, part);
+  const xp = missionXpFor(
+    escort,
+    poi,
+    run.win,
+    shares,
+    input.pantheonLevel,
+    !!hero,
+    part,
+    input.heroLevel,
+  );
 
   const mana = interceptionMana(raid, army, run);
   const effectif = raid.groups.reduce((s, g) => s + g.count, 0);

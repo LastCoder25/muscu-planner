@@ -349,7 +349,16 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
           // rattrapé le héros n'apprend plus rien, le mode « XP » ne doit pas le compter.
           xp: (t, us) => {
             const team = advsOf(us);
-            const got = missionXpFor(team, t, true, {}, char.pantheonLevel, hasHero(us), null);
+            const got = missionXpFor(
+              team,
+              t,
+              true,
+              {},
+              char.pantheonLevel,
+              hasHero(us),
+              null,
+              char.heroLevel,
+            );
             return team.reduce(
               (s, a) => s + Math.min(got[a.id] ?? 0, advXpRoom(a, char.heroLevel)),
               0,

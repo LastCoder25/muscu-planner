@@ -71,6 +71,7 @@ import {
 } from './expedition';
 import {
   advBankedLevel,
+  advXpCapped,
   advXpRoom,
   advChampion,
   advRarity,
@@ -1032,15 +1033,26 @@ export function missionXpFor(
    * ⚠️ Ignoré sur une victoire.
    */
   dealt: number | null,
+  /**
+   * 🧑‍✈️ Le niveau du héros. Un champion déjà au maximum de ce qu'il peut être
+   * (`advXpCapped` : le rang et les étoiles du héros) ne prend RIEN, et le partage se fait
+   * entre ceux qui peuvent encore apprendre (2026-10-20, décision de l'utilisateur : « l'XP est
+   * répartie parmi ceux qui peuvent en gagner »). 0 = inconnu : personne n'est écarté.
+   * ⚠️ REQUIS : l'oublier ferait diluer le partage par des champions qui n'en prennent rien.
+   */
+  heroLevel: number,
 ): Record<string, number> {
-  const split = missionXpSplit(escort.length) * (hero ? 1 : SOLO_XP_MULT);
+  const learners = escort.filter((a) => !advXpCapped(a, heroLevel));
+  const split = missionXpSplit(learners.length) * (hero ? 1 : SOLO_XP_MULT);
   // Défaite d'une ATTAQUE : le socle suit la part entamée, et peut valoir zéro (pas de
   // plancher à 1 XP — sinon « rien entamé » rapporterait encore quelque chose).
   const scaled = !won && typeof dealt === 'number';
   const part = scaled ? Math.max(0, Math.min(1, dealt)) : 1;
+  // Un Mentor au maximum enseigne toujours : il compte dans le multiplicateur de l'équipe.
   const mentor = mentorXpMult([...escort]);
   const xp: Record<string, number> = {};
-  for (const a of escort) {
+  for (const a of escort) if (!learners.includes(a)) xp[a.id] = 0;
+  for (const a of learners) {
     // ⚠️ LE NIVEAU DE SA RÉSERVE, pour la prime ET pour le rendement décroissant : bloqué à
     // ★5, son niveau affiché ne bouge plus, et les deux liraient un retard qu'il n'a plus.
     const L = advBankedLevel(a, pantheonLevel);
@@ -1113,13 +1125,14 @@ export function missionXpPreview(
   const escort = advs.filter((a) => escortIds.includes(a.id));
   // ⚠️ L'XP de l'escorte est la MÊME pour tous ses membres : on l'évalue une fois, au lieu
   //    d'une passe par champion (qui reboucle sur toute l'équipe et re-dérive la difficulté).
-  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel, hero, null);
+  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel, hero, null, heroLevel);
   const d = poiDifficultyLevel(poi);
   const out: Record<string, MissionXpPreview> = {};
   for (const a of advs) {
     const gross = escortIds.includes(a.id)
       ? (dejaLa[a.id] ?? 0)
-      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero, null)[a.id] ?? 0);
+      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero, null, heroLevel)[a.id] ??
+        0);
     // ⚠️ Ce que `grantAdvXp` lui laissera prendre : rien s'il a rattrapé le héros.
     const room = advXpRoom(a, heroLevel);
     const xp = Math.min(gross, room);
@@ -1432,7 +1445,13 @@ export function resolveCaravan(
    *  lieux différents et ne se réunissent qu'AU LIEU, à une heure fixée au départ — le
    *  demi-tour de l'équipe réunie n'a pas de chemin où se produire, et l'écran les montrait
    *  arrivés et récoltant pendant que le rapport disait « rentrés sans atteindre le lieu ». */
-  opts: { noTurnBack?: boolean } = {},
+  opts: {
+    noTurnBack?: boolean;
+    /** 🧑‍✈️ Le niveau du héros : les champions au maximum ne prennent pas d'XP et ne diluent
+     *  pas le partage (`missionXpFor`). Absent = inconnu (aperçu des chances). Les vrais
+     *  départs le passent toujours (`startCaravan` et la récolte l'exigent). */
+    heroLevel?: number;
+  } = {},
 ): CaravanOutcome {
   // ⚠️ Plus aucun équipement de champion sur la route (v0.1012) : il ne vient QUE du tirage.
   // Le générateur dédié qui le tirait a disparu avec lui — il ne lisait rien du flux `rng`,
@@ -1564,7 +1583,16 @@ export function resolveCaravan(
       keys: 0,
       mana: 0,
       // Un convoi n'est pas une attaque : son échec garde le socle plein (`dealt` null).
-      xp: missionXpFor(escort, poi, false, xpShare, pantheonLevel, false, null),
+      xp: missionXpFor(
+        escort,
+        poi,
+        false,
+        xpShare,
+        pantheonLevel,
+        false,
+        null,
+        opts.heroLevel ?? 0,
+      ),
       kills,
       hurt: hurtFinal,
       lightHurt: lightFinal,
@@ -1590,7 +1618,16 @@ export function resolveCaravan(
   const keyLuck = rng() < HARVEST.keyChance ? labyKeyPriceAt(heroRewardLevel(poi, playerLevel)) : 0;
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
   // Un convoi part toujours sans le héros.
-  const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel, false, null);
+  const xp = missionXpFor(
+    escort,
+    poi,
+    !lost,
+    xpShare,
+    pantheonLevel,
+    false,
+    null,
+    opts.heroLevel ?? 0,
+  );
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
@@ -1642,10 +1679,12 @@ export function startCaravan(
   /** ⚠️ REQUIS : la référence de la prime de rattrapage. L'issue étant FIGÉE au départ,
    *  c'est le Panthéon de CE moment — comme le reste du rapport, annoncé puis tenu. */
   pantheonLevel: number,
+  /** 🧑‍✈️ REQUIS : le niveau du héros (partage d'XP entre ceux qui peuvent apprendre). */
+  heroLevel: number,
 ): Caravan {
   const full =
     caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed, travelMult) * 60_000;
-  const outcome = resolveCaravan(poi, escort, seed, kit, pantheonLevel, undefined);
+  const outcome = resolveCaravan(poi, escort, seed, kit, pantheonLevel, undefined, { heroLevel });
   // 🔙 Un demi-tour raccourcit l'aller ET le retour à la part du chemin faite.
   const leg = full * (outcome.turnBack ?? 1);
   return {

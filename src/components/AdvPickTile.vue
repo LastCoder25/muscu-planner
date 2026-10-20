@@ -72,7 +72,15 @@
         <span v-if="travelMin != null" class="ca-trip" title="Trajet jusqu’au lieu"
           >🧭 {{ formatDurationMin(travelMin) }}</span
         >
-        <span v-if="xp" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
+        <!-- 🧑‍✈️ AU MAXIMUM (demandé) : même rang et mêmes étoiles que le héros, il n'apprend
+             plus rien ici — et l'XP du lieu se partage entre les autres. -->
+        <span
+          v-if="xp?.capped"
+          class="ca-max"
+          title="Au maximum : même rang et mêmes étoiles que le héros. Il ne prend pas d’XP, elle se partage entre les autres champions. Fais monter le héros pour qu’il reprenne."
+          >🧑‍✈️ max</span
+        >
+        <span v-else-if="xp" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
           {{ xp.win != null && xp.win < 1 ? '≈' : '' }}+{{ xp.xp }} XP<b v-if="xp.catchUp > 1"
             >×{{ fmtMult(xp.catchUp) }}</b
           >
@@ -443,6 +451,16 @@ const rar = computed(() => advGradeBadge(props.adv));
 .ca-xp.low {
   color: var(--dim);
   font-weight: 600;
+}
+.ca-max {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--dim);
+  white-space: nowrap;
 }
 /* La prime de retard : un gain, donc la teinte du gain (celle du vert de la charte). */
 .ca-xp b {

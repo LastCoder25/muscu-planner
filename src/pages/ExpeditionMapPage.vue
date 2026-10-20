@@ -1178,6 +1178,7 @@
                 <b>{{ partyAdvs.length }}{{ Number.isFinite(partyMax) ? '/' + partyMax : '' }}</b>
                 · XP <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b>
                 <span v-if="!partyHeroOn"> · 🧭 seuls, +25 %</span>
+                <span v-if="partyMaxedCount"> · 🧑‍✈️ {{ partyMaxedCount }} au max, sans XP</span>
               </p>
               <button
                 v-if="char.advList.length"
@@ -6270,6 +6271,7 @@ const {
   canSendPartyNow,
   partyMax,
   partyXpSplit,
+  partyMaxedCount,
   partyXp,
   partyLowXp,
   togglePartyAdv,

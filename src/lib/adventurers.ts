@@ -48,6 +48,7 @@ import {
   characterRank,
   rankProgress,
   rankStartLevel,
+  starEndLevel,
   type CharacterRank,
 } from './characterRank';
 // ⚠️ IMPORT DE TYPE SEUL : `combat.ts` n'importe rien, mais le garder en `type`
@@ -2338,15 +2339,31 @@ export function advBankedLevel(adv: Adventurer, pantheonLevel: number): number {
  * fois qu'ils ont rattrapé le héros ; l'XP accumulée avant une ascension ne doit pas leur
  * permettre de dépasser le héros une fois l'ascension faite »).
  *
- * C'est ce qui sépare son niveau de celui du héros, réserve DÉJÀ comprise : au niveau du
- * héros, il ne reste RIEN. `heroLevel` ≤ 0 ou non fini = niveau du héros inconnu (le store ne
- * l'a pas encore lu) : aucune borne, plutôt que de jeter de l'XP sur une valeur fausse. Pur.
+ * ⭐ LE PLAFOND EST LE RANG ET LES ÉTOILES DU HÉROS (2026-10-20, décision de l'utilisateur :
+ * « les champions peuvent up jusqu'au même rang et étoiles que le héros ») : le DERNIER niveau
+ * de l'étoile du héros (`advLevelCapFor`), atteint barre vide. Héros niveau 11 (Argent ★1) →
+ * champion jusqu'au niveau 12, toujours Argent ★1. ⚠️ Barre VIDE au dernier niveau : un ★5
+ * plein le rendrait « prêt » pour une ascension qui le ferait passer au rang suivant, devant
+ * le héros.
+ *
+ * C'est ce qui le sépare de ce plafond, réserve DÉJÀ comprise : au plafond, il ne reste RIEN.
+ * `heroLevel` ≤ 0 ou non fini = niveau du héros inconnu (le store ne l'a pas encore lu) :
+ * aucune borne, plutôt que de jeter de l'XP sur une valeur fausse. Pur.
  */
+export function advLevelCapFor(heroLevel: number): number {
+  return Math.min(ADV_MAX_LEVEL, starEndLevel(heroLevel));
+}
 export function advXpRoom(adv: Adventurer, heroLevel: number): number {
   if (!(heroLevel > 0) || !Number.isFinite(heroLevel)) return Infinity;
+  const top = advLevelCapFor(heroLevel);
   let room = 0;
-  for (let l = adv.level; l < heroLevel; l++) room += advXpToNext(l);
+  for (let l = adv.level; l < top; l++) room += advXpToNext(l);
   return Math.max(0, room - Math.max(0, adv.xp));
+}
+
+/** 🧑‍✈️ Il est au maximum de ce qu'il peut être : plus aucune XP ne lui sert (`advXpRoom`). */
+export function advXpCapped(adv: Adventurer, heroLevel: number): boolean {
+  return advXpRoom(adv, heroLevel) <= 0;
 }
 
 /** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner

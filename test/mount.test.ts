@@ -900,6 +900,34 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await rendu(null)).not.toContain('ca-gain');
   }, 30_000);
 
+  // 🧑‍✈️ Demandé : au choix des effectifs, un champion déjà au maximum (rang et étoiles du
+  // héros) se voit — une pastille « max », jamais un « +0 XP » qu'on prendrait pour un bug.
+  it('AdvPickTile montre le champion au maximum au lieu de son XP', async () => {
+    const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
+    const adv = ROW.adventurers[0];
+    const xp = (capped: boolean) => ({
+      xp: capped ? 0 : 40,
+      xpWin: capped ? 0 : 40,
+      win: null,
+      full: true,
+      catchUp: 1,
+      capped,
+    });
+    const rendu = async (capped: boolean) => {
+      let out = '';
+      await mountIt(AdvPickTile, { adv, on: true, xp: xp(capped) }, ROW, undefined, '/', (h) => {
+        out = h;
+      });
+      return out;
+    };
+    const max = await rendu(true);
+    expect(max).toContain('🧑‍✈️ max');
+    expect(max).not.toContain('XP</span');
+    expect(max).not.toContain('ca-xp');
+    const libre = await rendu(false);
+    expect(libre).not.toContain('🧑‍✈️ max');
+    expect(libre).toContain('+40 XP');  }, 30_000);
+
   // 🏅 Le RANG d'un champion s'écrit sur sa tuile (demandé : « je vois la rareté mais pas le
   // rang ») : nom ET étoiles, lus sur `advRank` — jamais recalculés à côté.
   it('AdvPickTile écrit le rang et les étoiles du champion', async () => {

@@ -63,7 +63,12 @@ import {
   type LastTeam,
 } from '@/lib/lastTeam';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
-import { advUnavailableReason, sortByGradeThenRank, type Adventurer } from '@/lib/adventurers';
+import {
+  advUnavailableReason,
+  advXpCapped,
+  sortByGradeThenRank,
+  type Adventurer,
+} from '@/lib/adventurers';
 import {
   missionXpPreview,
   missionXpSplit,
@@ -1066,9 +1071,17 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** 🗿 Combien de champions on peut engager — `partyCapFor` (le Panthéon), jamais une copie
    *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
   const partyMax = computed(() => partyCapFor(cap.value, selected.value));
-  /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
+  /** 🧑‍✈️ Les champions cochés déjà au maximum (rang et étoiles du héros) : ils ne prennent
+   *  pas d'XP et ne comptent pas dans le partage (`missionXpFor`). */
+  const partyMaxedCount = computed(
+    () => partyAdvs.value.filter((a) => advXpCapped(a, char.heroLevel)).length,
+  );
+  /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur, entre ceux
+   *  qui peuvent encore apprendre. */
   const partyXpSplit = computed(
-    () => missionXpSplit(partyAdvs.value.length) * (partyHeroOn.value ? 1 : SOLO_XP_MULT),
+    () =>
+      missionXpSplit(partyAdvs.value.length - partyMaxedCount.value) *
+      (partyHeroOn.value ? 1 : SOLO_XP_MULT),
   );
   /** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib
    *  (`missionXpPreview`), qui appelle `missionXpFor` — ce que le store verse vraiment :
@@ -1388,6 +1401,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     canSendPartyNow,
     partyMax,
     partyXpSplit,
+    partyMaxedCount,
     partyXp,
     partyLowXp,
     togglePartyAdv,

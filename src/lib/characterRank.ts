@@ -53,6 +53,13 @@ export function characterRank(level: number): CharacterRank {
   return { rankIndex, name: t.name, emoji: t.emoji, color: t.color, star, tier };
 }
 
+/** Le DERNIER niveau de l’étoile où se trouve ce niveau (une étoile = 2 niveaux) : niveau 9
+ *  ou 10 → 10 (Bronze ★5), 11 ou 12 → 12 (Argent ★1). Sert au plafond des champions, qui
+ *  peuvent monter jusqu’au même rang et aux mêmes étoiles que le héros. */
+export function starEndLevel(level: number): number {
+  return (Math.floor((Math.max(1, level) - 1) / LEVELS_PER_STAR) + 1) * LEVELS_PER_STAR;
+}
+
 /** Niveau auquel le rang d’index `i` commence (Bronze = 1, Argent = 11, Or = 21…).
  *
  *  ⚠️ EXPORTÉ parce que les PROMOTIONS d’aventurier s’y adossent : une classe par rang

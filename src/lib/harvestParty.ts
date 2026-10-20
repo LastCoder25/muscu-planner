@@ -76,6 +76,9 @@ export interface HarvestPartyInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+  /** 🧑‍✈️ REQUIS : le niveau du héros. Un champion au maximum (rang et étoiles du héros)
+   *  ne prend pas d'XP et le partage se fait entre les autres (`missionXpFor`). */
+  heroLevel: number;
   /** 🔙 Attaque COMBINÉE : pas de demi-tour sur la route (`resolveCaravan`, `noTurnBack`). */
   combined?: boolean;
 }
@@ -211,6 +214,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     ? null
     : resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel, {
         noTurnBack: input.combined,
+        heroLevel: input.heroLevel,
       });
   if (road0?.turnBack !== undefined) return turnedBack(input, road0, spec);
   const g: CampFight = spec
@@ -223,6 +227,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
         seed,
         playerLevel: input.playerLevel,
         pantheonLevel: input.pantheonLevel,
+        heroLevel: input.heroLevel,
       })
     : NO_GUARDS;
   const won = spec ? g.skirmish.win : true;
@@ -264,6 +269,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
         input.pantheonLevel,
         !!hero,
         g.skirmish.foeDealt,
+        input.heroLevel,
       ),
       hurt: spareInjured(escort, campHurt(g.skirmish, escort), seed),
       journal: g.journal,
@@ -312,7 +318,16 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     const party: PartyResult = {
       ...base,
       win: true,
-      xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel, !!hero, 1),
+      xp: missionXpFor(
+        escort,
+        poi,
+        true,
+        g.shares,
+        input.pantheonLevel,
+        !!hero,
+        1,
+        input.heroLevel,
+      ),
       hurt: [],
       lightHurt: spec ? spareInjured(escort, campLightHurt(g.skirmish, escort), seed) : [],
       journal: [...g.journal, out.text],
