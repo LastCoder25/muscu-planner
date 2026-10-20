@@ -1953,7 +1953,7 @@ import {
   riftSpecOf,
   warbandArmy,
 } from '@/lib/rift';
-import { caravanLegMin, poiOffers } from '@/lib/caravan';
+import { caravanLegMin, poiOffers, poiXpOffer, XP_TEAM_REF } from '@/lib/caravan';
 import {
   SWAP_BLOCK_LABEL,
   SWAP_MILITIA_FROM_BASE,
@@ -5675,6 +5675,9 @@ const poiFacts = computed<PoiFact[]>(() => {
   // (`poiTeamHaul`). Une faille
   // l'annonce déjà (« Si refermée »).
   if (!rift) pushHaul(out, p, force ?? null);
+  // 🎓 L'XP QU'IL RAPPORTE (demandé) : par champion tant que l'équipe n'est pas composée, puis
+  // ce que touche l'équipe cochée — la somme des chiffres de ses tuiles (`partyXp`).
+  if (partyTarget.value) out.push(xpFact(p));
   // 🐺 La bête d'une tanière a une force FIXE : on peut l'attaquer en surnombre.
   if (force && p.type === 'den')
     out.push({
@@ -5907,6 +5910,22 @@ const poiFacts = computed<PoiFact[]>(() => {
     });
   return out;
 });
+/** 🎓 La pastille d'XP de la fiche : `poiXpOffer` (une équipe de référence au plafond du
+ *  Panthéon) sans équipe, puis l'XP annoncée de chaque champion coché, additionnée. */
+function xpFact(p: Poi): PoiFact {
+  const hero = !!partyHeroOn.value;
+  const each = poiXpOffer(p, Math.max(1, char.pantheonLevel), char.pantheonLevel, hero);
+  const base = `Si le lieu est pris : ~${each} XP par champion (équipe de ${XP_TEAM_REF}, au plafond du Panthéon). Plus nombreux, ils se la partagent ; en retard, ils apprennent plus ; les ennemis abattus s’y ajoutent.${hero ? '' : ' Sans le héros, +25 %.'}`;
+  const ids = partyEscort.value;
+  if (!ids.length) return { icon: '🎓', label: 'XP', value: `~${each} / champion`, title: base };
+  const team = ids.reduce((s, id) => s + (partyXp.value[id]?.xp ?? 0), 0);
+  return {
+    icon: '🎓',
+    label: 'XP de l’équipe',
+    value: `+${team}`,
+    title: `Ce que touche l’équipe cochée, pondéré par sa chance de réussite (le détail est sur chaque tuile). ${base}`,
+  };
+}
 /** 📌 La tuile touchée reste sous le doigt quand la fiche au-dessus change de hauteur
  *  (`holdPosition`). Après le rendu, puis une fois les apports recalculés. */
 function anchorPick(e: MouseEvent) {

@@ -1071,6 +1071,28 @@ export function missionXpFor(
   return xp;
 }
 
+/**
+ * 🎓 L'XP QU'UN LIEU RAPPORTE, lisible sur sa fiche avant de composer l'équipe (2026-10-20,
+ * demandé par l'utilisateur : « quand on clique sur un lieu on doit pouvoir voir l'XP qu'il
+ * rapporte »). Ce que touche CHAQUE champion d'une équipe de référence (`XP_TEAM_REF`, donc
+ * sans dilution) au niveau `championLevel`, si le lieu est pris.
+ *
+ * ⚠️ AUCUNE FORMULE À ELLE : elle appelle `missionXpFor`, comme l'aperçu des tuiles. Socle
+ * seul (la part des abattus dépend du combat) ; héros du voyage ou non selon `hero`.
+ * `championLevel` = le plafond du Panthéon côté écran : la prime de rattrapage vaut 1, et
+ * c'est le niveau des champions qu'on envoie le plus.
+ */
+export function poiXpOffer(
+  poi: Poi,
+  championLevel: number,
+  pantheonLevel: number,
+  hero: boolean,
+): number {
+  const team = Array.from({ length: XP_TEAM_REF }, (_, i) => refChampionAdv(championLevel, i));
+  // Niveau du héros inconnu (0) : on chiffre le lieu, pas le plafond de tel champion.
+  return missionXpFor(team, poi, true, {}, pantheonLevel, hero, null, 0)[team[0]!.id] ?? 0;
+}
+
 /** 🔮 CE QU'UN CHAMPION VA GAGNER SUR CE LIEU, annoncé AVANT l'envoi (v0.1103, demandé par
  *  l'utilisateur). Mesuré (v0.1102) : selon la destination, un champion apprend du simple au
  *  quadruple — et rien ne le disait. La carte montre un rang et des étoiles, jamais « ce lieu
