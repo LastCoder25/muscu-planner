@@ -75,19 +75,16 @@
       </div>
       <div class="cfg">
         <div class="cfg-lbl">Ordre des séries</div>
-        <div class="chips">
-          <button
-            v-for="o in COMBO_SESSION_ORDERS"
-            :key="o.id"
-            class="chip"
-            :class="{ on: order === o.id }"
-            :aria-pressed="order === o.id"
-            @click="setOrder(o.id)"
-          >
-            {{ o.label }}
-          </button>
+        <div class="cfg-hint">
+          🧠 Calculé pour toi : les groupes musculaires s’alternent, jamais deux séries de suite sur
+          le même, pour arriver frais à chacune.
         </div>
-        <div class="cfg-hint">{{ orderHint }}</div>
+        <ol v-if="previewOrder.length" class="order-list" aria-label="Ordre prévu des séries">
+          <li v-for="(name, k) in previewOrder" :key="k" class="order-pill">
+            <span class="op-n">{{ k + 1 }}</span>
+            <span class="op-name">{{ name }}</span>
+          </li>
+        </ol>
       </div>
       <div class="cfg">
         <div class="cfg-lbl">Repos entre séries</div>
@@ -131,7 +128,7 @@
         <span class="rh-sets">{{ validatedCount }}/{{ totalSets }} séries</span>
       </div>
       <div v-if="restLeft > 0" class="rest-banner">Repos · {{ restLeft }} s</div>
-      <!-- Série SUIVANTE selon l'ordre choisi : en alterné, c'est elle qui dit où aller. -->
+      <!-- Série SUIVANTE de l'ordre calculé : c'est elle qui dit où aller. -->
       <button v-if="nextStep" type="button" class="next-banner" @click="goNext">
         <span class="nb-lbl">▶ Suivante</span>
         <span class="nb-exo">{{ session[nextStep.exo]?.exercise_name }}</span>
@@ -139,6 +136,12 @@
           >série {{ nextStep.set + 1 }}/{{ session[nextStep.exo]?.sets.length }}</span
         >
       </button>
+      <div v-if="thenNames.length" class="then-row">
+        <span class="then-lbl">Puis</span>
+        <span v-for="(name, k) in thenNames" :key="k" class="order-pill">
+          <span class="op-name">{{ name }}</span>
+        </span>
+      </div>
 
       <div
         v-for="(exo, i) in session"
@@ -261,9 +264,7 @@ import {
   legUnitLabel,
   legMode,
   legLastReps,
-  comboSessionSteps,
-  COMBO_SESSION_ORDERS,
-  type ComboSessionOrder,
+  comboStepMs,
   type ComboLeg,
   type ComboSessionExo,
 } from '@/lib/combo';
@@ -274,7 +275,12 @@ import SetLogDialog from '@/components/SetLogDialog.vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useComboFatigue } from '@/composables/useComboFatigue';
-import { fatigueLabel, pickFreshest, type FatigueHit } from '@/lib/muscleFatigue';
+import {
+  fatigueLabel,
+  muscleGroupOf,
+  planSessionOrder,
+  type FatigueHit,
+} from '@/lib/muscleFatigue';
 
 const router = useRouter();
 const progress = useProgress();
@@ -289,38 +295,14 @@ const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 
 const RESTS = [30, 60, 90];
 
-// Ordre des séries (standard / alterné / aléatoire) — mémorisé par appareil : c'est une
-// habitude d'entraînement, on ne la redemande pas à chaque séance.
-const ORDER_KEY = 'muscu:combo:session-order';
-function loadOrder(): ComboSessionOrder {
-  try {
-    const v = localStorage.getItem(ORDER_KEY);
-    return COMBO_SESSION_ORDERS.some((o) => o.id === v) ? (v as ComboSessionOrder) : 'standard';
-  } catch {
-    return 'standard';
-  }
-}
-const order = ref<ComboSessionOrder>(loadOrder());
-function setOrder(o: ComboSessionOrder) {
-  order.value = o;
-  try {
-    localStorage.setItem(ORDER_KEY, o);
-  } catch {
-    /* stockage indisponible : le choix vaut pour cette séance */
-  }
-}
-const orderHint = computed(
-  () => COMBO_SESSION_ORDERS.find((o) => o.id === order.value)?.hint ?? '',
-);
-// Graine du mélange, fixée au démarrage : l'ordre ne bouge pas en cours de séance.
-const orderSeed = ref(1);
+// L'ordre des séries n'est plus un choix (v1.249) : il est calculé (`planSessionOrder`).
 const restSec = ref(60);
 const phase = ref<'config' | 'run'>('config');
 
 // Exos encore à faire cette semaine (candidats à la séance), par GROUPE puis alphabétique —
 // la MÊME règle que la fiche du défi et l'onglet 🎯 (`legsByGroup`).
 // ⚠️ Cela ne touche QUE cette liste de cases à cocher : l'ordre des séries DANS la séance
-// reste celui qu'on choisit (standard / alterné / aléatoire, v0.861), et `counts` est
+// est CALCULÉ au démarrage (`planSessionOrder`, v1.249), et `counts` est
 // indexé par `exercise_id` — trier l'affichage ne déplace donc rien de ce qui a été coché.
 const availableLegs = computed(() =>
   legsByGroup((c.value?.legs ?? []).filter((l) => legRemaining(l) > 0)),
@@ -402,16 +384,8 @@ function isDone(i: number, j: number) {
 function doneReps(i: number, j: number) {
   return logged.value[`${i}-${j}`]?.reps ?? 0;
 }
-// La prochaine série à faire selon l'ordre choisi (la première non faite de la suite).
-const steps = computed(() =>
-  comboSessionSteps(
-    session.value.map((e) => e.sets.length),
-    order.value,
-    orderSeed.value,
-  ),
-);
 // ── Fatigue des groupes : les séries du défi déjà faites aujourd'hui + celles de la séance
-// (pas encore enregistrées). Sert à l'ordre « Par groupe » et à la pastille de chaque exo.
+// (pas encore enregistrées). Sert à l'ordre des séries et à la pastille de chaque exo.
 function legOf(exo: ComboSessionExo | undefined): ComboLeg | undefined {
   return exo ? c.value?.legs.find((l) => l.exercise_id === exo.exercise_id) : undefined;
 }
@@ -437,23 +411,57 @@ function exoFatigueText(i: number) {
 function firstOpenSet(i: number): number {
   return session.value[i]?.sets.findIndex((_v: number, j: number) => !isDone(i, j)) ?? -1;
 }
-/** L'exo de la dernière série faite : à fatigue égale, on ne le répète pas. */
+/** L'exo de la dernière série faite : la suivante ne travaille pas le même groupe. */
 const lastExo = computed(() => {
   let best: { exo: number; at: number } | null = null;
   for (const [key, v] of Object.entries(logged.value))
     if (!best || v.at > best.at) best = { exo: Number(key.split('-')[0]), at: v.at };
   return best?.exo;
 });
+function profileOfExo(e: ComboSessionExo) {
+  const leg = legOf(e);
+  return leg ? fatigue.legProfile(leg) : { primary: '', secondaries: [] };
+}
+/** L'ordre des séries restantes (index d'exo, une entrée par série), CALCULÉ : groupes
+ *  alternés, muscles les plus reposés d'abord (`planSessionOrder`). Il tient compte des
+ *  séries du défi déjà faites aujourd'hui et se recalcule après chaque série. */
+function orderOf(
+  exos: readonly ComboSessionExo[],
+  remaining: (i: number) => number,
+  last?: number,
+) {
+  const lastE = last == null ? undefined : exos[last];
+  return planSessionOrder(
+    exos.map((e, i) => ({ key: i, profile: profileOfExo(e), remaining: remaining(i) })),
+    {
+      hits: fatigue.hits.value,
+      now: Math.max(fatigue.now.value, Date.now()),
+      stepMs: comboStepMs(restSec.value),
+      ...(lastE ? { lastGroup: muscleGroupOf(String(last), profileOfExo(lastE)) } : {}),
+    },
+  );
+}
+const plan = computed(() =>
+  orderOf(
+    session.value,
+    (i) => session.value[i]!.sets.filter((_r, j) => !isDone(i, j)).length,
+    lastExo.value,
+  ),
+);
 const nextStep = computed(() => {
-  if (order.value !== 'muscle') return steps.value.find((st) => !isDone(st.exo, st.set)) ?? null;
-  // « Par groupe » : choisie EN DIRECT parmi les exos qui ont encore une série à faire.
-  const cands = session.value.flatMap((e, exo) => {
-    const leg = legOf(e);
-    return leg && firstOpenSet(exo) >= 0 ? [{ key: exo, profile: fatigue.legProfile(leg) }] : [];
-  });
-  const exo = pickFreshest(cands, fatigue.load.value, lastExo.value);
+  const exo = plan.value[0];
   return exo == null ? null : { exo, set: firstOpenSet(exo) };
 });
+/** Les quelques séries qui suivent la prochaine (pastilles « Puis »). */
+const thenNames = computed(() =>
+  plan.value.slice(1, 4).map((i) => session.value[i]?.exercise_name ?? ''),
+);
+/** L'ordre prévu, montré avant de commencer. */
+const previewOrder = computed(() =>
+  orderOf(previewSession.value, (i) => previewSession.value[i]!.sets.length).map(
+    (i) => previewSession.value[i]?.exercise_name ?? '',
+  ),
+);
 function goNext() {
   const st = nextStep.value;
   const exo = st ? session.value[st.exo] : undefined;
@@ -498,7 +506,6 @@ function start() {
   // Copie profonde des sets (tableaux mutables → ajout/retrait de séries).
   session.value = previewSession.value.map((e) => ({ ...e, sets: [...e.sets] }));
   logged.value = {};
-  orderSeed.value = Math.floor(Math.random() * 2 ** 31) || 1;
   phase.value = 'run';
   tick = setInterval(() => {
     elapsed.value++;
@@ -699,6 +706,61 @@ onUnmounted(() => {
   font-size: 11.5px;
   color: var(--dim);
   margin-top: 6px;
+}
+.order-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.order-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 9px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+.op-n {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.op-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.then-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+.then-row .order-pill {
+  padding-left: 9px;
+  color: var(--dim);
+}
+.then-lbl {
+  font-size: 11.5px;
+  color: var(--dim);
 }
 .next-banner {
   display: flex;

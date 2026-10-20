@@ -6,7 +6,6 @@ import {
   exoFatigue,
   exoFatigueCost,
   fatigueLabel,
-  pickFreshest,
   comboFatigueHits,
   type FatigueHit,
 } from '@/lib/muscleFatigue';
@@ -84,52 +83,6 @@ describe('exoFatigue', () => {
     ];
     expect(exoFatigue(muscleLoad(three(8), NOW), dips).level).toBe('hot');
     expect(exoFatigue(muscleLoad([hit(bench, 8)], NOW), dips).level).not.toBe('hot');
-  });
-});
-
-describe('pickFreshest', () => {
-  it('choisit le moins chargé, pas celui qu’on vient de faire', () => {
-    const l = muscleLoad([hit(bench, 0)], NOW);
-    const k = pickFreshest(
-      [
-        { key: 'dips', profile: dips },
-        { key: 'tri', profile: triExt },
-        { key: 'curl', profile: curl },
-      ],
-      l,
-    );
-    expect(k).toBe('curl');
-  });
-  it('à égalité, évite de répéter le dernier', () => {
-    expect(
-      pickFreshest(
-        [
-          { key: 'a', profile: curl },
-          { key: 'b', profile: triExt },
-        ],
-        {},
-        'a',
-      ),
-    ).toBe('b');
-  });
-  it('à égalité sans répétition, garde l’ordre donné', () => {
-    expect(
-      pickFreshest(
-        [
-          { key: 'a', profile: curl },
-          { key: 'b', profile: triExt },
-        ],
-        {},
-      ),
-    ).toBe('a');
-  });
-  it('compte la part secondaire dans le coût', () => {
-    const l = { triceps: 1 };
-    expect(exoFatigueCost(l, bench)).toBeCloseTo(FATIGUE.secondaryShare);
-    expect(exoFatigueCost(l, triExt)).toBeCloseTo(1);
-  });
-  it('rien à choisir → null', () => {
-    expect(pickFreshest([], {})).toBeNull();
   });
 });
 

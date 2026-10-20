@@ -48,15 +48,16 @@ export function useComboFatigue(
   // ⚠️ `Date.now()` en plus de l'horloge : une série saisie à l'instant porterait sinon une
   // heure POSTÉRIEURE au dernier battement, et `muscleLoad` l'ignorerait comme future. Le
   // calcul se refait de toute façon dès que les séries changent (dépendance sur `legs`).
-  const load = computed(() =>
-    muscleLoad(
-      [...comboFatigueHits(legs.value, profileOf), ...(extraHits?.value ?? [])],
-      Math.max(now.value, Date.now()),
-    ),
-  );
+  const hits = computed<FatigueHit[]>(() => [
+    ...comboFatigueHits(legs.value, profileOf),
+    ...(extraHits?.value ?? []),
+  ]);
+  const load = computed(() => muscleLoad(hits.value, Math.max(now.value, Date.now())));
 
   return {
     load,
+    hits,
+    now,
     legProfile,
     fatigueOf: (leg: ComboLeg) => exoFatigue(load.value, legProfile(leg)),
   };

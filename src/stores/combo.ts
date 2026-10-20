@@ -18,6 +18,7 @@ import {
 import { logicalToday } from '@/lib/challenges';
 import type { ComboChestRecord } from '@/lib/comboChest';
 import { useAuthStore } from '@/stores/auth';
+import { createLatestWriter } from '@/lib/latestWriter';
 
 export interface ComboRow extends ComboChallenge {
   user_id?: string;
@@ -48,6 +49,26 @@ export const useComboStore = defineStore('combo', () => {
    *  peuvent se fermer d'un coup, et un id unique n'en aurait signalé qu'un. Vidée par
    *  celui qui les traite (`useComboChest`). */
   const closedChests = ref<string[]>([]);
+
+  /** Écrit les séries et le statut d'un 360, UNE requête à la fois, avec l'état du moment
+   *  (`latestWriter`). ⚠️ Des requêtes lancées en parallèle (une par série à la fin d'une
+   *  séance) arrivaient dans le désordre et s'écrasaient : des séries faites étaient perdues. */
+  const legsWriter = createLatestWriter<string>(
+    async (id) => {
+      const c = list.value.find((x) => x.id === id);
+      if (!c) return;
+      const { error } = await supabase
+        .from('combo_challenges')
+        .update({
+          legs: JSON.parse(JSON.stringify(c.legs)) as ComboLeg[],
+          status: c.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    { onError: (id, e) => console.error('combo persist', id, e) },
+  );
 
   /** Recalcule le statut d'un 360 et signale sa fermeture si elle ouvre un coffre.
    *  Rend `true` si le statut a changé (à persister). */
@@ -117,6 +138,8 @@ export const useComboStore = defineStore('combo', () => {
   }
 
   async function persistLegs(id: string, legs: ComboLeg[], status?: string) {
+    // Après les séries encore en route : sinon l'une d'elles écraserait ce changement.
+    await legsWriter.idle(id);
     const patch: Record<string, unknown> = { legs, updated_at: new Date().toISOString() };
     if (status) patch.status = status;
     const { error } = await supabase.from('combo_challenges').update(patch).eq('id', id);
@@ -161,13 +184,7 @@ export const useComboStore = defineStore('combo', () => {
     // qui peuvent valider une série (donc quatre endroits où l'oublier), on émet ici et
     // un seul observateur, monté en permanence, s'en charge (`useComboChest`).
     refreshStatus(c);
-    void supabase
-      .from('combo_challenges')
-      .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('combo addSet persist', error);
-      });
+    legsWriter.schedule(id);
   }
 
   // Retire UNE série précise (la case touchée). OPTIMISTE.
@@ -181,13 +198,7 @@ export const useComboStore = defineStore('combo', () => {
     // erronée qu'on vient de retirer) pour ne pas le repré-remplir.
     if (!leg.sets.length) leg.weight_kg = null;
     c.status = comboNextStatus(c, logicalToday());
-    void supabase
-      .from('combo_challenges')
-      .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('combo removeSet persist', error);
-      });
+    legsWriter.schedule(id);
   }
 
   // Corrige UNE série précise (la case touchée). OPTIMISTE, comme l’ajout et le retrait.
@@ -208,13 +219,7 @@ export const useComboStore = defineStore('combo', () => {
     // La DERNIÈRE série porte le poids qui préremplit la suivante.
     if (index === leg.sets.length - 1) leg.weight_kg = weight ?? null;
     refreshStatus(c);
-    void supabase
-      .from('combo_challenges')
-      .update({ legs: c.legs, status: c.status, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('combo updateSet persist', error);
-      });
+    legsWriter.schedule(id);
   }
 
   // Met à jour la charge (kg) d'un exo.

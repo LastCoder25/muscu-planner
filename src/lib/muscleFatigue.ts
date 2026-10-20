@@ -1,5 +1,5 @@
 // muscleFatigue.ts — FATIGUE LOCALE des groupes musculaires pendant une séance (pur/testé).
-// Le Défi 360 laisse faire ses séries dans l'ordre qu'on veut : on CONSEILLE (jamais on
+// Le Défi 360 CALCULE l’ordre des séries d’une séance (`planSessionOrder`) et CONSEILLE (jamais on
 // n'interdit) de ne pas enchaîner un exo dont un muscle vient de travailler.
 //
 // ⚠️ AUCUN ÉTAT STOCKÉ : la fatigue se RECALCULE à partir de l'heure de chaque série
@@ -99,28 +99,6 @@ export function exoFatigueCost(load: Readonly<Record<string, number>>, p: Muscle
   return c;
 }
 
-/** La prochaine série « la plus fraîche » parmi des candidats (ordre « Par groupe » de la
- *  séance) : le coût le plus bas ; à égalité, pas l'exo qu'on vient de faire, puis l'ordre
- *  donné. `null` sans candidat. */
-export function pickFreshest<K>(
-  cands: readonly { key: K; profile: MuscleProfile }[],
-  load: Readonly<Record<string, number>>,
-  last?: K,
-): K | null {
-  let best: { key: K; cost: number; repeat: boolean } | null = null;
-  for (const c of cands) {
-    const cost = exoFatigueCost(load, c.profile);
-    const repeat = c.key === last;
-    if (
-      !best ||
-      cost < best.cost - 1e-9 ||
-      (Math.abs(cost - best.cost) <= 1e-9 && best.repeat && !repeat)
-    )
-      best = { key: c.key, cost, repeat };
-  }
-  return best?.key ?? null;
-}
-
 /** Le texte de la pastille (null quand il n'y a rien à dire). Formulé sans accord : les
  *  noms de muscles sont tantôt pluriels (pectoraux), tantôt non (dos). */
 export function fatigueLabel(f: ExoFatigue): { text: string; title: string } | null {
@@ -157,4 +135,98 @@ export function comboFatigueHits(legs: readonly ComboLeg[], profileOf: ProfileOf
     }
   }
   return out;
+}
+
+// ── ORDRE DES SÉRIES D'UNE SÉANCE DU 360 (v1.249 ; demandé par l'utilisateur) ──
+// L'ordre n'est plus un choix : l'app l'écrit pour que chaque série trouve ses muscles frais.
+// Deux règles, dans cet ordre :
+//  1. jamais deux séries de suite sur le même GROUPE (muscle principal) tant que c'est
+//     possible — y compris plus loin : on ne prend pas une série qui obligerait, en fin de
+//     séance, à enchaîner deux séries d'un même groupe (cf. `canFinish`) ;
+//  2. parmi les séries permises, celle dont les muscles sont les plus reposés, d'après la
+//     charge qui décroît (`exoFatigueCost`, principal + secondaires : un développé couché
+//     fatigue aussi les triceps). À égalité : le groupe qui a le plus de séries à caser,
+//     puis l'ordre donné.
+// La suite se simule au rythme d'une série (exécution + repos) : la page la recalcule après
+// chaque série faite, avec les vraies heures, donc elle suit le sportif s'il s'en écarte.
+
+/** Une série à placer : l'exo (`key`), ses muscles, et combien de séries il lui reste. */
+export interface OrderCandidate<K> {
+  key: K;
+  profile: MuscleProfile;
+  remaining: number;
+}
+
+/** Le groupe d'un exo : son muscle principal (un exo sans muscle connu est son propre groupe). */
+function groupOf<K>(c: OrderCandidate<K>): string {
+  return c.profile.primary || `#${String(c.key)}`;
+}
+
+/** Peut-on encore finir sans deux séries d'un même groupe à la suite, sachant que la
+ *  suivante ne peut pas être de `last` ? (Le groupe le plus fourni ne doit pas dépasser la
+ *  moitié, arrondie au-dessus — au-dessous pour `last`, qui ne peut pas ouvrir.) */
+function canFinish(counts: ReadonlyMap<string, number>, last: string): boolean {
+  let total = 0;
+  for (const n of counts.values()) total += n;
+  for (const [g, n] of counts) {
+    if (n > Math.ceil(total / 2)) return false;
+    if (g === last && n > Math.floor(total / 2)) return false;
+  }
+  return true;
+}
+
+/** L'ordre des séries restantes (une clé par série). `hits` = séries déjà faites (le défi
+ *  du jour et la séance), `lastGroup` = le groupe de la dernière série faite, `stepMs` =
+ *  durée d'une série repos compris. */
+export function planSessionOrder<K>(
+  cands: readonly OrderCandidate<K>[],
+  opts: { hits?: readonly FatigueHit[]; now: number; stepMs: number; lastGroup?: string },
+): K[] {
+  const left = cands.map((c) => ({ c, n: Math.max(0, Math.floor(c.remaining)), g: groupOf(c) }));
+  const counts = new Map<string, number>();
+  for (const x of left) counts.set(x.g, (counts.get(x.g) ?? 0) + x.n);
+  const hits = [...(opts.hits ?? [])];
+  let t = opts.now;
+  let last = opts.lastGroup ?? '';
+  const out: K[] = [];
+  for (;;) {
+    const open = left.filter((x) => x.n > 0);
+    if (!open.length) return out;
+    const fresh = open.filter((x) => x.g !== last);
+    const safe = fresh.filter((x) => {
+      const after = new Map(counts);
+      after.set(x.g, (after.get(x.g) ?? 0) - 1);
+      return canFinish(after, x.g);
+    });
+    // Plus de série sûre : on case d’abord le groupe le plus fourni (il est en retard).
+    const most = Math.max(...fresh.map((x) => counts.get(x.g) ?? 0));
+    const pool = safe.length
+      ? safe
+      : fresh.length
+        ? fresh.filter((x) => (counts.get(x.g) ?? 0) === most)
+        : open;
+    const load = muscleLoad(hits, t);
+    let best: { x: (typeof pool)[number]; cost: number } | null = null;
+    for (const x of pool) {
+      const cost = exoFatigueCost(load, x.c.profile);
+      if (
+        !best ||
+        cost < best.cost - 1e-9 ||
+        (Math.abs(cost - best.cost) <= 1e-9 && (counts.get(x.g) ?? 0) > (counts.get(best.x.g) ?? 0))
+      )
+        best = { x, cost };
+    }
+    const pick = best!.x;
+    out.push(pick.c.key);
+    pick.n--;
+    counts.set(pick.g, (counts.get(pick.g) ?? 0) - 1);
+    hits.push({ at: t, profile: pick.c.profile });
+    last = pick.g;
+    t += opts.stepMs;
+  }
+}
+
+/** Le groupe (muscle principal) d'un profil, tel que `planSessionOrder` le compare. */
+export function muscleGroupOf(key: string, profile: MuscleProfile): string {
+  return groupOf({ key, profile, remaining: 0 });
 }

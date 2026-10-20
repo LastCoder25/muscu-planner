@@ -9,7 +9,6 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
 import { localDayIso } from './localDay';
-import { mulberry32 } from './combat';
 import { bodyweightLoad } from './bodyweightLoad';
 import { addDaysUtcIso } from './startDate';
 import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
@@ -1077,77 +1076,11 @@ export function buildComboSessionFromCounts(
   return out;
 }
 
-// ── ORDRE DES SÉRIES D'UNE SÉANCE (v0.861 ; demandé par l'utilisateur) ──
-// « standard » : toutes les séries d'un exo, puis le suivant (A A A B B B).
-// « alterné » : une série de chaque exo à tour de rôle (A B C A B C).
-// « aléatoire » : alterné, mais l'ordre des exos est RE-MÉLANGÉ À CHAQUE TOUR (choix de
-// l'utilisateur), sans jamais deux séries du même exo à la suite — y compris à la jonction
-// entre deux tours. ⚠️ Seule exception, inévitable : quand il ne reste qu'UN exo (il avait
-// plus de séries que les autres), ses dernières séries s'enchaînent, en alterné aussi.
-// « par groupe » (v1.81) : la prochaine série est choisie EN DIRECT, sur l'exo dont les
-// muscles sont les plus reposés (`pickFreshest`, lib/muscleFatigue) — elle dépend de l'heure
-// des séries faites, donc elle ne se planifie pas d'avance. `comboSessionSteps` la traite
-// comme « alterné » (même suite de repli, quand on ne connaît pas les muscles).
-export type ComboSessionOrder = 'standard' | 'alternate' | 'shuffle' | 'muscle';
-
-export const COMBO_SESSION_ORDERS: { id: ComboSessionOrder; label: string; hint: string }[] = [
-  { id: 'standard', label: 'Standard', hint: 'Toutes les séries d’un exo, puis le suivant' },
-  { id: 'alternate', label: 'Alterné', hint: 'Une série de chaque exo, à tour de rôle' },
-  {
-    id: 'shuffle',
-    label: 'Aléatoire',
-    hint: 'À tour de rôle, dans un ordre mélangé à chaque tour',
-  },
-  {
-    id: 'muscle',
-    label: 'Par groupe',
-    hint: 'La prochaine série va aux muscles les plus reposés',
-  },
-];
-
-/** Une série à faire : l'exo (index dans la séance) et le numéro de série dans cet exo. */
-export interface ComboSessionStep {
-  exo: number;
-  set: number;
-}
-
-/** Tirage seedé (mulberry32) — la même graine redonne le même ordre : la séance ne se
- *  re-mélange pas à chaque rendu, ni quand on ajoute une série en cours de route. */
-function orderRng(seed: number): () => number {
-  return mulberry32(seed >>> 0 || 1);
-}
-
-/** L'ordre dans lequel faire les séries d'une séance. `sets[i]` = nombre de séries de
- *  l'exo `i`. ⚠️ Un tour ne dépend que des exos qui y participent : ajouter une série à un
- *  exo en pleine séance ne change pas l'ordre des tours déjà commencés. */
-export function comboSessionSteps(
-  sets: readonly number[],
-  order: ComboSessionOrder,
-  seed = 1,
-): ComboSessionStep[] {
-  const steps: ComboSessionStep[] = [];
-  if (order === 'standard') {
-    sets.forEach((n, exo) => {
-      for (let set = 0; set < n; set++) steps.push({ exo, set });
-    });
-    return steps;
-  }
-  const rng = orderRng(seed);
-  const rounds = Math.max(0, ...sets);
-  for (let r = 0; r < rounds; r++) {
-    const round = sets.map((n, exo) => (n > r ? exo : -1)).filter((exo) => exo >= 0);
-    if (order === 'shuffle') {
-      for (let i = round.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [round[i], round[j]] = [round[j]!, round[i]!];
-      }
-      // Jonction : le tour ne commence pas par l'exo qui vient de finir le précédent.
-      const last = steps.at(-1)?.exo;
-      if (round.length > 1 && round[0] === last) [round[0], round[1]] = [round[1]!, round[0]!];
-    }
-    for (const exo of round) steps.push({ exo, set: r });
-  }
-  return steps;
+/** Durée d'une série dans la séance, repos compris (ms) : le pas de la simulation qui
+ *  écrit l'ordre des séries (`planSessionOrder`, lib/muscleFatigue). L'ordre n'est plus un
+ *  choix depuis la v1.249 (Standard / Alterné / Aléatoire / Par groupe retirés). */
+export function comboStepMs(restSec: number): number {
+  return (COMBO_EXEC_SEC + Math.max(0, restSec)) * 1000;
 }
 
 /** Suggère un objectif pour un exo à partir de l'HISTORIQUE : reprend le `target`
