@@ -316,6 +316,15 @@
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
               @click.stop="askRecall(v.recall, v.recallInfo)"
             />
+            <!-- 🏠 Une troupe qui RENTRE porte un anneau turquoise (demandé, v1.244.0) : on
+                 distingue d'un coup d'œil les retours des départs. -->
+            <circle
+              v-if="v.homeward"
+              :cx="v.at.x"
+              :cy="v.at.y"
+              :r="(crewClass(v) ? 3.7 : 3) + 1.3"
+              class="home-ring"
+            />
             <!-- 🏰🛡️ Un renfort dit QUI il porte : champions (or, 🏰), miliciens (vert, 🛡️)
                  ou les deux (🏰 + pastille 🛡️). Pion un peu plus gros pour se lire. -->
             <circle
@@ -356,6 +365,13 @@
               role="button"
               aria-label="Faire demi-tour : ton héros"
               @click.stop="askRecall({ kind: 'hero' }, heroRecallInfo)"
+            />
+            <circle
+              v-if="hero.phase === 'return'"
+              :cx="hero.x"
+              :cy="hero.y"
+              r="4.7"
+              class="home-ring"
             />
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
@@ -4294,6 +4310,8 @@ const travelersOnMap = computed(() =>
     ...v,
     // 🏥 Rentre à l'infirmerie (un membre rentre blessé) : pastille sur son marqueur.
     infirmary: 'members' in v && crewHeadsToInfirmary(v.members, char.advList, now.value),
+    // 🏠 Elle rentre : phase retour d'un aller-retour, ou retour d'un poste vers la base.
+    homeward: v.at.phase === 'return' || v.recallInfo?.kind === 'return',
   })),
 );
 const shownTravelers = travelersOnMap;
@@ -7853,6 +7871,14 @@ onUnmounted(() => {
    troupe qu'on peut faire rebrousser chemin garde sa cible élargie (.recall-hit). */
 .van-mark,
 .hero {
+  pointer-events: none;
+}
+/* 🏠 Anneau des troupes qui rentrent : turquoise, couleur prise par aucun autre pion. */
+.home-ring {
+  fill: none;
+  stroke: #3ec9d6;
+  stroke-width: 0.75;
+  filter: drop-shadow(0 0 1.2px rgba(62, 201, 214, 0.8));
   pointer-events: none;
 }
 .recall-hit {
