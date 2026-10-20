@@ -3,7 +3,7 @@
 // Supabase ne rend jamais plus de 1 000 lignes par réponse : une liste qui nourrit un
 // TOTAL (le niveau Global additionne toutes les séances) ne doit ni porter de limite ni
 // s'arrêter à la première page. Une limite y faisait varier le niveau affiché selon
-// l'écran qui avait chargé la liste en dernier (v1.248.1).
+// l'écran qui avait chargé la liste en dernier (v1.248.2).
 
 /** Taille d'une page : le plafond de lignes du serveur. */
 export const PAGE_ROWS = 1000;
