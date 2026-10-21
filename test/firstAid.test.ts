@@ -31,7 +31,7 @@ describe('⛑️ premiers secours', () => {
   });
 
   it('un porteur épargne la part annoncée de la troupe (valeur de la rune)', () => {
-    const p = skillValue('care', 5) / 100;
+    const p = skillValue({ id: 'care', level: 5 }) / 100;
     expect(firstAidChance(secours)).toBeCloseTo(p, 9);
     const kept = spareInjured(secours, IDS, 12345).length / IDS.length;
     expect(1 - kept).toBeGreaterThan(p - 0.03);

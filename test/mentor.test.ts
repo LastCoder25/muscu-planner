@@ -22,7 +22,7 @@ const champ = (n: string, mentorLevel = 0, level = 20): Adventurer => ({
 });
 const mentor = (n: string, lvl = 1) => champ(n, lvl);
 const autre = (n: string) => champ(n);
-const m1 = skillValue('mentor', 1) / 100;
+const m1 = skillValue({ id: 'mentor', level: 1 }) / 100;
 
 const poi: Poi = {
   id: 'p',
@@ -44,9 +44,11 @@ describe('🎓 la compétence Mentor', () => {
   it('elle suit le barème des runes, sans plafond d’équipe', () => {
     expect(mentorXpMult([autre('a')])).toBe(1);
     expect(mentorXpMult([mentor('m'), autre('a')])).toBeCloseTo(1 + m1);
-    expect(mentorXpMult([mentor('m', 3)])).toBeCloseTo(1 + skillValue('mentor', 3) / 100);
+    expect(mentorXpMult([mentor('m', 3)])).toBeCloseTo(
+      1 + skillValue({ id: 'mentor', level: 3 }) / 100,
+    );
     expect(mentorXpMult([mentor('m', 5), mentor('n', 5), mentor('o', 5)])).toBeCloseTo(
-      1 + (3 * skillValue('mentor', 5)) / 100,
+      1 + (3 * skillValue({ id: 'mentor', level: 5 })) / 100,
     );
   });
 

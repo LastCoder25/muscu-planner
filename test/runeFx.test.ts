@@ -40,7 +40,7 @@ describe('🔮 animation de rune posée', () => {
 
   it('l’effet annoncé est celui du niveau ATTEINT, y compris une compétence fusionnée neuve', () => {
     const id = ofTier('blue');
-    const v3 = String(skillValue(id, 3)).replace('.', ',');
+    const v3 = String(skillValue({ id: id, level: 3 })).replace('.', ',');
     expect(runeApplyFx('stack', id, 'Nyx', 3).subtitle).toContain(v3);
     // Fusionnée au stock jusqu'au niveau 3, elle entre à SON niveau chez le champion.
     expect(runeApplyFx('new', id, 'Nyx', 3).subtitle).toContain(v3);

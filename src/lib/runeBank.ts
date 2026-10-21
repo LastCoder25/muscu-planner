@@ -21,7 +21,14 @@ import {
   RUNE_PLACE,
   pickTier,
   placeRuneChance,
+  RISE_BLOCK_LABEL,
+  riseBlocker,
+  riseOf,
+  riseSkill,
+  type RiseBlock,
+  sameSkill,
   skillsOfTier,
+  withRise,
   type ChampSkill,
   type PlaceRuneInput,
   type RuneTier,
@@ -86,6 +93,8 @@ export interface StockSkill {
   uid: string;
   id: SkillId;
   level: number;
+  /** 🌈 Crans d'élévation (cf. `SkillRef`), absent = 0. */
+  up?: number;
 }
 
 /**
@@ -171,11 +180,16 @@ export function normalizeRuneBank(raw: unknown): RuneBank {
   for (const s of Array.isArray(r.skills) ? (r.skills as Record<string, unknown>[]) : []) {
     if (!s || typeof s.uid !== 'string' || seen.has(s.uid) || !isSkill(s.id)) continue;
     seen.add(s.uid);
-    skills.push({
-      uid: s.uid,
-      id: s.id,
-      level: Math.max(1, Math.min(SKILL_MAX_LEVEL, int(s.level) || 1)),
-    });
+    skills.push(
+      withRise(
+        {
+          uid: s.uid,
+          id: s.id,
+          level: Math.max(1, Math.min(SKILL_MAX_LEVEL, int(s.level) || 1)),
+        },
+        s.up,
+      ),
+    );
   }
   const runes = int(r.runes);
   const exalted = Math.min(runes, int(r.exalted));
@@ -251,7 +265,7 @@ export type FuseBlock = 'few' | 'missing' | 'different' | 'over';
 export const FUSE_BLOCK_LABEL: Record<FuseBlock, string> = {
   few: 'choisis au moins deux exemplaires',
   missing: 'compétence introuvable',
-  different: 'seuls les exemplaires d’une même compétence fusionnent',
+  different: 'seuls les exemplaires d’une même compétence, de la même couleur, fusionnent',
   over: `la fusion dépasserait le niveau ${SKILL_MAX_LEVEL}`,
 };
 
@@ -263,7 +277,7 @@ export function fuseBlocker(bank: RuneBank, uids: readonly string[]): FuseBlock 
   if (picked.size < 2) return 'few';
   const copies = bank.skills.filter((s) => picked.has(s.uid));
   if (copies.length !== picked.size) return 'missing';
-  if (copies.some((s) => s.id !== copies[0]!.id)) return 'different';
+  if (copies.some((s) => !sameSkill(s, copies[0]!))) return 'different';
   return copies.reduce((t, s) => t + s.level, 0) > SKILL_MAX_LEVEL ? 'over' : null;
 }
 
@@ -287,6 +301,7 @@ export function fuseSkills(
     },
     group: {
       id: keep.id,
+      up: riseOf(keep),
       before: copies.map((s) => s.level).sort((a, b) => b - a),
       after: [total],
     },
@@ -297,12 +312,15 @@ export function fuseSkills(
 export type FuseTake = Record<number, number>;
 
 /** Les AUTRES exemplaires de la compétence de `uid`, par niveau (le plus haut d'abord). */
-function othersByLevel(bank: RuneBank, uid: string): { me: StockSkill; uids: Map<number, string[]> } | null {
+function othersByLevel(
+  bank: RuneBank,
+  uid: string,
+): { me: StockSkill; uids: Map<number, string[]> } | null {
   const me = bank.skills.find((s) => s.uid === uid);
   if (!me) return null;
   const uids = new Map<number, string[]>();
   for (const s of bank.skills) {
-    if (s.id !== me.id || s.uid === uid) continue;
+    if (!sameSkill(s, me) || s.uid === uid) continue;
     const l = uids.get(s.level);
     if (l) l.push(s.uid);
     else uids.set(s.level, [s.uid]);
@@ -365,12 +383,12 @@ export function bestFusePick(bank: RuneBank, uid: string): { take: FuseTake; tot
 /** Refus de « Tout fusionner » (aucune compétence n'a deux exemplaires qui tiennent ensemble). */
 export const FUSE_ALL_NONE = 'rien à fusionner';
 
-/** Les exemplaires identiques (même compétence, même niveau) en une pile « ×N », dans l'ordre
- *  du stock ; le premier exemplaire la représente. */
+/** Les exemplaires identiques (même compétence, même couleur, même niveau) en une pile « ×N »,
+ *  dans l'ordre du stock ; le premier exemplaire la représente. */
 export function stackSkills(skills: StockSkill[]): (StockSkill & { count: number })[] {
   const out = new Map<string, StockSkill & { count: number }>();
   for (const s of skills) {
-    const k = `${s.id}:${s.level}`;
+    const k = `${s.id}:${riseOf(s)}:${s.level}`;
     const cur = out.get(k);
     if (cur) cur.count++;
     else out.set(k, { ...s, count: 1 });
@@ -389,9 +407,15 @@ export function fuseGroupText(g: FuseGroup): string {
 /** Ce qu'une fusion groupée fait à une compétence : les niveaux d'avant, ceux d'après. */
 export interface FuseGroup {
   id: SkillId;
+  /** 🌈 Élévation des exemplaires fusionnés (tous de la même couleur). */
+  up: number;
   before: number[];
   after: number[];
 }
+
+/** Ce que « Tout fusionner » vise : tout (`null`), une compétence dans TOUTES ses couleurs
+ *  (son id), ou une compétence DANS UNE couleur (`{ id, up }`). */
+export type FuseOnly = SkillId | { id: SkillId; up?: number } | null;
 
 /**
  * 🔗 FUSIONNE D'UN GESTE tous les exemplaires d'une compétence (`only`), ou de toutes : les
@@ -402,19 +426,22 @@ export interface FuseGroup {
  */
 export function fuseAllSkills(
   bank: RuneBank,
-  only: SkillId | null = null,
+  only: FuseOnly = null,
 ): { bank: RuneBank; groups: FuseGroup[] } {
-  const byId = new Map<SkillId, StockSkill[]>();
+  // 🌈 Une compétence et une COULEUR par groupe : un bleu ne se verse pas dans un vert.
+  const byId = new Map<string, StockSkill[]>();
   for (const s of bank.skills) {
-    if (only && s.id !== only) continue;
-    const copies = byId.get(s.id);
+    if (only && (typeof only === 'string' ? s.id !== only : !sameSkill(s, only))) continue;
+    const key = `${s.id}:${riseOf(s)}`;
+    const copies = byId.get(key);
     if (copies) copies.push(s);
-    else byId.set(s.id, [s]);
+    else byId.set(key, [s]);
   }
   const level = new Map<string, number>();
   const gone = new Set<string>();
   const groups: FuseGroup[] = [];
-  for (const [id, copies] of byId) {
+  for (const copies of byId.values()) {
+    const { id } = copies[0]!;
     if (copies.length < 2) continue;
     const bins: { uid: string; level: number }[] = [];
     for (const s of [...copies].sort((a, b) => b.level - a.level)) {
@@ -428,6 +455,7 @@ export function fuseAllSkills(
     for (const b of bins) level.set(b.uid, b.level);
     groups.push({
       id,
+      up: riseOf(copies[0]!),
       before: copies.map((s) => s.level).sort((a, b) => b - a),
       after: bins.map((b) => b.level).sort((a, b) => b - a),
     });
@@ -446,8 +474,41 @@ export function fuseAllSkills(
 
 // ── 🎁 DONNER À UN CHAMPION ─────────────────────────────────────────────────────────────
 
-/** Ce que la compétence ferait à ce champion. */
-export type GiveKind = 'new' | 'stack' | 'replace';
+// ── 🌈 ÉLEVER AU STOCK ──────────────────────────────────────────────────────────────────
+
+export type StockRiseBlock = RiseBlock | 'missing';
+
+export const STOCK_RISE_BLOCK_LABEL: Record<StockRiseBlock, string> = {
+  ...RISE_BLOCK_LABEL,
+  missing: 'introuvable',
+};
+
+/** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche d'élever l'exemplaire `uid` du stock. */
+export function stockRiseBlocker(bank: RuneBank, uid: string): StockRiseBlock | null {
+  const s = bank.skills.find((x) => x.uid === uid);
+  return s ? riseBlocker(s) : 'missing';
+}
+
+/** 🌈 Élève l'exemplaire `uid` : il garde son `uid` et sa place, passe à la couleur au-dessus,
+ *  niveau 1. `null` si refusé. */
+export function riseStockSkill(
+  bank: RuneBank,
+  uid: string,
+): { bank: RuneBank; skill: StockSkill } | null {
+  const s = bank.skills.find((x) => x.uid === uid);
+  const next = s && riseSkill(s);
+  if (!next) return null;
+  return {
+    bank: { ...bank, skills: bank.skills.map((x) => (x.uid === uid ? next : x)) },
+    skill: next,
+  };
+}
+
+// ── 🎁 DONNER À UN CHAMPION (suite) ─────────────────────────────────────────────────────
+
+/** Ce que la compétence ferait à ce champion. `swap` : il la porte déjà, dans une AUTRE
+ *  couleur — elle prend sa place (la sienne est perdue avec ses niveaux). */
+export type GiveKind = 'new' | 'stack' | 'replace' | 'swap';
 
 export type GiveBlock = 'missing' | 'over' | 'full';
 
@@ -465,10 +526,14 @@ export interface ChampionSlots {
 
 /** Ce que donner cet exemplaire ferait, sans rien décider. `full` : il faudra choisir quoi
  *  remplacer. */
-export function giveKind(c: ChampionSlots, id: SkillId): GiveKind {
-  if (c.skills.some((s) => s.id === id)) return 'stack';
+export function giveKind(c: ChampionSlots, sk: Pick<ChampSkill, 'id' | 'up'>): GiveKind {
+  const cur = c.skills.find((s) => s.id === sk.id);
+  if (cur) return sameSkill(cur, sk) ? 'stack' : 'swap';
   return c.skills.length < c.slots ? 'new' : 'replace';
 }
+
+/** L'exemplaire tel qu'un champion le porte (sans `uid`, élévation gardée). */
+const carried = (sk: StockSkill): ChampSkill => withRise({ id: sk.id, level: sk.level }, sk.up);
 
 /**
  * ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de donner `uid` à ce champion.
@@ -483,7 +548,7 @@ export function giveBlocker(
 ): GiveBlock | null {
   const sk = bank.skills.find((s) => s.uid === uid);
   if (!sk || c.slots <= 0) return 'missing';
-  const kind = giveKind(c, sk.id);
+  const kind = giveKind(c, sk);
   if (kind === 'stack') {
     const cur = c.skills.find((s) => s.id === sk.id)!;
     return cur.level + sk.level > SKILL_MAX_LEVEL ? 'over' : null;
@@ -506,14 +571,16 @@ export function giveSkill(
 ): { bank: RuneBank; skills: ChampSkill[] } | null {
   if (giveBlocker(bank, uid, c, replaceIndex)) return null;
   const sk = bank.skills.find((s) => s.uid === uid)!;
-  const kind = giveKind(c, sk.id);
+  const kind = giveKind(c, sk);
   const cur = c.skills.map((s) => ({ ...s }));
   const skills =
     kind === 'stack'
       ? cur.map((s) => (s.id === sk.id ? { ...s, level: s.level + sk.level } : s))
-      : kind === 'new'
-        ? [...cur, { id: sk.id, level: sk.level }]
-        : cur.map((s, i) => (i === replaceIndex ? { id: sk.id, level: sk.level } : s));
+      : kind === 'swap'
+        ? cur.map((s) => (s.id === sk.id ? carried(sk) : s))
+        : kind === 'new'
+          ? [...cur, carried(sk)]
+          : cur.map((s, i) => (i === replaceIndex ? carried(sk) : s));
   return { bank: { ...bank, skills: bank.skills.filter((s) => s.uid !== uid) }, skills };
 }
 

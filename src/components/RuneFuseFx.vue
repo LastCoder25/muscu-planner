@@ -55,7 +55,9 @@
           <span class="rf-after">
             <b v-for="(l, i) in cur.after" :key="i" class="rf-nv font-display">Nv {{ l }}</b>
           </span>
-          <span class="rf-what">{{ skillEffectText(cur.id, cur.after[0] ?? 1) }}</span>
+          <span class="rf-what">{{
+            skillEffectText({ id: cur.id, up: cur.up, level: cur.after[0] ?? 1 })
+          }}</span>
         </div>
         <p v-else class="rf-hint">{{ hint }}</p>
       </div>
@@ -68,7 +70,7 @@
             v-for="g in list"
             :key="g.id"
             class="rf-row"
-            :style="{ '--c': RUNE_COLOR[SKILLS[g.id].tier] }"
+            :style="{ '--c': RUNE_COLOR[skillTier(g)] }"
           >
             <span class="rf-row-emo">{{ SKILLS[g.id].emoji }}</span>
             <span class="rf-row-main">
@@ -90,7 +92,7 @@ import RuneIcon from '@/components/RuneIcon.vue';
 import { useInvokeSfx } from '@/composables/useInvokeSfx';
 import { fuseGroupText, type FuseGroup } from '@/lib/runeBank';
 import { tierRank } from '@/lib/runeReveal';
-import { RUNE_COLOR, SKILLS, skillEffectText } from '@/lib/skillRunes';
+import { RUNE_COLOR, SKILLS, skillEffectText, skillTier } from '@/lib/skillRunes';
 
 const props = defineProps<{ groups: FuseGroup[] | null }>();
 const emit = defineEmits<{ close: [] }>();
@@ -108,7 +110,7 @@ const shards = ref<{ k: number; dx: number; dy: number; r: number }[]>([]);
 
 const list = computed(() => props.groups ?? []);
 const cur = computed(() => list.value[index.value] ?? null);
-const tier = computed(() => (cur.value ? SKILLS[cur.value.id].tier : 'green'));
+const tier = computed(() => (cur.value ? skillTier(cur.value) : 'green'));
 const color = computed(() => RUNE_COLOR[tier.value]);
 const stones = computed(() => (cur.value?.before ?? []).slice(0, MAX_STONES));
 const hint = computed(() =>

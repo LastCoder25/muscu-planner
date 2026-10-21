@@ -25,16 +25,45 @@
       <!-- ── La compétence choisie : la donner, ou la fusionner ── -->
       <template v-if="sel">
         <button type="button" class="rb-back" @click="back">‹ Stock</button>
-        <div class="rb-sel" :class="'t-' + SKILLS[sel.id].tier">
+        <div class="rb-sel" :class="'t-' + skillTier(sel)">
           <span class="rb-sel-emo">{{ SKILLS[sel.id].emoji }}</span>
           <span class="rb-sel-main">
             <span class="rb-sel-name font-display"
               >{{ SKILLS[sel.id].name }} <b>Nv {{ sel.level }}</b></span
             >
-            <span class="rb-sel-what">{{ whatOf(sel.id, sel.level) }}</span>
-            <span class="rb-sel-tier">{{ RUNE_INFO[SKILLS[sel.id].tier].label }}</span>
+            <span class="rb-sel-what">{{ skillEffectText(sel) }}</span>
+            <span class="rb-sel-tier"
+              >{{ RUNE_INFO[skillTier(sel)].label
+              }}<template v-if="riseOf(sel)">
+                · 🌈 élevée depuis {{ RUNE_INFO[SKILLS[sel.id].tier].emoji }}</template
+              ></span
+            >
           </span>
         </div>
+
+        <!-- 🌈 Au niveau 5 : passer à la couleur au-dessus, niveau 1. -->
+        <template v-if="!replaceFor && sel.level >= SKILL_MAX_LEVEL">
+          <div class="rb-sec">Élever</div>
+          <template v-if="selRise">
+            <p class="rb-note">{{ RISE_BLOCK_LABEL[selRise] }}.</p>
+          </template>
+          <template v-else>
+            <p class="rb-note">
+              Elle passe {{ RUNE_INFO[riseTier(sel)].label.replace('Rune ', '') }} au niveau 1 et
+              vaut déjà plus : {{ riseGain(sel) }}. Elle fusionnera ensuite avec les exemplaires de
+              sa nouvelle couleur.
+            </p>
+            <button
+              type="button"
+              class="rb-go font-display"
+              :class="'t-' + riseTier(sel)"
+              :disabled="busy"
+              @click="askRise"
+            >
+              🌈 Élever → {{ RUNE_INFO[riseTier(sel)].emoji }} Nv 1
+            </button>
+          </template>
+        </template>
 
         <!-- Le champion à qui on la donne, s'il est plein : quelle compétence remplacer ? -->
         <template v-if="replaceFor">
@@ -48,14 +77,16 @@
               :key="s.id"
               type="button"
               class="rb-row"
-              :class="'t-' + SKILLS[s.id].tier"
+              :class="'t-' + skillTier(s)"
               :disabled="busy"
               @click="confirmReplace(replaceFor, i)"
             >
               <span class="rb-row-emo">{{ SKILLS[s.id].emoji }}</span>
               <span class="rb-row-main">
-                <span class="rb-row-name">{{ SKILLS[s.id].name }} · Nv {{ s.level }}</span>
-                <span class="rb-row-sub">{{ whatOf(s.id, s.level) }}</span>
+                <span class="rb-row-name"
+                  >{{ SKILLS[s.id].name }} · Nv {{ skillLevelTag(s.level) }}</span
+                >
+                <span class="rb-row-sub">{{ skillEffectText(s) }}</span>
               </span>
               <span class="rb-pill bad">🔁 Remplacer</span>
             </button>
@@ -74,7 +105,7 @@
                 v-for="f in fuseRows"
                 :key="f.level"
                 class="rb-row rb-pick"
-                :class="['t-' + SKILLS[sel.id].tier, { on: f.take > 0 }]"
+                :class="['t-' + skillTier(sel), { on: f.take > 0 }]"
               >
                 <span class="rb-row-emo">{{ SKILLS[sel.id].emoji }}</span>
                 <span class="rb-row-main">
@@ -116,7 +147,7 @@
                 type="button"
                 class="rb-chip btn"
                 :disabled="busy"
-                @click="askFuseAll(sel.id)"
+                @click="askFuseAll(sel)"
               >
                 🔗 Tous → {{ selGroup.after.map((l) => 'Nv ' + l).join(' · ') }}
               </button>
@@ -133,7 +164,7 @@
             <button
               type="button"
               class="rb-go font-display"
-              :class="'t-' + SKILLS[sel.id].tier"
+              :class="'t-' + skillTier(sel)"
               :disabled="busy || !!pickBlock"
               @click="fusePicked"
             >
@@ -162,9 +193,10 @@
                     <span
                       v-if="k"
                       class="rb-has-chip"
-                      :class="['t-' + SKILLS[k.id].tier, { same: k.id === sel?.id }]"
-                      :title="whatOf(k.id, k.level)"
-                      >{{ SKILLS[k.id].emoji }} {{ SKILLS[k.id].name }} <b>{{ k.level }}</b></span
+                      :class="['t-' + skillTier(k), { same: k.id === sel?.id }]"
+                      :title="skillEffectText(k)"
+                      >{{ SKILLS[k.id].emoji }} {{ SKILLS[k.id].name }}
+                      <b>{{ skillLevelTag(k.level) }}</b></span
                     >
                     <span v-else class="rb-has-chip free">libre</span>
                   </template>
@@ -177,7 +209,8 @@
           <p class="rb-note">
             Une compétence donnée ne revient jamais au stock. Les exemplaires d’une même compétence
             se fusionnent : leurs niveaux s’additionnent ({{ SKILL_MAX_LEVEL }} au plus), de quoi
-            préparer une compétence haut niveau pour ton prochain champion.
+            préparer une compétence haut niveau pour ton prochain champion. Au niveau
+            {{ SKILL_MAX_LEVEL }}, elle s’élève à la couleur au-dessus 🌈.
           </p>
         </template>
       </template>
@@ -226,11 +259,7 @@
         <template v-if="lastOpened.length">
           <div class="rb-sec">Ouvertes à l’instant</div>
           <div class="rb-chips">
-            <span
-              v-for="s in lastOpened"
-              :key="s.uid"
-              class="rb-chip"
-              :class="'t-' + SKILLS[s.id].tier"
+            <span v-for="s in lastOpened" :key="s.uid" class="rb-chip" :class="'t-' + skillTier(s)"
               >{{ SKILLS[s.id].emoji }} {{ SKILLS[s.id].name }}</span
             >
           </div>
@@ -246,7 +275,7 @@
             :key="s.uid"
             type="button"
             class="rb-chip btn"
-            :class="'t-' + SKILLS[s.id].tier"
+            :class="'t-' + skillTier(s)"
             @click="select(s.uid)"
           >
             {{ SKILLS[s.id].emoji }} {{ SKILLS[s.id].name }} <b>Nv {{ s.level }}</b>
@@ -280,10 +309,18 @@ import {
   RUNE_INFO,
   RUNE_TIERS,
   SKILLS,
+  RISE_BLOCK_LABEL,
   SKILL_MAX_LEVEL,
+  riseBlocker,
+  riseGain,
+  riseOf,
+  riseTier,
+  sameSkill,
   skillEffectText,
+  skillLevelTag,
+  skillTier,
   type ChampSkill,
-  type SkillId,
+  type SkillRef,
 } from '@/lib/skillRunes';
 import {
   FUSE_ALL_NONE,
@@ -350,14 +387,31 @@ const blockLot = computed(() => openBlocker(bank.value, RUNE_LOT.size));
 const sortedSkills = computed(() =>
   stackSkills(bank.value.skills).sort(
     (a, b) =>
-      RUNE_TIERS.indexOf(SKILLS[b.id].tier) - RUNE_TIERS.indexOf(SKILLS[a.id].tier) ||
+      RUNE_TIERS.indexOf(skillTier(b)) - RUNE_TIERS.indexOf(skillTier(a)) ||
       SKILLS[a.id].name.localeCompare(SKILLS[b.id].name, 'fr') ||
       b.level - a.level,
   ),
 );
 
-function whatOf(id: SkillId, level: number): string {
-  return skillEffectText(id, level);
+const selRise = computed(() => (sel.value ? riseBlocker(sel.value) : null));
+
+/** 🌈 L'élévation ne se défait pas : on dit ce qu'elle change avant de la faire. */
+function askRise() {
+  const s = sel.value;
+  if (!s || riseBlocker(s)) return;
+  const to = RUNE_INFO[riseTier(s)];
+  $q.dialog({
+    title: `Élever ${SKILLS[s.id].name} ?`,
+    message: `Elle devient ${to.label.replace('Rune ', '')} ${to.emoji}, niveau 1 : ${riseGain(s)}.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: '🌈 Élever', color: 'positive' },
+  }).onOk(() => {
+    void run(async (uid) => {
+      const r = await char.riseRuneSkill(uid, s.uid);
+      if (!r.ok) throw new Error(r.reason);
+      gameFx.celebrateRune('rise', r.skill.id, '', 1, riseOf(r.skill));
+    });
+  });
 }
 
 interface GiveRow {
@@ -372,7 +426,7 @@ interface GiveRow {
   cells: (ChampSkill | null)[];
   order: number;
 }
-const GIVE_ORDER: Record<GiveKind, number> = { stack: 0, new: 1, replace: 2 };
+const GIVE_ORDER: Record<GiveKind, number> = { stack: 0, new: 1, swap: 2, replace: 2 };
 
 /** Chaque champion, avec ce qui se passera : amélioration, place libre, remplacement, ou grisé
  *  avec la raison. Tri : améliorations, places libres, remplacements, grisés. */
@@ -383,7 +437,7 @@ const giveRows = computed<GiveRow[]>(() => {
     .filter((a) => advChampionSlots(a).slots > 0)
     .map((a): GiveRow => {
       const c = advChampionSlots(a);
-      const kind = giveKind(c, s.id);
+      const kind = giveKind(c, s);
       const raw = giveBlocker(bank.value, s.uid, c, kind === 'replace' ? 0 : null);
       const block = raw === 'full' ? null : raw;
       const cur = c.skills.find((k) => k.id === s.id);
@@ -393,14 +447,16 @@ const giveRows = computed<GiveRow[]>(() => {
           ? `⬆️ Nv ${cur!.level} → ${cur!.level + s.level}`
           : kind === 'new'
             ? '🟢 Nouvelle'
-            : '🔁 Remplacer';
+            : kind === 'swap'
+              ? `🔁 ${RUNE_INFO[skillTier(cur!)].emoji}${skillLevelTag(cur!.level)} → ${RUNE_INFO[skillTier(s)].emoji}${s.level}`
+              : '🔁 Remplacer';
       return {
         adv: a,
         emoji: advTitle(a)?.emoji ?? '🧑',
         kind,
         block,
         pill,
-        tone: block ? 'off' : kind === 'replace' ? 'bad' : 'up',
+        tone: block ? 'off' : kind === 'replace' || kind === 'swap' ? 'bad' : 'up',
         sub: block
           ? GIVE_BLOCK_LABEL[block]
           : `${c.skills.length}/${c.slots} compétence${c.slots > 1 ? 's' : ''}`,
@@ -432,23 +488,29 @@ function pickBest() {
 /** Ce que « Tout fusionner » ferait, compétence par compétence (vide = rien à fusionner). */
 const fusePreview = computed(() => fuseAllSkills(bank.value).groups);
 /** Ce que la fusion de tous les exemplaires de la compétence choisie ferait. */
-const selGroup = computed(() => fusePreview.value.find((g) => g.id === sel.value?.id) ?? null);
+const selGroup = computed(
+  () => fusePreview.value.find((g) => sel.value && sameSkill(g, sel.value)) ?? null,
+);
 
-/** ⚠️ Une fusion ne se défait pas : on dit ce qui sera fusionné avant de le faire. */
-function askFuseAll(only: SkillId | null) {
-  const groups = fusePreview.value.filter((g) => !only || g.id === only);
+/** ⚠️ Une fusion ne se défait pas : on dit ce qui sera fusionné avant de le faire. `only` :
+ *  une compétence DANS SA COULEUR (les autres couleurs n'y sont pas versées). */
+function askFuseAll(only: SkillRef | null) {
+  const groups = fusePreview.value.filter((g) => !only || sameSkill(g, only));
   if (!groups.length) return;
   $q.dialog({
     title: only ? 'Fusionner tous les exemplaires ?' : 'Tout fusionner ?',
     message: groups
-      .map((g) => `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} : ${fuseGroupText(g)}`)
+      .map(
+        (g) =>
+          `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} ${RUNE_INFO[skillTier(g)].emoji} : ${fuseGroupText(g)}`,
+      )
       .join('\n'),
     style: 'white-space: pre-line',
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Fusionner', color: 'positive' },
   }).onOk(() => {
     void run(async (uid) => {
-      const r = await char.fuseAllRuneSkills(uid, only);
+      const r = await char.fuseAllRuneSkills(uid, only && { id: only.id, up: riseOf(only) });
       if (!r.ok) throw new Error(r.reason);
       back();
       fusing.value = r.groups;
@@ -506,10 +568,11 @@ function doGive(adv: Adventurer, replaceIndex: number | null) {
   const s = sel.value;
   if (!s) return;
   const id = s.id;
+  const up = riseOf(s);
   void run(async (uid) => {
     const r = await char.giveRuneSkill(uid, s.uid, adv.id, replaceIndex);
     if (!r.ok) throw new Error(r.reason);
-    gameFx.celebrateRune(r.kind, id, adv.name, r.level);
+    gameFx.celebrateRune(r.kind, id, adv.name, r.level, up);
     back();
   });
 }
@@ -520,6 +583,11 @@ function give(r: GiveRow) {
     replaceFor.value = r.adv;
     return;
   }
+  if (r.kind === 'swap') {
+    const i = (r.adv.skills ?? []).findIndex((k) => k.id === sel.value?.id);
+    if (i >= 0) confirmReplace(r.adv, i);
+    return;
+  }
   doGive(r.adv, null);
 }
 
@@ -528,11 +596,12 @@ function confirmReplace(adv: Adventurer, index: number) {
   const old = adv.skills?.[index];
   if (!old) return;
   $q.dialog({
-    title: `Remplacer ${SKILLS[old.id].name} niveau ${old.level} ?`,
+    title: `Remplacer ${SKILLS[old.id].name} ${RUNE_INFO[skillTier(old)].emoji} niveau ${skillLevelTag(old.level)} ?`,
     message: `${adv.name} perd ${SKILLS[old.id].name} et ses niveaux. Elle ne revient pas au stock.`,
     cancel: true,
     ok: { label: 'Remplacer', color: 'negative' },
-  }).onOk(() => doGive(adv, index));
+    // ⚠️ La même compétence dans une autre couleur prend SA place : pas d'index à passer.
+  }).onOk(() => doGive(adv, old.id === sel.value?.id ? null : index));
 }
 </script>
 

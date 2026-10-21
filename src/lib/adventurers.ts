@@ -60,6 +60,7 @@ import {
   SKILLS,
   SKILL_SLOTS,
   skillEffectText,
+  skillTier,
   skillValue,
   type ChampSkill,
   type SkillId,
@@ -2091,8 +2092,7 @@ export function advRuneSkills(adv: Adventurer): ChampSkill[] {
 export function teamRuneValue(advs: readonly Adventurer[], id: SkillId): number {
   let v = 0;
   for (const a of advs)
-    for (const k of advRuneSkills(a))
-      if (k.id === id) v = Math.max(v, skillValue(k.id, k.level) / 100);
+    for (const k of advRuneSkills(a)) if (k.id === id) v = Math.max(v, skillValue(k) / 100);
   return v;
 }
 
@@ -2159,8 +2159,8 @@ export function advBadges(adv: Adventurer): AdvBadge[] {
       what: SKILLS[s.id].name,
       level: s.level,
       role: roleOfSkill(s.id) !== undefined,
-      color: RUNE_COLOR[SKILLS[s.id].tier],
-      effect: skillEffectText(s.id, s.level),
+      color: RUNE_COLOR[skillTier(s)],
+      effect: skillEffectText(s),
     }));
     return [...list.filter((b) => b.role), ...list.filter((b) => !b.role)];
   }

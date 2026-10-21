@@ -46,6 +46,8 @@ import {
   SKILLS,
   SKILL_OVERCLOCK_LEVEL,
   SKILL_MAX_LEVEL,
+  skillTier,
+  type ChampSkill,
   type RuneTier,
   type SkillId,
 } from './skillRunes';
@@ -1581,10 +1583,15 @@ export interface LapisGain {
  * ⚡ LE LAPIDAIRE SURCHARGE (décision de l'utilisateur, 2026-10-12) : au-delà des runes (5 au
  * plus), il SURCHARGE une compétence au niveau 5 — elle reste niveau 5, sa valeur prend +50 %
  * (`OVERCLOCK_MULT`). Les heures selon sa couleur (`CONTROL.lapidaryHours` : 1, 2, 4, 7 jours).
+ * 🌈 La couleur est celle de L'EXEMPLAIRE porté : une Vitesse élevée au doré prend 7 jours.
  */
-export function lapidaryHours(id: SkillId): number {
-  return CONTROL.lapidaryHours[SKILLS[id].tier];
+export function lapidaryHours(s: Pick<ChampSkill, 'id' | 'up'>): number {
+  return CONTROL.lapidaryHours[skillTier(s)];
 }
+
+/** L'exemplaire de `id` que porte ce champion (le lapidaire ne vise que les siens). */
+const carriedSkill = (a: Pick<Adventurer, 'skills'>, id: SkillId): ChampSkill =>
+  (a.skills ?? []).find((s) => s.id === id) ?? { id, level: SKILL_MAX_LEVEL };
 
 const TIER_ORDER: Record<RuneTier, number> = { green: 0, blue: 1, violet: 2, gold: 3 };
 
@@ -1606,7 +1613,9 @@ export function lapisTarget(
   if (pick && ok.includes(pick)) return pick;
   const done = (s: SkillId) => a.lapisHours?.[s] ?? 0;
   return [...ok].sort(
-    (x, y) => done(y) - done(x) || TIER_ORDER[SKILLS[y].tier] - TIER_ORDER[SKILLS[x].tier],
+    (x, y) =>
+      done(y) - done(x) ||
+      TIER_ORDER[skillTier(carriedSkill(a, y))] - TIER_ORDER[skillTier(carriedSkill(a, x))],
   )[0]!;
 }
 
@@ -1632,7 +1641,7 @@ export function applyLapis(
     changed = true;
     const h = (a.lapisHours?.[skill] ?? 0) + g.hours;
     const hours = { ...(a.lapisHours ?? {}) };
-    const cut = h + 1e-9 >= lapidaryHours(skill);
+    const cut = h + 1e-9 >= lapidaryHours(carriedSkill(a, skill));
     if (cut) {
       delete hours[skill];
       up++;
@@ -1676,7 +1685,7 @@ export function lapisBar(
 ): { skill: SkillId; pct: number; leftH: number } | null {
   const skill = lapisTarget(a, p.control?.lapisPick?.[a.id] as SkillId | undefined);
   if (!skill) return null;
-  const need = lapidaryHours(skill);
+  const need = lapidaryHours(carriedSkill(a, skill));
   const done = (a.lapisHours?.[skill] ?? 0) + (champStockBy(p, now, 1)[a.id] ?? 0);
   return { skill, pct: Math.min(1, done / need), leftH: Math.max(0, need - done) };
 }

@@ -317,7 +317,7 @@ export function roleShare(advs: Adventurer[], role: AdvRole): number {
   for (const a of advs) {
     if (advChampion(a)) {
       const s = advRuneSkills(a).find((k) => k.id === ROLE_SKILL[role]);
-      if (s) v += skillValue(s.id, s.level) / 100;
+      if (s) v += skillValue(s) / 100;
     } else v += countRole([a], role) * LEGACY_ROLE_SHARE[role];
   }
   return v;
@@ -444,8 +444,8 @@ function withGoldenRunes(c: Combatant, advs: Adventurer[]): Combatant {
   let stand = 0;
   for (const a of advs)
     for (const k of advRuneSkills(a)) {
-      if (k.id === 'firstBlood') opening += skillValue(k.id, k.level) / 100;
-      if (k.id === 'secondWind') stand = Math.max(stand, skillValue(k.id, k.level) / 100);
+      if (k.id === 'firstBlood') opening += skillValue(k) / 100;
+      if (k.id === 'secondWind') stand = Math.max(stand, skillValue(k) / 100);
     }
   const out = { ...c };
   if (opening > 0) out.openingDmg = opening / advs.length;

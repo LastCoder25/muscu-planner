@@ -262,8 +262,9 @@ const reduced = (): boolean =>
   typeof window !== 'undefined' &&
   !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+/** Une compétence qui SORT d'une rune n'est jamais élevée. */
 function whatOf(id: SkillId, level: number): string {
-  return skillEffectText(id, level);
+  return skillEffectText({ id, level });
 }
 const stockOf = (id: SkillId): number => props.stock.filter((s) => s.id === id).length;
 

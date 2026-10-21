@@ -107,14 +107,14 @@ describe('💎 le lapidaire de l’île 5', () => {
   });
 
   it('le temps dépend de la couleur : 1, 2, 4 et 7 jours', () => {
-    expect(lapidaryHours('speed')).toBe(24);
-    expect(lapidaryHours('speed')).toBeLessThan(lapidaryHours('plunder'));
-    expect(lapidaryHours('plunder')).toBe(168);
+    expect(lapidaryHours({ id: 'speed' })).toBe(24);
+    expect(lapidaryHours({ id: 'speed' })).toBeLessThan(lapidaryHours({ id: 'plunder' }));
+    expect(lapidaryHours({ id: 'plunder' })).toBe(168);
   });
 
   it('seule une compétence au niveau 5 se surcharge, et elle le reste', () => {
     expect(lapisCandidates(adv())).toEqual(['care']);
-    const a = applyLapis([adv()], [{ advId: 'a', hours: lapidaryHours('care') }]);
+    const a = applyLapis([adv()], [{ advId: 'a', hours: lapidaryHours({ id: 'care' }) }]);
     expect(a.up).toBe(1);
     expect(a.advs[0]!.skills!.find((s) => s.id === 'care')!.level).toBe(SKILL_OVERCLOCK_LEVEL);
     // Les autres ne bougent pas, et une compétence surchargée ne se surcharge plus.
@@ -127,14 +127,14 @@ describe('💎 le lapidaire de l’île 5', () => {
   });
 
   it('⚡ surchargée, elle vaut +50 % de sa valeur au niveau 5', () => {
-    expect(skillValue('care', SKILL_OVERCLOCK_LEVEL)).toBeCloseTo(
-      skillValue('care', 5) * OVERCLOCK_MULT,
+    expect(skillValue({ id: 'care', level: SKILL_OVERCLOCK_LEVEL })).toBeCloseTo(
+      skillValue({ id: 'care', level: 5 }) * OVERCLOCK_MULT,
       0,
     );
   });
 
   it('la progression est GARDÉE sur le champion : s’il part, elle se met en pause', () => {
-    const half = lapidaryHours('care') / 2;
+    const half = lapidaryHours({ id: 'care' }) / 2;
     const one = applyLapis([adv()], [{ advId: 'a', hours: half }]);
     expect(one.up).toBe(0);
     expect(one.advs[0]!.lapisHours!.care).toBeCloseTo(half, 6);

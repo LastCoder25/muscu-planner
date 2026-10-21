@@ -107,7 +107,7 @@ describe('fusionner au choix', () => {
       ['a', 'b', 'd'],
     )!;
     expect(r.bank.skills).toEqual([sk('b', 'crit', 4), sk('c', 'pv')]);
-    expect(r.group).toEqual({ id: 'crit', before: [2, 1, 1], after: [4] });
+    expect(r.group).toEqual({ id: 'crit', up: 0, before: [2, 1, 1], after: [4] });
   });
 
   it('une partie seulement : les exemplaires non choisis restent au stock', () => {
@@ -135,7 +135,13 @@ describe('fusionner au choix', () => {
 
 describe('choisir tout ou partie', () => {
   it('ajoute à l’exemplaire choisi le nombre demandé par niveau, borné au stock', () => {
-    const b = bank(0, [sk('a', 'speed'), sk('b', 'speed'), sk('c', 'speed', 2), sk('d', 'speed'), sk('x', 'pv')]);
+    const b = bank(0, [
+      sk('a', 'speed'),
+      sk('b', 'speed'),
+      sk('c', 'speed', 2),
+      sk('d', 'speed'),
+      sk('x', 'pv'),
+    ]);
     const r = fusePick(b, 'a', { 1: 9, 2: 0 });
     expect(r.rows).toEqual([
       { level: 2, count: 1, take: 0 },
@@ -154,7 +160,12 @@ describe('jusqu’au plus haut', () => {
 
   it('vise le plus haut niveau atteignable, pas le premier qui tient', () => {
     // 1 + 3 = 4 en prenant le plus gros d'abord ; 1 + 2 + 2 = 5 existe.
-    const b = bank(0, [sk('a', 'crit', 1), sk('b', 'crit', 3), sk('c', 'crit', 2), sk('d', 'crit', 2)]);
+    const b = bank(0, [
+      sk('a', 'crit', 1),
+      sk('b', 'crit', 3),
+      sk('c', 'crit', 2),
+      sk('d', 'crit', 2),
+    ]);
     const pick = bestUids(b, 'a');
     expect(pick[0]).toBe('a');
     expect(new Set(pick)).toEqual(new Set(['a', 'c', 'd']));
@@ -166,7 +177,13 @@ describe('jusqu’au plus haut', () => {
     expect(bestUids(b, 'z')).toEqual([]);
     expect(bestFusePick(b, 'a').total).toBe(5);
     // 1 + 2 + 2 et 1 + 2 + 1 + 1 font tous deux 5 : on garde le moins d’exemplaires.
-    const tie = bank(0, [sk('s', 'pv', 1), sk('t', 'pv', 2), sk('u', 'pv', 2), sk('v', 'pv'), sk('w', 'pv')]);
+    const tie = bank(0, [
+      sk('s', 'pv', 1),
+      sk('t', 'pv', 2),
+      sk('u', 'pv', 2),
+      sk('v', 'pv'),
+      sk('w', 'pv'),
+    ]);
     expect(bestUids(tie, 's')).toEqual(['s', 't', 'u']);
   });
 
@@ -184,7 +201,7 @@ describe('tout fusionner', () => {
     const six = [1, 2, 3, 4, 5, 6].map((i) => sk('s' + i, 'speed', 1));
     const r = fuseAllSkills(bank(0, [...six, sk('p', 'pv', 2)]));
     expect(r.bank.skills).toEqual([sk('s1', 'speed', 5), sk('s6', 'speed', 1), sk('p', 'pv', 2)]);
-    expect(r.groups).toEqual([{ id: 'speed', before: [1, 1, 1, 1, 1, 1], after: [5, 1] }]);
+    expect(r.groups).toEqual([{ id: 'speed', up: 0, before: [1, 1, 1, 1, 1, 1], after: [5, 1] }]);
   });
 
   it('les plus hauts niveaux d’abord, jamais au-delà de 5 ni écrêtés', () => {
@@ -209,7 +226,9 @@ describe('tout fusionner', () => {
     expect(fuseGroupText({ id: 'speed', before: [1, 1, 1, 1, 1, 1, 1], after: [5, 2] })).toBe(
       '7 × Nv 1 → Nv 5 · Nv 2',
     );
-    expect(fuseGroupText({ id: 'crit', before: [3, 1, 1], after: [5] })).toBe('Nv 3 + 2 × Nv 1 → Nv 5');
+    expect(fuseGroupText({ id: 'crit', before: [3, 1, 1], after: [5] })).toBe(
+      'Nv 3 + 2 × Nv 1 → Nv 5',
+    );
     const st = stackSkills([sk('a', 'crit'), sk('b', 'pv'), sk('c', 'crit'), sk('d', 'crit', 2)]);
     expect(st.map((s) => [s.uid, s.count])).toEqual([
       ['a', 2],
@@ -261,8 +280,8 @@ describe('donner à un champion', () => {
   });
 
   it('annonce ce que le don ferait (pastille de l’écran)', () => {
-    expect(giveKind(c([]), 'crit')).toBe('new');
-    expect(giveKind(c([{ id: 'crit', level: 1 }]), 'crit')).toBe('stack');
+    expect(giveKind(c([]), { id: 'crit' })).toBe('new');
+    expect(giveKind(c([{ id: 'crit', level: 1 }]), { id: 'crit' })).toBe('stack');
     const full = c(
       [
         { id: 'pv', level: 1 },
@@ -270,7 +289,7 @@ describe('donner à un champion', () => {
       ],
       2,
     );
-    const kind: GiveKind = giveKind(full, 'crit');
+    const kind: GiveKind = giveKind(full, { id: 'crit' });
     expect(kind).toBe('replace');
   });
 

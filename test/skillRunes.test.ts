@@ -65,19 +65,25 @@ describe('📈 le cumul', () => {
     expect(SKILL_OVERCLOCK_LEVEL).toBe(6);
     expect(LEVEL_CURVE.length).toBe(SKILL_MAX_LEVEL);
     for (const id of SKILL_IDS)
-      expect(skillValue(id, 9)).toBe(skillValue(id, SKILL_OVERCLOCK_LEVEL));
+      expect(skillValue({ id: id, level: 9 })).toBe(
+        skillValue({ id: id, level: SKILL_OVERCLOCK_LEVEL }),
+      );
   });
 
   it('⚡ la SURCHARGE vaut +50 % sur le niveau 5, pour toutes les compétences', () => {
     expect(OVERCLOCK_MULT).toBe(1.5);
     for (const id of SKILL_IDS) {
       const five = SKILLS[id].base * LEVEL_CURVE[SKILL_MAX_LEVEL - 1]!;
-      expect(skillValue(id, SKILL_OVERCLOCK_LEVEL), id).toBeCloseTo(five * OVERCLOCK_MULT, 0);
+      expect(skillValue({ id: id, level: SKILL_OVERCLOCK_LEVEL }), id).toBeCloseTo(
+        five * OVERCLOCK_MULT,
+        0,
+      );
       // Plus que n'importe quel cran de la courbe (le plus gros vaut +70 %… de la base).
       expect(
-        skillValue(id, SKILL_OVERCLOCK_LEVEL) - skillValue(id, SKILL_MAX_LEVEL),
+        skillValue({ id: id, level: SKILL_OVERCLOCK_LEVEL }) -
+          skillValue({ id: id, level: SKILL_MAX_LEVEL }),
         id,
-      ).toBeGreaterThan(skillValue(id, 2) - skillValue(id, 1));
+      ).toBeGreaterThan(skillValue({ id: id, level: 2 }) - skillValue({ id: id, level: 1 }));
     }
   });
 
@@ -86,7 +92,7 @@ describe('📈 le cumul', () => {
     expect(isOverclocked(6)).toBe(true);
     expect(skillLevelTag(5)).toBe('5');
     expect(skillLevelTag(6)).toBe('5⚡');
-    expect(overclockGain('crit')).toBe('32,4 % → 48,6 %');
+    expect(overclockGain({ id: 'crit' })).toBe('32,4 % → 48,6 %');
   });
 
   it('⚠️ RENDEMENT DÉCROISSANT : chaque niveau apporte moins que le précédent', () => {
@@ -97,12 +103,14 @@ describe('📈 le cumul', () => {
   it('la valeur monte à chaque niveau, pour toutes les compétences', () => {
     for (const id of SKILL_IDS)
       for (let l = 2; l <= SKILL_MAX_LEVEL; l++)
-        expect(skillValue(id, l), `${id} ${l}`).toBeGreaterThan(skillValue(id, l - 1));
+        expect(skillValue({ id: id, level: l }), `${id} ${l}`).toBeGreaterThan(
+          skillValue({ id: id, level: l - 1 }),
+        );
   });
 
   it('⚠️ la Vitesse au maximum reste sous le plafond d’équipe actuel (−30 %)', () => {
     // La durée des trajets est le plus gros levier économique du jeu (v0.935).
-    expect(skillValue('speed', SKILL_MAX_LEVEL)).toBeLessThan(30);
+    expect(skillValue({ id: 'speed', level: SKILL_MAX_LEVEL })).toBeLessThan(30);
   });
 });
 
@@ -150,7 +158,7 @@ describe('🎁 les sources de runes', () => {
 describe('⚔️ les compétences en combat', () => {
   it('une compétence de combat donne son effet à la valeur de son niveau', () => {
     const e = runeCombatEffects([{ id: 'pv', level: 3 }]);
-    expect(e.maxPvPct).toBeCloseTo(skillValue('pv', 3) / 100);
+    expect(e.maxPvPct).toBeCloseTo(skillValue({ id: 'pv', level: 3 }) / 100);
   });
 
   it('les compétences s’additionnent, les utilitaires ne touchent pas au combat', () => {
@@ -159,8 +167,8 @@ describe('⚔️ les compétences en combat', () => {
       { id: 'crit', level: 2 },
       { id: 'speed', level: 5 },
     ]);
-    expect(e.damagePct).toBeCloseTo(skillValue('damage', 1) / 100);
-    expect(e.critAdd).toBeCloseTo(skillValue('crit', 2) / 100);
+    expect(e.damagePct).toBeCloseTo(skillValue({ id: 'damage', level: 1 }) / 100);
+    expect(e.critAdd).toBeCloseTo(skillValue({ id: 'crit', level: 2 }) / 100);
     expect(runeCombatEffects([{ id: 'speed', level: 5 }])).toEqual(runeCombatEffects([]));
   });
 

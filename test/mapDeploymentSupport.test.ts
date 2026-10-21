@@ -125,7 +125,7 @@ describe('⛑️🎓🐫 attackSupport — la règle des missions, à rendement 
   });
   it('chaque soutien compte, lu sur la valeur de sa rune', () => {
     const heal = attackSupport([champ('a', [{ id: 'care', level: 5 }])]);
-    expect(heal).toBeCloseTo(skillValue('care', 5) / 100 / 3, 9);
+    expect(heal).toBeCloseTo(skillValue({ id: 'care', level: 5 }) / 100 / 3, 9);
     expect(attackSupport([champ('a', [{ id: 'mentor', level: 3 }])])).toBeGreaterThan(0);
     expect(attackSupport([champ('a', [{ id: 'haul', level: 3 }])])).toBeGreaterThan(0);
   });

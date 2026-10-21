@@ -123,8 +123,14 @@ export function useGameFx() {
   }
   /** 🔮 RUNE POSÉE SUR UN CHAMPION : la pierre de la couleur tirée se brise et la compétence
    *  en sort. La couleur et l'intensité suivent la rareté de la compétence (`runeApplyFx`). */
-  function celebrateRune(kind: RuneFxKind, drawn: SkillId, advName: string, level: number): void {
-    const r = runeApplyFx(kind, drawn, advName, level);
+  function celebrateRune(
+    kind: RuneFxKind,
+    drawn: SkillId,
+    advName: string,
+    level: number,
+    up = 0,
+  ): void {
+    const r = runeApplyFx(kind, drawn, advName, level, up);
     celebrate({ kind: 'rune', emoji: r.emoji, title: r.title, subtitle: r.subtitle, rune: r.tier });
   }
   return {

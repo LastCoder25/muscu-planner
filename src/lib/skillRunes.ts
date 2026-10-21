@@ -9,7 +9,8 @@
  *
  * Le principe : un champion reçoit ses compétences par des RUNES que le joueur gagne et pose
  * où il veut. Une rune tire une compétence au hasard DANS SON CRAN ; chaque compétence
- * n'existe que dans un seul cran et se cumule sur elle-même jusqu'au niveau 5.
+ * part d'un seul cran et se cumule sur elle-même jusqu'au niveau 5, puis s'ÉLÈVE au cran
+ * au-dessus (🌈, `SkillRef.up`, v1.252.0).
  *
  * ⚠️ Les VALEURS sont des points de départ : elles seront fixées par la mesure (routes, camps,
  * failles, sièges, puits d'or, débit de mana) avant d'être lues par le jeu.
@@ -71,6 +72,9 @@ export interface SkillDef {
   what: string;
   /** Valeur au niveau 1, en % (les niveaux suivants suivent `LEVEL_CURVE`). */
   base: number;
+  /** Plafond de la valeur, en % : seulement pour une CHANCE qu'une élévation pousserait
+   *  au-delà de 100 (⛑️ vert → doré, surchargé : 112 %). */
+  cap?: number;
 }
 
 /** ⚠️ Un `Record` exhaustif : ajouter une compétence sans la décrire ne compile pas. */
@@ -84,6 +88,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     name: 'Premiers secours',
     what: '{v} % de chances qu’un blessé de la troupe l’évite',
     base: 15,
+    cap: 90,
   },
   haul: { tier: 'green', emoji: '🐫', name: 'Cargaison', what: 'cargaison +{v} %', base: 8 },
   scout: { tier: 'green', emoji: '👁️', name: 'Repérage', what: 'embuscades −{v} %', base: 8 },
@@ -161,6 +166,67 @@ export function isOverclocked(level: number): boolean {
   return Math.floor(level) >= SKILL_OVERCLOCK_LEVEL;
 }
 
+/**
+ * 🌈 L'ÉLÉVATION (décision de l'utilisateur, 2026-10-21) : une compétence au niveau 5 peut
+ * passer à la COULEUR AU-DESSUS, au niveau 1 (vert → bleu → violet → doré, sans limite sinon
+ * le doré). Une compétence verte peut donc finir dorée ; une dorée n'a que la surcharge ⚡.
+ *
+ * ⚠️ La couleur est celle de L'EXEMPLAIRE : `up` = crans d'élévation au-dessus de sa couleur
+ * de départ (`SKILLS[id].tier`), ABSENT = 0. C'est le seul champ ajouté : une compétence non
+ * élevée s'écrit et vaut exactement comme avant (étalons des combats inchangés).
+ */
+export interface SkillRef {
+  id: SkillId;
+  level: number;
+  up?: number;
+}
+
+/** Crans d'élévation encore possibles au-dessus de la couleur de départ. */
+export function maxRise(id: SkillId): number {
+  return RUNE_TIERS.length - 1 - RUNE_TIERS.indexOf(SKILLS[id].tier);
+}
+
+/** Les crans d'élévation d'un exemplaire, bornés (lecture défensive). */
+export function riseOf(s: Pick<SkillRef, 'id' | 'up'>): number {
+  const u = Math.floor(Number(s.up ?? 0));
+  return Number.isFinite(u) ? Math.max(0, Math.min(maxRise(s.id), u)) : 0;
+}
+
+/** ⚠️ SOURCE UNIQUE : la couleur d'un EXEMPLAIRE (élévation comprise). */
+export function skillTier(s: Pick<SkillRef, 'id' | 'up'>): RuneTier {
+  return RUNE_TIERS[RUNE_TIERS.indexOf(SKILLS[s.id].tier) + riseOf(s)]!;
+}
+
+/** Deux exemplaires de la même compétence ET de la même couleur (seuls ceux-là fusionnent). */
+export function sameSkill(a: Pick<SkillRef, 'id' | 'up'>, b: Pick<SkillRef, 'id' | 'up'>): boolean {
+  return a.id === b.id && riseOf(a) === riseOf(b);
+}
+
+export type RiseBlock = 'level' | 'top';
+
+export const RISE_BLOCK_LABEL: Record<RiseBlock, string> = {
+  level: `au niveau ${SKILL_MAX_LEVEL} seulement`,
+  top: 'déjà dorée : seule la surcharge ⚡ du lapidaire la fait monter',
+};
+
+/** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche d'élever cet exemplaire. Une compétence
+ *  surchargée (5⚡) peut s'élever : elle PERD sa surcharge (l'écran le dit). */
+export function riseBlocker(s: SkillRef): RiseBlock | null {
+  if (Math.floor(s.level) < SKILL_MAX_LEVEL) return 'level';
+  return riseOf(s) >= maxRise(s.id) ? 'top' : null;
+}
+
+/** 🌈 La couleur où l'élévation mène cet exemplaire (la sienne s'il est déjà au sommet). */
+export function riseTier(s: Pick<SkillRef, 'id' | 'up'>): RuneTier {
+  return skillTier({ id: s.id, up: Math.min(maxRise(s.id), riseOf(s) + 1) });
+}
+
+/** L'exemplaire élevé : couleur au-dessus, niveau 1 (surcharge perdue). `null` si refusé. */
+export function riseSkill<T extends SkillRef>(s: T): T | null {
+  if (riseBlocker(s)) return null;
+  return { ...s, level: 1, up: riseOf(s) + 1 };
+}
+
 /** Le niveau d'une compétence tel qu'on l'ÉCRIT : « 3 », ou « 5⚡ » si elle est surchargée. */
 export function skillLevelTag(level: number): string {
   return isOverclocked(level) ? `${SKILL_MAX_LEVEL}⚡` : String(Math.floor(level));
@@ -180,23 +246,48 @@ export const RUNE_COLOR: Record<RuneTier, string> = {
  *  La surcharge du lapidaire n'est PAS un cran de cette courbe (`OVERCLOCK_MULT`). */
 export const LEVEL_CURVE: readonly number[] = [1, 1.7, 2.2, 2.5, 2.7];
 
-/** La valeur d'une compétence à un niveau donné, en %, arrondie au dixième (surcharge comprise). */
-export function skillValue(id: SkillId, level: number): number {
-  const l = Math.max(1, Math.min(SKILL_MAX_LEVEL, Math.floor(level)));
-  const boost = isOverclocked(level) ? OVERCLOCK_MULT : 1;
-  return Math.round(SKILLS[id].base * LEVEL_CURVE[l - 1]! * boost * 10) / 10;
+/**
+ * 🌈 La même courbe sur toute l'échelle des ÉLÉVATIONS (ligne = crans au-dessus de la couleur
+ * de départ), en multiples de la valeur de base. La ligne 0 EST `LEVEL_CURVE`.
+ * ⚠️ Deux garanties (testées) : (1) le niveau 1 d'une couleur vaut PLUS que le niveau 5 de la
+ * précédente — élever ne fait jamais rien perdre (hors surcharge) ; (2) chaque couleur ajoute
+ * moins que la précédente (+1, +0,75, +0,55) — une verte montée au doré plafonne à ×5, pas à
+ * ×2,7⁴ (une Vitesse à « trajet −290 % »).
+ */
+const RISE_CURVE: readonly (readonly number[])[] = [
+  LEVEL_CURVE,
+  [3, 3.25, 3.45, 3.6, 3.7],
+  [3.95, 4.15, 4.3, 4.4, 4.45],
+  [4.65, 4.8, 4.9, 4.97, 5],
+];
+
+/** La valeur d'un exemplaire, en %, arrondie au dixième (élévation et surcharge comprises). */
+export function skillValue(s: SkillRef): number {
+  const l = Math.max(1, Math.min(SKILL_MAX_LEVEL, Math.floor(s.level)));
+  const boost = isOverclocked(s.level) ? OVERCLOCK_MULT : 1;
+  const def = SKILLS[s.id];
+  const v = Math.round(def.base * RISE_CURVE[riseOf(s)]![l - 1]! * boost * 10) / 10;
+  return def.cap === undefined ? v : Math.min(def.cap, v);
 }
 
-/** Ce que fait une compétence à un niveau donné, valeur comprise, en virgule française
+/** Ce que fait un exemplaire, valeur comprise, en virgule française
  *  (« 33 % de chances qu’un blessé de la troupe l’évite »). Source unique des écrans. */
-export function skillEffectText(id: SkillId, level: number): string {
-  return SKILLS[id].what.replace('{v}', String(skillValue(id, level)).replace('.', ','));
+export function skillEffectText(s: SkillRef): string {
+  return SKILLS[s.id].what.replace('{v}', String(skillValue(s)).replace('.', ','));
 }
+
+const pct = (v: number) => `${String(v).replace('.', ',')} %`;
 
 /** ⚡ Ce que la surcharge change, en clair : « 32,4 % → 48,6 % ». */
-export function overclockGain(id: SkillId): string {
-  const f = (v: number) => `${String(v).replace('.', ',')} %`;
-  return `${f(skillValue(id, SKILL_MAX_LEVEL))} → ${f(skillValue(id, SKILL_OVERCLOCK_LEVEL))}`;
+export function overclockGain(s: Pick<SkillRef, 'id' | 'up'>): string {
+  const at = (level: number) => skillValue({ id: s.id, up: riseOf(s), level });
+  return `${pct(at(SKILL_MAX_LEVEL))} → ${pct(at(SKILL_OVERCLOCK_LEVEL))}`;
+}
+
+/** 🌈 Ce que l'élévation change, en clair : « 32,4 % → 36 % » (surcharge perdue comprise). */
+export function riseGain(s: SkillRef): string {
+  const next = riseSkill(s);
+  return next ? `${pct(skillValue(s))} → ${pct(skillValue(next))}` : '';
 }
 
 export function skillsOfTier(tier: RuneTier): SkillId[] {
@@ -206,11 +297,8 @@ export function skillsOfTier(tier: RuneTier): SkillId[] {
 /** Emplacements de compétence selon la lettre du champion. */
 export const SKILL_SLOTS: Record<'A' | 'S' | 'X', number> = { A: 2, S: 3, X: 4 };
 
-/** Une compétence portée par un champion. */
-export interface ChampSkill {
-  id: SkillId;
-  level: number;
-}
+/** Une compétence portée par un champion (`up` : son élévation, cf. `SkillRef`). */
+export type ChampSkill = SkillRef;
 
 /**
  * Le TIRAGE d'une rune sur un champion : une compétence du cran, au hasard.
@@ -422,7 +510,7 @@ export const SKILL_COMBAT_EFFECT: Partial<Record<SkillId, EffectType>> = {
 export function runeCombatEffects(skills: readonly ChampSkill[]): AggregatedEffects {
   const list = skills.flatMap((s) => {
     const t = SKILL_COMBAT_EFFECT[s.id];
-    return t ? [effectAsAggregate(t, skillValue(s.id, s.level))] : [];
+    return t ? [effectAsAggregate(t, skillValue(s))] : [];
   });
   return list.length ? mergeEffects(...list) : emptyEffects();
 }
@@ -489,7 +577,7 @@ function simulateBuild(rng: () => number, rankIndex: number, slots: number): Cha
 /** La « valeur de combat » d'un build : somme des valeurs de ses compétences de combat.
  *  Sert seulement à choisir le build MÉDIAN. */
 function combatScore(sk: readonly ChampSkill[]): number {
-  return sk.reduce((n, s) => n + (SKILL_COMBAT_EFFECT[s.id] ? skillValue(s.id, s.level) : 0), 0);
+  return sk.reduce((n, s) => n + (SKILL_COMBAT_EFFECT[s.id] ? skillValue(s) : 0), 0);
 }
 
 const refBuildCache = new Map<string, ChampSkill[]>();
@@ -530,14 +618,26 @@ export function normalizeChampSkills(raw: unknown): ChampSkill[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<SkillId>();
   const out: ChampSkill[] = [];
-  for (const s of raw as { id?: unknown; level?: unknown }[]) {
+  for (const s of raw as { id?: unknown; level?: unknown; up?: unknown }[]) {
     if (!s || !isSkill(s.id) || seen.has(s.id)) continue;
     seen.add(s.id);
     const lv = Math.floor(Number(s.level));
-    out.push({
-      id: s.id,
-      level: Math.max(1, Math.min(SKILL_OVERCLOCK_LEVEL, Number.isFinite(lv) ? lv : 1)),
-    });
+    out.push(
+      withRise(
+        {
+          id: s.id,
+          level: Math.max(1, Math.min(SKILL_OVERCLOCK_LEVEL, Number.isFinite(lv) ? lv : 1)),
+        },
+        s.up,
+      ),
+    );
   }
   return out;
+}
+
+/** Pose l'élévation lue (bornée) sur un exemplaire relu ; ABSENTE à 0, pour que les
+ *  compétences non élevées s'écrivent exactement comme avant. */
+export function withRise<T extends { id: SkillId }>(s: T, up: unknown): T & { up?: number } {
+  const u = riseOf({ id: s.id, up: up as number });
+  return u ? { ...s, up: u } : s;
 }

@@ -7,7 +7,7 @@
         v-for="(s, i) in cells"
         :key="i"
         class="srp-slot"
-        :class="[s ? 't-' + SKILLS[s.id].tier : 'empty']"
+        :class="[s ? 't-' + skillTier(s) : 'empty']"
       >
         <template v-if="s">
           <span class="srp-emo">{{ SKILLS[s.id].emoji }}</span>
@@ -25,8 +25,20 @@
                 }}</b
               >
             </span>
-            <span class="srp-what">{{ whatOf(s.id, s.level) }}</span>
+            <span class="srp-what">{{ skillEffectText(s) }}</span>
           </span>
+          <!-- 🌈 Au niveau 5 : passer à la couleur au-dessus. -->
+          <button
+            v-if="!riseBlocker(s)"
+            type="button"
+            class="srp-rise"
+            :class="'t-' + riseTier(s)"
+            :disabled="busy"
+            :aria-label="`Élever ${SKILLS[s.id].name}`"
+            @click="askRise(s)"
+          >
+            🌈<small>{{ RUNE_INFO[riseTier(s)].emoji }}</small>
+          </button>
         </template>
         <span v-else class="srp-free">Emplacement libre</span>
       </div>
@@ -44,14 +56,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useQuasar } from 'quasar';
+import { useAuthStore } from '@/stores/auth';
+import { useCharacterStore } from '@/stores/character';
+import { useGameFx } from '@/composables/useGameFx';
 import {
+  RUNE_INFO,
   SKILLS,
   SKILL_MAX_LEVEL,
   isOverclocked,
+  riseBlocker,
+  riseGain,
+  riseOf,
+  riseTier,
   skillLevelTag,
   skillEffectText,
-  type SkillId,
+  skillTier,
+  type ChampSkill,
 } from '@/lib/skillRunes';
 import { advRuneSkills, advSkillSlots, type Adventurer } from '@/lib/adventurers';
 
@@ -66,8 +88,41 @@ const cells = computed(() =>
     (_, i) => skills.value[i] ?? null,
   ),
 );
-function whatOf(id: SkillId, level: number): string {
-  return skillEffectText(id, level);
+
+const $q = useQuasar();
+const auth = useAuthStore();
+const char = useCharacterStore();
+const gameFx = useGameFx();
+const busy = ref(false);
+
+/** 🌈 L'élévation ne se défait pas : on dit ce qu'elle change (surcharge perdue comprise). */
+function askRise(s: ChampSkill) {
+  if (riseBlocker(s)) return;
+  const to = RUNE_INFO[riseTier(s)];
+  const lost = isOverclocked(s.level)
+    ? ' Elle perd sa surcharge ⚡ (le lapidaire pourra la surcharger à nouveau au niveau 5).'
+    : '';
+  $q.dialog({
+    title: `Élever ${SKILLS[s.id].name} ?`,
+    message: `${props.adv.name} : elle devient ${to.label.replace('Rune ', '')} ${to.emoji}, niveau 1 — ${riseGain(s)}.${lost}`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: '🌈 Élever', color: 'positive' },
+  }).onOk(() => void rise(s));
+}
+
+async function rise(s: ChampSkill) {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  busy.value = true;
+  try {
+    const r = await char.riseChampionSkill(uid, props.adv.id, s.id);
+    if (!r.ok) throw new Error(r.reason);
+    gameFx.celebrateRune('rise', s.id, props.adv.name, 1, riseOf(r.skill));
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : String(e) });
+  } finally {
+    busy.value = false;
+  }
 }
 </script>
 
@@ -101,6 +156,29 @@ function whatOf(id: SkillId, level: number): string {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
+}
+.srp-rise {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--tier, var(--accent));
+  background: color-mix(in srgb, var(--tier, var(--accent)) 16%, transparent);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+}
+.srp-rise small {
+  font-size: 11px;
+}
+.srp-rise:disabled {
+  opacity: 0.5;
 }
 .srp-name {
   font-weight: 600;

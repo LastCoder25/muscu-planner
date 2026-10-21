@@ -3783,7 +3783,9 @@ const lapisRows = computed(() => {
         adv: a,
         bar,
         sk: bar ? SKILLS[bar.skill] : null,
-        gain: bar ? overclockGain(bar.skill) : '',
+        gain: bar
+          ? overclockGain(a.skills?.find((s) => s.id === bar.skill) ?? { id: bar.skill })
+          : '',
         left: bar ? formatDuration(bar.leftH * 3600_000) : '',
         choices: lapisCandidates(a).map((id) => ({
           id,

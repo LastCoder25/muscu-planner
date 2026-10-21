@@ -3617,6 +3617,34 @@ describe('🪬 SkillRunesPanel', () => {
     expect(out).toContain('2 au stock');
     expect(out).not.toContain('Garder les siennes');
   }, 30_000);
+
+  it('🌈 une compétence au niveau 5 propose de s’élever, une dorée non ; la couleur suit l’exemplaire', async () => {
+    const { default: SkillRunesPanel } = await import('@/components/SkillRunesPanel.vue');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const c = CHAMPIONS.find((x) => x.grade === 'A')!;
+    const adv = {
+      id: 'c1',
+      name: c.name,
+      seed: 1,
+      path: [],
+      level: 25,
+      xp: 0,
+      championId: c.id,
+      copies: 1,
+      skills: [
+        { id: 'speed', level: 5 },
+        { id: 'crit', level: 5, up: 1 },
+      ],
+    };
+    let out = '';
+    expect(
+      await mountIt(SkillRunesPanel, { adv }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    // Un seul bouton : la Vitesse verte monte au bleu ; la Critique, élevée au doré, est au sommet.
+    expect(out.match(/class="srp-rise/g)?.length).toBe(1);
+    expect(out).toContain('srp-rise t-blue');
+    expect(out).toMatch(/srp-slot t-gold[^>]*>[\s\S]*?Critique/);
+  }, 30_000);
 });
 
 describe('🪬 RuneBankSheet', () => {
@@ -3741,6 +3769,85 @@ describe('🪬 RuneBankSheet', () => {
     const line = out.slice(out.indexOf(c.name));
     expect(line).toMatch(/class="rb-has-chip t-[a-z]+"[^>]*>[^<]*Critique <b[^>]*>3<\/b>/);
     expect(line).toContain('rb-has-chip free');
+  }, 30_000);
+
+  it('🌈 fiche d’un Nv 5 : « Élever » vers la couleur au-dessus, avec ce que ça change', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const row = {
+      ...ROW,
+      runes: {
+        runes: 0,
+        skills: [
+          { uid: 'sk1', id: 'crit', level: 5 },
+          { uid: 'sk2', id: 'speed', level: 2, up: 1 },
+        ],
+        opened: 2,
+        comp: 2,
+      },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) =>
+          [...host.querySelectorAll<HTMLElement>('.rb-chip.btn')]
+            .find((x) => x.textContent?.includes('Critique'))!
+            .click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Élever');
+    expect(out).toContain('🌈 Élever → 🟠 Nv 1');
+    expect(out).toContain('32,4 % → 36 %');
+    // Au stock, une Vitesse élevée se lit bleue.
+    expect(
+      await mountIt(RuneBankSheet, { open: true }, row, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toMatch(/rb-chip btn t-blue[^>]*>[^<]*Vitesse/);
+  }, 30_000);
+
+  it('🌈 donner une autre couleur de la même compétence : elle prend sa place', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const c = CHAMPIONS.find((x) => x.grade === 'A')!;
+    const champ = {
+      id: 'c1',
+      name: c.name,
+      seed: 1,
+      path: [],
+      level: 25,
+      xp: 0,
+      championId: c.id,
+      copies: 1,
+      skills: [{ id: 'speed', level: 3 }],
+    };
+    const row = {
+      ...ROW,
+      adventurers: [champ],
+      runes: {
+        runes: 0,
+        skills: [{ uid: 'sk1', id: 'speed', level: 2, up: 1 }],
+        opened: 1,
+        comp: 2,
+      },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector<HTMLElement>('.rb-chip.btn')!.click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('🔁 🟢3 → 🔵2');
   }, 30_000);
 });
 

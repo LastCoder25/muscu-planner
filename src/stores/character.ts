@@ -268,7 +268,14 @@ import {
   advChampionSlots,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RUNE_PLACE_OK, type SkillId } from '@/lib/skillRunes';
+import {
+  RISE_BLOCK_LABEL,
+  RUNE_PLACE_OK,
+  riseBlocker,
+  riseSkill,
+  type ChampSkill,
+  type SkillId,
+} from '@/lib/skillRunes';
 import {
   AWAKEN_RUNE_COUNT,
   FUSE_ALL_NONE,
@@ -276,6 +283,9 @@ import {
   GIVE_BLOCK_LABEL,
   OPEN_BLOCK_LABEL,
   RUNE_BANK_VERSION,
+  STOCK_RISE_BLOCK_LABEL,
+  riseStockSkill,
+  stockRiseBlocker,
   addRuneCount,
   ascensionRuneCount,
   fuseAllSkills,
@@ -289,6 +299,7 @@ import {
   rollPlaceRunes,
   runeCount,
   type FuseGroup,
+  type FuseOnly,
   type GiveKind,
   type StockSkill,
 } from '@/lib/runeBank';
@@ -1033,7 +1044,7 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🪬 FUSIONNE d'un geste tous les exemplaires d'une compétence (`only`), ou de toutes. */
   async function fuseAllRuneSkills(
     userId: string,
-    only: SkillId | null = null,
+    only: FuseOnly = null,
   ): Promise<{ ok: false; reason: string } | { ok: true; groups: FuseGroup[] }> {
     const cur = row.value;
     if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
@@ -1041,6 +1052,70 @@ export const useCharacterStore = defineStore('character', () => {
     if (!out.groups.length) return { ok: false, reason: FUSE_ALL_NONE };
     await persist(userId, { runes: out.bank });
     return { ok: true, groups: out.groups };
+  }
+
+  /** 🌈 ÉLÈVE un exemplaire du stock au niveau 5 : couleur au-dessus, niveau 1. */
+  async function riseRuneSkill(
+    userId: string,
+    uid: string,
+  ): Promise<{ ok: false; reason: string } | { ok: true; skill: StockSkill }> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    const block = stockRiseBlocker(cur.runes, uid);
+    if (block) return { ok: false, reason: STOCK_RISE_BLOCK_LABEL[block] };
+    const out = riseStockSkill(cur.runes, uid)!;
+    await persist(userId, { runes: out.bank });
+    return { ok: true, skill: out.skill };
+  }
+
+  /** 🌈 ÉLÈVE une compétence que porte un champion. ⚠️ Posté au LAPIDAIRE, ses heures pas
+   *  encore versées le sont D'ABORD (même patron que `chooseLapisSkill`) : sans ça, la
+   *  compétence redescendue au niveau 1 n'étant plus candidate, elles iraient à une autre ou
+   *  seraient perdues. Les heures gardées sur elle RESTENT : elles compteront pour sa
+   *  surcharge quand elle sera de nouveau au niveau 5. */
+  async function riseChampionSkill(
+    userId: string,
+    advId: string,
+    id: SkillId,
+  ): Promise<{ ok: false; reason: string } | { ok: true; skill: ChampSkill }> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    let map = cur.expedition_map;
+    let advs = advList.value;
+    const lapis = map?.pois.find(
+      (p) =>
+        p.control?.kind === 'lapidary' &&
+        p.control.owner === 'player' &&
+        p.control.garrison.includes(advId),
+    );
+    if (map && lapis) {
+      const h = harvestControlIn(
+        map,
+        advs,
+        cur.adv_gear?.stock ?? [],
+        lapis.id,
+        Date.now(),
+        heroLevel.value,
+      );
+      map = h.map;
+      advs = h.advs;
+    }
+    const sk = advs.find((a) => a.id === advId)?.skills?.find((s) => s.id === id);
+    if (!sk) return { ok: false, reason: 'compétence introuvable' };
+    const block = riseBlocker(sk);
+    if (block) return { ok: false, reason: RISE_BLOCK_LABEL[block] };
+    const next = riseSkill(sk)!;
+    await persist(userId, {
+      ...(map !== cur.expedition_map ? { expedition_map: map } : {}),
+      adventurers: advs.map((a) =>
+        a.id === advId
+          ? { ...a, skills: (a.skills ?? []).map((s) => (s.id === id ? next : s)) }
+          : a,
+      ),
+    });
+    return { ok: true, skill: next };
   }
 
   /** 🪬 DONNE une compétence du stock à un champion. ⚠️ Le stock et le champion partent dans
@@ -1060,7 +1135,7 @@ export const useCharacterStore = defineStore('character', () => {
     const block = giveBlocker(cur.runes, skillUid, c, replaceIndex);
     if (block) return { ok: false, reason: GIVE_BLOCK_LABEL[block] };
     const sk = cur.runes.skills.find((s) => s.uid === skillUid)!;
-    const kind = giveKind(c, sk.id);
+    const kind = giveKind(c, sk);
     const out = giveSkill(cur.runes, skillUid, c, replaceIndex)!;
     await persist(userId, {
       runes: out.bank,
@@ -6976,6 +7051,8 @@ export const useCharacterStore = defineStore('character', () => {
     openRuneBatch,
     fuseRuneSkills,
     fuseAllRuneSkills,
+    riseRuneSkill,
+    riseChampionSkill,
     giveRuneSkill,
     row,
     loaded,

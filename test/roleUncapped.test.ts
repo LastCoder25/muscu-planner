@@ -50,7 +50,7 @@ describe('🔓 compétences sans plafond', () => {
   });
 
   it('roleCut : chaque porteur retire sa part de ce qui reste', () => {
-    const v = skillValue('speed', 5) / 100;
+    const v = skillValue({ id: 'speed', level: 5 }) / 100;
     expect(roleCut(team('speed', 2), 'speed')).toBeCloseTo(1 - (1 - v) ** 2, 9);
     expect(roleCut(team('speed', 40), 'speed')).toBeLessThan(1);
   });
@@ -67,9 +67,15 @@ describe('🔓 compétences sans plafond', () => {
 
   it('Cargaison et Mentor s’additionnent sans borne', () => {
     const esc = team('haul', 6);
-    expect(caravanHaulMult(esc, [])).toBeCloseTo(1 + 6 * (skillValue('haul', 5) / 100), 9);
+    expect(caravanHaulMult(esc, [])).toBeCloseTo(
+      1 + 6 * (skillValue({ id: 'haul', level: 5 }) / 100),
+      9,
+    );
     expect(caravanHaulMult(esc, [])).toBeGreaterThan(1 + CARAVAN.haulMax);
-    expect(roleShare(esc, 'haul')).toBeCloseTo((6 * skillValue('haul', 5)) / 100, 9);
-    expect(mentorXpMult(team('mentor', 4))).toBeCloseTo(1 + (4 * skillValue('mentor', 5)) / 100, 9);
+    expect(roleShare(esc, 'haul')).toBeCloseTo((6 * skillValue({ id: 'haul', level: 5 })) / 100, 9);
+    expect(mentorXpMult(team('mentor', 4))).toBeCloseTo(
+      1 + (4 * skillValue({ id: 'mentor', level: 5 })) / 100,
+      9,
+    );
   });
 });
