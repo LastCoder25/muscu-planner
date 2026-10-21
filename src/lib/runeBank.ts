@@ -564,11 +564,28 @@ export function giveBlocker(
 
 /** Un `uid` de stock encore libre pour une compétence REVENUE d'un champion (`rb1`, `rb2`…) :
  *  jamais `sk<n>`, réservé aux ouvertures (`openRune`). */
-function freshUid(bank: RuneBank): string {
+function freshUid(bank: RuneBank, prefix = 'rb'): string {
   const used = new Set(bank.skills.map((s) => s.uid));
   let k = 1;
-  while (used.has(`rb${k}`)) k++;
-  return `rb${k}`;
+  while (used.has(`${prefix}${k}`)) k++;
+  return `${prefix}${k}`;
+}
+
+/** 💎 Verse au stock ce que le lapidaire a fabriqué : `count` exemplaires Nv 5 (verts) de
+ *  chaque compétence, uid `lp<n>`. Rien à verser → le MÊME stock. */
+export function addForgedSkills(
+  bank: RuneBank,
+  forged: readonly { id: SkillId; count: number }[] | undefined,
+): RuneBank {
+  if (!forged?.some((f) => f.count > 0)) return bank;
+  let next = bank;
+  for (const f of forged)
+    for (let i = 0; i < f.count; i++)
+      next = {
+        ...next,
+        skills: [...next.skills, { uid: freshUid(next, 'lp'), id: f.id, level: SKILL_MAX_LEVEL }],
+      };
+  return next;
 }
 
 /** Remet au stock une compétence qu'un champion portait (couleur gardée). ⚠️ Le stock ne

@@ -57,19 +57,19 @@ describe('🪵 palissades : règles de pose', () => {
 
   it('10 + 20 passe, 20 + 20 non : 30 % au plus par lieu', () => {
     let c = placeWard(held, 'palissade', 0);
-    expect(wardBlocker(c, 'bastion', true, 0)).toBeNull();
+    expect(wardBlocker(c, 'bastion', 0)).toBeNull();
     c = placeWard(c, 'bastion', 0);
     expect(wardCut(c, 0)).toBeCloseTo(0.3, 9);
-    expect(wardBlocker(c, 'palissade', true, 0)).toBe('full');
+    expect(wardBlocker(c, 'palissade', 0)).toBe('full');
     const two = placeWard(held, 'bastion', 0);
-    expect(wardBlocker(two, 'bastion', true, 0)).toBe('full');
+    expect(wardBlocker(two, 'bastion', 0)).toBe('full');
     // Trois petites passent pile au plafond.
     let three = held;
     for (let i = 0; i < 3; i++) {
-      expect(wardBlocker(three, 'palissade', true, 0)).toBeNull();
+      expect(wardBlocker(three, 'palissade', 0)).toBeNull();
       three = placeWard(three, 'palissade', 0);
     }
-    expect(wardBlocker(three, 'palissade', true, 0)).toBe('full');
+    expect(wardBlocker(three, 'palissade', 0)).toBe('full');
   });
 
   it('chacune dure 24 h, et une expirée libère la place', () => {
@@ -84,10 +84,9 @@ describe('🪵 palissades : règles de pose', () => {
     expect(wardCut(d, 30 * H)).toBeCloseTo(0.3, 9);
   });
 
-  it('seulement sur un lieu tenu qui se défend', () => {
-    expect(wardBlocker({ owner: 'enemy', wards: [] }, 'palissade', true, 0)).toBe('notHeld');
-    expect(wardBlocker(undefined, 'palissade', true, 0)).toBe('notHeld');
-    expect(wardBlocker(held, 'palissade', false, 0)).toBe('noDefense');
+  it('seulement sur un lieu tenu', () => {
+    expect(wardBlocker({ owner: 'enemy', wards: [] }, 'palissade', 0)).toBe('notHeld');
+    expect(wardBlocker(undefined, 'palissade', 0)).toBe('notHeld');
   });
 
   it('la somme est plafonnée même si des données en portent trop', () => {

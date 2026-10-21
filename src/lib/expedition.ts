@@ -236,11 +236,16 @@ export interface ControlState {
   wards?: Ward[];
   /** 🗺️ CARTOGRAPHE : le type de lieu que le joueur fait apparaître plus souvent. */
   favor?: PoiType;
-  /** 💎 LAPIDAIRE (avant le 2026-10-12) : la compétence polie. Ignoré, remplacé par `lapisPick`. */
+  /** 💎 LAPIDAIRE d'avant la v1.254.0 (surcharge par champion) : IGNORÉS, effacés quand le
+   *  lieu change de type. */
   lapis?: string;
-  /** 💎 LAPIDAIRE : la compétence que CHAQUE champion taille (id → id de `SKILLS`), choisie
-   *  par le joueur ; absent : `lapisTarget` décide. */
   lapisPick?: Record<string, string>;
+  /** 💎 LAPIDAIRE (v1.254.0, l'usine) : la compétence VERTE qu'il fabrique (id de `SKILLS`) ;
+   *  absent : il n'en a pas encore, sa production l'attend (`forgeOf`). */
+  forge?: string;
+  /** 💎 L'avancement GARDÉ de chaque compétence (id → fraction d'un exemplaire Nv 5) : en
+   *  changer ne perd rien, on reprend où on en était. */
+  forgeDone?: Record<string, number>;
   /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
    *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
    *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */

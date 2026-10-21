@@ -146,14 +146,14 @@ export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 /** Niveau maximum d'une compétence PAR LES RUNES (tirage, fusion, don). */
 export const SKILL_MAX_LEVEL = 5;
 /**
- * ⚡ LA SURCHARGE (décision de l'utilisateur, 2026-10-12, remplace le « niveau 6 taillé »).
- * Le LAPIDAIRE (île 3) ne fait plus passer une compétence au niveau 6 : il SURCHARGE une
- * compétence déjà au niveau 5. Elle reste niveau 5 à l'écran (« 5⚡ », « surchargée ») et sa
- * valeur est multipliée par `OVERCLOCK_MULT`.
+ * ⚡ LA SURCHARGE — ⚠️ ON N'EN FAIT PLUS depuis la v1.254.0 (décision de l'utilisateur,
+ * 2026-10-21 : le lapidaire devient une usine de compétences vertes). Celles qui existent
+ * sont CONVERTIES au chargement (`convertOverclock`) ; seules restent celles qu'aucun cran ne
+ * vaut (au doré, ou presque), pour ne rien faire perdre. Elle reste niveau 5 à l'écran
+ * (« 5⚡ », « surchargée ») et sa valeur est multipliée par `OVERCLOCK_MULT`.
  *
- * ⚠️ STOCKÉE comme un niveau 6 (`level: 6`) : c'est la valeur que les champions taillés avant
- * portent déjà en base — aucune migration. Un niveau 6 n'est donc qu'un DRAPEAU, jamais un cran
- * de plus sur `LEVEL_CURVE` ; seuls `skillValue` et les libellés le lisent.
+ * ⚠️ STOCKÉE comme un niveau 6 (`level: 6`). Un niveau 6 n'est donc qu'un DRAPEAU, jamais un
+ * cran de plus sur `LEVEL_CURVE` ; seuls `skillValue` et les libellés le lisent.
  */
 export const SKILL_OVERCLOCK_LEVEL = 6;
 /** ⚡ +50 % sur la valeur du niveau 5. L'ancien niveau 6 (+0,15 sur la courbe) ne valait que
@@ -206,7 +206,7 @@ export type RiseBlock = 'level' | 'top';
 
 export const RISE_BLOCK_LABEL: Record<RiseBlock, string> = {
   level: `au niveau ${SKILL_MAX_LEVEL} seulement`,
-  top: 'déjà dorée : seule la surcharge ⚡ du lapidaire la fait monter',
+  top: 'déjà dorée : la plus haute couleur',
 };
 
 /** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche d'élever cet exemplaire. Une compétence
@@ -298,10 +298,23 @@ export function skillEffectText(s: SkillRef): string {
 
 const pct = (v: number) => `${String(v).replace('.', ',')} %`;
 
-/** ⚡ Ce que la surcharge change, en clair : « 32,4 % → 48,6 % ». */
-export function overclockGain(s: Pick<SkillRef, 'id' | 'up'>): string {
-  const at = (level: number) => skillValue({ id: s.id, up: riseOf(s), level });
-  return `${pct(at(SKILL_MAX_LEVEL))} → ${pct(at(SKILL_OVERCLOCK_LEVEL))}`;
+/**
+ * ⚡→🌈 CONVERTIT une compétence surchargée (v1.254.0, décision de l'utilisateur : « supprimée,
+ * convertie, rien n'est perdu ») : elle devient le PLUS PETIT cran (couleur, puis niveau, à
+ * partir de la sienne) qui vaut AU MOINS autant — une verte 5⚡ (×4,05) devient une violette
+ * Nv 2 (×4,15). Aucun cran ne la vaut (déjà au doré, ou élevée puis surchargée) : elle reste
+ * 5⚡, telle quelle. Une compétence non surchargée est rendue telle quelle.
+ */
+export function convertOverclock<T extends SkillRef>(s: T): T {
+  if (!isOverclocked(s.level)) return s;
+  const was = skillValue(s);
+  for (let up = riseOf(s); up <= maxRise(s.id); up++)
+    for (let level = 1; level <= SKILL_MAX_LEVEL; level++) {
+      // `up` absent à 0 (comme `withRise`) : une compétence non élevée s'écrit comme avant.
+      const next: T = up ? { ...s, level, up } : { ...s, level };
+      if (skillValue(next) >= was) return next;
+    }
+  return s;
 }
 
 /** 🌈 Ce que l'élévation change, en clair : « 32,4 % → 36 % » (surcharge perdue comprise). */

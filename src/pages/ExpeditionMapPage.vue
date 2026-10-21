@@ -727,48 +727,35 @@
               </p>
               <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
             </div>
-            <!-- ⚡ LE LAPIDAIRE : une barre par champion (surcharge d'une compétence niveau 5). -->
+            <!-- 💎 LE LAPIDAIRE, UNE USINE (v1.254.0) : la compétence verte qu'il fabrique, du
+                 niveau 0 au niveau 5, puis versée au stock ; chaque tuile garde son avancement. -->
             <div v-if="liveControl.kind === 'lapidary'" class="carto-box">
               <p class="carto-q">
-                ⚡ Surcharge : +50 % sur une compétence niveau 5 — une barre par champion
+                💎 Quelle compétence verte fabriquer ? Au niveau 5, elle part dans ton stock et il
+                en recommence une.
               </p>
-              <p v-if="!lapisRows.length" class="carto-q">
-                Poste jusqu’à 5 champions qui portent une compétence au niveau 5.
-              </p>
-              <div v-for="r in lapisRows" :key="r.adv.id" class="lapis-row">
-                <div class="lapis-head">
-                  <b class="lapis-name">{{ r.adv.name }}</b>
-                  <span v-if="r.sk" class="lapis-skill">{{ r.sk.emoji }} {{ r.sk.name }}</span>
-                </div>
-                <template v-if="r.bar">
-                  <div class="yield-bar">
-                    <i :style="{ width: Math.round(r.bar.pct * 100) + '%' }" />
-                  </div>
-                  <p class="lapis-left">
-                    {{ Math.round(r.bar.pct * 100) }} % · surchargée dans {{ r.left }} · ⚡
-                    {{ r.gain }}
-                  </p>
-                  <div v-if="r.choices.length > 1" class="lapis-choices">
-                    <button
-                      v-for="k in r.choices"
-                      :key="k.id"
-                      type="button"
-                      class="carto-tile lapis-pick"
-                      :class="{ on: r.bar.skill === k.id }"
-                      :aria-pressed="r.bar.skill === k.id"
-                      :aria-label="`Surcharger ${k.name}`"
-                      :disabled="ctlBusy"
-                      @click="chooseLapis(r.adv.id, k.id)"
-                    >
-                      <span class="carto-emo">{{ k.emoji }}</span>
-                      <span class="carto-lab">{{ k.name }}</span>
-                    </button>
-                  </div>
-                </template>
-                <p v-else class="lapis-left">
-                  Aucune compétence au niveau 5 : rien à surcharger pour lui.
-                </p>
+              <div class="carto-grid forge-grid">
+                <button
+                  v-for="k in forgeTiles"
+                  :key="k.id"
+                  type="button"
+                  class="carto-tile forge-tile"
+                  :class="{ on: k.on }"
+                  :aria-pressed="k.on"
+                  :aria-label="`Fabriquer ${k.name}`"
+                  :disabled="ctlBusy"
+                  @click="chooseForge(k.id)"
+                >
+                  <span class="carto-emo">{{ k.emoji }}</span>
+                  <span class="carto-lab">{{ k.name }}</span>
+                  <span v-if="k.on || k.level > 0" class="forge-pill" :class="{ on: k.on }"
+                    >Nv {{ k.level }}/5</span
+                  >
+                </button>
               </div>
+              <p v-if="forgePending" class="carto-q forge-wait">
+                ⏳ Sa production attend ton choix : elle ira à la première compétence choisie.
+              </p>
             </div>
             <!-- 🗺️ LE CARTOGRAPHE : le lieu qu'il fait revenir sur l'île (`CARTO_TYPES`). -->
             <div v-if="liveControl.kind === 'cartographer'" class="carto-box">
@@ -827,8 +814,6 @@
             <GarrisonStrip
               :cells="champStrip"
               :title="champStripTitle"
-              :note="defendsControl(liveControl.kind) ? null : 'polit sans défendre le lieu'"
-              note-tone="dim"
               :advs="advById"
               @toggle="toggleRecall"
               @add="openQuick"
@@ -1277,10 +1262,6 @@
             <p v-if="stayHold !== null" class="car-cap stay-hold-line">
               🛡️ Garnison : repousse environ <b>{{ stayHold }} %</b> des attaques
               <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
-            </p>
-            <p v-else-if="stayNoDefense" class="car-cap stay-hold-line">
-              🛡️ Ce lieu ne se défend pas : seule l’interception de l’armée qui marche dessus le
-              protège.
             </p>
             <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
                sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
@@ -1750,7 +1731,7 @@ import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildi
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { SKILLS, overclockGain, type SkillId } from '@/lib/skillRunes';
+import { SKILLS, type SkillId } from '@/lib/skillRunes';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1925,7 +1906,6 @@ import {
   acceptsMilitia,
   arrivalSeats,
   militiaMayHead,
-  defendsControl,
   militiaSeatsOf,
   heroPostBlocker,
   heroSeatsIn,
@@ -1950,8 +1930,8 @@ import {
   attackerHidden,
   controlDefenseHold,
   defenderCount,
-  lapisBar,
-  lapisCandidates,
+  FORGE_SKILLS,
+  forgeState,
   vanquishedHidden,
   defendersAtAttack,
   imminentControlKey,
@@ -3424,7 +3404,7 @@ function defenseArgs(p: Poi | null, extra: { id: string; at: number }[] = []) {
 function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const a = defenseArgs(p, extra);
   if (!a) return null;
-  const { c, map, present, late, hero, heroLate, vsArmy, fort } = a;
+  const { map, present, late, hero, heroLate, vsArmy, fort } = a;
   const hold = vsArmy
     ? controlAttackHold(
         map!,
@@ -3448,8 +3428,8 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
       );
   return {
     pct: Math.round(hold * 100),
-    count: defenderCount(c.kind, present, !!hero),
-    late: defenderCount(c.kind, late, !!heroLate),
+    count: defenderCount(present, !!hero),
+    late: defenderCount(late, !!heroLate),
     vsArmy,
   };
 }
@@ -3482,8 +3462,8 @@ const defenseNow = computed(() => {
   const { a, fc } = d;
   return {
     pct: Math.round(fc.hold * 100),
-    count: defenderCount(a.c.kind, a.present, !!a.hero),
-    late: defenderCount(a.c.kind, a.late, !!a.heroLate),
+    count: defenderCount(a.present, !!a.hero),
+    late: defenderCount(a.late, !!a.heroLate),
     vsArmy: a.vsArmy,
   };
 });
@@ -3517,7 +3497,6 @@ const occupantLoss = computed<Record<string, { loss: number; without: number }>>
   if (!p?.control || p.control.owner !== 'player' || base === undefined) return {};
   const out: Record<string, { loss: number; without: number }> = {};
   for (const id of p.control.garrison) {
-    if (!defendsControl(p.control.kind)) continue;
     const without = holdAfter(p, [id], []);
     out[id] = { loss: base - without, without };
   }
@@ -3768,40 +3747,38 @@ async function transferCtl(toId: string) {
     ctlBusy.value = false;
   }
 }
-/** 💎 Le lapidaire : une barre par champion posté — la compétence qu'il taille du niveau 5 au
- *  6, sa part faite (la progression est gardée sur lui : partie, elle se met en pause), et
- *  ses autres compétences au niveau 5 parmi lesquelles choisir. */
-const lapisRows = computed(() => {
+/** 💎 Le lapidaire : une tuile par compétence verte, avec son niveau gardé (`forgeDone`) ;
+ *  celle en cours lit `forgeState` (même réserve que la récolte). */
+const forgeTiles = computed(() => {
   const c = liveControl.value;
   const p = livePoi.value;
   if (c?.kind !== 'lapidary' || !p) return [];
-  return char.advList
-    .filter((a) => c.garrison.includes(a.id))
-    .map((a) => {
-      const bar = lapisBar(a, p, now.value);
-      return {
-        adv: a,
-        bar,
-        sk: bar ? SKILLS[bar.skill] : null,
-        gain: bar
-          ? overclockGain(a.skills?.find((s) => s.id === bar.skill) ?? { id: bar.skill })
-          : '',
-        left: bar ? formatDuration(bar.leftH * 3600_000) : '',
-        choices: lapisCandidates(a).map((id) => ({
-          id,
-          emoji: SKILLS[id].emoji,
-          name: SKILLS[id].name,
-        })),
-      };
-    });
+  const f = forgeState(p, now.value, heroLevel.value);
+  return FORGE_SKILLS.map((id) => {
+    const on = f.skill === id;
+    const done = on ? f.pct : (c.forgeDone?.[id] ?? 0) % 1;
+    return {
+      id,
+      on,
+      emoji: SKILLS[id].emoji,
+      name: SKILLS[id].name,
+      level: Math.floor(done * 5 + 1e-9),
+    };
+  });
 });
-async function chooseLapis(advId: string, skill: SkillId) {
+/** 💎 De la production attend qu'on choisisse une compétence. */
+const forgePending = computed(() => {
+  const p = livePoi.value;
+  if (p?.control?.kind !== 'lapidary') return false;
+  return forgeState(p, now.value, heroLevel.value).pending > 1e-6;
+});
+async function chooseForge(skill: SkillId) {
   const uid = auth.user?.id;
   const p = livePoi.value;
   if (!uid || !p || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    await char.chooseLapisSkill(uid, p.id, advId, skill, Date.now(), heroLevel.value);
+    await char.chooseForgeSkill(uid, p.id, skill, Date.now(), heroLevel.value);
   } finally {
     ctlBusy.value = false;
   }
@@ -3946,7 +3923,7 @@ const partyTarget = computed(
 const wardView = computed(() => {
   const p = livePoi.value;
   const c = p?.control;
-  if (!p || !c || c.owner !== 'player' || !defendsControl(c.kind)) return null;
+  if (!p || !c || c.owner !== 'player') return null;
   const t = coarseNow.value;
   const stock = char.row?.supplies ?? {};
   const active = activeWards(c, t).map((w) => ({
@@ -3956,7 +3933,7 @@ const wardView = computed(() => {
     left: formatDuration(Math.max(0, w.until - t)),
   }));
   const options: WardOption[] = WARD_IDS.filter((id) => (stock[id] ?? 0) > 0).map((id) => {
-    const block = wardBlocker(c, id, true, t);
+    const block = wardBlocker(c, id, t);
     return {
       id,
       emoji: SUPPLIES[id].emoji,
@@ -5118,18 +5095,15 @@ const quickHold = computed(() => {
   const pctWith = (next: ReinfSelection) => quickDefense(p, next)?.pct ?? cur;
   const free = quickFree.value;
   const champ: Record<string, number> = {};
-  if (defendsControl(p.control?.kind))
-    for (const a of freeSorted.value) {
-      const on = sel.champs.includes(a.id);
-      if (!on && !reinfCanAdd(sel, 'champ', free)) continue;
-      const other = pctWith(toggleReinfChamp(sel, a.id, free));
-      champ[a.id] = on ? cur - other : other - cur;
-    }
+  for (const a of freeSorted.value) {
+    const on = sel.champs.includes(a.id);
+    if (!on && !reinfCanAdd(sel, 'champ', free)) continue;
+    const other = pctWith(toggleReinfChamp(sel, a.id, free));
+    champ[a.id] = on ? cur - other : other - cur;
+  }
   const trans: Record<string, number> = {};
   for (const src of quickSources.value)
     for (const m of src.members) {
-      // 💎 Au lapidaire, seuls les miliciens défendent.
-      if (!defendsControl(p.control?.kind) && !isMilitiaId(m.id)) continue;
       const on = sel.transfers.some((t) => t.id === m.id);
       if (!on && !reinfCanAdd(sel, isMilitiaId(m.id) ? 'mil' : 'champ', free)) continue;
       const next = toggleReinfTransfer(sel, src.fromId, m.id, free);
@@ -6287,7 +6261,6 @@ const {
   stayCap,
   stayHold,
   stayHoldOf,
-  stayNoDefense,
   stayIds,
   stayChoice,
   toggleStay,
@@ -7068,47 +7041,26 @@ onUnmounted(() => {
 .carto-box {
   margin-top: 10px;
 }
-.lapis-row {
-  padding: 8px 10px;
-  margin-top: 6px;
+.carto-grid.forge-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.forge-tile {
+  min-height: 72px;
+}
+.forge-pill {
+  margin-top: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-}
-.lapis-row .yield-bar {
-  margin-top: 6px;
-}
-.lapis-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-.lapis-name {
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lapis-skill {
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.lapis-left {
-  margin: 4px 0 0;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--dim);
 }
-.lapis-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+.forge-pill.on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
-.lapis-pick {
-  min-height: 44px;
-  flex: 1 1 88px;
+.forge-wait {
+  margin-top: 6px;
 }
 .carto-q {
   margin: 0 0 6px;

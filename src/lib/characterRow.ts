@@ -35,7 +35,12 @@ import {
   type DefenseStructure,
 } from '@/lib/raid';
 import { syncChampionName, advAwaken, advChampion, type Adventurer } from '@/lib/adventurers';
-import { autoRise, normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
+import {
+  autoRise,
+  convertOverclock,
+  normalizeChampSkills,
+  type ChampSkill,
+} from '@/lib/skillRunes';
 import { migrateLegacyRunes, normalizeRuneBank, type RuneBank } from '@/lib/runeBank';
 import { normalizeAdvGearState, type AdvGearState } from '@/lib/advGear';
 import { normalizeParties, type ActiveParty } from '@/lib/party';
@@ -136,6 +141,8 @@ export function normalizeCharacterRow(r: CharacterRow): {
     const rest: Record<string, unknown> = { ...a };
     delete rest.familiarId;
     delete rest.talentId;
+    // 💎 Les heures du lapidaire d'avant l'usine (v1.254.0) ne servent plus.
+    delete rest.lapisHours;
     // 🔮 Les compétences de runes : relues défensivement (id inconnu, doublon, niveau hors
     // bornes). Absentes = aucun champ, pas un tableau vide qu'on écrirait pour rien.
     if (rest.skills !== undefined) rest.skills = normalizeChampSkills(rest.skills);
@@ -285,8 +292,10 @@ export function normalizeCharacterRow(r: CharacterRow): {
     // la prochaine écriture des champions l'inscrit en base (idempotent d'ici là).
     r.adventurers = r.adventurers.map((a) => {
       if (!a.skills?.length) return a;
-      const up = autoRise(a.skills);
-      return up.rose.length ? { ...a, skills: up.skills } : a;
+      // ⚡→🌈 v1.254.0 : la surcharge n'existe plus, convertie au cran qui vaut autant.
+      const up = autoRise(a.skills.map(convertOverclock));
+      const same = up.skills.every((x, i) => x === a.skills![i]);
+      return same ? a : { ...a, skills: up.skills };
     });
   }
   r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083

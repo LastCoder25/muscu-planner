@@ -42,15 +42,7 @@ import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import { addWear, wearsDown, withoutWear } from './enemyWear';
 import { MILITIA, isMilitiaId, militiaUnits, type IslandMilitia } from './militia';
-import {
-  SKILLS,
-  SKILL_OVERCLOCK_LEVEL,
-  SKILL_MAX_LEVEL,
-  skillTier,
-  type ChampSkill,
-  type RuneTier,
-  type SkillId,
-} from './skillRunes';
+import { SKILLS, skillsOfTier, type SkillId } from './skillRunes';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { bossSummonCost } from '../data/bosses';
 import type { SkirmishUnit } from './skirmish';
@@ -113,9 +105,12 @@ export const CONTROL = {
    */
   // ⚖️ Au rythme de l'arsenal depuis le 2026-10-08 : même besoin, même offre (cf. RUINS_SEALS).
   ossuaryHoursPerRuin: 144,
-  /** 💎 Lapidaire (île 3) : heures pour SURCHARGER une compétence niveau 5 (+50 %),
-   *  selon sa couleur (2026-10-12) : 1, 2, 4 et 7 jours. */
-  lapidaryHours: { green: 24, blue: 48, violet: 96, gold: 168 } as Record<RuneTier, number>,
+  /** 💎 Lapidaire (île 5, l'usine, v1.254.0) : heures pour fabriquer UNE compétence verte du
+   *  niveau 0 au niveau 5, garnison au complet (3 ; ×1,3 à 5). MESURÉ en équivalents verts
+   *  (bleue = 5, violette = 25, dorée = 125 : le coût d'une élévation) : 0,21 / h, soit 73 %
+   *  de l'autel (0,285 / h) et 53 % du laboratoire (0,39 / h) — moins en valeur brute, mais
+   *  la compétence est CHOISIE (au hasard, il faut 4 vertes pour tomber sur la bonne). */
+  lapidaryHoursPerSkill: 24,
   arsenalHoursPerRuin: 144,
   circleHoursPerAttempt: 48,
   altarHoursPerRune: ALTAR_HOURS_PER_RUNE,
@@ -434,9 +429,7 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   cartographer: PRODUCER_SEATS,
   hospice: PRODUCER_SEATS,
   lab: PRODUCER_SEATS,
-  // 💎 Cinq champions, chacun sa barre (2026-10-12) : ils taillent, ils ne se battent pas.
-  // Cinq places de milice le défendent (2026-10-12, demandé : « il manque les places des
-  // miliciens sur le lapidaire »).
+  // 💎 Cinq places de champion et cinq de milice, comme les autres lieux qui produisent.
   lapidary: PRODUCER_SEATS,
   tower: PRODUCER_SEATS,
   // 🏯 La citadelle ne se tient pas : on l'abat, personne n'y reste.
@@ -457,10 +450,6 @@ export const holdSeats = (c: Pick<ControlState, 'kind' | 'razes'>): number =>
 /** 🏰 La garnison ENTIÈRE d'un point : ses places de champion PLUS ses places de milice
  *  (deux réserves séparées depuis le 2026-10-08), sans limite pour la forteresse. */
 export const garrisonCap = (kind: ControlKind): number => seatsOf(kind) + militiaSeatsOf(kind);
-/** 🛡️ Ses CHAMPIONS (et le héros) le défendent-ils ? Pas au lapidaire : ils taillent, ils ne
- *  se battent pas — seuls ses MILICIENS le défendent (`controlAllies`, 2026-10-12). ⚠️ Lu
- *  par la reprise (store) ET par chaque pronostic de tenue. */
-export const defendsControl = (kind: ControlKind | undefined): boolean => kind !== 'lapidary';
 /** 🛡️ Les places de MILICE d'un point, À PART de celles des champions (2026-10-08, décision
  *  de l'utilisateur : « seuls les miliciens défendent les lieux fixes ; champions et héros y
  *  restent postés, produisent, et interceptent »). 5 sur un lieu de production, 0 là où aucun
@@ -472,29 +461,23 @@ export const militiaSeatsOf = (kind: ControlKind): number =>
  *  « pour plus de cohérence, faire défendre les miliciens et les champions — garder les
  *  champions ou non est un choix »). SOURCE DE VÉRITÉ, override « seuls les miliciens
  *  défendent » (v1.104.0). Ceux qui COMBATTENT la reprise d'un point : les champions postés
- *  (avec compagnons et pièces), le héros posté ET les miliciens de `ids`. Personne au
- *  lapidaire (`defendsControl`). ⚠️ Lu par la bataille du store et par chaque pronostic de
- *  tenue. Un champion vaut
+ *  (avec compagnons et pièces), le héros posté ET les miliciens de `ids`, partout (le
+ *  lapidaire aussi depuis la v1.254.0). ⚠️ Lu par la bataille du store et par chaque pronostic
+ *  de tenue. Un champion vaut
  *  ~2 miliciens (`MILITIA.unitShare`) ; au-delà de `CONTROL.maxHold` l'ennemi grossit
  *  (`retakeBoost`) : empiler ne rend jamais un lieu imprenable. */
 export function controlAllies(
-  kind: ControlKind | undefined,
   champs: readonly Adventurer[],
   kit: EscortKit,
   hero: PostedHero | null,
   ids: readonly string[],
   playerLevel: number,
 ): SkirmishUnit[] {
-  // 💎 Au lapidaire, seuls les miliciens se battent.
-  if (!defendsControl(kind)) return militiaUnits([...ids], playerLevel);
   return [...partyAllies([...champs], kit, hero), ...militiaUnits([...ids], playerLevel)];
 }
-/** 🛡️ Combien COMBATTRONT : toute la garnison et le héros ; au lapidaire, ses miliciens. */
-export const defenderCount = (
-  kind: ControlKind | undefined,
-  ids: readonly string[],
-  hero: boolean,
-): number => (defendsControl(kind) ? ids.length + (hero ? 1 : 0) : ids.filter(isMilitiaId).length);
+/** 🛡️ Combien COMBATTRONT : toute la garnison et le héros. */
+export const defenderCount = (ids: readonly string[], hero: boolean): number =>
+  ids.length + (hero ? 1 : 0);
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
  *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
  *  la Forge de campagne (2026-09-29). */
@@ -550,7 +533,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   distillery: 'boosts de vitesse ⚡',
   fort: 'des reprises affaiblies sur tes autres lieux de l’île 🛡️',
   cartographer: 'le lieu de ton choix, plus souvent sur l’île 🗺️',
-  lapidary: 'une compétence niveau 5 de chaque champion surchargée (+50 %) ⚡',
+  lapidary: 'une compétence verte niveau 5 de ton choix, en boucle 💎',
   hospice: 'des champions blessés de l’île guéris plus vite 🕯️',
   lab: 'runes multicolores violettes ou mieux 🟣',
   tower: 'trajets plus courts 🧭',
@@ -1374,8 +1357,20 @@ export function convertReplacedControls(
       if (!untouched) continue;
       drop.add(there.id);
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { favor, lapis, lapisPick, perXp, banked, yieldMult, fortMult, ...rest } = c;
+    // Le nouveau type repart de zéro : ses réglages et sa production d'avant ne le suivent pas.
+    const rest: ControlState = { ...c };
+    for (const k of [
+      'favor',
+      'lapis',
+      'lapisPick',
+      'forge',
+      'forgeDone',
+      'perXp',
+      'banked',
+      'yieldMult',
+      'fortMult',
+    ] as const)
+      delete rest[k];
     replace.set(p.id, { ...p, id, control: { ...rest, kind, banked: 0, collectedAt: now } });
     renamed.set(p.id, id);
   }
@@ -1571,123 +1566,78 @@ function withControl(map: ExpeditionMap, id: string, f: (p: Poi) => Poi): Expedi
   return { ...map, pois: map.pois.map((p) => (p.id === id && p.control ? f(p) : p)) };
 }
 
-/** 💎 Les heures qu'UN champion a passées au lapidaire depuis la dernière récolte, et la
- *  compétence qu'il y taille si le joueur l'a choisie (sinon `lapisTarget` décide). */
-export interface LapisGain {
-  advId: string;
-  hours: number;
-  skill?: SkillId;
+/**
+ * 💎 LE LAPIDAIRE EST UNE USINE (décision de l'utilisateur, 2026-10-21 : « on propose les
+ * runes de base vertes ; il en choisit une et le lapidaire la produit du niveau 0 au niveau 5,
+ * la reverse au stock, et recommence »). Il ne travaille plus sur les champions : la garnison
+ * (champions, héros, miliciens, 5 comptés) ne fait que l'accélérer, comme les autres lieux.
+ * L'unité produite est UN exemplaire Nv 5 ; l'avancement de chaque compétence est GARDÉ
+ * (`forgeDone`) : en changer ne perd rien.
+ */
+export const FORGE_SKILLS: readonly SkillId[] = skillsOfTier('green');
+
+/** 💎 La compétence que fabrique ce lapidaire (`null` : pas encore choisie). */
+function forgeOf(c: Pick<ControlState, 'forge'> | undefined | null): SkillId | null {
+  const k = c?.forge as SkillId | undefined;
+  return k && FORGE_SKILLS.includes(k) ? k : null;
+}
+
+/** 💎 Une compétence fabriquée, versée au stock (`count` exemplaires Nv 5). */
+export interface ForgedSkill {
+  id: SkillId;
+  count: number;
 }
 
 /**
- * ⚡ LE LAPIDAIRE SURCHARGE (décision de l'utilisateur, 2026-10-12) : au-delà des runes (5 au
- * plus), il SURCHARGE une compétence au niveau 5 — elle reste niveau 5, sa valeur prend +50 %
- * (`OVERCLOCK_MULT`). Les heures selon sa couleur (`CONTROL.lapidaryHours` : 1, 2, 4, 7 jours).
- * 🌈 La couleur est celle de L'EXEMPLAIRE porté : une Vitesse élevée au doré prend 7 jours.
+ * 💎 Où en est le lapidaire à `now` : la compétence, son avancement (fraction de l'exemplaire
+ * en cours, plus ceux déjà finis pas encore versés : `ready`) et le niveau atteint (0 à 4).
+ * Sans compétence choisie, la production ATTEND (`pending`) : elle ira à la première choisie.
  */
-export function lapidaryHours(s: Pick<ChampSkill, 'id' | 'up'>): number {
-  return CONTROL.lapidaryHours[skillTier(s)];
-}
-
-/** L'exemplaire de `id` que porte ce champion (le lapidaire ne vise que les siens). */
-const carriedSkill = (a: Pick<Adventurer, 'skills'>, id: SkillId): ChampSkill =>
-  (a.skills ?? []).find((s) => s.id === id) ?? { id, level: SKILL_MAX_LEVEL };
-
-const TIER_ORDER: Record<RuneTier, number> = { green: 0, blue: 1, violet: 2, gold: 3 };
-
-/** 💎 Ce que le lapidaire peut tailler chez ce champion : ses compétences au niveau 5. */
-export function lapisCandidates(a: Pick<Adventurer, 'skills'>): SkillId[] {
-  return (a.skills ?? []).filter((s) => s.level === SKILL_MAX_LEVEL).map((s) => s.id);
-}
-
-/**
- * 💎 La compétence qu'un champion taille : celle choisie si elle est encore au niveau 5,
- * sinon celle qui a le plus avancé, sinon la plus rare. `null` : rien au niveau 5.
- */
-export function lapisTarget(
-  a: Pick<Adventurer, 'skills' | 'lapisHours'>,
-  pick?: SkillId,
-): SkillId | null {
-  const ok = lapisCandidates(a);
-  if (!ok.length) return null;
-  if (pick && ok.includes(pick)) return pick;
-  const done = (s: SkillId) => a.lapisHours?.[s] ?? 0;
-  return [...ok].sort(
-    (x, y) =>
-      done(y) - done(x) ||
-      TIER_ORDER[skillTier(carriedSkill(a, y))] - TIER_ORDER[skillTier(carriedSkill(a, x))],
-  )[0]!;
-}
-
-/**
- * 💎 Verse les heures du lapidaire : chaque champion sur SA compétence (`lapisTarget`), qui
- * est surchargée quand son temps est atteint. ⚠️ Les heures sont GARDÉES sur le champion
- * (`lapisHours`, par compétence), pas sur le lieu : s'il part, sa barre se met en PAUSE et
- * reprend où elle en était à son retour. Un champion sans compétence au niveau 5 ne reçoit rien.
- */
-export function applyLapis(
-  advs: Adventurer[],
-  gains: readonly LapisGain[] | undefined,
-): { advs: Adventurer[]; up: number } {
-  // ⚠️ Rien à verser → le MÊME tableau : le store compare par identité pour ne pas écrire.
-  if (!gains?.length) return { advs, up: 0 };
-  let up = 0;
-  let changed = false;
-  const next = advs.map((a) => {
-    const g = gains.find((x) => x.advId === a.id && x.hours > 0);
-    if (!g) return a;
-    const skill = lapisTarget(a, g.skill);
-    if (!skill) return a;
-    changed = true;
-    const h = (a.lapisHours?.[skill] ?? 0) + g.hours;
-    const hours = { ...(a.lapisHours ?? {}) };
-    const cut = h + 1e-9 >= lapidaryHours(carriedSkill(a, skill));
-    if (cut) {
-      delete hours[skill];
-      up++;
-    } else hours[skill] = h;
-    return {
-      ...a,
-      skills: (a.skills ?? []).map((s) =>
-        cut && s.id === skill ? { ...s, level: SKILL_OVERCLOCK_LEVEL } : s,
-      ),
-      lapisHours: hours,
-    };
-  });
-  return { advs: changed ? next : advs, up };
-}
-
-/** 💎 Le joueur choisit la compétence qu'un champion du lapidaire taille. Refus (carte
- *  inchangée) : pas un lapidaire, pas à nous, champion absent, ou compétence inconnue.
- *  ⚠️ Rien ne repart de zéro : le store verse d'abord les heures sur l'ancienne. */
-export function setLapisSkill(
-  map: ExpeditionMap,
-  id: string,
-  advId: string,
-  skill: SkillId,
-): ExpeditionMap {
-  const c = map.pois.find((p) => p.id === id)?.control;
-  if (!c || c.kind !== 'lapidary' || c.owner !== 'player') return map;
-  if (!(skill in SKILLS) || !c.garrison.includes(advId) || c.lapisPick?.[advId] === skill)
-    return map;
-  return withControl(map, id, (p) => ({
-    ...p,
-    control: { ...p.control!, lapisPick: { ...(p.control!.lapisPick ?? {}), [advId]: skill } },
-  }));
-}
-
-/** 💎 La barre d'un champion au lapidaire : la compétence taillée, et sa part faite (heures
- *  gardées + celles pas encore versées). `null` : rien au niveau 5. */
-export function lapisBar(
-  a: Pick<Adventurer, 'id' | 'skills' | 'lapisHours'>,
+export function forgeState(
   p: Poi,
   now: number,
-): { skill: SkillId; pct: number; leftH: number } | null {
-  const skill = lapisTarget(a, p.control?.lapisPick?.[a.id] as SkillId | undefined);
-  if (!skill) return null;
-  const need = lapidaryHours(carriedSkill(a, skill));
-  const done = (a.lapisHours?.[skill] ?? 0) + (champStockBy(p, now, 1)[a.id] ?? 0);
-  return { skill, pct: Math.min(1, done / need), leftH: Math.max(0, need - done) };
+  playerLevel: number,
+): { skill: SkillId | null; pct: number; level: number; ready: number; pending: number } {
+  const c = p.control;
+  const units = stockUnits(p, now, playerLevel);
+  const skill = forgeOf(c);
+  if (!skill) return { skill, pct: 0, level: 0, ready: 0, pending: units };
+  const total = (c?.forgeDone?.[skill] ?? 0) + units;
+  const ready = Math.floor(total + 1e-9);
+  const pct = Math.max(0, total - ready);
+  return { skill, pct, level: Math.floor(pct * SKILL_MAX + 1e-9), ready, pending: 0 };
+}
+const SKILL_MAX = 5;
+
+/** 💎 Change la compétence que fabrique le lapidaire. Ce qui est produit jusque-là va à
+ *  l'ANCIENNE (ou, s'il n'en avait pas, à la nouvelle) : rien ne se perd. Refus (carte
+ *  inchangée) : pas un lapidaire, pas à nous, compétence hors des vertes, ou déjà celle-là. */
+export function setForgeSkill(
+  map: ExpeditionMap,
+  id: string,
+  skill: SkillId,
+  now: number,
+  playerLevel: number,
+): ExpeditionMap {
+  const p = map.pois.find((x) => x.id === id);
+  const c = p?.control;
+  if (!p || !c || c.kind !== 'lapidary' || c.owner !== 'player') return map;
+  if (!FORGE_SKILLS.includes(skill) || forgeOf(c) === skill) return map;
+  const units = stockUnits(p, now, playerLevel);
+  const to = forgeOf(c) ?? skill;
+  const forgeDone = { ...(c.forgeDone ?? {}) };
+  if (units > 1e-9) forgeDone[to] = (forgeDone[to] ?? 0) + units;
+  const until = Math.min(now, c.attackAt ?? now);
+  return withControl(map, id, (q) => ({
+    ...q,
+    control: {
+      ...q.control!,
+      forge: skill,
+      forgeDone,
+      banked: 0,
+      ...(q.control!.collectedAt !== undefined ? { collectedAt: until } : {}),
+    },
+  }));
 }
 
 /** 🗺️ Le CARTOGRAPHE tenu change le type qu'il fait revenir. Refus (carte inchangée) : pas un
@@ -2174,7 +2124,7 @@ export function controlDefenseHold(
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
-  const allies = controlAllies(p.control?.kind, champs, kit, hero, ids, playerLevel);
+  const allies = controlAllies(champs, kit, hero, ids, playerLevel);
   return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies, fort, wardAt);
 }
 
@@ -2280,10 +2230,8 @@ function baseUnitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'distillery':
       return shareOf(n) / shareOf(1) / CONTROL.distilleryHoursPerItem;
     case 'lapidary':
-      // 💎 Des HEURES de polissage, versées sur la compétence choisie (`applyLapis`). Sans
-      // compétence choisie rien n'est versé (`collectControl`), et la choisir remet l'horloge
-      // à zéro (`setLapisSkill`).
-      return n > 0 ? 1 : 0;
+      // 💎 Une compétence verte Nv 5 toutes les 24 h au complet (`forgeState`).
+      return shareOf(n) / CONTROL.lapidaryHoursPerSkill;
     case 'garden':
       // Un jardinier : un consommable toutes les 12 h, comme avant ; plus de monde, plus vite.
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
@@ -2372,10 +2320,9 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   return Math.max(0, need);
 }
 
-/** Le lieu où CHAQUE champion a sa propre réserve (sa jauge) : le camp (XP) et le lapidaire
- *  (heures de taille). */
-const isPerChampKind = (k: ControlKind | undefined): k is 'training' | 'lapidary' =>
-  k === 'training' || k === 'lapidary';
+/** Le lieu où CHAQUE champion a sa propre réserve (sa jauge) : le camp (XP). Le lapidaire
+ *  ne l'est plus depuis la v1.254.0 (une usine commune). */
+const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k === 'training';
 
 /**
  * 🎯 L'XP accumulée par CHAQUE champion au camp à `now`, non arrondie (ses pièces portées
@@ -2391,13 +2338,9 @@ function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, 
   if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
     return {};
   const until = Math.min(now, c.attackAt ?? now);
-  // 💎 Au lapidaire, des heures de taille : une par heure passée sur place, sans cran.
-  const lapis = c.kind === 'lapidary';
   // 🏅 Chaque heure au cran qu'elle avait (`tierHours`).
-  const hours = lapis
-    ? Math.max(0, until - c.collectedAt) / 3600_000
-    : tierHours(c, c.collectedAt, until);
-  const rate = lapis ? 1 : trainingXpPerHour(playerLevel);
+  const hours = tierHours(c, c.collectedAt, until);
+  const rate = trainingXpPerHour(playerLevel);
   // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
   const out: Record<string, number> = { ...c.perXp };
@@ -2589,8 +2532,8 @@ export function collectControl(
   /** 🗿 Sceaux de champion (l'autel des runes), au rang `champSealRank`. */
   champSeals: number;
   champSealRank: number;
-  /** 💎 Les heures de taille du lapidaire, champion par champion (`applyLapis`). */
-  lapis?: LapisGain[];
+  /** 💎 Les compétences vertes Nv 5 sorties du lapidaire, à verser au stock. */
+  forged?: ForgedSkill[];
 } {
   const p = map.pois.find((x) => x.id === id);
   const none = {
@@ -2613,25 +2556,25 @@ export function collectControl(
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
   // entamée (sauf un champion ramené depuis : ce qui lui reste ne compte plus).
-  // 💎 Le lapidaire : CHAQUE champion verse ses heures, fraction comprise (rien ne se perd :
-  // elles s'additionnent sur le champion, `applyLapis`).
+  // 💎 Le lapidaire : chaque exemplaire FINI part au stock ; l'entamé reste sur SA compétence
+  // (`forgeDone`). Sans compétence choisie, rien ne part : la production attend.
   if (c.kind === 'lapidary') {
-    const by = champStockBy(p, now, playerLevel);
-    const lapis = Object.entries(by)
-      .filter(([, h]) => h > 1e-9)
-      .map(([advId, hours]) => {
-        const skill = c.lapisPick?.[advId] as SkillId | undefined;
-        return skill ? { advId, hours, skill } : { advId, hours };
-      });
-    if (!lapis.length) return none;
+    const f = forgeState(p, now, playerLevel);
+    if (!f.skill || f.ready <= 0) return none;
+    const skill = f.skill;
     const until = Math.min(now, c.attackAt ?? now);
     return {
       ...none,
       map: withControl(map, id, (q) => ({
         ...q,
-        control: { ...q.control!, collectedAt: until, banked: 0, perXp: {} },
+        control: {
+          ...q.control!,
+          collectedAt: until,
+          banked: 0,
+          forgeDone: { ...(q.control!.forgeDone ?? {}), [skill]: f.pct },
+        },
       })),
-      lapis,
+      forged: [{ id: skill, count: f.ready }],
     };
   }
   if (isPerChampKind(c.kind)) {
@@ -2721,10 +2664,13 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
   if (c.kind === 'lapidary') {
-    const n = c.garrison.filter((g) => !isMilitiaId(g)).length;
+    const f = forgeState(p, now, playerLevel);
+    if (!f.skill) return { text: '💎 Choisis la compétence à fabriquer', pct: null };
+    const rate = unitsPerHour(p, controlWorkforce(c), playerLevel);
+    const left = leftFor(1 - f.pct, rate);
     return {
-      text: n ? `💎 ${n} champion${n > 1 ? 's' : ''} en taille` : '💎 Personne ne taille',
-      pct: null,
+      text: `${SKILLS[f.skill].emoji} Nv ${f.level}/${SKILL_MAX}${left ? ` · ${left}` : ''}`,
+      pct: f.pct,
     };
   }
   if (c.kind === 'cartographer') {
@@ -2870,7 +2816,7 @@ export function controlYieldCard(
   const c = p.control;
   if (!c || c.owner !== 'player' || !controlProduces(c.kind)) return null;
   // 🧝 Le héros posté vaut 2 travailleurs — sauf au camp, où chacun n'apprend que pour lui.
-  // Les miliciens ne travaillent pas au camp ni au lapidaire : seuls les champions comptent.
+  // Les miliciens ne travaillent pas au camp : seuls les champions comptent.
   const n = isPerChampKind(c.kind)
     ? c.garrison.filter((g) => !isMilitiaId(g)).length
     : controlWorkforce(c);
@@ -2879,13 +2825,19 @@ export function controlYieldCard(
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
   if (c.kind === 'lapidary') {
+    const f = forgeState(p, now, playerLevel);
+    const rate = unitsPerHour(p, n, playerLevel);
+    const left = leftFor(1 - f.pct, rate);
+    const k = f.skill ? SKILLS[f.skill] : null;
     return {
-      emoji: '💎',
-      value: `${n} en surcharge`,
-      what: 'chacun surcharge une compétence au niveau 5 : +50 % sur sa valeur',
-      pct: null,
-      gauge: idle,
-      rate: `${crew} · seuls ses miliciens le défendent`,
+      emoji: k?.emoji ?? '💎',
+      value: k ? `Nv ${f.level}/${SKILL_MAX}` : 'À choisir',
+      what: k
+        ? `${k.name} verte, versée au stock au niveau ${SKILL_MAX}`
+        : 'choisis la compétence verte à fabriquer',
+      pct: k ? f.pct : null,
+      gauge: idle ?? (k && left ? `Niveau ${SKILL_MAX} dans ${left}` : null),
+      rate: `${(rate * 24).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} 💎/jour · ${crew}`,
       ready: false,
       full: false,
     };
@@ -3117,8 +3069,7 @@ export const HERO_POST_BLOCK_LABEL: Record<HeroPostBlock, string> = {
 export function heroPostBlocker(c: ControlState | undefined | null): HeroPostBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
   if (c.hero || c.heroComing || c.heroAway) return 'here';
-  // 💎 Pas au lapidaire : le héros n'a aucune compétence à y tailler.
-  if (c.kind === 'lapidary' || seatsOf(c.kind) < MILITIA.heroSeats) return 'noSeat';
+  if (seatsOf(c.kind) < MILITIA.heroSeats) return 'noSeat';
   if (controlFreeSeats(c) < MILITIA.heroSeats) return 'full';
   return null;
 }

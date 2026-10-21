@@ -332,9 +332,6 @@ export function heroCanStay(poi: Pick<Poi, 'id' | 'type' | 'control'> | null | u
     c.owner === 'enemy' &&
     // 🪺 Un nid s'abat : personne n'y reste, le héros non plus.
     !c.razes &&
-    // 💎 Jamais au lapidaire : le héros n'a aucune compétence à y tailler (même règle que
-    // `heroPostBlocker`, recopiée faute de pouvoir importer `controlPoints` — cycle via `camp`).
-    c.kind !== 'lapidary' &&
     (c.kind === 'fortress' ||
       (c.kind === 'objective' && poi!.id !== 'isl_endless') ||
       !RAZE_KINDS.has(c.kind))

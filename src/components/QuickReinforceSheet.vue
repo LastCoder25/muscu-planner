@@ -10,10 +10,7 @@
   <q-dialog :model-value="!!poi" position="bottom" @update:model-value="(v) => !v && emit('close')">
     <div v-if="poi && poi.control" class="qr">
       <div class="qr-head">
-        <span class="qr-title"
-          >➕ Renfort · {{ poiEmo(poi) }}
-          {{ poiLabel(poi) }}</span
-        >
+        <span class="qr-title">➕ Renfort · {{ poiEmo(poi) }} {{ poiLabel(poi) }}</span>
         <button type="button" class="qr-x" aria-label="Fermer" @click="emit('close')">✕</button>
       </div>
       <!-- 🛡️⚔️ UN LIEU ENNEMI (demandé : « pré-envoyer une garnison de miliciens ») : seuls des
@@ -60,7 +57,7 @@
             heroOffer.why ??
             (!sel.hero && !canHero
               ? 'plus assez de places de champion (il en prend 2)'
-              : `🧭 ${formatDurationMin(heroOffer.min)} · ${defendsControl(poi?.control?.kind) ? 'défend à son arrivée' : 'ne défend pas ce lieu'}`)
+              : `🧭 ${formatDurationMin(heroOffer.min)} · défend à son arrivée`)
           }}</span>
         </span>
         <span class="qr-hero-mark" aria-hidden="true">{{ sel.hero ? '✓' : '＋' }}</span>
@@ -198,7 +195,6 @@ import { computed } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
-import { defendsControl } from '@/lib/controlPoints';
 import { poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import { MILITIA, MILITIA_NAME } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';

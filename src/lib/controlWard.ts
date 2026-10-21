@@ -63,23 +63,19 @@ export function wardMult(c: Pick<ControlState, 'wards'> | undefined, at: number)
   return 1 - wardCut(c, at);
 }
 
-export type WardBlock = 'notHeld' | 'noDefense' | 'full';
+export type WardBlock = 'notHeld' | 'full';
 export const WARD_BLOCK_LABEL: Record<WardBlock, string> = {
   notHeld: 'seulement sur un lieu que tu tiens',
-  noDefense: 'personne ne défend ce lieu : rien à renforcer',
   full: `plafond de ${Math.round(WARD.max * 100)} % atteint`,
 };
 
-/** Pourquoi on ne peut pas poser cette palissade ici — `null` si on peut.
- *  `defends` : le lieu se défend (`defendsControl`, le lapidaire non). */
+/** Pourquoi on ne peut pas poser cette palissade ici — `null` si on peut. */
 export function wardBlocker(
   c: Pick<ControlState, 'owner' | 'wards'> | undefined,
   id: WardId,
-  defends: boolean,
   now: number,
 ): WardBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
-  if (!defends) return 'noDefense';
   // Somme brute (non plafonnée) : on refuse ce qui dépasserait le plafond, on ne l'écrête pas.
   const sum = activeWards(c, now).reduce((t, w) => t + WARD_CUT[w.id], 0);
   return sum + WARD_CUT[id] > WARD.max + 1e-9 ? 'full' : null;

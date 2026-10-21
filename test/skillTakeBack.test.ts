@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { autoRise, type ChampSkill } from '@/lib/skillRunes';
+import { autoRise, convertOverclock, skillValue, type ChampSkill } from '@/lib/skillRunes';
 import { giveSkill, takeBackSkill, type RuneBank, type StockSkill } from '@/lib/runeBank';
 import { normalizeCharacterRow, type CharacterRow } from '@/lib/characterRow';
 
@@ -122,7 +122,7 @@ describe('↩️ takeBackSkill — récupérer une compétence', () => {
 });
 
 describe('🌈 rattrapage au chargement', () => {
-  it('les Nv 5 déjà posés passent au Nv 1 de la couleur au-dessus (dorée et 5⚡ gardées)', () => {
+  it('les Nv 5 passent au Nv 1 au-dessus ; une 5⚡ est convertie, sauf si aucun cran ne la vaut', () => {
     const { row } = normalizeCharacterRow({
       user_id: 'u1',
       pseudo: 'T',
@@ -137,14 +137,34 @@ describe('🌈 rattrapage au chargement', () => {
             { id: 'speed', level: 5 },
             { id: 'pv', level: 6 },
             { id: 'plunder', level: 5 },
+            { id: 'firstBlood', level: 6 },
           ],
         },
       ],
     } as unknown as CharacterRow);
     expect(row.adventurers[0]!.skills).toEqual([
       { id: 'speed', level: 1, up: 1 },
-      { id: 'pv', level: 6 },
+      // ⚡→🌈 v1.254.0 : bleue 5⚡ (×4,05) → dorée Nv 2 (×4,15), le plus petit cran qui vaut autant.
+      { id: 'pv', level: 2, up: 2 },
       { id: 'plunder', level: 5 },
+      // Dorée 5⚡ : aucun cran ne la vaut, elle reste telle quelle (rien n'est perdu).
+      { id: 'firstBlood', level: 6 },
     ]);
+  });
+});
+
+describe('⚡→🌈 convertOverclock (v1.254.0, la surcharge n’existe plus)', () => {
+  it('le plus petit cran qui vaut au moins autant', () => {
+    // Verte 5⚡ : ×4,05 → violette Nv 2 (×4,15), pas violette Nv 1 (×3,95).
+    expect(convertOverclock({ id: 'speed', level: 6 })).toEqual({ id: 'speed', level: 2, up: 2 });
+    expect(skillValue(convertOverclock({ id: 'speed', level: 6 }))).toBeGreaterThanOrEqual(
+      skillValue({ id: 'speed', level: 6 }),
+    );
+  });
+  it('aucun cran ne la vaut : elle reste 5⚡ ; non surchargée : intouchée', () => {
+    const top = { id: 'speed' as const, level: 6, up: 3 };
+    expect(convertOverclock(top)).toBe(top);
+    const plain = { id: 'speed' as const, level: 5 };
+    expect(convertOverclock(plain)).toBe(plain);
   });
 });

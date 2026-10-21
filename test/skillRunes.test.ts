@@ -10,7 +10,6 @@ import {
   OVERCLOCK_MULT,
   isOverclocked,
   skillLevelTag,
-  overclockGain,
   SKILL_SLOTS,
   skillValue,
   skillsOfTier,
@@ -92,7 +91,6 @@ describe('📈 le cumul', () => {
     expect(isOverclocked(6)).toBe(true);
     expect(skillLevelTag(5)).toBe('5');
     expect(skillLevelTag(6)).toBe('5⚡');
-    expect(overclockGain({ id: 'crit' })).toBe('32,4 % → 48,6 %');
   });
 
   it('⚠️ RENDEMENT DÉCROISSANT : chaque niveau apporte moins que le précédent', () => {
