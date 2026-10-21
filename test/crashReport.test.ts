@@ -13,6 +13,31 @@ describe('⚠️ crashReport — dire ce qui a planté', () => {
   it('une valeur jetée qui n’est pas une Error se lit quand même', () => {
     expect(describeCrash('boum', 'promesse rejetée').message).toBe('boum');
   });
+  // ⚠️ Signalé en v1.262.0 (« [object Object] » sur /aventure, régulièrement) : Supabase
+  // rend ses erreurs en OBJETS SIMPLES { message, details, hint, code }, pas en Error.
+  it('une erreur Supabase (objet simple) se lit : message, code, détails', () => {
+    const c = describeCrash(
+      { message: 'new row violates row-level security', code: '42501', details: 'D', hint: 'H' },
+      'promesse rejetée',
+    );
+    expect(c.message).toBe('new row violates row-level security (42501)');
+    expect(c.detail).toContain('D');
+    expect(c.detail).toContain('H');
+    expect(describeCrash({ foo: 1 }, 'promesse rejetée').message).toBe('{"foo":1}');
+  });
+  it('une coupure réseau rendue par Supabase est un bruit, comme une Error réseau', () => {
+    const coupure = { message: 'TypeError: Load failed', details: '', hint: '', code: '' };
+    const c = useCrash();
+    c.dismiss();
+    reportCrash(coupure, 'promesse rejetée');
+    reportCrash({ message: 'TypeError: Failed to fetch', code: '' }, 'promesse rejetée');
+    expect(c.current.value).toBeNull();
+  });
+  it('seule une erreur de l’AFFICHAGE (Vue) dit que l’écran a planté', () => {
+    expect(describeCrash(new Error('x'), 'vue · render').screen).toBe(true);
+    expect(describeCrash(new Error('x'), 'promesse rejetée').screen).toBe(false);
+    expect(describeCrash(new Error('x'), 'window.onerror').screen).toBe(false);
+  });
   it('les bruits connus sont ignorés, une vraie erreur non', () => {
     expect(isIgnorableError('ResizeObserver loop completed with undelivered notifications.')).toBe(
       true,
@@ -24,7 +49,11 @@ describe('⚠️ crashReport — dire ce qui a planté', () => {
     expect(isIgnorableError('TypeError: Cannot read properties of undefined')).toBe(false);
   });
   it('le texte envoyé porte la version et l’écran, borné', () => {
-    const t = crashReportText({ message: 'M', detail: 'D'.repeat(9000) }, '/aventure', '1.2.3');
+    const t = crashReportText(
+      { message: 'M', detail: 'D'.repeat(9000), screen: true },
+      '/aventure',
+      '1.2.3',
+    );
     expect(t.startsWith('⚠️ Plantage v1.2.3 sur /aventure\nM\n')).toBe(true);
     expect(t.length).toBeLessThanOrEqual(4000);
   });

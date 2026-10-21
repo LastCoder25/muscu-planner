@@ -5281,5 +5281,12 @@ describe('⚠️ CrashPanel', () => {
     expect(out).toContain('TypeError: boum');
     expect(out).toContain('Envoyer au développeur');
     useCrash().dismiss();
+    // Erreur d'arrière-plan (objet Supabase) : lisible, et pas annoncée comme un plantage.
+    reportCrash({ message: 'permission denied', code: '42501' }, 'promesse rejetée');
+    expect(await mountIt(CrashPanel, {}, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(out).toContain('Une erreur est survenue');
+    expect(out).not.toContain('Cet écran a planté');
+    expect(out).toContain('permission denied (42501)');
+    useCrash().dismiss();
   }, 30_000);
 });

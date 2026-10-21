@@ -3,9 +3,16 @@
        l'envoyer (signalé : « Aventure, écran noir » sur téléphone, introuvable au banc). -->
   <div v-if="crash.current.value" class="crash" role="alert">
     <div class="crash-head">
-      <b>⚠️ Cet écran a planté</b>
+      <!-- Seule une erreur de l'AFFICHAGE casse l'écran ; une erreur d'arrière-plan
+           (sauvegarde, requête) le laisse souvent intact : ne pas crier au plantage. -->
+      <b>{{
+        crash.current.value.screen ? '⚠️ Cet écran a planté' : '⚠️ Une erreur est survenue'
+      }}</b>
       <button type="button" class="crash-x" aria-label="Fermer" @click="crash.dismiss">✕</button>
     </div>
+    <p v-if="!crash.current.value.screen" class="crash-hint">
+      L’écran peut continuer à marcher ; ferme ce message, et envoie-le s’il revient.
+    </p>
     <p class="crash-msg">{{ crash.current.value.message }}</p>
     <details class="crash-more">
       <summary>Détail</summary>
@@ -109,6 +116,11 @@ function reload() {
   background: transparent;
   color: inherit;
   font-size: 18px;
+}
+.crash-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.8;
 }
 .crash-msg {
   margin: 4px 0 6px;
