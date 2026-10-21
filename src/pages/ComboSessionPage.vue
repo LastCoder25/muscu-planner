@@ -154,20 +154,25 @@
         class="s-exo"
         :class="{ next: nextStep?.exo === i }"
       >
-        <div class="se-head">
-          <span class="se-name">{{ exo.exercise_name }}</span>
-          <!-- Fourchette conseillée : c’est ICI qu’elle compte — le seul moment du 360 où
+        <!-- Vignette animée de l'exécution (toucher = la fiche en grand), comme sur la
+             fiche du défi : c'est pendant la séance qu'on a besoin de revoir le geste. -->
+        <div class="se-top">
+          <ExerciseDemo :exercise-id="exo.exercise_id" :name="exo.exercise_name" :size="56" />
+          <div class="se-head">
+            <span class="se-name">{{ exo.exercise_name }}</span>
+            <!-- Fourchette conseillée : c’est ICI qu’elle compte — le seul moment du 360 où
                on lit une consigne AVANT de faire la série. -->
-          <span class="se-range">🎯 {{ exoRangeLabel(exo) }}</span>
-          <span v-if="exo.weight_kg" class="se-kg">{{ exo.weight_kg }} kg</span>
-          <!-- Fatigue du groupe : un conseil, jamais un blocage (même pastille que la fiche). -->
-          <span
-            v-if="exoFatigueText(i)"
-            class="se-fat"
-            :class="exoFatigueOf(i)?.level"
-            :title="exoFatigueText(i)?.title"
-            >{{ exoFatigueText(i)?.text }}</span
-          >
+            <span class="se-range">🎯 {{ exoRangeLabel(exo) }}</span>
+            <span v-if="exo.weight_kg" class="se-kg">{{ exo.weight_kg }} kg</span>
+            <!-- Fatigue du groupe : un conseil, jamais un blocage (même pastille que la fiche). -->
+            <span
+              v-if="exoFatigueText(i)"
+              class="se-fat"
+              :class="exoFatigueOf(i)?.level"
+              :title="exoFatigueText(i)?.title"
+              >{{ exoFatigueText(i)?.text }}</span
+            >
+          </div>
         </div>
         <!-- Exo de DURÉE (gainage) : chrono (chaque pause valide une série) au lieu de reps. -->
         <div v-if="exo.time" class="se-sets">
@@ -285,6 +290,7 @@ import { logicalToday } from '@/lib/challenges';
 import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
 import { useProfileStore } from '@/stores/profile';
 import SetLogDialog from '@/components/SetLogDialog.vue';
+import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useComboFatigue } from '@/composables/useComboFatigue';
@@ -993,13 +999,20 @@ onUnmounted(() => {
 }
 /* 3 éléments (nom, fourchette, charge) : wrap obligatoire — un nom d’exo long tient
    mal à côté des deux sur un écran plié (~344 px). */
+.se-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 .se-head {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 2px 8px;
-  margin-bottom: 8px;
 }
 .se-name {
   flex: 1 1 auto;
