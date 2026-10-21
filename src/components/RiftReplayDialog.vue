@@ -137,8 +137,8 @@ function close(): void {
 /** « Voir le rapport » (fin du rejeu) : on dit à la page d'ouvrir le rapport, PUIS on ferme.
  *  ⚠️ Sans ce signal le bouton ne faisait que fermer (signalé : « il ne fait rien ») — le
  *  rejeu automatique ne part d'aucun rapport ouvert, il n'y avait donc rien derrière. */
-function onDone(): void {
-  emit('report');
+function onDone(report: boolean): void {
+  if (report) emit('report');
   close();
 }
 </script>

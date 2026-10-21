@@ -215,7 +215,7 @@
     </transition>
 
     <!-- L'écran de fin est un MOMENT du jeu : on n'émet `done` qu'au clic. ⚠️ Sauf une
-         faille refermée : son explosion enchaîne SEULE sur le rapport (`explodeRift`) — on
+         faille refermée : son explosion ferme SEULE le plateau, sans rapport (`explodeRift`) — on
          ne voit cet écran que via « Passer », une défaite ou `prefers-reduced-motion`. -->
     <div v-if="ended" class="end">
       <div class="end-card">
@@ -234,8 +234,15 @@
           color="primary"
           text-color="dark"
           class="end-cta"
-          label="Voir le rapport"
-          @click="finish"
+          label="Continuer"
+          @click="finish(false)"
+        />
+        <q-btn
+          flat
+          no-caps
+          class="end-cta end-report"
+          label="📜 Voir le rapport"
+          @click="finish(true)"
         />
       </div>
     </div>
@@ -272,7 +279,7 @@ const props = defineProps<{
   /** ⏱️ Heure de la bataille quand le rejeu arrive en retard (`replayWhenLabel`). */
   when?: string | null;
 }>();
-const emit = defineEmits<{ done: [] }>();
+const emit = defineEmits<{ done: [report: boolean] }>();
 
 /** La couleur de la faille : celle de son RANG, la même que sur la carte. */
 const rankColor = computed(() => characterRank(props.level).color);
@@ -509,7 +516,7 @@ function explodeRift(at: number): void {
     cinema.value = false;
     boom.value = true;
   }, at + OVERLOAD_MS);
-  later(finish, at + OVERLOAD_MS + BOOM_COVER_MS);
+  later(() => finish(false), at + OVERLOAD_MS + BOOM_COVER_MS);
 }
 
 /** Poussière de mana : figée par l'index, sinon elle sauterait à chaque rendu. */
@@ -881,8 +888,10 @@ function stop(): void {
   ended.value = true;
 }
 
-function finish(): void {
-  emit('done');
+/** `report` : « Voir le rapport ». L'explosion d'une faille refermée enchaîne seule,
+ *  SANS rapport (on le lit rarement ; il reste dans la boîte 📬). */
+function finish(report = false): void {
+  emit('done', report);
 }
 
 onMounted(() => {
@@ -1846,5 +1855,13 @@ onBeforeUnmount(() => {
 .reduce .bars .bar {
   animation: none;
   transition: none;
+}
+
+/* 📜 Le rapport en second : on le lit rarement, « Continuer » ferme le plateau et laisse
+   passer l'XP des champions (demandé par l'utilisateur). */
+.end-report {
+  display: block;
+  margin: 6px auto 0;
+  color: var(--dim);
 }
 </style>

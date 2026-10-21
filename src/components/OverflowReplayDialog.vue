@@ -35,8 +35,8 @@ const when = computed(() => (msg.value ? replayWhenLabel(msg.value.resolvedAt, D
 function close(): void {
   msg.value = null;
 }
-function onDone(): void {
-  emit('report');
+function onDone(report: boolean): void {
+  if (report) emit('report');
   close();
 }
 </script>

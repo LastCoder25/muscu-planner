@@ -184,8 +184,15 @@
           color="primary"
           text-color="dark"
           class="end-cta"
-          label="Voir le rapport"
-          @click="emit('done')"
+          label="Continuer"
+          @click="emit('done', false)"
+        />
+        <q-btn
+          flat
+          no-caps
+          class="end-cta end-report"
+          label="📜 Voir le rapport"
+          @click="emit('done', true)"
         />
       </div>
     </div>
@@ -208,7 +215,7 @@ import { speciesArt } from '@/data/monsterArt';
 import RiftPortal from '@/components/RiftPortal.vue';
 
 const props = defineProps<{ overflow: OverflowReplay; when?: string | null }>();
-const emit = defineEmits<{ done: [] }>();
+const emit = defineEmits<{ done: [report: boolean] }>();
 
 const color = computed(() => characterRank(props.overflow.level).color);
 /** L'horizon prend la couleur de la faille, assombrie. */
@@ -992,5 +999,13 @@ onBeforeUnmount(clearAll);
 .reduce * {
   animation: none !important;
   transition: none !important;
+}
+
+/* 📜 Le rapport en second : on le lit rarement, « Continuer » ferme le plateau et laisse
+   passer l'XP des champions (demandé par l'utilisateur). */
+.end-report {
+  display: block;
+  margin: 6px auto 0;
+  color: var(--dim);
 }
 </style>

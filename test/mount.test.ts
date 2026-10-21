@@ -3461,6 +3461,33 @@ describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () 
     expect(out.match(/class="find/g)?.length).toBe(3);
     expect(out).toContain('Ruines d’un héros tombé');
   }, 30_000);
+  // ⏭️ Demandé par l'utilisateur : le rapport ne doit plus être le SEUL moyen de sortir d'un
+  // rejeu. « Continuer » ferme sans rapport, « Voir le rapport » le demande.
+  it('⏭️ fin de rejeu : « Continuer » sort sans rapport, « Voir le rapport » le demande', async () => {
+    const { default: FallenStage } = await import('@/components/FallenStage.vue');
+    for (const [label, want] of [
+      ['Continuer', false],
+      ['📜 Voir le rapport', true],
+    ] as const) {
+      const got: boolean[] = [];
+      expect(
+        await mountIt(
+          FallenStage,
+          { supplies: { potion: 1 }, hero: null, cast, onDone: (r: boolean) => got.push(r) },
+          undefined,
+          undefined,
+          '/',
+          undefined,
+          async (host) => {
+            (host.querySelector('.skip') as HTMLElement).click();
+            await nextTick();
+            (host.querySelector(`[label="${label}"]`) as HTMLElement).click();
+          },
+        ),
+      ).toBeNull();
+      expect(got).toEqual([want]);
+    }
+  }, 30_000);
 
   it('🩹 un consommable gagné se touche : la bulle dit à quoi il sert', async () => {
     const { default: HaulPills } = await import('@/components/HaulPills.vue');

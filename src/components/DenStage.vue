@@ -232,8 +232,15 @@
           color="primary"
           text-color="dark"
           class="end-cta"
-          label="Voir le rapport"
-          @click="emit('done')"
+          label="Continuer"
+          @click="emit('done', false)"
+        />
+        <q-btn
+          flat
+          no-caps
+          class="end-cta end-report"
+          label="📜 Voir le rapport"
+          @click="emit('done', true)"
         />
       </div>
     </div>
@@ -261,7 +268,7 @@ const props = defineProps<{
   cast: RiftCastMember[];
   when?: string | null;
 }>();
-const emit = defineEmits<{ done: [] }>();
+const emit = defineEmits<{ done: [report: boolean] }>();
 
 /** Deux places dans une tanière (le héros en vaut deux) : au plus deux silhouettes. */
 const shownCast = computed(() => props.cast.slice(0, 2));
@@ -1028,5 +1035,13 @@ onBeforeUnmount(clearAll);
 .reduce * {
   animation: none !important;
   transition: none !important;
+}
+
+/* 📜 Le rapport en second : on le lit rarement, « Continuer » ferme le plateau et laisse
+   passer l'XP des champions (demandé par l'utilisateur). */
+.end-report {
+  display: block;
+  margin: 6px auto 0;
+  color: var(--dim);
 }
 </style>
