@@ -53,6 +53,17 @@ export function formatCountdown(ms: number): string {
   return total < MIN ? `${Math.ceil(total / 1000)} s` : formatDuration(total);
 }
 
+/** ⏱️ Un temps restant SERRÉ, pour un coin de carte : « 45s » · « 12m » · « 3h05 » · « 2j3h ».
+ *  Mêmes coupures que `formatCountdown` (secondes au-dessus, minutes tronquées au-delà d'un
+ *  jour), sans les espaces. */
+export function formatEta(ms: number): string {
+  return formatCountdown(ms)
+    .replace(' min', 'm')
+    .replace(' s', 's')
+    .replace(/ j ?/, 'j')
+    .replace(/ h ?/, 'h');
+}
+
 /** La même, pour une durée déjà exprimée en minutes. */
 export function formatDurationMin(min: number): string {
   return formatDuration(min * MIN);

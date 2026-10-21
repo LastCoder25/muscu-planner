@@ -133,6 +133,22 @@ const ECRANS = [
       { nom: 'rappel', clic: '.bgs-recall', attendu: '.rh' },
       // 🏝️ L'île actuelle, en haut à droite : toucher la pastille déplie les cinq îles.
       { nom: 'archipel', clic: '.arch-cur', attendu: '.arch-pop', escape: true },
+      // ⏱️ Les prochains à rentrer, en bas à gauche : le bloc ouvre les Voyages, et les referme
+      // (pas de touche Échap sur la carte : sinon les gestes suivants trouveraient l'affichage
+      // ouvert). Facultatif : il faut un voyage en cours.
+      {
+        nom: 'prochains',
+        facultatif: true,
+        escape: true,
+        clic: '.map-eta',
+        attendu: '.map-overlay',
+      },
+      {
+        nom: 'prochains-ferme',
+        facultatif: true,
+        clic: 'body:has(.map-overlay) .map-eta',
+        attendu: 'body:not(:has(.map-overlay))',
+      },
       // 🗂️ (essai) Les tuiles par-dessus la carte, par les boutons à côté de ↕️ : toucher un
       // voyage ferme l'affichage et met son tracé en avant.
       {

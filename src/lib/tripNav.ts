@@ -23,24 +23,41 @@ export interface NavTrip extends LegSource {
   endsAt?: number;
 }
 
-/** ↩️ LE PROCHAIN VOYAGE À REVENIR À SON POINT DE DÉPART (demandé : « voir d'un coup d'œil sur
- *  la carte le temps de la prochaine expédition qui va rentrer » — « à son lieu de départ tout
- *  court », pas à la base). Seuls les allers-retours comptent, à leur heure de retour (`homeAt` :
- *  la base OU le poste d'où ils sont partis). Un aller simple (renfort, traversée, poste quitté
- *  pour la base) ne revient pas ; un voyage programmé n'est pas encore parti. `null` sans retour
- *  à venir. */
-export function nextHomecoming<T extends NavTrip>(
+/** Un voyage et l'heure (ms) où il arrive. */
+export interface TripEta<T> {
+  trip: T;
+  at: number;
+}
+
+/**
+ * ⏱️ LES PROCHAINS À RENTRER, EN BAS À GAUCHE DE LA CARTE (v1.257.0, demandé : « les trois
+ * prochains retours sur le lieu de départ, et les trois prochaines expéditions qui rentrent à
+ * un endroit allié — retour d'attaque, blessés qui retournent à la base, garnison qui arrive
+ * sur un lieu allié »). Remplace la pastille du seul prochain retour (v1.246.0).
+ * - `back` : les ALLERS-RETOURS, à leur heure de retour (`homeAt` : la base OU le poste d'où ils
+ *   sont partis) — expéditions, attaques, héros.
+ * - `arrive` : les ALLERS SIMPLES qui arrivent chez nous (`cat` renfort : garnison qui rejoint un
+ *   lieu tenu, héros qui va se poster, poste quitté ou blessés qui rentrent à la base), à leur
+ *   arrivée (`endsAt`). Une traversée en mer n'en est pas (elle change d'île).
+ * Un voyage programmé n'est pas encore parti ; une heure passée ne compte plus. `n` au plus
+ * par liste, du plus proche au plus lointain.
+ */
+export function upcomingTrips<T extends NavTrip>(
   trips: readonly T[],
   now: number,
-): { trip: T; at: number } | null {
-  let best: { trip: T; at: number } | null = null;
+  n = 3,
+): { back: TripEta<T>[]; arrive: TripEta<T>[] } {
+  const back: TripEta<T>[] = [];
+  const arrive: TripEta<T>[] = [];
   for (const t of trips) {
     if (t.pending) continue;
-    const at = t.homeAt;
-    if (at === undefined || at <= now) continue;
-    if (!best || at < best.at) best = { trip: t, at };
+    if (t.homeAt !== undefined) {
+      if (t.homeAt > now) back.push({ trip: t, at: t.homeAt });
+    } else if (!t.sea && (t.cat === 'reinf' || t.toBase) && (t.endsAt ?? 0) > now)
+      arrive.push({ trip: t, at: t.endsAt! });
   }
-  return best;
+  const first = (l: TripEta<T>[]) => l.sort((x, y) => x.at - y.at).slice(0, n);
+  return { back: first(back), arrive: first(arrive) };
 }
 
 const CAT_ORDER: readonly TripCat[] = ['trips', 'raids', 'reinf', 'planned', 'attacks'];

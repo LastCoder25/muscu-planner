@@ -465,23 +465,6 @@
            les îles avec la fiche de celle qu'on choisit. -->
       <ArchipelPanel v-if="!viewed" v-bind="archBind" v-on="archOn" />
 
-      <!-- ↩️ LE PROCHAIN RETOUR AU POINT DE DÉPART (base ou poste), toujours visible en bas à
-           gauche de la carte (demandé : « voir d'un coup d'œil le temps de la prochaine
-           expédition qui va rentrer »). Turquoise comme l'anneau des pions qui rentrent ; le
-           toucher centre la carte sur ce voyage. -->
-      <button
-        v-if="homecoming && !viewed"
-        type="button"
-        class="home-next"
-        :title="homecoming.trip.title"
-        :aria-label="'Prochain retour : ' + homecoming.trip.title"
-        @click="pickOverlayTrip(homecoming.trip.key)"
-      >
-        <span aria-hidden="true">↩️</span>
-        <span aria-hidden="true">{{ homecoming.trip.who }}</span>
-        <b class="hn-t">{{ formatCountdown(homecoming.at - now) }}</b>
-      </button>
-
       <!-- Zoom -->
       <div class="zoom-ctl">
         <div class="zoom-col">
@@ -1585,6 +1568,35 @@
       </button>
     </div>
 
+    <!-- ⏱️ LES PROCHAINS À RENTRER (demandé : « entre le bord gauche et le premier bouton, petit
+         et discret : les trois prochains retours au lieu de départ, et les trois prochaines
+         arrivées sur un lieu allié »). Une seule cible tactile : elle ouvre les Voyages. Masqué
+         pendant la barre d'un voyage, qui prend ce coin. -->
+    <button
+      v-if="!viewed && !tripBar && (upcoming.back.length || upcoming.arrive.length)"
+      type="button"
+      class="map-eta"
+      :style="{ maxWidth: etaMaxWidth }"
+      :aria-label="etaLabel"
+      :title="etaLabel"
+      @click="toggleOverlay('trips')"
+    >
+      <span v-if="upcoming.back.length" class="eta-grp eta-back">
+        <span class="eta-h" aria-hidden="true">↩</span>
+        <span v-for="r in upcoming.back" :key="r.trip.key" class="eta-row" aria-hidden="true">
+          <span class="eta-who">{{ r.trip.who }}</span
+          ><b class="eta-t">{{ formatEta(r.at - now) }}</b>
+        </span>
+      </span>
+      <span v-if="upcoming.arrive.length" class="eta-grp eta-arr">
+        <span class="eta-h" aria-hidden="true">📍</span>
+        <span v-for="r in upcoming.arrive" :key="r.trip.key" class="eta-row" aria-hidden="true">
+          <span class="eta-who">{{ r.trip.who }}</span
+          ><b class="eta-t">{{ formatEta(r.at - now) }}</b>
+        </span>
+      </span>
+    </button>
+
     <!-- 🏠 En bas à droite : la base de l'île 1, en un geste. La carte
          vit dans l'Aventure, qui lit `?tab=` : elle bascule sur l'onglet Base et quitte la carte.
          ⚠️ Masqué pendant la barre d'un voyage (en bas à gauche) : à 344 px ils se chevauchent. -->
@@ -1895,8 +1907,8 @@ import {
   sortByGradeThenRank,
   type Adventurer,
 } from '@/lib/adventurers';
-import { formatCountdown, formatDuration, formatDurationMin } from '@/lib/duration';
-import { nextHomecoming } from '@/lib/tripNav';
+import { formatCountdown, formatDuration, formatDurationMin, formatEta } from '@/lib/duration';
+import { upcomingTrips } from '@/lib/tripNav';
 import {
   CONTROL_LABEL,
   CONTROL_YIELD,
@@ -4593,8 +4605,25 @@ const trips = computed(() => {
   }
   return out.sort((x, y) => (x.endsAt ?? 0) - (y.endsAt ?? 0));
 });
-/** ↩️ Le prochain voyage à revenir à son point de départ (pastille en bas à gauche de la carte). */
-const homecoming = computed(() => nextHomecoming(trips.value, now.value));
+/** ⏱️ Les 3 prochains retours au point de départ et les 3 prochaines arrivées chez nous
+ *  (`upcomingTrips`), en bas à gauche de la carte. */
+const upcoming = computed(() => upcomingTrips(trips.value, now.value));
+/** Ce que le bloc dit, en clair, pour un lecteur d'écran. */
+const etaLabel = computed(() => {
+  const say = (l: { trip: { who: string }; at: number }[]) =>
+    l.map((r) => `${r.trip.who} ${formatCountdown(r.at - now.value)}`).join(', ');
+  const u = upcoming.value;
+  return [
+    u.back.length ? `Prochains retours : ${say(u.back)}` : '',
+    u.arrive.length ? `Prochaines arrivées : ${say(u.arrive)}` : '',
+  ]
+    .filter(Boolean)
+    .concat('Toucher pour voir les voyages')
+    .join('. ');
+});
+/** ↔️ Il tient entre le bord gauche et le premier rond (les `mapTabs` + 🏠, 56 px d'écart,
+ *  16 px du bord droit, 48 px de large), avec 8 px de chaque côté. */
+const etaMaxWidth = computed(() => `calc(100vw - ${16 + 56 * mapTabs.value.length + 48 + 16}px)`);
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
   const nMil = militiaIn(members).length;
@@ -7867,32 +7896,61 @@ onUnmounted(() => {
   pointer-events: none;
 }
 /* 🏠 Anneau des troupes qui rentrent : turquoise, couleur prise par aucun autre pion. */
-/* ↩️ Le prochain retour, en bas à gauche de la carte, à hauteur des boutons de zoom. */
-.home-next {
-  position: absolute;
+/* ⏱️ Les prochains à rentrer : en bas à gauche, à la hauteur des ronds, au-dessus du numéro de
+   version. Petit et discret (demandé) : une colonne serrée, turquoise pour les retours (la
+   couleur de l'anneau des pions qui rentrent), violet pour les arrivées chez nous. */
+.map-eta {
+  position: fixed;
   left: 8px;
-  bottom: calc(84px + env(safe-area-inset-bottom));
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 50;
+  min-width: 44px;
   min-height: 44px;
-  max-width: calc(100% - 64px);
-  padding: 0 12px;
-  border: 1.5px solid #3ec9d6;
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: 0 0 6px rgba(62, 201, 214, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 4px 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
   color: var(--text);
-  font-size: 14px;
-  white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
 }
-.hn-t {
+.eta-grp {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 100%;
+}
+.eta-h {
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.8;
+}
+.eta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.eta-who {
+  font-size: 9.5px;
+}
+.eta-t {
   font-family: Oswald, sans-serif;
-  font-size: 16px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+.eta-back .eta-t,
+.eta-back .eta-h {
   color: #3ec9d6;
+}
+.eta-arr .eta-t {
+  color: #b98cff;
 }
 .home-ring {
   fill: none;
