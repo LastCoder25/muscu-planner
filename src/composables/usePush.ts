@@ -5,7 +5,13 @@
 
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { CLIENT_PUSH_KINDS, planPushes, type PushContext } from '@/lib/push';
+import {
+  CLIENT_PUSH_KINDS,
+  planPushes,
+  toggleMuted,
+  type AnyPushKind,
+  type PushContext,
+} from '@/lib/push';
 
 /** ⚠️ PUBLIQUE PAR NATURE — le navigateur la reçoit et le service de push aussi. Elle
  *  est ici plutôt que dans une variable d'environnement pour une raison précise : une
@@ -66,8 +72,50 @@ const enabled = ref(false);
  *  mesuré à l'audit du 2026-10-15). Mémoire de session seulement : la première synchro
  *  après un rechargement écrit toujours. */
 let syncedSig = '';
+/** 🔕 Les sortes coupées par le joueur (`push_prefs`, migr. 0110), chargées une fois. */
+const muted = ref<string[]>([]);
+let prefsOf = '';
 
 export function usePush() {
+  /** Charge les sortes coupées (une fois par compte et par session). */
+  async function loadPrefs(userId: string): Promise<void> {
+    if (prefsOf === userId) return;
+    const { data, error } = await supabase
+      .from('push_prefs')
+      .select('muted')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) return; // réessaiera à la synchro suivante
+    muted.value = (data?.muted as string[] | undefined) ?? [];
+    prefsOf = userId;
+  }
+
+  /** Coupe ou rallume une sorte. Coupée : ses messages EN ATTENTE sont effacés tout de
+   *  suite (ceux du boss entre amis compris, que la synchro ne touche jamais). */
+  async function toggleKind(userId: string, kind: AnyPushKind): Promise<boolean> {
+    const before = muted.value;
+    const next = toggleMuted(before, kind);
+    muted.value = next;
+    const { error } = await supabase
+      .from('push_prefs')
+      .upsert({ user_id: userId, muted: next, updated_at: new Date().toISOString() });
+    if (error) {
+      muted.value = before;
+      return false;
+    }
+    if (next.includes(kind)) {
+      await supabase
+        .from('scheduled_pushes')
+        .delete()
+        .eq('user_id', userId)
+        .is('sent_at', null)
+        .eq('kind', kind);
+    }
+    // Rallumée : la prochaine synchro réécrit le plan même si le jeu n'a pas bougé.
+    syncedSig = '';
+    return true;
+  }
+
   async function refresh() {
     if (!pushSupported()) return;
     const reg = await navigator.serviceWorker.getRegistration();
@@ -152,7 +200,8 @@ export function usePush() {
    */
   async function sync(userId: string, ctx: PushContext, now = Date.now()): Promise<void> {
     if (!enabled.value) return;
-    const plans = planPushes(ctx, now);
+    await loadPrefs(userId);
+    const plans = planPushes(ctx, now, muted.value);
     const vivantes = plans.map((p) => p.dedupe);
     const sig = JSON.stringify([userId, plans]);
     if (sig === syncedSig) return;
@@ -190,5 +239,5 @@ export function usePush() {
     if (!error && !upsertFailed) syncedSig = sig;
   }
 
-  return { enabled, busy, refresh, enable, disable, sync };
+  return { enabled, busy, muted, refresh, enable, disable, sync, loadPrefs, toggleKind };
 }
