@@ -1785,7 +1785,6 @@ import {
   isRiftPoi,
   citadelRestingUntil,
   isWarbandPoi,
-  isClaimable,
   claimState,
   ruinsSealKind,
   haulPills,
@@ -4729,47 +4728,16 @@ function openOvfReport() {
 const lastState = computed(() =>
   lastOutcome.value ? claimState(lastOutcome.value, now.value) : 'done',
 );
-/** 🔔 Tap sur « ton héros / ton groupe est rentré » (`?report=1`). ⚠️ Sans ce drapeau, être
- *  DÉJÀ sur la carte ne faisait rien : l'URL ne changeait pas, et un rapport déjà vu puis
- *  fermé ne se rouvrait pas. On ouvre le rapport encore à prendre, sinon le plus récent,
- *  puis on retire le drapeau (un retour arrière ne le rejoue pas, un second tap le repose). */
-/** 🔔 Le rapport nommé par la notification (`?report=msg_…`) n'est déposé qu'au premier
- *  passage du cycle de vie après l'ouverture : on l'ATTEND un moment au lieu d'ouvrir
- *  aussitôt « le plus récent » — qui était souvent celui d'un autre voyage. */
-const REPORT_WAIT_MS = 15_000;
-let reportWaitFrom = 0;
+/** 🔔 Tap sur « ton héros / ton groupe est rentré » (`?report=…`) : on arrive sur la carte, et
+ *  c'est TOUT. ⚠️ La carte ouvrait d'office la fenêtre du rapport (signalé par l'utilisateur le
+ *  2026-10-21 : « même quand je ne clique pas dessus, les rapports sont ouverts ; je ne les lis
+ *  jamais »). Elle n'apportait rien : la carte vit dans l'Aventure, qui encaisse seule le retour
+ *  et joue l'animation d'XP des champions (`expeAutoClaim`). Le rapport reste dans la boîte 📬.
+ *  On retire seulement le drapeau, pour qu'un retour arrière ne le rejoue pas. */
 watch(
-  () => [route.query.report, char.row?.messages?.length ?? -1, now.value] as const,
-  ([flag]) => {
-    if (!flag || !char.row) {
-      reportWaitFrom = 0;
-      return;
-    }
-    const msgs = (char.row.messages ?? []).filter((m) => !m.chest);
-    const wanted = typeof flag === 'string' && flag !== '1' ? flag : null;
-    const exact = wanted ? msgs.find((x) => x.id === wanted) : undefined;
-    if (wanted && !exact) {
-      if (!reportWaitFrom) reportWaitFrom = Date.now();
-      if (Date.now() - reportWaitFrom < REPORT_WAIT_MS) return;
-    }
-    reportWaitFrom = 0;
-    // ⚠️ Un rapport NOMMÉ introuvable n'est jamais remplacé par un autre : ouvrir « le plus
-    // récent » faisait croire que la notification menait au mauvais rapport (relevé le
-    // 2026-10-06). On le dit, et l'on n'ouvre rien.
-    const m = wanted
-      ? exact
-      : (msgs.find((x) => isClaimable(x, Date.now())) ??
-        [...msgs].sort((a, b) => b.resolvedAt - a.resolvedAt)[0]);
-    if (wanted && !exact)
-      $q.notify({
-        message:
-          'Ce rapport n’est plus dans ta boîte 📬 (elle garde les plus récents), ou la bataille n’a pas eu lieu.',
-        timeout: 4000,
-      });
-    if (m) {
-      lastOutcome.value = m;
-      collectOpen.value = true;
-    }
+  () => route.query.report,
+  (flag) => {
+    if (!flag) return;
     const rest = { ...route.query };
     delete rest.report;
     void router.replace({ path: route.path, query: rest });

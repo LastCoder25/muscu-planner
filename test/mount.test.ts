@@ -5317,3 +5317,36 @@ describe('⚠️ CrashPanel', () => {
     useCrash().dismiss();
   }, 30_000);
 });
+
+// 🔔 Demandé par l'utilisateur (2026-10-21) : « même quand je ne clique pas dessus, les rapports
+// sont ouverts ». La notification « ton groupe est rentré » mène à la carte avec `?report=` ;
+// la carte ouvrait alors d'office la fenêtre du rapport. L'Aventure encaisse déjà seule le
+// retour et montre l'XP des champions : la carte ne doit plus rien ouvrir.
+describe('🔔 notification « rentré » : la carte n’ouvre pas le rapport', () => {
+  it('?report=<id> ne pose aucune fenêtre « Retour de mission »', async () => {
+    const { default: ExpeditionMapPage } = await import('@/pages/ExpeditionMapPage.vue');
+    const msg = {
+      id: 'msg_t',
+      poiType: 'camp',
+      level: 1,
+      win: true,
+      text: 'Victoire',
+      gold: 5,
+      energy: 0,
+      key: 'k',
+      resolvedAt: Date.now() - 60_000,
+      read: false,
+    };
+    let out = '';
+    const err = await mountIt(
+      ExpeditionMapPage,
+      {},
+      { ...ROW, messages: [msg] },
+      undefined,
+      '/aventure?report=msg_t',
+      (h) => (out = h),
+    );
+    expect(err).toBeNull();
+    expect(out).not.toContain('Retour de mission');
+  }, 60_000);
+});
