@@ -4621,9 +4621,9 @@ const etaLabel = computed(() => {
     .concat('Toucher pour voir les voyages')
     .join('. ');
 });
-/** ↔️ Il tient entre le bord gauche et le premier rond (les `mapTabs` + 🏠, 56 px d'écart,
- *  16 px du bord droit, 48 px de large), avec 8 px de chaque côté. */
-const etaMaxWidth = computed(() => `calc(100vw - ${16 + 56 * mapTabs.value.length + 48 + 16}px)`);
+/** ↔️ Il tient entre le bord gauche de la carte (collé) et le premier rond (les `mapTabs` +
+ *  🏠, 56 px d'écart, 16 px du bord droit, 48 px de large), à 4 px de lui. */
+const etaMaxWidth = computed(() => `calc(100vw - ${16 + 56 * mapTabs.value.length + 48 + 4}px)`);
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
   const nMil = militiaIn(members).length;
@@ -7901,8 +7901,10 @@ onUnmounted(() => {
    couleur de l'anneau des pions qui rentrent), violet pour les arrivées chez nous. */
 .map-eta {
   position: fixed;
-  left: 8px;
-  bottom: calc(20px + env(safe-area-inset-bottom));
+  /* Collé au coin bas-gauche de la carte (demandé). Le numéro de version, toujours affiché
+     dans ce coin, prend la dernière ligne du bloc (padding du bas) sans chevaucher les temps. */
+  left: 0;
+  bottom: 0;
   z-index: 50;
   min-width: 44px;
   min-height: 44px;
@@ -7910,9 +7912,10 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  padding: 4px 5px;
+  padding: 5px 6px calc(18px + env(safe-area-inset-bottom));
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-width: 1px 1px 0 0;
+  border-radius: 0 10px 0 0;
   background: color-mix(in srgb, var(--surface) 78%, transparent);
   color: var(--text);
   overflow: hidden;
@@ -7925,20 +7928,20 @@ onUnmounted(() => {
   max-width: 100%;
 }
 .eta-h {
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   opacity: 0.8;
 }
 .eta-row {
   display: flex;
   align-items: baseline;
-  gap: 2px;
-  font-size: 10px;
-  line-height: 1.15;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.2;
   white-space: nowrap;
 }
 .eta-who {
-  font-size: 9.5px;
+  font-size: 11px;
 }
 .eta-t {
   font-family: Oswald, sans-serif;
