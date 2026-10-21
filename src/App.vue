@@ -5,6 +5,8 @@
   <XpGainOverlay />
   <AdvXpGainOverlay v-if="advXp.current.value" />
   <GoldGainOverlay />
+  <!-- ⚠️ Une erreur qui casse l'écran se DIT (au lieu d'un écran noir) et s'envoie. -->
+  <CrashPanel />
   <!-- ⚠️ Ce projet déploie plusieurs fois par jour : un onglet resté ouvert fait
        tourner l'ANCIEN code indéfiniment, et un correctif livré est alors signalé
        comme « toujours cassé ». On PROPOSE le rechargement — jamais d’autorité,
@@ -25,6 +27,7 @@ import { useAdvXpFx } from '@/composables/useAdvXpFx';
 const AdvXpGainOverlay = defineAsyncComponent(() => import('@/components/AdvXpGainOverlay.vue'));
 const advXp = useAdvXpFx();
 import GoldGainOverlay from '@/components/GoldGainOverlay.vue';
+import CrashPanel from '@/components/CrashPanel.vue';
 import { useBodyReminder } from '@/composables/useBodyReminder';
 import { useChallengeReminder } from '@/composables/useChallengeReminder';
 import { useComboChest } from '@/composables/useComboChest';

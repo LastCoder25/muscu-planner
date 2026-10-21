@@ -5266,3 +5266,20 @@ describe('💰 la récompense sur la tuile d’un voyage', () => {
     expect(after).toContain('class="timer"'); // le repos démarre
   }, 30_000);
 });
+
+describe('⚠️ CrashPanel', () => {
+  it('rien sans erreur ; une erreur captée se lit, avec le bouton d’envoi', async () => {
+    const { default: CrashPanel } = await import('@/components/CrashPanel.vue');
+    const { reportCrash, useCrash } = await import('@/composables/useCrash');
+    useCrash().dismiss();
+    let out = '';
+    expect(await mountIt(CrashPanel, {}, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(out).not.toContain('Cet écran a planté');
+    reportCrash(new TypeError('boum'), 'vue · render');
+    expect(await mountIt(CrashPanel, {}, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(out).toContain('Cet écran a planté');
+    expect(out).toContain('TypeError: boum');
+    expect(out).toContain('Envoyer au développeur');
+    useCrash().dismiss();
+  }, 30_000);
+});

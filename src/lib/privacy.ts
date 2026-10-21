@@ -89,6 +89,11 @@ export const DATA_ITEMS: readonly DataItem[] = [
     basis: 'Consentement (désactivable depuis la Base)',
   },
   {
+    what: 'Rapport de plantage : message d’erreur, écran et version de l’app (seulement si tu touches « Envoyer »)',
+    why: 'Corriger l’erreur qui a cassé l’écran',
+    basis: 'Consentement (envoi manuel, supprimé avec ton compte)',
+  },
+  {
     what: 'Position approximative (seulement si tu l’autorises pour la météo)',
     why: 'Afficher la météo de ton créneau de sortie — non enregistrée sur nos serveurs',
     basis: 'Consentement (autorisation du navigateur)',
