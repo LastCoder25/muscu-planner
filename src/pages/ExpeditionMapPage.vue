@@ -1553,7 +1553,13 @@
          les boosts n'étaient plus accessibles). Une barre en bas à gauche, à côté des boutons
          ronds : faire demi-tour, ou refermer. Les boosts ⚡ vivent sur chaque tuile de la liste
          des expéditions (demandé : accélérer d'un toucher, sans ouvrir de fenêtre). -->
-    <div v-if="tripBar" class="trip-bar" role="group" :aria-label="tripBar.title">
+    <div
+      v-if="tripBar"
+      class="trip-bar"
+      role="group"
+      :aria-label="tripBar.title"
+      :style="{ left: mapLeft + 16 + 'px' }"
+    >
       <button
         v-if="tripBar.recall"
         type="button"
@@ -1576,7 +1582,7 @@
       v-if="!viewed && !tripBar && (upcoming.back.length || upcoming.arrive.length)"
       type="button"
       class="map-eta"
-      :style="{ maxWidth: etaMaxWidth }"
+      :style="{ left: mapLeft + 'px', maxWidth: etaMaxWidth }"
       :aria-label="etaLabel"
       :title="etaLabel"
       @click="toggleOverlay('trips')"
@@ -2605,6 +2611,11 @@ const mapPx = ref(700); // taille de rendu du SVG (px) → zoom
 const scrollX = ref(0);
 const scrollY = ref(0);
 const contW = ref(1);
+/** 📐 Le bord GAUCHE de la carte dans l'écran (px). ⚠️ Les boutons fixés à gauche (prochains
+ *  retours, barre d'un voyage) s'y calent : avec `left: 0` ils se calaient sur l'ÉCRAN, et
+ *  sur un Fold déplié — la carte dans le volet droit — ils tombaient dans le volet sport
+ *  (signalé par l'utilisateur, 2026-10-21). Les ronds, calés à droite, n'ont pas ce défaut. */
+const mapLeft = ref(0);
 const contH = ref(1);
 const MIN_PX = 340;
 const MAX_PX = 1700;
@@ -2637,6 +2648,7 @@ function measure() {
   if (!el) return;
   contW.value = el.clientWidth;
   contH.value = el.clientHeight;
+  mapLeft.value = Math.max(0, Math.round(el.getBoundingClientRect().left));
   // Le cadre peut grandir (rotation, rangée de voyages qui disparaît) : on rattrape.
   if (mapPx.value < minPx.value) mapPx.value = minPx.value;
   // 🧭 Tant que le joueur n'a pas zoomé, la vue de départ SUIT le dézoom maximal : la hauteur
@@ -4622,7 +4634,10 @@ const etaLabel = computed(() => {
 });
 /** ↔️ Il tient entre le bord gauche de la carte (collé) et le premier rond (les `mapTabs` +
  *  🏠, 56 px d'écart, 16 px du bord droit, 48 px de large), à 4 px de lui. */
-const etaMaxWidth = computed(() => `calc(100vw - ${16 + 56 * mapTabs.value.length + 48 + 4}px)`);
+/*  Le bord gauche est celui de la carte (`mapLeft`), pas de l'écran. */
+const etaMaxWidth = computed(
+  () => `calc(100vw - ${mapLeft.value + 16 + 56 * mapTabs.value.length + 48 + 4}px)`,
+);
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
   const nMil = militiaIn(members).length;
