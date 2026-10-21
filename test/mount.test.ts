@@ -926,7 +926,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(max).not.toContain('ca-xp');
     const libre = await rendu(false);
     expect(libre).not.toContain('🧑‍✈️ max');
-    expect(libre).toContain('+40 XP');  }, 30_000);
+    expect(libre).toContain('+40 XP');
+  }, 30_000);
 
   // 🏅 Le RANG d'un champion s'écrit sur sa tuile (demandé : « je vois la rareté mais pas le
   // rang ») : nom ET étoiles, lus sur `advRank` — jamais recalculés à côté.
@@ -3702,6 +3703,44 @@ describe('🪬 RuneBankSheet', () => {
     expect(out.match(/class="rb-row rb-pick/g)?.length).toBe(2);
     expect(out).toContain('Jusqu’au Nv 5');
     expect(out).toContain('choisis au moins deux exemplaires');
+  }, 30_000);
+
+  it('« Donner à un champion » montre les compétences de chaque champion sur sa ligne', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const c = CHAMPIONS.find((x) => x.grade === 'A')!;
+    const champ = {
+      id: 'c1',
+      name: c.name,
+      seed: 1,
+      path: [],
+      level: 25,
+      xp: 0,
+      championId: c.id,
+      copies: 1,
+      skills: [{ id: 'crit', level: 3 }],
+    };
+    const row = {
+      ...ROW,
+      adventurers: [champ],
+      runes: { runes: 0, skills: [{ uid: 'sk1', id: 'speed', level: 1 }], opened: 1, comp: 2 },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector<HTMLElement>('.rb-chip.btn')!.click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Donner à un champion');
+    const line = out.slice(out.indexOf(c.name));
+    expect(line).toMatch(/class="rb-has-chip t-[a-z]+"[^>]*>[^<]*Critique <b[^>]*>3<\/b>/);
+    expect(line).toContain('rb-has-chip free');
   }, 30_000);
 });
 

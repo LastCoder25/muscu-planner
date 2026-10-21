@@ -138,9 +138,7 @@
               @click="fusePicked"
             >
               <template v-if="pickBlock">{{ FUSE_BLOCK_LABEL[pickBlock] }}</template>
-              <template v-else
-                >🔗 Fusionner {{ pickedUids.length }} → Nv {{ pickTotal }}</template
-              >
+              <template v-else>🔗 Fusionner {{ pickedUids.length }} → Nv {{ pickTotal }}</template>
             </button>
           </template>
           <div class="rb-sec">Donner à un champion</div>
@@ -158,6 +156,19 @@
               <span class="rb-row-main">
                 <span class="rb-row-name">{{ r.adv.name }}</span>
                 <span class="rb-row-sub">{{ r.sub }}</span>
+                <!-- Ses compétences actuelles, puis ses places libres. -->
+                <span class="rb-has">
+                  <template v-for="(k, i) in r.cells" :key="i">
+                    <span
+                      v-if="k"
+                      class="rb-has-chip"
+                      :class="['t-' + SKILLS[k.id].tier, { same: k.id === sel?.id }]"
+                      :title="whatOf(k.id, k.level)"
+                      >{{ SKILLS[k.id].emoji }} {{ SKILLS[k.id].name }} <b>{{ k.level }}</b></span
+                    >
+                    <span v-else class="rb-has-chip free">libre</span>
+                  </template>
+                </span>
               </span>
               <span class="rb-pill" :class="r.tone">{{ r.pill }}</span>
             </button>
@@ -271,6 +282,7 @@ import {
   SKILLS,
   SKILL_MAX_LEVEL,
   skillEffectText,
+  type ChampSkill,
   type SkillId,
 } from '@/lib/skillRunes';
 import {
@@ -295,7 +307,7 @@ import {
   type GiveKind,
   type StockSkill,
 } from '@/lib/runeBank';
-import { advChampionSlots, advTitle, type Adventurer } from '@/lib/adventurers';
+import { advChampionSlots, advSkillCells, advTitle, type Adventurer } from '@/lib/adventurers';
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -356,6 +368,8 @@ interface GiveRow {
   pill: string;
   tone: string;
   sub: string;
+  /** Ses compétences posées, puis `null` par place libre. */
+  cells: (ChampSkill | null)[];
   order: number;
 }
 const GIVE_ORDER: Record<GiveKind, number> = { stack: 0, new: 1, replace: 2 };
@@ -390,6 +404,7 @@ const giveRows = computed<GiveRow[]>(() => {
         sub: block
           ? GIVE_BLOCK_LABEL[block]
           : `${c.skills.length}/${c.slots} compétence${c.slots > 1 ? 's' : ''}`,
+        cells: advSkillCells(a),
         order: block ? 3 : GIVE_ORDER[kind],
       };
     })
@@ -768,6 +783,40 @@ function confirmReplace(adv: Adventurer, index: number) {
   font-size: 12px;
   color: var(--dim);
   overflow-wrap: anywhere;
+}
+.rb-has {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.rb-has-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tier, var(--line)) 70%, transparent);
+  background: color-mix(in srgb, var(--tier, var(--line)) 12%, transparent);
+  font-size: 11.5px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rb-has-chip b {
+  color: var(--tier);
+}
+.rb-has-chip.same {
+  border-width: 2px;
+  font-weight: 700;
+}
+.rb-has-chip.free {
+  border-style: dashed;
+  border-color: var(--line);
+  background: none;
+  color: var(--dim);
 }
 .rb-pill {
   flex: none;
