@@ -245,11 +245,64 @@ describe('planificateur — attaque combinée et temps occupé', () => {
     expect(solo.trips[0]!.tripMin).toBe(300);
   });
 
-  it('juge sur le temps occupé (champions × trajet), pas sur le nombre seul', async () => {
-    // Un champion seul de la base (300 min) contre deux de A (30 min) : 300 > 60.
+  it('juge sur la durée du voyage, pas sur le nombre de champions', async () => {
+    // Un champion seul de la base (300 min) contre deux de A (30 min).
     const units = [u('x', 10, 'base'), u('a', 5, 'A'), u('b', 5, 'A')];
     const r = (await run(units, false))!;
     expect(r.trips[0]!.units.map((x) => x.id).sort()).toEqual(['a', 'b']);
+  });
+
+  // ⏱️ 2026-10-21, demandé par l'utilisateur : en mode « événements », le facteur le plus
+  // important est la DURÉE la plus courte. Avant, on jugeait le temps occupé (champions ×
+  // trajet) : un champion seul à 80 min battait trois champions à 30 min (80 < 90).
+  it('la durée d’abord : trois champions en 30 min plutôt qu’un seul en 80 min', async () => {
+    const geo2: PlanDeps<T> = {
+      ...deps,
+      tripMin: (_t, us) => Math.max(...us.map((x) => ({ base: 80, A: 30 })[x.origin]!)),
+    };
+    const units = [u('x', 10, 'base'), u('a', 4, 'A'), u('b', 4, 'A'), u('c', 4, 'A')];
+    const r = (await planExpeditions([{ id: 'dur', need: 10, min: 0, xp: 1 }], units, {
+      threshold: 0.9,
+      mode: 'events',
+      maxTeam: 6,
+      deps: geo2,
+    }))!;
+    expect(r.trips[0]!.tripMin).toBe(30);
+  });
+});
+
+/** ⏱️ Chaque membre a SON pas (compétences, équipement, héros) : le groupe va au pas du plus
+ *  lent, sauf si un guide 🧭 l'emmène (tout le monde à 20 min). */
+describe('planificateur — événements : la durée la plus courte, compétences comprises', () => {
+  const pace: Record<string, number> = { S: 100, W: 200, G: 999, H: 150 };
+  const paced: PlanDeps<T> = {
+    ...deps,
+    tripMin: (_t, us) =>
+      us.some((x) => x.id === 'G') ? 20 : Math.max(...us.map((x) => pace[x.id]!)),
+  };
+  const run = (units: PlanUnit[]) =>
+    planExpeditions([{ id: 'lieu', need: 9, min: 0, xp: 1 }], units, {
+      threshold: 0.9,
+      mode: 'events',
+      maxTeam: 6,
+      deps: paced,
+    });
+
+  it('ne remplace pas un membre rapide par un plus faible mais plus LENT', async () => {
+    const r = (await run([u('S', 10), u('W', 9)]))!;
+    expect(r.trips[0]!.units.map((x) => x.id)).toEqual(['S']);
+    expect(r.trips[0]!.tripMin).toBe(100);
+  });
+
+  it('emmène un guide 🧭 qui raccourcit le voyage, même sans besoin de sa force', async () => {
+    const r = (await run([u('S', 10), u('G', 1)]))!;
+    expect(r.trips[0]!.units.map((x) => x.id).sort()).toEqual(['G', 'S']);
+    expect(r.trips[0]!.tripMin).toBe(20);
+  });
+
+  it('laisse le héros s’il ralentit le groupe et que les champions suffisent', async () => {
+    const r = (await run([u('H', 10, 'base', true), u('S', 9)]))!;
+    expect(r.trips[0]!.units.map((x) => x.id)).toEqual(['S']);
   });
 });
 

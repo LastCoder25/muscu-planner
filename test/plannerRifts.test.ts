@@ -30,9 +30,10 @@ describe('planificateur — mode Failles', () => {
     // Base : un fort seul à 30 min. Garnison : deux faibles à 20 min.
     const t = [{ id: 'faille', need: 6, trip: { base: 30, g: 20 } }];
     const units = [u('S', 10, 'base'), u('W1', 3, 'g'), u('W2', 3, 'g')];
-    // Événements (temps champion) : le fort seul (1 × 30 < 2 × 20).
+    // Événements : la durée d'abord depuis le 2026-10-21 (avant, le temps champion gardait le
+    // fort seul, 1 × 30 < 2 × 20) — les deux proches aussi.
     const ev = (await plan(t, units, 'events'))!;
-    expect(ev.trips[0]!.units.map((x) => x.id)).toEqual(['S']);
+    expect(ev.trips[0]!.units.map((x) => x.id).sort()).toEqual(['W1', 'W2']);
     // Failles : les deux proches, on y est plus vite.
     const rf = (await plan(t, units, 'rifts'))!;
     expect(rf.trips[0]!.units.map((x) => x.id).sort()).toEqual(['W1', 'W2']);

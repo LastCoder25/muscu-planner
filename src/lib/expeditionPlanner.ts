@@ -5,8 +5,10 @@
  * moins 90 % par exemple »).
  *
  * Deux optimisations, au choix du joueur :
- * - `events` : le PLUS D'ÉVÉNEMENTS possible avec les effectifs disponibles, puis le MOINS DE
- *   TEMPS (les équipes les plus petites d'abord, à égalité les trajets les plus courts) ;
+ * - `events` : le PLUS D'ÉVÉNEMENTS possible avec les effectifs disponibles, chacun par le
+ *   voyage le plus COURT (2026-10-21, demandé : « le facteur le plus important, c'est la durée
+ *   la plus courte, compétences des champions et du héros comprises ») — à durée égale, la plus
+ *   petite équipe. Avant : le temps occupé (champions × trajet) ;
  * - `xp` : le PLUS D'XP pour les champions, ramenée au temps passé dehors (XP par heure et
  *   par champion engagé) ;
  * - `rifts` (2026-10-15, demandé : « une organisation automatique pour attaquer les failles,
@@ -137,11 +139,10 @@ function score<T>(c: Candidate<T>, mode: PlanMode): number {
   }
   // 🕳️ Failles : le plus PROCHE (le plus court aller-retour), même si l'équipe est plus grande.
   if (mode === 'rifts') return -c.tripMin;
-  // ⏱️ Le TEMPS OCCUPÉ : champions × aller-retour (2026-10-11, signalé : « de très longs trajets
-  // proposés »). Avant, une équipe plus petite passait toujours devant, quel que soit son trajet :
-  // un champion seul 5 h battait deux champions 1 h. Un champion occupé moins longtemps est un
-  // champion de nouveau libre pour l'événement suivant.
-  return -(Math.max(1, c.units.length) * c.tripMin);
+  // ⏱️ Événements : la DURÉE du voyage d'abord (2026-10-21, demandé par l'utilisateur), à
+  // égalité la plus petite équipe. Avant, le temps occupé (champions × trajet) faisait passer
+  // un champion seul à 80 min devant trois champions à 30 min.
+  return -c.tripMin - c.units.length / 1000;
 }
 
 /**
@@ -244,6 +245,12 @@ export async function planExpeditions<T extends { id: string }>(
             }
           }
         }
+        if (mode === 'events') {
+          const q = await quicken(t, picked, w, order, kitFor);
+          if (!q) return null;
+          picked = q.team;
+          w = q.w;
+        }
         const win = w ?? 1;
         const kit = kitFor(picked);
         const c: Candidate<T> = {
@@ -286,6 +293,55 @@ export async function planExpeditions<T extends { id: string }>(
       }
     }
     return best;
+  };
+
+  /**
+   * ⏱️ ÉVÉNEMENTS : RACCOURCIR LE VOYAGE (2026-10-21, demandé par l'utilisateur). Le groupe va
+   * au pas du plus lent, et un champion 🧭 peut l'accélérer : la recherche par la force ne voit
+   * ni l'un ni l'autre. Tant que ça raccourcit le voyage, on essaie d'ÉCHANGER un membre ou
+   * d'AJOUTER quelqu'un du même point de départ (un guide), ou de RETIRER un membre (le héros
+   * qui ralentit), toujours au-dessus du seuil. Le trajet ne coûte rien à calculer : on ne
+   * simule le combat que des équipes plus rapides.
+   */
+  const quicken = async (
+    t: T,
+    start: PlanUnit[],
+    startW: number | null,
+    order: PlanUnit[],
+    kitFor: (team: PlanUnit[]) => string[],
+  ): Promise<{ team: PlanUnit[]; w: number | null } | null> => {
+    let team = start;
+    let w = startW;
+    const tripOf = (x: PlanUnit[]) => deps.tripMin(t, x, kitFor(x));
+    for (let round = 0; round < 4; round++) {
+      const cur = tripOf(team);
+      const alts: PlanUnit[][] = [];
+      if (team.length > 1)
+        for (let i = 0; i < team.length; i++) alts.push(team.filter((_, j) => j !== i));
+      for (const s of order) {
+        if (team.includes(s)) continue;
+        for (let i = 0; i < team.length; i++) alts.push(team.map((x, j) => (j === i ? s : x)));
+        if (team.length < opts.maxTeam) alts.push([...team, s]);
+      }
+      // Les plus courts d'abord, à durée égale les plus petits : le premier qui passe gagne.
+      const faster = alts
+        .map((x) => ({ x, min: tripOf(x) }))
+        .filter((a) => a.min < cur && allowed(t, a.x))
+        .sort((a, b) => a.min - b.min || a.x.length - b.x.length);
+      let moved = false;
+      for (const a of faster) {
+        if (opts.cancelled?.()) return null;
+        const aw = await winOf(t, a.x, kitFor(a.x));
+        if (passes(aw)) {
+          team = a.x;
+          w = aw;
+          moved = true;
+          break;
+        }
+      }
+      if (!moved) break;
+    }
+    return { team, w };
   };
 
   /** ⚔️ Les ordres d'essai d'une attaque combinée : les plus proches d'abord (trajet SANS
@@ -503,12 +559,10 @@ export async function planExpeditions<T extends { id: string }>(
   const rankOf = new Map(targets.map((t, i) => [t.id, i]));
   const urgency = (r: { trips: PlannedTrip<T>[] }) =>
     r.trips.reduce((s, t) => s + (rankOf.get(t.target.id) ?? 0), 0);
-  // 🕳️ Failles : le temps pour y être (Σ aller-retour), pas le temps champion.
+  // ⏱️ Failles et événements : le temps pour y être (Σ aller-retour), pas le temps champion ;
+  // à égalité, le moins de monde engagé.
   const totalMin = (r: { trips: PlannedTrip<T>[] }) =>
-    r.trips.reduce(
-      (s, t) => s + t.tripMin * (mode === 'rifts' ? 1 : Math.max(1, t.units.length)),
-      0,
-    );
+    r.trips.reduce((s, t) => s + t.tripMin + t.units.length / 1000, 0);
   let pick: { trips: PlannedTrip<T>[]; missed: T[] } | null = null;
   for (const order of orders) {
     const r = await assign(order, mode === 'xp');
