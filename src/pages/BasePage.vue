@@ -649,6 +649,32 @@
         {{ pushOn ? 'Désactiver les notifications' : 'Activer les notifications' }}
       </button>
       <div v-if="pushNote" class="p-sub push-note">{{ pushNote }}</div>
+      <!-- 🔕 Type par type (2026-10-21). Rien ne sonne quand l'app est déjà à l'écran. -->
+      <template v-if="pushOn">
+        <div class="p-sub push-hint">
+          Touche un type pour le couper ou le rallumer. Rien ne sonne quand l’app est déjà à
+          l’écran.
+        </div>
+        <div v-for="g in PUSH_GROUPS" :key="g.id" class="push-group">
+          <div class="push-group-title">{{ g.label }}</div>
+          <div class="push-chips">
+            <button
+              v-for="k in pushKindsOf(g.id)"
+              :key="k"
+              type="button"
+              class="push-chip"
+              :class="{ off: pushMuted.includes(k) }"
+              :aria-pressed="!pushMuted.includes(k)"
+              :disabled="pushKindBusy"
+              @click="toggleKindPush(k)"
+            >
+              <span class="push-chip-emo" aria-hidden="true">{{ PUSH_KIND_INFO[k].emo }}</span>
+              {{ PUSH_KIND_INFO[k].label }}
+              <span class="push-chip-state">{{ pushMuted.includes(k) ? 'coupé' : 'actif' }}</span>
+            </button>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- ── Héros à l'infirmerie ── -->
@@ -1095,6 +1121,7 @@ import {
 import { controlDetectBoost, islandMilitiaOf } from '@/lib/controlPoints';
 import { DETECT_FLOOR, islandPerception } from '@/lib/fieldArmy';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
+import { PUSH_GROUPS, PUSH_KIND_INFO, pushKindsOf, type AnyPushKind } from '@/lib/push';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
@@ -1148,9 +1175,30 @@ const siegeReportDetail = computed(() =>
 // 🔔 Notifications. ⚠️ Sur iOS, le push n'existe QUE si l'app a été ajoutée à l'écran
 // d'accueil — d'où le message explicite plutôt qu'un bouton qui ne ferait rien.
 const pushOk = pushSupported();
-const { enabled: pushOn, busy: pushBusy, refresh: pushRefresh, enable, disable } = usePush();
+const {
+  enabled: pushOn,
+  busy: pushBusy,
+  muted: pushMuted,
+  refresh: pushRefresh,
+  enable,
+  disable,
+  loadPrefs,
+  toggleKind,
+} = usePush();
 const pushNote = ref('');
+const pushKindBusy = ref(false);
 void pushRefresh();
+if (auth.user?.id) void loadPrefs(auth.user.id);
+async function toggleKindPush(k: AnyPushKind) {
+  const uid = auth.user?.id;
+  if (!uid || pushKindBusy.value) return;
+  pushKindBusy.value = true;
+  try {
+    if (!(await toggleKind(uid, k))) pushNote.value = '⚠️ Réglage non enregistré. Réessaie.';
+  } finally {
+    pushKindBusy.value = false;
+  }
+}
 /** ⚠️ CHAQUE issue a son message. Un bouton qui échoue en silence est le pire cas :
  *  à la livraison, cliquer ne produisait littéralement RIEN — ni invite, ni erreur.
  *  Les deux causes trouvées : une permission déjà refusée (le navigateur ne
@@ -2085,6 +2133,64 @@ function doHarvest() {
 <style scoped>
 .base-page {
   padding: 0 12px 28px;
+}
+/* 🔕 Notifications type par type : des pastilles à toucher, regroupées. */
+.push-hint {
+  margin-top: 10px;
+}
+.push-group {
+  margin-top: 10px;
+}
+.push-group-title {
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.push-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.push-chip {
+  min-height: 44px;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 22px;
+  border: 1px solid var(--accent, #ffd23f);
+  background: rgba(255, 210, 63, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.push-chip.off {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--dim);
+}
+.push-chip.off .push-chip-emo {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.push-chip-state {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 210, 63, 0.25);
+  color: var(--accent, #ffd23f);
+}
+.push-chip.off .push-chip-state {
+  background: var(--line);
+  color: var(--dim);
+}
+.push-chip:disabled {
+  opacity: 0.7;
 }
 /* En onglet, la page parente porte déjà les gouttières et le défilement. */
 .base-page.in-tab {

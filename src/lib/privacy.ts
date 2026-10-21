@@ -84,7 +84,7 @@ export const DATA_ITEMS: readonly DataItem[] = [
     basis: 'Consentement (tu choisis tes amis ; le classement publie ton pseudo et tes niveaux)',
   },
   {
-    what: 'Abonnement aux notifications (adresse technique du navigateur)',
+    what: 'Abonnement aux notifications (adresse technique du navigateur) et types coupés',
     why: 'T’envoyer les notifications que tu as activées',
     basis: 'Consentement (désactivable depuis la Base)',
   },

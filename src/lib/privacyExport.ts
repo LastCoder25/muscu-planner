@@ -30,6 +30,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: 'shared_challenges', cols: ['created_by', 'invited_user'] },
   { table: 'push_subscriptions', cols: ['user_id'] },
   { table: 'scheduled_pushes', cols: ['user_id'] },
+  { table: 'push_prefs', cols: ['user_id'] },
   { table: 'friend_bosses', cols: ['owner_id'] },
   { table: 'friend_boss_members', cols: ['user_id'] },
   { table: 'friend_boss_hits', cols: ['user_id'] },

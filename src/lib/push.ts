@@ -35,6 +35,55 @@ export const CLIENT_PUSH_KINDS = [
 ] as const;
 type PushKind = (typeof CLIENT_PUSH_KINDS)[number];
 
+/** Les sortes posées par les DÉCLENCHEURS EN BASE (boss entre amis, migr. 0067 → 0108). */
+type ServerPushKind = 'fboss_invite' | 'fboss_joined' | 'fboss_hit' | 'fboss_down' | 'fboss_end';
+export type AnyPushKind = PushKind | ServerPushKind;
+
+/** 🔔 Le réglage « Me prévenir », type par type (2026-10-21, demandé par l'utilisateur).
+ *  ⚠️ `Record` sur TOUTES les sortes : en ajouter une sans la nommer ici casse la
+ *  compilation — un type oublié serait impossible à couper. */
+export const PUSH_KIND_INFO: Record<
+  AnyPushKind,
+  { group: PushGroupId; emo: string; label: string }
+> = {
+  siege: { group: 'base', emo: '🗼', label: 'Armée repérée' },
+  siege_done: { group: 'base', emo: '⚔️', label: 'Assaut résolu' },
+  hero_home: { group: 'voyages', emo: '🧭', label: 'Héros rentré' },
+  party_home: { group: 'voyages', emo: '⚔️', label: 'Équipe rentrée' },
+  control_warn: { group: 'carte', emo: '⚠️', label: 'Point tenu bientôt attaqué' },
+  control_attack: { group: 'carte', emo: '🏰', label: 'Point tenu attaqué' },
+  plunder: { group: 'carte', emo: '🏴‍☠️', label: 'Caravane pillée' },
+  fboss_invite: { group: 'boss', emo: '⚔️', label: 'Un ami demande de l’aide' },
+  fboss_joined: { group: 'boss', emo: '🤝', label: 'Un ami rejoint ton boss' },
+  fboss_hit: { group: 'boss', emo: '⚔️', label: 'Un ami frappe le boss' },
+  fboss_down: { group: 'boss', emo: '🏆', label: 'Boss abattu' },
+  fboss_end: { group: 'boss', emo: '⏳', label: 'Dernières heures du boss' },
+};
+
+export const PUSH_GROUPS = [
+  { id: 'base', label: 'Ta base' },
+  { id: 'voyages', label: 'Retours de voyage' },
+  { id: 'carte', label: 'La carte' },
+  { id: 'boss', label: 'Boss entre amis' },
+] as const;
+type PushGroupId = (typeof PUSH_GROUPS)[number]['id'];
+
+/** Les sortes d'un groupe, dans l'ordre du catalogue. */
+export function pushKindsOf(group: PushGroupId): AnyPushKind[] {
+  return (Object.keys(PUSH_KIND_INFO) as AnyPushKind[]).filter(
+    (k) => PUSH_KIND_INFO[k].group === group,
+  );
+}
+
+/** Coupe ou rallume une sorte ; rend une liste triée, sans doublon ni sorte inconnue
+ *  (une préférence laissée par une ancienne version ne doit pas traîner). */
+export function toggleMuted(muted: readonly string[], kind: AnyPushKind): AnyPushKind[] {
+  const set = new Set(muted.filter((k): k is AnyPushKind => k in PUSH_KIND_INFO));
+  if (set.has(kind)) set.delete(kind);
+  else set.add(kind);
+  return [...set].sort();
+}
+
 /** 🏰 Le rappel avant l'attaque d'un point tenu (2026-09-29, demandé par l'utilisateur) :
  *  10 min — de quoi ouvrir l'app et envoyer un renfort proche, pas de quoi planifier. */
 export const CONTROL_WARN_MS = 10 * 60_000;
@@ -119,10 +168,16 @@ function heures(ms: number): string {
  * seconde où le serveur la voit, donc une notification pour un événement révolu — et,
  * l'app replanifiant à chaque ouverture, une par ouverture.
  */
-export function planPushes(ctx: PushContext, now: number): PushPlan[] {
+export function planPushes(
+  ctx: PushContext,
+  now: number,
+  muted: readonly string[] = [],
+): PushPlan[] {
   const out: PushPlan[] = [];
+  // 🔕 Une sorte coupée n'est pas programmée, et la synchro efface sa ligne en attente
+  // (le garde en base, migr. 0110, la refuserait de toute façon).
   const add = (p: PushPlan) => {
-    if (p.sendAt > now) out.push(p);
+    if (p.sendAt > now && !muted.includes(p.kind)) out.push(p);
   };
 
   const b = ctx.base;

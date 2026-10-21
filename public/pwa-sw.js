@@ -35,19 +35,34 @@ self.addEventListener('push', (event) => {
     d = {};
   }
   event.waitUntil(
-    self.registration.showNotification(d.title || 'Muscu', {
-      body: d.body || 'Il se passe quelque chose dans ton aventure.',
-      icon: '/icons/pwa-192.png',
-      badge: '/icons/pwa-192.png',
-      // ⚠️ Le `tag` REMPLACE une notification de même nature au lieu d'en empiler une
-      // seconde : après trois jours d'absence, on ne veut pas dérouler trois alertes
-      // de convoi. `renotify` fait quand même vibrer pour la plus récente.
-      tag: d.tag || d.url || 'muscu',
-      renotify: true,
-      data: { url: d.url || '/' },
-    }),
+    (async () => {
+      // 🔕 App OUVERTE et à l'écran : le joueur voit déjà le retour, l'attaque, la caravane
+      // (2026-10-21, demandé par l'utilisateur) — on n'affiche rien.
+      if (await appOnScreen()) return;
+      await self.registration.showNotification(d.title || 'Muscu', {
+        body: d.body || 'Il se passe quelque chose dans ton aventure.',
+        icon: '/icons/pwa-192.png',
+        badge: '/icons/pwa-192.png',
+        // ⚠️ Le `tag` REMPLACE une notification de même nature au lieu d'en empiler une
+        // seconde : après trois jours d'absence, on ne veut pas dérouler trois alertes
+        // de convoi. `renotify` fait quand même vibrer pour la plus récente.
+        tag: d.tag || d.url || 'muscu',
+        renotify: true,
+        data: { url: d.url || '/' },
+      });
+    })(),
   );
 });
+
+/* Une fenêtre de l'app est-elle VISIBLE ? ⚠️ Pas seulement « ouverte » : une app laissée
+   en arrière-plan doit toujours prévenir. ⚠️ Safari (iPhone, Mac) retire l'abonnement à
+   qui reçoit des push sans rien afficher : là, on garde la notification. Chrome, lui,
+   n'impose rien quand une fenêtre du site est au premier plan. */
+async function appOnScreen() {
+  if (/iPhone|iPad|Macintosh/.test(self.navigator.userAgent || '')) return false;
+  const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  return all.some((w) => w.visibilityState === 'visible');
+}
 
 /* Taper la notification ouvre l'app SUR LE BON ÉCRAN — et réutilise l'onglet déjà
    ouvert plutôt que d'en empiler un nouveau à chaque fois.
