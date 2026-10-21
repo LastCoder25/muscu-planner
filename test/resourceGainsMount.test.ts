@@ -74,4 +74,22 @@ describe('ResourceGains — les « +N » sous le plateau', () => {
     const live = host.querySelectorAll('.rg:not(.rg-leave-active) .rg-chip');
     expect(live.length).toBe(0);
   });
+  it('le mana non plus (comme l’or), chacun avec sa propre heure', async () => {
+    const { char, props, host } = await setup();
+    props.ready = true;
+    await nextTick();
+    char.row = { ...char.row, mana: 20 };
+    await nextTick();
+    await nextTick();
+    expect(host.textContent ?? '').toContain('💠');
+    (host.querySelector('.rg-chips') as HTMLElement).click();
+    await nextTick();
+    // Une pierre de mana de plus, puis de l'or (jamais annoncé) : l'or sort, pas le mana.
+    char.row = { ...char.row, mana: 21, gold: 1500 };
+    await nextTick();
+    await nextTick();
+    const live = [...host.querySelectorAll('.rg:not(.rg-leave-active) .rg-chip')];
+    expect(live.map((c) => c.textContent ?? '').join(' ')).not.toContain('💠');
+    expect(live.map((c) => c.textContent ?? '').join(' ')).toContain('🪙');
+  });
 });

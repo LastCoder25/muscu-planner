@@ -34,10 +34,12 @@ import { useCharacterStore } from '@/stores/character';
 import { compactNumber } from '@/lib/compactNumber';
 import { emptySeals, sealsSummary } from '@/lib/ascension';
 import {
-  gateGold,
+  GATED_GAINS,
+  gateGain,
   mergeGains,
   resourceGains,
-  type GoldGate,
+  type GainGate,
+  type GatedGain,
   type ResourceGain,
 } from '@/lib/resourceGains';
 import type { ResourceSnapshot } from '@/lib/resourceGains';
@@ -89,18 +91,21 @@ const gains = ref<ResourceGain[]>([]);
 let last: ResourceSnapshot | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-// 🪙 L'or est retenu et ne s'annonce qu'une fois par heure (`gateGold`). La dernière annonce
-// est retenue par appareil : sinon chaque remontage de l'écran la ré-autoriserait.
-const GOLD_KEY = 'muscu:gains:gold-at';
-function readShownAt(): number {
+// 🪙💠 L'or et le mana sont retenus et ne s'annoncent qu'une fois par heure chacun
+// (`gateGain`). La dernière annonce est retenue par appareil : sinon chaque remontage de
+// l'écran la ré-autoriserait. ⚠️ La clé de l'or garde son nom d'avant (v1.229.1).
+const gateKey = (id: GatedGain) => `muscu:gains:${id}-at`;
+function readShownAt(id: GatedGain): number {
   try {
-    const v = Number(localStorage.getItem(GOLD_KEY));
+    const v = Number(localStorage.getItem(gateKey(id)));
     return Number.isFinite(v) ? v : 0;
   } catch {
     return 0;
   }
 }
-let goldGate: GoldGate = { held: 0, shownAt: readShownAt() };
+const gates = Object.fromEntries(
+  GATED_GAINS.map((id) => [id, { held: 0, shownAt: readShownAt(id) }]),
+) as Record<GatedGain, GainGate>;
 
 // ⚠️ La référence ne se pose qu'une fois TOUT chargé (ligne ET XP de fond), et sans rien
 // annoncer : ce qu'on avait déjà en ouvrant n'est pas un gain.
@@ -113,17 +118,21 @@ watch(
       last = snap;
       return;
     }
-    const gated = gateGold(resourceGains(last, snap), goldGate, Date.now());
+    let add = resourceGains(last, snap);
     last = snap;
-    if (gated.gate.shownAt !== goldGate.shownAt) {
-      try {
-        localStorage.setItem(GOLD_KEY, String(gated.gate.shownAt));
-      } catch {
-        /* stockage indisponible : l'heure reste en mémoire */
+    const now = Date.now();
+    for (const id of GATED_GAINS) {
+      const gated = gateGain(add, id, gates[id], now);
+      if (gated.gate.shownAt !== gates[id].shownAt) {
+        try {
+          localStorage.setItem(gateKey(id), String(gated.gate.shownAt));
+        } catch {
+          /* stockage indisponible : l'heure reste en mémoire */
+        }
       }
+      gates[id] = gated.gate;
+      add = gated.show;
     }
-    goldGate = gated.gate;
-    const add = gated.show;
     if (!add.length) return;
     gains.value = mergeGains(gains.value, add);
     if (timer) clearTimeout(timer);

@@ -41,30 +41,36 @@ export function mergeGains(acc: ResourceGain[], add: ResourceGain[]): ResourceGa
   return out;
 }
 
-/** ⚠️ L'OR NE S'ANNONCE QU'UNE FOIS PAR HEURE (demandé : « il revient régulièrement et ça
- *  gêne l'affichage ») : les mines et lieux fixes le créditent à chaque récolte, et le
- *  bandeau réapparaissait sans cesse pour lui. Il s'ACCUMULE en silence (`held`), puis sort
- *  d'un bloc avec les autres gains dès qu'une heure a passé depuis sa dernière annonce. */
-export const GOLD_GAIN_EVERY_MS = 3_600_000;
+/** ⚠️ L'OR ET LE MANA NE S'ANNONCENT QU'UNE FOIS PAR HEURE (demandé pour l'or, v1.229.1 :
+ *  « il revient régulièrement et ça gêne l'affichage » ; puis pour le mana, v1.259.0 :
+ *  « comme l'or, n'affiche pas la production à chaque pierre de mana »). Mines, sources et
+ *  lieux fixes les créditent à chaque récolte, et le bandeau réapparaissait sans cesse pour
+ *  eux. Chacun s'ACCUMULE en silence (`held`), puis sort d'un bloc avec les autres gains dès
+ *  qu'une heure a passé depuis SA dernière annonce. */
+export const GATED_GAINS = ['gold', 'mana'] as const;
+export type GatedGain = (typeof GATED_GAINS)[number];
+export const GAIN_GATE_MS = 3_600_000;
 
-export interface GoldGate {
-  /** Or retenu, pas encore annoncé. */
+export interface GainGate {
+  /** Quantité retenue, pas encore annoncée. */
   held: number;
-  /** Dernière annonce d'or (ms), 0 = jamais. */
+  /** Dernière annonce de cette ressource (ms), 0 = jamais. */
   shownAt: number;
 }
 
-/** Filtre l'or des gains : le retient, ou l'annonce (cumulé) si l'heure est passée. */
-export function gateGold(
+/** Filtre UNE ressource des gains : la retient, ou l'annonce (cumulée) si l'heure est passée.
+ *  Les autres passent telles quelles. */
+export function gateGain(
   add: ResourceGain[],
-  gate: GoldGate,
+  id: GatedGain,
+  gate: GainGate,
   now: number,
-): { show: ResourceGain[]; gate: GoldGate } {
-  const gold = add.find((g) => g.id === 'gold');
-  const rest = add.filter((g) => g.id !== 'gold');
-  const held = gate.held + (gold?.n ?? 0);
-  if (held > 0 && now - gate.shownAt >= GOLD_GAIN_EVERY_MS) {
-    return { show: [...rest, { id: 'gold', n: held }], gate: { held: 0, shownAt: now } };
+): { show: ResourceGain[]; gate: GainGate } {
+  const hit = add.find((g) => g.id === id);
+  const rest = add.filter((g) => g.id !== id);
+  const held = gate.held + (hit?.n ?? 0);
+  if (held > 0 && now - gate.shownAt >= GAIN_GATE_MS) {
+    return { show: [...rest, { id, n: held }], gate: { held: 0, shownAt: now } };
   }
   return { show: rest, gate: { held, shownAt: gate.shownAt } };
 }
