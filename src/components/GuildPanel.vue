@@ -25,6 +25,19 @@
 
       <template v-else>
         <template v-if="guildTab === 'roster'">
+          <!-- ⚔️ LA PUISSANCE DE TOUTE LA COLLECTION, EN TÊTE (2026-10-21, demandé par
+               l'utilisateur : « voir un peu l'avancement »). La somme EXACTE de ce que
+               chaque portrait affiche, même arbitre (`powerOf`), même échelle (`showK`). -->
+          <div v-if="roster.length" class="roster-power">
+            <span class="rp-label">Puissance totale</span>
+            <span class="rp-value font-display"
+              >⚔️ <CountUp :value="rosterPowerTotal" :format="(n: number) => fmtChampPow(n, showK)"
+            /></span>
+            <span class="rp-sub"
+              >{{ roster.length }} champion{{ roster.length > 1 ? 's' : '' }} · moyenne
+              {{ fmtChampPow(rosterPowerTotal / roster.length, showK) }}</span
+            >
+          </div>
           <!-- ⚠️ Le RECRUTEMENT et la PROMOTION ont disparu avec l'arbre de classes
              (v0.951) : on n'élève plus une recrue, on INVOQUE un champion et ses doublons
              le réveillent.
@@ -991,6 +1004,7 @@ import {
 import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 import { adventurerPowers, adventurerGearPower, autoAdvGear, equipThenMerge } from '@/lib/raid';
 import {
+  champPowSum,
   champShowK,
   champStat,
   fmtChampDelta,
@@ -1103,6 +1117,8 @@ const autoPreview = computed(() => {
   const pending = [...gearPending.value.values()].reduce((n, slots) => n + slots.length, 0);
   return { changes, pending };
 });
+/** ⚔️ Le bandeau en tête du vivier : la somme de ce que les portraits AFFICHENT. */
+const rosterPowerTotal = computed(() => champPowSum(roster.value.map(powerOf), showK.value));
 /** Puissance totale du vivier — la somme de ce que chaque portrait affiche. */
 const rosterPower = () =>
   [...adventurerPowers(char.advList, compCtx.value).values()].reduce((s, p) => s + p, 0);
@@ -2504,6 +2520,33 @@ function leftOf(at: number): string {
 .rs-note {
   margin-top: 8px;
   font-size: 12px;
+  color: var(--dim);
+}
+.roster-power {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent, #ffd23f) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent, #ffd23f) 10%, var(--surface));
+}
+.rp-label {
+  width: 100%;
+  font-size: 11.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.rp-value {
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--accent, #ffd23f);
+}
+.rp-sub {
+  font-size: 12.5px;
   color: var(--dim);
 }
 .asc-banner {

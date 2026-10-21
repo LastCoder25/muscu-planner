@@ -1937,6 +1937,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // le second nombre est DÉRIVÉ de `engageCap`, jamais une copie de sa formule.
     expect(out).toContain(String(ROW.adventurers.length));
     expect(out).toContain(`${engageCap(3)} engagés à la fois`);
+    // ⚔️ La puissance de toute la collection, en tête (v1.255.0).
+    expect(out).toMatch(/class="roster-power".*Puissance totale/s);
+    expect(out).toMatch(new RegExp(`${ROW.adventurers.length} champions\\s*· moyenne`));
     // 🪬 Le rappel des runes se voit AVANT d'ouvrir un champion (bascule des runes).
     expect(out).toContain('3 runes à ouvrir');
     expect(out).toContain('1 compétence');

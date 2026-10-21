@@ -58,6 +58,15 @@ export function fmtChampPow(n: number, k: number): string {
   return fmtPow(n * k);
 }
 
+/** ⚔️ La puissance de toute une collection, telle que l'écran l'additionne : la somme des
+ *  valeurs que chaque portrait AFFICHE (arrondies à l'échelle `k`), rendue en unités brutes
+ *  pour `fmtChampPow`. ⚠️ Pas la somme brute : deux portraits à « 7 » (6,5 chacun) se
+ *  lisaient « 13 » au total. */
+export function champPowSum(powers: readonly number[], k: number): number {
+  if (k <= 0) return 0;
+  return powers.reduce((s, p) => s + Math.round(p * k), 0) / k;
+}
+
 /** L'écart signé entre deux puissances de champion, à l'échelle `k`. */
 export function fmtChampDelta(cur: number, next: number, k: number): string {
   return fmtDelta(cur * k, next * k);

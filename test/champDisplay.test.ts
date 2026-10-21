@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  champPowSum,
+  fmtChampPow,
   CHAMP_SHOW_SHARE,
   champShowK,
   champStat,
@@ -21,7 +23,9 @@ describe('🏅 l’échelle d’affichage des champions', () => {
   it('un champion à ton niveau s’affiche à 40 % du héros NU (dès que l’échelle dépasse 1)', () => {
     for (const L of [10, 30, 50, 80, 100]) {
       const shown = champAt(L) * champShowK(L);
-      expect(shown / combatPower(refFighter(L)), `niveau ${L}`).toBeGreaterThanOrEqual(CHAMP_SHOW_SHARE - 1e-9);
+      expect(shown / combatPower(refFighter(L)), `niveau ${L}`).toBeGreaterThanOrEqual(
+        CHAMP_SHOW_SHARE - 1e-9,
+      );
     }
   });
 
@@ -80,7 +84,22 @@ describe('🗡️ les stats d’une pièce en valeur réelle', () => {
   });
 
   it('la seconde stat suit la même règle', () => {
-    const two = { effect: { type: 'damage_pct', value: 1 }, effect2: { type: 'crit_pct', value: 0.5 }, level: 1 } as Parameters<typeof realGearTexts>[0];
+    const two = {
+      effect: { type: 'damage_pct', value: 1 },
+      effect2: { type: 'crit_pct', value: 0.5 },
+      level: 1,
+    } as Parameters<typeof realGearTexts>[0];
     expect(realGearTexts(two, base, 1)).toHaveLength(2);
+  });
+});
+
+describe('champPowSum : le total du Panthéon égale la somme des portraits', () => {
+  it('deux portraits à « 7 » (6,5 chacun) font 14, pas 13', () => {
+    expect(fmtChampPow(0.65, 10)).toBe('7');
+    expect(fmtChampPow(champPowSum([0.65, 0.65], 10), 10)).toBe('14');
+  });
+  it('vide → 0 ; échelle nulle → 0', () => {
+    expect(champPowSum([], 10)).toBe(0);
+    expect(champPowSum([3], 0)).toBe(0);
   });
 });
