@@ -256,13 +256,17 @@ describe('donner à un champion', () => {
 
   it('compétence déjà portée : les niveaux s’additionnent, refus au-delà de 5', () => {
     const b = bank(0, [sk('a', 'crit', 2)]);
+    expect(giveSkill(b, 'a', c([{ id: 'crit', level: 2 }]))!.skills).toEqual([
+      { id: 'crit', level: 4 },
+    ]);
+    // 🌈 v1.253.0 : arrivée au niveau 5, elle s'élève aussitôt (violette → dorée, Nv 1).
     expect(giveSkill(b, 'a', c([{ id: 'crit', level: 3 }]))!.skills).toEqual([
-      { id: 'crit', level: 5 },
+      { id: 'crit', level: 1, up: 1 },
     ]);
     expect(giveBlocker(b, 'a', c([{ id: 'crit', level: 4 }]))).toBe('over');
   });
 
-  it('champion plein : il faut choisir quoi remplacer, l’ancienne est perdue', () => {
+  it('champion plein : il faut choisir quoi remplacer (l’ancienne revient au stock, cf. skillTakeBack)', () => {
     const b = bank(0, [sk('a', 'crit', 2)]);
     const full = c(
       [

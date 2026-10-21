@@ -227,6 +227,26 @@ export function riseSkill<T extends SkillRef>(s: T): T | null {
   return { ...s, level: 1, up: riseOf(s) + 1 };
 }
 
+/**
+ * 🌈 SUR UN CHAMPION, LE NIVEAU 5 S'ÉLÈVE DE LUI-MÊME (décision de l'utilisateur, 2026-10-21 :
+ * « quand on passe une compétence d'un champion au lvl 5, elle passe à la rareté au-dessus au
+ * lvl 1 »). Toute compétence d'un champion au niveau 5 tout juste (ni surchargée ni dorée)
+ * devient la couleur au-dessus, niveau 1. ⚠️ Une surchargée (5⚡) ne bouge pas : c'est le
+ * travail du lapidaire, l'élever la ferait baisser ; elle garde le bouton 🌈. Au stock, rien
+ * n'est automatique. `rose` : les compétences élevées (pour l'animation).
+ */
+export function autoRise<T extends SkillRef>(skills: readonly T[]): { skills: T[]; rose: T[] } {
+  const rose: T[] = [];
+  const out = skills.map((s) => {
+    if (Math.floor(s.level) !== SKILL_MAX_LEVEL) return s;
+    const next = riseSkill(s);
+    if (!next) return s;
+    rose.push(next);
+    return next;
+  });
+  return { skills: out, rose };
+}
+
 /** Le niveau d'une compétence tel qu'on l'ÉCRIT : « 3 », ou « 5⚡ » si elle est surchargée. */
 export function skillLevelTag(level: number): string {
   return isOverclocked(level) ? `${SKILL_MAX_LEVEL}⚡` : String(Math.floor(level));

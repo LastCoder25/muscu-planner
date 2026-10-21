@@ -39,18 +39,29 @@
           >
             🌈<small>{{ RUNE_INFO[riseTier(s)].emoji }}</small>
           </button>
+          <!-- ↩️ La rendre au stock, niveaux et couleur gardés. -->
+          <button
+            type="button"
+            class="srp-back"
+            :disabled="busy"
+            :aria-label="`Récupérer ${SKILLS[s.id].name} au stock`"
+            title="Récupérer au stock"
+            @click="askBack(s)"
+          >
+            ↩️
+          </button>
         </template>
         <span v-else class="srp-free">Emplacement libre</span>
       </div>
     </div>
 
-    <!-- 🪬 Depuis la bascule des runes multicolores, on ne pose plus rien ICI : une rune
-         s'ouvre au Panthéon, et la compétence se DONNE depuis la tuile Runes. Une compétence
-         donnée ne revient jamais au stock — il n'y a pas de bouton « retirer ». -->
+    <!-- 🪬 On ne pose rien ICI : la compétence se DONNE depuis la tuile Runes du Panthéon.
+         ↩️ la rend au stock (v1.253.0). -->
     <p class="srp-note">
       Donne-lui des compétences depuis la tuile 🪬 Runes du Panthéon<template v-if="stock">
         ({{ stock }} au stock)</template
-      >.
+      >. Au niveau 5, une compétence passe d’elle-même à la couleur au-dessus 🌈 ; ↩️ la rend au
+      stock.
     </p>
   </div>
 </template>
@@ -108,6 +119,35 @@ function askRise(s: ChampSkill) {
     cancel: { label: 'Annuler', flat: true },
     ok: { label: '🌈 Élever', color: 'positive' },
   }).onOk(() => void rise(s));
+}
+
+/** ↩️ Rendre au stock : sans question, sauf une surchargée (le stock ne garde pas le ⚡). */
+function askBack(s: ChampSkill) {
+  if (!isOverclocked(s.level)) return void takeBack(s);
+  $q.dialog({
+    title: `Récupérer ${SKILLS[s.id].name} ?`,
+    message: `Elle revient au stock au niveau ${SKILL_MAX_LEVEL}, sans sa surcharge ⚡.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: '↩️ Récupérer', color: 'negative' },
+  }).onOk(() => void takeBack(s));
+}
+
+async function takeBack(s: ChampSkill) {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  busy.value = true;
+  try {
+    const r = await char.takeBackRuneSkill(uid, props.adv.id, s.id);
+    if (!r.ok) throw new Error(r.reason);
+    $q.notify({
+      type: 'positive',
+      message: `↩️ ${SKILLS[s.id].name} ${RUNE_INFO[skillTier(r.skill)].emoji} Nv ${r.skill.level} revient au stock`,
+    });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : String(e) });
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function rise(s: ChampSkill) {
@@ -173,6 +213,21 @@ async function rise(s: ChampSkill) {
   justify-content: center;
   gap: 1px;
   cursor: pointer;
+}
+.srp-back {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.srp-back:disabled {
+  opacity: 0.5;
 }
 .srp-rise small {
   font-size: 11px;

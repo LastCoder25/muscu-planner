@@ -35,7 +35,7 @@ import {
   type DefenseStructure,
 } from '@/lib/raid';
 import { syncChampionName, advAwaken, advChampion, type Adventurer } from '@/lib/adventurers';
-import { normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
+import { autoRise, normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
 import { migrateLegacyRunes, normalizeRuneBank, type RuneBank } from '@/lib/runeBank';
 import { normalizeAdvGearState, type AdvGearState } from '@/lib/advGear';
 import { normalizeParties, type ActiveParty } from '@/lib/party';
@@ -277,7 +277,18 @@ export function normalizeCharacterRow(r: CharacterRow): {
       return rest as unknown as Adventurer;
     });
     refunded = mig.refunded;
-  } else r.runes = normalizeRuneBank(r.runes);
+  } else {
+    r.runes = normalizeRuneBank(r.runes);
+    // 🌈 RATTRAPAGE (v1.253.0) : depuis que le niveau 5 s'élève de lui-même chez un champion
+    // (`autoRise`), les Nv 5 déjà posés passent au Nv 1 de la couleur au-dessus. ⚠️ APRÈS la
+    // bascule des runes (elle rembourse les compétences d'avant à LEUR niveau). En mémoire ;
+    // la prochaine écriture des champions l'inscrit en base (idempotent d'ici là).
+    r.adventurers = r.adventurers.map((a) => {
+      if (!a.skills?.length) return a;
+      const up = autoRise(a.skills);
+      return up.rose.length ? { ...a, skills: up.skills } : a;
+    });
+  }
   r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
   r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0090
   if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)

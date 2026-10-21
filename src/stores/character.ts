@@ -271,6 +271,7 @@ import {
 import {
   RISE_BLOCK_LABEL,
   RUNE_PLACE_OK,
+  SKILL_MAX_LEVEL,
   riseBlocker,
   riseSkill,
   type ChampSkill,
@@ -294,6 +295,7 @@ import {
   giveBlocker,
   giveKind,
   giveSkill,
+  takeBackSkill,
   openBlocker,
   openRunes,
   rollPlaceRunes,
@@ -1125,7 +1127,16 @@ export const useCharacterStore = defineStore('character', () => {
     skillUid: string,
     advId: string,
     replaceIndex: number | null = null,
-  ): Promise<{ ok: false; reason: string } | { ok: true; kind: GiveKind; level: number }> {
+  ): Promise<
+    | { ok: false; reason: string }
+    | {
+        ok: true;
+        kind: GiveKind;
+        level: number;
+        rose: ChampSkill[];
+        back: StockSkill | null;
+      }
+  > {
     const cur = row.value;
     if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
     const advs = cur.adventurers ?? [];
@@ -1141,7 +1152,34 @@ export const useCharacterStore = defineStore('character', () => {
       runes: out.bank,
       adventurers: advs.map((a) => (a.id === advId ? { ...a, skills: out.skills } : a)),
     });
-    return { ok: true, kind, level: out.skills.find((s) => s.id === sk.id)?.level ?? sk.level };
+    // 🌈 Le niveau ATTEINT par le don (5 si elle s'est élevée dans la foulée : `rose`).
+    const level = out.rose.some((s) => s.id === sk.id)
+      ? SKILL_MAX_LEVEL
+      : (out.skills.find((s) => s.id === sk.id)?.level ?? sk.level);
+    return { ok: true, kind, level, rose: out.rose, back: out.back };
+  }
+
+  /** ↩️ RÉCUPÈRE une compétence d'un champion : elle revient au stock, niveaux et couleur
+   *  gardés. ⚠️ Stock et champion dans la MÊME écriture. Les heures du lapidaire déjà
+   *  gardées sur elle (`lapisHours`) restent sur le champion. */
+  async function takeBackRuneSkill(
+    userId: string,
+    advId: string,
+    id: SkillId,
+  ): Promise<{ ok: false; reason: string } | { ok: true; skill: StockSkill }> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    const advs = cur.adventurers ?? [];
+    const adv = advs.find((a) => a.id === advId);
+    if (!adv) return { ok: false, reason: 'champion introuvable' };
+    const out = takeBackSkill(cur.runes, advChampionSlots(adv).skills, id);
+    if (!out) return { ok: false, reason: 'compétence introuvable' };
+    await persist(userId, {
+      runes: out.bank,
+      adventurers: advs.map((a) => (a.id === advId ? { ...a, skills: out.skills } : a)),
+    });
+    return { ok: true, skill: out.skill };
   }
 
   /** 🗓️ Récupère les tickets des paliers atteints (`earned`, au total de la semaine) moins ceux
@@ -7054,6 +7092,7 @@ export const useCharacterStore = defineStore('character', () => {
     riseRuneSkill,
     riseChampionSkill,
     giveRuneSkill,
+    takeBackRuneSkill,
     row,
     loaded,
     fetchMine,

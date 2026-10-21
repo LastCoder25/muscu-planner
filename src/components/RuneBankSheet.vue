@@ -69,7 +69,8 @@
         <template v-if="replaceFor">
           <div class="rb-sec">Remplacer chez {{ replaceFor.name }}</div>
           <p class="rb-note">
-            Toutes ses places sont prises. La compétence remplacée est perdue, avec ses niveaux.
+            Toutes ses places sont prises. La compétence remplacée revient au stock, avec ses
+            niveaux.
           </p>
           <div class="rb-list">
             <button
@@ -207,10 +208,12 @@
           </div>
 
           <p class="rb-note">
-            Une compétence donnée ne revient jamais au stock. Les exemplaires d’une même compétence
-            se fusionnent : leurs niveaux s’additionnent ({{ SKILL_MAX_LEVEL }} au plus), de quoi
-            préparer une compétence haut niveau pour ton prochain champion. Au niveau
-            {{ SKILL_MAX_LEVEL }}, elle s’élève à la couleur au-dessus 🌈.
+            Une compétence donnée se récupère depuis la fiche du champion (↩️). Les exemplaires
+            d’une même compétence se fusionnent : leurs niveaux s’additionnent ({{
+              SKILL_MAX_LEVEL
+            }}
+            au plus), de quoi préparer une compétence haut niveau pour ton prochain champion. Au
+            niveau {{ SKILL_MAX_LEVEL }}, elle s’élève à la couleur au-dessus 🌈.
           </p>
         </template>
       </template>
@@ -573,6 +576,8 @@ function doGive(adv: Adventurer, replaceIndex: number | null) {
     const r = await char.giveRuneSkill(uid, s.uid, adv.id, replaceIndex);
     if (!r.ok) throw new Error(r.reason);
     gameFx.celebrateRune(r.kind, id, adv.name, r.level, up);
+    // 🌈 Arrivée au niveau 5 chez lui : elle s'élève aussitôt (`autoRise`), on le montre.
+    for (const k of r.rose) gameFx.celebrateRune('rise', k.id, adv.name, 1, riseOf(k));
     back();
   });
 }
@@ -591,15 +596,15 @@ function give(r: GiveRow) {
   doGive(r.adv, null);
 }
 
-/** ⚠️ Le remplacement DIT ce qui est perdu avant de le faire. */
+/** ⚠️ Le remplacement DIT ce qui part avant de le faire (au stock, niveaux gardés). */
 function confirmReplace(adv: Adventurer, index: number) {
   const old = adv.skills?.[index];
   if (!old) return;
   $q.dialog({
     title: `Remplacer ${SKILLS[old.id].name} ${RUNE_INFO[skillTier(old)].emoji} niveau ${skillLevelTag(old.level)} ?`,
-    message: `${adv.name} perd ${SKILLS[old.id].name} et ses niveaux. Elle ne revient pas au stock.`,
+    message: `${SKILLS[old.id].name} quitte ${adv.name} et revient au stock, avec ses niveaux.`,
     cancel: true,
-    ok: { label: 'Remplacer', color: 'negative' },
+    ok: { label: 'Remplacer', color: 'primary' },
     // ⚠️ La même compétence dans une autre couleur prend SA place : pas d'index à passer.
   }).onOk(() => doGive(adv, old.id === sel.value?.id ? null : index));
 }

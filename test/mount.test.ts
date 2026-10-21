@@ -3644,6 +3644,9 @@ describe('🪬 SkillRunesPanel', () => {
     expect(out.match(/class="srp-rise/g)?.length).toBe(1);
     expect(out).toContain('srp-rise t-blue');
     expect(out).toMatch(/srp-slot t-gold[^>]*>[\s\S]*?Critique/);
+    // ↩️ v1.253.0 : chaque compétence posée se récupère au stock.
+    expect(out.match(/class="srp-back/g)?.length).toBe(2);
+    expect(out).toContain('Récupérer Vitesse au stock');
   }, 30_000);
 });
 

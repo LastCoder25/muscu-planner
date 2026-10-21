@@ -16,6 +16,7 @@
 import { mulberry32, seedOf } from './combat';
 import {
   RUNE_TIERS,
+  autoRise,
   SKILLS,
   SKILL_MAX_LEVEL,
   RUNE_PLACE,
@@ -507,7 +508,7 @@ export function riseStockSkill(
 // ── 🎁 DONNER À UN CHAMPION (suite) ─────────────────────────────────────────────────────
 
 /** Ce que la compétence ferait à ce champion. `swap` : il la porte déjà, dans une AUTRE
- *  couleur — elle prend sa place (la sienne est perdue avec ses niveaux). */
+ *  couleur — elle prend sa place (la sienne revient au stock). */
 export type GiveKind = 'new' | 'stack' | 'replace' | 'swap';
 
 export type GiveBlock = 'missing' | 'over' | 'full';
@@ -561,27 +562,77 @@ export function giveBlocker(
   return null;
 }
 
-/** Donne `uid` au champion : rend le stock sans lui et les compétences du champion. La
- *  compétence remplacée (s'il y en a une) est PERDUE avec ses niveaux. `null` si refusé. */
+/** Un `uid` de stock encore libre pour une compétence REVENUE d'un champion (`rb1`, `rb2`…) :
+ *  jamais `sk<n>`, réservé aux ouvertures (`openRune`). */
+function freshUid(bank: RuneBank): string {
+  const used = new Set(bank.skills.map((s) => s.uid));
+  let k = 1;
+  while (used.has(`rb${k}`)) k++;
+  return `rb${k}`;
+}
+
+/** Remet au stock une compétence qu'un champion portait (couleur gardée). ⚠️ Le stock ne
+ *  connaît pas la surcharge : une 5⚡ y revient au niveau 5. */
+function backToStock(bank: RuneBank, s: ChampSkill): { bank: RuneBank; skill: StockSkill } {
+  const skill = withRise(
+    { uid: freshUid(bank), id: s.id, level: Math.min(SKILL_MAX_LEVEL, Math.floor(s.level)) },
+    s.up,
+  );
+  return { bank: { ...bank, skills: [...bank.skills, skill] }, skill };
+}
+
+/** Donne `uid` au champion : rend le stock sans lui et les compétences du champion.
+ *  ⚠️ La compétence remplacée (place pleine, ou la même dans une autre couleur) REVIENT AU
+ *  STOCK avec ses niveaux (`back`, décision de l'utilisateur, 2026-10-21 ; avant : perdue).
+ *  🌈 Une compétence qui atteint le niveau 5 chez lui s'élève aussitôt (`autoRise`) : `rose`.
+ *  `null` si refusé. */
 export function giveSkill(
   bank: RuneBank,
   uid: string,
   c: ChampionSlots,
   replaceIndex: number | null = null,
-): { bank: RuneBank; skills: ChampSkill[] } | null {
+): {
+  bank: RuneBank;
+  skills: ChampSkill[];
+  back: StockSkill | null;
+  rose: ChampSkill[];
+} | null {
   if (giveBlocker(bank, uid, c, replaceIndex)) return null;
   const sk = bank.skills.find((s) => s.uid === uid)!;
   const kind = giveKind(c, sk);
   const cur = c.skills.map((s) => ({ ...s }));
-  const skills =
+  const old =
+    kind === 'swap'
+      ? cur.find((s) => s.id === sk.id)!
+      : kind === 'replace'
+        ? cur[replaceIndex!]!
+        : null;
+  const placed =
     kind === 'stack'
       ? cur.map((s) => (s.id === sk.id ? { ...s, level: s.level + sk.level } : s))
-      : kind === 'swap'
-        ? cur.map((s) => (s.id === sk.id ? carried(sk) : s))
-        : kind === 'new'
-          ? [...cur, carried(sk)]
-          : cur.map((s, i) => (i === replaceIndex ? carried(sk) : s));
-  return { bank: { ...bank, skills: bank.skills.filter((s) => s.uid !== uid) }, skills };
+      : kind === 'new'
+        ? [...cur, carried(sk)]
+        : cur.map((s) => (s === old ? carried(sk) : s));
+  const { skills, rose } = autoRise(placed);
+  let next: RuneBank = { ...bank, skills: bank.skills.filter((s) => s.uid !== uid) };
+  let back: StockSkill | null = null;
+  if (old) ({ bank: next, skill: back } = backToStock(next, old));
+  return { bank: next, skills, back, rose };
+}
+
+// ── ↩️ RÉCUPÉRER UNE COMPÉTENCE ─────────────────────────────────────────────────────────
+
+/** ↩️ Retire la compétence `id` d'un champion et la remet au stock, niveaux et couleur gardés
+ *  (décision de l'utilisateur, 2026-10-21). `null` s'il ne la porte pas. */
+export function takeBackSkill(
+  bank: RuneBank,
+  skills: readonly ChampSkill[],
+  id: SkillId,
+): { bank: RuneBank; skills: ChampSkill[]; skill: StockSkill } | null {
+  const s = skills.find((x) => x.id === id);
+  if (!s) return null;
+  const out = backToStock(bank, s);
+  return { ...out, skills: skills.filter((x) => x.id !== id).map((x) => ({ ...x })) };
 }
 
 // ── 📦 COMBIEN DE RUNES CHAQUE SOURCE DONNE ─────────────────────────────────────────────
