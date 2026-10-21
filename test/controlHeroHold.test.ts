@@ -71,7 +71,7 @@ describe('sur une mine, le héros posté défend avec la garnison', () => {
   it('face à l’armée : le % rejoue EXACTEMENT la bataille du store, héros compris', () => {
     // La composition du store sur un lieu de production : champions, héros, miliciens.
     const allies = [...partyAllies(advs, kit, HERO), ...militiaUnits(ids, L)];
-    expect(controlAllies('mine', advs, kit, HERO, ids, L)).toEqual(allies);
+    expect(controlAllies(advs, kit, HERO, ids, L)).toEqual(allies);
     const { foe, force } = retakeBattle({ seed: 3 }, p, allies, L, 1);
     const withHero = controlAttackHold({ seed: 3 }, p, ids, advs, kit, L, 1, HERO);
     expect(withHero).toBe(campWinPct(foe, force, allies, 24));

@@ -29,7 +29,6 @@ import {
   type RuneBank,
   type StockSkill,
 } from '@/lib/runeBank';
-import { lapidaryHours } from '@/lib/controlPoints';
 import { runeApplyFx } from '@/lib/runeFx';
 
 const bank = (skills: StockSkill[]): RuneBank => ({
@@ -239,12 +238,6 @@ describe('🌈 relecture, lapidaire, mise en scène', () => {
       ],
     });
     expect(nb.skills).toEqual([sk('a', 'scout', 3, 1), sk('b', 'scout', 1)]);
-  });
-
-  it('le lapidaire prend le temps de la couleur ATTEINTE', () => {
-    expect(lapidaryHours({ id: 'speed' })).toBe(24);
-    expect(lapidaryHours({ id: 'speed', up: 1 })).toBe(48);
-    expect(lapidaryHours({ id: 'speed', up: 3 })).toBe(168);
   });
 
   it('l’animation d’élévation prend la couleur nouvelle et annonce le niveau 1', () => {

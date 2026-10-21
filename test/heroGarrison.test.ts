@@ -105,9 +105,8 @@ describe('🧝 le héros prend 2 places de champion sur les 5', () => {
           size: 1,
         },
       };
-      expect(heroCanStay(poi as never)).toBe(
-        kind !== 'lapidary' && seatsOf(kind) >= MILITIA.heroSeats,
-      );
+      // 💎 Le lapidaire compris depuis la v1.254.0 (un lieu fixe comme les autres).
+      expect(heroCanStay(poi as never)).toBe(seatsOf(kind) >= MILITIA.heroSeats);
     }
   });
 });
@@ -208,10 +207,10 @@ describe('🏠 envoyer le héros depuis la base (avec champions et miliciens)', 
     expect(baseSendBlocker(c, 0, 1, true)).toBeNull();
     expect(baseSendBlocker(c, 1, 1, true)).toBeNull(); // 🛡️ v1.70 : le milicien en trop part quand même (demi-tour à l'arrivée)
   });
-  it('refusé s’il y est déjà, ou au lapidaire', () => {
+  it('refusé s’il y est déjà ; accepté au lapidaire (v1.254.0, un lieu comme les autres)', () => {
     expect(baseSendBlocker(ctl(held(['a'], true)), 0, 0, true)).toBe('heroHere');
     const lap = { ...ctl(held([])), kind: 'lapidary' as const };
-    expect(baseSendBlocker(lap, 0, 0, true)).toBe('heroNoSeat');
+    expect(baseSendBlocker(lap, 0, 0, true)).toBeNull();
   });
   it('sans le héros, rien ne change', () => {
     expect(baseSendBlocker(ctl(held(['a', 'b'])), 3, 0)).toBeNull();

@@ -1816,7 +1816,7 @@ const WARLORD = {
 export function weakestHeld(pois: readonly Poi[], at: number, seed: number): Poi | null {
   const held = heldBefore(pois, at);
   if (!held.length) return null;
-  const def = (p: Poi) => defenderCount(p.control!.kind, p.control!.garrison, !!p.control!.hero);
+  const def = (p: Poi) => defenderCount(p.control!.garrison, !!p.control!.hero);
   const least = Math.min(...held.map(def));
   const ties = held.filter((p) => def(p) === least);
   const r = mulberry32((seedOf(`${seed}:warTarget:${at}`) ^ 0x7f4a7c15) >>> 0 || 1)();

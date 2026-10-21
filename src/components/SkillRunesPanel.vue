@@ -111,7 +111,7 @@ function askRise(s: ChampSkill) {
   if (riseBlocker(s)) return;
   const to = RUNE_INFO[riseTier(s)];
   const lost = isOverclocked(s.level)
-    ? ' Elle perd sa surcharge ⚡ (le lapidaire pourra la surcharger à nouveau au niveau 5).'
+    ? ' Elle perd sa surcharge ⚡ pour de bon (le lapidaire n’en fait plus).'
     : '';
   $q.dialog({
     title: `Élever ${SKILLS[s.id].name} ?`,
@@ -126,7 +126,7 @@ function askBack(s: ChampSkill) {
   if (!isOverclocked(s.level)) return void takeBack(s);
   $q.dialog({
     title: `Récupérer ${SKILLS[s.id].name} ?`,
-    message: `Elle revient au stock au niveau ${SKILL_MAX_LEVEL}, sans sa surcharge ⚡.`,
+    message: `Elle revient au stock au niveau ${SKILL_MAX_LEVEL}, sans sa surcharge ⚡ (perdue pour de bon : le lapidaire n’en fait plus).`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: '↩️ Récupérer', color: 'negative' },
   }).onOk(() => void takeBack(s));

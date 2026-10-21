@@ -288,6 +288,7 @@ import {
   riseStockSkill,
   stockRiseBlocker,
   addRuneCount,
+  addForgedSkills,
   ascensionRuneCount,
   fuseAllSkills,
   fuseBlocker,
@@ -470,9 +471,8 @@ import {
   newlyDiscoveredCitadels,
   citadelDiscoveryFx,
   setCartoFavor,
-  defendsControl,
-  applyLapis,
-  setLapisSkill,
+  setForgeSkill,
+  type ForgedSkill,
   orphanPosts,
   garrisonWithoutPost,
 } from '@/lib/controlPoints';
@@ -1071,11 +1071,8 @@ export const useCharacterStore = defineStore('character', () => {
     return { ok: true, skill: out.skill };
   }
 
-  /** 🌈 ÉLÈVE une compétence que porte un champion. ⚠️ Posté au LAPIDAIRE, ses heures pas
-   *  encore versées le sont D'ABORD (même patron que `chooseLapisSkill`) : sans ça, la
-   *  compétence redescendue au niveau 1 n'étant plus candidate, elles iraient à une autre ou
-   *  seraient perdues. Les heures gardées sur elle RESTENT : elles compteront pour sa
-   *  surcharge quand elle sera de nouveau au niveau 5. */
+  /** 🌈 ÉLÈVE une compétence que porte un champion (une 5⚡ d'avant l'usine du lapidaire,
+   *  la seule qui reste au niveau 5 chez un champion sans être dorée). */
   async function riseChampionSkill(
     userId: string,
     advId: string,
@@ -1084,33 +1081,13 @@ export const useCharacterStore = defineStore('character', () => {
     await writesSettled();
     const cur = row.value;
     if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
-    let map = cur.expedition_map;
-    let advs = advList.value;
-    const lapis = map?.pois.find(
-      (p) =>
-        p.control?.kind === 'lapidary' &&
-        p.control.owner === 'player' &&
-        p.control.garrison.includes(advId),
-    );
-    if (map && lapis) {
-      const h = harvestControlIn(
-        map,
-        advs,
-        cur.adv_gear?.stock ?? [],
-        lapis.id,
-        Date.now(),
-        heroLevel.value,
-      );
-      map = h.map;
-      advs = h.advs;
-    }
+    const advs = advList.value;
     const sk = advs.find((a) => a.id === advId)?.skills?.find((s) => s.id === id);
     if (!sk) return { ok: false, reason: 'compétence introuvable' };
     const block = riseBlocker(sk);
     if (block) return { ok: false, reason: RISE_BLOCK_LABEL[block] };
     const next = riseSkill(sk)!;
     await persist(userId, {
-      ...(map !== cur.expedition_map ? { expedition_map: map } : {}),
       adventurers: advs.map((a) =>
         a.id === advId
           ? { ...a, skills: (a.skills ?? []).map((s) => (s.id === id ? next : s)) }
@@ -4917,7 +4894,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!stock) return `aucun(e) ${SUPPLIES[wardId].name.toLowerCase()} en stock`;
     const poi = map.pois.find((p) => p.id === poiId);
     const c = poi?.control;
-    const why = wardBlocker(c, wardId, !!c && defendsControl(c.kind), now);
+    const why = wardBlocker(c, wardId, now);
     if (why) return WARD_BLOCK_LABEL[why];
     const control = placeWard(c!, wardId, now);
     await persist(userId, {
@@ -5466,6 +5443,7 @@ export const useCharacterStore = defineStore('character', () => {
     let summon = 0;
     let gearSeals = 0;
     const champSeals: [number, number][] = [];
+    const forged: ForgedSkill[] = [];
     for (const k of abandonedIslandKeys(root)) {
       let map = holdGrace(redirectIslandAttacks(islands[k]!, now), now);
       const due = dueRetakes(map, now);
@@ -5479,6 +5457,7 @@ export const useCharacterStore = defineStore('character', () => {
         const at = p.control!.attackAt!;
         const h = harvestControlIn(map, advList.value, cur.adv_gear?.stock ?? [], p.id, at, lvl);
         map = h.map;
+        forged.push(...h.forged);
         runes += h.runes;
         blessed += h.blessedRunes;
         exalted += h.exaltedRunes;
@@ -5486,9 +5465,7 @@ export const useCharacterStore = defineStore('character', () => {
         summon += h.summon;
         gearSeals += h.gearSeals;
         if (h.champSeals) champSeals.push([h.champSealRank, h.champSeals]);
-        const militia = defendsControl(p.control!.kind)
-          ? militiaUnits(p.control!.garrison, lvl)
-          : [];
+        const militia = militiaUnits(p.control!.garrison, lvl);
         const { foe, force } = retakeBattle(map, p, militia, lvl, fortify(cur, heroLevel));
         const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
         const kit = escortKitOf(cur);
@@ -5567,7 +5544,9 @@ export const useCharacterStore = defineStore('character', () => {
       patch: {
         expedition_map: { ...root, islands },
         ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
-        ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed, exalted) } : {}),
+        ...(runes || forged.length
+          ? { runes: addForgedSkills(addRuneCount(cur.runes, runes, blessed, exalted), forged) }
+          : {}),
         ...(keys ? { keys: cur.keys + keys } : {}),
         ...(summon ? { summon_stones: (cur.summon_stones ?? 0) + summon } : {}),
         ...(gearSeals || champSeals.length
@@ -5698,6 +5677,7 @@ export const useCharacterStore = defineStore('character', () => {
     let summonIn = 0;
     let gearSealsIn = 0;
     const champSealsIn: [number, number][] = [];
+    const forgedIn: ForgedSkill[] = [];
     // 🔙 Les sorties en retour vers un point qui tombe rentrent à la base (`rerouteSorties`).
     let parties: ActiveParty[] = [...partyList.value];
     let partiesMoved = false;
@@ -5712,6 +5692,7 @@ export const useCharacterStore = defineStore('character', () => {
       map = h.map;
       advs = h.advs;
       gearStock = h.stock;
+      forgedIn.push(...h.forged);
       runesIn += h.runes;
       blessedIn += h.blessedRunes;
       exaltedIn += h.exaltedRunes;
@@ -5720,11 +5701,9 @@ export const useCharacterStore = defineStore('character', () => {
       gearSealsIn += h.gearSeals;
       if (h.champSeals) champSealsIn.push([h.champSealRank, h.champSeals]);
       // 🛡️ CHAMPIONS, HÉROS ET MILICIENS DÉFENDENT ENSEMBLE (2026-10-12, décision de
-      // l'utilisateur ; `controlAllies`). Au lapidaire, seuls les MILICIENS se battent : les
-      // champions postés rentrent SANS blessure s'il tombe.
-      const fights = defendsControl(p.control!.kind);
+      // l'utilisateur ; `controlAllies`), le lapidaire aussi depuis la v1.254.0.
       const posted = advs.filter((a) => ids.has(a.id));
-      const escort = fights ? posted : [];
+      const escort = posted;
       const militia = militiaUnits(p.control!.garrison, playerLevel);
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
@@ -5732,7 +5711,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
       // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
       // 🧝 Le héros posté défend avec eux (son instantané figé à son départ).
-      const heroUnit = fights && p.control!.hero ? (p.control!.heroUnit ?? null) : null;
+      const heroUnit = p.control!.hero ? (p.control!.heroUnit ?? null) : null;
       const { foe, force } = retakeBattle(
         map,
         p,
@@ -5804,9 +5783,6 @@ export const useCharacterStore = defineStore('character', () => {
               : militia.length
                 ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}${wearSettleLabel(o?.party?.dealt, p.control)}`
                 : `${emo} L’ennemi a repris le lieu, laissé sans personne pour le défendre.`) +
-          (!held && !fights && (posted.length || p.control!.hero)
-            ? ' Tes champions postés n’ont pas combattu : ils rentrent à pied, sans blessure.'
-            : '') +
           turnBackLabel(back.length) +
           sortieHomeLabel(rr?.n ?? 0) +
           tierLostLabel(held ? 0 : controlTier(p.control, at)),
@@ -5925,7 +5901,14 @@ export const useCharacterStore = defineStore('character', () => {
       ...(heroWound ? { base: { ...baseOf(cur, now), wound: heroWound } } : {}),
       ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
-      ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn, blessedIn, exaltedIn) } : {}),
+      ...(runesIn || forgedIn.length
+        ? {
+            runes: addForgedSkills(
+              addRuneCount(cur.runes, runesIn, blessedIn, exaltedIn),
+              forgedIn,
+            ),
+          }
+        : {}),
       // 📖 Les clés des archives, de même.
       ...(keysIn ? { keys: cur.keys + keysIn } : {}),
       // ⚱️ Les pierres de l'ossuaire, de même.
@@ -5968,6 +5951,8 @@ export const useCharacterStore = defineStore('character', () => {
     gearSeals: number;
     champSeals: number;
     champSealRank: number;
+    /** 💎 Les compétences vertes Nv 5 sorties du lapidaire (`addForgedSkills`). */
+    forged: ForgedSkill[];
   } {
     const p = map.pois.find((x) => x.id === id);
     // 🏝️ En mode archipel, un lieu tenu produit au RANG DE SON ÎLE, plus au niveau du héros.
@@ -5975,8 +5960,7 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚒️ Le camp verse AUSSI son XP aux PIÈCES portées — chacun la SIENNE, selon le temps
     // qu'il a passé sur place, même quand le champion bute sur son plafond.
     const nextStock = campGear(stock, advs, c.gearXp);
-    // 💎 Le lapidaire verse ses heures sur la compétence de son champion.
-    if (c.lapis) advs = applyLapis(advs, c.lapis).advs;
+    const forged = c.forged ?? [];
     if (!p?.control || !Object.keys(c.xpBy).length)
       return {
         map: c.map,
@@ -5993,6 +5977,7 @@ export const useCharacterStore = defineStore('character', () => {
         gearSeals: c.gearSeals,
         champSeals: c.champSeals,
         champSealRank: c.champSealRank,
+        forged,
       };
     // 🎯 Le camp : chacun reçoit SA réserve, selon le temps qu'il a passé sur place (un renfort
     // arrivé tard n'a pas l'XP des autres) — un champion ramené reçoit ce qu'il avait gagné.
@@ -6024,6 +6009,7 @@ export const useCharacterStore = defineStore('character', () => {
       gearSeals: c.gearSeals,
       champSeals: c.champSeals,
       champSealRank: c.champSealRank,
+      forged,
     };
   }
 
@@ -6069,6 +6055,7 @@ export const useCharacterStore = defineStore('character', () => {
     let gearSeals = 0;
     const champSeals: [number, number][] = [];
     const msgs: ExpeditionMessage[] = [];
+    const forgedAll: ForgedSkill[] = [];
     /** Récolte tous les points dus d'UNE carte (l'active ou une île rangée). */
     const harvestAll = (m0: ExpeditionMap): ExpeditionMap => {
       let m = m0;
@@ -6082,6 +6069,7 @@ export const useCharacterStore = defineStore('character', () => {
         m = h.map;
         advs = h.advs;
         stock = h.stock;
+        forgedAll.push(...h.forged);
         gold += h.gold;
         mana += h.mana;
         supplies = addSupplies(supplies, h.supplies);
@@ -6128,7 +6116,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...(gold > 0 ? { gold: cur.gold + gold } : {}),
       ...(mana > 0 ? { mana: cur.mana + mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, supplies) } : {}),
-      ...(runes ? { runes: addRuneCount(cur.runes, runes, blessed, exalted) } : {}),
+      ...(runes || forgedAll.length
+        ? { runes: addForgedSkills(addRuneCount(cur.runes, runes, blessed, exalted), forgedAll) }
+        : {}),
       ...(keys ? { keys: cur.keys + keys } : {}),
       ...(summon ? { summon_stones: (cur.summon_stones ?? 0) + summon } : {}),
       ...(gearSeals || champSeals.length
@@ -6168,8 +6158,13 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.runes
-        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+      ...(h.runes || h.forged.length
+        ? {
+            runes: addForgedSkills(
+              addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes),
+              h.forged,
+            ),
+          }
         : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
@@ -6234,8 +6229,13 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.runes
-        ? { runes: addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes) }
+      ...(h.runes || h.forged.length
+        ? {
+            runes: addForgedSkills(
+              addRuneCount(cur.runes, h.runes, h.blessedRunes, h.exaltedRunes),
+              h.forged,
+            ),
+          }
         : {}),
       ...(h.keys ? { keys: cur.keys + h.keys } : {}),
       ...(h.summon ? { summon_stones: (cur.summon_stones ?? 0) + h.summon } : {}),
@@ -6378,12 +6378,11 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
-  /** 💎 Un champion du lapidaire taille une autre compétence : ses heures sont versées d'abord
-   *  sur l'ancienne (gardées sur lui, rien ne se perd). */
-  async function chooseLapisSkill(
+  /** 💎 Le lapidaire fabrique une autre compétence verte. Les exemplaires FINIS partent d'abord
+   *  au stock ; l'entamé reste sur l'ancienne (`forgeDone`) : rien ne se perd. */
+  async function chooseForgeSkill(
     userId: string,
     id: string,
-    advId: string,
     skill: SkillId,
     now: number,
     playerLevel: number,
@@ -6399,11 +6398,12 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       playerLevel,
     );
-    const next = setLapisSkill(h.map, id, advId, skill);
+    const next = setForgeSkill(h.map, id, skill, now, mapPlayerLevel(h.map, playerLevel));
     if (next === h.map && h.map === cur.expedition_map) return;
     await persist(userId, {
       expedition_map: next,
       ...(h.advs !== advList.value ? { adventurers: h.advs } : {}),
+      ...(h.forged.length ? { runes: addForgedSkills(cur.runes, h.forged) } : {}),
     });
   }
 
@@ -7168,7 +7168,7 @@ export const useCharacterStore = defineStore('character', () => {
     recallControl,
     releaseControlChampions,
     chooseCartoFavor,
-    chooseLapisSkill,
+    chooseForgeSkill,
     recallHeroFromPost,
     sendHeroToPost,
     reinforceControlPoint,

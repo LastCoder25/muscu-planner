@@ -28,13 +28,7 @@
 import { simulateCombat } from './combat';
 import { campBodies, campFoe, campHurt, campLightHurt } from './camp';
 import { fuseUnits, deriveSkirmish, type SkirmishUnit } from './skirmish';
-import {
-  CONTROL,
-  controlAllies,
-  defendsControl,
-  garrisonBoost,
-  garrisonFoes,
-} from './controlPoints';
+import { CONTROL, controlAllies, garrisonBoost, garrisonFoes } from './controlPoints';
 import {
   campSpecOf,
   type CampSpec,
@@ -249,9 +243,8 @@ export function defenseForecast(
 ): DefenseForecast {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
-  const allies = controlAllies(p.control?.kind, champs, kit, hero, ids, playerLevel);
-  // 🛡️ Au lapidaire les champions ne se battent pas : ni blessés, ni comptés.
-  const escort = defendsControl(p.control?.kind) ? champs : [];
+  const allies = controlAllies(champs, kit, hero, ids, playerLevel);
+  const escort = champs;
   if (!allies.length) return { ...simulate([], allies, escort, samples), hold: 0, vsArmy };
   let foes: Foe[];
   if (vsArmy) {

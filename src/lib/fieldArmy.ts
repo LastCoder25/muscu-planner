@@ -930,7 +930,7 @@ export function controlAttackHold(
 ): number {
   const set = new Set(ids);
   const champs = advs.filter((a) => set.has(a.id));
-  const allies = controlAllies(p.control?.kind, champs, kit, hero, ids, playerLevel);
+  const allies = controlAllies(champs, kit, hero, ids, playerLevel);
   if (!allies.length) return 0;
   const { foe, force } = retakeBattle(map, p, allies, playerLevel, fort);
   return campWinPct(foe, force, allies, CONTROL.holdSamples);

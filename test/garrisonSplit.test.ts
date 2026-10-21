@@ -7,7 +7,6 @@ import {
   captureControl,
   defenderCount,
   controlAllies,
-  defendsControl,
   controlFreeSeats,
   controlIdOf,
   ensureControls,
@@ -167,43 +166,28 @@ describe('🛡️ (c) qui défend la reprise', () => {
   const kit = { advGear: [] };
   const advs = [refChampionAdv(L, 0), refChampionAdv(L, 1)];
   const ids = [...advs.map((a) => a.id), 'mil:a', 'mil:b'];
-  const allyIds = (kind: ControlKind, hero: PostedHero | null = null) =>
-    controlAllies(kind, advs, kit, hero, ids, L).map((u) => u.id);
+  const allyIds = (hero: PostedHero | null = null) =>
+    controlAllies(advs, kit, hero, ids, L).map((u) => u.id);
 
   // 🛡️ 2026-10-12 (décision de l'utilisateur) : champions, héros et miliciens défendent
-  // ENSEMBLE — garder des champions en garnison est un choix (v1.104.0 renversée).
-  it('sur un lieu de production, champions, héros ET miliciens défendent', () => {
-    for (const kind of ['mine', 'training', 'garden', 'tower'] as const) {
-      expect(defendsControl(kind)).toBe(true);
-      const got = allyIds(kind, HERO);
-      expect(got).toEqual(
-        expect.arrayContaining([...advs.map((a) => a.id), HERO_UNIT_ID, 'mil:a', 'mil:b']),
-      );
-      expect(got).toHaveLength(advs.length + 3);
-    }
+  // ENSEMBLE — garder des champions en garnison est un choix (v1.104.0 renversée). Partout,
+  // le lapidaire compris depuis la v1.254.0 (il n'en dépend plus du type de lieu).
+  it('champions, héros ET miliciens défendent', () => {
+    const got = allyIds(HERO);
+    expect(got).toEqual(
+      expect.arrayContaining([...advs.map((a) => a.id), HERO_UNIT_ID, 'mil:a', 'mil:b']),
+    );
+    expect(got).toHaveLength(advs.length + 3);
   });
-  it('sur un objectif et la forteresse, les champions et le héros défendent', () => {
-    for (const kind of ['objective', 'fortress'] as const) {
-      const got = allyIds(kind, HERO);
-      expect(got).toEqual(expect.arrayContaining([...advs.map((a) => a.id), HERO_UNIT_ID]));
-    }
-  });
-  it('au lapidaire, ses miliciens seuls (ni champion ni héros)', () => {
-    expect(defendsControl('lapidary')).toBe(false);
-    expect(allyIds('lapidary', HERO)).toEqual(['mil:a', 'mil:b']);
+  it('sans héros : champions et miliciens', () => {
+    expect(allyIds()).toHaveLength(advs.length + 2);
   });
 });
 
 describe('🛡️ qui compte comme défenseur (defenderCount)', () => {
-  it('sur un lieu de production : toute la garnison et le héros', () => {
-    expect(defenderCount('mine', ['a', 'b', 'mil:1'], true)).toBe(4);
-    expect(defenderCount('mine', ['mil:1'], false)).toBe(1);
-  });
-  it('sur un objectif tenu : les champions et le héros', () => {
-    expect(defenderCount('objective', ['a', 'b'], true)).toBe(3);
-  });
-  it('au lapidaire : ses miliciens seuls', () => {
-    expect(defenderCount('lapidary', ['a', 'mil:1'], true)).toBe(1);
-    expect(defenderCount('lapidary', ['a'], true)).toBe(0);
+  it('toute la garnison et le héros (le lapidaire compris, v1.254.0)', () => {
+    expect(defenderCount(['a', 'b', 'mil:1'], true)).toBe(4);
+    expect(defenderCount(['mil:1'], false)).toBe(1);
+    expect(defenderCount(['a', 'b'], true)).toBe(3);
   });
 });

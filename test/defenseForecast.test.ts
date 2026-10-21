@@ -217,12 +217,14 @@ describe('🤕 les champions blessés', () => {
     const r = measure(400, (k) => realDefense(p, care, ids, k));
     expect(Math.abs(r.pHurt - g.expected.pHurt)).toBeLessThan(0.1);
   });
-  it('au lapidaire les champions ne se battent pas : ni blessés ni comptés', () => {
+  it('au lapidaire, comme ailleurs, les champions se battent (v1.254.0)', () => {
+    const here = held(1000 * H + 2 * 7919, ids);
     const lap = held(1000 * H + 2 * 7919, ids);
     lap.control = { ...lap.control!, kind: 'lapidary' };
+    const a = defenseForecast(MAP, here, ids, adv, KIT, L, 1, null, true, 0, 48);
     const g = defenseForecast(MAP, lap, ids, adv, KIT, L, 1, null, true, 0, 48);
-    expect(g.engaged.champions).toBe(0);
-    expect(g.expected.pHurt).toBe(0);
+    expect(g.engaged.champions).toBeGreaterThan(0);
+    expect(g.engaged.champions).toBe(a.engaged.champions);
   });
 });
 
