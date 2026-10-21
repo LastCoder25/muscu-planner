@@ -19,7 +19,7 @@
       <p class="intro">
         Choisis le nombre de séries <b>pour chaque exercice</b>, ou une <b>durée</b> pour les exos
         chronométrés (gainage, chaise…). Chaque série ≈ 40 s d'exécution + le repos choisi.
-        <b>Décoche</b> un exo pour le <b>retirer</b> de cette séance.
+        <b>Coche</b> les exos à faire dans cette séance (1 série chacun au départ).
       </p>
       <div class="cfg">
         <div class="cfg-lbl">Exercices à faire</div>
@@ -105,13 +105,13 @@
           </button>
         </div>
       </div>
-      <div class="preview">
-        <b>{{ previewSets }}</b> séries · ~{{ previewMinutes }} min · {{ previewExos }} exo{{
-          previewExos > 1 ? 's' : ''
-        }}
+      <div v-if="previewExos > 0" class="preview">
+        <b>{{ previewSets }}</b> série{{ previewSets > 1 ? 's' : '' }} · ~{{ previewMinutes }} min ·
+        {{ previewExos }} exo{{ previewExos > 1 ? 's' : '' }}
       </div>
-      <div v-if="previewExos === 0" class="empty">
-        Tout est déjà fait cette semaine 🎉 Rien à générer.
+      <!-- Rien n'est coché par défaut : l'état vide dit quoi faire, pas « tout est fait ». -->
+      <div v-if="previewExos === 0 && availableLegs.length" class="empty">
+        Coche les exos à faire pour composer ta séance.
       </div>
       <q-btn
         v-else
@@ -280,7 +280,7 @@ import {
   legLastReps,
   comboStepMs,
   comboTimeSets,
-  comboDefaultTimeSec,
+  comboDefaultCount,
   legTimePerSet,
   COMBO_TIME_STEP,
   type ComboLeg,
@@ -348,16 +348,12 @@ function bumpCount(exId: string, dir: number) {
   // Plancher = un pas, sauf s'il reste moins (ex. 10 s de gainage) : jamais au-delà du restant.
   counts[exId] = Math.min(max, Math.max(Math.min(step, max), cur + dir * step));
 }
-// Défaut : tous cochés, ~2 séries (ou ~20 reps, ou ~2 séries de durée) par exo —
-// ajustable, décochable.
+// Défaut (v1.262, demandé par l'utilisateur) : rien de coché, UNE série par exo (les reps
+// d'une série, ou 30 s en durée) — on coche ce qu'on fait aujourd'hui, puis on ajuste.
 function initCounts() {
   for (const leg of availableLegs.value) {
-    included[leg.exercise_id] = true;
-    const m = legMode(leg);
-    counts[leg.exercise_id] =
-      m === 'time'
-        ? comboDefaultTimeSec(perSetOf(leg), maxCount(leg))
-        : Math.min(m === 'reps' ? 20 : 2, maxCount(leg));
+    included[leg.exercise_id] = false;
+    counts[leg.exercise_id] = comboDefaultCount(legMode(leg), legLastReps(leg), maxCount(leg));
   }
 }
 /** Durée d'une série d'un exo de durée (découpe la durée choisie en séries). */
@@ -922,7 +918,6 @@ onUnmounted(() => {
   color: var(--text);
 }
 .exo-name.struck {
-  text-decoration: line-through;
   color: var(--dim);
 }
 .exo-rem {

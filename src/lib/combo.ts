@@ -1078,13 +1078,24 @@ export function comboTimeSets(totalSec: number, perSetSec: number): number[] {
   return Array.from({ length: n }, (_v, i) => (base + (i < extra ? 1 : 0)) * unit);
 }
 
-/** Durée par défaut d'un exo de durée dans la séance : ~2 séries, au pas du réglage, sans
- *  dépasser ce qu'il reste à faire. */
-export function comboDefaultTimeSec(perSetSec: number, remaining: number): number {
-  const want = Math.max(
-    COMBO_TIME_STEP,
-    Math.round((2 * perSetSec) / COMBO_TIME_STEP) * COMBO_TIME_STEP,
-  );
+/** Durée par défaut d'un exo de durée dans la préparation de séance : une série de 30 s,
+ *  la série type d'un débutant (décision de l'utilisateur, v1.262). */
+export const COMBO_DEFAULT_TIME_SEC = 30;
+
+/** Réglage par défaut d'un exo dans la préparation de séance : UNE série (v1.262, demandé
+ *  par l'utilisateur), dans l'unité du réglage — 1 en séries, les reps d'une série en
+ *  reps (`repsPerSet`), 30 s en durée. Jamais plus que ce qu'il reste à faire. */
+export function comboDefaultCount(
+  mode: ComboCountMode,
+  repsPerSet: number,
+  remaining: number,
+): number {
+  const want =
+    mode === 'sets'
+      ? 1
+      : mode === 'time'
+        ? COMBO_DEFAULT_TIME_SEC
+        : Math.max(1, Math.round(repsPerSet));
   return Math.max(0, Math.min(remaining, want));
 }
 

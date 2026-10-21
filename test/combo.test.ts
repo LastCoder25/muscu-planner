@@ -38,7 +38,8 @@ import {
   comboSessionDurationMin,
   buildComboSessionFromCounts,
   comboTimeSets,
-  comboDefaultTimeSec,
+  comboDefaultCount,
+  COMBO_DEFAULT_TIME_SEC,
   legTimePerSet,
   COMBO_TIME_STEP,
   legSets,
@@ -392,11 +393,21 @@ describe('⏱️ séance générée : un exo de DURÉE se règle en durée (v1.2
     expect(s.find((e) => e.exercise_id === 'a')!.sets).toHaveLength(3);
     expect(s.find((e) => e.exercise_id === 'g')!.sets).toEqual([45]);
   });
-  it('durée par défaut : ~2 séries au pas de 15 s, jamais plus que le restant', () => {
-    expect(comboDefaultTimeSec(45, 360)).toBe(90);
-    expect(comboDefaultTimeSec(40, 360)).toBe(75); // 80 → arrondi au pas de 15
-    expect(comboDefaultTimeSec(45, 50)).toBe(50);
-    expect(comboDefaultTimeSec(5, 360)).toBe(COMBO_TIME_STEP);
+  it('réglage par défaut : UNE série dans chaque mode, jamais plus que le restant', () => {
+    // Séries : 1, quelle que soit la taille d'une série.
+    expect(comboDefaultCount('sets', 12, 6)).toBe(1);
+    // Reps : les reps d'une série → la séance n'en tire qu'une série.
+    expect(comboDefaultCount('reps', 12, 100)).toBe(12);
+    // Durée : 30 s (série type d'un débutant), découpées en UNE série même quand la
+    // série habituelle est plus longue (haut de fourchette 60 s, dernière série 45 s).
+    expect(comboDefaultCount('time', 0, 360)).toBe(COMBO_DEFAULT_TIME_SEC);
+    expect(COMBO_DEFAULT_TIME_SEC).toBe(30);
+    expect(comboTimeSets(comboDefaultCount('time', 0, 360), 60)).toEqual([30]);
+    expect(comboTimeSets(comboDefaultCount('time', 0, 360), 45)).toEqual([30]);
+    // Plafonné par le restant.
+    expect(comboDefaultCount('time', 0, 20)).toBe(20);
+    expect(comboDefaultCount('reps', 12, 7)).toBe(7);
+    expect(comboDefaultCount('sets', 12, 0)).toBe(0);
   });
 });
 
