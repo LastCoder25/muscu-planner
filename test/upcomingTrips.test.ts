@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { upcomingTrips, type NavTrip } from '@/lib/tripNav';
+import { upcomingTrips, type NavTrip, type TripEta } from '@/lib/tripNav';
 import { formatEta } from '@/lib/duration';
 
 const trip = (key: string, extra: Partial<NavTrip> = {}): NavTrip => ({
@@ -10,7 +10,9 @@ const trip = (key: string, extra: Partial<NavTrip> = {}): NavTrip => ({
   ...extra,
 });
 const NOW = 1000;
-const keys = (l: { trip: NavTrip }[]) => l.map((r) => r.trip.key);
+const keys = (l: TripEta<NavTrip>[]) => l.map((r) => r.trip.key);
+const backs = (l: TripEta<NavTrip>[]) => keys(l.filter((r) => !r.arrive));
+const arrivals = (l: TripEta<NavTrip>[]) => keys(l.filter((r) => r.arrive));
 
 describe('↩️ upcomingTrips : les prochains retours', () => {
   it('les allers-retours, du plus proche au plus lointain, à leur heure de RETOUR', () => {
@@ -18,12 +20,13 @@ describe('↩️ upcomingTrips : les prochains retours', () => {
       [trip('a', { homeAt: 5000, endsAt: 1500 }), trip('b', { homeAt: 3000, endsAt: 2500 })],
       NOW,
     );
-    expect(keys(r.back)).toEqual(['b', 'a']);
-    expect(r.back[0]!.at).toBe(3000);
+    expect(keys(r)).toEqual(['b', 'a']);
+    expect(r[0]!.at).toBe(3000);
+    expect(r[0]!.arrive).toBe(false);
   });
   it('trois au plus', () => {
     const many = [5, 2, 9, 4, 7].map((h) => trip('t' + h, { homeAt: h * 1000 }));
-    expect(keys(upcomingTrips(many, NOW).back)).toEqual(['t2', 't4', 't5']);
+    expect(keys(upcomingTrips(many, NOW))).toEqual(['t2', 't4', 't5']);
   });
   // v1.246.0 (demandé : « celle qui rentre à son lieu de départ ») : quitter un poste pour la
   // base n'est pas un retour… c’est une ARRIVÉE chez nous (v1.257.0).
@@ -32,8 +35,8 @@ describe('↩️ upcomingTrips : les prochains retours', () => {
       [trip('a', { homeAt: 5000 }), trip('walk', { toBase: true, back: true, endsAt: 2000 })],
       NOW,
     );
-    expect(keys(r.back)).toEqual(['a']);
-    expect(keys(r.arrive)).toEqual(['walk']);
+    expect(backs(r)).toEqual(['a']);
+    expect(arrivals(r)).toEqual(['walk']);
   });
   it('un voyage programmé, pas encore parti, ne compte pas ; une heure passée non plus', () => {
     const r = upcomingTrips(
@@ -46,13 +49,12 @@ describe('↩️ upcomingTrips : les prochains retours', () => {
       ],
       NOW,
     );
-    expect(keys(r.back)).toEqual(['a']);
-    expect(r.arrive).toEqual([]);
+    expect(keys(r)).toEqual(['a']);
   });
 });
 
 describe('📍 upcomingTrips : les prochaines arrivées sur un lieu allié', () => {
-  it('renforts, garnisons et retours à la base, à leur ARRIVÉE, trois au plus', () => {
+  it('renforts, garnisons et retours à la base, à leur ARRIVÉE', () => {
     const r = upcomingTrips(
       [
         trip('r1', { cat: 'reinf', endsAt: 6000 }),
@@ -62,8 +64,8 @@ describe('📍 upcomingTrips : les prochaines arrivées sur un lieu allié', () 
       ],
       NOW,
     );
-    expect(keys(r.arrive)).toEqual(['base', 'r2', 'r1']);
-    expect(r.arrive[0]!.at).toBe(2000);
+    expect(arrivals(r)).toEqual(['base', 'r2', 'r1']);
+    expect(r[0]!.at).toBe(2000);
   });
   it('ni une traversée en mer, ni un aller vers un lieu ennemi', () => {
     const r = upcomingTrips(
@@ -74,13 +76,31 @@ describe('📍 upcomingTrips : les prochaines arrivées sur un lieu allié', () 
       ],
       NOW,
     );
-    expect(r.arrive).toEqual([]);
-    expect(r.back).toEqual([]);
+    expect(r).toEqual([]);
   });
   it('un aller-retour reste un retour, même renfort', () => {
     const r = upcomingTrips([trip('x', { cat: 'reinf', homeAt: 4000, endsAt: 2000 })], NOW);
-    expect(keys(r.back)).toEqual(['x']);
-    expect(r.arrive).toEqual([]);
+    expect(backs(r)).toEqual(['x']);
+    expect(arrivals(r)).toEqual([]);
+  });
+});
+
+// v1.269.0 (choisi : « une liste de 3 ») : plus 3 retours + 3 arrivées, mais les 3 plus
+// proches en tout.
+describe('📋 upcomingTrips : une seule liste de trois', () => {
+  it('retours et arrivées mêlés par heure, trois en tout', () => {
+    const r = upcomingTrips(
+      [
+        trip('b1', { homeAt: 2000 }),
+        trip('a1', { cat: 'reinf', endsAt: 1500 }),
+        trip('b2', { homeAt: 4000 }),
+        trip('a2', { cat: 'reinf', endsAt: 3000 }),
+        trip('b3', { homeAt: 5000 }),
+      ],
+      NOW,
+    );
+    expect(keys(r)).toEqual(['a1', 'b1', 'a2']);
+    expect(r.map((x) => x.arrive)).toEqual([true, false, true]);
   });
 });
 
@@ -98,8 +118,7 @@ describe('🛡️ upcomingTrips : sans les troupes de miliciens seuls', () => {
       ],
       NOW,
     );
-    expect(keys(r.arrive)).toEqual(['champ']);
-    expect(r.back).toEqual([]);
+    expect(keys(r)).toEqual(['champ']);
   });
   it('une troupe mixte ou avec le héros compte', () => {
     const r = upcomingTrips(
@@ -110,8 +129,8 @@ describe('🛡️ upcomingTrips : sans les troupes de miliciens seuls', () => {
       ],
       NOW,
     );
-    expect(keys(r.arrive)).toEqual(['mixed', 'empty']);
-    expect(keys(r.back)).toEqual(['hero']);
+    expect(arrivals(r)).toEqual(['mixed', 'empty']);
+    expect(backs(r)).toEqual(['hero']);
   });
 });
 

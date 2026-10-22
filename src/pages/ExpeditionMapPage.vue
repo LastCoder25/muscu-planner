@@ -1575,11 +1575,12 @@
     </div>
 
     <!-- ⏱️ LES PROCHAINS À RENTRER (demandé : « entre le bord gauche et le premier bouton, petit
-         et discret : les trois prochains retours au lieu de départ, et les trois prochaines
-         arrivées sur un lieu allié »). Une seule cible tactile : elle ouvre les Voyages. Masqué
-         pendant la barre d'un voyage, qui prend ce coin. -->
+         et discret »). Les TROIS prochains en tout (v1.269.0) : retours au lieu de départ
+         (turquoise) et arrivées sur un lieu allié (violet) mêlés, hors miliciens seuls. Une seule
+         cible tactile : elle ouvre les Voyages. Masqué pendant la barre d'un voyage, qui prend
+         ce coin. -->
     <button
-      v-if="!viewed && !tripBar && (upcoming.back.length || upcoming.arrive.length)"
+      v-if="!viewed && !tripBar && upcoming.length"
       type="button"
       class="map-eta"
       :style="{ left: mapLeft + 'px', maxWidth: etaMaxWidth }"
@@ -1587,16 +1588,15 @@
       :title="etaLabel"
       @click="toggleOverlay('trips')"
     >
-      <span v-if="upcoming.back.length" class="eta-grp eta-back">
+      <span class="eta-grp">
         <span class="eta-h" aria-hidden="true">↩</span>
-        <span v-for="r in upcoming.back" :key="r.trip.key" class="eta-row" aria-hidden="true">
-          <span class="eta-who">{{ r.trip.who }}</span
-          ><b class="eta-t">{{ formatEta(r.at - now) }}</b>
-        </span>
-      </span>
-      <span v-if="upcoming.arrive.length" class="eta-grp eta-arr">
-        <span class="eta-h" aria-hidden="true">📍</span>
-        <span v-for="r in upcoming.arrive" :key="r.trip.key" class="eta-row" aria-hidden="true">
+        <span
+          v-for="r in upcoming"
+          :key="r.trip.key"
+          class="eta-row"
+          :class="r.arrive ? 'eta-arr' : 'eta-back'"
+          aria-hidden="true"
+        >
           <span class="eta-who">{{ r.trip.who }}</span
           ><b class="eta-t">{{ formatEta(r.at - now) }}</b>
         </span>
@@ -4616,22 +4616,21 @@ const trips = computed(() => {
   }
   return out.sort((x, y) => (x.endsAt ?? 0) - (y.endsAt ?? 0));
 });
-/** ⏱️ Les 3 prochains retours au point de départ et les 3 prochaines arrivées chez nous
- *  (`upcomingTrips`), en bas à gauche de la carte. */
+/** ⏱️ Les 3 prochains à rentrer, retours et arrivées chez nous mêlés (`upcomingTrips`), en
+ *  bas à gauche de la carte. */
 const upcoming = computed(() => upcomingTrips(trips.value, now.value));
 /** Ce que le bloc dit, en clair, pour un lecteur d'écran. */
-const etaLabel = computed(() => {
-  const say = (l: { trip: { who: string }; at: number }[]) =>
-    l.map((r) => `${r.trip.who} ${formatCountdown(r.at - now.value)}`).join(', ');
-  const u = upcoming.value;
-  return [
-    u.back.length ? `Prochains retours : ${say(u.back)}` : '',
-    u.arrive.length ? `Prochaines arrivées : ${say(u.arrive)}` : '',
-  ]
-    .filter(Boolean)
-    .concat('Toucher pour voir les voyages')
-    .join('. ');
-});
+const etaLabel = computed(
+  () =>
+    'Prochains retours : ' +
+    upcoming.value
+      .map(
+        (r) =>
+          `${r.trip.who} ${r.arrive ? 'arrive' : 'rentre'} dans ${formatCountdown(r.at - now.value)}`,
+      )
+      .join(', ') +
+    '. Toucher pour voir les voyages',
+);
 /** ↔️ Il tient entre le bord gauche de la carte (collé) et le premier rond (les `mapTabs` +
  *  🏠, 56 px d'écart, 16 px du bord droit, 48 px de large), à 4 px de lui. */
 /*  Le bord gauche est celui de la carte (`mapLeft`), pas de l'écran. */
@@ -7931,8 +7930,8 @@ onUnmounted(() => {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-.eta-back .eta-t,
-.eta-back .eta-h {
+.eta-h,
+.eta-back .eta-t {
   color: #3ec9d6;
 }
 .eta-arr .eta-t {

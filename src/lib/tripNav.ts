@@ -31,10 +31,12 @@ export interface NavTrip extends LegSource {
 const militiaOnly = (t: NavTrip): boolean =>
   !t.withHero && !!t.members?.length && crewMix(t.members) === 'militia';
 
-/** Un voyage et l'heure (ms) où il arrive. */
+/** Un voyage, l'heure (ms) où il arrive, et si c'est un aller simple qui arrive chez nous
+ *  (`arrive`) plutôt qu'un aller-retour qui rentre. */
 export interface TripEta<T> {
   trip: T;
   at: number;
+  arrive: boolean;
 }
 
 /**
@@ -49,25 +51,24 @@ export interface TripEta<T> {
  *   arrivée (`endsAt`). Une traversée en mer n'en est pas (elle change d'île).
  * 🛡️ Hors milice (v1.268.0, demandé : « hors garnison de miliciens ») : une troupe de miliciens
  * seuls ne compte ni dans l'une ni dans l'autre ; mêlée à des champions ou au héros, elle compte.
- * Un voyage programmé n'est pas encore parti ; une heure passée ne compte plus. `n` au plus
- * par liste, du plus proche au plus lointain.
+ * 📋 UNE SEULE LISTE (v1.269.0, choisi : « une liste de 3 ») : retours et arrivées mêlés,
+ * `n` au plus en tout, du plus proche au plus lointain (avant : 3 de chaque, 6 lignes).
+ * Un voyage programmé n'est pas encore parti ; une heure passée ne compte plus.
  */
 export function upcomingTrips<T extends NavTrip>(
   trips: readonly T[],
   now: number,
   n = 3,
-): { back: TripEta<T>[]; arrive: TripEta<T>[] } {
-  const back: TripEta<T>[] = [];
-  const arrive: TripEta<T>[] = [];
+): TripEta<T>[] {
+  const out: TripEta<T>[] = [];
   for (const t of trips) {
     if (t.pending || militiaOnly(t)) continue;
     if (t.homeAt !== undefined) {
-      if (t.homeAt > now) back.push({ trip: t, at: t.homeAt });
+      if (t.homeAt > now) out.push({ trip: t, at: t.homeAt, arrive: false });
     } else if (!t.sea && (t.cat === 'reinf' || t.toBase) && (t.endsAt ?? 0) > now)
-      arrive.push({ trip: t, at: t.endsAt! });
+      out.push({ trip: t, at: t.endsAt!, arrive: true });
   }
-  const first = (l: TripEta<T>[]) => l.sort((x, y) => x.at - y.at).slice(0, n);
-  return { back: first(back), arrive: first(arrive) };
+  return out.sort((x, y) => x.at - y.at).slice(0, n);
 }
 
 const CAT_ORDER: readonly TripCat[] = ['trips', 'raids', 'reinf', 'planned', 'attacks'];
