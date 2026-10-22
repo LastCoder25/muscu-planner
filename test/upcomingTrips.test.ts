@@ -84,6 +84,37 @@ describe('📍 upcomingTrips : les prochaines arrivées sur un lieu allié', () 
   });
 });
 
+// v1.268.0 (demandé : « hors garnison de miliciens ») : la milice ne fait que tenir des lieux,
+// son va-et-vient noyait les retours des expéditions.
+describe('🛡️ upcomingTrips : sans les troupes de miliciens seuls', () => {
+  const MIL = ['mil:1', 'mil:2'];
+  it('ni une garnison de miliciens qui arrive, ni des miliciens qui rentrent', () => {
+    const r = upcomingTrips(
+      [
+        trip('milReinf', { cat: 'reinf', members: MIL, endsAt: 1500 }),
+        trip('milHome', { cat: 'reinf', toBase: true, members: MIL, endsAt: 1600 }),
+        trip('milBack', { members: MIL, homeAt: 1700 }),
+        trip('champ', { cat: 'reinf', members: ['adv1'], endsAt: 5000 }),
+      ],
+      NOW,
+    );
+    expect(keys(r.arrive)).toEqual(['champ']);
+    expect(r.back).toEqual([]);
+  });
+  it('une troupe mixte ou avec le héros compte', () => {
+    const r = upcomingTrips(
+      [
+        trip('mixed', { cat: 'reinf', members: ['adv1', 'mil:1'], endsAt: 2000 }),
+        trip('hero', { members: ['mil:1'], withHero: true, homeAt: 3000 }),
+        trip('empty', { cat: 'reinf', toBase: true, members: [], endsAt: 2500 }),
+      ],
+      NOW,
+    );
+    expect(keys(r.arrive)).toEqual(['mixed', 'empty']);
+    expect(keys(r.back)).toEqual(['hero']);
+  });
+});
+
 describe('⏱️ formatEta : un compte à rebours serré', () => {
   it('sans espaces, mêmes coupures que le compte à rebours', () => {
     const S = 1000;

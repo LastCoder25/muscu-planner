@@ -3,6 +3,7 @@
  * rangée des tuiles (`TripsPanel`), sous la carte comme par-dessus. Deux copies de « qui passe
  * le filtre » finiraient par ne plus montrer la même chose.
  */
+import { crewMix } from './militia';
 import { shownTripCats, type TripCat, type TripSelection } from './tripFilter';
 import {
   shownLegs,
@@ -21,7 +22,14 @@ export interface NavTrip extends LegSource {
   homeAt?: number;
   /** Prochaine étape (ms) : l'heure où se range la tuile du voyage. */
   endsAt?: number;
+  /** Qui voyage (ids ; `mil:…` = un milicien) et si le héros en est. */
+  members?: readonly string[];
+  withHero?: boolean;
 }
+
+/** 🛡️ Une troupe de miliciens SEULS (sans champion ni héros) : elle ne fait que tenir un lieu. */
+const militiaOnly = (t: NavTrip): boolean =>
+  !t.withHero && !!t.members?.length && crewMix(t.members) === 'militia';
 
 /** Un voyage et l'heure (ms) où il arrive. */
 export interface TripEta<T> {
@@ -39,6 +47,8 @@ export interface TripEta<T> {
  * - `arrive` : les ALLERS SIMPLES qui arrivent chez nous (`cat` renfort : garnison qui rejoint un
  *   lieu tenu, héros qui va se poster, poste quitté ou blessés qui rentrent à la base), à leur
  *   arrivée (`endsAt`). Une traversée en mer n'en est pas (elle change d'île).
+ * 🛡️ Hors milice (v1.268.0, demandé : « hors garnison de miliciens ») : une troupe de miliciens
+ * seuls ne compte ni dans l'une ni dans l'autre ; mêlée à des champions ou au héros, elle compte.
  * Un voyage programmé n'est pas encore parti ; une heure passée ne compte plus. `n` au plus
  * par liste, du plus proche au plus lointain.
  */
@@ -50,7 +60,7 @@ export function upcomingTrips<T extends NavTrip>(
   const back: TripEta<T>[] = [];
   const arrive: TripEta<T>[] = [];
   for (const t of trips) {
-    if (t.pending) continue;
+    if (t.pending || militiaOnly(t)) continue;
     if (t.homeAt !== undefined) {
       if (t.homeAt > now) back.push({ trip: t, at: t.homeAt });
     } else if (!t.sea && (t.cat === 'reinf' || t.toBase) && (t.endsAt ?? 0) > now)
