@@ -137,3 +137,20 @@ export function transfersByOrigin(sel: ReinfSelection): Map<string, string[]> {
   for (const t of sel.transfers) out.set(t.fromId, [...(out.get(t.fromId) ?? []), t.id]);
   return out;
 }
+
+/**
+ * 🏅🛡️ LES PLACES LIBRES ANNONCÉES en tête du renfort, une pastille par réserve — les deux
+ * rangées de points sous le fort (`garrisonDotRows` : champions en haut, miliciens en bas).
+ * ⚠️ Signalé (2026-10-22) : l'en-tête additionnait les deux réserves (« 7 places libres, dont
+ * 2 de champion »), un reste d'avant leur séparation (2026-10-08), et ne collait plus à la carte.
+ * `mil` vaut `null` là où aucun milicien ne va (objectif, forteresse).
+ */
+export function reinfFreeLabels(free: ReinfFree): { champ: string; mil: string | null } {
+  const n = (k: number, what: string) => `${k} place${k > 1 ? 's' : ''} de ${what}`;
+  return {
+    champ: Number.isFinite(free.champ)
+      ? `🏅 ${n(free.champ, 'champion')}`
+      : '🏅 places de champion sans limite',
+    mil: free.milAnyway ? `🛡️ ${n(free.mil ?? free.total, 'milicien')}` : null,
+  };
+}

@@ -20,18 +20,18 @@
         Lieu <b>ennemi</b> · envoie des miliciens à l’avance : si ton attaque l’a pris à leur
         arrivée, ils prennent les places libres ; sinon ils font demi-tour vers la base.
       </p>
-      <p v-else class="qr-sub">
-        <template v-if="champFree > milFree"
-          >{{ milFree }} place{{ milFree > 1 ? 's' : '' }} libre{{ milFree > 1 ? 's' : '' }} ·
-          jusqu’à {{ champFree }} champion{{ champFree > 1 ? 's' : '' }} (des miliciens leur
-          céderont leur place)</template
-        >
-        <template v-else
-          >{{ milFree }} place{{ milFree > 1 ? 's' : '' }} libre{{ milFree > 1 ? 's' : '' }}, dont
-          {{ champFree }} de champion</template
-        >
-        · coche tes renforts, puis envoie-les
-      </p>
+      <!-- 🏅🛡️ Les places libres, une pastille par réserve : les deux rangées de points sous le
+           fort sur la carte (`reinfFreeLabels`). -->
+      <template v-else>
+        <div class="qr-seats">
+          <span class="qr-seat" :class="{ none: !champFree }">{{ freeLabels.champ }}</span>
+          <span v-if="freeLabels.mil" class="qr-seat" :class="{ none: !milRoom }">{{
+            freeLabels.mil
+          }}</span>
+          <span v-if="Number.isFinite(champFree)" class="qr-seat-cap">libres</span>
+        </div>
+        <p class="qr-sub">Coche tes renforts, puis envoie-les.</p>
+      </template>
       <!-- 🛡️ La tenue À L'ATTAQUE, et ce que la sélection y change (arrivées comprises). -->
       <p v-if="hold" class="qr-hold">
         🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b>
@@ -202,6 +202,7 @@ import { formatDurationMin } from '@/lib/duration';
 import {
   reinfCanAdd,
   reinfCount,
+  reinfFreeLabels,
   reinfMilitiaOver,
   reinfSeats,
   type ReinfSelection,
@@ -258,6 +259,7 @@ const free = computed(() => ({
   mil: props.milRoom,
   milAnyway: props.milAnyway,
 }));
+const freeLabels = computed(() => reinfFreeLabels(free.value));
 const canChamp = computed(() => reinfCanAdd(props.sel, 'champ', free.value));
 const canMil = computed(() => reinfCanAdd(props.sel, 'mil', free.value));
 /** 🛡️ Un milicien de la base de plus : toujours possible là où des miliciens vont (dans la
@@ -327,6 +329,30 @@ const emit = defineEmits<{
   color: var(--text);
   font-size: 18px;
   cursor: pointer;
+}
+.qr-seats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.qr-seat {
+  padding: 3px 9px;
+  border: 1px solid var(--accent, #ffd23f);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qr-seat.none {
+  border-color: var(--line);
+  color: var(--dim);
+}
+.qr-seat-cap {
+  color: var(--dim);
+  font-size: 12.5px;
 }
 .qr-sub {
   margin: 0 0 10px;
