@@ -1040,6 +1040,12 @@ export interface ComboSessionExo {
 }
 
 const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
+/** Changer de poste prend du temps même « sans repos » (circuit express, v1.270) : un
+ *  repos plus court compte pour cette transition. */
+const COMBO_TRANSITION_SEC = 15;
+function restOrTransition(restSec: number): number {
+  return Math.max(COMBO_TRANSITION_SEC, restSec);
+}
 
 /** Durée estimée (min) d'une séance (exécution + repos) : une série de reps compte
  *  ~40 s d'exécution, une série de DURÉE compte ses secondes. */
@@ -1050,8 +1056,18 @@ export function comboSessionDurationMin(
   let sec = 0;
   for (const e of session)
     for (const v of e.sets)
-      sec += (e.time ? Math.max(0, v) : COMBO_EXEC_SEC) + Math.max(0, restSec);
+      sec += (e.time ? Math.max(0, v) : COMBO_EXEC_SEC) + restOrTransition(restSec);
   return Math.max(1, Math.round(sec / 60));
+}
+
+/** Séries qu'il reste à faire cette semaine, en SÉRIES quel que soit le mode (reps et
+ *  secondes divisées par une série type) : la priorité du circuit express. */
+export function legSetsLeft(leg: ComboLeg, objective?: Objective | null): number {
+  const left = legRemaining(leg);
+  const m = legMode(leg);
+  if (m === 'sets') return left;
+  const per = m === 'time' ? legTimePerSet(leg, objective) : Math.max(1, legLastReps(leg));
+  return Math.ceil(left / per);
 }
 
 /** Pas du réglage d'un exo de DURÉE dans la préparation de séance (secondes). */
@@ -1135,7 +1151,7 @@ export function buildComboSessionFromCounts(
  *  écrit l'ordre des séries (`planSessionOrder`, lib/muscleFatigue). L'ordre n'est plus un
  *  choix depuis la v1.249 (Standard / Alterné / Aléatoire / Par groupe retirés). */
 export function comboStepMs(restSec: number): number {
-  return (COMBO_EXEC_SEC + Math.max(0, restSec)) * 1000;
+  return (COMBO_EXEC_SEC + restOrTransition(restSec)) * 1000;
 }
 
 /** Suggère un objectif pour un exo à partir de l'HISTORIQUE : reprend le `target`

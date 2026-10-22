@@ -21,6 +21,39 @@
         chronométrés (gainage, chaise…). Chaque série ≈ 40 s d'exécution + le repos choisi.
         <b>Coche</b> les exos à faire dans cette séance (1 série chacun au départ).
       </p>
+      <!-- ⚡ Circuit express (v1.270) : N exos qui ne se fatiguent pas entre eux, une série de
+           chaque, enchaînées sans repos. Il coche la liste ci-dessous, qui reste modifiable. -->
+      <div v-if="expressMax >= 2" class="express" :class="{ on: expressN != null }">
+        <div class="ex-head">
+          <span class="ex-title font-display">⚡ Circuit express</span>
+          <span class="ex-sub"
+            >1 série de chaque, enchaînées sans repos, avec des exos qui ne travaillent pas les
+            mêmes muscles</span
+          >
+        </div>
+        <div class="chips">
+          <button
+            v-for="n in EXPRESS_SIZES"
+            :key="n"
+            type="button"
+            class="chip ex-chip"
+            :class="{ on: expressN === n }"
+            :disabled="n > expressMax"
+            :aria-pressed="expressN === n"
+            @click="applyExpress(n)"
+          >
+            {{ n }} exos
+          </button>
+        </div>
+        <div v-if="expressN != null" class="ex-foot">
+          <span v-if="expressShort" class="ex-note"
+            >{{ expressShort }} exos compatibles seulement aujourd’hui</span
+          >
+          <button type="button" class="ex-reroll" @click="rerollExpress">
+            🎲 Autre combinaison
+          </button>
+        </div>
+      </div>
       <div class="cfg">
         <div class="cfg-lbl">Exercices à faire</div>
         <div v-if="!availableLegs.length" class="empty">Tout est déjà fait cette semaine 🎉</div>
@@ -38,7 +71,7 @@
             :title="
               included[leg.exercise_id] ? 'Retirer de cette séance' : 'Ajouter à cette séance'
             "
-            @click="included[leg.exercise_id] = !included[leg.exercise_id]"
+            @click="toggleIncluded(leg.exercise_id)"
           >
             {{ included[leg.exercise_id] ? '☑' : '☐' }}
           </button>
@@ -101,7 +134,7 @@
             :class="{ on: restSec === r }"
             @click="restSec = r"
           >
-            {{ r }} s
+            {{ r ? `${r} s` : 'Sans repos' }}
           </button>
         </div>
       </div>
@@ -238,6 +271,18 @@
         </div>
       </div>
 
+      <!-- Tout est fait : un tour de plus (une série de chaque exo qui en a encore à faire). -->
+      <q-btn
+        v-if="canRedoRound"
+        class="full-width q-mt-md"
+        outline
+        color="primary"
+        no-caps
+        size="lg"
+        icon="replay"
+        label="Refaire un tour"
+        @click="redoRound"
+      />
       <q-btn
         class="full-width q-mt-md"
         color="primary"
@@ -265,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { backOr, backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
@@ -282,6 +327,7 @@ import {
   comboTimeSets,
   comboDefaultCount,
   legTimePerSet,
+  legSetsLeft,
   COMBO_TIME_STEP,
   type ComboLeg,
   type ComboSessionExo,
@@ -289,6 +335,7 @@ import {
 import { logicalToday } from '@/lib/challenges';
 import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
 import { useProfileStore } from '@/stores/profile';
+import { useLibraryStore } from '@/stores/library';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import { useProgress } from '@/composables/useProgress';
@@ -300,6 +347,7 @@ import {
   planSessionOrder,
   type FatigueHit,
 } from '@/lib/muscleFatigue';
+import { pickExpressCircuit } from '@/lib/expressCircuit';
 
 const router = useRouter();
 const progress = useProgress();
@@ -308,14 +356,19 @@ const route = useRoute();
 const $q = useQuasar();
 const combo = useComboStore();
 const profileStore = useProfileStore();
+const library = useLibraryStore();
 
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 
-const RESTS = [30, 60, 90];
+const RESTS = [0, 30, 60, 90];
+const EXPRESS_SIZES = [2, 3, 4, 5];
 
 // L'ordre des séries n'est plus un choix (v1.249) : il est calculé (`planSessionOrder`).
 const restSec = ref(60);
+// ⚡ Circuit express choisi (nb d'exos) et son ordre — déclarés tôt : l'aperçu les lit.
+const expressN = ref<number | null>(null);
+const expressOrder = ref<string[]>([]);
 const phase = ref<'config' | 'run'>('config');
 
 // Exos encore à faire cette semaine (candidats à la séance), par GROUPE puis alphabétique —
@@ -393,12 +446,22 @@ const buildCounts = computed<Record<string, number>>(() => {
   return out;
 });
 
-// Aperçu (avant de commencer) — d'après les compteurs par exo.
-const previewSession = computed(() =>
-  c.value
-    ? buildComboSessionFromCounts(c.value, buildCounts.value, profileStore.profile?.objective)
-    : [],
-);
+// Aperçu (avant de commencer) — d'après les compteurs par exo. Les exos d'un circuit express
+// passent dans l'ordre du circuit (haut / bas / tronc alternés) : `planSessionOrder` le
+// garde à fatigue égale.
+const previewSession = computed(() => {
+  if (!c.value) return [];
+  const built = buildComboSessionFromCounts(
+    c.value,
+    buildCounts.value,
+    profileStore.profile?.objective,
+  );
+  const rank = (e: ComboSessionExo) => {
+    const k = expressOrder.value.indexOf(e.exercise_id);
+    return k < 0 ? expressOrder.value.length : k; // hors circuit : après, dans leur ordre
+  };
+  return [...built].sort((a, b) => rank(a) - rank(b));
+});
 const previewSets = computed(() => previewSession.value.reduce((a, e) => a + e.sets.length, 0));
 const previewMinutes = computed(() => comboSessionDurationMin(previewSession.value, restSec.value));
 const previewExos = computed(() => previewSession.value.length);
@@ -444,6 +507,85 @@ const fatigue = useComboFatigue(
   computed(() => c.value?.legs ?? []),
   sessionHits,
 );
+
+// ── ⚡ Circuit express (v1.270) : la règle vit dans `lib/expressCircuit`. ──
+// Le repos choisi avant le circuit, rendu quand on en sort en cochant à la main.
+let restBeforeExpress = 60;
+// Circuits déjà proposés par « 🎲 Autre combinaison » : on les repousse en dernier recours.
+let expressSeen = new Set<string>();
+function circuitCands() {
+  const obj = profileStore.profile?.objective;
+  return availableLegs.value.map((l) => ({
+    key: l.exercise_id,
+    profile: fatigue.legProfile(l),
+    setsLeft: legSetsLeft(l, obj),
+  }));
+}
+function pickCircuit(n: number, avoid?: ReadonlySet<string>): string[] {
+  return pickExpressCircuit(circuitCands(), n, {
+    load: fatigue.load.value,
+    ...(avoid ? { avoid } : {}),
+  });
+}
+/** Le plus grand circuit possible aujourd'hui : au-delà, les pastilles sont grisées. */
+const expressMax = computed(() => pickCircuit(EXPRESS_SIZES[EXPRESS_SIZES.length - 1]!).length);
+const expressShort = computed(() =>
+  expressN.value != null && expressOrder.value.length < expressN.value
+    ? expressOrder.value.length
+    : 0,
+);
+function setCircuit(n: number, keys: string[]) {
+  for (const leg of availableLegs.value) {
+    const on = keys.includes(leg.exercise_id);
+    included[leg.exercise_id] = on;
+    if (on)
+      counts[leg.exercise_id] = comboDefaultCount(legMode(leg), legLastReps(leg), maxCount(leg));
+  }
+  if (expressN.value == null) restBeforeExpress = restSec.value;
+  expressN.value = n;
+  expressOrder.value = keys;
+  restSec.value = 0;
+}
+function applyExpress(n: number) {
+  const keys = pickCircuit(n);
+  if (!keys.length) return;
+  expressSeen = new Set(keys);
+  setCircuit(n, keys);
+}
+function rerollExpress() {
+  const n = expressN.value;
+  if (n == null) return;
+  let keys = pickCircuit(n, expressSeen);
+  if (!keys.length) return;
+  // Plus rien de neuf : on repart du circuit affiché.
+  if (keys.every((k) => expressSeen.has(k))) {
+    expressSeen = new Set(expressOrder.value);
+    keys = pickCircuit(n, expressSeen);
+  }
+  const same =
+    keys.length === expressOrder.value.length && keys.every((k) => expressOrder.value.includes(k));
+  if (same) $q.notify({ message: 'Pas d’autre combinaison possible aujourd’hui' });
+  for (const k of keys) expressSeen.add(k);
+  setCircuit(n, keys);
+}
+/** Cocher à la main sort du circuit express (la pastille se rallume en en choisissant un). */
+function toggleIncluded(exId: string) {
+  included[exId] = !included[exId];
+  if (expressN.value == null) return;
+  expressN.value = null;
+  expressOrder.value = [];
+  restSec.value = restBeforeExpress;
+}
+// Les muscles secondaires arrivent après l'ouverture : un circuit tiré avant ne voyait que
+// les muscles principaux (pompes + dips seraient passés). On le retire à leur arrivée.
+watch(
+  () => library.secondaries,
+  () => {
+    const n = expressN.value;
+    if (n != null) applyExpress(n);
+  },
+);
+
 function exoFatigueOf(i: number) {
   const leg = legOf(session.value[i]);
   return leg && firstOpenSet(i) >= 0 ? fatigue.fatigueOf(leg) : null;
@@ -537,6 +679,18 @@ function addSetSlot(i: number) {
 function removeSetSlot(i: number) {
   if (!canRemoveSlot(i)) return;
   session.value[i]!.sets.pop();
+}
+/** Tout est fait et un exo a encore de quoi faire : « Refaire un tour » (une série de chaque). */
+const canRedoRound = computed(
+  () =>
+    totalSets.value > 0 &&
+    validatedCount.value >= totalSets.value &&
+    session.value.some((_e, i) => canAddSlot(i)),
+);
+function redoRound() {
+  session.value.forEach((_e, i) => {
+    if (canAddSlot(i)) addSetSlot(i);
+  });
 }
 
 // Chrono séance + repos.
@@ -873,6 +1027,70 @@ onUnmounted(() => {
 .chip.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+/* ⚡ Circuit express : une tuile en tête, ses pastilles 2·3·4·5 exos. */
+.express {
+  margin: 12px 0 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.express.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.ex-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.ex-title {
+  font-size: 17px;
+  color: var(--text);
+}
+.ex-sub {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+.express .chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.ex-chip {
+  min-height: 44px;
+  padding: 8px 4px;
+  white-space: nowrap;
+}
+.ex-chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ex-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ex-note {
+  font-size: 12px;
+  color: var(--dim);
+}
+.ex-reroll {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: auto;
 }
 /* Coche l'exo + nb de séries (ou reps) PAR EXO */
 .exo-row {
