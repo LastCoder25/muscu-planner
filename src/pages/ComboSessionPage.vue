@@ -21,7 +21,7 @@
         chronométrés (gainage, chaise…). Chaque série ≈ 40 s d'exécution + le repos choisi.
         <b>Coche</b> les exos à faire dans cette séance (1 série chacun au départ).
       </p>
-      <!-- ⚡ Circuit express (v1.270) : N exos qui ne se fatiguent pas entre eux, une série de
+      <!-- ⚡ Circuit express (v1.271) : N exos qui ne se fatiguent pas entre eux, une série de
            chaque, enchaînées sans repos. Il coche la liste ci-dessous, qui reste modifiable. -->
       <div v-if="expressMax >= 2" class="express" :class="{ on: expressN != null }">
         <div class="ex-head">
@@ -508,7 +508,7 @@ const fatigue = useComboFatigue(
   sessionHits,
 );
 
-// ── ⚡ Circuit express (v1.270) : la règle vit dans `lib/expressCircuit`. ──
+// ── ⚡ Circuit express (v1.271) : la règle vit dans `lib/expressCircuit`. ──
 // Le repos choisi avant le circuit, rendu quand on en sort en cochant à la main.
 let restBeforeExpress = 60;
 // Circuits déjà proposés par « 🎲 Autre combinaison » : on les repousse en dernier recours.

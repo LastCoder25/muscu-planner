@@ -1,4 +1,4 @@
-// ⚡ CIRCUIT EXPRESS DU DÉFI 360 (v1.270 ; demandé par l'utilisateur : « je prends 2/3/4/5
+// ⚡ CIRCUIT EXPRESS DU DÉFI 360 (v1.271 ; demandé par l'utilisateur : « je prends 2/3/4/5
 // exos et je fais une série de chaque en enchaînant »). Choisit N exos qui ne se fatiguent
 // pas entre eux, pour une série de chaque, enchaînées sans repos.
 //

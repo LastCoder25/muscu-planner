@@ -1040,7 +1040,7 @@ export interface ComboSessionExo {
 }
 
 const COMBO_EXEC_SEC = 40; // durée d'exécution moyenne d'une série
-/** Changer de poste prend du temps même « sans repos » (circuit express, v1.270) : un
+/** Changer de poste prend du temps même « sans repos » (circuit express, v1.271) : un
  *  repos plus court compte pour cette transition. */
 const COMBO_TRANSITION_SEC = 15;
 function restOrTransition(restSec: number): number {
