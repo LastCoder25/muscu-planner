@@ -7,7 +7,7 @@ import {
   buildLotReveal,
   cellOf,
   cellOfChampion,
-  igniteOrder,
+  lotSteps,
   bestRank,
   finalRank,
   singleSequenceMs,
@@ -221,17 +221,25 @@ describe('🎰 LE ×10 — dix orbes bleues qui s’allument', () => {
     });
   });
 
-  it('⚠️ LES A S’ALLUMENT D’ABORD, LES S EN DERNIER — le meilleur ferme la marche', () => {
+  // v1.272.0 (demandé) : un seul passage, de gauche à droite — l'ancienne règle « les A
+  // d'abord, les S en dernier » imposait un second passage sur des orbes déjà scrutées.
+  it('⚠️ UN SEUL PASSAGE DE GAUCHE À DROITE : chaque orbe s’allume À SON TOUR', () => {
     const p = buildLotReveal(lot, mulberry32(4));
-    expect(igniteOrder(p)).toEqual([1, 6, 3]);
+    const steps = lotSteps(p);
+    expect(steps.map((s) => s.i)).toEqual(p.items.map((_, i) => i));
+    steps.forEach((s, i) => expect(s.ignite).toEqual(p.items[i]!.path.slice(1)));
+    // Un S tiré avant un A s'allume avant lui.
+    const sDabord = lotSteps(buildLotReveal([it0('S'), it0('B'), it0('A')], mulberry32(1)));
+    expect(sDabord[0]!.ignite.at(-1)).toBe(2);
+    expect(sDabord[1]!.ignite).toEqual([]);
+    expect(sDabord[2]!.ignite).toEqual([1]);
     expect(bestRank(p)).toBe(2);
-    expect(igniteOrder(buildLotReveal([it0('B'), it0('B')], mulberry32(1)))).toEqual([]);
   });
 
   it('⚠️ prefers-reduced-motion : rien ne s’allume, rien n’anime', () => {
     const p = buildLotReveal(lot, mulberry32(2), { reduced: true });
     p.items.forEach((it, i) => expect(it.path).toEqual([GRADE_RANK[grades[i]!]]));
-    expect(igniteOrder(p)).toEqual([]);
+    lotSteps(p).forEach((s) => expect(s.ignite).toEqual([]));
     expect(lotSequenceMs(p)).toBe(0);
   });
 
@@ -427,15 +435,15 @@ describe('🖤 ADAMANTIUM — la cérémonie la plus haute', () => {
       });
     }
   });
-  it('au ×10, l’ADAMANTIUM s’allume en DERNIER — c’est lui qu’on attend', () => {
+  it('au ×10, l’ADAMANTIUM s’allume à SA place, et c’est l’allumage le plus long', () => {
     const grades: PullGrade[] = ['X', 'S', 'A', 'B'];
-    const order = igniteOrder(
+    const steps = lotSteps(
       buildLotReveal(
         grades.map((g) => it0(g)),
         mulberry32(3),
       ),
     );
-    expect(order[order.length - 1]).toBe(0);
+    expect(steps[0]!.ignite.at(-1)).toBe(3);
     expect(lotIgniteMs(3)).toBeGreaterThan(lotIgniteMs(2));
   });
   it('sa séquence ×1 est la plus longue, mais reste bornée', () => {

@@ -189,7 +189,7 @@ import {
   apexMs,
   bestRank,
   finalRank,
-  igniteOrder,
+  lotSteps,
   omenOf,
   sigilTints,
   silhouetteMs,
@@ -977,9 +977,11 @@ async function playLot() {
     );
     orbs.forEach(({ o }) => setTail(o, 0));
     await wait(INVOKE.lotApexMs, tok);
-    // Scrutation : chaque orbe a son moment, qu'elle s'allume ensuite ou non.
-    for (let i = 0; i < orbs.length; i++) {
-      orbs[i]!.o.querySelector('.ivk-o-body')?.animate(
+    // Un seul passage, de gauche à droite : chaque orbe a son moment et, si elle monte,
+    // s'allume aussitôt avant qu'on passe à la suivante.
+    for (const { i, ignite } of lotSteps(plan)) {
+      const o = orbs[i]!.o;
+      o.querySelector('.ivk-o-body')?.animate(
         [
           { transform: 'scale(1)', filter: 'brightness(1)' },
           { transform: 'scale(1.35)', filter: 'brightness(1.8)', offset: 0.4 },
@@ -990,14 +992,7 @@ async function playLot() {
       sfx.pulse(i);
       vib(8);
       await wait(INVOKE.lotScanMs, tok);
-    }
-    await wait(INVOKE.lotScanHoldMs, tok);
-    // Les A puis les S s'allument un à un.
-    for (const i of igniteOrder(plan)) {
-      const it = plan.items[i]!;
-      const o = orbs[i]!.o;
-      for (let s = 1; s < it.path.length; s++) {
-        const g = it.path[s]!;
+      for (const g of ignite) {
         await wait(INVOKE.lotCrackPauseMs, tok);
         sfx.crack();
         vib(25);

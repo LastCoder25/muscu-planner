@@ -84,10 +84,13 @@ export const INVOKE = {
    *  à son tour (380 ms) au lieu d'une rafale, et chaque allumage se laisse voir. */
   lotLaunchStagger: 45,
   lotApexMs: 900,
-  /** Scrutation : chaque orbe pulse à son tour, de gauche à droite. */
-  lotScanMs: 260,
-  /** Silence après la scrutation, avant le premier allumage (ou la chute). */
-  lotScanHoldMs: 600,
+  /** Scrutation : chaque orbe pulse à son tour, de gauche à droite, et s'allume aussitôt si
+   *  elle monte (cf. `lotSteps`).
+   *  ⚠️ **UN SEUL PASSAGE (v1.272.0, demandé : « le premier passage en surbrillance qui ne
+   *  révèle rien ne sert pas à grand chose »)** : avant, toutes les orbes pulsaient, puis on
+   *  repassait sur les A et les S. Le silence de 600 ms entre les deux passages est réparti
+   *  sur chaque orbe (260 → 320 ms) : la durée d'un lot sans or ne bouge pas. */
+  lotScanMs: 320,
   /** Un allumage : hésitation, fissure, éclair, puis repos — plus long vers l'or. */
   lotCrackPauseMs: 220,
   lotCrackMs: 480,
@@ -240,15 +243,14 @@ export function buildLotReveal(
 }
 
 /**
- * L'ordre dans lequel les orbes d'un ×10 s'allument : les A d'abord, les S en dernier, puis
- * l'ordre du tirage. ⚠️ Le meilleur ferme la marche — c'est lui que l'on attend.
+ * Le déroulé d'un ×10 : les orbes dans l'ordre du tirage (de gauche à droite), chacune avec
+ * les rangs vers lesquels elle s'allume À SON TOUR (vide pour un B). ⚠️ Lu par l'écran ET par
+ * `lotSequenceMs` : la durée annoncée est celle jouée.
+ * ⚠️ Depuis la v1.272.0, le meilleur ne ferme plus forcément la marche : un S tiré en
+ * premier s'allume en premier (choix de l'utilisateur, un seul passage plutôt que deux).
  */
-export function igniteOrder(plan: RevealPlan): number[] {
-  return plan.items
-    .map((it, i) => ({ i, r: finalRank(it), up: it.path.length > 1 }))
-    .filter((x) => x.up)
-    .sort((a, b) => a.r - b.r || a.i - b.i)
-    .map((x) => x.i);
+export function lotSteps(plan: RevealPlan): { i: number; ignite: number[] }[] {
+  return plan.items.map((it, i) => ({ i, ignite: it.path.slice(1) }));
 }
 
 /** Le rang le plus haut du plan — il donne la couleur de l'impact et son intensité. */
@@ -428,8 +430,8 @@ export function lotIgniteMs(g: number): number {
  */
 export function lotSequenceMs(plan: RevealPlan): number {
   if (plan.reduced) return 0;
-  const ignites = plan.items.reduce(
-    (s, it) => s + it.path.slice(1).reduce((t, g) => t + lotIgniteMs(g), 0),
+  const ignites = lotSteps(plan).reduce(
+    (s, st) => s + st.ignite.reduce((t, g) => t + lotIgniteMs(g), 0),
     0,
   );
   const bees = plan.items.filter((it) => finalRank(it) === 0).length;
@@ -438,7 +440,6 @@ export function lotSequenceMs(plan: RevealPlan): number {
     (plan.items.length - 1) * INVOKE.lotLaunchStagger +
     INVOKE.lotApexMs +
     plan.items.length * INVOKE.lotScanMs +
-    INVOKE.lotScanHoldMs +
     ignites +
     INVOKE.windupMs +
     INVOKE.fallMs +
