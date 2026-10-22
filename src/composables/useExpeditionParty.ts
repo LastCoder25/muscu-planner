@@ -469,10 +469,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  rassemblait TOUS ses champions (occupés, postés ou blessés compris) et son héros — un
    *  repère « est-elle à ma portée ? », pas une équipe qu'on peut envoyer telle quelle. Même
    *  dispatch que l'équipe (`partyWinChance`), sans consommables. `null` hors forteresse
-   *  ennemie. */
-  const fortressAllWin = computed(() => {
-    const p = aimed.value;
-    if (!p || p.control?.kind !== 'fortress' || p.control.owner === 'player') return null;
+   *  ennemie. Lu aussi par la carte, sous la forteresse (`fortressOddsKey`). */
+  function allInWin(p: Poi): number | null {
+    if (p.control?.kind !== 'fortress' || p.control.owner === 'player') return null;
     const hero: PartyHero = {
       name: char.row?.pseudo ?? 'Toi',
       level: heroLevel.value,
@@ -487,7 +486,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
       FORECAST_SAMPLES,
     );
     return w === null ? null : Math.round(w * 100);
-  });
+  }
+  const fortressAllWin = computed(() => (aimed.value ? allInWin(aimed.value) : null));
   /** 🎯➕ CE QUE CHAQUE MEMBRE APPORTE à la réussite, en points (`winGain`), par rapport à
    *  l'équipe COCHÉE : un champion non coché s'y ajoute, un coché en est retiré. Clé `hero`
    *  pour le héros.
@@ -1381,6 +1381,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyWin,
     partyBattleView,
     fortressAllWin,
+    allInWin,
     partyGuardWin,
     partyRoute,
     partyLeg,

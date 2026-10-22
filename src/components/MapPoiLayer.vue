@@ -132,6 +132,11 @@
         >
           {{ p.control.kind === 'citadel' ? 'P' : '🏅' }}{{ tiers.get(p.id) }}
         </text>
+        <!-- 🎯 LA CHANCE DE PRENDRE LA FORTERESSE, tous réunis (demandé), sous tout le reste. -->
+        <g v-if="odds.has(p.id)" class="odds-pill" :class="oddsTone(odds.get(p.id)!)">
+          <rect :x="p.x - 6" :y="p.y + belowFort(p) - 0.6" width="12" height="4.2" rx="2.1" />
+          <text :x="p.x" :y="p.y + belowFort(p) + 2.4">🎯 {{ odds.get(p.id) }} %</text>
+        </g>
         <!-- 🪦 L'HEURE où ils sortent de terre, connue d'avance : de quoi prévoir sa défense. -->
         <g v-if="rising.get(p.id)" class="dead-pill" aria-hidden="true">
           <rect :x="p.x - 7" :y="p.y - 16.6" width="14" height="4.4" rx="2.2" />
@@ -264,6 +269,8 @@ const props = defineProps<{
   tierKey?: string;
   /** ⚫ La garnison des points tenus, « id:champions/miliciens » joints par « | » (`garrisonDotRows`). */
   garrisonKey?: string;
+  /** 🎯 La chance de prendre la forteresse ennemie, « id:% » joints par « | ». */
+  oddsKey?: string;
   /** La cible du héros en voyage. */
   target: Poi | null;
   /** Les cibles des équipes en route. */
@@ -326,11 +333,24 @@ const attackDotDy = (p: Poi) => {
   // 🌀 Une faille : juste sous le bas de l'ovale (le bas de sa boîte est vide, mesuré au banc).
   if (isRiftPoi(p)) return RIFT_MAP_ICON.h - RIFT_MAP_ICON.dy;
   if (!p.control) return 6.6;
-  const below =
-    (tiers.value.get(p.id) ? 13.2 : dots.value.get(p.id) ? 9.2 : 7.2) +
-    (dots.value.get(p.id) ? dotExtra(p.id) : 0);
-  return below * scaleOf(p);
+  return (belowFort(p) + (odds.value.has(p.id) ? 4.6 : 0)) * scaleOf(p);
 };
+/** Sous le fort, garnison et cran compris (unités du fort, avant agrandissement). */
+const belowFort = (p: Poi) =>
+  (tiers.value.get(p.id) ? 13.2 : dots.value.get(p.id) ? 9.2 : 7.2) +
+  (dots.value.get(p.id) ? dotExtra(p.id) : 0);
+/** 🎯 La chance de prendre la forteresse, id → % (`oddsKey`). */
+const odds = computed(
+  () =>
+    new Map(
+      (props.oddsKey ? props.oddsKey.split('|') : []).map((s) => {
+        const i = s.lastIndexOf(':');
+        return [s.slice(0, i), Number(s.slice(i + 1))] as const;
+      }),
+    ),
+);
+/** Mêmes seuils que la pastille de la fiche (`winClass`). */
+const oddsTone = (pct: number) => (pct >= 70 ? 'good' : pct >= 35 ? 'mid' : 'bad');
 const tiers = computed(
   () =>
     new Map(
@@ -623,6 +643,30 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   pointer-events: none;
   &.enemy {
     fill: var(--dim);
+  }
+}
+.odds-pill {
+  pointer-events: none;
+  rect {
+    fill: color-mix(in srgb, var(--bg) 88%, transparent);
+    stroke: var(--tone);
+    stroke-width: 0.35;
+  }
+  text {
+    font-size: 2.7px;
+    font-weight: 800;
+    text-anchor: middle;
+    fill: var(--tone);
+    stroke: none;
+  }
+  &.good {
+    --tone: var(--d1, #7bc86c);
+  }
+  &.mid {
+    --tone: var(--d3, #ffb23f);
+  }
+  &.bad {
+    --tone: var(--d4, #ff6a45);
   }
 }
 .poi-rank {

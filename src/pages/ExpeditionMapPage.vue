@@ -264,6 +264,7 @@
             :attacked-key="attackedKey"
             :tier-key="tierKey"
             :garrison-key="garrisonKey"
+            :odds-key="fortressOddsKey"
             :target="
               active && voyageTargetShown(active, now) && !fixedOnMap(active.poi)
                 ? active.poi
@@ -6304,6 +6305,7 @@ const {
   partyWin,
   partyBattleView,
   fortressAllWin,
+  allInWin,
   partyGuardWin,
   partyRoute,
   partyLeg,
@@ -6357,6 +6359,18 @@ const {
   progressReady: progress.ready,
   settleDueSiege,
 });
+/** 🏰🎯 LA CHANCE DE PRENDRE LA FORTERESSE, sous son fort sur la carte (demandé) : le même
+ *  « 👥 Tous réunis » que sa fiche (`allInWin` : tous les champions et le héros), sans avoir à
+ *  la toucher. « id:% » joints par « | », pour ne redessiner le calque que s'il change. */
+const fortressOddsKey = computed(() =>
+  placePois.value
+    .map((p) => {
+      const w = allInWin(p);
+      return w === null ? '' : `${p.id}:${w}`;
+    })
+    .filter(Boolean)
+    .join('|'),
+);
 /** 🪄 Les lieux que le planificateur peut proposer : ceux où une ÉQUIPE peut aller (mêmes règles
  *  que le grisage, `dimmed`), sans voyage déjà en route vers eux. ⚠️ Ni les lieux fixes ennemis
  *  (les prendre poste des champions : un choix lieu par lieu) ni les armées en marche (rendez-vous
