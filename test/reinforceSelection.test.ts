@@ -9,6 +9,7 @@ import {
   toggleReinfChamp,
   toggleReinfTransfer,
   transfersByOrigin,
+  reinfFreeLabels,
 } from '@/lib/reinforceSelection';
 
 const free = { champ: 2, total: 4 };
@@ -78,5 +79,26 @@ describe('🦸 le héros se coche avec la sélection (2026-10-08)', () => {
     const two = toggleReinfChamp(sel, 'a', free);
     expect(reinfCanAdd(two, 'champ', free)).toBe(false);
     expect(toggleReinfHero(sel, free).hero).toBeUndefined();
+  });
+});
+
+describe('renfort groupé : les places libres annoncées', () => {
+  // Signalé : l'en-tête additionnait les deux réserves (« 7 places libres, dont 2 de
+  // champion ») alors que la carte montre deux rangées séparées sous le fort.
+  it('annonce chaque réserve à part, comme les deux rangées de points de la carte', () => {
+    expect(reinfFreeLabels({ champ: 2, total: 7, mil: 5, milAnyway: true })).toEqual({
+      champ: '🏅 2 places de champion',
+      mil: '🛡️ 5 places de milicien',
+    });
+    expect(reinfFreeLabels({ champ: 1, total: 1, mil: 0, milAnyway: true })).toEqual({
+      champ: '🏅 1 place de champion',
+      mil: '🛡️ 0 place de milicien',
+    });
+  });
+  it('pas de pastille de milice là où aucun milicien ne va, sans limite à la forteresse', () => {
+    expect(reinfFreeLabels({ champ: 3, total: 3, mil: 0, milAnyway: false }).mil).toBeNull();
+    expect(
+      reinfFreeLabels({ champ: Infinity, total: Infinity, mil: 0, milAnyway: false }).champ,
+    ).toBe('🏅 places de champion sans limite');
   });
 });
