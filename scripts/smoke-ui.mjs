@@ -73,7 +73,12 @@ const ECRANS = [
     gestes: [{ nom: 'choix', clic: '.cta:has-text("Choisir un exercice")', attendu: '.sheet' }],
   },
   { route: '/history', nom: 'historique' },
-  { route: '/stats', nom: 'stats' },
+  {
+    route: '/stats',
+    nom: 'stats',
+    // 🏅 Niveau par muscle : une ligne de l'équilibre se déplie sur sa tuile de niveau.
+    gestes: [{ nom: 'niveau-muscle', clic: '.bb-row', attendu: '.bb-lvl' }],
+  },
   { route: '/trophies', nom: 'trophees' },
   { route: '/agenda', nom: 'agenda' },
   { route: '/settings', nom: 'parametres' },

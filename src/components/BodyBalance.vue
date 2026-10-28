@@ -44,6 +44,12 @@
             <span class="bb-dot" :style="{ background: muscleColor(r.muscle) }" /><span
               class="bb-txt"
               >{{ muscleLabel(r.muscle) }}</span
+            ><span
+              v-if="r.lv"
+              class="bb-lv"
+              :title="'Niveau ' + r.lv.level"
+              :aria-label="'Niveau ' + r.lv.level"
+              >{{ r.lv.level }}</span
             >
           </span>
           <!-- Le FAIT en vert et plus épais que la piste : il se distingue du prévu (hachuré, à
@@ -70,6 +76,18 @@
           <span v-if="r.act" class="bb-add" aria-hidden="true">＋</span>
         </button>
         <div v-if="open === r.muscle" class="bb-detail">
+          <!-- Niveau du muscle (affichage seul) : tuile + progression vers le suivant. -->
+          <div v-if="r.lv" class="bb-lvl">
+            <span class="bb-lvl-n font-display">Niv. {{ r.lv.level }}</span>
+            <span class="bb-lvl-bar"
+              ><span class="bb-lvl-fill" :style="{ width: r.lv.progressPct + '%' }"
+            /></span>
+            <span class="bb-lvl-xp">{{ r.lv.xpIntoLevel }}/{{ r.lv.xpForLevel }} XP</span>
+          </div>
+          <p v-if="r.lv && r.lv.braked" class="bb-lvl-brake">
+            ⚖️ Ce groupe est bien en avance sur les autres : son XP au-delà du seuil compte à
+            moitié. Les autres groupes le rattrapent à plein régime.
+          </p>
           <p v-if="!detail.length" class="bb-d-empty">
             Rien ne travaille ce groupe pour l’instant.
           </p>
@@ -102,7 +120,7 @@
       <p class="bb-legend">
         <span class="bb-lg lg-done" /> fait · <span class="bb-lg lg-plan" /> prévu ·
         <span class="bb-lg lg-mark" /> cible — séries/sem. ; « fait/cible → avec le prévu » ; un
-        muscle secondaire compte ½ série.
+        muscle secondaire compte ½ série. La pastille ronde est le niveau du groupe.
       </p>
     </template>
   </section>
@@ -125,7 +143,8 @@ import {
   type BalanceSource,
 } from '@/lib/bodyBalance';
 import { muscleColor, fmtSets } from '@/lib/volume';
-import { muscleLabel } from '@/lib/muscles';
+import { muscleLabel, normMuscle } from '@/lib/muscles';
+import { useMuscleLevels } from '@/composables/useMuscleLevels';
 import { computeMuscleTargets } from '@/lib/programBuilder';
 
 const PERIODS: { key: BalancePeriod; label: string }[] = [
@@ -149,6 +168,7 @@ const PERIOD_KEY = 'muscu:balance:period';
 const router = useRouter();
 const profileStore = useProfileStore();
 const { input, ensureLoaded } = useBalanceInput();
+const { levels } = useMuscleLevels();
 
 // Semaine par défaut : c'est l'unité du Défi 360, et la vue 4 semaines (une MOYENNE) ne se
 // compare à rien de ce qu'on voit ailleurs. Le choix est retenu sur l'appareil.
@@ -182,6 +202,7 @@ const rows = computed(() => {
       ...r,
       act: needsChallenge(r),
       bar: balanceBarGeometry(r.done, r.value, r.target),
+      lv: levels.value[normMuscle(r.muscle)],
     }),
   );
 });
@@ -300,7 +321,7 @@ onMounted(async () => {
 /* Retour à la ligne plutôt que troncature : « ischio-jambiers » ne tient pas sur 88 px à
    344 px de large, et coupé il ne se lit plus. La ligne garde ses 44 px. */
 .bb-name {
-  flex: 0 0 88px;
+  flex: 0 0 112px;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -315,6 +336,62 @@ onMounted(async () => {
   &::first-letter {
     text-transform: uppercase;
   }
+}
+/* Pastille de niveau : ronde, 22 px (la ligne entière reste la cible tactile de 44 px). */
+.bb-lv {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font: 700 11px var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.bb-lvl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 4px;
+}
+.bb-lvl-n {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.bb-lvl-bar {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.bb-lvl-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+}
+.bb-lvl-xp {
+  flex: 0 0 auto;
+  font: 11.5px var(--font-display);
+  color: var(--dim);
+}
+.bb-lvl-brake {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--d3) 12%, transparent);
+  font-size: 12px;
+  color: var(--dim);
 }
 .bb-dot {
   flex: 0 0 7px;

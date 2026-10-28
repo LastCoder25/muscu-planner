@@ -81,9 +81,29 @@
     <div v-if="selected" class="mbody-pick" :style="{ color: color(selected) }">
       {{ label(selected) }} — <b>{{ fmtSets(series[selected] ?? 0) }}</b> série{{
         (series[selected] ?? 0) > 1 ? 's' : ''
-      }}
+      }}<template v-if="levels?.[selected]">
+        · <span class="mbody-lv">niv. {{ levels[selected]!.level }}</span></template
+      >
     </div>
     <div v-else class="mbody-pick dim">Touche un groupe musculaire</div>
+
+    <!-- Niveau de CHAQUE groupe (affichage seul) : tuiles, y compris ceux que la silhouette
+         ne dessine pas (avant-bras, fessiers). Toucher une tuile sélectionne le groupe. -->
+    <div v-if="levels" class="mbody-tiles">
+      <button
+        v-for="m in LEVEL_MUSCLES"
+        :key="m"
+        type="button"
+        class="mtile"
+        :class="{ sel: selected === m }"
+        :aria-pressed="selected === m"
+        @click="selected = selected === m ? null : m"
+      >
+        <span class="mtile-dot" :style="{ background: color(m) }" />
+        <span class="mtile-txt">{{ label(m) }}</span>
+        <span class="mtile-lv font-display">{{ levels[m]?.level ?? 1 }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -91,8 +111,13 @@
 import { ref } from 'vue';
 import { fmtSets, muscleColor } from '@/lib/volume';
 import { muscleLabel } from '@/lib/muscles';
+import { LEVEL_MUSCLES, type MuscleLevel } from '@/lib/muscleLevels';
 
-const props = defineProps<{ series: Record<string, number> }>();
+const props = defineProps<{
+  series: Record<string, number>;
+  /** Niveau par muscle (affichage seul) ; absent = pas de tuiles. */
+  levels?: Record<string, MuscleLevel>;
+}>();
 const view = ref<'front' | 'back'>('front');
 const selected = ref<string | null>(null);
 
@@ -198,6 +223,61 @@ const label = (m: string) => muscleLabel(m);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   min-height: 18px;
+}
+.mbody-lv {
+  color: var(--accent);
+}
+.mbody-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+}
+.mtile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2, #2b241b);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mtile.sel {
+  border-color: var(--accent);
+}
+.mtile-dot {
+  flex: 0 0 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.mtile-txt {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+/* Pastille ronde du niveau. */
+.mtile-lv {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-3, #3a332a);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .mbody-pick.dim {
   color: var(--dim);

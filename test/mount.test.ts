@@ -5350,3 +5350,24 @@ describe('🔔 notification « rentré » : la carte n’ouvre pas le rapport', 
     expect(out).not.toContain('Retour de mission');
   }, 60_000);
 });
+
+// 🏅 Niveau par groupe musculaire (affichage seul) : la silhouette montre une tuile par
+// muscle suivi, avec sa pastille de niveau ; sans niveaux, pas de tuiles.
+describe('🏅 MuscleBody : niveaux par muscle', () => {
+  it('une tuile par muscle avec son niveau ; rien sans la prop', async () => {
+    const { default: MuscleBody } = await import('@/components/MuscleBody.vue');
+    const { muscleLevels, LEVEL_MUSCLES } = await import('@/lib/muscleLevels');
+    const levels = muscleLevels({ sessions: [], secondaries: () => undefined });
+    levels.dos = { ...levels.dos!, level: 7 };
+    let out = '';
+    expect(
+      await mountIt(MuscleBody, { series: {}, levels }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out.split('class="mtile"').length - 1).toBe(LEVEL_MUSCLES.length);
+    expect(out).toContain('>7<');
+    expect(
+      await mountIt(MuscleBody, { series: {} }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).not.toContain('mtile');
+  }, 30_000);
+});

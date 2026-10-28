@@ -104,7 +104,7 @@
           </button>
         </div>
         <div class="vol-card">
-          <MuscleBody :series="volSets" />
+          <MuscleBody :series="volSets" :levels="muscleLvls" />
           <div class="vol-total">
             <b>{{ fmtSets(volData.totalSets) }}</b> séries · {{ volPeriodLabel }}
           </div>
@@ -336,6 +336,7 @@ import {
 } from '@/lib/bodyBalance';
 import { MUSCLE_REGIONS, regionTotals } from '@/lib/muscles';
 import { useBalanceInput } from '@/composables/useBalanceInput';
+import { useMuscleLevels } from '@/composables/useMuscleLevels';
 import { challengeLane } from '@/lib/tennisTraining';
 import { DRILL_SHOT_LABELS } from '@/data/tennis';
 import { useProgress } from '@/composables/useProgress';
@@ -358,6 +359,7 @@ const progress = useProgress();
 // UNE entrée pour tous les comptes de séries de la page (cf. lib/bodyBalance, « une page,
 // un compte ») et UN « aujourd'hui » (le jour d'entraînement) pour toutes les semaines.
 const { input: balanceInput, ensureLoaded: ensureBalanceLoaded, today } = useBalanceInput();
+const { levels: muscleLvls } = useMuscleLevels();
 // Global + un niveau par SPORT réellement pratiqué (cohérent avec l'accueil) + Défis.
 // En vue muscu seule : seulement le niveau Muscu (tuile `disc:musculation`).
 const levelCards = computed(() => {
