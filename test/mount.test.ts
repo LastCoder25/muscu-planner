@@ -576,6 +576,38 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(none).not.toContain('data-test="cond-chip"');
   });
 
+  it('AbsenceCard : pastilles du résumé, à relancer, et le geste pour la ranger', async () => {
+    const { default: AbsenceCard } = await import('@/components/AbsenceCard.vue');
+    let out = '';
+    const summary = {
+      reports: 4,
+      gold: 1240,
+      xp: 3400,
+      supplies: 2,
+      taken: 1,
+      lost: 0,
+      hurt: 0,
+      riftsClosed: 2,
+      riftsOverflowed: 0,
+    };
+    await mountIt(
+      AbsenceCard,
+      { summary, away: 3 * 3600_000, relaunch: { champions: 4, heroFree: true, places: 7 } },
+      undefined,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
+    expect(out).toContain('3 h 00');
+    expect(out).toContain('lieu pris');
+    expect(out).toContain('failles fermées');
+    expect(out).not.toContain('lieu perdu'); // un zéro n'a pas de pastille
+    expect(out).toContain('4 champions libres');
+    expect(out).toContain('7 lieux disponibles');
+    expect(out).toContain('Héros libre');
+    expect(out).toContain('Ranger');
+  });
+
   // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de
   // l'île active est dite.
   it('ArchipelPanel : la traversée vers une île ouverte, et la milice de chaque île', async () => {

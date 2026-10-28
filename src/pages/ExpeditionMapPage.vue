@@ -479,7 +479,13 @@
            expéditions et un pour les places fortes ; toucher une tuile ferme l'affichage et
            centre la carte sur son tracé ou son lieu). Les expéditions ne s'affichent plus que là
            (demandé) ; sous la carte ne restent que les places fortes. -->
-      <div v-if="overlay && !viewed" class="map-overlay" role="dialog" :aria-label="overlayTitle">
+      <div
+        v-if="overlay && !viewed"
+        class="map-overlay"
+        :class="{ compact: overlay === 'absence' }"
+        role="dialog"
+        :aria-label="overlayTitle"
+      >
         <div class="mo-head" :class="{ bare: overlay === 'ctl' }">
           <span v-if="overlay !== 'ctl'" class="mo-title">{{ overlayTitle }}</span>
           <button type="button" class="mo-x" aria-label="Fermer" @click="overlay = null">✕</button>
@@ -502,6 +508,14 @@
             @attack="(p: Poi) => ((overlay = null), openAttack(p))"
           />
         </template>
+        <AbsenceCard
+          v-else-if="overlay === 'absence' && absence"
+          :summary="absence"
+          :away="coarseNow - absenceSince"
+          :relaunch="absenceRelaunch"
+          @plan="overlay = 'plan'"
+          @close="overlay = null"
+        />
         <ExpeditionPlanner
           v-else-if="overlay === 'plan' || overlay === 'repart'"
           :key="overlay"
@@ -1850,6 +1864,13 @@ import CrossingSheet from '@/components/CrossingSheet.vue';
 import CrossingScene from '@/components/CrossingScene.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
+import AbsenceCard from '@/components/AbsenceCard.vue';
+import {
+  ABSENCE_MIN_MS,
+  absenceSummary,
+  isAbsence,
+  type RelaunchInput,
+} from '@/lib/absenceSummary';
 import { pantheonLights } from '@/lib/pantheonLights';
 import { normalizeRuneBank } from '@/lib/runeBank';
 import { useExpeditionPlanner, type PlannerRow } from '@/composables/useExpeditionPlanner';
@@ -4790,7 +4811,7 @@ function dimmed(p: Poi): boolean {
 
 /** 🗂️ Les tuiles affichées PAR-DESSUS la carte (cf. le gabarit) : expéditions ou places
  *  fortes. Plus rien ne s'affiche sous la carte (demandé). */
-type MapPanel = 'trips' | 'ctl' | 'plan' | 'repart';
+type MapPanel = 'trips' | 'ctl' | 'plan' | 'repart' | 'absence';
 const overlay = ref<MapPanel | null>(null);
 // 📏 Ouvrir une liste re-mesure la carte : si le haut de la page a bougé depuis le montage
 // (un bandeau apparu puis parti), la liste s'arrêtait trop haut au-dessus des ronds du bas.
@@ -4800,11 +4821,13 @@ watch(overlay, (o) => {
 const overlayTitle = computed(() =>
   overlay.value === 'ctl'
     ? '🏰 Places fortes'
-    : overlay.value === 'plan'
-      ? '🪄 Planifier des expéditions'
-      : overlay.value === 'repart'
-        ? '👥 Répartir l’effectif'
-        : '🧭 Expéditions',
+    : overlay.value === 'absence'
+      ? '📋 Pendant ton absence'
+      : overlay.value === 'plan'
+        ? '🪄 Planifier des expéditions'
+        : overlay.value === 'repart'
+          ? '👥 Répartir l’effectif'
+          : '🧭 Expéditions',
 );
 function toggleOverlay(id: MapPanel) {
   overlay.value = overlay.value === id ? null : id;
@@ -6469,6 +6492,69 @@ const controlReturnNote = computed(() =>
  *  sans ce drapeau, les écouteurs et l'intervalle d'une seconde posés ensuite survivaient à
  *  `onUnmounted` (déjà passé) et retenaient la page détachée. */
 let disposed = false;
+// ── 📋 PENDANT TON ABSENCE ───────────────────────────────────────────────────────────────
+// La dernière visite vit dans le navigateur (par appareil) : aucune donnée de jeu en plus. Le
+// résumé additionne les rapports de la boîte 📬 tombés depuis (`absenceSummary`) ; il s'ouvre
+// UNE fois par absence (au montage, ou au retour d'un onglet resté caché ≥ 30 min), se range
+// d'un geste, et la visite est alors datée.
+const SEEN_KEY = 'muscu:map:lastSeen';
+function readSeen(): number {
+  try {
+    const v = Number(localStorage.getItem(SEEN_KEY));
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+function writeSeen(t: number) {
+  try {
+    localStorage.setItem(SEEN_KEY, String(t));
+  } catch {
+    /* navigation privée : pas de résumé, rien de cassé */
+  }
+}
+const absenceSince = ref(readSeen());
+const absence = computed(() =>
+  isAbsence(absenceSince.value, coarseNow.value)
+    ? absenceSummary(char.row?.messages ?? [], absenceSince.value, coarseNow.value)
+    : null,
+);
+/** Ce qui est à relancer : les mêmes effectifs et lieux que le planificateur lit. */
+const absenceRelaunch = computed<RelaunchInput>(() => ({
+  champions: freeStable.value.length,
+  heroFree: planner.heroFree.value,
+  places: plannerTargets.value.length,
+}));
+let absenceShown = false;
+watch(
+  absence,
+  (a) => {
+    if (!a || absenceShown || overlay.value || viewed.value) return;
+    absenceShown = true;
+    overlay.value = 'absence';
+  },
+  { immediate: true },
+);
+// Rangée (✕, « Ranger », ou un autre panneau ouvert) : la visite est datée.
+watch(overlay, (o, prev) => {
+  if (prev === 'absence' && o !== 'absence') writeSeen(Date.now());
+});
+let hiddenAt = 0;
+function onVisibility() {
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now();
+    writeSeen(hiddenAt);
+  } else if (hiddenAt && Date.now() - hiddenAt >= ABSENCE_MIN_MS) {
+    absenceSince.value = hiddenAt;
+    absenceShown = false;
+  }
+}
+document.addEventListener('visibilitychange', onVisibility);
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibility);
+  writeSeen(Date.now());
+});
+
 onMounted(async () => {
   // La carte est tenue à jour par l'Aventure qui l'héberge (`expeSyncMap` dans sa boucle).
   if (auth.user?.id && !char.row) await char.fetchMine().catch(() => undefined);
@@ -7482,6 +7568,11 @@ onUnmounted(() => {
   border-radius: 14px;
   background: var(--bg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+/* 📋 Une tuile courte (résumé d'absence) : elle épouse son contenu au lieu de couvrir la carte. */
+.map-overlay.compact {
+  bottom: auto;
+  max-height: calc(100% - 128px);
 }
 .mo-head {
   position: sticky;
