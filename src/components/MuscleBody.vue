@@ -229,7 +229,7 @@ const label = (m: string) => muscleLabel(m);
 }
 .mbody-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 6px;
   width: 100%;
   margin-top: 6px;
@@ -262,7 +262,7 @@ const label = (m: string) => muscleLabel(m);
   min-width: 0;
   font-size: 12px;
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 /* Pastille ronde du niveau. */
 .mtile-lv {
