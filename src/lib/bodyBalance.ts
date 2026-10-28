@@ -114,7 +114,7 @@ type Tally = Record<string, number>;
 export type BalanceSource = 'session' | 'combo' | 'challenge' | 'boss';
 
 /** Du volume attribué à un exo : `sets` séries (fractionnaires possibles) le jour `day`. */
-interface VolumeItem {
+export interface VolumeItem {
   source: BalanceSource;
   day: string;
   exerciseId: string;
@@ -367,14 +367,23 @@ function muscuChallenges(challenges: readonly Challenge[]): Challenge[] {
   return challenges.filter((c) => challengeLane(c) === 'muscu');
 }
 
-/** Tout le volume RÉELLEMENT fait (séances, 360, challenges muscu), en éléments. */
-function doneItems(i: Omit<BalanceInput, 'targets' | 'today'>): VolumeItem[] {
+/** Le volume RÉELLEMENT fait HORS bilans de séance : Défi 360, challenges muscu, boss entre
+ *  amis. Exporté pour que le niveau par muscle (`muscleLevels`) lise la MÊME règle que ce
+ *  graphe (quelles sources, séries fractionnaires, conditionnement écarté) au lieu de la
+ *  recopier. */
+export function sideVolumeItems(
+  i: Pick<BalanceInput, 'combos' | 'challenges' | 'bossHits' | 'primaries' | 'objective'>,
+): VolumeItem[] {
   return [
-    ...sessionItems(i.sessions),
     ...i.combos.flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
     ...challengeItems(muscuChallenges(i.challenges), i.objective),
     ...bossItems(i.bossHits, i.primaries, i.objective),
   ];
+}
+
+/** Tout le volume RÉELLEMENT fait (séances, 360, challenges muscu), en éléments. */
+function doneItems(i: Omit<BalanceInput, 'targets' | 'today'>): VolumeItem[] {
+  return [...sessionItems(i.sessions), ...sideVolumeItems(i)];
 }
 
 /** Crédite par muscle les éléments dont le jour tombe dans [start, end). */

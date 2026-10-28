@@ -1,6 +1,7 @@
 // muscleLevels.ts — NIVEAU PAR GROUPE MUSCULAIRE (pur/testable). AFFICHAGE SEUL : aucun effet
 // de jeu (décision de l'utilisateur) et RIEN n'est stocké — tout est recalculé depuis
-// l'historique COMPLET des bilans de séance, comme les autres pistes (`useProgress`).
+// l'historique COMPLET (bilans de séance + Défi 360 + challenges muscu + boss entre amis, les
+// mêmes sources que `muscuTotal`), comme les autres pistes (`useProgress`).
 //
 // XP d'un muscle = l'XP de ses séries : chaque série valait déjà `reps × REP_XP + charge/500`
 // dans `sessionXp` ; on y ajoute un petit socle par série (`SET_XP`) car, ici, il n'y a pas de
@@ -23,7 +24,7 @@
 import type { SessionLog } from './types';
 import { computeLevel, type LevelInfo } from './levels';
 import { REP_XP, XP_MULT } from './athlete';
-import { creditSets } from './bodyBalance';
+import { creditSets, sideVolumeItems, type BalanceInput, type VolumeItem } from './bodyBalance';
 import { MUSCLE_LABELS, normMuscle } from './muscles';
 import { isMuscuLog, type LogEntry } from './volume';
 
@@ -48,6 +49,12 @@ export interface MuscleLevel extends LevelInfo {
 
 export interface MuscleLevelsInput {
   sessions: readonly LogEntry[];
+  /** Autres sources de muscu (facultatives : absentes = ne comptent pas). Les mêmes champs
+   *  que le graphe d'équilibre, lus par `sideVolumeItems`. */
+  combos?: BalanceInput['combos'];
+  challenges?: BalanceInput['challenges'];
+  bossHits?: BalanceInput['bossHits'];
+  objective?: BalanceInput['objective'];
   /** Muscles secondaires d'un exo (bibliothèque) ; inconnu → principal seul. */
   secondaries: (exerciseId: string) => readonly string[] | null | undefined;
   /** Muscle principal d'un exo (bibliothèque), quand le bilan ne le porte pas. */
@@ -66,9 +73,30 @@ export function setXp(
   return (SET_XP + work) * XP_MULT;
 }
 
-/** XP BRUTE par muscle normalisé (muscu seulement : prépa, cardio, autres sports exclus). */
+/** XP d'un élément de volume hors bilan (360, challenge, boss) : le MÊME barème qu'une série
+ *  de séance — socle par série + reps — sur ses séries (fractionnaires) et ses reps faites.
+ *  Un exo au temps porte `reps: 0` : socle seul, comme `setXp`. ⚠️ Le tonnage n'y figure pas
+ *  (l'élément ne le porte pas) : une charge lourde y vaut un peu moins qu'en séance. */
+export function itemXp(it: Pick<VolumeItem, 'sets' | 'reps'>): number {
+  if (!(it.sets > 0)) return 0;
+  return (it.sets * SET_XP + (it.reps || 0) * REP_XP) * XP_MULT;
+}
+
+/** XP BRUTE par muscle normalisé (muscu seulement : prépa, cardio, autres sports exclus).
+ *  Sources : bilans de séance + Défi 360 + challenges muscu + boss entre amis.
+ *  ⚠️ Pas de double compte par construction : le 360, les challenges et les boss n'écrivent
+ *  JAMAIS de bilan dans `logs` (seules les sorties CARDIO ont un miroir `challenge_id`, et
+ *  ce n'est pas de la muscu) — comme pour `muscuTotal` (useProgress). */
 export function rawMuscleXp(i: MuscleLevelsInput): Record<string, number> {
   const tally: Record<string, number> = {};
+  const side = sideVolumeItems({
+    combos: i.combos ?? [],
+    challenges: i.challenges ?? [],
+    bossHits: i.bossHits ?? [],
+    primaries: i.primaries ?? (() => undefined),
+    objective: i.objective,
+  });
+  for (const it of side) creditSets(tally, it.primary, i.secondaries(it.exerciseId), itemXp(it));
   for (const e of i.sessions) {
     const log: SessionLog = e.log;
     if (!isMuscuLog(log)) continue;
