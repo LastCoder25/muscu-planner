@@ -110,6 +110,7 @@ import {
   recordDeparture,
   archipelFloor,
 } from '@/lib/expedition';
+import type { LastWave } from '@/lib/lastWave';
 import {
   activeIsland,
   archipelOn,
@@ -4050,6 +4051,15 @@ export const useCharacterStore = defineStore('character', () => {
   // `caravanLegMin`, et le renommer partout n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
 
+  /** 🔁 Retient la dernière vague lancée par « Tout lancer » (`lastWave.ts`) dans la carte de l'île :
+   *  UNE écriture par vague (jamais une par départ), additive dans le JSONB de la carte, sans
+   *  migration. Ne fait rien sans carte chargée. */
+  async function recordWave(userId: string, wave: LastWave): Promise<void> {
+    const map = row.value?.expedition_map;
+    if (!map) return;
+    await persist(userId, { expedition_map: { ...map, lastWave: wave } });
+  }
+
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
    *  autant d'aventuriers DISPONIBLES qu'on veut — ⚠️ aucun `escortMax` (seuls les convois
    *  le gardent). ⚠️ UNIQUE chemin d’envoi d’un groupe, donc unique endroit où se décide la
@@ -7176,6 +7186,7 @@ export const useCharacterStore = defineStore('character', () => {
     attackList,
     heroEngaged,
     sendCombinedAttack,
+    recordWave,
     attackTick,
     sendParty,
     partyTick,

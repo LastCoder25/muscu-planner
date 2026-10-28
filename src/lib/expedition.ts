@@ -19,6 +19,7 @@ import { troopSize, type EnemyWear } from './enemyWear';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
+import type { LastWave } from './lastWave';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { islandSpan, islandVia, islandView, onIsland, LAND_MARGIN } from './islandShape';
 import { RETENTION } from './privacy';
@@ -982,6 +983,10 @@ export interface ExpeditionMap {
    *  (`startSailing`) : la carte active ne change pas, ils changent d'île à l'arrivée
    *  (`settleSailings`). Absent quand il n'y en a pas. */
   sailings?: Crossing[];
+  /** 🔁 La DERNIÈRE VAGUE lancée d'un coup par « Tout lancer » du planificateur (`lastWave.ts`) :
+   *  de quoi la relancer. Propre à l'île (elle vit dans sa carte, rangée avec elle). Absent =
+   *  aucune vague encore. ⚠️ `advanceWorld` reconstruit la carte champ par champ : il la recopie. */
+  lastWave?: LastWave;
   /** 🏰 Le héros RAPPELÉ de la forteresse rentre à la base à cet instant (occupé d'ici là). */
   heroReturnAt?: number;
   /** 🧭 D'OÙ et QUAND le héros est parti pour rentrer à pied (rappel, demi-tour, lieu perdu) :
@@ -3137,6 +3142,7 @@ export function advanceWorld(
     ...(map.islands ? { islands: map.islands } : {}),
     ...(map.citadelStash ? { citadelStash: map.citadelStash } : {}),
     ...(map.heroReturnAt !== undefined ? { heroReturnAt: map.heroReturnAt } : {}),
+    ...(map.lastWave ? { lastWave: map.lastWave } : {}),
     ...(map.heroReturnFrom ? { heroReturnFrom: map.heroReturnFrom } : {}),
     ...(map.militia ? { militia: map.militia } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte

@@ -11,6 +11,30 @@
       ils rejoignent le plus vite le reste de l’île en attaque combinée. La garde des lieux reste
       aux miliciens.
     </p>
+    <!-- 🔁 LA DERNIÈRE VAGUE (demandé) : les mêmes équipes sur des lieux du même type, sans rien
+         recalculer. Le store refuse ce que l'envoi manuel refuserait ; ce qui ne repart pas est
+         listé avec sa raison. -->
+    <div v-if="section === 'plan' && lastWave" class="pl-wave" data-test="wave">
+      <button type="button" class="pl-all" :disabled="!!launching" @click="relaunchWave">
+        {{
+          launching === 'wave'
+            ? '⏳ Départs…'
+            : `🔁 Relancer la dernière vague (${lastWave.trips.length})`
+        }}
+      </button>
+      <div class="pl-sum">
+        <span class="pl-pill dim">il y a {{ waveAge }}</span>
+        <span v-for="c in waveChips" :key="c.key" class="pl-pill">{{ c.label }} ×{{ c.n }}</span>
+      </div>
+      <div v-if="waveResult" class="pl-sum" data-test="wave-result">
+        <span class="pl-pill ok"
+          >✅ {{ waveResult.sent }} parti{{ waveResult.sent > 1 ? 's' : '' }}</span
+        >
+        <span v-for="(s, i) in waveResult.skipped" :key="i" class="pl-pill warn">
+          ⚠️ {{ s.label }} : {{ s.reason }}
+        </span>
+      </div>
+    </div>
     <div v-if="section === 'plan'" class="pl-modes" role="radiogroup" aria-label="Optimiser">
       <button
         v-for="m in MODES"
@@ -330,6 +354,8 @@ import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition
 import type { PlanMode } from '@/lib/expeditionPlanner';
 import { DEPLOY_HERO_ID } from '@/lib/deployPlan';
 import { SUPPLIES } from '@/lib/supplies';
+import { waveCounts } from '@/lib/lastWave';
+import { absenceDuration } from '@/lib/absenceSummary';
 
 const props = defineProps<{
   planner: ReturnType<typeof useExpeditionPlanner>;
@@ -355,6 +381,9 @@ const {
   compute,
   launch,
   launchAll,
+  lastWave,
+  waveResult,
+  relaunchWave,
   repoTeams,
   repoMoves,
   repoRunning,
@@ -402,6 +431,12 @@ const engaged = computed(() =>
 );
 const longest = computed(() => Math.max(0, ...(rows.value ?? []).map((r) => r.tripMin)));
 const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0));
+
+/** 🔁 La dernière vague en pastilles (un par type de lieu) et son âge. */
+const waveChips = computed(() => (lastWave.value ? waveCounts(lastWave.value) : []));
+const waveAge = computed(() =>
+  lastWave.value ? absenceDuration(Date.now() - lastWave.value.at) : '',
+);
 
 /** 🧭 Un endroit : la base ou le lieu fixe. */
 const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Base');
@@ -525,6 +560,21 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
   border: 1px solid var(--line);
   font-size: 12px;
   font-weight: 600;
+  &.dim {
+    color: var(--dim);
+  }
+  &.ok {
+    border-color: #7bc86c;
+  }
+  &.warn {
+    border-color: #ffb23f;
+    line-height: 1.3;
+  }
+}
+.pl-wave {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .pl-list {
   display: flex;

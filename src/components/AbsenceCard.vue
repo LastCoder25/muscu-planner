@@ -19,7 +19,10 @@
     </div>
     <div class="abs-actions">
       <button type="button" class="abs-btn" @click="$emit('plan')">🪄 Planifier</button>
-      <slot name="actions" />
+      <!-- 🔁 La dernière vague en un geste (le planificateur s'ouvre et dit ce qui est parti). -->
+      <button v-if="wave" type="button" class="abs-btn" :disabled="busy" @click="$emit('wave')">
+        🔁 Relancer la vague ({{ wave }})
+      </button>
       <button type="button" class="abs-btn ghost" @click="$emit('close')">Ranger</button>
     </div>
   </section>
@@ -40,8 +43,12 @@ const props = defineProps<{
   /** Depuis combien de temps (ms) le joueur n'avait pas ouvert la carte. */
   away: number;
   relaunch: RelaunchInput;
+  /** Combien de départs compte la dernière vague (0 = aucune, pas de bouton). */
+  wave?: number;
+  /** Un départ est en cours : le bouton se grise. */
+  busy?: boolean;
 }>();
-defineEmits<{ (e: 'plan'): void; (e: 'close'): void }>();
+defineEmits<{ (e: 'plan'): void; (e: 'wave'): void; (e: 'close'): void }>();
 
 const chips = computed(() => absenceChips(props.summary));
 const relaunch = computed(() => relaunchChips(props.relaunch));
@@ -118,6 +125,10 @@ const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
     background: var(--surface);
     font-weight: 600;
     flex-basis: 90px;
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 }
 </style>

@@ -513,7 +513,10 @@
           :summary="absence"
           :away="coarseNow - absenceSince"
           :relaunch="absenceRelaunch"
+          :wave="planner.lastWave.value?.trips.length ?? 0"
+          :busy="!!planner.launching.value"
           @plan="overlay = 'plan'"
+          @wave="relaunchFromAbsence"
           @close="overlay = null"
         />
         <ExpeditionPlanner
@@ -6519,6 +6522,12 @@ const absence = computed(() =>
     ? absenceSummary(char.row?.messages ?? [], absenceSince.value, coarseNow.value)
     : null,
 );
+/** 🔁 Depuis la tuile : le planificateur s'ouvre (il dit ce qui est parti et ce qui est resté),
+ *  la vague repart par le même chemin que son propre bouton. */
+function relaunchFromAbsence() {
+  overlay.value = 'plan';
+  void planner.relaunchWave();
+}
 /** Ce qui est à relancer : les mêmes effectifs et lieux que le planificateur lit. */
 const absenceRelaunch = computed<RelaunchInput>(() => ({
   champions: freeStable.value.length,

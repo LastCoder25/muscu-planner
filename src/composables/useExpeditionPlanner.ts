@@ -32,6 +32,13 @@ import {
   supplyTarget,
   usefulSupplies,
 } from '@/lib/party';
+import {
+  planReplay,
+  replayDeps,
+  waveFromRows,
+  waveKeyLabel,
+  type ReplayWorld,
+} from '@/lib/lastWave';
 import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import { healableForDeploy, type BaseState } from '@/lib/raid';
 import { riftsByUrgency, withRiftCut } from '@/lib/rift';
@@ -633,6 +640,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     launching.value = '*';
     let ok = 0;
     const refusals: string[] = [];
+    const sent: PlannerRow[] = [];
     try {
       await ctx.settleDueSiege();
       for (const r of [...(rows.value ?? [])]) {
@@ -640,17 +648,109 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         if (refused) refusals.push(refused);
         else {
           ok++;
+          sent.push(r);
           rows.value = (rows.value ?? []).filter((x) => x.key !== r.key);
         }
       }
     } finally {
       launching.value = null;
     }
+    // 🔁 La vague PARTIE (pas la proposition : seulement ce qui a vraiment quitté la base) est
+    // retenue pour être relancée. Une écriture, après les départs.
+    await rememberWave(sent);
     if (refusals.length)
       $q.notify({
         type: ok ? 'warning' : 'negative',
         message: `${ok} expédition(s) lancée(s), ${refusals.length} refusée(s) : ${refusals[0]}.`,
       });
+  }
+
+  // ── 🔁 RELANCER LA DERNIÈRE VAGUE ───────────────────────────────────────────────────────
+  /** La dernière vague de CETTE île (elle vit dans sa carte). */
+  const lastWave = computed(() => char.row?.expedition_map?.lastWave ?? null);
+  /** Ce que le dernier « Relancer » a fait : combien sont partis, et ce qui est resté avec sa
+   *  raison (jamais ignoré en silence). */
+  const waveResult = ref<{ sent: number; skipped: { label: string; reason: string }[] } | null>(
+    null,
+  );
+
+  /** Retient la vague qui vient de partir. Une écriture manquée n'empêche rien : la vague
+   *  d'avant reste, le joueur relancera à la main. */
+  async function rememberWave(sent: PlannerRow[]) {
+    const uid = auth.user?.id;
+    const wave = waveFromRows(sent, Date.now());
+    if (!uid || !wave) return;
+    try {
+      await char.recordWave(uid, wave);
+      waveResult.value = null;
+    } catch {
+      /* hors ligne : la prochaine vague la retiendra */
+    }
+  }
+
+  /** Les règles d'envoi, BRANCHÉES sur celles du planificateur et du store — la vague n'en a
+   *  aucune à elle (cf. `lastWave.ts`). */
+  function replayWorld(): ReplayWorld {
+    const map = char.row?.expedition_map;
+    const free = new Map<string, string | null>(ctx.freeStable.value.map((a) => [a.id, null]));
+    for (const [pid, list] of readyGarrisons(map, char.advList, ctx.now.value))
+      for (const a of list) free.set(a.id, pid);
+    return {
+      targets: ctx.targets.value,
+      free,
+      advs: new Map(char.advList.map((a) => [a.id, a])),
+      heroFree: heroFree.value,
+      heroAt: heroPostOf(map)?.id ?? null,
+      hero: heroObj(),
+      road: ctx.roadCtx.value,
+      base: ctx.base.value,
+      cap: ctx.cap.value,
+      now: Date.now(),
+      need: threshold.value / 100,
+    };
+  }
+
+  /** « 🔁 Relancer la dernière vague » : les mêmes équipes, sur des lieux du même type, par le
+   *  MÊME chemin d'envoi que « Tout lancer » (`sendRow` → le store refuse ce que l'envoi
+   *  manuel refuserait). Ce qui ne repart pas est listé avec sa raison. */
+  async function relaunchWave() {
+    const wave = lastWave.value;
+    if (!wave || launching.value) return;
+    launching.value = 'wave';
+    const skipped: { label: string; reason: string }[] = [];
+    let sent = 0;
+    try {
+      await ctx.settleDueSiege();
+      const map = char.row?.expedition_map;
+      const plan = planReplay(wave, replayDeps(replayWorld()), char.row?.supplies ?? {});
+      for (const s of plan.skipped)
+        skipped.push({ label: waveKeyLabel(s.trip.key), reason: s.reason });
+      for (const { trip, target } of plan.sends) {
+        const groups = trip.wings.map((w) => ({
+          from: map?.pois.find((p) => p.id === w.originId) ?? null,
+          advs: w.advIds.flatMap((id) => char.advList.find((a) => a.id === id) ?? []),
+          hero: w.hero,
+        }));
+        const refused = await sendRow({
+          key: `wave|${target.id}`,
+          poi: target,
+          advs: groups.flatMap((g) => g.advs),
+          hero: groups.some((g) => g.hero),
+          from: groups[0]!.from,
+          wings: groups.length > 1 ? groups : null,
+          win: 1,
+          tripMin: 0,
+          xp: 0,
+          supplies: trip.supplies,
+        });
+        if (refused) skipped.push({ label: waveKeyLabel(trip.key), reason: refused });
+        else sent++;
+      }
+    } finally {
+      launching.value = null;
+    }
+    waveResult.value = { sent, skipped };
+    if (sent && rows.value) rows.value = withoutEngaged(rows.value, ctx.targets.value);
   }
 
   /** 🕳️ Combien de failles le mode « Failles » peut viser (l'écran le dit s'il n'y en a aucune). */
@@ -676,6 +776,9 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     reset,
     launch,
     launchAll,
+    lastWave,
+    waveResult,
+    relaunchWave,
     repoTeams,
     repoMoves,
     repoRunning,
