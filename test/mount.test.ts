@@ -558,7 +558,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(open).toContain('encore 11 h'); // 12 h de période − 1 h écoulée
     expect(open).toContain('Ensuite');
     expect(open).toContain('Vents calmes');
-    // Sans condition ni suivante : pas de bloc du tout.
+    // Sans condition ni suivante : le bloc DIT qu'il n'y en a pas (même message que quand une
+    // autre arrive), sans « Ensuite ».
     let none = '';
     await mountIt(
       ArchipelPanel,
@@ -569,7 +570,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (none = h),
       (host) => host.querySelector<HTMLElement>('.arch-cur')?.click(),
     );
-    expect(none).not.toContain('class="at-cond"');
+    expect(none).toContain('class="at-cond"');
+    expect(none).toContain('Pas de condition particulière');
+    expect(none).not.toContain('Ensuite');
+    expect(none).not.toContain('data-test="cond-chip"');
   });
 
   // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de

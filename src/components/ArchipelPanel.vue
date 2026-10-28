@@ -101,7 +101,7 @@
             <span v-else class="at-chip dim">🔒 à venir</span>
           </div>
           <!-- 🌗 La condition d'île du moment (`islandCondition`) : pastille, effet, durée restante. -->
-          <div v-if="selTile.active && (condition || nextCondition)" class="at-cond">
+          <div v-if="selTile.active" class="at-cond">
             <template v-if="condition">
               <span class="at-chip cond" data-test="cond-chip"
                 >{{ condition.def.emo }} {{ condition.def.label }}</span

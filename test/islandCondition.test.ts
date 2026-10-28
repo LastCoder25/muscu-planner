@@ -1,5 +1,8 @@
 // 🌗 Les conditions d'île (v1.276.0) : fonction pure de (graine, île, période de 12 h).
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { resolveHarvestParty } from '@/lib/harvestParty';
+import { poiHaulPreview, poiTeamHaul } from '@/lib/poiYield';
 import {
   CONDITIONS,
   CONDITION_PERIOD_MS as P,
@@ -159,6 +162,95 @@ describe('🪙 l’or n’est multiplié que sous la condition', () => {
       expect(b.gold).toBeGreaterThan(a.gold * 1.9);
       expect(b.gold).toBeLessThan(a.gold * 2.1);
     }
+  });
+});
+
+describe('🔌 le câblage : récolte en équipe, aperçu, store', () => {
+  const team = (n: number) => Array.from({ length: n }, (_, i) => refChampionAdv(40, i));
+  const kit = { advGear: refAdvGear(40, 3) };
+  const heroIn = { name: 'H', level: 40, combatant: refFighter(40) };
+  /** L'or d'une récolte de mine sur plusieurs graines, avec/sans condition (même graine). */
+  function ratios(withHero: boolean): number[] {
+    const out: number[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      const input = {
+        poi: mine(),
+        escort: team(withHero ? 1 : 3),
+        road: kit,
+        hero: withHero ? heroIn : null,
+        seed,
+        playerLevel: 40,
+        pantheonLevel: 40,
+        heroLevel: 40,
+      };
+      const a = resolveHarvestParty(input);
+      const b = resolveHarvestParty({ ...input, conditionMult: 1.6 });
+      if (!a.win || a.gold <= 0) continue; // repoussés / demi-tour : rien à comparer
+      out.push(b.gold / a.gold);
+    }
+    return out;
+  }
+  it('resolveHarvestParty AVEC le héros : l’or suit conditionMult', () => {
+    const r = ratios(true);
+    expect(r.length).toBeGreaterThan(5);
+    // Les bourses des gardes ne sont pas multipliées : le rapport est sous 1,6, mais bien > 1.
+    for (const k of r) expect(k).toBeGreaterThan(1.2);
+    for (const k of r) expect(k).toBeLessThan(1.65);
+  });
+  it('resolveHarvestParty SANS le héros (convoi) : l’or suit conditionMult', () => {
+    const r = ratios(false);
+    expect(r.length).toBeGreaterThan(5);
+    for (const k of r) expect(k).toBeGreaterThan(1.2);
+    for (const k of r) expect(k).toBeLessThan(1.65);
+  });
+
+  it('l’aperçu de la fiche (poiHaulPreview, poiTeamHaul) suit la condition', () => {
+    const p = mine();
+    const base = poiHaulPreview(p, { playerLevel: 40, heroGoes: true });
+    const lune = poiHaulPreview(p, { playerLevel: 40, heroGoes: true, conditionMult: 1.6 });
+    expect(Math.abs(lune.gold - base.gold * 1.6)).toBeLessThanOrEqual(2);
+    // 🧺 Des bâts : la cargaison (+20 %) donne un BONUS d'or, calculé sur l'or CONDITIONNÉ.
+    const opts = {
+      playerLevel: 40,
+      heroGoes: false,
+      escort: team(3),
+      kit: { ...kit, supplies: ['bats' as const] },
+    };
+    const t0 = poiTeamHaul(p, opts);
+    const t1 = poiTeamHaul(p, { ...opts, conditionMult: 1.6 });
+    expect(t0.bonus.gold).toBeGreaterThan(0);
+    expect(t1.base.gold).toBeGreaterThan(t0.base.gold * 1.5);
+    expect(t1.bonus.gold).toBeGreaterThan(t0.bonus.gold * 1.5);
+    expect(t1.total.gold).toBeGreaterThan(t0.total.gold * 1.5);
+  });
+
+  // Le store est hors harnais (convention du projet, cf. `heroStableWiring.test.ts`) : on
+  // verrouille son câblage sur la SOURCE.
+  const src = readFileSync('src/stores/character.ts', 'utf-8');
+  const slice = (from: string, len = 9000) => {
+    const at = src.indexOf(from);
+    expect(at, from).toBeGreaterThan(-1);
+    return src.slice(at, at + len);
+  };
+  it('partyOutcomeFor : or, consommable et XP lisent la condition DE L’ENVOI', () => {
+    const b = slice('function partyOutcomeFor(');
+    expect(b).toMatch(/conditionFx\(row\.value\?\.expedition_map, a\.sentAt\)/);
+    expect(b).toMatch(/conditionMult: fx\.goldOf\(poi\.type\)/);
+    expect(b).toMatch(/scaleXp\(healed\.xp, fx\.xp\)/);
+    expect(b).toMatch(/rollSupplyDrop\(seed, fx\.supplyChance\)/);
+  });
+  it('expeSend : le héros seul reçoit l’or et le consommable de la condition', () => {
+    const b = slice('async function expeSend(', 5000);
+    expect(b).toMatch(/conditionFx\(cur\.expedition_map, now\)/);
+    expect(b).toMatch(/fx\.goldOf\(poi\.type\)/);
+    expect(b).toMatch(/rollSupplyDrop\(started\.seed, fx\.supplyChance\)/);
+  });
+  it('ENVOI : un départ lit la condition de `now`, une attaque combinée de `createdAt` (pas de l’arrivée)', () => {
+    expect(slice('const withSupplies = partyOutcomeFor({', 600)).toMatch(/sentAt: now,/);
+    const combined = slice('const outcome0 = partyOutcomeFor({', 700);
+    expect(combined).toMatch(/sentAt: a\.createdAt,/);
+    expect(combined).not.toMatch(/sentAt: a\.arriveAt/);
+    expect(combined).toMatch(/now: a\.arriveAt,/); // le reste (maturité d'une faille) lit l'arrivée
   });
 });
 

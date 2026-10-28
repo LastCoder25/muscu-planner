@@ -4183,6 +4183,7 @@ export const useCharacterStore = defineStore('character', () => {
       seed,
       now,
       arriveAt: now + leg * 60000,
+      sentAt: now,
       playerLevel: opts.playerLevel,
       stayIds: opts.stayIds,
       combined: false,
@@ -4309,6 +4310,10 @@ export const useCharacterStore = defineStore('character', () => {
     now: number;
     /** L'arrivée sur le lieu : la maturité d'une faille se lit là. */
     arriveAt: number;
+    /** ⚠️ REQUIS : l'heure d'ENVOI, celle où se lit la condition d'île (`conditionFx`). Pour une
+     *  attaque combinée c'est `createdAt`, PAS l'arrivée (`now`) : l'aperçu lit la condition de
+     *  l'envoi, et l'issue est figée au départ. */
+    sentAt: number;
     playerLevel: number;
     stayIds?: string[];
     /** ⚠️ REQUIS : attaque COMBINÉE → aucun demi-tour sur la route (`noTurnBack`). Ses
@@ -4318,7 +4323,7 @@ export const useCharacterStore = defineStore('character', () => {
     const { poi, escort, road, hero, seed, now } = a;
     const supplies = road.supplies ?? [];
     // 🌗 La condition d'île À L'ENVOI : l'issue est figée ici (graine du départ).
-    const fx = conditionFx(row.value?.expedition_map, now);
+    const fx = conditionFx(row.value?.expedition_map, a.sentAt);
     const opts = {
       playerLevel: a.playerLevel,
       stayIds: a.stayIds,
@@ -4753,6 +4758,8 @@ export const useCharacterStore = defineStore('character', () => {
         seed: a.seed,
         now: a.arriveAt,
         arriveAt: a.arriveAt,
+        // 🌗 La condition d'île de l'ENVOI de l'attaque (`createdAt`), comme l'aperçu.
+        sentAt: a.createdAt,
         playerLevel: a.playerLevel,
         stayIds: a.stayIds,
         // 🔙 Les groupes ne se réunissent qu'au lieu : aucun demi-tour sur la route.
