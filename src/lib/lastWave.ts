@@ -35,7 +35,7 @@ import { withRiftCut } from './rift';
 import type { SupplyId } from './supplies';
 
 /** Un groupe de la vague : d'où il part (`null` = la base) et qui en fait partie. */
-export interface WaveWing {
+interface WaveWing {
   originId: string | null;
   advIds: string[];
   hero: boolean;
@@ -117,7 +117,7 @@ export function waveCounts(wave: LastWave): { key: string; label: string; n: num
 /** Tous les champions d'un départ, groupes confondus. */
 export const tripAdvIds = (t: WaveTrip): string[] => t.wings.flatMap((w) => w.advIds);
 /** Le héros fait-il partie du départ ? */
-export const tripHasHero = (t: WaveTrip): boolean => t.wings.some((w) => w.hero);
+const tripHasHero = (t: WaveTrip): boolean => t.wings.some((w) => w.hero);
 
 export interface ReplayDeps<P> {
   /** Les lieux disponibles MAINTENANT, dans l'ordre où on les essaie. */

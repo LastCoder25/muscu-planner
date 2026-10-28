@@ -98,7 +98,7 @@ export const DAILY_COUNT = 3;
 
 /** Le jour LOGIQUE bascule à 4 h (comme les quêtes de la semaine) : veiller tard ne change pas
  *  d'objectifs à minuit. */
-export const DAY_START_HOUR = 4;
+const DAY_START_HOUR = 4;
 const DAY_MS = 24 * 3600_000;
 
 /** Le numéro du jour logique. `tzOffsetMin` = `Date#getTimezoneOffset()` (minutes derrière UTC) :
