@@ -120,6 +120,7 @@ describe('🔔 la notification « armée repérée » suit le même préavis', (
       pacified: false,
       playerLevel: 26,
       plunder: null,
+      condition: null,
       controls: [],
     });
     const at = (fort: number) =>

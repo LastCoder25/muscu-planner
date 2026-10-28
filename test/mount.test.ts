@@ -524,6 +524,54 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(open).not.toContain('Quitter le mode archipel');
   });
 
+  // 🌗 La condition d'île : pastille sur le bouton replié, puis pastille + effet + durée restante
+  // + condition suivante sur la fiche de l'île active (`islandCondition`).
+  it("ArchipelPanel : la pastille et la fiche de la condition d'île", async () => {
+    const { default: ArchipelPanel } = await import('@/components/ArchipelPanel.vue');
+    const { islandById } = await import('@/lib/archipelago');
+    const { CONDITIONS, CONDITION_PERIOD_MS: P } = await import('@/lib/islandCondition');
+    const now = 100 * P + 3600_000;
+    let closed = '';
+    let open = '';
+    const props = {
+      island: islandById(1),
+      busy: false,
+      now,
+      condition: { def: CONDITIONS.lune_rouge, period: 100, startsAt: 100 * P, endsAt: 101 * P },
+      nextCondition: { def: CONDITIONS.vents_calmes, startsAt: 102 * P },
+    };
+    await mountIt(ArchipelPanel, props, undefined, undefined, '/', (h) => (closed = h));
+    expect(closed).toContain('🌑');
+    expect(closed).not.toContain('at-cond'); // replié : l'emoji seul, pas la fiche
+    await mountIt(
+      ArchipelPanel,
+      props,
+      undefined,
+      undefined,
+      '/',
+      (h) => (open = h),
+      (host) => host.querySelector<HTMLElement>('.arch-cur')?.click(),
+    );
+    expect(open).toContain('data-test="cond-chip"');
+    expect(open).toContain('Lune rouge');
+    expect(open).toContain('augmenté de 60 %');
+    expect(open).toContain('encore 11 h'); // 12 h de période − 1 h écoulée
+    expect(open).toContain('Ensuite');
+    expect(open).toContain('Vents calmes');
+    // Sans condition ni suivante : pas de bloc du tout.
+    let none = '';
+    await mountIt(
+      ArchipelPanel,
+      { island: islandById(1), busy: false, now },
+      undefined,
+      undefined,
+      '/',
+      (h) => (none = h),
+      (host) => host.querySelector<HTMLElement>('.arch-cur')?.click(),
+    );
+    expect(none).not.toContain('class="at-cond"');
+  });
+
   // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de
   // l'île active est dite.
   it('ArchipelPanel : la traversée vers une île ouverte, et la milice de chaque île', async () => {
@@ -5361,7 +5409,14 @@ describe('🏅 MuscleBody : niveaux par muscle', () => {
     levels.dos = { ...levels.dos!, level: 7 };
     let out = '';
     expect(
-      await mountIt(MuscleBody, { series: {}, levels }, undefined, undefined, '/', (h) => (out = h)),
+      await mountIt(
+        MuscleBody,
+        { series: {}, levels },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
     ).toBeNull();
     expect(out.split('class="mtile"').length - 1).toBe(LEVEL_MUSCLES.length);
     expect(out).toContain('>7<');

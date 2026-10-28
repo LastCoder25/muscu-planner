@@ -25,6 +25,7 @@ const ctx: PushContext = {
   pacified: false,
   playerLevel: 10,
   plunder: { id: 'p1', at: NOW + 3 * H },
+  condition: null,
   controls: [{ id: 'c1', attackAt: NOW + 4 * H, label: 'Mine' }],
 };
 

@@ -45,6 +45,8 @@ export function poiHaulPreview(
     /** ⚡🔮 Une équipe SANS le héros ne ramène qu'une part de l'énergie et des pierres d'un
      *  sanctuaire (`CARAVAN.energyShare`, `stonesShare`). */
     heroGoes: boolean;
+    /** 🌗 Multiplicateur d'or de la condition d'île (`ConditionFx.goldOf`), ×1 par défaut. */
+    conditionMult?: number;
   },
 ): PoiHaul {
   const force = poiForceOf(poi);
@@ -53,7 +55,7 @@ export function poiHaulPreview(
     ? harvestYield(poi.type, heroRewardLevel(poi, opts.playerLevel), force?.size ?? 0)
     : { energy: 0, summonStones: 0, keys: 0, mana: 0 };
   return {
-    gold: harvestGold(poi, opts.playerLevel) + loot.gold,
+    gold: harvestGold(poi, opts.playerLevel, opts.conditionMult) + loot.gold,
     energy: opts.heroGoes ? y.energy : Math.round(y.energy * CARAVAN.energyShare),
     summonStones:
       (opts.heroGoes ? y.summonStones : Math.round(y.summonStones * CARAVAN.stonesShare)) +
@@ -83,6 +85,7 @@ export function poiHaulBonus(
     heroGoes: boolean;
     escort: Adventurer[];
     kit: Pick<EscortKit, 'advGear' | 'supplies'>;
+    conditionMult?: number;
   },
 ): PoiHaul {
   const zero: PoiHaul = { gold: 0, energy: 0, summonStones: 0, keys: 0, mana: 0 };
@@ -93,7 +96,7 @@ export function poiHaulBonus(
     heroRewardLevel(poi, opts.playerLevel),
     poiForceOf(poi)?.size ?? 0,
   );
-  const gold = harvestGold(poi, opts.playerLevel);
+  const gold = harvestGold(poi, opts.playerLevel, opts.conditionMult);
   const k = caravanHaulMult(opts.escort, opts.kit.advGear, bats);
   if (opts.heroGoes) {
     // 🐫 Avec le héros aussi (v0.1299) : porteurs + bâts sous le plafond ; l'énergie, elle, ne
@@ -137,6 +140,7 @@ export function poiTeamHaul(
     heroGoes: boolean;
     escort: Adventurer[];
     kit: Pick<EscortKit, 'advGear' | 'supplies'>;
+    conditionMult?: number;
   },
 ): { base: PoiHaul; bonus: PoiHaul; total: PoiHaul; idleHaul: boolean } {
   const base = poiHaulPreview(poi, opts);

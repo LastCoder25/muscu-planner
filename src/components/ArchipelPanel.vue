@@ -18,6 +18,9 @@
     >
       <span class="ac-emo" aria-hidden="true">{{ curTile?.emoji ?? '🏝️' }}</span>
       <span class="ac-txt">Île {{ curTile?.id ?? '?' }} · {{ curTile?.name }}</span>
+      <span v-if="condition" class="ac-sea" :title="condition.def.label" aria-hidden="true">{{
+        condition.def.emo
+      }}</span>
       <span v-if="crossing || sailings?.length" class="ac-sea" aria-hidden="true">⛵</span>
       <span class="ac-chev" aria-hidden="true">{{ open ? '▴' : '▾' }}</span>
     </button>
@@ -97,6 +100,23 @@
             <span v-else-if="!selTile.locked" class="at-chip open">⛵ ouverte</span>
             <span v-else class="at-chip dim">🔒 à venir</span>
           </div>
+          <!-- 🌗 La condition d'île du moment (`islandCondition`) : pastille, effet, durée restante. -->
+          <div v-if="selTile.active && (condition || nextCondition)" class="at-cond">
+            <template v-if="condition">
+              <span class="at-chip cond" data-test="cond-chip"
+                >{{ condition.def.emo }} {{ condition.def.label }}</span
+              >
+              <span class="ac-fx">{{ condition.def.effect }}</span>
+              <span class="ac-left"
+                >⏳ encore {{ formatDuration(Math.max(0, condition.endsAt - now)) }}</span
+              >
+            </template>
+            <span v-else class="ac-fx">🌗 Pas de condition particulière pour l’instant.</span>
+            <span v-if="nextCondition" class="ac-next"
+              >Ensuite : {{ nextCondition.def.emo }} {{ nextCondition.def.label }} dans
+              {{ formatDuration(Math.max(0, nextCondition.startsAt - now)) }}</span
+            >
+          </div>
           <div class="at-ranks">
             <span class="at-rank" :style="{ '--rk': selTile.lo.color }">{{ selTile.lo.name }}</span>
             <span class="at-rank" :style="{ '--rk': selTile.hi.color }">{{ selTile.hi.name }}</span>
@@ -137,11 +157,7 @@
                   ? '🔒 forteresse verrouillée'
                   : '🏰 forteresse à abattre'
             }}</span>
-            <span
-              v-for="e in embers ?? []"
-              :key="e.id"
-              class="at-pill"
-              :class="{ dim: e.frozen }"
+            <span v-for="e in embers ?? []" :key="e.id" class="at-pill" :class="{ dim: e.frozen }"
               >{{ e.emoji }} {{ e.name }} · 🕯️ {{ emberText(e, now) }}</span
             >
             <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
@@ -364,6 +380,7 @@ import { computed, ref } from 'vue';
 import { ISLANDS, type Island } from '@/lib/archipelago';
 import { CROSSING, nextCrossingDeparture, type RemotePoint } from '@/lib/crossing';
 import { formatDuration } from '@/lib/duration';
+import type { ActiveCondition, ConditionDef } from '@/lib/islandCondition';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import {
@@ -421,6 +438,9 @@ const props = defineProps<{
   advice?: CrossingAdvice | null;
   /** 🧭 Le conseil « rester ou reculer » sur l'île active, tant qu'elle n'est pas pacifiée. */
   stay?: StayOrBackAdvice | null;
+  /** 🌗 La condition de l'île active en ce moment, et la suivante (`islandCondition`). */
+  condition?: ActiveCondition | null;
+  nextCondition?: { def: ConditionDef; startsAt: number } | null;
   /** 🗺️ L'île rangée dont on regarde la carte (null : la carte active). */
   shown?: number | null;
   now: number;
@@ -675,6 +695,38 @@ const islandCapRank = computed(() =>
   background: var(--accent);
   color: #15120e;
   white-space: nowrap;
+}
+/* 🌗 Condition d'île : pastille + effet + durée, en ligne qui passe à la ligne (344 px). */
+.at-cond {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.at-chip.cond {
+  margin-left: 0;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.ac-fx {
+  flex: 1 1 140px;
+  min-width: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.ac-left,
+.ac-next {
+  font-size: 11px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.ac-next {
+  flex-basis: 100%;
 }
 .at-chip.dim {
   background: transparent;

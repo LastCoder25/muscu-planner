@@ -383,6 +383,7 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     activeDays7: 0,
     playerLevel: 30,
     plunder: null,
+    condition: null,
   };
   it('prévient 10 min avant l’attaque, puis dit l’attaque, jamais son issue', () => {
     const plans = planPushes(

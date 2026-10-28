@@ -319,3 +319,25 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     expect(aSept - aNeuf, 'deux retraits doivent se sentir').toBeGreaterThan(0.03);
   });
 });
+
+describe('🌗 les conditions d’île (v1.276.0) ne gonflent pas le revenu', () => {
+  // Le gain MOYEN d'or des conditions (Lune rouge ×1,6, Filon riche ×1,2, sur les MINES seules)
+  // rapporté au revenu d'une journée type, avant/après. ⚠️ Moyenne pour un joueur qui envoie à
+  // des heures indifférentes ; un joueur qui choisit l'heure de ses mines fait jusqu'à ×1,6 sur
+  // la part « mines » (cf. note de l'entrée du domaine). Les autres tests de ce fichier
+  // (« LA MARGE » surtout) lisent ce même revenu, conditions comprises.
+  it('le gain moyen reste sous 2,6 % du revenu, du niveau 5 au 100', () => {
+    const rows = LEVELS.map((L) => {
+      const avant = fullGoldPerDay(L, L, 0.5, false, false);
+      const apres = fullGoldPerDay(L, L, 0.5, false, true);
+      console.log(
+        `[conditions] niv. ${L} : ${Math.round(avant)} -> ${Math.round(apres)} or/jour (+${((apres / avant - 1) * 100).toFixed(2)} %)`,
+      );
+      return { L, part: apres / avant - 1 };
+    });
+    for (const { L, part } of rows) {
+      expect(part, `niveau ${L}`).toBeGreaterThan(0);
+      expect(part, `niveau ${L} : +${(part * 100).toFixed(2)} %`).toBeLessThan(0.026);
+    }
+  });
+});

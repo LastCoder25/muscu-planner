@@ -27,6 +27,7 @@ import { rollRaid } from '@/lib/raid';
 import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
 import { controlGoldPerHour } from '@/lib/controlPoints';
+import { meanGoldMult } from '@/lib/islandCondition';
 
 export const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
 /** ~4 séances de sport par semaine : le jeu est annexe. */
@@ -257,6 +258,18 @@ const siegeGold = memo((L) => {
 /** ⛏️ La rente d'une MINE FIXE tenue par 3 champions, une journée (v1.217). */
 export const controlRentPerDay = (L: number): number => controlGoldPerHour({ id: 'm' }, 3, L) * 24;
 
+/** 🌗 L'or d'une journée qui vient des MINES (héros, convois d'équipe, part des camps calculée
+ *  sur les mines) — la seule source que les conditions d'île multiplient. */
+export function mineIncomePerDay(L: number, comptoir = L): number {
+  const mines = 2 * mineNet(L);
+  return mines + convoyGoldPerDay(L, comptoir) + campShare(L) * mines;
+}
+/** 🌗 Ce que les conditions ajoutent EN MOYENNE à une journée type (joueur qui envoie à des
+ *  heures indifférentes) : revenu de mine × (multiplicateur moyen − 1). */
+export function conditionGoldPerDay(L: number, comptoir = L): number {
+  return mineIncomePerDay(L, comptoir) * (meanGoldMult('mine') - 1);
+}
+
 /** Le revenu d'or COMPLET d'une journée type. `comptoir` = niveau de l'Avant-poste (il
  *  règle le nombre et la vitesse des convois) ; `siegesPerDay` suit le rythme sportif.
  *  ⚠️ `withMine` ajoute la rente de la mine fixe. HORS de l'étalon par défaut : la tenir en
@@ -267,10 +280,13 @@ export function fullGoldPerDay(
   comptoir = L,
   siegesPerDay = 0.5,
   withMine = false,
+  /** 🌗 Compter le gain MOYEN des conditions d'île (v1.276.0) ; `false` = l'étalon d'avant. */
+  withConditions = true,
 ): number {
   const runs = dungeonGold(bestDungeon(L)) * RUNS_PER_DAY;
   const mines = 2 * mineNet(L);
   return (
+    (withConditions ? conditionGoldPerDay(L, comptoir) : 0) +
     runs +
     mines +
     salePerRun(L) * RUNS_PER_DAY +

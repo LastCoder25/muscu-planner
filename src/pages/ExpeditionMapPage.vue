@@ -1675,6 +1675,7 @@ import {
   wardedControlKey,
 } from '@/lib/controlWard';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
+import { activeCondition, conditionFx, upcomingCondition } from '@/lib/islandCondition';
 import {
   attackReservedIds,
   attackHeroWaitingAt,
@@ -2259,8 +2260,12 @@ const archBind = computed(() => ({
   shippable: shippable.value,
   advice: islandAdvice.value,
   stay: stayAdvice.value,
+  condition: activeCondition(char.row?.expedition_map, now.value),
+  nextCondition: upcomingCondition(char.row?.expedition_map, now.value),
   now: now.value,
 }));
+/** 🌗 Les effets de la condition d'île du moment (fiche d'un lieu : or annoncé). */
+const condFx = computed(() => conditionFx(char.row?.expedition_map, now.value));
 const archOn = {
   view: viewIslandMap,
   cross: crossTo,
@@ -5954,11 +5959,13 @@ const sendOdds = computed(() => poiFacts.value.filter((f) => f.go));
 function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPreview>[1] | null) {
   const heroGoes = partyTarget.value && partySize.value ? partyHeroOn.value : true;
   const playerLevel = heroGoes ? progressionLevel.value : heroLevel.value;
-  const base = poiHaulPreview(p, { playerLevel, heroGoes });
+  // 🌗 La condition d'île du moment : l'envoi la lit à son heure, la fiche l'annonce.
+  const conditionMult = condFx.value.goldOf(p.type);
+  const base = poiHaulPreview(p, { playerLevel, heroGoes, conditionMult });
   const txt = formatHaul(base);
   if (!txt) return;
   const detail: string[] = [];
-  const filon = p.type === 'mine' ? harvestGold(p, playerLevel) : 0;
+  const filon = p.type === 'mine' ? harvestGold(p, playerLevel, conditionMult) : 0;
   const bourses = force ? forceLootPreview(p, force).gold : 0;
   if (filon && bourses)
     detail.push(
@@ -5969,7 +5976,13 @@ function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPrev
   // bonus des bâts/porteurs, les règles de la résolution — aucune de plus ici.
   const team =
     partyTarget.value && partySize.value
-      ? poiTeamHaul(p, { playerLevel, heroGoes, escort: partyAdvs.value, kit: partyRoad.value })
+      ? poiTeamHaul(p, {
+          playerLevel,
+          heroGoes,
+          escort: partyAdvs.value,
+          kit: partyRoad.value,
+          conditionMult,
+        })
       : null;
   const totalTxt = team ? formatHaul(team.total) : '';
   const boosted = !!team && totalTxt !== txt;

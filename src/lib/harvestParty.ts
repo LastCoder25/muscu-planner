@@ -81,6 +81,8 @@ export interface HarvestPartyInput {
   heroLevel: number;
   /** 🔙 Attaque COMBINÉE : pas de demi-tour sur la route (`resolveCaravan`, `noTurnBack`). */
   combined?: boolean;
+  /** 🌗 Multiplicateur de l'or de la condition d'île à l'envoi (`harvestGold`) ; absent = ×1. */
+  conditionMult?: number;
 }
 
 /** 💰 Ajoute à une récolte ce que portaient les gardes (`forceHaul` : bourses des bandits,
@@ -215,6 +217,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     : resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel, {
         noTurnBack: input.combined,
         heroLevel: input.heroLevel,
+        conditionMult: input.conditionMult,
       });
   if (road0?.turnBack !== undefined) return turnedBack(input, road0, spec);
   const g: CampFight = spec
@@ -295,7 +298,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
   }
 
   if (hero) {
-    const raw = resolveOutcome(hero.combatant, poi, seed, input.playerLevel);
+    const raw = resolveOutcome(hero.combatant, poi, seed, input.playerLevel, input.conditionMult);
     // 🧺🐫 La cargaison avec le héros (v0.1299, décision de l'utilisateur : « les porteurs
     // comptent aussi quand le héros est là ») : les bâts ET les porteurs 🐫 / pièces de
     // cargaison des champions, sous le MÊME plafond qu'une équipe (`caravanHaulMult`).

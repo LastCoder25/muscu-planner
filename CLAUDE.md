@@ -107,7 +107,7 @@ l’utilisateur. Une nouvelle décision s’ajoute À LA FIN du fichier de son d
 - [docs/domaines/sport.md](docs/domaines/sport.md) — Sport : Défi 360, challenges, séances, cardio, tennis, suivi corporel, accueil, stats, agenda, météo (58 entrées)
 - [docs/domaines/champions-gacha.md](docs/domaines/champions-gacha.md) — Champions, gacha, invocation, runes, éveil, ascension, sceaux, aventuriers, Panthéon (156 entrées)
 - [docs/domaines/base-sieges.md](docs/domaines/base-sieges.md) — Base, enceinte, sièges, garnison, milice, bâtiments de la cour (81 entrées)
-- [docs/domaines/carte-expeditions.md](docs/domaines/carte-expeditions.md) — Carte d’expédition, lieux, failles, camps, convois, points de contrôle, archipel, Labyrinthe (131 entrées)
+- [docs/domaines/carte-expeditions.md](docs/domaines/carte-expeditions.md) — Carte d’expédition, lieux, failles, camps, convois, points de contrôle, archipel, Labyrinthe (132 entrées)
 - [docs/domaines/heros-equipement.md](docs/domaines/heros-equipement.md) — Héros : équipement, raretés, drops, sets, talents, familiers, reliques, trophées, combat, donjons, boss de palier (77 entrées)
 - [docs/domaines/divers.md](docs/domaines/divers.md) — Interface transverse et économie (plateau de ressources, boîte à messages, puits d’or, gestes de masse) (62 entrées)
 

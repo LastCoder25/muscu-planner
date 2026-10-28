@@ -4279,6 +4279,8 @@ export function resolveOutcome(
   poi: Poi,
   seed: number,
   playerLevel?: number, // cap anti-runaway : rang des drops plafonné à min(contenu, joueur)
+  /** 🌗 Condition d'île à l'envoi (`harvestGold`) : multiplicateur de l'or de ce lieu. */
+  conditionMult = 1,
 ): ExpeditionOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
   const cost = goldCost(poi.type, poiRewardLevel(poi));
@@ -4303,7 +4305,7 @@ export function resolveOutcome(
     const k = tr.resMult;
     return {
       win: true,
-      gold: Math.round(harvestGold(poi, playerLevel) * tr.goldMult), // symbolique : la paie est en ressources
+      gold: Math.round(harvestGold(poi, playerLevel, conditionMult) * tr.goldMult), // symbolique : la paie est en ressources
       // Le plafond s'applique APRÈS le bonus de trajet : « complément, jamais
       // substitut au sport » est un invariant, pas une valeur de base qu'un bon
       // voyage pourrait dépasser.
@@ -4395,7 +4397,7 @@ export function resolveOutcome(
   // être envoyé »). Ce garde est la ceinture : aucun chemin ne peut la résoudre en silence.
   if (isRiftPoi(poi)) throw new Error('Une faille se referme par une incursion (rift.ts).');
   // Mine = récolte (pas de combat) ; les rencontres de trajet lui rendent de la variance.
-  const base = mineOutcome(rng, poi, heroRewardLevel(poi, playerLevel), playerLevel);
+  const base = mineOutcome(rng, poi, heroRewardLevel(poi, playerLevel), playerLevel, conditionMult);
   // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
   // maintenir deux fois la même règle.
   const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
@@ -4437,10 +4439,14 @@ export function resolveOutcome(
 export function harvestGold(
   poi: Pick<Poi, 'id' | 'type' | 'level'>,
   playerLevel: number | undefined,
+  /** 🌗 Le multiplicateur de la condition d'île EN COURS À L'ENVOI (`islandCondition`,
+   *  `ConditionFx.goldOf(poi.type)`) : 1 = aucune condition. Optionnel pour ne rien changer aux
+   *  appelants qui n'ont pas d'horloge (convoi de forteresse, modèle d'économie des tests). */
+  conditionMult = 1,
 ): number {
   if (poi.type === 'mine' || poi.type === 'plunder') {
     const vein = mineVeinGold(heroRewardLevel(poi, playerLevel));
-    return Math.round(vein * (poi.type === 'plunder' ? PLUNDER_GOLD_MULT : 1));
+    return Math.round(vein * (poi.type === 'plunder' ? PLUNDER_GOLD_MULT : 1) * conditionMult);
   }
   return 0;
 }
@@ -4462,10 +4468,11 @@ function mineOutcome(
   poi: Poi,
   L: number,
   playerLevel: number | undefined,
+  conditionMult = 1,
 ): ExpeditionOutcome {
   // ⚠️ Trajet de RÉFÉRENCE de sa difficulté, pas le trajet réel (v0.1153).
   // MINE = reine de l'or — la règle vit dans `harvestGold`, partagée avec les équipes.
-  const gold = harvestGold(poi, playerLevel);
+  const gold = harvestGold(poi, playerLevel, conditionMult);
   return {
     win: true,
     gold,
@@ -4691,11 +4698,12 @@ export function startExpedition(
   seed: number,
   travelMult = 1,
   playerLevel?: number, // cap anti-runaway sur le rang des drops
+  conditionMult = 1, // 🌗 condition d'île à l'envoi (`harvestGold`)
 ): ActiveExpedition {
   const oneWayMs = Math.round(
     travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * 60_000 * travelMult,
   );
-  const outcome = resolveOutcome(hero, poi, seed, playerLevel);
+  const outcome = resolveOutcome(hero, poi, seed, playerLevel, conditionMult);
   // Seule la jambe RETOUR bouge : l'aller et le dépôt du rapport (midAt) restent intacts,
   // le héros a bien atteint l'objectif avant que la route ne décide de sa vitesse.
   const backMs = Math.round(oneWayMs * (outcome.returnMult || 1));

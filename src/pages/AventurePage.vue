@@ -3341,6 +3341,7 @@ import {
 } from '@/lib/messageFilter';
 import { addDaysIso, logicalToday } from '@/lib/challenges';
 import { islandPacified, plunderForecast } from '@/lib/archipelago';
+import { nextRareCondition } from '@/lib/islandCondition';
 
 interface RunFight {
   monster: string;
@@ -5811,6 +5812,7 @@ async function syncPush(force = false) {
           attackAt: p.control!.attackAt!,
           label: poiLabel(p),
         })),
+      condition: nextRareCondition(char.row.expedition_map, now),
       plunder: char.row.expedition_map
         ? plunderForecast(
             char.row.expedition_map,

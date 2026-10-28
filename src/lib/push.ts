@@ -30,6 +30,7 @@ export const CLIENT_PUSH_KINDS = [
   'hero_home',
   'party_home',
   'plunder',
+  'condition',
   'control_warn',
   'control_attack',
 ] as const;
@@ -53,6 +54,7 @@ export const PUSH_KIND_INFO: Record<
   control_warn: { group: 'carte', emo: '⚠️', label: 'Point tenu bientôt attaqué' },
   control_attack: { group: 'carte', emo: '🏰', label: 'Point tenu attaqué' },
   plunder: { group: 'carte', emo: '🏴‍☠️', label: 'Caravane pillée' },
+  condition: { group: 'carte', emo: '🌗', label: 'Condition d’île rare' },
   fboss_invite: { group: 'boss', emo: '⚔️', label: 'Un ami demande de l’aide' },
   fboss_joined: { group: 'boss', emo: '🤝', label: 'Un ami rejoint ton boss' },
   fboss_hit: { group: 'boss', emo: '⚔️', label: 'Un ami frappe le boss' },
@@ -148,6 +150,8 @@ export interface PushContext {
   playerLevel: number;
   /** 🏴‍☠️ La prochaine caravane pillée (`nextPlunderSpawn`), ou null. ⚠️ REQUIS. */
   plunder: { id: string; at: number } | null;
+  /** 🌗 La prochaine condition d'île RARE (`nextRareCondition`), ou null. ⚠️ REQUIS. */
+  condition: { id: string; at: number; emo: string; label: string; effect: string } | null;
   /** 🏰 Les points de contrôle TENUS et l'heure de leur prochaine attaque ennemie
    *  (`heldControls`). ⚠️ REQUIS : les oublier, c'est apprendre la perte d'une mine en
    *  rouvrant l'app. */
@@ -280,6 +284,18 @@ export function planPushes(
       // « pillée » se lisait comme un pillage de MES biens, à chercher dans la boîte).
       title: '🏴‍☠️ Une caravane pillée est apparue sur la carte',
       body: 'Des pillards l’ont prise : va la reprendre, son or est à toi. Elle repart dans quelques heures.',
+      url: '/expedition-map',
+    });
+  }
+
+  if (ctx.condition) {
+    add({
+      kind: 'condition',
+      // Liée à (île, période) : replanifier ne la double pas, et elle s'efface si l'on change d'île.
+      dedupe: ctx.condition.id,
+      sendAt: ctx.condition.at,
+      title: `${ctx.condition.emo} ${ctx.condition.label} sur ton île`,
+      body: `${ctx.condition.effect} Elle dure 12 h au moins : profites-en pour tes envois.`,
       url: '/expedition-map',
     });
   }

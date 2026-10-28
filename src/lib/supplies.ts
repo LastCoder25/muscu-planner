@@ -502,13 +502,19 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
  *  (`pickTome`). Un voyage peut donc rendre les trois.
  *  ⚠️ Tiré sur la graine du voyage : déterministe, chaque drop sur SON générateur (aucun ne
  *  décale l'autre, ni un autre tirage de la résolution). */
-export function rollSupplyDrop(seed: number): SupplyStock {
+export function rollSupplyDrop(
+  seed: number,
+  /** 🌗 Condition d'île « Marchand itinérant » : multiplie la chance du CONSOMMABLE (pas des
+   *  boosts ni des tomes). ⚠️ Même tirage, seuil plus haut : un drop obtenu à ×1 l'est aussi
+   *  à ×2, et le consommable choisi ne change pas. */
+  chanceMult = 1,
+): SupplyStock {
   const out: SupplyStock = {};
   const roll = (salt: number, chance: number, pick: (r: number) => SupplyId) => {
     const next = mulberry32((seed ^ salt) >>> 0 || 1);
     if (next() < chance) out[pick(next())] = 1;
   };
-  roll(0x2f6b0a13, SUPPLY.dropChance, pickSupply);
+  roll(0x2f6b0a13, Math.min(1, SUPPLY.dropChance * chanceMult), pickSupply);
   roll(0x5be0cd19, SUPPLY.boostDropChance, pickBoost);
   roll(0x1f83d9ab, SUPPLY.tomeDropChance, pickTome);
   return out;

@@ -1473,6 +1473,8 @@ export function resolveCaravan(
      *  pas le partage (`missionXpFor`). Absent = inconnu (aperçu des chances). Les vrais
      *  départs le passent toujours (`startCaravan` et la récolte l'exigent). */
     heroLevel?: number;
+    /** 🌗 Multiplicateur de l'or de la condition d'île à l'envoi (`harvestGold`). */
+    conditionMult?: number;
   } = {},
 ): CaravanOutcome {
   // ⚠️ Plus aucun équipement de champion sur la route (v0.1012) : il ne vient QUE du tirage.
@@ -1660,7 +1662,7 @@ export function resolveCaravan(
     // compétence de convoi qui ramène plus ») : une équipe de porteurs gagne désormais plus
     // d'or que le héros seul sur la même mine — c'est le prix de la compétence. Avec le héros
     // le même plafond s'applique (`harvestParty`, v0.1299).
-    gold: Math.round(harvestGold(poi, playerLevel) * mult * haul),
+    gold: Math.round(harvestGold(poi, playerLevel, opts.conditionMult) * mult * haul),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × l'ancien `yieldShare` (0,5), donc il tombait sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur

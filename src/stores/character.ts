@@ -494,6 +494,7 @@ import {
   transferGarrison,
 } from '@/lib/controlRoutes';
 import { resolveHarvestParty } from '@/lib/harvestParty';
+import { conditionFx, scaleXp } from '@/lib/islandCondition';
 import {
   applyFieldHitToBase,
   applyFieldHitToMap,
@@ -2732,6 +2733,8 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Plus de coût d'envoi (v0.1069, décision de l'utilisateur).
     // Réduction de trajet selon le niveau de l'avant-poste.
     const mult = travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now);
+    // 🌗 La condition d'île À L'ENVOI : l'issue (or, consommable) est figée ici.
+    const fx = conditionFx(cur.expedition_map, now);
     const fromTown = startExpedition(
       hero,
       poi,
@@ -2739,6 +2742,7 @@ export const useCharacterStore = defineStore('character', () => {
       (now ^ (poi.level * 2654435761)) >>> 0 || 1,
       mult,
       level,
+      fx.goldOf(poi.type),
     );
     // 🧝 Posté sur un lieu tenu, il part de son poste et y revient (`expeditionFromPost`) —
     // la règle de trajet d'une sortie (`legFromSpot`), comme l'envoi en équipe.
@@ -2754,7 +2758,7 @@ export const useCharacterStore = defineStore('character', () => {
     // 🎒 Un consommable peut tomber de TOUT voyage (« tout partout »), tiré sur sa graine.
     const exp = {
       ...started,
-      outcome: { ...started.outcome, supplies: rollSupplyDrop(started.seed) },
+      outcome: { ...started.outcome, supplies: rollSupplyDrop(started.seed, fx.supplyChance) },
     };
     const baseMap = cur.expedition_map ?? {
       ...createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost')),
@@ -4313,6 +4317,8 @@ export const useCharacterStore = defineStore('character', () => {
   }): ExpeditionOutcome | null {
     const { poi, escort, road, hero, seed, now } = a;
     const supplies = road.supplies ?? [];
+    // 🌗 La condition d'île À L'ENVOI : l'issue est figée ici (graine du départ).
+    const fx = conditionFx(row.value?.expedition_map, now);
     const opts = {
       playerLevel: a.playerLevel,
       stayIds: a.stayIds,
@@ -4388,6 +4394,7 @@ export const useCharacterStore = defineStore('character', () => {
                     pantheonLevel: pantheonLevel.value,
                     heroLevel: heroLevel.value,
                     combined: a.combined,
+                    conditionMult: fx.goldOf(poi.type),
                   })
                 : null;
     if (!outcome) return null;
@@ -4398,7 +4405,9 @@ export const useCharacterStore = defineStore('character', () => {
     // qui fera poster la garnison à l'arrivée.
     // 🤕 Une défaite AVEC le héros le blesse aussi (`markHeroHurt`) — sauf trousse.
     const marked = outcome.party ? markHeroHurt(outcome.party, medkit) : outcome.party;
-    const fought = marked && medkit ? medkitHeal(marked) : marked;
+    const healed = marked && medkit ? medkitHeal(marked) : marked;
+    // 🍃 « Vents calmes » : l'XP des champions du rapport, mise à l'échelle au départ.
+    const fought = healed && fx.xp !== 1 ? { ...healed, xp: scaleXp(healed.xp, fx.xp) } : healed;
     const party =
       fought && poi.type === 'control'
         ? {
@@ -4430,7 +4439,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(placeRunes ? { runes: runeCount(outcome.runes) + placeRunes } : {}),
       ...(party ? { party } : {}),
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
-      supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
+      supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed, fx.supplyChance)),
     };
     return withSupplies;
   }

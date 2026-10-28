@@ -42,6 +42,7 @@ import { champSeatsWithHero, holdSeats, garrisonHold } from '@/lib/controlPoints
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { memberTripDelta } from '@/lib/tripDelta';
 import { formatHaulDelta, haulDelta, poiTeamHaul } from '@/lib/poiYield';
+import { conditionFx } from '@/lib/islandCondition';
 import { heroPostOf, heroSpotOf } from '@/lib/islandConquest';
 import {
   COMBINED_BLOCK_LABEL,
@@ -785,6 +786,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
       heroGoes,
       escort,
       kit: { ...roadCtx.value, supplies },
+      conditionMult: condFx.value.goldOf(p.type),
     }).total;
   };
   const partyHaulDelta = computed(() => {
@@ -1086,7 +1088,21 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib
    *  (`missionXpPreview`), qui appelle `missionXpFor` — ce que le store verse vraiment :
    *  une seconde formule d'affichage finirait par annoncer une XP que l'encaissement dément. */
-  const partyXp = computed<Record<string, MissionXpPreview>>(() =>
+  /** 🌗 La condition d'île du moment : l'envoi la lit à son heure (`partyOutcomeFor`). */
+  const condFx = computed(() => conditionFx(char.row?.expedition_map, now.value));
+  const partyXp = computed<Record<string, MissionXpPreview>>(() => {
+    const raw = selected.value ? partyXpRaw() : {};
+    const k = condFx.value.xp;
+    if (k === 1) return raw;
+    // 🍃 « Vents calmes » : les MÊMES nombres que le store verse (`scaleXp`).
+    return Object.fromEntries(
+      Object.entries(raw).map(([id, v]) => [
+        id,
+        { ...v, xp: Math.round(v.xp * k), xpWin: Math.round(v.xpWin * k) },
+      ]),
+    );
+  });
+  const partyXpRaw = (): Record<string, MissionXpPreview> =>
     selected.value
       ? missionXpPreview(
           char.advList,
@@ -1106,8 +1122,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
             return g == null ? null : ((partyWin.value ?? 0) + g) / 100;
           },
         )
-      : {},
-  );
+      : {};
   /** La note ne s'affiche que si un champion DISPONIBLE y perd : sinon c'est du bruit. */
   const partyLowXp = computed(() =>
     partyPool.value.some((a) => partyXp.value[a.id]?.full === false),
