@@ -524,6 +524,7 @@
           :key="overlay"
           :planner="planner"
           :section="overlay"
+          :daily="daily"
           @open="openPlannedRow"
         />
         <ControlPointsSheet
@@ -1868,6 +1869,7 @@ import CrossingScene from '@/components/CrossingScene.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
 import AbsenceCard from '@/components/AbsenceCard.vue';
+import { dailyStatesFor, dueObjectives, objectiveView } from '@/lib/dailyObjectives';
 import {
   ABSENCE_MIN_MS,
   absenceSummary,
@@ -6495,6 +6497,41 @@ const controlReturnNote = computed(() =>
  *  sans ce drapeau, les écouteurs et l'intervalle d'une seconde posés ensuite survivaient à
  *  `onUnmounted` (déjà passé) et retenaient la page détachée. */
 let disposed = false;
+// ── 🎯 OBJECTIFS DU JOUR ─────────────────────────────────────────────────────────────────
+// Dérivés (`dailyStatesFor`, la MÊME fonction que le store) ; le bonus est payé dès qu'un
+// objectif est atteint, par le store, qui recalcule lui-même. Horloge grossière : la progression
+// se relit à la minute.
+const daily = computed(() => {
+  const m = char.row?.expedition_map;
+  return m
+    ? dailyStatesFor(m, char.row?.messages ?? [], coarseNow.value, new Date().getTimezoneOffset())
+        .states
+    : [];
+});
+watch(
+  () => dueObjectives(daily.value).length,
+  async (n) => {
+    const uid = auth.user?.id;
+    if (!n || !uid) return;
+    try {
+      const paid = await char.claimDailyObjectives(uid, Date.now(), new Date().getTimezoneOffset());
+      if (paid.length)
+        $q.notify({
+          type: 'positive',
+          message: `🎯 ${paid.map((o) => objectiveView(o).label).join(' · ')} — ${paid
+            .map((o) => objectiveView(o).rewardEmoji)
+            .join(' ')} gagné`,
+          // En haut : en bas, la rangée de ronds de la carte (Voyages, Planifier…) serait couverte.
+          position: 'top',
+          timeout: 4000,
+        });
+    } catch {
+      /* hors ligne : le bonus sera payé à la prochaine ouverture */
+    }
+  },
+  { immediate: true },
+);
+
 // ── 📋 PENDANT TON ABSENCE ───────────────────────────────────────────────────────────────
 // La dernière visite vit dans le navigateur (par appareil) : aucune donnée de jeu en plus. Le
 // résumé additionne les rapports de la boîte 📬 tombés depuis (`absenceSummary`) ; il s'ouvre

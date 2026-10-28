@@ -20,6 +20,7 @@ import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 import type { LastWave } from './lastWave';
+import type { ObjectiveKind } from './dailyObjectives';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { islandSpan, islandVia, islandView, onIsland, LAND_MARGIN } from './islandShape';
 import { RETENTION } from './privacy';
@@ -987,6 +988,10 @@ export interface ExpeditionMap {
    *  de quoi la relancer. Propre à l'île (elle vit dans sa carte, rangée avec elle). Absent =
    *  aucune vague encore. ⚠️ `advanceWorld` reconstruit la carte champ par champ : il la recopie. */
   lastWave?: LastWave;
+  /** 🎯 Les objectifs du jour déjà PAYÉS (`dailyObjectives.ts`) : le numéro du jour logique et les
+   *  types payés. La seule chose stockée des objectifs (le reste se dérive) ; propre à l'île.
+   *  Absent = rien de payé. ⚠️ `advanceWorld` la recopie. */
+  daily?: { day: number; done: ObjectiveKind[] };
   /** 🏰 Le héros RAPPELÉ de la forteresse rentre à la base à cet instant (occupé d'ici là). */
   heroReturnAt?: number;
   /** 🧭 D'OÙ et QUAND le héros est parti pour rentrer à pied (rappel, demi-tour, lieu perdu) :
@@ -3143,6 +3148,7 @@ export function advanceWorld(
     ...(map.citadelStash ? { citadelStash: map.citadelStash } : {}),
     ...(map.heroReturnAt !== undefined ? { heroReturnAt: map.heroReturnAt } : {}),
     ...(map.lastWave ? { lastWave: map.lastWave } : {}),
+    ...(map.daily ? { daily: map.daily } : {}),
     ...(map.heroReturnFrom ? { heroReturnFrom: map.heroReturnFrom } : {}),
     ...(map.militia ? { militia: map.militia } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte

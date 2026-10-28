@@ -650,6 +650,116 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(repart).not.toContain('data-test="wave"');
   });
 
+  it('DailyObjectives : trois buts, progression, récompense, coché quand atteint, se range', async () => {
+    const { default: DailyObjectives } = await import('@/components/DailyObjectives.vue');
+    const states = [
+      {
+        obj: { kind: 'sends', target: 6, reward: 'rations' },
+        progress: 4,
+        complete: false,
+        paid: false,
+      },
+      {
+        obj: { kind: 'camps', target: 2, reward: 'potion' },
+        progress: 2,
+        complete: true,
+        paid: true,
+      },
+      {
+        obj: { kind: 'rifts', target: 1, reward: 'rations' },
+        progress: 0,
+        complete: false,
+        paid: false,
+      },
+    ];
+    let open = '';
+    await mountIt(DailyObjectives, { states }, undefined, undefined, '/', (h) => (open = h));
+    expect(open).toContain('Objectifs du jour');
+    expect(open).toContain('1/3');
+    expect(open).toContain('Envoie 6 équipes');
+    expect(open).toContain('4/6');
+    expect(open).toContain('Prends 2 camps');
+    expect(open).toContain('✓'); // l'atteint est coché, plus de « 2/2 »
+    expect(open).toContain('Ferme 1 faille');
+    expect(open.match(/class="dly-row/g)).toHaveLength(3);
+    // Se range d'un geste (le choix est mémorisé).
+    let closed = '';
+    await mountIt(
+      DailyObjectives,
+      { states },
+      undefined,
+      undefined,
+      '/',
+      (h) => (closed = h),
+      (host) => host.querySelector<HTMLElement>('[data-test="daily-toggle"]')?.click(),
+    );
+    expect(closed).toContain('1/3');
+    expect(closed).not.toContain('dly-row');
+    // Dans le planificateur : seulement sur « Planifier », jamais sur « Répartir ».
+    const { ref } = await import('vue');
+    const { default: ExpeditionPlanner } = await import('@/components/ExpeditionPlanner.vue');
+    const planner = {
+      threshold: ref(90),
+      mode: ref('events'),
+      withGarrisons: ref(false),
+      withHero: ref(true),
+      supplyStock: ref([]),
+      toggleSupply: () => undefined,
+      heroFree: ref(true),
+      poolInfo: ref({ base: 0, garrison: 0 }),
+      running: ref(false),
+      progress: ref(0),
+      rows: ref(null),
+      unreachable: ref([]),
+      launching: ref(null),
+      compute: () => undefined,
+      reset: () => undefined,
+      launch: () => undefined,
+      launchAll: () => undefined,
+      lastWave: ref(null),
+      waveResult: ref(null),
+      relaunchWave: () => undefined,
+      repoTeams: ref(null),
+      repoMoves: ref([]),
+      repoRunning: ref(false),
+      repoMissing: ref({ hero: false, advs: [] }),
+      repoHealable: ref({ advs: [], cost: 0, gold: 0, afford: true }),
+      healThenRepartir: () => undefined,
+      repartir: () => undefined,
+      launchAllMoves: () => undefined,
+    };
+    let plan = '';
+    let repart = '';
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'plan', daily: states },
+      undefined,
+      undefined,
+      '/',
+      (h) => (plan = h),
+    );
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'repart', daily: states },
+      undefined,
+      undefined,
+      '/',
+      (h) => (repart = h),
+    );
+    expect(plan).toContain('data-test="daily"');
+    expect(repart).not.toContain('data-test="daily"');
+    let none = '';
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'plan', daily: [] },
+      undefined,
+      undefined,
+      '/',
+      (h) => (none = h),
+    );
+    expect(none).not.toContain('data-test="daily"');
+  });
+
   it('AbsenceCard : pastilles du résumé, à relancer, et le geste pour la ranger', async () => {
     const { default: AbsenceCard } = await import('@/components/AbsenceCard.vue');
     let out = '';

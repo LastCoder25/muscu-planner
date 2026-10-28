@@ -11,6 +11,8 @@
       ils rejoignent le plus vite le reste de l’île en attaque combinée. La garde des lieux reste
       aux miliciens.
     </p>
+    <!-- 🎯 Les objectifs du jour : la progression se lit ici, là où l'on lance ses vagues. -->
+    <DailyObjectives v-if="section === 'plan' && daily?.length" :states="daily" />
     <!-- 🔁 LA DERNIÈRE VAGUE (demandé) : les mêmes équipes sur des lieux du même type, sans rien
          recalculer. Le store refuse ce que l'envoi manuel refuserait ; ce qui ne repart pas est
          listé avec sa raison. -->
@@ -355,12 +357,16 @@ import type { PlanMode } from '@/lib/expeditionPlanner';
 import { DEPLOY_HERO_ID } from '@/lib/deployPlan';
 import { SUPPLIES } from '@/lib/supplies';
 import { waveCounts } from '@/lib/lastWave';
+import DailyObjectives from '@/components/DailyObjectives.vue';
+import type { ObjectiveState } from '@/lib/dailyObjectives';
 import { absenceDuration } from '@/lib/absenceSummary';
 
 const props = defineProps<{
   planner: ReturnType<typeof useExpeditionPlanner>;
   /** Le panneau affiché : proposer des expéditions, ou répartir l'effectif. */
   section: 'plan' | 'repart';
+  /** 🎯 Les objectifs du jour (état dérivé par la page) ; absent ou vide = pas de tuile. */
+  daily?: ObjectiveState[];
 }>();
 const emit = defineEmits<{ open: [row: PlannerRow] }>();
 const {

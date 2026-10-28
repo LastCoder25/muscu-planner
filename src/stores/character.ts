@@ -112,6 +112,13 @@ import {
 } from '@/lib/expedition';
 import type { LastWave } from '@/lib/lastWave';
 import {
+  dailyStatesFor,
+  dueObjectives,
+  paidToday,
+  rewardStock,
+  type DailyObjective,
+} from '@/lib/dailyObjectives';
+import {
   activeIsland,
   archipelOn,
   islandById,
@@ -4055,9 +4062,44 @@ export const useCharacterStore = defineStore('character', () => {
    *  UNE écriture par vague (jamais une par départ), additive dans le JSONB de la carte, sans
    *  migration. Ne fait rien sans carte chargée. */
   async function recordWave(userId: string, wave: LastWave): Promise<void> {
+    // Un geste : il attend que les envois en vol aient atterri avant de lire la carte.
+    await writesSettled();
     const map = row.value?.expedition_map;
     if (!map) return;
     await persist(userId, { expedition_map: { ...map, lastWave: wave } });
+  }
+
+  /** 🎯 Paie les objectifs du jour ATTEINTS et pas encore payés (`dailyObjectives.ts`) : un
+   *  consommable chacun, crédité dans la MÊME écriture que la marque « payé » (jamais l'un sans
+   *  l'autre). ⚠️ Le store RECALCULE la progression lui-même : il ne croit pas l'écran, et ne
+   *  paie jamais deux fois (la marque du jour). Rend ce qui vient d'être payé. */
+  let dailyBusy = false;
+  async function claimDailyObjectives(
+    userId: string,
+    now: number,
+    tzOffsetMin: number,
+  ): Promise<DailyObjective[]> {
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    // ⚠️ Un tick de fond, pas un geste : il passe son tour tant qu'une écriture vole (sa carte
+    // serait périmée et écraserait l'envoi en cours) ; l'écran le relance à la minute suivante.
+    if (!cur || !map || dailyBusy || !tickMayWrite(cur)) return [];
+    const { day, states } = dailyStatesFor(map, cur.messages ?? [], now, tzOffsetMin);
+    const due = dueObjectives(states);
+    if (!due.length) return [];
+    dailyBusy = true;
+    try {
+      await persist(userId, {
+        expedition_map: {
+          ...map,
+          daily: { day, done: [...paidToday(map.daily, day), ...due.map((o) => o.kind)] },
+        },
+        supplies: addSupplies(cur.supplies, rewardStock(due)),
+      });
+      return due;
+    } finally {
+      dailyBusy = false;
+    }
   }
 
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
@@ -7187,6 +7229,7 @@ export const useCharacterStore = defineStore('character', () => {
     heroEngaged,
     sendCombinedAttack,
     recordWave,
+    claimDailyObjectives,
     attackTick,
     sendParty,
     partyTick,
