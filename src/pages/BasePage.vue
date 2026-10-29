@@ -677,6 +677,32 @@
       </template>
     </div>
 
+    <!-- 🎬 Animations automatiques : par appareil, rien ne change au jeu — le rapport reste
+         dans la boîte 📬 et « Revoir » rejoue à la demande. -->
+    <div class="panel push-panel">
+      <div class="p-title font-display">🎬 Animations</div>
+      <div class="p-sub">
+        Touche un type pour qu’il ne se lance plus tout seul. Le résultat est identique : le rapport
+        reste dans la boîte 📬.
+      </div>
+      <div class="push-chips anim-chips">
+        <button
+          v-for="o in ANIMATION_OPTIONS"
+          :key="o.id"
+          type="button"
+          class="push-chip"
+          :class="{ off: !anim.on[o.id] }"
+          :aria-pressed="anim.on[o.id]"
+          :title="o.hint"
+          @click="anim.set(o.id, !anim.on[o.id])"
+        >
+          <span class="push-chip-emo" aria-hidden="true">{{ o.emoji }}</span>
+          {{ o.label }}
+          <span class="push-chip-state">{{ anim.on[o.id] ? 'actif' : 'coupé' }}</span>
+        </button>
+      </div>
+    </div>
+
     <!-- ── Héros à l'infirmerie ── -->
     <div v-if="wounded" class="panel warn">
       <div class="p-title">🤕 Ton héros est à l’infirmerie</div>
@@ -1121,6 +1147,8 @@ import {
 import { controlDetectBoost, islandMilitiaOf } from '@/lib/controlPoints';
 import { DETECT_FLOOR, islandPerception } from '@/lib/fieldArmy';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
+import { ANIMATION_OPTIONS } from '@/lib/animationPrefs';
 import { PUSH_GROUPS, PUSH_KIND_INFO, pushKindsOf, type AnyPushKind } from '@/lib/push';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
@@ -1175,6 +1203,7 @@ const siegeReportDetail = computed(() =>
 // 🔔 Notifications. ⚠️ Sur iOS, le push n'existe QUE si l'app a été ajoutée à l'écran
 // d'accueil — d'où le message explicite plutôt qu'un bouton qui ne ferait rien.
 const pushOk = pushSupported();
+const anim = useAnimationPrefs();
 const {
   enabled: pushOn,
   busy: pushBusy,

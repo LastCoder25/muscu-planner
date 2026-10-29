@@ -8,6 +8,7 @@
 import { ref, watch, type Ref } from 'vue';
 import type { ExpeditionMessage } from '@/lib/expedition';
 import { overflowAutoReplay } from '@/lib/overflowStage';
+import { useAnimationPrefs } from './useAnimationPrefs';
 import { useCharacterStore } from '@/stores/character';
 
 const KEY = 'muscu:overflow:replayed';
@@ -36,6 +37,7 @@ export function useOverflowReplay(busy: Ref<boolean>): {
   ovfAutoId: Ref<string | null>;
 } {
   const char = useCharacterStore();
+  const anim = useAnimationPrefs();
   const ovfMsg = ref<ExpeditionMessage | null>(null);
   const ovfAutoId = ref<string | null>(null);
   watch(ovfMsg, (m) => {
@@ -47,7 +49,8 @@ export function useOverflowReplay(busy: Ref<boolean>): {
       if (!messages || b || ovfMsg.value) return;
       const t = overflowAutoReplay(messages, readSeen(), Date.now());
       writeSeen(t.seen);
-      if (t.play) {
+      // 🎬 Éteint dans « Base » : retenu comme vu, donc pas rejoué non plus en le rallumant.
+      if (t.play && anim.on.overflow) {
         ovfAutoId.value = t.play.id;
         ovfMsg.value = t.play;
       }

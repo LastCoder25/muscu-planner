@@ -530,6 +530,7 @@ import {
   type BossFamily,
   type FriendBoss,
 } from '@/lib/friendBoss';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 import { friendBossArt } from '@/data/friendBossArt';
 
 defineProps<{ embedded?: boolean }>();
@@ -652,6 +653,7 @@ function syncLook() {
 }
 watch([loaded, myLook], () => loaded.value && syncLook(), { immediate: true });
 
+const anim = useAnimationPrefs();
 /** Rejoue une fois, à l'ouverture, les frappes des amis depuis ma dernière visite. */
 const SEEN_KEY = (id: string) => `muscu:fboss:seen:${id}`;
 let replayedFor: string | null = null;
@@ -670,7 +672,7 @@ watch(
       /* stockage indisponible : pas de rejeu */
     }
     const { strikes, startHp } = strikesToReplay(b, store.hits, uid.value, since);
-    if (!strikes.length) return;
+    if (!strikes.length || !anim.on.fboss) return; // 🎬 interrupteur de la page Base
     await nextTick();
     await stage.value?.play(strikes, startHp);
   },

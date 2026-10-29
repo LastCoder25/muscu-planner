@@ -3187,6 +3187,7 @@ import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
 import OverflowReplayDialog from '@/components/OverflowReplayDialog.vue';
 import { useOverflowReplay } from '@/composables/useOverflowReplay';
 import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { familiarSpecies } from '@/data/familiars';
@@ -5689,6 +5690,7 @@ const siegeAdvTracks = ref<AdvXpTrack[]>([]);
  *  on découvre l'issue par l'animation, jamais par une notification. Mémoire par appareil
  *  de l'identifiant du dernier siège rejoué ; au-delà de 3 jours on ne rejoue plus rien. */
 const SIEGE_SEEN_KEY = 'muscu:siege:seen';
+const anim = useAnimationPrefs();
 function markSiegeSeen(r: RaidReport) {
   try {
     localStorage.setItem(SIEGE_SEEN_KEY, r.raidId);
@@ -5708,6 +5710,7 @@ watch(
     }
     if (seen === r.raidId) return;
     markSiegeSeen(r);
+    if (!anim.on.siege) return; // 🎬 éteint : retenu comme vu, « Revoir l'assaut » reste
     siegeReport.value = r;
     tab.value = 'base';
   },
@@ -5863,9 +5866,14 @@ async function baseLifecycle() {
     if (r.report) {
       siegeAdvProgress.value = r.advProgress;
       siegeAdvTracks.value = r.advTracks;
-      siegeReport.value = r.report;
       markSiegeSeen(r.report);
-      tab.value = 'base';
+      if (anim.on.siege) {
+        siegeReport.value = r.report;
+        tab.value = 'base';
+      } else {
+        // 🎬 Éteint : pas de plateau, mais l'XP des défenseurs s'annonce quand même.
+        onSiegeSeen();
+      }
     }
     // Un tick a pu déplacer l’échéance du prochain siège → on réaligne.
     void syncPush(!!r.detected || !!r.report);

@@ -11,6 +11,7 @@
 // parce que le stockage est bloqué (navigation privée) l'est aussi — d'où les try/catch.
 import { onScopeDispose, ref, watch, type Ref } from 'vue';
 import { useAdvXpFx } from './useAdvXpFx';
+import { useAnimationPrefs } from './useAnimationPrefs';
 import type { PartyResult } from '@/lib/expedition';
 import { riftAutoReplay } from '@/lib/riftStage';
 import { useCharacterStore } from '@/stores/character';
@@ -41,6 +42,7 @@ function writeSeen(ids: string[]): void {
  *  l'id seulement sur le chemin automatique. */
 export function useRiftAutoReplay(replay: Ref<PartyResult | null>): Ref<string | null> {
   const char = useCharacterStore();
+  const anim = useAnimationPrefs();
   const autoMsgId = ref<string | null>(null);
   // ⏸️ Le rapport et son rejeu arrivent ENSEMBLE : les barres d'XP attendent la fin du rejeu,
   // sinon elles le recouvriraient et en révéleraient l'issue (le gain dépend de la victoire).
@@ -59,7 +61,8 @@ export function useRiftAutoReplay(replay: Ref<PartyResult | null>): Ref<string |
       if (!messages || replay.value) return;
       const t = riftAutoReplay(messages, readSeen(), Date.now());
       writeSeen(t.seen);
-      if (t.play?.party) {
+      // 🎬 Éteint dans « Base » : retenu comme vu, donc pas rejoué non plus en le rallumant.
+      if (t.play?.party && anim.on.rift) {
         autoMsgId.value = t.play.id;
         replay.value = t.play.party;
       }
