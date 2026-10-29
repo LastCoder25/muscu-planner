@@ -1695,6 +1695,7 @@ import {
 } from '@/lib/controlWard';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import { activeCondition, conditionFx, upcomingCondition } from '@/lib/islandCondition';
+import { milestoneViews } from '@/lib/islandMilestones';
 import {
   attackReservedIds,
   attackHeroWaitingAt,
@@ -2275,6 +2276,7 @@ const archBind = computed(() => ({
   shown: viewed.value?.island.id ?? null,
   conquest: islandProgress.value,
   embers: emberStatus(char.row?.expedition_map),
+  milestones: milestoneViews(char.row?.expedition_map, heroLevel.value),
   busy: archBusy.value,
   openIds: crossInfo.value.open,
   visitedIds: crossInfo.value.visited,

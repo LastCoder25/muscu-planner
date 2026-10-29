@@ -504,6 +504,7 @@ import {
 } from '@/lib/controlRoutes';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { conditionFx, scaleXp } from '@/lib/islandCondition';
+import { settleMilestones } from '@/lib/islandMilestones';
 import {
   applyFieldHitToBase,
   applyFieldHitToMap,
@@ -2455,8 +2456,11 @@ export const useCharacterStore = defineStore('character', () => {
     // 🌀 Île 5 : un coffre par victoire sur la brèche sans fin.
     const endless = endlessReward(fort?.map ?? mapP, now);
     // 🛡️ La Caserne produit aussi pour les îles rangées (une réserve par île).
+    // 🏅 Les jalons d'île franchis (niveau du joueur vu par la carte) : cochés dans la carte,
+    // annoncés dans la boîte, même écriture. Un jalon déjà dépassé à l'arrivée est coché sans bruit.
+    const mile = settleMilestones(endless?.map ?? fort?.map ?? mapP, now, level);
     const mapM = produceIslandMilitia(
-      endless?.map ?? fort?.map ?? mapP,
+      mile?.map ?? endless?.map ?? fort?.map ?? mapP,
       buildingLevel(cur.buildings, 'barracks'),
       now,
     );
@@ -2464,6 +2468,7 @@ export const useCharacterStore = defineStore('character', () => {
     const islandMsgs = [
       ...(fort ? [fort.msg] : []),
       ...(endless?.msgs ?? []),
+      ...(mile?.msgs ?? []),
       ...(landIsl && landIsl.id > 1
         ? [landingChestMessage(landIsl, land!.crossing!.arriveAt)]
         : []),
@@ -2522,6 +2527,15 @@ export const useCharacterStore = defineStore('character', () => {
           rarity: land.firstTime ? 'legendary' : 'rare',
         });
     }
+    // 🏅 Un jalon franchi se fête (après l'écriture : la carte d'après le porte cochée).
+    for (const m of mile?.fresh ?? [])
+      useGameFx().celebrate({
+        kind: 'unlock',
+        emoji: m.def.emoji,
+        title: m.def.name,
+        subtitle: `Jalon de l'île · niveau ${m.level}`,
+        rarity: m.def.chest ? 'legendary' : 'rare',
+      });
     // 🏯 L'Avant-poste vient de découvrir une citadelle : elle sort du brouillard À L'ÉCRAN
     // (demandé par l'utilisateur). Après l'écriture : la carte d'après porte la découverte, un
     // tick suivant ne la rejoue donc pas.
