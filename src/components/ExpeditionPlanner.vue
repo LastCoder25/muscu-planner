@@ -12,7 +12,11 @@
       aux miliciens.
     </p>
     <!-- 🎯 Les objectifs du jour : la progression se lit ici, là où l'on lance ses vagues. -->
-    <DailyObjectives v-if="section === 'plan' && daily?.length" :states="daily" />
+    <DailyObjectives
+      v-if="section === 'plan' && daily?.length"
+      :states="daily"
+      :reward="dailyReward ?? undefined"
+    />
     <!-- 🔁 LA DERNIÈRE VAGUE (demandé) : les mêmes équipes sur des lieux du même type, sans rien
          recalculer. Le store refuse ce que l'envoi manuel refuserait ; ce qui ne repart pas est
          listé avec sa raison. -->
@@ -355,7 +359,7 @@ import { formatDurationMin } from '@/lib/duration';
 import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import type { PlanMode } from '@/lib/expeditionPlanner';
 import { DEPLOY_HERO_ID } from '@/lib/deployPlan';
-import { SUPPLIES } from '@/lib/supplies';
+import { SUPPLIES, type SupplyId } from '@/lib/supplies';
 import { waveCounts } from '@/lib/lastWave';
 import DailyObjectives from '@/components/DailyObjectives.vue';
 import type { ObjectiveState } from '@/lib/dailyObjectives';
@@ -367,6 +371,8 @@ const props = defineProps<{
   section: 'plan' | 'repart';
   /** 🎯 Les objectifs du jour (état dérivé par la page) ; absent ou vide = pas de tuile. */
   daily?: ObjectiveState[];
+  /** Le consommable du jour (versé quand les trois sont atteints). */
+  dailyReward?: SupplyId | null;
 }>();
 const emit = defineEmits<{ open: [row: PlannerRow] }>();
 const {

@@ -654,26 +654,33 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const { default: DailyObjectives } = await import('@/components/DailyObjectives.vue');
     const states = [
       {
-        obj: { kind: 'sends', target: 6, reward: 'rations' },
+        obj: { kind: 'sends', target: 6 },
         progress: 4,
         complete: false,
-        paid: false,
+        latched: false,
       },
       {
-        obj: { kind: 'camps', target: 2, reward: 'potion' },
+        obj: { kind: 'camps', target: 2 },
         progress: 2,
         complete: true,
-        paid: true,
+        latched: true,
       },
       {
-        obj: { kind: 'rifts', target: 1, reward: 'rations' },
+        obj: { kind: 'rifts', target: 1 },
         progress: 0,
         complete: false,
-        paid: false,
+        latched: false,
       },
     ];
     let open = '';
-    await mountIt(DailyObjectives, { states }, undefined, undefined, '/', (h) => (open = h));
+    await mountIt(
+      DailyObjectives,
+      { states, reward: 'rations' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (open = h),
+    );
     expect(open).toContain('Objectifs du jour');
     expect(open).toContain('1/3');
     expect(open).toContain('Envoie 6 équipes');
@@ -681,6 +688,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(open).toContain('Prends 2 camps');
     expect(open).toContain('✓'); // l'atteint est coché, plus de « 2/2 »
     expect(open).toContain('Ferme 1 faille');
+    expect(open).toContain('3/3 : un consommable'); // un seul bonus, à 3/3 (plus un par objectif)
+    expect(open).toContain('data-test="daily-bonus"');
+    expect(open.match(/dly-rew/g)).toHaveLength(1);
     expect(open.match(/class="dly-row/g)).toHaveLength(3);
     // Se range d'un geste (le choix est mémorisé).
     let closed = '';
@@ -791,7 +801,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Héros libre');
     expect(out).toContain('Ranger');
     // 🔁 Sans vague mémorisée, pas de bouton ; avec, il porte le nombre de départs.
-    expect(out).not.toContain('Relancer la vague');
+    expect(out).not.toContain('Relancer (');
     let withWave = '';
     await mountIt(
       AbsenceCard,
@@ -801,7 +811,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       '/',
       (h) => (withWave = h),
     );
-    expect(withWave).toContain('Relancer la vague (3)');
+    expect(withWave).toContain('Relancer (3)');
   });
 
   // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de

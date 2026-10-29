@@ -21,7 +21,7 @@
       <button type="button" class="abs-btn" @click="$emit('plan')">🪄 Planifier</button>
       <!-- 🔁 La dernière vague en un geste (le planificateur s'ouvre et dit ce qui est parti). -->
       <button v-if="wave" type="button" class="abs-btn" :disabled="busy" @click="$emit('wave')">
-        🔁 Relancer la vague ({{ wave }})
+        🔁 Relancer ({{ wave }})
       </button>
       <button type="button" class="abs-btn ghost" @click="$emit('close')">Ranger</button>
     </div>
@@ -60,8 +60,8 @@ const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 .abs {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 4px 4px 10px;
+  gap: 6px;
+  padding: 2px 4px 12px;
 }
 .abs-since {
   margin: 0;
@@ -69,8 +69,8 @@ const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
   color: var(--dim);
 }
 .abs-lab {
-  margin: 4px 0 0;
-  font-size: 12px;
+  margin: 2px 0 0;
+  font-size: 11px;
   font-weight: 700;
   color: var(--dim);
   text-transform: uppercase;
@@ -85,13 +85,13 @@ const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
-  padding: 0 11px;
+  min-height: 28px;
+  padding: 0 9px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: 12.5px;
+  line-height: 1.15;
   &.todo {
     border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
   }
@@ -106,25 +106,27 @@ const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 .abs-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 2px;
 }
 .abs-btn {
-  flex: 1 1 130px;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 46px;
-  padding: 0 12px;
+  padding: 0 6px;
   border-radius: 12px;
   border: 1.5px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 22%, var(--surface));
   color: var(--text);
   font-weight: 800;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.15;
   cursor: pointer;
   &.ghost {
     border-color: var(--line);
     background: var(--surface);
     font-weight: 600;
-    flex-basis: 90px;
+    flex-grow: 0.6;
   }
   &:disabled {
     opacity: 0.6;

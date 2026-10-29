@@ -5,19 +5,22 @@
  *
  * ⚠️ DISTINCTS DES QUÊTES DE LA SEMAINE (`weeklyQuests.ts`) : celles-là sont du SPORT et paient
  * des tickets 🎟️ (décision : « un objectif de jeu aurait cassé cette séparation »). Ceux-ci sont
- * du JEU, tirent leur but du jour et paient un CONSOMMABLE — jamais d'or, jamais de ticket.
+ * du JEU, tirent leur but du jour et paient UN SEUL CONSOMMABLE, versé quand les TROIS sont
+ * atteints (v1.279.2 : par objectif, il doublait presque ce que rapportent les voyages) — jamais
+ * d'or, jamais de ticket.
  *
  * ⚠️ TOUT EST DÉRIVÉ, SAUF UNE MARQUE. Les trois objectifs sont une fonction PURE de (graine de
  * la carte, île, jour) ; la progression se LIT dans ce que le jeu écrit déjà (les départs de la
- * carte, les rapports de la boîte 📬). La seule chose stockée est « ce bonus a déjà été payé »
- * (`ExpeditionMap.daily`) : sans elle, rien ne distinguerait un bonus encaissé d'un bonus à
- * encaisser. Stockage minimal INÉVITABLE, pas une progression stockée.
+ * carte, les rapports de la boîte 📬). La seule chose stockée est « quels objectifs sont déjà
+ * atteints » (`ExpeditionMap.daily`) : sans elle la progression pourrait reculer (rapports sortis
+ * de la boîte) et rien ne distinguerait un bonus encaissé d'un bonus à encaisser (les trois
+ * notés = bonus payé). Stockage minimal INÉVITABLE, pas une progression stockée.
  *
  * ⚠️ DEUX LIMITES ASSUMÉES, écrites ici pour ne pas être redécouvertes :
  * - la boîte 📬 ne garde que `MESSAGES_CAP` rapports : pour un joueur qui en produit des dizaines
  *   par jour, la progression lue dans les rapports peut RECULER quand les plus vieux sortent. Le
- *   bonus est donc payé AU MOMENT où l'objectif est atteint (l'écran ouvert le déclenche), et ce
- *   qui est payé ne se reprend jamais ;
+ *   Un objectif atteint est donc NOTÉ au moment où il l'est (l'écran ouvert le déclenche), et ce
+ *   qui est noté ne se reprend jamais ;
  * - les rapports ne disent pas de quelle île ils viennent : une mission faite sur une autre île
  *   le même jour compte aussi. Chaque île a ses propres objectifs (graine et île au tirage) et
  *   sa propre marque : traverser pour « re-gagner » le jour est possible mais coûteux (une
@@ -89,8 +92,6 @@ const KIND_ORDER = Object.keys(OBJECTIVE_KINDS) as ObjectiveKind[];
 export interface DailyObjective {
   kind: ObjectiveKind;
   target: number;
-  /** Le consommable payé : tiré avec l'objectif, donc connu d'avance (affiché sur la tuile). */
-  reward: SupplyId;
 }
 
 /** Les objectifs par jour. Nombre fixe : trois. */
@@ -122,9 +123,18 @@ export function dailyObjectives(seed: number, island: number, day: number): Dail
     const kind = pool.splice(Math.floor(rng() * pool.length), 1)[0]!;
     const def = OBJECTIVE_KINDS[kind];
     const target = def.min + Math.floor(rng() * (def.max - def.min + 1));
-    out.push({ kind, target, reward: pickSupply(rng()) });
+    out.push({ kind, target });
   }
   return out;
+}
+
+/** Le SEUL consommable payé du jour — quand les trois objectifs sont atteints. Tiré sur son propre
+ *  générateur (graine, île, jour) : connu d'avance, affiché sur la tuile. */
+export function dailyReward(seed: number, island: number, day: number): SupplyId {
+  const rng = mulberry32(
+    (seed ^ Math.imul(island + 1, 0x27d4eb2f) ^ Math.imul(day, 0x165667b1)) >>> 0 || 1,
+  );
+  return pickSupply(rng());
 }
 
 export interface DailyCounters {
@@ -172,28 +182,29 @@ export interface ObjectiveState {
   progress: number;
   /** La progression lue atteint la cible. */
   complete: boolean;
-  /** Le bonus est déjà payé. */
-  paid: boolean;
+  /** Atteint ET déjà noté dans la marque du jour : il ne recule plus, même si les rapports sortent
+   *  de la boîte. */
+  latched: boolean;
 }
 
-/** Ce qui est payé aujourd'hui : la marque du jour, vide si elle date d'un autre jour. */
-export function paidToday(daily: ExpeditionMap['daily'], day: number): ObjectiveKind[] {
+/** Les objectifs notés atteints aujourd'hui : la marque du jour, vide si elle date d'un autre jour. */
+export function latchedToday(daily: ExpeditionMap['daily'], day: number): ObjectiveKind[] {
   return daily && daily.day === day ? daily.done : [];
 }
 
 export function objectiveStates(
   objs: readonly DailyObjective[],
   counters: DailyCounters,
-  paid: readonly ObjectiveKind[],
+  latched: readonly ObjectiveKind[],
 ): ObjectiveState[] {
   return objs.map((obj) => {
-    const done = paid.includes(obj.kind);
+    const done = latched.includes(obj.kind);
     const have = counters[obj.kind];
     return {
       obj,
       progress: done ? obj.target : Math.min(obj.target, have),
       complete: done || have >= obj.target,
-      paid: done,
+      latched: done,
     };
   });
 }
@@ -208,39 +219,46 @@ export function dailyStatesFor(
   messages: readonly ExpeditionMessage[],
   now: number,
   tzOffsetMin: number,
-): { day: number; states: ObjectiveState[] } {
+): { day: number; states: ObjectiveState[]; reward: SupplyId } {
   const day = dayIndex(now, tzOffsetMin);
-  if (map.archipel?.vacatedAt !== undefined) return { day, states: [] };
-  const objs = dailyObjectives(map.seed, map.archipel?.island ?? 0, day);
+  const island = map.archipel?.island ?? 0;
+  const reward = dailyReward(map.seed, island, day);
+  if (map.archipel?.vacatedAt !== undefined) return { day, states: [], reward };
+  const objs = dailyObjectives(map.seed, island, day);
   const counters = dailyCounters(map, messages, dayStartMs(day, tzOffsetMin), now);
-  return { day, states: objectiveStates(objs, counters, paidToday(map.daily, day)) };
+  return { day, states: objectiveStates(objs, counters, latchedToday(map.daily, day)), reward };
 }
 
-/** Les bonus à payer maintenant : atteints et pas encore payés. */
+/** Les objectifs atteints qu'il faut NOTER dans la marque maintenant (atteints, pas encore notés). */
 export const dueObjectives = (states: readonly ObjectiveState[]): DailyObjective[] =>
-  states.filter((s) => s.complete && !s.paid).map((s) => s.obj);
+  states.filter((s) => s.complete && !s.latched).map((s) => s.obj);
 
-/** Le stock payé par un lot d'objectifs. */
-export function rewardStock(due: readonly DailyObjective[]): SupplyStock {
-  const out: SupplyStock = {};
-  for (const o of due) out[o.reward] = (out[o.reward] ?? 0) + 1;
-  return out;
+/** Le consommable est-il à payer maintenant ? Oui quand les TROIS sont atteints et que la marque
+ *  d'avant ne les couvrait pas tous (donc jamais deux fois : une fois les trois notés, plus rien). */
+export function bonusDue(states: readonly ObjectiveState[]): boolean {
+  return (
+    states.length === DAILY_COUNT &&
+    states.every((s) => s.complete) &&
+    !states.every((s) => s.latched)
+  );
 }
 
-/** La tuile d'un objectif : emoji, but, récompense. */
-export function objectiveView(o: DailyObjective): {
-  emoji: string;
-  label: string;
-  how: string;
-  rewardEmoji: string;
-  rewardName: string;
-} {
+/** Le stock payé : UN seul consommable. */
+export function rewardStock(reward: SupplyId): SupplyStock {
+  return { [reward]: 1 };
+}
+
+/** Clé de relance du paiement : tant qu'il y a quelque chose à noter, elle change à chaque minute
+ *  (le store a pu passer son tour : écriture en vol) ; sinon 0 et rien ne se relance. */
+export const claimRetryKey = (dueCount: number, now: number): number => (dueCount > 0 ? now : 0);
+
+/** La tuile d'un objectif : emoji, but, sens du compteur. */
+export function objectiveView(o: DailyObjective): { emoji: string; label: string; how: string } {
   const def = OBJECTIVE_KINDS[o.kind];
-  return {
-    emoji: def.emoji,
-    label: def.label(o.target),
-    how: def.how,
-    rewardEmoji: SUPPLIES[o.reward].emoji,
-    rewardName: SUPPLIES[o.reward].name,
-  };
+  return { emoji: def.emoji, label: def.label(o.target), how: def.how };
+}
+
+/** La récompense du jour, pour la tuile. */
+export function rewardView(reward: SupplyId): { emoji: string; name: string } {
+  return { emoji: SUPPLIES[reward].emoji, name: SUPPLIES[reward].name };
 }

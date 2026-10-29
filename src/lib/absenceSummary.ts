@@ -169,3 +169,17 @@ export function absenceDuration(ms: number): string {
   if (h < 24) return `${h} h ${String(min % 60).padStart(2, '0')}`;
   return `${Math.floor(h / 24)} j ${h % 24} h`;
 }
+
+/** Le panneau « absence » est resté ouvert alors que plus rien n'est à résumer (retour d'un onglet
+ *  resté caché sans rapport neuf) : il faut le FERMER, sinon la chaîne de panneaux de la carte
+ *  retombe sur un autre (« Places fortes » sous le titre « Pendant ton absence »). */
+export function absencePanelStale(overlay: string | null, summary: unknown): boolean {
+  return overlay === 'absence' && !summary;
+}
+
+/** Au retour d'un onglet caché : la tuile a-t-elle déjà été montrée pour cette absence ? Oui si le
+ *  panneau est ouvert maintenant ; sinon elle peut s'ouvrir. Sans cela, la ranger la faisait
+ *  revenir dans la minute. */
+export function absenceShownOnReturn(overlay: string | null): boolean {
+  return overlay === 'absence';
+}

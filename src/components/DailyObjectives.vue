@@ -1,6 +1,6 @@
 <template>
   <!-- 🎯 LES OBJECTIFS DU JOUR : trois buts qui tournent, la progression lue dans ce que le jeu
-       a déjà écrit, un consommable à la clé. Ne calcule rien (`dailyObjectives.ts`). -->
+       a déjà écrit, UN consommable quand les trois sont atteints. Ne calcule rien (`dailyObjectives.ts`). -->
   <section class="dly" data-test="daily" aria-label="Objectifs du jour">
     <button
       type="button"
@@ -29,7 +29,17 @@
           </span>
         </span>
         <span class="dly-num">{{ s.complete ? '✓' : `${s.progress}/${s.obj.target}` }}</span>
-        <span class="dly-rew" :title="s.view.rewardName">{{ s.view.rewardEmoji }}</span>
+      </li>
+      <li
+        v-if="rewardInfo"
+        class="dly-bonus"
+        :class="{ done: doneCount === states.length }"
+        data-test="daily-bonus"
+        :title="rewardInfo.name"
+      >
+        <span aria-hidden="true">🎁</span>
+        <span class="dly-label">{{ states.length }}/{{ states.length }} : un consommable</span>
+        <span class="dly-rew">{{ rewardInfo.emoji }}</span>
       </li>
     </ul>
   </section>
@@ -37,9 +47,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { objectiveView, type ObjectiveState } from '@/lib/dailyObjectives';
+import { objectiveView, rewardView, type ObjectiveState } from '@/lib/dailyObjectives';
+import type { SupplyId } from '@/lib/supplies';
 
-const props = defineProps<{ states: ObjectiveState[] }>();
+const props = defineProps<{ states: ObjectiveState[]; reward?: SupplyId }>();
 
 const KEY = 'muscu:daily:open';
 function readOpen(): boolean {
@@ -60,6 +71,7 @@ function toggle() {
 }
 
 const rows = computed(() => props.states.map((s) => ({ ...s, view: objectiveView(s.obj) })));
+const rewardInfo = computed(() => (props.reward ? rewardView(props.reward) : null));
 const doneCount = computed(() => props.states.filter((s) => s.complete).length);
 const pct = (s: ObjectiveState) => Math.round((s.progress / s.obj.target) * 100);
 </script>
@@ -156,6 +168,21 @@ const pct = (s: ObjectiveState) => Math.round((s.progress / s.obj.target) * 100)
   font-size: 14px;
   min-width: 34px;
   text-align: right;
+}
+.dly-bonus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  &.done {
+    border: 1px solid #7bc86c;
+  }
+  .dly-label {
+    flex: 1;
+  }
 }
 .dly-rew {
   font-size: 18px;

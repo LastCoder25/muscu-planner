@@ -71,7 +71,8 @@ export function waveKeyLabel(key: string): string {
       ? { type: 'control', control: { kind: key.slice(8) } }
       : { type: key }
   ) as Pick<Poi, 'type' | 'control'>;
-  return `${poiEmo(stub)} ${poiLabel(stub)}`;
+  // Un type que ce code ne connaît plus (retiré depuis) : un repli lisible, jamais « undefined ».
+  return `${poiEmo(stub) || '📍'} ${poiLabel(stub) || 'Lieu'}`;
 }
 
 /** Ce que la vague lit d'une proposition lancée (la forme de `PlannerRow`, sans la dépendre). */

@@ -112,9 +112,10 @@ import {
 } from '@/lib/expedition';
 import type { LastWave } from '@/lib/lastWave';
 import {
+  bonusDue,
   dailyStatesFor,
   dueObjectives,
-  paidToday,
+  latchedToday,
   rewardStock,
   type DailyObjective,
 } from '@/lib/dailyObjectives';
@@ -4069,34 +4070,38 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, { expedition_map: { ...map, lastWave: wave } });
   }
 
-  /** 🎯 Paie les objectifs du jour ATTEINTS et pas encore payés (`dailyObjectives.ts`) : un
-   *  consommable chacun, crédité dans la MÊME écriture que la marque « payé » (jamais l'un sans
+  /** 🎯 Note les objectifs du jour ATTEINTS (`dailyObjectives.ts`) et, quand les TROIS le sont,
+   *  verse l'UNIQUE consommable du jour — dans la MÊME écriture que la marque (jamais l'un sans
    *  l'autre). ⚠️ Le store RECALCULE la progression lui-même : il ne croit pas l'écran, et ne
-   *  paie jamais deux fois (la marque du jour). Rend ce qui vient d'être payé. */
+   *  paie jamais deux fois (les trois notés = payé). Rend ce qui vient d'être noté, et le
+   *  consommable s'il vient d'être versé. */
   let dailyBusy = false;
   async function claimDailyObjectives(
     userId: string,
     now: number,
     tzOffsetMin: number,
-  ): Promise<DailyObjective[]> {
+  ): Promise<{ latched: DailyObjective[]; reward: SupplyId | null }> {
+    const none = { latched: [], reward: null };
     const cur = row.value;
     const map = cur?.expedition_map;
     // ⚠️ Un tick de fond, pas un geste : il passe son tour tant qu'une écriture vole (sa carte
-    // serait périmée et écraserait l'envoi en cours) ; l'écran le relance à la minute suivante.
-    if (!cur || !map || dailyBusy || !tickMayWrite(cur)) return [];
-    const { day, states } = dailyStatesFor(map, cur.messages ?? [], now, tzOffsetMin);
+    // serait périmée et écraserait l'envoi en cours). L'écran le RELANCE à chaque minute tant
+    // qu'il y a quelque chose à noter (`claimRetryKey`).
+    if (!cur || !map || dailyBusy || !tickMayWrite(cur)) return none;
+    const { day, states, reward } = dailyStatesFor(map, cur.messages ?? [], now, tzOffsetMin);
     const due = dueObjectives(states);
-    if (!due.length) return [];
+    if (!due.length) return none;
+    const pay = bonusDue(states);
     dailyBusy = true;
     try {
       await persist(userId, {
         expedition_map: {
           ...map,
-          daily: { day, done: [...paidToday(map.daily, day), ...due.map((o) => o.kind)] },
+          daily: { day, done: [...latchedToday(map.daily, day), ...due.map((o) => o.kind)] },
         },
-        supplies: addSupplies(cur.supplies, rewardStock(due)),
+        ...(pay ? { supplies: addSupplies(cur.supplies, rewardStock(reward)) } : {}),
       });
-      return due;
+      return { latched: due, reward: pay ? reward : null };
     } finally {
       dailyBusy = false;
     }

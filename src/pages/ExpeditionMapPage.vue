@@ -525,6 +525,7 @@
           :planner="planner"
           :section="overlay"
           :daily="daily"
+          :daily-reward="dailyReward"
           @open="openPlannedRow"
         />
         <ControlPointsSheet
@@ -1869,9 +1870,11 @@ import CrossingScene from '@/components/CrossingScene.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ExpeditionPlanner from '@/components/ExpeditionPlanner.vue';
 import AbsenceCard from '@/components/AbsenceCard.vue';
-import { dailyStatesFor, dueObjectives, objectiveView } from '@/lib/dailyObjectives';
+import { claimRetryKey, dailyStatesFor, dueObjectives, rewardView } from '@/lib/dailyObjectives';
 import {
   ABSENCE_MIN_MS,
+  absencePanelStale,
+  absenceShownOnReturn,
   absenceSummary,
   isAbsence,
   type RelaunchInput,
@@ -6501,32 +6504,33 @@ let disposed = false;
 // Dérivés (`dailyStatesFor`, la MÊME fonction que le store) ; le bonus est payé dès qu'un
 // objectif est atteint, par le store, qui recalcule lui-même. Horloge grossière : la progression
 // se relit à la minute.
-const daily = computed(() => {
+const dailyAll = computed(() => {
   const m = char.row?.expedition_map;
   return m
     ? dailyStatesFor(m, char.row?.messages ?? [], coarseNow.value, new Date().getTimezoneOffset())
-        .states
-    : [];
+    : null;
 });
+const daily = computed(() => dailyAll.value?.states ?? []);
+const dailyReward = computed(() => dailyAll.value?.reward ?? null);
+// ⚠️ Retenté À CHAQUE MINUTE tant qu'il y a quelque chose à noter : le store passe son tour si une
+// écriture vole (`tickMayWrite`), et rien d'autre ne relancerait le paiement.
 watch(
-  () => dueObjectives(daily.value).length,
-  async (n) => {
+  () => claimRetryKey(dueObjectives(daily.value).length, coarseNow.value),
+  async (key) => {
     const uid = auth.user?.id;
-    if (!n || !uid) return;
+    if (!key || !uid) return;
     try {
-      const paid = await char.claimDailyObjectives(uid, Date.now(), new Date().getTimezoneOffset());
-      if (paid.length)
+      const r = await char.claimDailyObjectives(uid, Date.now(), new Date().getTimezoneOffset());
+      if (r.reward)
         $q.notify({
           type: 'positive',
-          message: `🎯 ${paid.map((o) => objectiveView(o).label).join(' · ')} — ${paid
-            .map((o) => objectiveView(o).rewardEmoji)
-            .join(' ')} gagné`,
+          message: `🎯 Objectifs du jour atteints — ${rewardView(r.reward).emoji} ${rewardView(r.reward).name} gagné`,
           // En haut : en bas, la rangée de ronds de la carte (Voyages, Planifier…) serait couverte.
           position: 'top',
           timeout: 4000,
         });
     } catch {
-      /* hors ligne : le bonus sera payé à la prochaine ouverture */
+      /* hors ligne : retenté à la minute suivante */
     }
   },
   { immediate: true },
@@ -6575,6 +6579,8 @@ let absenceShown = false;
 watch(
   absence,
   (a) => {
+    // Plus rien à résumer : le panneau ouvert se ferme (sinon un autre panneau prend sa place).
+    if (absencePanelStale(overlay.value, a)) overlay.value = null;
     if (!a || absenceShown || overlay.value || viewed.value) return;
     absenceShown = true;
     overlay.value = 'absence';
@@ -6592,7 +6598,7 @@ function onVisibility() {
     writeSeen(hiddenAt);
   } else if (hiddenAt && Date.now() - hiddenAt >= ABSENCE_MIN_MS) {
     absenceSince.value = hiddenAt;
-    absenceShown = false;
+    absenceShown = absenceShownOnReturn(overlay.value);
   }
 }
 document.addEventListener('visibilitychange', onVisibility);

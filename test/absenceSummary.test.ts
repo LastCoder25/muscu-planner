@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ABSENCE_MIN_MS,
+  absencePanelStale,
+  absenceShownOnReturn,
   absenceChips,
   absenceDuration,
   absenceSummary,
@@ -102,6 +105,21 @@ describe('absenceSummary — la tuile « pendant ton absence »', () => {
     expect(s.lost).toBe(1);
   });
 
+  it('une seule défense PERDUE compte perdue ; une seule défense TENUE ne compte rien', () => {
+    const lost = absenceSummary(
+      [msg({ poiType: 'control', party: { controlId: 'c3', defense: true, win: false } })],
+      T0,
+      T0 + 5 * H,
+    )!;
+    expect([lost.lost, lost.taken]).toEqual([1, 0]);
+    const held = absenceSummary(
+      [msg({ poiType: 'control', party: { controlId: 'c4', defense: true, win: true } })],
+      T0,
+      T0 + 5 * H,
+    )!;
+    expect([held.lost, held.taken]).toEqual([0, 0]);
+  });
+
   it('compte les failles refermées (victoire d’incursion) et débordées', () => {
     const s = absenceSummary(
       [
@@ -122,6 +140,29 @@ describe('isAbsence', () => {
     expect(isAbsence(0, T0)).toBe(false);
     expect(isAbsence(T0, T0 + ABSENCE_MIN_MS - 1)).toBe(false);
     expect(isAbsence(T0, T0 + ABSENCE_MIN_MS)).toBe(true);
+  });
+});
+
+describe('panneau d’absence : fermeture et retour d’onglet', () => {
+  it('ouvert sans rien à résumer, il est périmé (sinon un autre panneau prend sa place)', () => {
+    expect(absencePanelStale('absence', null)).toBe(true);
+    expect(absencePanelStale('absence', { reports: 1 })).toBe(false);
+    expect(absencePanelStale('plan', null)).toBe(false);
+    expect(absencePanelStale(null, null)).toBe(false);
+  });
+
+  it('au retour, la tuile n’est « déjà montrée » que si son panneau est ouvert', () => {
+    expect(absenceShownOnReturn('absence')).toBe(true);
+    expect(absenceShownOnReturn(null)).toBe(false);
+    expect(absenceShownOnReturn('plan')).toBe(false);
+  });
+
+  it('câblage : la page ferme le panneau périmé et mémorise « montrée » au retour', () => {
+    const page = readFileSync('src/pages/ExpeditionMapPage.vue', 'utf-8');
+    expect(page).toMatch(
+      /if\s*\(\s*absencePanelStale\(\s*overlay\.value,\s*a\s*\)\s*\)\s*overlay\.value\s*=\s*null/,
+    );
+    expect(page).toMatch(/absenceShown\s*=\s*absenceShownOnReturn\(\s*overlay\.value\s*\)/);
   });
 });
 

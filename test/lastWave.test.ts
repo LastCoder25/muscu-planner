@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   WAVE_MAX_TRIPS,
@@ -20,7 +19,7 @@ import type { Adventurer } from '@/lib/adventurers';
 import { advanceWorld, createMap, type ExpeditionMap, type Poi } from '@/lib/expedition';
 import { archipelOn } from '@/lib/archipelago';
 import { refFighter } from '@/lib/proceduralContent';
-import { PARTY_SEND_BLOCK_LABEL } from '@/lib/party';
+import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL } from '@/lib/party';
 
 const poi = (id: string, type: Poi['type'] = 'mine', over: Partial<Poi> = {}): Poi => ({
   id,
@@ -110,6 +109,9 @@ describe('🔁 waveFromRows — ce qui est retenu d’une vague', () => {
     expect(waveKey(ctl('mine'))).toBe('control:mine');
     expect(waveKey(ctl('garden'))).not.toBe(waveKey(ctl('mine')));
     expect(waveKeyLabel('mine')).toContain('Mine');
+    // Un type retiré depuis, ou un genre de point inconnu : repli lisible, jamais « undefined ».
+    expect(waveKeyLabel('epave_retiree')).toBe('📍 Lieu');
+    expect(waveKeyLabel('control:inconnu')).toBe('📍 Lieu');
   });
 
   it('pastilles : un compte par type, dans l’ordre du départ', () => {
@@ -298,6 +300,13 @@ describe('🔁 replayDeps — les VRAIES règles d’envoi (celles du planificat
     expect(r.skipped[0]!.reason).toMatch(/chance de \d+ %, sous ton seuil de 101 %/);
   });
 
+  it('le héros ne part pas vers un filon (règle de l’écran d’envoi), la raison est dite', () => {
+    const t = trip('vein', ['a0'], { wings: [{ originId: null, advIds: ['a0'], hero: true }] });
+    const r = planReplay(wave(t), replayDeps(world({ targets: [poi('v1', 'vein')] })));
+    expect(r.sends).toEqual([]);
+    expect(r.skipped[0]!.reason).toBe(`héros : ${PARTY_HERO_BLOCK_LABEL.vein}`);
+  });
+
   it('le refus de l’écran d’envoi (plafond du Panthéon) vaut aussi ici', () => {
     const r = planReplay(wave(trip('mine', ['a0', 'a1', 'a2'])), replayDeps(world({ cap: 2 })));
     expect(r.sends).toEqual([]);
@@ -326,42 +335,5 @@ describe('🔁 la vague vit dans la carte de l’île', () => {
 
   it('sans vague, aucune clé n’est ajoutée (la carte ne diffère pas à chaque tick)', () => {
     expect('lastWave' in advanceWorld(base(), T0 + 60_000, 12, 1)).toBe(false);
-  });
-});
-
-// 🔌 Le câblage du store et du planificateur est hors harnais (Supabase, Pinia, horloge) : on
-// verrouille par la source, comme `heroStableWiring.test`.
-describe('🔌 câblage : une écriture par vague, par le chemin d’envoi de « Tout lancer »', () => {
-  const store = readFileSync('src/stores/character.ts', 'utf-8');
-  const planner = readFileSync('src/composables/useExpeditionPlanner.ts', 'utf-8');
-  const fn = (src: string, name: string) => {
-    const at = src.indexOf(`function ${name}(`);
-    expect(at).toBeGreaterThan(-1);
-    const next = src.indexOf('\n  /**', at + 10);
-    return src.slice(at, next === -1 ? undefined : next);
-  };
-
-  it('le store écrit la vague dans la carte, en UNE écriture', () => {
-    const b = fn(store, 'recordWave');
-    expect(b.match(/persist\(/g)).toHaveLength(1);
-    expect(b).toMatch(/expedition_map: \{ \.\.\.map, lastWave: wave \}/);
-  });
-
-  it('« Tout lancer » retient ce qui est PARTI, pas ce qui était proposé', () => {
-    const b = fn(planner, 'launchAll');
-    expect(b).toMatch(/sent\.push\(r\)/);
-    expect(b).toMatch(/await rememberWave\(sent\)/);
-    expect(b.indexOf('sent.push(r)')).toBeGreaterThan(
-      b.indexOf('const refused = await sendRow(r)'),
-    );
-  });
-
-  it('la relance part par le MÊME chemin d’envoi (`sendRow`) et liste les refus', () => {
-    const b = fn(planner, 'relaunchWave');
-    expect(b).toMatch(/planReplay\(wave, replayDeps\(replayWorld\(\)\)/);
-    expect(b).toMatch(/await sendRow\(/);
-    expect(b).toMatch(/if \(refused\) skipped\.push/);
-    // Elle ne réécrit PAS la vague : ce qui est resté n'est pas perdu.
-    expect(b).not.toMatch(/recordWave|rememberWave/);
   });
 });

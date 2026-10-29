@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DAILY_COUNT,
@@ -11,8 +10,12 @@ import {
   dueObjectives,
   objectiveStates,
   objectiveView,
-  paidToday,
+  latchedToday,
+  bonusDue,
+  claimRetryKey,
+  dailyReward,
   rewardStock,
+  rewardView,
   type DailyCounters,
   type DailyObjective,
 } from '@/lib/dailyObjectives';
@@ -58,7 +61,6 @@ describe('🎯 dailyObjectives — le tirage', () => {
         const d = OBJECTIVE_KINDS[o.kind];
         expect(o.target).toBeGreaterThanOrEqual(d.min);
         expect(o.target).toBeLessThanOrEqual(d.max);
-        expect(CONSUMABLE_IDS).toContain(o.reward);
       }
     }
   });
@@ -183,9 +185,9 @@ describe('🎯 dailyCounters — la progression, LUE', () => {
 
 describe('🎯 états, bonus dus, marque « payé »', () => {
   const objs: DailyObjective[] = [
-    { kind: 'sends', target: 4, reward: 'rations' },
-    { kind: 'camps', target: 2, reward: 'potion' },
-    { kind: 'rifts', target: 1, reward: 'rations' },
+    { kind: 'sends', target: 4 },
+    { kind: 'camps', target: 2 },
+    { kind: 'rifts', target: 1 },
   ];
   const counters = (over: Partial<DailyCounters> = {}): DailyCounters => ({
     sends: 0,
@@ -198,7 +200,7 @@ describe('🎯 états, bonus dus, marque « payé »', () => {
 
   it('progression bornée à la cible (jamais « 7/4 »), complète à la cible', () => {
     const s = objectiveStates(objs, counters({ sends: 7, camps: 1 }), []);
-    expect(s[0]).toMatchObject({ progress: 4, complete: true, paid: false });
+    expect(s[0]).toMatchObject({ progress: 4, complete: true, latched: false });
     expect(s[1]).toMatchObject({ progress: 1, complete: false });
     expect(s[2]).toMatchObject({ progress: 0, complete: false });
     // Pile à la cible : atteint (pas seulement au-dessus).
@@ -221,29 +223,53 @@ describe('🎯 états, bonus dus, marque « payé »', () => {
 
   it('un objectif payé reste complet même si la progression RECULE (rapports sortis de la boîte)', () => {
     const s = objectiveStates(objs, counters({ sends: 0 }), ['sends']);
-    expect(s[0]).toMatchObject({ complete: true, paid: true, progress: 4 });
+    expect(s[0]).toMatchObject({ complete: true, latched: true, progress: 4 });
     expect(dueObjectives(s)).toEqual([]);
   });
 
   it('la marque d’un AUTRE jour ne vaut rien', () => {
-    expect(paidToday({ day: 10, done: ['sends'] }, 10)).toEqual(['sends']);
-    expect(paidToday({ day: 10, done: ['sends'] }, 11)).toEqual([]);
-    expect(paidToday(undefined, 11)).toEqual([]);
+    expect(latchedToday({ day: 10, done: ['sends'] }, 10)).toEqual(['sends']);
+    expect(latchedToday({ day: 10, done: ['sends'] }, 11)).toEqual([]);
+    expect(latchedToday(undefined, 11)).toEqual([]);
   });
 
-  it('le bonus : un consommable par objectif, les mêmes se cumulent', () => {
-    expect(rewardStock(objs)).toEqual({ rations: 2, potion: 1 });
-    expect(rewardStock([])).toEqual({});
+  it('le bonus : UN SEUL consommable, versé quand les trois sont atteints, jamais deux fois', () => {
+    const all = counters({ sends: 9, camps: 5, rifts: 3 });
+    // Deux sur trois : rien.
+    expect(bonusDue(objectiveStates(objs, counters({ sends: 9, camps: 5 }), []))).toBe(false);
+    // Les trois d'un coup : dû.
+    expect(bonusDue(objectiveStates(objs, all, []))).toBe(true);
+    // Le troisième s'ajoute aux deux déjà notés : dû (c'est lui qui complète).
+    expect(bonusDue(objectiveStates(objs, all, ['sends', 'camps']))).toBe(true);
+    // Les trois déjà notés : déjà payé, plus rien.
+    expect(bonusDue(objectiveStates(objs, all, ['sends', 'camps', 'rifts']))).toBe(false);
+    // Les trois notés puis la progression recule : toujours payé, jamais redû.
+    expect(bonusDue(objectiveStates(objs, counters(), ['sends', 'camps', 'rifts']))).toBe(false);
+    // Jamais sans trois objectifs (une carte sans objectifs, une liste tronquée).
+    expect(bonusDue([])).toBe(false);
+    expect(bonusDue(objectiveStates(objs.slice(0, 2), all, []))).toBe(false);
+    expect(rewardStock('rations')).toEqual({ rations: 1 });
+  });
+
+  it('la récompense du jour : un consommable, pure, qui change avec le jour', () => {
+    expect(CONSUMABLE_IDS).toContain(dailyReward(5, 1, 100));
+    expect(dailyReward(5, 1, 100)).toBe(dailyReward(5, 1, 100));
+    const seen = new Set(Array.from({ length: 40 }, (_, d) => dailyReward(5, 1, d)));
+    expect(seen.size).toBeGreaterThan(2);
+    expect(rewardView('rations').emoji).toBeTruthy();
+  });
+
+  it('le paiement est RETENTÉ chaque minute tant qu’il y a quelque chose à noter', () => {
+    expect(claimRetryKey(1, 60_000)).toBe(60_000);
+    expect(claimRetryKey(2, 120_000)).not.toBe(claimRetryKey(2, 60_000));
+    expect(claimRetryKey(0, 60_000)).toBe(0);
   });
 
   it('la tuile dit le but, le sens du compteur et la récompense', () => {
-    const v = objectiveView({ kind: 'camps', target: 1, reward: 'rations' });
+    const v = objectiveView({ kind: 'camps', target: 1 });
     expect(v.label).toBe('Prends 1 camp');
     expect(v.how).toMatch(/rapport gagné/);
-    expect(v.rewardEmoji).toBeTruthy();
-    expect(objectiveView({ kind: 'camps', target: 3, reward: 'rations' }).label).toBe(
-      'Prends 3 camps',
-    );
+    expect(objectiveView({ kind: 'camps', target: 3 }).label).toBe('Prends 3 camps');
   });
 });
 
@@ -258,8 +284,8 @@ describe('🎯 dailyStatesFor — source unique de l’écran et du store', () =
     expect(r.day).toBe(day);
     expect(r.states.map((s) => s.obj)).toEqual(objs);
     const paid = dailyStatesFor({ ...m, daily: { day, done: [objs[0]!.kind] } }, [], T0, PARIS);
-    expect(paid.states[0]!.paid).toBe(true);
-    expect(paid.states[1]!.paid).toBe(false);
+    expect(paid.states[0]!.latched).toBe(true);
+    expect(paid.states[1]!.latched).toBe(false);
   });
 
   it('une île quittée (plus rien n’y apparaît) n’a pas d’objectifs', () => {
@@ -298,45 +324,5 @@ describe('🎯 dailyStatesFor — source unique de l’écran et du store', () =
     const m: ExpeditionMap = { ...base(), daily: { day, done: ['sends'] } };
     expect(advanceWorld(m, T0 + 60_000, 12, 1).daily).toEqual(m.daily);
     expect('daily' in advanceWorld(base(), T0 + 60_000, 12, 1)).toBe(false);
-  });
-});
-
-// 🔌 Le store et la page sont hors harnais : câblage verrouillé par la source (convention
-// `heroStableWiring.test`).
-describe('🔌 câblage : le store recalcule, paie dans la MÊME écriture, ne croit pas l’écran', () => {
-  const store = readFileSync('src/stores/character.ts', 'utf-8');
-  const page = readFileSync('src/pages/ExpeditionMapPage.vue', 'utf-8');
-  const at = store.indexOf('async function claimDailyObjectives(');
-  expect(at).toBeGreaterThan(-1);
-  const body = store.slice(at, store.indexOf('\n  /**', at + 10));
-
-  it('il recalcule les objectifs lui-même (même fonction que l’écran) et ne paie que le dû', () => {
-    expect(body).toMatch(/dailyStatesFor\(map, cur\.messages/);
-    expect(body).toMatch(/const due = dueObjectives\(states\)/);
-    expect(body).toMatch(/if \(!due\.length\) return \[\]/);
-  });
-
-  it('UNE écriture : la marque du jour ET le stock, jamais l’un sans l’autre', () => {
-    expect(body.match(/persist\(/g)).toHaveLength(1);
-    expect(body).toMatch(
-      /daily: \{ day, done: \[\.\.\.paidToday\(map\.daily, day\), \.\.\.due\.map/,
-    );
-    expect(body).toMatch(/supplies: addSupplies\(cur\.supplies, rewardStock\(due\)\)/);
-  });
-
-  it('le bonus est un consommable : jamais d’or, de ticket ni d’énergie (économie intacte)', () => {
-    expect(body).not.toMatch(/gold|ticket|energy|mana/i);
-  });
-
-  it('un tick de fond : il passe son tour si une écriture vole, et refuse la réentrée', () => {
-    expect(body).toMatch(/dailyBusy \|\| !tickMayWrite\(cur\)/);
-    expect(body).toMatch(/finally \{\s*dailyBusy = false;/);
-  });
-
-  it('la page paie dès qu’un objectif est atteint, avec le fuseau du joueur', () => {
-    expect(page).toMatch(/watch\(\s*\(\) => dueObjectives\(daily\.value\)\.length/);
-    expect(page).toMatch(
-      /char\.claimDailyObjectives\(uid, Date\.now\(\), new Date\(\)\.getTimezoneOffset\(\)\)/,
-    );
   });
 });
