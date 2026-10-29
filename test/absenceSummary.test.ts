@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ABSENCE_MIN_MS,
   absencePanelStale,
+  absenceWatchStep,
   absenceShownOnReturn,
   absenceChips,
   absenceDuration,
@@ -157,11 +158,47 @@ describe('panneau d’absence : fermeture et retour d’onglet', () => {
     expect(absenceShownOnReturn('plan')).toBe(false);
   });
 
+  it('tuile OUVERTE, onglet caché ≥ 30 min : résumé nul puis non nul, la tuile REVIENT', () => {
+    const sum = { reports: 1 };
+    // 1re absence : la tuile s'ouvre.
+    let st = absenceWatchStep(null, sum, false, false);
+    expect(st).toEqual({ overlay: 'absence', shown: true });
+    // Retour d'onglet : la page remet « montrée » = panneau ouvert (vrai).
+    st = { ...st, shown: absenceShownOnReturn(st.overlay) };
+    // Horloge périmée : le résumé est nul, le panneau se ferme et « montrée » retombe.
+    st = absenceWatchStep(st.overlay, null, st.shown, false);
+    expect(st).toEqual({ overlay: null, shown: false });
+    // L'horloge rattrape, un rapport est tombé : la tuile se rouvre.
+    st = absenceWatchStep(st.overlay, sum, st.shown, false);
+    expect(st).toEqual({ overlay: 'absence', shown: true });
+  });
+
+  it('tuile RANGÉE : le résumé qui reste (ou revient) ne la rouvre pas', () => {
+    const sum = { reports: 1 };
+    let st = absenceWatchStep(null, sum, false, false);
+    st = { overlay: null, shown: st.shown }; // rangée par le joueur
+    expect(absenceWatchStep(st.overlay, sum, st.shown, false)).toEqual({
+      overlay: null,
+      shown: true,
+    });
+    // Retour d'onglet, panneau fermé : « montrée » = faux, une nouvelle absence peut l'ouvrir.
+    expect(absenceShownOnReturn(st.overlay)).toBe(false);
+  });
+
+  it('un autre panneau ouvert, ou la carte déjà vue, retient la tuile', () => {
+    expect(absenceWatchStep('plan', { reports: 1 }, false, false)).toEqual({
+      overlay: 'plan',
+      shown: false,
+    });
+    expect(absenceWatchStep(null, { reports: 1 }, false, true)).toEqual({
+      overlay: null,
+      shown: false,
+    });
+  });
+
   it('câblage : la page ferme le panneau périmé et mémorise « montrée » au retour', () => {
     const page = readFileSync('src/pages/ExpeditionMapPage.vue', 'utf-8');
-    expect(page).toMatch(
-      /if\s*\(\s*absencePanelStale\(\s*overlay\.value,\s*a\s*\)\s*\)\s*overlay\.value\s*=\s*null/,
-    );
+    expect(page).toMatch(/absenceWatchStep\(\s*overlay\.value,\s*a,\s*absenceShown/);
     expect(page).toMatch(/absenceShown\s*=\s*absenceShownOnReturn\(\s*overlay\.value\s*\)/);
   });
 });

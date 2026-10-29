@@ -991,9 +991,9 @@ export interface ExpeditionMap {
    *  de quoi la relancer. Propre à l'île (elle vit dans sa carte, rangée avec elle). Absent =
    *  aucune vague encore. ⚠️ `advanceWorld` reconstruit la carte champ par champ : il la recopie. */
   lastWave?: LastWave;
-  /** 🎯 Les objectifs du jour déjà PAYÉS (`dailyObjectives.ts`) : le numéro du jour logique et les
-   *  types payés. La seule chose stockée des objectifs (le reste se dérive) ; propre à l'île.
-   *  Absent = rien de payé. ⚠️ `advanceWorld` la recopie. */
+  /** 🎯 Les objectifs du jour déjà ATTEINTS (`dailyObjectives.ts`, marque « latched ») : le numéro du jour
+   *  logique et les types atteints. La seule chose stockée des objectifs (le reste se dérive) ; propre à l'île.
+   *  Absent = rien d'atteint. ⚠️ `advanceWorld` la recopie. */
   daily?: { day: number; done: ObjectiveKind[] };
   /** 🏰 Le héros RAPPELÉ de la forteresse rentre à la base à cet instant (occupé d'ici là). */
   heroReturnAt?: number;

@@ -177,6 +177,21 @@ export function absencePanelStale(overlay: string | null, summary: unknown): boo
   return overlay === 'absence' && !summary;
 }
 
+/** Un pas du watcher de la tuile : `shown` = « déjà montrée pour cette absence ». Quand le résumé
+ *  disparaît sous un panneau ouvert (horloge périmée au retour d'un onglet resté caché), le panneau
+ *  se ferme ET `shown` retombe à faux : le résumé de la nouvelle absence, quand l'horloge rattrape,
+ *  doit pouvoir rouvrir la tuile. Une tuile RANGÉE par le joueur garde `shown` (ne revient pas). */
+export function absenceWatchStep(
+  overlay: string | null,
+  summary: unknown,
+  shown: boolean,
+  viewed: boolean,
+): { overlay: string | null; shown: boolean } {
+  if (absencePanelStale(overlay, summary)) return { overlay: null, shown: false };
+  if (!summary || shown || overlay || viewed) return { overlay, shown };
+  return { overlay: 'absence', shown: true };
+}
+
 /** Au retour d'un onglet caché : la tuile a-t-elle déjà été montrée pour cette absence ? Oui si le
  *  panneau est ouvert maintenant ; sinon elle peut s'ouvrir. Sans cela, la ranger la faisait
  *  revenir dans la minute. */

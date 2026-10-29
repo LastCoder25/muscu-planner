@@ -1874,7 +1874,7 @@ import AbsenceCard from '@/components/AbsenceCard.vue';
 import { claimRetryKey, dailyStatesFor, dueObjectives, rewardView } from '@/lib/dailyObjectives';
 import {
   ABSENCE_MIN_MS,
-  absencePanelStale,
+  absenceWatchStep,
   absenceShownOnReturn,
   absenceSummary,
   isAbsence,
@@ -6582,10 +6582,11 @@ watch(
   absence,
   (a) => {
     // Plus rien à résumer : le panneau ouvert se ferme (sinon un autre panneau prend sa place).
-    if (absencePanelStale(overlay.value, a)) overlay.value = null;
-    if (!a || absenceShown || overlay.value || viewed.value) return;
-    absenceShown = true;
-    overlay.value = 'absence';
+    // ⚠️ Fermée par péremption, la tuile n'est plus « montrée » : le résumé qui reviendra
+    // (horloge rattrapée) doit la rouvrir. Rangée par le joueur, elle ne revient pas.
+    const step = absenceWatchStep(overlay.value, a, absenceShown, !!viewed.value);
+    absenceShown = step.shown;
+    overlay.value = step.overlay as typeof overlay.value;
   },
   { immediate: true },
 );
