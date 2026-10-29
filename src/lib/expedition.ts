@@ -953,6 +953,9 @@ export interface ExpeditionMap {
     embers?: Record<string, ObjectiveEmber>;
     /** 🕯️ La dernière sortie comptée pour les braises. */
     emberFrom?: number;
+    /** 🏅 Les JALONS d'île franchis (id `isl_mile_<île>_<n>` → marque) : cochés une fois pour
+     *  toutes (`settleMilestones`). Absent sur une carte d'avant ou une île sans jalons. */
+    milestones?: Record<string, { at: number; silent?: true }>;
     /** LEGACY (îles 4 et 5, avant les v1.66.0 / v1.67.0) : la prochaine sortie de l'armée ou de
      *  l'invasion, à l'horloge. Elles partent aux sorties (`sorties`) ; effacé au premier tick. */
     warAt?: number;

@@ -162,6 +162,40 @@
             >
             <span v-if="conquest.pacified" class="at-pill done">🕊️ île pacifiée</span>
           </div>
+          <!-- 🏅 Les jalons de l'île (livraison 1 « rival + jalons ») : 4 tuiles, le prochain en
+               avant. Toucher une tuile déplie son texte. -->
+          <div v-if="selTile.active && milestones?.length" class="at-miles" data-test="milestones">
+            <button
+              v-for="m in milestones"
+              :key="m.id"
+              type="button"
+              class="am-tile"
+              :class="m.state"
+              :data-state="m.state"
+              :aria-expanded="isMileOpen(m)"
+              @click="toggleMile(m)"
+            >
+              <span class="am-emo" aria-hidden="true">{{
+                m.state === 'todo' ? '🔒' : m.emoji
+              }}</span>
+              <span class="am-body">
+                <span class="am-name">{{ m.name }}</span>
+                <span class="am-state">{{
+                  m.state === 'done'
+                    ? '✓ atteint'
+                    : m.state === 'next'
+                      ? `🎯 niveau ${m.level}`
+                      : `niveau ${m.level}`
+                }}</span>
+                <span v-if="isMileOpen(m)" class="am-text"
+                  >{{ m.text
+                  }}<template v-if="m.chestRunes">
+                    🎁 Coffre : {{ m.chestRunes }} runes.</template
+                  ></span
+                >
+              </span>
+            </button>
+          </div>
           <!-- ⛵ Les champions restés sur cette île, et la traversée pour la rejoindre. -->
           <div v-if="awayOn(selTile.id)" class="at-away">
             ⛵ {{ awayOn(selTile.id) }} champion{{ awayOn(selTile.id) > 1 ? 's' : '' }} resté{{
@@ -381,6 +415,7 @@ import { ISLANDS, type Island } from '@/lib/archipelago';
 import { CROSSING, nextCrossingDeparture, type RemotePoint } from '@/lib/crossing';
 import { formatDuration } from '@/lib/duration';
 import type { ActiveCondition, ConditionDef } from '@/lib/islandCondition';
+import type { MilestoneView } from '@/lib/islandMilestones';
 import type { Crossing } from '@/lib/expedition';
 import { characterRank } from '@/lib/characterRank';
 import {
@@ -411,6 +446,8 @@ const props = defineProps<{
   } | null;
   /** 🕯️ Les objectifs éteints de l'île active et leur rallumage (`emberStatus`). */
   embers?: EmberStatus[];
+  /** 🏅 Les jalons de l'île active (`milestoneViews`), vide si elle n'en a pas. */
+  milestones?: MilestoneView[];
   /** ⛵ Les îles ouvertes à la traversée (`openIslands`) et celles déjà visitées. */
   openIds?: number[];
   visitedIds?: number[];
@@ -465,6 +502,13 @@ const militiaOn = (id: number) => props.militia?.[id] ?? 0;
 const shipCount = ref(5);
 const shipN = (id: number) => Math.max(1, Math.min(shipCount.value, props.shippable?.[id] ?? 1));
 const prevFortress = (id: number) => ISLANDS.find((i) => i.id === id - 1)?.fortress ?? '';
+
+/** 🏅 Le texte d'un jalon : déplié d'office pour le prochain, au toucher pour les autres. */
+const mileToggled = ref<Record<string, boolean>>({});
+const isMileOpen = (m: MilestoneView) => mileToggled.value[m.id] ?? m.state === 'next';
+const toggleMile = (m: MilestoneView) => {
+  mileToggled.value = { ...mileToggled.value, [m.id]: !isMileOpen(m) };
+};
 
 const open = ref(false);
 
@@ -807,6 +851,73 @@ const islandCapRank = computed(() =>
 }
 .at-pill.dim {
   color: var(--dim);
+}
+/* 🏅 Jalons : tuiles pleine largeur (le texte du prochain a besoin de place à 344 px). */
+.at-miles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.am-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, var(--surface));
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.am-tile.done {
+  border-color: color-mix(in srgb, var(--d1) 60%, var(--line));
+}
+.am-tile.next {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.am-tile.todo {
+  color: var(--dim);
+}
+.am-emo {
+  font-size: 18px;
+  line-height: 1.2;
+  flex: none;
+}
+.am-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.am-name {
+  font-family: 'Oswald', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.am-state {
+  font-size: 11px;
+  color: var(--dim);
+}
+.am-tile.done .am-state {
+  color: var(--d1);
+}
+.am-tile.next .am-state {
+  color: var(--accent);
+  font-weight: 700;
+}
+.am-text {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 .at-chip.open {
   background: #5aa9d6;

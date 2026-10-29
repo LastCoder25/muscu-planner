@@ -14,6 +14,7 @@ import {
   type ExpeditionMessage,
   type PartyResult,
 } from './expedition';
+import { isMilestoneMessage } from './islandMilestones';
 import { partyReport } from './party';
 import { feedWhen } from './friendFeed';
 import type { Adventurer } from './adventurers';
@@ -107,6 +108,7 @@ export function isProductionMessage(m: ExpeditionMessage): boolean {
 function messageVerdict(m: ExpeditionMessage): string {
   if (isProductionMessage(m)) return 'récolte';
   if (m.chest) return 'coffre';
+  if (isMilestoneMessage(m)) return 'jalon';
   if (m.overflow) return 'débordée';
   if (m.waves !== undefined) return `${plural(m.waves, 'vague')} tenue${m.waves > 1 ? 's' : ''}`;
   if (m.party) return partyReport(m.party, []).verdict;
@@ -130,11 +132,12 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
   const rift = m.poiType === 'rift' || !!m.party?.rift;
   const loot = m.items?.length ? m.items : m.item ? [m.item] : [];
   const prod = isProductionMessage(m);
-  const rk = m.chest || prod ? null : rankLabel(messageRankLevel(m));
+  const mile = isMilestoneMessage(m);
+  const rk = m.chest || prod || mile ? null : rankLabel(messageRankLevel(m));
   return {
     id: m.id,
     rift,
-    emoji: m.chest ? '🎁' : m.poiType ? POI_EMO[m.poiType] : '📜',
+    emoji: m.chest ? '🎁' : mile ? '🏅' : m.poiType ? POI_EMO[m.poiType] : '📜',
     color: rk?.color ?? 'var(--accent)',
     title: messageTitle(m),
     rank: rk?.label ?? null,
@@ -158,7 +161,7 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
       from: m.party?.from?.[x.id]?.label ?? null,
     })),
     route: missionRoute(m),
-    hero: m.chest || prod ? false : p ? p.hero : true,
+    hero: m.chest || prod || mile ? false : p ? p.hero : true,
     militia: prod ? (m.production?.militia ?? 0) : null,
     kills: p && p.foes > 0 ? `${p.slain}/${p.foes} abattus` : null,
     totalXp: p?.totalXp ?? 0,
