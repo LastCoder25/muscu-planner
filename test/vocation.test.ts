@@ -13,6 +13,7 @@ import {
   readableGroups,
   readingText,
   recordVet,
+  vetFactOf,
   vetFactionOf,
   vetLines,
   vocationAmbushMult,
@@ -149,6 +150,17 @@ describe('⚔️ les deux voies : situation modeste, jamais cumulée', () => {
     expect(vocationGuardMult([brise, autre], { type: 'camp' })).toBe(0.95);
   });
 
+  it('🧭 UNE SEULE voie par équipe : la première dans l’ordre de l’escorte, jamais les deux', () => {
+    // Brise-camp d'abord : Garde de route, portée par un autre, ne compte pas
+    expect(vocationGuardMult([brise, garde], { type: 'camp' })).toBe(0.95);
+    expect(vocationAmbushMult([brise, garde], true)).toBe(1);
+    // l'ordre décide : Garde de route d'abord
+    expect(vocationGuardMult([garde, brise], { type: 'camp' })).toBe(1);
+    expect(vocationAmbushMult([garde, brise], true)).toBe(0.9);
+    // un champion sans voie ne compte pas dans l'ordre
+    expect(vocationGuardMult([guerrier('z'), brise, garde], { type: 'camp' })).toBe(0.95);
+  });
+
   it('Garde de route : −10 % d’embuscades, sur route dangereuse seulement, jamais cumulé', () => {
     expect(vocationAmbushMult([garde], true)).toBe(0.9);
     expect(vocationAmbushMult([garde], false)).toBe(1);
@@ -183,6 +195,26 @@ describe('⚔️ les deux voies : situation modeste, jamais cumulée', () => {
     const guarded = team(3, ['guerrier.garde-route']);
     expect(ambushChance(risky, guarded)).toBeCloseTo(ambushChance(risky, plain) * 0.9, 10);
     expect(ambushChance(calm, guarded)).toBe(ambushChance(calm, plain));
+  });
+
+  it('🔗 une équipe avec LES DEUX voies : le % affiché = une seule voie (la première)', () => {
+    const small = poi({ id: 'p0' });
+    const both = (first: string, second: string) => {
+      const t = team(2);
+      t[0] = { ...t[0]!, vocation: { nodes: [first] } };
+      t[1] = { ...t[1]!, vocation: { nodes: [second] } };
+      return t;
+    };
+    const shown = (e: Adventurer[]) => partyWinChance(small, e, kit, null, NOW)!;
+    // Brise-camp en tête : même % qu'avec Brise-camp seul ; Garde de route en tête : aucun gain
+    expect(shown(both('guerrier.brise-camp', 'guerrier.garde-route'))).toBe(
+      shown(team(2, ['guerrier.brise-camp'])),
+    );
+    expect(shown(both('guerrier.garde-route', 'guerrier.brise-camp'))).toBe(shown(team(2)));
+    const risky = poi({ type: 'mine', perilous: true });
+    expect(ambushChance(risky, both('guerrier.brise-camp', 'guerrier.garde-route'))).toBe(
+      ambushChance(risky, team(2)),
+    );
   });
 
   it('🔗 le camp : le VRAI combat et le % affiché lisent le même facteur', () => {
@@ -243,8 +275,13 @@ describe('🔭 lectures d’information', () => {
   });
 
   it('dit quand, ou qu’il n’y a rien dans l’horizon', () => {
-    expect(readingText(nextOfGroup(spawns, 'fight'), NOW)).toContain('dans environ 2 h');
-    expect(readingText(null, NOW)).toContain('Rien d’annoncé');
+    const t = readingText('fight', nextOfGroup(spawns, 'fight'), NOW);
+    expect(t).toContain('Dans environ 2 h');
+    // ⚠️ aucune promesse : ni type exact (la tanière « c1 » est annoncée comme un camp ou un
+    // repaire), ni précision à la demi-heure
+    expect(t).toContain('un camp ou un repaire');
+    expect(t).not.toMatch(/tanière|demi-heure/i);
+    expect(readingText('rift', null, NOW)).toContain('Rien d’annoncé');
   });
 });
 
@@ -272,6 +309,20 @@ describe('🔭 la prévision des apparitions = ce que la carte fera vraiment', (
       seen += ahead.length;
     }
     expect(seen, 'aucune apparition : le test ne prouve rien').toBeGreaterThan(5);
+  });
+});
+
+describe('🔭 l’horizon : 48 h par défaut, fin de fenêtre comprise', () => {
+  it('une apparition pile à l’horizon est dedans, une demi-heure avant elle est dehors', () => {
+    const start = createMap(11, 0, 30, 30);
+    const all = upcomingSpawns(start, 0, 30, 30);
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.every((s) => s.at <= 48 * 3600_000)).toBe(true);
+    const first = all[0]!;
+    const exact = upcomingSpawns(start, 0, 30, 30, undefined, first.at);
+    expect(exact.map((s) => s.id)).toContain(first.id);
+    const before = upcomingSpawns(start, 0, 30, 30, undefined, first.at - 30 * 60_000);
+    expect(before.map((s) => s.id)).not.toContain(first.id);
   });
 });
 
@@ -305,6 +356,21 @@ describe('🏅 vétérance : un titre à 15 victoires, titre seul', () => {
     expect(vetFactionOf(win({ convoy: true }), 'warband')).toBeNull();
     expect(vetFactionOf(win({ late: true }), 'camp')).toBeNull();
     expect(vetFactionOf(win(), undefined)).toBeNull();
+  });
+
+  it('ne compte PAS une victoire sans combat (filon, héros tombé, mine de mana : foes 0)', () => {
+    for (const t of ['vein', 'fallen', 'mana_mine'] as const)
+      expect(vetFactionOf(win({ foes: 0 }), t), t).toBeNull();
+  });
+
+  it('🏅 la pastille « Vétéran » de la fiche d’un lieu : le meilleur titre, ou rien', () => {
+    expect(vetFactOf([guerrier('a')])).toBeNull();
+    const f = vetFactOf([
+      guerrier('a', { name: 'Anne', vet: { bandits: 16 } }),
+      guerrier('b', { name: 'Bob', vet: { mortsvivants: 40 } }),
+    ]);
+    expect(f).toMatchObject({ label: 'Vétéran', value: 'Purificateur', icon: '💀' });
+    expect(f!.title).toContain('Bob');
   });
 
   it('recordVet incrémente la faction, et ne touche pas à l’objet sans faction', () => {

@@ -81,6 +81,7 @@
         </div>
 
         <h3 class="vc-sec">⚔️ Voies <span class="vc-dim">— l’une ou l’autre</span></h3>
+        <p class="vc-dim vc-rule">Une seule voie compte par équipe : la première de l’équipe.</p>
         <div class="vc-grid">
           <div
             v-for="n in majorNodes"
@@ -168,14 +169,15 @@ import {
 const props = defineProps<{
   modelValue: boolean;
   advId: string | null;
-  /** Le niveau du héros (budget de points, et niveau vu par la carte). */
-  heroLevel: number;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 
+/** ⚠️ UNE SEULE source du niveau du héros : celle du store, que `learnVocation` lit aussi —
+ *  « Apprendre » et l'écriture ne peuvent plus diverger. */
+const heroLevel = computed(() => char.heroLevel);
 const busy = ref(false);
 /** L'heure de l'ouverture / du dernier geste : jamais une horloge qui défile (les lectures
  *  coûtent un rejeu de la carte). */
@@ -185,9 +187,9 @@ const adv = computed(() => roster.value.find((a) => a.id === props.advId) ?? nul
 const tree = computed(() => (adv.value ? vocationTree(adv.value) : null));
 const infoNodes = computed(() => (tree.value ?? []).filter((n) => n.kind === 'info'));
 const majorNodes = computed(() => (tree.value ?? []).filter((n) => n.kind === 'major'));
-const free = computed(() => vocationFree(roster.value, props.heroLevel, now.value));
+const free = computed(() => vocationFree(roster.value, heroLevel.value, now.value));
 const pending = computed(() => pendingPoints(roster.value, now.value));
-const total = computed(() => vocationBudget(props.heroLevel));
+const total = computed(() => vocationBudget(heroLevel.value));
 const vet = computed(() => (adv.value ? vetLines(adv.value) : []));
 const lineageLabel = computed(() => {
   const l = adv.value ? advChampion(adv.value)?.lineage : undefined;
@@ -202,7 +204,7 @@ const LINEAGE_LABEL: Record<string, string> = {
   caravanier: 'Caravanier',
 };
 const stateOf = (n: VocationNode) =>
-  nodeState(roster.value, adv.value!, n, props.heroLevel, now.value);
+  nodeState(roster.value, adv.value!, n, heroLevel.value, now.value);
 
 // 🔭 Les lectures : un rejeu de la carte, fait à l'ouverture et quand un nœud de lecture change.
 const spawns = ref<SpawnAhead[] | null>(null);
@@ -218,7 +220,7 @@ watch(
         ? spawnsForecast(
             map,
             now.value,
-            props.heroLevel,
+            heroLevel.value,
             buildingLevel(char.row?.buildings ?? [], 'outpost'),
             char.row?.expedition?.poi.id,
           )
@@ -227,7 +229,7 @@ watch(
   { immediate: true },
 );
 const readingFor = (g: SpawnGroup) =>
-  spawns.value ? readingText(nextOfGroup(spawns.value, g), now.value) : 'Lecture indisponible.';
+  spawns.value ? readingText(g, nextOfGroup(spawns.value, g), now.value) : 'Lecture indisponible.';
 
 async function act(fn: (uid: string) => Promise<string | null>, ok: string) {
   const uid = auth.user?.id;

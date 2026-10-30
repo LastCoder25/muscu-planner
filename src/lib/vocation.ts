@@ -17,12 +17,13 @@
  */
 import { advChampion, type Adventurer } from './adventurers';
 import type { Lineage } from './advGear';
-import { POI_LABEL, type PartyResult, type Poi, type PoiType } from './expedition';
+import { type PartyResult, type Poi, type PoiType } from './expedition';
 import { formatDuration } from './duration';
 import type { RaidFaction } from './raid';
+import type { PoiFact } from './poiFacts';
 
 /** Ce qu'un champion a acquis. `freeAt` : un instant par point RETIRÉ qui n'est pas encore
- *  redevenu dépensable (purgé à chaque écriture, jamais plus de 6 entrées). */
+ *  redevenu dépensable (purgé à chaque écriture ; au plus autant d'entrées que de points du budget). */
 export interface AdvVocation {
   nodes: string[];
   freeAt?: number[];
@@ -89,7 +90,7 @@ const TREES: Partial<Record<Lineage, readonly VocationNode[]>> = {
       cost: 1,
       emoji: '🏕️',
       label: 'Flair des bannières',
-      text: 'Annonce quand apparaîtra le prochain camp, repaire ou tanière.',
+      text: 'Estime quand apparaîtra un camp ou un repaire (à peu près, sans promesse).',
       spawn: 'fight',
     },
     {
@@ -99,7 +100,7 @@ const TREES: Partial<Record<Lineage, readonly VocationNode[]>> = {
       cost: 1,
       emoji: '🕳️',
       label: 'Veilleur des failles',
-      text: 'Annonce quand s’ouvrira la prochaine faille.',
+      text: 'Estime quand s’ouvrira une faille (à peu près, sans promesse).',
       spawn: 'rift',
     },
     {
@@ -109,7 +110,7 @@ const TREES: Partial<Record<Lineage, readonly VocationNode[]>> = {
       cost: 1,
       emoji: '🏛️',
       label: 'Œil des ruines',
-      text: 'Annonce quand émergeront les prochaines ruines anciennes.',
+      text: 'Estime quand émergeront des ruines anciennes (à peu près, sans promesse).',
       spawn: 'ruins',
     },
     {
@@ -268,21 +269,29 @@ export function forgetNode(
 // ⚔️ LES DEUX EFFETS — lus par les crochets existants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const someHas = (escort: readonly Adventurer[], id: string) =>
-  escort.some((a) => nodesOf(a).includes(id));
-
-/** 🪓 Brise-camp : la force des ennemis d'un camp ou d'un repaire. ⚠️ Jamais cumulé : un seul
- *  champion qui l'a suffit, dix n'y changent rien. 1 = aucun effet. */
+/**
+ * 🧭 LA VOIE MAJEURE DE L'ÉQUIPE : UNE SEULE compte par mission (décision de l'utilisateur).
+ * C'est la première trouvée en parcourant l'escorte DANS L'ORDRE REÇU (celui de `escort`, le
+ * même pour le vrai combat et le pronostic) ; un champion n'en a qu'une (exclusivité). Les deux
+ * voies ne se cumulent donc jamais, même portées par deux champions. `null` = aucune.
+ */
+function teamMajor(escort: readonly Adventurer[]): string | null {
+  for (const a of escort)
+    for (const id of nodesOf(a)) if (NODE_BY_ID.get(id)?.kind === 'major') return id;
+  return null;
+}
+/** 🪓 Brise-camp : la force des ennemis d'un camp ou d'un repaire, si c'est la voie de l'équipe.
+ *  1 = aucun effet. */
 export function vocationGuardMult(escort: readonly Adventurer[], poi: Pick<Poi, 'type'>): number {
-  return (poi.type === 'camp' || poi.type === 'lair') && someHas(escort, 'guerrier.brise-camp')
+  return (poi.type === 'camp' || poi.type === 'lair') && teamMajor(escort) === 'guerrier.brise-camp'
     ? BREAKER_FOE
     : 1;
 }
 
 /** 🛡️ Garde de route : le facteur sur la chance d'embuscade d'une route DANGEREUSE
- *  (`routePerilous`, fourni par l'appelant). 1 = aucun effet. */
+ *  (`routePerilous`, fourni par l'appelant), si c'est la voie de l'équipe. 1 = aucun effet. */
 export function vocationAmbushMult(escort: readonly Adventurer[], perilous: boolean): number {
-  return perilous && someHas(escort, 'guerrier.garde-route') ? GUARD_AMBUSH : 1;
+  return perilous && teamMajor(escort) === 'guerrier.garde-route' ? GUARD_AMBUSH : 1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,23 +311,24 @@ export function nextOfGroup(spawns: readonly SpawnAhead[], group: SpawnGroup): S
   return spawns.filter((s) => types.includes(s.type)).sort((a, b) => a.at - b.at)[0] ?? null;
 }
 
-const SPAWN_EMO: Partial<Record<PoiType, string>> = {
-  camp: '🏕️',
-  lair: '⛺',
-  den: '🐺',
-  rift: '🕳️',
-  ruins: '🏛️',
+const SPAWN_EMO: Record<SpawnGroup, string> = { fight: '🏕️', rift: '🕳️', ruins: '🏛️' };
+
+/** Le nom, volontairement VAGUE, d'une famille : le type exact peut différer à l'arrivée. */
+const VAGUE_LABEL: Record<SpawnGroup, string> = {
+  fight: 'un camp ou un repaire',
+  rift: 'une faille',
+  ruins: 'des ruines',
 };
 
-/** La phrase d'une lecture : quoi, et dans combien de temps (à la demi-heure près : la carte
- *  est rejouée par pas de 30 min). ⚠️ C'est une PRÉVISION de la carte telle qu'elle est :
- *  prendre un lieu libère une place et peut la changer. */
-export function readingText(next: SpawnAhead | null, now: number): string {
+/** La phrase d'une lecture. ⚠️ AUCUNE promesse de précision : c'est une estimation de la carte
+ *  telle qu'elle est (« environ »), le type exact peut différer (camp, repaire ou tanière) et
+ *  prendre un lieu libère une place, ce qui peut tout changer. */
+export function readingText(group: SpawnGroup, next: SpawnAhead | null, now: number): string {
   if (!next) return 'Rien d’annoncé dans les 48 prochaines heures.';
   const ms = Math.max(0, next.at - now);
-  return `${SPAWN_EMO[next.type] ?? '📍'} ${POI_LABEL[next.type]} · ${
-    ms < 60_000 ? 'imminent' : `dans environ ${formatDuration(ms)}`
-  }`;
+  return `${SPAWN_EMO[group]} ${
+    ms < 60_000 ? 'Maintenant' : `Dans environ ${formatDuration(ms)}`
+  } : ${VAGUE_LABEL[group]}`;
 }
 
 /** Les familles que ce champion sait lire (nœuds d'information acquis). */
@@ -349,10 +359,15 @@ const VET_FACTIONS = Object.keys(VET_TITLE) as RaidFaction[];
  * ⚠️ `poiType` inconnu (rapport très ancien) : non, plutôt que de compter à tort.
  */
 export function vetFactionOf(
-  party: Pick<PartyResult, 'win' | 'faction' | 'late' | 'convoy' | 'controlId' | 'defense'>,
+  party: Pick<
+    PartyResult,
+    'win' | 'faction' | 'late' | 'convoy' | 'controlId' | 'defense' | 'foes'
+  >,
   poiType: PoiType | undefined,
 ): RaidFaction | null {
   if (!party.win || party.late || party.convoy || party.controlId || party.defense) return null;
+  // Aucun ennemi affronté (filon, héros tombé, mine de mana : « gagné » sans combat) : non.
+  if (!(party.foes > 0)) return null;
   if (!poiType || poiType === 'control') return null;
   return party.faction;
 }
@@ -377,6 +392,19 @@ export function vetLines(adv: Adventurer): VetLine[] {
     const wins = adv.vet?.[f] ?? 0;
     return { faction: f, ...VET_TITLE[f], wins, earned: wins >= VET.tier };
   });
+}
+
+/** 🏅 La pastille « Vétéran » de la fiche d'un lieu : le meilleur titre de l'équipe, ou rien. */
+export function vetFactOf(team: readonly Adventurer[]): PoiFact | null {
+  const t = bestVetTitle(team);
+  return t
+    ? {
+        icon: t.emoji,
+        label: 'Vétéran',
+        value: t.label,
+        title: `Titre de ${t.by} — un honneur, sans effet au combat`,
+      }
+    : null;
 }
 
 /** 🏅 Le meilleur titre d'une équipe — celui du plus grand nombre de victoires, jamais cumulé. */

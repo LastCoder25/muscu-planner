@@ -147,8 +147,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(
         VocationSheet,
-        { modelValue: true, advId: 'g1', heroLevel: 45 },
-        { ...ROW, adventurers: [roan], expedition_map: createMap(7, Date.now(), 30, 30) },
+        { modelValue: true, advId: 'g1' },
+        {
+          ...ROW,
+          reward_level: 45,
+          adventurers: [roan],
+          expedition_map: createMap(7, Date.now(), 30, 30),
+        },
         undefined,
         '/',
         (h) => (out = h),
@@ -158,6 +163,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Brise-camp');
     expect(out).toContain('Garde de route');
     expect(out).toContain('vc-reading'); // le nœud acquis lit la carte
+    expect(out).toMatch(/Dans environ [^<]*: un camp ou un repaire/);
+    expect(out).toContain('Une seule voie compte par équipe');
     expect(out).toContain('17 points à dépenser'); // 10 + 2 × (45 − 41) − 1
     expect(out).toContain('Fléau des bandits'); // titre gagné à 15 victoires
     expect(out).toContain('4 / 15'); // bêtes : pas encore
@@ -178,7 +185,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(
         VocationSheet,
-        { modelValue: true, advId: 'g2', heroLevel: 10 },
+        { modelValue: true, advId: 'g2' },
         { ...ROW, adventurers: [sylve] },
         undefined,
         '/',

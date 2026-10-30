@@ -720,7 +720,6 @@
   <VocationSheet
     :model-value="!!vocationFor"
     :adv-id="vocationFor"
-    :hero-level="playerLevel ?? 1"
     @update:model-value="vocationFor = null"
   />
 
