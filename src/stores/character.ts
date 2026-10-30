@@ -374,6 +374,7 @@ import {
   RECALL_BLOCK_LABEL,
   type RecallTarget,
 } from '@/lib/party';
+import { forgetNode, learnNode, vetFactionOf } from '@/lib/vocation';
 import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
@@ -1168,6 +1169,28 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: advs.map((a) => (a.id === advId ? { ...a, skills: out.skills } : a)),
     });
     return { ok: true, skill: out.skill };
+  }
+
+  /** 📓 CARNET DE VOCATION : apprend (`learnVocation`) ou retire (`forgetVocation`) un nœud.
+   *  ⚠️ Le refus vit dans la lib (`learnNode`, même règle que la tuile) ; UNE écriture, du seul
+   *  vivier. Rend `null` si c'est fait, sinon la raison. */
+  async function learnVocation(userId: string, advId: string, nodeId: string) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return 'ton personnage n’est pas chargé';
+    const r = learnNode(cur.adventurers ?? [], advId, nodeId, heroLevel.value, Date.now());
+    if (!r.ok) return r.reason;
+    await persist(userId, { adventurers: r.roster });
+    return null;
+  }
+  async function forgetVocation(userId: string, advId: string, nodeId: string) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return 'ton personnage n’est pas chargé';
+    const r = forgetNode(cur.adventurers ?? [], advId, nodeId, Date.now());
+    if (!r.ok) return r.reason;
+    await persist(userId, { adventurers: r.roster });
+    return null;
   }
 
   /** 🗓️ Récupère les tickets des paliers atteints (`earned`, au total de la semaine) moins ceux
@@ -3136,6 +3159,8 @@ export const useCharacterStore = defineStore('character', () => {
         // 🎓 Versée à l'ARRIVÉE du rapport (`grantReportXp`) ; les rapports d'avant ce
         // changement ne l'ont pas reçue et la reçoivent ici.
         xpGranted: !!m.xpGranted,
+        // 🏅 Sa victoire n'est comptée ici que si l'XP ne l'a pas été à l'arrivée.
+        vet: vetFactionOf(party, m.poiType),
         // 🕯️ L'hospice tenu de l'île abrège les soins (1 sans hospice, hors archipel).
         healMult: hospiceHealMult(cur.expedition_map),
       });
@@ -5967,6 +5992,7 @@ export const useCharacterStore = defineStore('character', () => {
           backAt: m.resolvedAt,
           now,
           xpGranted: true,
+          vet: null,
           // 🕯️ L'hospice tel qu'il est APRÈS l'attaque (perdu, il ne soigne plus).
           healMult: hospiceHealMult(map),
         }).adventurers;
@@ -7180,6 +7206,8 @@ export const useCharacterStore = defineStore('character', () => {
     riseChampionSkill,
     giveRuneSkill,
     takeBackRuneSkill,
+    learnVocation,
+    forgetVocation,
     row,
     loaded,
     fetchMine,

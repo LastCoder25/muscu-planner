@@ -18,6 +18,7 @@ import { partyForecastSeed } from './party';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 import { supplyFx } from './supplies';
+import { vocationGuardMult } from './vocation';
 import { fieldArmySpec } from './fieldArmy';
 
 /**
@@ -81,8 +82,15 @@ export function partyWinChance(
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
   // 🐺 Une tanière : la bête garde SA force, quel que soit le nombre envoyé.
   const spec = poiForceOf(poi);
+  // 📓 Brise-camp : le MÊME facteur que le vrai combat (`fightCampForce`).
   const guards = spec
-    ? campWinPct(poi, spec, allies, samples * CAMP_SAMPLE_MULT, fx.guardMult)
+    ? campWinPct(
+        poi,
+        spec,
+        allies,
+        samples * CAMP_SAMPLE_MULT,
+        fx.guardMult * vocationGuardMult(escort, poi),
+      )
     : null;
   // 🛣️ UNE RÉCOLTE SANS LE HÉROS VOYAGE COMME UN CONVOI (`resolveHarvestParty`) : sa
   // « réussite » = les gardes abattus ET aucune embuscade PERDUE sur la route. Ne compter que

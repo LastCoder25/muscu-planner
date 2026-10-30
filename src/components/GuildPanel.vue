@@ -699,11 +699,29 @@
         </p>
       </section>
 
+      <!-- ── 📓 CARNET DE VOCATION ── un axe de progression qui ne passe pas par l'XP. -->
+      <section v-if="detailAdv.championId" class="d-blk">
+        <button type="button" class="d-voc" @click="vocationFor = detailAdv.id">
+          <span class="d-voc-emo" aria-hidden="true">📓</span>
+          <span class="d-voc-main">
+            <b>Carnet de vocation</b>
+            <small>{{ vocationLine(detailAdv) }}</small>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
+      </section>
+
       <div class="g-actions">
         <q-btn flat no-caps label="Fermer" @click="detailAdv = null" />
       </div>
     </q-card>
   </q-dialog>
+
+  <VocationSheet
+    :model-value="!!vocationFor"
+    :adv-id="vocationFor"
+    @update:model-value="vocationFor = null"
+  />
 
   <!-- ── À QUI CONFIER CETTE PIÈCE ? (depuis le stock) ─────────────────────
        ⚠️ Seuls ceux qui PEUVENT la porter sont proposés (`canWearAdvGear` : son métier,
@@ -957,6 +975,8 @@ import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
+import VocationSheet from '@/components/VocationSheet.vue';
+import { bestVetTitle } from '@/lib/vocation';
 import { tomeChoices, type TomeChoice } from '@/lib/xpTome';
 import { SUPPLIES } from '@/lib/supplies';
 import { emptyBank } from '@/lib/runeBank';
@@ -1506,6 +1526,20 @@ function stateOf(a: Adventurer): string {
 }
 // ── Fiche d'un aventurier ──
 const detailAdv = ref<Adventurer | null>(null);
+/** 📓 Le champion dont on ouvre le carnet de vocation (ouvert par-dessus sa fiche). */
+const vocationFor = ref<string | null>(null);
+/** Le sous-titre de la tuile du carnet : le titre gagné, sinon ce qui reste à dépenser. */
+function vocationLine(shown: Adventurer): string {
+  // La fiche garde l'objet ouvert : on relit le vivier pour ne pas afficher un compte périmé.
+  const a = char.advList.find((x) => x.id === shown.id) ?? shown;
+  const t = bestVetTitle([a]);
+  const n = a.vocation?.nodes.length ?? 0;
+  const parts = [
+    n ? `${n} nœud${n > 1 ? 's' : ''} acquis` : 'Aucun nœud acquis',
+    ...(t ? [`${t.emoji} ${t.label}`] : []),
+  ];
+  return parts.join(' · ');
+}
 // ⬆️ Ouverture ciblée : la fiche porte le bloc d'ascension. Suivi à chaque ouverture — le
 // composant reste monté entre deux. Un id qui ne désigne plus personne n'ouvre rien.
 watch(
@@ -1962,6 +1996,34 @@ function leftOf(at: number): string {
   border-radius: 14px;
   background: var(--surface-2, #2b241b);
   border: 1px solid var(--line);
+}
+.d-voc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #1d1913;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.d-voc-emo {
+  font-size: 26px;
+}
+.d-voc-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.d-voc-main small {
+  color: var(--dim);
+  font-size: 12.5px;
 }
 .d-blk-t {
   display: flex;

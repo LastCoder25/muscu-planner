@@ -11,7 +11,7 @@
  *   règle plus que la VITESSE ;
  * - les lieux tenus produisent **au rang de l'île**, plus au niveau du héros.
  */
-import { nextPlunderSpawn, revealRadius, type ExpeditionMap } from './expedition';
+import { nextPlunderSpawn, revealRadius, upcomingSpawns, type ExpeditionMap } from './expedition';
 import type { RaidFaction } from './raid';
 
 export interface Island {
@@ -186,6 +186,27 @@ export function plunderForecast(
   protectedPoiId?: string,
 ): { id: string; at: number } | null {
   return nextPlunderSpawn(
+    map,
+    now,
+    mapPlayerLevel(map, playerLevel),
+    mapOutpostLevel(map, outpostBuildingLevel),
+    protectedPoiId,
+  );
+}
+
+/**
+ * 🔭 Les apparitions des 48 prochaines heures (carnet de vocation), avec le niveau et l'Avant-
+ * poste VUS PAR LA CARTE — la même règle que `plunderForecast`, pour la même raison : passer
+ * le niveau du héros simulerait une AUTRE carte sur une île.
+ */
+export function spawnsForecast(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  outpostBuildingLevel: number,
+  protectedPoiId?: string,
+) {
+  return upcomingSpawns(
     map,
     now,
     mapPlayerLevel(map, playerLevel),
