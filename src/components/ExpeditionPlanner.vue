@@ -66,7 +66,7 @@
           >
         </button>
       </div>
-      <p class="pl-lab" data-test="modes-help">
+      <p class="pl-lab pl-help" data-test="modes-help">
         Touche dans l’ordre voulu : la 1re est servie en priorité, la suivante avec ce qui reste.
       </p>
     </div>
@@ -437,7 +437,7 @@ const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: str
   {
     id: 'events',
     emo: '🗺️',
-    title: 'Événements',
+    title: 'Lieux',
     short: 'Lieux',
     sub: 'le plus possible, le plus vite',
   },
@@ -548,6 +548,9 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
 .pm-sub {
   font-size: 11px;
   color: var(--dim);
+}
+.pl-help {
+  margin: 3px 0 0; /* 5 px de gap + 3 = 8 px sous les tuiles */
 }
 .pm-rank {
   position: absolute;

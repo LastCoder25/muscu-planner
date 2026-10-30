@@ -557,7 +557,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).toContain('Valider : tout le monde part');
     expect(html).toContain('👥 Recalculer');
     expect(html).not.toContain('Proposer des expéditions');
-    expect(html).not.toContain('Événements');
+    expect(html).not.toContain('data-test="mode-events"');
     expect(html).toContain('🏠 Base');
     // ⏳ Un immobile (ici le héros) est marqué, pas déplacé.
     expect(html).toContain('⏳ 🧝 Héros');

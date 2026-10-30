@@ -50,7 +50,7 @@ describe('priorités : la préférence sauvegardée', () => {
     expect(parseModes('rifts,events')).toEqual(['rifts', 'events']);
     expect(parseModes('xp,rifts,events')).toEqual(['xp', 'rifts', 'events']);
   });
-  it('défaut = événements ; inconnues et doublons écartés ; 3 au plus', () => {
+  it('défaut = lieux ; inconnues et doublons écartés ; 3 au plus', () => {
     expect(parseModes(null)).toEqual(['events']);
     expect(parseModes('')).toEqual(['events']);
     expect(parseModes('n’importe quoi')).toEqual(['events']);
@@ -170,7 +170,7 @@ describe('priorités : le calcul par passes', () => {
   });
 
   it('inaccessible = hors de portée de TOUTES les passes (une passe suivante peut l’atteindre)', async () => {
-    // Le héros seul : refusé en mode XP (il n’apprend rien à personne), permis en événements.
+    // Le héros seul : refusé en mode XP (il n’apprend rien à personne), permis en lieux.
     const res = (await planInPasses([u('__hero', 5, 'base', true)], {
       ...base,
       modes: ['xp', 'events'],
@@ -179,6 +179,22 @@ describe('priorités : le calcul par passes', () => {
     expect(ids(res.trips.map((t) => t.target))).toEqual(['lieu']);
     expect(res.tripModes).toEqual(['events']);
     expect(res.unreachable).toEqual([]);
+  });
+
+  it('à 3 passes : un lieu hors de portée de toutes reste inaccessible, un lieu rattrapé par une passe suivante en sort', async () => {
+    // Un lieu que personne n'atteint (puissance 99) ; un lieu que le héros seul n'atteint qu'en
+    // mode « lieux » (le mode XP refuse le héros seul).
+    const hors: T = { id: 'hors', need: 99, min: 10 };
+    const res = (await planInPasses([u('__hero', 5, 'base', true)], {
+      ...base,
+      modes: ['xp', 'rifts', 'events'],
+      // Passe 1 (xp) : lieu refusé (héros seul) et hors ; passe 2 (rifts) : lieu atteint ;
+      // passe 3 (events) : plus personne pour lieu2.
+      targetsOf: (m) => (m === 'xp' ? [lieu, hors] : m === 'rifts' ? [lieu] : [lieu2]),
+    }))!;
+    expect(ids(res.trips.map((t) => t.target))).toEqual(['lieu']);
+    expect(res.tripModes).toEqual(['rifts']);
+    expect(ids(res.unreachable)).toEqual(['hors', 'lieu2']);
   });
 
   it('plus personne pour la passe suivante : ses lieux sont inaccessibles', async () => {
