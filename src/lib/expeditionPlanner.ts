@@ -591,3 +591,88 @@ export async function planExpeditions<T extends { id: string }>(
   );
   return { trips, unreachable };
 }
+
+// ── 🪄 PRIORITÉS MULTIPLES (2026-10-30, demandé : « sélectionner plusieurs options prises dans
+// l'ordre cliqué, par exemple les failles en priorité puis les lieux en second ; de 1 à 3 ») ──
+
+/** Les trois optimisations, dans l'ordre d'affichage des tuiles. */
+export const PLAN_MODES: readonly PlanMode[] = ['events', 'xp', 'rifts'];
+/** Combien de priorités au plus (une par optimisation). */
+export const MAX_MODES = PLAN_MODES.length;
+
+/**
+ * Lit la préférence sauvegardée. Rétro-compatible : l'ancienne forme est UNE valeur (`rifts`),
+ * la nouvelle une liste « rifts,events ». Valeurs inconnues et doublons écartés, 3 au plus ;
+ * rien d'utilisable = `['events']` (le défaut d'avant).
+ */
+export function parseModes(raw: string | null | undefined): PlanMode[] {
+  const out: PlanMode[] = [];
+  for (const part of (raw ?? '').split(',')) {
+    const m = part.trim() as PlanMode;
+    if (PLAN_MODES.includes(m) && !out.includes(m)) out.push(m);
+  }
+  return out.length ? out.slice(0, MAX_MODES) : ['events'];
+}
+
+/**
+ * Toucher une tuile : une priorité non choisie s'AJOUTE en fin de liste (l'ordre cliqué), une
+ * choisie se RETIRE (les suivantes remontent). On en garde toujours une : retirer la dernière est
+ * refusé en silence (la liste revient telle quelle).
+ */
+export function toggleMode(cur: readonly PlanMode[], id: PlanMode): PlanMode[] {
+  if (!cur.includes(id)) return cur.length >= MAX_MODES ? [...cur] : [...cur, id];
+  return cur.length <= 1 ? [...cur] : cur.filter((m) => m !== id);
+}
+
+export interface PassesOptions<T> extends Omit<PlanOptions<T>, 'mode'> {
+  /** Les priorités, dans l'ordre où on les sert (1 à 3). */
+  modes: readonly PlanMode[];
+  /** Les lieux que vise CHAQUE priorité (les failles par urgence, sinon tous). */
+  targetsOf: (mode: PlanMode) => readonly T[];
+}
+
+export interface PassesResult<T> extends PlanResult<T> {
+  /** La priorité qui a servi chaque voyage (parallèle à `trips`). */
+  tripModes: PlanMode[];
+}
+
+/**
+ * Joue les priorités l'UNE APRÈS L'AUTRE : chaque passe reçoit les cibles de son mode, privées des
+ * lieux déjà planifiés, le vivier RESTANT (qui est parti dans une passe ne repart pas dans la
+ * suivante) et le stock de consommables RESTANT. Les voyages s'enchaînent dans l'ordre des passes.
+ * `unreachable` = ce qu'AUCUNE passe n'atteint. Un seul mode = exactement `planExpeditions`.
+ */
+export async function planInPasses<T extends { id: string }>(
+  units: readonly PlanUnit[],
+  opts: PassesOptions<T>,
+): Promise<PassesResult<T> | null> {
+  const modes = [...new Set(opts.modes)].slice(0, MAX_MODES);
+  const { modes: _modes, targetsOf, ...rest } = opts;
+  let pool = [...units];
+  const stock: Record<string, number> = { ...(opts.stock ?? {}) };
+  const planned = new Set<string>();
+  const trips: PlannedTrip<T>[] = [];
+  const tripModes: PlanMode[] = [];
+  const missed = new Map<string, T>();
+  for (const mode of modes) {
+    const targets = targetsOf(mode).filter((t) => !planned.has(t.id));
+    if (!targets.length) continue;
+    if (!pool.length) {
+      for (const t of targets) missed.set(t.id, t);
+      continue;
+    }
+    const res = await planExpeditions(targets, pool, { ...rest, mode, stock: { ...stock } });
+    if (!res || opts.cancelled?.()) return null;
+    const used = new Set<string>();
+    for (const tr of res.trips) {
+      planned.add(tr.target.id);
+      for (const u of tr.units) used.add(u.id);
+      for (const id of tr.kit) stock[id] = (stock[id] ?? 0) - 1;
+      trips.push(tr);
+      tripModes.push(mode);
+    }
+    pool = pool.filter((u) => !used.has(u.id));
+    for (const t of res.unreachable) missed.set(t.id, t);
+  }
+  return { trips, tripModes, unreachable: [...missed.values()].filter((t) => !planned.has(t.id)) };
+}

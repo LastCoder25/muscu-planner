@@ -17,7 +17,9 @@ import { type Poi } from '@/lib/expedition';
 import { mapOutpostLevel } from '@/lib/archipelago';
 import { buildDeploymentAsync } from '@/lib/deployPlan';
 import {
-  planExpeditions,
+  parseModes,
+  planInPasses,
+  toggleMode as toggleModeIn,
   withoutEngaged,
   type PlanMode,
   type PlannedTrip,
@@ -144,6 +146,8 @@ export interface PlannerRow {
   xp: number;
   /** 🎒 Les consommables emportés (déjà comptés dans le 🎯 % et le trajet). */
   supplies: SupplyId[];
+  /** 🪄 La priorité qui a fait proposer ce départ (absente d'une vague relancée). */
+  mode?: PlanMode;
 }
 
 /**
@@ -158,12 +162,16 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   const char = useCharacterStore();
 
   const threshold = ref(Math.min(99, Math.max(50, readNum(THRESHOLD_KEY, 90))));
-  const savedMode = readStr(MODE_KEY);
-  const mode = ref<PlanMode>(savedMode === 'xp' || savedMode === 'rifts' ? savedMode : 'events');
+  /** 🪄 Les priorités, dans l'ordre cliqué (1 à 3) : la première est servie d'abord, la suivante
+   *  avec ce qui reste. Ancienne préférence (une seule valeur) lue telle quelle. */
+  const modes = ref<PlanMode[]>(parseModes(readStr(MODE_KEY)));
   const withGarrisons = ref(readStr(GARRISON_KEY) === '1');
   const withHero = ref(true);
   watch(threshold, (v) => save(THRESHOLD_KEY, String(v)));
-  watch(mode, (v) => save(MODE_KEY, v));
+  watch(modes, (v) => save(MODE_KEY, v.join(',')));
+  function toggleMode(id: PlanMode) {
+    modes.value = toggleModeIn(modes.value, id);
+  }
   watch(withGarrisons, (v) => save(GARRISON_KEY, v ? '1' : '0'));
   /** 🎒 Les consommables que le joueur AUTORISE dans les simulations (demandé : « pouvoir
    *  rajouter des consommables sur les simulations d'optimisation des expéditions »). Rien par
@@ -283,17 +291,22 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         for (const u of us) by.set(u.origin, [...(by.get(u.origin) ?? []), u]);
         return [...by];
       };
-      const targets = planTargets(ctx.targets.value, mode.value);
-      const total = Math.max(1, targets.length * 6);
+      const targetsOf = (m: PlanMode) => planTargets(ctx.targets.value, m);
+      // La barre couvre l'ensemble des passes : jamais de retour à 0 entre deux.
+      const total = Math.max(
+        1,
+        modes.value.reduce((s, m) => s + targetsOf(m).length * 6, 0),
+      );
       let done = 0;
       // 🎒 Le stock des consommables autorisés : jamais plus que ce qu'on possède.
       const owned = char.row?.supplies ?? {};
       const stock: Record<string, number> = {};
       for (const r of supplyStock.value) if (r.on) stock[r.id] = owned[r.id] ?? 0;
       const sup = (kit: readonly string[]) => kit as readonly SupplyId[];
-      const res = await planExpeditions(targets, units, {
+      const res = await planInPasses(units, {
+        modes: modes.value,
+        targetsOf,
         threshold: threshold.value / 100,
-        mode: mode.value,
         maxTeam: MAX_TEAM,
         stock,
         cancelled: () => me !== run,
@@ -374,7 +387,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         },
       });
       if (!res || me !== run) return;
-      rows.value = res.trips.map((tr: PlannedTrip<Poi>) => ({
+      rows.value = res.trips.map((tr: PlannedTrip<Poi>, i) => ({
+        mode: res.tripModes[i]!,
         key: `${tr.target.id}|${tr.units.map((u) => u.id).join(',')}`,
         poi: tr.target,
         advs: advsOf(tr.units),
@@ -583,7 +597,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     rows.value = null;
     unreachable.value = [];
   }
-  watch([threshold, mode, withGarrisons, withHero, allowedSupplies], reset);
+  watch([threshold, modes, withGarrisons, withHero, allowedSupplies], reset);
   // ⚔️ Un lieu attaqué depuis le calcul (envoi manuel, héros seul) quitte les cibles : sa
   // proposition s'efface, le reste du plan tient (`withoutEngaged`).
   watch(
@@ -755,11 +769,17 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
 
   /** 🕳️ Combien de failles le mode « Failles » peut viser (l'écran le dit s'il n'y en a aucune). */
   const riftCount = computed(() => planTargets(ctx.targets.value, 'rifts').length);
+  /** Rien à proposer du tout : aucune cible pour AUCUNE des priorités choisies. */
+  const nothingToPlan = computed(() =>
+    modes.value.every((m) => planTargets(ctx.targets.value, m).length === 0),
+  );
 
   return {
     threshold,
-    mode,
+    modes,
+    toggleMode,
     riftCount,
+    nothingToPlan,
     withGarrisons,
     withHero,
     supplyStock,

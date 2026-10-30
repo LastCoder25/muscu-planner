@@ -316,7 +316,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const poi = { id: 'p1', type: 'camp', level: 12, x: 0, y: 0, distNorm: 0.4 };
     const planner = {
       threshold: ref(90),
-      mode: ref('events'),
+      modes: ref(['events']),
+      toggleMode: () => undefined,
+      nothingToPlan: ref(false),
       withGarrisons: ref(false),
       withHero: ref(true),
       supplyStock: ref([
@@ -325,6 +327,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           def: { emoji: '🥖', name: 'Rations de route', what: '' },
           n: 3,
           on: false,
+        },
+        {
+          id: 'potion',
+          def: { emoji: '🧪', name: 'Potion', what: '' },
+          n: 2,
+          on: true,
         },
       ]),
       toggleSupply: () => undefined,
@@ -344,6 +352,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           tripMin: 75,
           xp: 120,
           supplies: ['rations'],
+          mode: 'events',
         },
       ]),
       unreachable: ref([poi]),
@@ -377,8 +386,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
     expect(html).toContain('1 lieu hors de portée');
     // 🎒 Les consommables à engager (stock affiché) et ceux qu'une proposition emporte.
-    expect(html).toContain('Consommables à engager');
-    expect(html).toContain('×3');
+    // 🎒 Repliés par défaut (demandé) : l'en-tête dit combien sont engagés, les tuiles sont cachées.
+    expect(html).toContain('Consommables · 1 engagé');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('×3');
+    // Une priorité seule : pas de pastille de priorité par ligne, un badge ① sur sa tuile.
+    expect(html).not.toContain('data-test="row-prio"');
+    expect(html).toContain('①');
+    expect(html).not.toContain('②');
+    expect(html).toContain('Touche dans l’ordre voulu');
     expect(html).toContain('🎒 🥖');
     // 🔎 Chaque proposition s'ouvre comme un envoi manuel (consommables à choisir).
     expect(html).toContain('🔎 Ouvrir');
@@ -414,6 +430,29 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(html).toContain('Attaque combinée');
     expect(html).toContain('Fila');
+
+    // 🪄 Plusieurs priorités : badges ① ② dans l'ordre, pastille de priorité par ligne ; un clic
+    // sur l'en-tête déplie les consommables (cochés ou non, ils comptaient déjà).
+    planner.modes.value = ['rifts', 'events'];
+    planner.rows.value = [{ ...planner.rows.value![0]!, mode: 'rifts' }] as never;
+    await mountIt(
+      ExpeditionPlanner,
+      { planner, section: 'plan' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (html = h),
+      (host) => {
+        (host.querySelector('[data-test="supplies-toggle"]') as HTMLElement).click();
+      },
+    );
+    expect(html).toContain('①');
+    expect(html).toContain('②');
+    expect(html).not.toContain('③');
+    expect(html).toContain('① Failles');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('×3');
+    planner.modes.value = ['events'];
 
     // 🧭 La répartition : les déplacements, puis les équipes qui en profitent.
     const fort = {
@@ -582,7 +621,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     let relaunched = 0;
     const planner = {
       threshold: ref(90),
-      mode: ref('events'),
+      modes: ref(['events']),
+      toggleMode: () => undefined,
+      nothingToPlan: ref(false),
       withGarrisons: ref(false),
       withHero: ref(true),
       supplyStock: ref([]),
@@ -710,7 +751,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const { default: ExpeditionPlanner } = await import('@/components/ExpeditionPlanner.vue');
     const planner = {
       threshold: ref(90),
-      mode: ref('events'),
+      modes: ref(['events']),
+      toggleMode: () => undefined,
+      nothingToPlan: ref(false),
       withGarrisons: ref(false),
       withHero: ref(true),
       supplyStock: ref([]),

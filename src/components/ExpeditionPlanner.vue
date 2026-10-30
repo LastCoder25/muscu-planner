@@ -41,21 +41,34 @@
         </span>
       </div>
     </div>
-    <div v-if="section === 'plan'" class="pl-modes" role="radiogroup" aria-label="Optimiser">
-      <button
-        v-for="m in MODES"
-        :key="m.id"
-        type="button"
-        class="pl-mode"
-        :class="{ on: mode === m.id }"
-        role="radio"
-        :aria-checked="mode === m.id"
-        @click="mode = m.id"
-      >
-        <span class="pm-emo">{{ m.emo }}</span>
-        <span class="pm-title">{{ m.title }}</span>
-        <span class="pm-sub">{{ m.sub }}</span>
-      </button>
+    <!-- 🪄 PRIORITÉS DANS L'ORDRE CLIQUÉ (demandé, 1 à 3) : la 1re est servie d'abord, la suivante
+         avec ce qui reste (effectifs, lieux, consommables). -->
+    <div v-if="section === 'plan'" class="pl-row">
+      <div class="pl-modes" role="group" aria-label="Optimiser, dans l’ordre de priorité">
+        <button
+          v-for="m in MODES"
+          :key="m.id"
+          type="button"
+          class="pl-mode"
+          :class="{ on: modes.includes(m.id) }"
+          :aria-pressed="modes.includes(m.id)"
+          :data-test="`mode-${m.id}`"
+          @click="toggleMode(m.id)"
+        >
+          <span class="pm-emo">{{ m.emo }}</span>
+          <span class="pm-title">{{ m.title }}</span>
+          <span class="pm-sub">{{ m.sub }}</span>
+          <span
+            v-if="modes.includes(m.id)"
+            class="pm-rank"
+            :aria-label="`priorité ${modes.indexOf(m.id) + 1}`"
+            >{{ RANKS[modes.indexOf(m.id)] }}</span
+          >
+        </button>
+      </div>
+      <p class="pl-lab" data-test="modes-help">
+        Touche dans l’ordre voulu : la 1re est servie en priorité, la suivante avec ce qui reste.
+      </p>
     </div>
 
     <div v-if="section === 'plan'" class="pl-row">
@@ -104,8 +117,20 @@
          (attaque et embuscades), et alors le minimum, tant qu'il en reste en stock — son
          🎯 % et son trajet les comptent. Rien de coché = aucun. -->
     <div v-if="section === 'plan' && supplyStock.length" class="pl-row">
-      <span class="pl-lab">🎒 Consommables à engager</span>
-      <div class="pl-chips">
+      <!-- Replié par défaut (demandé) : l'en-tête dit combien sont engagés, les cochés comptent
+           même repliés. -->
+      <button
+        type="button"
+        class="pl-fold"
+        :aria-expanded="suppliesOpen"
+        aria-controls="pl-supplies"
+        data-test="supplies-toggle"
+        @click="suppliesOpen = !suppliesOpen"
+      >
+        <span>🎒 Consommables · {{ engagedLabel }}</span>
+        <span aria-hidden="true">{{ suppliesOpen ? '▴' : '▾' }}</span>
+      </button>
+      <div v-if="suppliesOpen" id="pl-supplies" class="pl-chips" data-test="supplies-body">
         <button
           v-for="s in supplyStock"
           :key="s.id"
@@ -184,7 +209,7 @@
     </div>
 
     <template v-if="section === 'plan' && rows && !running">
-      <p v-if="!rows.length && mode === 'rifts' && !riftCount" class="pl-empty">
+      <p v-if="!rows.length && modes.includes('rifts') && nothingToPlan" class="pl-empty">
         Aucune faille ouverte à attaquer sur la carte.
       </p>
       <p v-else-if="!rows.length" class="pl-empty">
@@ -208,6 +233,7 @@
               <span class="pt-rank" :style="{ '--rk': rankOf(r.poi).color }">
                 {{ rankOf(r.poi).name }} ★{{ rankOf(r.poi).star }}
               </span>
+              <span v-if="prioChip(r)" class="pt-prio" data-test="row-prio">{{ prioChip(r) }}</span>
             </div>
             <!-- ⚔️ Attaque combinée : un groupe par point de départ, tous arrivent ensemble. -->
             <template v-if="r.wings">
@@ -377,8 +403,9 @@ const props = defineProps<{
 const emit = defineEmits<{ open: [row: PlannerRow] }>();
 const {
   threshold,
-  mode,
-  riftCount,
+  modes,
+  toggleMode,
+  nothingToPlan,
   withGarrisons,
   withHero,
   supplyStock,
@@ -406,11 +433,31 @@ const {
   launchAllMoves,
 } = props.planner;
 
-const MODES: { id: PlanMode; emo: string; title: string; sub: string }[] = [
-  { id: 'events', emo: '🗺️', title: 'Événements', sub: 'le plus possible, le plus vite' },
-  { id: 'xp', emo: '⭐', title: 'XP des champions', sub: 'le plus d’XP par heure' },
-  { id: 'rifts', emo: '🕳️', title: 'Failles', sub: 'les plus proches, la plus urgente d’abord' },
+const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: string }[] = [
+  { id: 'events', emo: '🗺️', title: 'Événements', short: 'Lieux', sub: 'le plus possible, le plus vite' },
+  { id: 'xp', emo: '⭐', title: 'XP des champions', short: 'XP', sub: 'le plus d’XP par heure' },
+  {
+    id: 'rifts',
+    emo: '🕳️',
+    title: 'Failles',
+    short: 'Failles',
+    sub: 'les plus proches, la plus urgente d’abord',
+  },
 ];
+const RANKS = ['①', '②', '③'];
+/** 🎒 Replié au démarrage : le réglage se lit sur l'en-tête sans l'ouvrir. */
+const suppliesOpen = ref(false);
+const engagedLabel = computed(() => {
+  const n = supplyStock.value.filter((s) => s.on).length;
+  return n ? `${n} engagé${n > 1 ? 's' : ''}` : 'aucun';
+});
+/** Pastille de priorité d'une ligne : seulement quand plusieurs priorités sont actives. */
+function prioChip(r: PlannerRow): string | null {
+  if (modes.value.length < 2 || !r.mode) return null;
+  const i = modes.value.indexOf(r.mode);
+  const m = MODES.find((x) => x.id === r.mode);
+  return i < 0 || !m ? null : `${RANKS[i]} ${m.short}`;
+}
 const THRESHOLDS = [70, 80, 90, 95, 99];
 const FIXED_TITLE = 'Pas disponible : compté ici, il n’est pas déplacé';
 
@@ -467,6 +514,7 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
   gap: 8px;
 }
 .pl-mode {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -494,6 +542,31 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
 .pm-sub {
   font-size: 11px;
   color: var(--dim);
+}
+.pm-rank {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent);
+}
+.pl-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
 }
 .pl-row {
   display: flex;
@@ -626,6 +699,15 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
   border-radius: 999px;
   border: 1.5px solid var(--rk);
   color: var(--rk);
+  font-size: 11px;
+  font-weight: 700;
+}
+.pt-prio {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   font-size: 11px;
   font-weight: 700;
 }
