@@ -3,7 +3,7 @@
 // route recalcule la rencontre ; arrivés après l'armée, ils rentrent sans combattre.
 import { describe, expect, it } from 'vitest';
 import { reMeet } from '@/lib/party';
-import { boostVoyage, voyageBoostPlan, attackBoostPlan } from '@/lib/speedBoost';
+import { boostAttack, boostVoyage, voyageBoostPlan, attackBoostPlan } from '@/lib/speedBoost';
 import {
   EXPE,
   lateOutcome,
@@ -70,9 +70,45 @@ describe('⚡ un boost sur une interception', () => {
     const v = { poi: band({ type: 'camp', from: undefined }), midAt: T0 + 2 * H };
     expect(reMeet(v)).toBe(v);
   });
-  it('une attaque combinée qui attend encore ses groupes ne se presse toujours pas', () => {
-    const a = { poi: band(), arriveAt: T0 + 5 * H, midAt: T0 + 5 * H, wings: [] };
-    expect(attackBoostPlan(a as never, 10, T0)).toBe('intercept');
+  // 2026-10-30 (signalé) : une attaque combinée sur une armée qui attend encore ses groupes se
+  // presse aussi ; la rencontre se recalcule à la nouvelle heure d'arrivée.
+  const wing = (departAt: number, returnAt: number) => ({
+    originId: null,
+    members: ['a'],
+    hero: false,
+    legMin: 60,
+    departAt,
+    returnAt,
+    state: 'waiting' as const,
+  });
+  const attack = () => ({
+    id: 'a1',
+    poi: warbandAt(band(), T0 + 5 * H),
+    seed: 1,
+    createdAt: T0,
+    arriveAt: T0 + 5 * H,
+    midAt: T0 + 5 * H,
+    wings: [wing(T0 + 4 * H, T0 + 6 * H)],
+  });
+  it('une attaque combinée qui attend encore ses groupes se presse (plus de blocage)', () => {
+    const plan = attackBoostPlan(attack() as never, 60, T0);
+    expect(typeof plan).not.toBe('string');
+    expect((plan as { gainMs: number }).gainMs).toBe(H);
+  });
+  it('… et son point de rencontre est celui de l’armée à la nouvelle heure d’arrivée', () => {
+    const a = attack();
+    const plan = attackBoostPlan(a as never, 120, T0) as never;
+    const { attack: nv } = boostAttack(a as never, plan, T0);
+    expect(nv.arriveAt).toBe(T0 + 3 * H);
+    const at = warbandAt(band(), T0 + 3 * H);
+    expect(nv.poi.x).toBeCloseTo(at.x, 6);
+    expect(nv.poi.y).toBeCloseTo(at.y, 6);
+    expect(nv.poi.x).not.toBeCloseTo(a.poi.x, 6);
+  });
+  it('un lieu fixe garde son lieu', () => {
+    const a = { ...attack(), poi: band({ type: 'camp', from: undefined }) };
+    const plan = attackBoostPlan(a as never, 60, T0) as never;
+    expect(boostAttack(a as never, plan, T0).attack.poi).toBe(a.poi);
   });
 });
 

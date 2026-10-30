@@ -24,18 +24,18 @@
  * ⚔️ VERS UNE ARMÉE EN MARCHE (`warband`, 2026-10-06, décision de l'utilisateur : « des
  * champions trop lents doivent pouvoir la rattraper grâce aux boosts ») : autorisé, et le point
  * de rencontre est RECALCULÉ (`reMeet`, party.ts) — là où l'armée sera à la nouvelle heure
- * d'arrivée. ⚠️ Pas une attaque combinée qui attend encore ses groupes (`attackBoostPlan`) :
- * son heure de rencontre est commune et figée ; une fois tous partis, ses voyages se pressent.
+ * d'arrivée. 2026-10-30 (signalé : « je ne peux pas utiliser d'accélérateur quand j'attaque une
+ * armée ennemie ») : une ATTAQUE COMBINÉE qui attend encore ses groupes se presse aussi — son
+ * arrivée commune avance de X et la rencontre est recalculée de même (`boostAttack`).
  */
-import type { ActiveExpedition } from './expedition';
+import { warbandAt, type ActiveExpedition } from './expedition';
 import type { CombinedAttack } from './combinedAttack';
 import { BOOST_IDS, BOOST_MIN, type BoostId, type SupplyStock } from './supplies';
 
-export type BoostBlock = 'onSite' | 'done' | 'intercept';
+export type BoostBlock = 'onSite' | 'done';
 export const BOOST_BLOCK_LABEL: Record<BoostBlock, string> = {
   onSite: 'l’équipe est sur place : il n’y a pas de route à raccourcir',
   done: 'ce voyage est terminé',
-  intercept: 'on ne presse pas une interception : l’armée ne serait pas au rendez-vous',
 };
 
 export interface BoostPlan {
@@ -112,7 +112,6 @@ export function attackBoostPlan(
 ): BoostPlan | BoostBlock {
   const boost = Math.max(0, minutes) * 60_000;
   if (now >= a.arriveAt) return 'onSite';
-  if (a.poi.type === 'warband') return 'intercept';
   const goMs = Math.min(boost, a.arriveAt - now);
   // Le reste raccourcit les retours, jusqu'au plus long d'entre eux.
   const longest = Math.max(
@@ -160,8 +159,16 @@ export function boostAttack(
         }
       : { ...w, returnAt, ...cut };
   });
+  const arriveAt = a.arriveAt - gainMs;
   return {
-    attack: { ...a, arriveAt: a.arriveAt - gainMs, midAt: a.midAt - gainMs, wings },
+    attack: {
+      ...a,
+      // ⚔️ Une armée en marche : on la croise là où elle SERA à la nouvelle heure d'arrivée.
+      poi: warbandAt(a.poi, arriveAt),
+      arriveAt,
+      midAt: a.midAt - gainMs,
+      wings,
+    },
     moved,
   };
 }
