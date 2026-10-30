@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_MODES,
   parseModes,
   planExpeditions,
   planInPasses,
@@ -56,7 +55,7 @@ describe('priorités : la préférence sauvegardée', () => {
     expect(parseModes('')).toEqual(['events']);
     expect(parseModes('n’importe quoi')).toEqual(['events']);
     expect(parseModes('rifts,zzz,rifts,xp')).toEqual(['rifts', 'xp']);
-    expect(parseModes('rifts,xp,events,rifts,xp').length).toBeLessThanOrEqual(MAX_MODES);
+    expect(parseModes('rifts,xp,events,rifts,xp').length).toBeLessThanOrEqual(3);
   });
 });
 

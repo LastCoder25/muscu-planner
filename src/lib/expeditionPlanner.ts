@@ -159,6 +159,7 @@ export function withoutEngaged<R extends { poi: { id: string } }>(
   return rows.filter((r) => ids.has(r.poi.id));
 }
 
+/** @public Une seule passe : `planInPasses` l'appelle, et les tests la visent directement. */
 export async function planExpeditions<T extends { id: string }>(
   targets: readonly T[],
   units: readonly PlanUnit[],
@@ -596,9 +597,9 @@ export async function planExpeditions<T extends { id: string }>(
 // l'ordre cliqué, par exemple les failles en priorité puis les lieux en second ; de 1 à 3 ») ──
 
 /** Les trois optimisations, dans l'ordre d'affichage des tuiles. */
-export const PLAN_MODES: readonly PlanMode[] = ['events', 'xp', 'rifts'];
+const PLAN_MODES: readonly PlanMode[] = ['events', 'xp', 'rifts'];
 /** Combien de priorités au plus (une par optimisation). */
-export const MAX_MODES = PLAN_MODES.length;
+const MAX_MODES = PLAN_MODES.length;
 
 /**
  * Lit la préférence sauvegardée. Rétro-compatible : l'ancienne forme est UNE valeur (`rifts`),
