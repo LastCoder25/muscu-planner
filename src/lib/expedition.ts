@@ -3026,6 +3026,36 @@ export function nextPlunderSpawn(
   return null;
 }
 
+/**
+ * 🔭 TOUS les lieux qui apparaîtront dans l'horizon, tels que le JEU les fera apparaître
+ * (même rejeu pas à pas que `nextPlunderSpawn`, avec `advanceWorld` lui-même). Sert au carnet
+ * de vocation : « quand le prochain camp / la prochaine faille ». Un lieu déjà sur la carte
+ * n'est pas une apparition. Coûteux (jusqu'à 96 `advanceWorld`) : à calculer à l'ouverture
+ * d'un écran, jamais dans un `computed` qui suit l'horloge.
+ */
+export function upcomingSpawns(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  outpostLevel: number,
+  protectedPoiId?: string,
+  horizonMs = 48 * 3600_000,
+): { id: string; type: PoiType; at: number }[] {
+  const STEP = 30 * 60_000;
+  const seen = new Set(map.pois.map((p) => p.id));
+  const out: { id: string; type: PoiType; at: number }[] = [];
+  let m = map;
+  for (let t = now + STEP; t <= now + horizonMs; t += STEP) {
+    m = advanceWorld(m, t, playerLevel, outpostLevel, protectedPoiId);
+    for (const p of m.pois) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push({ id: p.id, type: p.type, at: p.spawnedAt });
+    }
+  }
+  return out;
+}
+
 /** 🏝️ Le niveau d'entrée de l'île active (1 hors archipel) : lieux et armées ne tirent jamais
  *  de rang sous le sien (sauf joueur encore en dessous, cf. `riftLevelFor`). */
 export function archipelFloor(map: Pick<ExpeditionMap, 'archipel'> | null | undefined): number {

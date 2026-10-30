@@ -54,6 +54,7 @@ import { partyFightSeed, partyForecastSeed } from './party';
 import { bossReplaySteps, RIFT_BOSS_STEPS } from './rift';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
 import { type Adventurer } from './adventurers';
+import { vocationGuardMult } from './vocation';
 
 export const CAMP = {
   /** Taille de la RÉFÉRENCE : un camp de taille 3 est dimensionné sur 3 aventuriers de
@@ -395,7 +396,12 @@ export interface CampFight {
 export function fightCampForce(input: PartyInput): CampFight {
   const { poi, spec, escort, hero, seed } = input;
   const allies = [...partyAllies(escort, input.road, hero), ...(input.militia ?? [])];
-  const foe = campFoe(poi, spec, supplyFx(input.road.supplies).guardMult);
+  // 📓 Brise-camp (carnet de vocation) : même facteur que le pronostic (`partyWinChance`).
+  const foe = campFoe(
+    poi,
+    spec,
+    supplyFx(input.road.supplies).guardMult * vocationGuardMult(escort, poi),
+  );
   const bodies = campBodies(poi, spec, foe);
   // 🏰 Contre une forteresse ennemie, rendement décroissant au-delà des 6 meilleurs.
   const group = assaultGroup(poi, allies, 'Groupe');

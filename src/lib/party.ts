@@ -44,7 +44,8 @@ import {
   RAZE_KINDS,
   HERO_GARRISON_SEATS,
 } from './expedition';
-import { FACTION_EMOJI, FACTION_LABEL } from './raid';
+import { FACTION_EMOJI, FACTION_LABEL, type RaidFaction } from './raid';
+import { recordVet, vetFactionOf } from './vocation';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
 /** Trajet ALLER d'un groupe (minutes) : le héros profite de toute la réduction de
  *  l'Avant-poste, les champions de la moitié (v0.1049, `championOutpostMult`) ; le groupe va au pas du plus LENT (sans rôle 🧭, c'est le héros). ⚠️ Tous les paramètres sont REQUIS, comme `caravanLegMin`. */
@@ -1011,9 +1012,12 @@ export function grantReportXp(
   let adventurers = roster;
   for (const m of granted) {
     const xp = m.party!.xp;
+    // 🏅 Une victoire de plus pour chaque champion de la mission (vétérance, titre seul). Sous
+    // la même garde que l'XP (`xpGranted`) : un rapport n'est compté qu'une fois.
+    const vet = vetFactionOf(m.party!, m.poiType);
     adventurers = adventurers.map((a) => {
       const gain = xp[a.id];
-      return gain === undefined ? a : grantAdvXp(a, gain, pantheonLevel, heroLevel);
+      return gain === undefined ? a : recordVet(grantAdvXp(a, gain, pantheonLevel, heroLevel), vet);
     });
   }
   const done = new Set(granted.map((m) => m.id));
@@ -1047,6 +1051,9 @@ export function partyClaimRoster(
     /** ⚠️ REQUIS : l'XP a-t-elle déjà été versée à l'arrivée (`grantReportXp`) ? L'oublier
      *  la verserait deux fois. */
     xpGranted: boolean;
+    /** 🏅 La faction dont ce rapport compte une victoire (`vetFactionOf`), `null` si aucune.
+     *  Ignorée quand `xpGranted` (déjà comptée). ⚠️ REQUIS : l'oublier ne compterait rien. */
+    vet: RaidFaction | null;
     /** 🕯️ L'HOSPICE de l'île (`hospiceHealMult`) : il multiplie la convalescence (½ au mieux,
      *  1 sans hospice tenu). ⚠️ REQUIS : optionnel, un appelant l'oublierait et les blessés de
      *  l'île guériraient au rythme normal sans que rien ne le dise. */
@@ -1065,7 +1072,11 @@ export function partyClaimRoster(
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
-    const up = ctx.xpGranted ? a : grantAdvXp(a, gain, ctx.pantheonLevel, ctx.heroLevel);
+    // 🏅 Les rapports d'AVANT le versement à l'arrivée comptent ici leur victoire (`ctx.vet`) ;
+    // les autres l'ont déjà comptée (`grantReportXp`) : même garde que l'XP.
+    const up = ctx.xpGranted
+      ? a
+      : recordVet(grantAdvXp(a, gain, ctx.pantheonLevel, ctx.heroLevel), ctx.vet);
     // 🏠 L'infirmerie est À LA BASE : la convalescence ne court qu'une fois le champion
     // RENTRÉ. Un blessé encore en route (retour d'une sortie par la base, groupe d'une
     // attaque combinée qui rentre plus tard, garnison délogée qui marche) est occupé

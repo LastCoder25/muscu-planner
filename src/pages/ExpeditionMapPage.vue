@@ -1916,6 +1916,7 @@ import {
   winClass,
   type PoiFact,
 } from '@/lib/poiFacts';
+import { bestVetTitle } from '@/lib/vocation';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
@@ -5724,6 +5725,16 @@ const poiFacts = computed<PoiFact[]>(() => {
   // 🎓 L'XP QU'IL RAPPORTE (demandé) : par champion tant que l'équipe n'est pas composée, puis
   // ce que touche l'équipe cochée — la somme des chiffres de ses tuiles (`partyXp`).
   if (partyTarget.value) out.push(xpFact(p));
+  // 🏅 Le meilleur titre de vétérance de l'équipe (carnet de vocation) — titre seul, jamais
+  // cumulé : un seul, celui du plus grand nombre de victoires.
+  const vetTitle = bestVetTitle(partyAdvs.value);
+  if (vetTitle)
+    out.push({
+      icon: vetTitle.emoji,
+      label: 'Vétéran',
+      value: vetTitle.label,
+      title: `Titre de ${vetTitle.by} — un honneur, sans effet au combat`,
+    });
   // 🐺 La bête d'une tanière a une force FIXE : on peut l'attaquer en surnombre.
   if (force && p.type === 'den')
     out.push({

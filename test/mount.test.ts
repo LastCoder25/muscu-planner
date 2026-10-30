@@ -127,6 +127,68 @@ const ROW = {
 };
 
 describe('🚪 montage des écrans (erreurs de setup)', () => {
+  // 📓 Carnet de vocation : un guerrier avec une lecture acquise, une voie, un titre.
+  it('VocationSheet montre les tuiles du guerrier, la lecture acquise et la vétérance', async () => {
+    const { default: VocationSheet } = await import('@/components/VocationSheet.vue');
+    const { createMap } = await import('@/lib/expedition');
+    const roan = {
+      id: 'g1',
+      name: 'Roän',
+      seed: 4,
+      path: [],
+      level: 20,
+      xp: 0,
+      championId: 'roan',
+      copies: 1,
+      vocation: { nodes: ['guerrier.flair'] },
+      vet: { bandits: 15, betes: 4 },
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        VocationSheet,
+        { modelValue: true, advId: 'g1', heroLevel: 45 },
+        { ...ROW, adventurers: [roan], expedition_map: createMap(7, Date.now(), 30, 30) },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Flair des bannières');
+    expect(out).toContain('Brise-camp');
+    expect(out).toContain('Garde de route');
+    expect(out).toContain('vc-reading'); // le nœud acquis lit la carte
+    expect(out).toContain('17 points à dépenser'); // 10 + 2 × (45 − 41) − 1
+    expect(out).toContain('Fléau des bandits'); // titre gagné à 15 victoires
+    expect(out).toContain('4 / 15'); // bêtes : pas encore
+  });
+  it('VocationSheet dit qu’une lignée sans carnet n’est pas encore ouverte', async () => {
+    const { default: VocationSheet } = await import('@/components/VocationSheet.vue');
+    const sylve = {
+      id: 'g2',
+      name: 'Sylvane',
+      seed: 5,
+      path: [],
+      level: 20,
+      xp: 0,
+      championId: 'sylve',
+      copies: 1,
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        VocationSheet,
+        { modelValue: true, advId: 'g2', heroLevel: 10 },
+        { ...ROW, adventurers: [sylve] },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('pas encore ouvert');
+    expect(out).not.toContain('Brise-camp');
+  });
+
   // 🔙 Rappeler à la base : une équipe en route se propose au rappel.
   it('RecallHomeSheet liste une équipe en route et propose de la rappeler', async () => {
     const { default: RecallHomeSheet } = await import('@/components/RecallHomeSheet.vue');

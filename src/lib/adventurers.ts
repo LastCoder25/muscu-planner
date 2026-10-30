@@ -66,6 +66,7 @@ import {
   type SkillId,
 } from './skillRunes';
 import type { ChampionSlots } from './runeBank';
+import type { AdvVet, AdvVocation } from './vocation';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -1354,6 +1355,11 @@ export interface Adventurer {
    *  ⚠️ L'appariement vit SUR l'aventurier : la pièce suit son homme.
    *  Absent = rien de porté (tous les aventuriers d'avant). */
   gear?: Partial<Record<'weapon' | 'armor' | 'accessory' | 'relic', string>>;
+  /** 📓 Son CARNET DE VOCATION (`vocation.ts`) : nœuds acquis et points retirés en attente.
+   *  Absent = rien (JSONB, aucune migration). */
+  vocation?: AdvVocation;
+  /** 🏅 Ses victoires par faction (`vocation.ts`), source des titres. Absent = aucune. */
+  vet?: AdvVet;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
