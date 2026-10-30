@@ -27,8 +27,7 @@ const u = (id: string, power: number, origin = 'base', hero = false): PlanUnit =
 const deps: PlanDeps<T> = {
   fits: (_t, us) => us.length > 0,
   // Une potion vaut +4 de puissance : elle pallie un manque d'effectif.
-  win: (t, us, kit) =>
-    Math.min(1, (us.reduce((s, x) => s + x.power, 0) + 4 * kit.length) / t.need),
+  win: (t, us, kit) => Math.min(1, (us.reduce((s, x) => s + x.power, 0) + 4 * kit.length) / t.need),
   tripMin: (t) => t.min,
   xp: (_t, us) => us.filter((x) => !x.hero).length,
   kit: (_t, _us, avail) => avail.filter((id) => id === 'potion'),
@@ -77,8 +76,7 @@ describe('priorités : toucher une tuile', () => {
 
 describe('priorités : câblage du composable (lecture de la source, pas un comportement)', () => {
   it('lit et écrit la préférence en liste, et calcule par passes', () => {
-    const src = readFileSync('src/composables/useExpeditionPlanner.ts', 'utf8')
-      .replace(/\s+/g, '');
+    const src = readFileSync('src/composables/useExpeditionPlanner.ts', 'utf8').replace(/\s+/g, '');
     expect(src).toContain('parseModes(readStr(MODE_KEY))');
     expect(src).toContain("save(MODE_KEY,v.join(','))");
     expect(src).toContain('planInPasses(units,{modes:modes.value');

@@ -434,7 +434,13 @@ const {
 } = props.planner;
 
 const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: string }[] = [
-  { id: 'events', emo: '🗺️', title: 'Événements', short: 'Lieux', sub: 'le plus possible, le plus vite' },
+  {
+    id: 'events',
+    emo: '🗺️',
+    title: 'Événements',
+    short: 'Lieux',
+    sub: 'le plus possible, le plus vite',
+  },
   { id: 'xp', emo: '⭐', title: 'XP des champions', short: 'XP', sub: 'le plus d’XP par heure' },
   {
     id: 'rifts',

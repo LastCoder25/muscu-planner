@@ -647,7 +647,7 @@ export async function planInPasses<T extends { id: string }>(
   opts: PassesOptions<T>,
 ): Promise<PassesResult<T> | null> {
   const modes = [...new Set(opts.modes)].slice(0, MAX_MODES);
-  const { modes: _modes, targetsOf, ...rest } = opts;
+  const { targetsOf } = opts;
   let pool = [...units];
   const stock: Record<string, number> = { ...(opts.stock ?? {}) };
   const planned = new Set<string>();
@@ -661,7 +661,7 @@ export async function planInPasses<T extends { id: string }>(
       for (const t of targets) missed.set(t.id, t);
       continue;
     }
-    const res = await planExpeditions(targets, pool, { ...rest, mode, stock: { ...stock } });
+    const res = await planExpeditions(targets, pool, { ...opts, mode, stock: { ...stock } });
     if (!res || opts.cancelled?.()) return null;
     const used = new Set<string>();
     for (const tr of res.trips) {
