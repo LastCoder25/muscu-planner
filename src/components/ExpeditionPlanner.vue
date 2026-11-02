@@ -216,7 +216,7 @@
         Aucune expédition n’atteint {{ threshold }} % avec les effectifs libres.
       </p>
       <template v-else>
-        <div class="pl-sum">
+        <div ref="sumEl" class="pl-sum">
           <span class="pl-pill">{{ rows.length }} expédition{{ rows.length > 1 ? 's' : '' }}</span>
           <span class="pl-pill">👥 {{ engaged }}</span>
           <span class="pl-pill">⏱️ {{ fmt(longest) }} au plus</span>
@@ -388,6 +388,7 @@ import { DEPLOY_HERO_ID } from '@/lib/deployPlan';
 import { SUPPLIES, type SupplyId } from '@/lib/supplies';
 import { waveCounts } from '@/lib/lastWave';
 import DailyObjectives from '@/components/DailyObjectives.vue';
+import { useScrollWhenReady } from '@/composables/useScrollWhenReady';
 import type { ObjectiveState } from '@/lib/dailyObjectives';
 import { absenceDuration } from '@/lib/absenceSummary';
 
@@ -432,6 +433,15 @@ const {
   repartir,
   launchAllMoves,
 } = props.planner;
+
+// 📜 Une fois les expéditions générées, l'écran défile : pastilles, « Tout lancer » puis les
+// propositions en haut (au lieu de laisser l'utilisateur sous les réglages).
+const sumEl = ref<HTMLElement | null>(null);
+useScrollWhenReady(
+  running,
+  () => props.section === 'plan' && !!rows.value?.length,
+  sumEl,
+);
 
 const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: string }[] = [
   {
@@ -643,6 +653,8 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
   transition: width 0.2s;
 }
 .pl-sum {
+  /* Sous l'en-tête fixe quand la page défile jusqu'ici (voir useScrollWhenReady). */
+  scroll-margin-top: 64px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
