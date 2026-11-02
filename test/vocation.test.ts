@@ -11,6 +11,7 @@ import {
   nodeState,
   pendingPoints,
   readableGroups,
+  readsPulse,
   readingText,
   recordVet,
   vetFactOf,
@@ -20,11 +21,33 @@ import {
   vocationBudget,
   vocationFree,
   vocationGuardMult,
+  vocationRiftMult,
   vocationTree,
+  nextRiftGrowth,
+  pulseLines,
   type SpawnAhead,
 } from '@/lib/vocation';
+import {
+  incursionWinPct,
+  resolveIncursion,
+  riftOverflowAt,
+  riftPopulation,
+  simulateIncursion,
+} from '@/lib/rift';
+import { attackForecast } from '@/lib/defenseForecast';
+import { poiForceOf, ruinsSealKind, type PoiType } from '@/lib/expedition';
+import type { RaidFaction } from '@/lib/raid';
+import { partyFightSeed } from '@/lib/party';
+import { fuseUnits } from '@/lib/skirmish';
+import { formatDuration } from '@/lib/duration';
 import { grantReportXp, partyClaimRoster } from '@/lib/party';
-import { ambushChance, refChampionAdv, refAdvGear, type EscortKit } from '@/lib/caravan';
+import {
+  ambushChance,
+  partyAllies,
+  refChampionAdv,
+  refAdvGear,
+  type EscortKit,
+} from '@/lib/caravan';
 import { fightCampForce, type PartyInput } from '@/lib/camp';
 import { partyWinChance } from '@/lib/partyForecast';
 import { normalizeCharacterRow } from '@/lib/characterRow';
@@ -51,13 +74,51 @@ const guerrier = (id: string, extra: Partial<Adventurer> = {}): Adventurer => ({
   ...extra,
 });
 const archer = (id: string): Adventurer => ({ ...guerrier(id), championId: 'sylve' }); // 🏹
+const CHAMP: Record<string, string> = {
+  guerrier: 'roan',
+  archer: 'sylve',
+  mage: 'orsene',
+  homme_armes: 'gorm',
+  eclaireur: 'fila',
+  caravanier: 'boulin',
+};
+/** Un champion de cette lignée avec ces nœuds. */
+const vocAdv = (id: string, lineage: string, nodes: string[]): Adventurer => ({
+  ...guerrier(id, { vocation: { nodes } }),
+  championId: CHAMP[lineage]!,
+});
+/** Un lieu de ce type dont les gardes sont de cette faction (id trouvé par balayage : la faction
+ *  est dérivée de l'id, `poiForceOf`). */
+const gp = (type: PoiType, faction?: RaidFaction) => {
+  for (let i = 0; i < 500; i++) {
+    const id = `t${i}`;
+    if (!faction || poiForceOf({ id, type, level: 20 })?.faction === faction)
+      return { id, type, level: 20 };
+  }
+  throw new Error(`aucun id ${type}/${faction}`);
+};
+const risky = { perilous: true };
+const calm = {};
 
 describe('🎯 les points : un pool commun, rattrapé depuis le niveau 41', () => {
   it('10 au départ, +2 par niveau de héros au-delà de 41', () => {
     expect(vocationBudget(1)).toBe(10);
     expect(vocationBudget(41)).toBe(10);
     expect(vocationBudget(42)).toBe(12);
-    expect(vocationBudget(61)).toBe(50);
+    expect(vocationBudget(55)).toBe(38);
+  });
+
+  it('📉 plafonné à 40 : atteint au niveau 56, plus rien ensuite (le choix demeure)', () => {
+    expect(VOCATION.cap).toBe(40);
+    expect(vocationBudget(56)).toBe(40);
+    expect(vocationBudget(57)).toBe(40);
+    expect(vocationBudget(61)).toBe(40);
+    expect(vocationBudget(100)).toBe(40);
+    // le plafond borne les TOTAUX : un vivier qui avait déjà dépensé plus n'est pas puni (≥ 0)
+    const lots = Array.from({ length: 15 }, (_, i) =>
+      guerrier(`g${i}`, { vocation: { nodes: ['guerrier.brise-camp'] } }),
+    );
+    expect(vocationFree(lots, 100, NOW)).toBe(0);
   });
 
   it('un nœud coûte son prix sur le pool de TOUT le vivier', () => {
@@ -86,8 +147,9 @@ describe('🎯 les points : un pool commun, rattrapé depuis le niveau 41', () =
 
   it('refuse une lignée sans carnet, un nœud déjà acquis et la voie exclusive', () => {
     const roster = [guerrier('a'), archer('x')];
-    expect(vocationTree(archer('x'))).toBeNull();
-    expect(learnNode(roster, 'x', 'guerrier.flair', 1, NOW).ok).toBe(false);
+    expect(vocationTree({ ...archer('x'), championId: undefined })).toBeNull(); // sans lignée
+    expect(learnNode(roster, 'x', 'guerrier.flair', 1, NOW).ok).toBe(false); // pas dans SON carnet
+    expect(learnNode(roster, 'x', 'archer.piste', 1, NOW).ok).toBe(true);
     const r = learnNode(roster, 'a', 'guerrier.brise-camp', 1, NOW);
     if (!r.ok) throw new Error('attendu');
     expect(learnNode(r.roster, 'a', 'guerrier.brise-camp', 1, NOW)).toEqual({
@@ -138,35 +200,43 @@ describe('⚔️ les deux voies : situation modeste, jamais cumulée', () => {
   const garde = guerrier('b', { vocation: { nodes: ['guerrier.garde-route'] } });
 
   it('Brise-camp : −5 % sur un camp ou un repaire seulement', () => {
-    expect(vocationGuardMult([brise], { type: 'camp' })).toBe(0.95);
-    expect(vocationGuardMult([brise], { type: 'lair' })).toBe(0.95);
-    expect(vocationGuardMult([brise], { type: 'mine' })).toBe(1);
-    expect(vocationGuardMult([brise], { type: 'den' })).toBe(1);
-    expect(vocationGuardMult([garde], { type: 'camp' })).toBe(1);
+    expect(vocationGuardMult([brise], gp('camp'))).toBe(0.95);
+    expect(vocationGuardMult([brise], gp('lair'))).toBe(0.95);
+    expect(vocationGuardMult([brise], gp('mine'))).toBe(1);
+    expect(vocationGuardMult([brise], gp('den'))).toBe(1);
+    expect(vocationGuardMult([garde], gp('camp'))).toBe(1);
   });
 
   it('Brise-camp ne se cumule pas entre champions', () => {
     const autre = guerrier('c', { vocation: { nodes: ['guerrier.brise-camp'] } });
-    expect(vocationGuardMult([brise, autre], { type: 'camp' })).toBe(0.95);
+    expect(vocationGuardMult([brise, autre], gp('camp'))).toBe(0.95);
   });
 
-  it('🧭 UNE SEULE voie par équipe : la première dans l’ordre de l’escorte, jamais les deux', () => {
+  it('🧭 UNE SEULE voie par équipe : la première QUI S’APPLIQUE AU LIEU, jamais deux', () => {
     // Brise-camp d'abord : Garde de route, portée par un autre, ne compte pas
-    expect(vocationGuardMult([brise, garde], { type: 'camp' })).toBe(0.95);
-    expect(vocationAmbushMult([brise, garde], true)).toBe(1);
-    // l'ordre décide : Garde de route d'abord
-    expect(vocationGuardMult([garde, brise], { type: 'camp' })).toBe(1);
-    expect(vocationAmbushMult([garde, brise], true)).toBe(0.9);
+    expect(vocationGuardMult([brise, garde], gp('camp'))).toBe(0.95);
+    expect(vocationAmbushMult([brise, garde], risky)).toBe(0.9); // Brise-camp ne dit rien d'une route
+    // Garde de route d'abord : elle ne s'applique pas à un camp, Brise-camp passe — l'ordre
+    // n'éteint plus la voie du voisin (v1.296.0)
+    expect(vocationGuardMult([garde, brise], gp('camp'))).toBe(0.95);
+    expect(vocationAmbushMult([garde, brise], risky)).toBe(0.9);
     // un champion sans voie ne compte pas dans l'ordre
-    expect(vocationGuardMult([guerrier('z'), brise, garde], { type: 'camp' })).toBe(0.95);
+    expect(vocationGuardMult([guerrier('z'), brise, garde], gp('camp'))).toBe(0.95);
+    // deux voies qui s'appliquent TOUTES LES DEUX au lieu : la première seule, jamais le produit
+    const piste = vocAdv('p', 'archer', ['archer.traqueur']);
+    expect(vocationGuardMult([piste, brise], gp('den'))).toBe(0.95);
+    const exo = vocAdv('m', 'mage', ['mage.exorcisme']);
+    const campMort = gp('camp', 'mortsvivants');
+    expect(vocationGuardMult([exo, brise], campMort)).toBe(0.95);
+    expect(vocationGuardMult([brise, exo], campMort)).toBe(0.95);
   });
 
   it('Garde de route : −10 % d’embuscades, sur route dangereuse seulement, jamais cumulé', () => {
-    expect(vocationAmbushMult([garde], true)).toBe(0.9);
-    expect(vocationAmbushMult([garde], false)).toBe(1);
-    expect(vocationAmbushMult([brise], true)).toBe(1);
+    expect(vocationAmbushMult([garde], risky)).toBe(0.9);
+    expect(vocationAmbushMult([garde], calm)).toBe(1);
+    expect(vocationAmbushMult([brise], risky)).toBe(1);
     const autre = guerrier('c', { vocation: { nodes: ['guerrier.garde-route'] } });
-    expect(vocationAmbushMult([garde, autre], true)).toBe(0.9);
+    expect(vocationAmbushMult([garde, autre], risky)).toBe(0.9);
   });
 
   const poi = (over: Partial<Poi> = {}): Poi => ({
@@ -206,14 +276,20 @@ describe('⚔️ les deux voies : situation modeste, jamais cumulée', () => {
       return t;
     };
     const shown = (e: Adventurer[]) => partyWinChance(small, e, kit, null, NOW)!;
-    // Brise-camp en tête : même % qu'avec Brise-camp seul ; Garde de route en tête : aucun gain
+    // Sur un camp, seule Brise-camp s'applique : même % qu'avec elle seule, dans LES DEUX ORDRES
     expect(shown(both('guerrier.brise-camp', 'guerrier.garde-route'))).toBe(
       shown(team(2, ['guerrier.brise-camp'])),
     );
-    expect(shown(both('guerrier.garde-route', 'guerrier.brise-camp'))).toBe(shown(team(2)));
+    expect(shown(both('guerrier.garde-route', 'guerrier.brise-camp'))).toBe(
+      shown(team(2, ['guerrier.brise-camp'])),
+    );
+    // Sur une route dangereuse, seule Garde de route s'applique, dans les deux ordres
     const risky = poi({ type: 'mine', perilous: true });
     expect(ambushChance(risky, both('guerrier.brise-camp', 'guerrier.garde-route'))).toBe(
-      ambushChance(risky, team(2)),
+      ambushChance(risky, team(2, ['guerrier.garde-route'])),
+    );
+    expect(ambushChance(risky, both('guerrier.garde-route', 'guerrier.brise-camp'))).toBe(
+      ambushChance(risky, team(2, ['guerrier.garde-route'])),
     );
   });
 
@@ -289,26 +365,37 @@ describe('🔭 la prévision des apparitions = ce que la carte fera vraiment', (
   it('chaque apparition annoncée arrive à l’heure dite, avec son type, et rien ne manque', () => {
     const H = 3600_000;
     let seen = 0;
+    let dangerous = 0;
     for (const seed of [11, 4242, 90210]) {
       const start = createMap(seed, 0, 30, 30);
       const ahead = upcomingSpawns(start, 0, 30, 30);
       // On rejoue la carte pas à pas, comme l'app, et on relève ce qui apparaît.
       const known = new Set(start.pois.map((p) => p.id));
-      const real: { id: string; type: string; at: number }[] = [];
+      const real: { id: string; type: string; at: number; perilous?: true }[] = [];
       let m = start;
       for (let t = H / 2; t <= 48 * H; t += H / 2) {
         m = advanceWorld(m, t, 30, 30);
         for (const p of m.pois)
           if (!known.has(p.id)) {
             known.add(p.id);
-            real.push({ id: p.id, type: p.type, at: p.spawnedAt });
+            // la route dangereuse est tirée au spawn : la lecture « route calme » la lit ici
+            real.push({
+              id: p.id,
+              type: p.type,
+              at: p.spawnedAt,
+              ...(p.perilous ? { perilous: true as const } : {}),
+            });
           }
       }
       expect(ahead).toEqual(real);
       expect(ahead.every((s) => s.at > 0 && !start.pois.some((p) => p.id === s.id))).toBe(true);
       seen += ahead.length;
+      dangerous += ahead.filter((s) => s.perilous).length;
     }
     expect(seen, 'aucune apparition : le test ne prouve rien').toBeGreaterThan(5);
+    expect(dangerous, 'aucune route dangereuse vue : le drapeau n’est pas éprouvé').toBeGreaterThan(
+      0,
+    );
   });
 });
 
@@ -448,6 +535,507 @@ describe('🏅 vétérance : un titre à 15 victoires, titre seul', () => {
     expect(old.adventurers[0]!.vet).toEqual({ betes: 1 });
     const arrived = partyClaimRoster(p, [guerrier('a')], { ...ctx, xpGranted: true, vet: 'betes' });
     expect(arrived.adventurers[0]!.vet).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🌳 v1.296.0 — LES CINQ AUTRES LIGNÉES
+// ─────────────────────────────────────────────────────────────────────────────
+const LINEAGES = ['archer', 'mage', 'homme_armes', 'eclaireur', 'caravanier'] as const;
+
+describe('🌳 les cinq autres carnets : 2 lectures à 1 point, 2 voies à 3 points, exclusives', () => {
+  it('chaque lignée a SON carnet, sans doublon d’identifiant', () => {
+    const ids = new Set<string>();
+    for (const l of LINEAGES) {
+      const tree = vocationTree(vocAdv('x', l, []))!;
+      expect(tree, l).not.toBeNull();
+      const info = tree.filter((n) => n.kind === 'info');
+      const major = tree.filter((n) => n.kind === 'major');
+      expect(info, l).toHaveLength(2);
+      expect(major, l).toHaveLength(2);
+      for (const n of info) {
+        expect(n.cost).toBe(1);
+        expect(n.spawn || n.pulse, n.id).toBeTruthy();
+      }
+      for (const n of major) expect(n.cost).toBe(3);
+      expect(major[0]!.excl).toBe(major[1]!.id);
+      expect(major[1]!.excl).toBe(major[0]!.id);
+      for (const n of tree) {
+        expect(n.lineage).toBe(l);
+        expect(n.id.startsWith(`${l}.`), n.id).toBe(true);
+        expect(ids.has(n.id), `doublon ${n.id}`).toBe(false);
+        ids.add(n.id);
+      }
+    }
+  });
+
+  it('l’exclusivité tient : une voie barre l’autre sur le même champion, pas sur un autre', () => {
+    for (const l of LINEAGES) {
+      const [a, b] = vocationTree(vocAdv('x', l, []))!.filter((n) => n.kind === 'major');
+      const roster = [vocAdv('x', l, []), vocAdv('y', l, [])];
+      const r = learnNode(roster, 'x', a!.id, 99, NOW);
+      if (!r.ok) throw new Error(`${l} : ${r.reason}`);
+      expect(learnNode(r.roster, 'x', b!.id, 99, NOW)).toEqual({
+        ok: false,
+        reason: 'incompatible avec son autre voie',
+      });
+      expect(learnNode(r.roster, 'y', b!.id, 99, NOW).ok, l).toBe(true);
+    }
+  });
+
+  it('chaque voie majeure a un effet MESURABLE quelque part (aucune tuile morte)', () => {
+    const types: PoiType[] = [
+      'camp',
+      'lair',
+      'den',
+      'mine',
+      'well',
+      'shrine',
+      'archive',
+      'ruins',
+      'plunder',
+    ];
+    const factions: RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
+    for (const l of LINEAGES) {
+      for (const n of vocationTree(vocAdv('x', l, []))!.filter((m) => m.kind === 'major')) {
+        const t = [vocAdv('x', l, [n.id])];
+        // (une tanière n'a que des bêtes, une caravane pillée que des bandits : id sans faction)
+        const guard = types.flatMap((ty) =>
+          ty === 'den' || ty === 'plunder'
+            ? [vocationGuardMult(t, gp(ty))]
+            : factions.map((f) => vocationGuardMult(t, gp(ty, f))),
+        );
+        const ambush = [calm, risky, { riftPeril: true }, { nestPeril: true }].map((p) =>
+          vocationAmbushMult(t, p),
+        );
+        const rift = vocationRiftMult(t);
+        const acts = [...guard, ...ambush, rift.foe, rift.boss].some((v) => v < 1);
+        expect(acts, n.id).toBe(true);
+      }
+    }
+  });
+});
+
+describe('⚔️ les voies par type de lieu et par faction', () => {
+  const only = (l: string, node: string) => [vocAdv('x', l, [node])];
+  const g = (l: string, node: string, p: ReturnType<typeof gp>) =>
+    vocationGuardMult(only(l, node), p);
+
+  it('🐾 Traqueur : −5 % sur la bête d’une TANIÈRE seulement', () => {
+    expect(g('archer', 'archer.traqueur', gp('den'))).toBe(0.95);
+    for (const t of ['camp', 'lair', 'mine', 'ruins'] as const)
+      expect(g('archer', 'archer.traqueur', gp(t, 'betes')), t).toBe(1);
+  });
+
+  it('🕯️ Exorcisme : −5 % sur les morts-vivants d’un camp, d’un repaire ou d’une garde', () => {
+    for (const t of ['camp', 'lair', 'mine', 'well', 'shrine', 'archive', 'ruins'] as const)
+      expect(g('mage', 'mage.exorcisme', gp(t, 'mortsvivants')), t).toBe(0.95);
+    expect(g('mage', 'mage.exorcisme', gp('camp', 'betes'))).toBe(1);
+    expect(g('mage', 'mage.exorcisme', gp('camp', 'bandits'))).toBe(1);
+    expect(g('mage', 'mage.exorcisme', gp('den'))).toBe(1);
+  });
+
+  it('🐺 Pisteur : −5 % sur les bêtes d’un camp, d’un repaire ou d’une garde, SAUF en tanière', () => {
+    for (const t of ['camp', 'lair', 'mine', 'archive', 'ruins'] as const)
+      expect(g('eclaireur', 'eclaireur.pisteur', gp(t, 'betes')), t).toBe(0.95);
+    expect(g('eclaireur', 'eclaireur.pisteur', gp('den'))).toBe(1); // la tanière est à Traqueur
+    expect(g('eclaireur', 'eclaireur.pisteur', gp('camp', 'bandits'))).toBe(1);
+    expect(g('eclaireur', 'eclaireur.pisteur', gp('camp', 'mortsvivants'))).toBe(1);
+  });
+
+  it('🗝️ Mots de passe : −5 % sur les bandits d’un camp, d’un repaire ou d’une garde, pillée comprise', () => {
+    for (const t of ['camp', 'lair', 'mine', 'plunder', 'ruins'] as const)
+      expect(g('caravanier', 'caravanier.mots-de-passe', gp(t, 'bandits')), t).toBe(0.95);
+    expect(g('caravanier', 'caravanier.mots-de-passe', gp('camp', 'betes'))).toBe(1);
+  });
+
+  it('🛡️ Escorte armée : −5 % sur les gardes d’une mine, d’une source, d’un sanctuaire, d’archives', () => {
+    for (const t of ['mine', 'well', 'shrine', 'archive'] as const)
+      expect(g('homme_armes', 'homme_armes.escorte', gp(t)), t).toBe(0.95);
+    for (const t of ['camp', 'lair', 'den', 'ruins', 'plunder'] as const)
+      expect(g('homme_armes', 'homme_armes.escorte', gp(t)), t).toBe(1);
+  });
+
+  it('🧱 Briseur de garde : −5 % sur les gardes de ruines ou d’une caravane pillée', () => {
+    for (const t of ['ruins', 'plunder'] as const)
+      expect(g('homme_armes', 'homme_armes.brise-garde', gp(t)), t).toBe(0.95);
+    for (const t of ['mine', 'well', 'camp', 'den'] as const)
+      expect(g('homme_armes', 'homme_armes.brise-garde', gp(t)), t).toBe(1);
+  });
+
+  it('⛔ aucune voie par faction n’agit sur un point de contrôle, une armée en campagne, ni un lieu sans garde', () => {
+    const control = {
+      id: 'ctl_mine',
+      type: 'control' as const,
+      level: 20,
+      control: {
+        kind: 'mine',
+        owner: 'enemy',
+        faction: 'betes',
+        size: 2,
+        garrison: [],
+        retakes: 0,
+      },
+    } as unknown as Poi;
+    const nodes: [string, string][] = [
+      ['mage', 'mage.exorcisme'],
+      ['eclaireur', 'eclaireur.pisteur'],
+      ['caravanier', 'caravanier.mots-de-passe'],
+      ['archer', 'archer.traqueur'],
+      ['homme_armes', 'homme_armes.escorte'],
+      ['homme_armes', 'homme_armes.brise-garde'],
+      ['guerrier', 'guerrier.brise-camp'],
+    ];
+    for (const [l, n] of nodes) {
+      for (const f of ['bandits', 'betes', 'mortsvivants'] as const) {
+        expect(
+          g(l, n, { ...control, control: { ...control.control!, faction: f } } as Poi),
+          n,
+        ).toBe(1);
+        expect(g(l, n, { ...gp('warband'), faction: f } as unknown as Poi), n).toBe(1);
+      }
+      for (const t of ['vein', 'fallen', 'mana_mine', 'rift'] as const)
+        expect(g(l, n, gp(t)), n).toBe(1);
+    }
+  });
+
+  it('🧭 la première voie qui s’applique à CE lieu, quel que soit l’ordre de l’escorte', () => {
+    const traq = vocAdv('a', 'archer', ['archer.traqueur']);
+    const pist = vocAdv('b', 'eclaireur', ['eclaireur.pisteur']);
+    const mdp = vocAdv('c', 'caravanier', ['caravanier.mots-de-passe']);
+    const esc = vocAdv('d', 'homme_armes', ['homme_armes.escorte']);
+    const den = gp('den');
+    const mineBetes = gp('mine', 'betes');
+    for (const order of [
+      [traq, pist, mdp, esc],
+      [esc, mdp, pist, traq],
+      [pist, traq, esc, mdp],
+    ]) {
+      expect(vocationGuardMult(order, den)).toBe(0.95); // Traqueur seul
+      expect(vocationGuardMult(order, mineBetes)).toBe(0.95); // Pisteur OU Escorte : jamais 0,9025
+      expect(vocationGuardMult(order, gp('camp', 'bandits'))).toBe(0.95); // Mots de passe seul
+      expect(vocationGuardMult(order, gp('camp', 'mortsvivants'))).toBe(1); // aucune ne s'y applique
+    }
+  });
+});
+
+describe('🛣️ les routes', () => {
+  const only = (l: string, node: string) => [vocAdv('x', l, [node])];
+  const harassed = { riftPeril: true };
+  const nest = { nestPeril: true };
+
+  it('👣 Pas de loup : −10 % d’embuscades sur une route CALME seulement', () => {
+    const t = only('eclaireur', 'eclaireur.pas-de-loup');
+    expect(vocationAmbushMult(t, calm)).toBe(0.9);
+    expect(vocationAmbushMult(t, risky)).toBe(1);
+    expect(vocationAmbushMult(t, harassed)).toBe(1);
+    expect(vocationAmbushMult(t, nest)).toBe(1);
+  });
+
+  it('🌫️ Détour sûr : −20 % sur une route HARCELÉE (faille débordée ou nid) seulement', () => {
+    const t = only('caravanier', 'caravanier.detour');
+    expect(vocationAmbushMult(t, harassed)).toBe(0.8);
+    expect(vocationAmbushMult(t, nest)).toBe(0.8);
+    expect(vocationAmbushMult(t, { perilous: true, riftPeril: true })).toBe(0.8);
+    expect(vocationAmbushMult(t, risky)).toBe(1); // dangereuse sans harcèlement : non
+    expect(vocationAmbushMult(t, calm)).toBe(1);
+  });
+
+  it('🧭 une seule voie de route : la première qui s’applique, jamais le produit', () => {
+    const garde = vocAdv('g', 'guerrier', ['guerrier.garde-route']);
+    const detour = vocAdv('d', 'caravanier', ['caravanier.detour']);
+    const loup = vocAdv('l', 'eclaireur', ['eclaireur.pas-de-loup']);
+    const both = { perilous: true, riftPeril: true };
+    expect(vocationAmbushMult([garde, detour], both)).toBe(0.9);
+    expect(vocationAmbushMult([detour, garde], both)).toBe(0.8);
+    // Garde de route ne dit rien d'une route calme : Pas de loup, derrière elle, s'applique
+    expect(vocationAmbushMult([garde, loup], calm)).toBe(0.9);
+    expect(vocationAmbushMult([loup, garde], calm)).toBe(0.9);
+    // et sur une route dangereuse, c'est Garde de route, jamais Pas de loup
+    expect(vocationAmbushMult([loup, garde], risky)).toBe(0.9);
+  });
+
+  it('🔗 le vrai trajet : la chance d’embuscade baisse vraiment (calme, harcelée)', () => {
+    const base: Poi = {
+      id: 'p1',
+      type: 'mine',
+      level: 20,
+      x: 60,
+      y: 60,
+      distNorm: 0.5,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+    };
+    const tm = (nodes: string[]) =>
+      Array.from({ length: 3 }, (_, i) => ({
+        ...refChampionAdv(20, i),
+        id: `adv_${i}`,
+        ...(i === 0 && nodes.length ? { vocation: { nodes } } : {}),
+      }));
+    const loup = tm(['eclaireur.pas-de-loup']);
+    expect(ambushChance(base, loup)).toBeCloseTo(ambushChance(base, tm([])) * 0.9, 10);
+    const hr: Poi = { ...base, riftPeril: true };
+    const det = tm(['caravanier.detour']);
+    expect(ambushChance(hr, det)).toBeCloseTo(ambushChance(hr, tm([])) * 0.8, 10);
+    expect(ambushChance(base, det)).toBe(ambushChance(base, tm([])));
+  });
+});
+
+describe('🕳️ les failles : monstres (Pluie de flèches) ou gardien (Contre-sort)', () => {
+  const none = { foe: 1, boss: 1 };
+  it('Pluie de flèches : monstres ×0,85, gardien intact', () => {
+    expect(vocationRiftMult([vocAdv('a', 'archer', ['archer.volee'])])).toEqual({
+      foe: 0.85,
+      boss: 1,
+    });
+  });
+  it('Contre-sort : gardien ×0,93, monstres intacts', () => {
+    expect(vocationRiftMult([vocAdv('m', 'mage', ['mage.contresort'])])).toEqual({
+      foe: 1,
+      boss: 0.93,
+    });
+  });
+  it('sans voie, ou avec une voie qui ne touche pas les failles : aucun effet', () => {
+    expect(vocationRiftMult([guerrier('z')])).toEqual(none);
+    expect(vocationRiftMult([vocAdv('g', 'guerrier', ['guerrier.brise-camp'])])).toEqual(none);
+    expect(vocationRiftMult([vocAdv('e', 'mage', ['mage.exorcisme'])])).toEqual(none);
+  });
+  it('🧭 une seule voie de faille par équipe : la première, jamais les deux', () => {
+    const a = vocAdv('a', 'archer', ['archer.volee']);
+    const m = vocAdv('m', 'mage', ['mage.contresort']);
+    const e = vocAdv('e', 'mage', ['mage.exorcisme']);
+    expect(vocationRiftMult([a, m])).toEqual({ foe: 0.85, boss: 1 });
+    expect(vocationRiftMult([m, a])).toEqual({ foe: 1, boss: 0.93 });
+    expect(vocationRiftMult([e, m])).toEqual({ foe: 1, boss: 0.93 }); // Exorcisme ne dit rien d'une faille
+  });
+
+  // Le MÊME facteur, du pronostic au vrai combat.
+  const L = 26;
+  const DAY = 24 * 3600_000;
+  const rift: Poi = {
+    id: 'rift_1',
+    type: 'rift',
+    level: L,
+    x: 60,
+    y: 60,
+    distNorm: 0.5,
+    spawnedAt: 0,
+    expiresAt: 9e15,
+  };
+  const tm = (nodes: string[]) =>
+    Array.from({ length: 3 }, (_, i) => ({
+      ...refChampionAdv(L, i),
+      id: `adv_${i}`,
+      ...(i === 0 && nodes.length ? { vocation: { nodes } } : {}),
+    }));
+  const road: EscortKit = { advGear: refAdvGear(L, 3) };
+
+  for (const [name, node, foe, boss] of [
+    ['Pluie de flèches', 'archer.volee', 0.85, 1],
+    ['Contre-sort', 'mage.contresort', 1, 0.93],
+  ] as const) {
+    it(`🔗 ${name} : le % affiché et le VRAI combat lisent le même facteur`, () => {
+      const now = 5 * DAY;
+      const team = tm([node]);
+      const allies = partyAllies(team, road, null);
+      const shown = partyWinChance(rift, team, road, null, now, 200)!;
+      expect(shown).toBe(incursionWinPct(rift, allies, now, 200, foe, boss));
+      expect(shown, 'le facteur n’est pas lu').not.toBe(
+        partyWinChance(rift, tm([]), road, null, now, 200),
+      );
+      for (let seed = 1; seed <= 60; seed++) {
+        const won = resolveIncursion({
+          poi: rift,
+          escort: team,
+          road,
+          hero: null,
+          seed,
+          now,
+          pantheonLevel: L,
+          heroLevel: L,
+        }).win;
+        const group = fuseUnits(allies, 'Groupe');
+        expect(won, `graine ${seed}`).toBe(
+          simulateIncursion(group, rift, now, partyFightSeed(seed), foe, boss).cleared,
+        );
+      }
+    });
+  }
+
+  it('🔗 Voie de faille ET lanterne : les deux facteurs se multiplient (une voie, un consommable)', () => {
+    const now = 5 * DAY;
+    const team = tm(['mage.contresort']);
+    const lit: EscortKit = { ...road, supplies: ['lanterne'] };
+    const allies = partyAllies(team, lit, null);
+    expect(partyWinChance(rift, team, lit, null, now, 120)).toBe(
+      incursionWinPct(rift, allies, now, 120, 0.85, 0.9 * 0.93),
+    );
+  });
+});
+
+describe('🔮 le pronostic d’un assaut voit Brise-camp (défaut de la v1.283 corrigé)', () => {
+  const road: EscortKit = { advGear: refAdvGear(30, 3) };
+  const tm = (nodes: string[]) =>
+    Array.from({ length: 3 }, (_, i) => ({
+      ...refChampionAdv(30, i),
+      id: `adv_${i}`,
+      ...(i === 0 && nodes.length ? { vocation: { nodes } } : {}),
+    }));
+  const camp = (id: string): Poi => ({
+    id,
+    type: 'camp',
+    level: 30,
+    x: 60,
+    y: 60,
+    distNorm: 0.5,
+    spawnedAt: 0,
+    expiresAt: 9e15,
+  });
+
+  it('les pastilles 🔮 (attackForecast) rejouent le combat AVEC la voie, comme le 🎯 %', () => {
+    // un camp dont la chance, pour trois champions, n'est ni 0 ni 1 : le facteur s'y voit
+    let tested = 0;
+    for (let i = 0; i < 30 && tested < 3; i++) {
+      const poi = camp(`c${i}`);
+      for (const n of [1, 2]) {
+        const plain = attackForecast(poi, tm([]).slice(0, n), road, null, 240);
+        if (!plain || plain.win < 0.1 || plain.win > 0.85) continue;
+        const team = tm(['guerrier.brise-camp']).slice(0, n);
+        const brave = attackForecast(poi, team, road, null, 240)!;
+        expect(brave.win).toBe(partyWinChance(poi, team, road, null, 0, 40));
+        expect(brave.win).toBeGreaterThan(plain.win);
+        tested++;
+      }
+    }
+    expect(tested, 'aucun camp à chance moyenne trouvé : le test ne prouve rien').toBeGreaterThan(
+      0,
+    );
+  });
+});
+
+describe('🔭 les nouvelles lectures', () => {
+  const H = 3600_000;
+  const ruinsOf = (kind: 'champion' | 'gear') => {
+    for (let i = 0; i < 200; i++) if (ruinsSealKind({ id: `u${i}` }) === kind) return `u${i}`;
+    throw new Error('aucune ruine');
+  };
+  const spawns: SpawnAhead[] = [
+    { id: 'd1', type: 'den', at: NOW + 9 * H },
+    { id: 'c1', type: 'camp', at: NOW + 1 * H },
+    { id: ruinsOf('gear'), type: 'ruins', at: NOW + 2 * H },
+    { id: ruinsOf('champion'), type: 'ruins', at: NOW + 11 * H },
+    { id: 's1', type: 'shrine', at: NOW + 6 * H },
+    { id: 'w1', type: 'well', at: NOW + 7 * H },
+    { id: 'a1', type: 'archive', at: NOW + 8 * H },
+    { id: 'f1', type: 'fallen', at: NOW + 12 * H },
+    { id: 'm1', type: 'mine', at: NOW + 13 * H, perilous: true },
+    { id: 'm2', type: 'mine', at: NOW + 14 * H },
+    { id: 'm3', type: 'vein', at: NOW + 15 * H },
+  ];
+  it('chaque famille ne voit que SES lieux', () => {
+    expect(nextOfGroup(spawns, 'den')?.id).toBe('d1'); // pas le camp, plus proche
+    expect(nextOfGroup(spawns, 'shrine')?.id).toBe('s1');
+    expect(nextOfGroup(spawns, 'well')?.id).toBe('w1');
+    expect(nextOfGroup(spawns, 'archive')?.id).toBe('a1');
+    expect(nextOfGroup(spawns, 'fallen')?.id).toBe('f1');
+    expect(nextOfGroup(spawns, 'mine')?.id).toBe('m1'); // une mine, dangereuse comprise
+  });
+  it('🔱 / ⚜️ : la nature des sceaux se lit dans l’id, la famille ne voit que la sienne', () => {
+    expect(nextOfGroup(spawns, 'sealChamp')?.at).toBe(NOW + 11 * H);
+    expect(nextOfGroup(spawns, 'sealGear')?.at).toBe(NOW + 2 * H);
+    expect(nextOfGroup(spawns, 'ruins')?.at).toBe(NOW + 2 * H); // toutes les ruines
+  });
+  it('🧭 « route calme » : une récolte dont la route n’est pas dangereuse', () => {
+    expect(nextOfGroup(spawns, 'calm')?.at).toBe(NOW + 2 * H); // les ruines (récolte), 2 h
+    const dangerFirst: SpawnAhead[] = [
+      { id: 'm', type: 'mine', at: NOW + 1 * H, perilous: true },
+      { id: 'w', type: 'well', at: NOW + 5 * H },
+    ];
+    expect(nextOfGroup(dangerFirst, 'calm')?.id).toBe('w'); // la mine dangereuse ne compte pas
+    expect(nextOfGroup([{ id: 'c', type: 'camp', at: NOW }], 'calm')).toBeNull(); // un camp n'est pas une récolte
+    expect(nextOfGroup([{ id: 'm', type: 'mine', at: NOW, perilous: true }], 'calm')).toBeNull();
+  });
+  it('les lectures acquises ouvrent LEURS familles', () => {
+    const a = vocAdv('a', 'archer', ['archer.piste', 'archer.sceaux', 'archer.traqueur']);
+    expect(readableGroups(a)).toEqual(['den', 'sealChamp']);
+    expect(
+      readableGroups(vocAdv('e', 'eclaireur', ['eclaireur.source', 'eclaireur.archives'])),
+    ).toEqual(['well', 'archive']);
+    expect(
+      readableGroups(vocAdv('h', 'homme_armes', ['homme_armes.tombe', 'homme_armes.sceaux-objet'])),
+    ).toEqual(['fallen', 'sealGear']);
+    expect(
+      readableGroups(vocAdv('c', 'caravanier', ['caravanier.mine', 'caravanier.route'])),
+    ).toEqual(['mine', 'calm']);
+    expect(readableGroups(vocAdv('m', 'mage', ['mage.sanctuaire', 'mage.pouls']))).toEqual([
+      'shrine',
+    ]);
+    expect(readsPulse(vocAdv('m', 'mage', ['mage.pouls']))).toBe(true);
+    expect(readsPulse(vocAdv('m', 'mage', ['mage.sanctuaire']))).toBe(false);
+  });
+  it('les phrases restent vagues et nomment la famille', () => {
+    expect(readingText('den', nextOfGroup(spawns, 'den'), NOW)).toContain('une tanière');
+    expect(readingText('calm', nextOfGroup(spawns, 'calm'), NOW)).toMatch(/route calme/);
+    expect(readingText('sealChamp', nextOfGroup(spawns, 'sealChamp'), NOW)).toContain(
+      'sceaux de champion',
+    );
+    for (const g of [
+      'fight',
+      'rift',
+      'ruins',
+      'den',
+      'sealChamp',
+      'sealGear',
+      'shrine',
+      'well',
+      'archive',
+      'fallen',
+      'mine',
+      'calm',
+    ] as const) {
+      const t = readingText(g, { id: 'x', type: 'camp', at: NOW + 3 * H }, NOW);
+      expect(t, g).toContain('Dans environ 3 h');
+      expect(t, g).not.toMatch(/demi-heure/);
+    }
+  });
+});
+
+describe('💓 Pouls des failles : le prochain monstre d’une faille ouverte', () => {
+  const H = 3600_000;
+  const rift = { id: 'r1', type: 'rift' as const, level: 30, spawnedAt: 0 };
+  it('rend l’instant EXACT où l’effectif monte, jamais avant', () => {
+    for (const now of [0, 5 * H, 30 * H, 70 * H]) {
+      const t = nextRiftGrowth(rift, now);
+      expect(t, `à ${now}`).not.toBeNull();
+      const p0 = riftPopulation(rift, now);
+      expect(t!).toBeGreaterThan(now);
+      expect(riftPopulation(rift, t!)).toBeGreaterThan(p0);
+      expect(riftPopulation(rift, t! - 1000)).toBe(p0); // pas une seconde plus tôt
+    }
+  });
+  it('rien quand la faille est au plus haut (elle déborde alors, rien de plus à gagner)', () => {
+    const end = riftOverflowAt(rift);
+    expect(nextRiftGrowth(rift, end)).toBeNull();
+    expect(nextRiftGrowth(rift, end + H)).toBeNull();
+  });
+  it('les lignes : une par faille ouverte (3 au plus), la plus proche d’abord, vide dit « aucune »', () => {
+    expect(pulseLines([], 0)).toEqual(['Aucune faille ouverte.']);
+    expect(pulseLines([{ id: 'm', type: 'mine', level: 3, spawnedAt: 0 }], 0)).toEqual([
+      'Aucune faille ouverte.',
+    ]);
+    const rifts = [0, 1, 2, 3].map((i) => ({
+      id: `r${i}`,
+      type: 'rift' as const,
+      level: 20 + i,
+      spawnedAt: -i * 17 * H,
+    }));
+    const lines = pulseLines(rifts, 10 * H);
+    expect(lines).toHaveLength(3);
+    const ats = rifts
+      .map((r) => nextRiftGrowth(r, 10 * H))
+      .filter((x): x is number => x !== null)
+      .sort((a, b) => a - b);
+    expect(lines[0]).toContain(`Dans environ ${formatDuration(ats[0]! - 10 * H)}`);
   });
 });
 

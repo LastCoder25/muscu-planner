@@ -6,18 +6,36 @@
  * Trois choses, toutes PURES (l'écran et le store ne font que les appeler) :
  * 1. 🎯 LES POINTS — un pool COMMUN au vivier : `10 + 2 × max(0, niveauHéros − 41)`. Un point
  *    retiré redevient dépensable 24 h plus tard ; l'effet, lui, disparaît tout de suite.
- * 2. 🌳 L'ARBRE de la lignée — 3 nœuds d'INFORMATION à 1 point (une lecture que le jeu ne
+ * 2. 🌳 L'ARBRE de la lignée — des nœuds d'INFORMATION à 1 point (une lecture que le jeu ne
  *    montre nulle part ailleurs) et 2 nœuds MAJEURS à 3 points, mutuellement exclusifs, aux
- *    effets de situation modestes. Une seule lignée livrée (guerrier) ; la structure en tient 6.
+ *    effets de situation modestes. Les SIX lignées ont le leur (v1.296.0) : le guerrier en a 3
+ *    de lecture (livré tel quel), les cinq autres 2 — celles qui apprennent vraiment quelque chose.
  * 3. 🏅 LA VÉTÉRANCE — un titre par faction à `VET.tier` victoires. TITRE SEUL : aucun effet.
  *
- * ⚠️ Aucune récompense d'XP, aucune monnaie. ⚠️ Les deux effets passent par des crochets qui
- * existent déjà (`fightCampForce`/`partyWinChance` pour la force des ennemis, `ambushChance`
- * pour les embuscades) : jamais par `simulateCombat` ni `escortCombatant`.
+ * ⚠️ Aucune récompense d'XP, aucune monnaie, aucun % général de puissance. ⚠️ Les effets passent
+ * par des crochets qui existent déjà : `fightCampForce`/`partyWinChance`/`attackForecast` pour la
+ * force des gardes (`vocationGuardMult`), `ambushChance` pour les embuscades
+ * (`vocationAmbushMult`), `resolveIncursion`/`partyWinChance` pour les failles
+ * (`vocationRiftMult`) — jamais par `simulateCombat` ni `escortCombatant`.
+ *
+ * 🧭 UNE SEULE VOIE MAJEURE COMPTE PAR ÉQUIPE : la PREMIÈRE, dans l'ordre de l'escorte, QUI
+ * S'APPLIQUE AU LIEU (décision de l'utilisateur, v1.296.0). Une voie qui ne dit rien de ce lieu
+ * (un archer Traqueur devant un camp) ne cache donc plus celle de son voisin ; deux voies qui
+ * s'appliquent toutes les deux ne se cumulent jamais. Le % annoncé et le vrai combat appellent
+ * les MÊMES fonctions avec la MÊME escorte, donc lisent le même facteur dans tous les ordres.
  */
 import { advChampion, type Adventurer } from './adventurers';
 import type { Lineage } from './advGear';
-import { type PartyResult, type Poi, type PoiType } from './expedition';
+import {
+  HARVEST_TYPES,
+  poiForceOf,
+  routePerilous,
+  ruinsSealKind,
+  type PartyResult,
+  type Poi,
+  type PoiType,
+} from './expedition';
+import { riftOverflowAt, riftPopulation } from './rift';
 import { formatDuration } from './duration';
 import type { RaidFaction } from './raid';
 import type { PoiFact } from './poiFacts';
@@ -38,6 +56,12 @@ export const VOCATION = {
   perHeroLevel: 2,
   /** Rattrapage : les niveaux d'avant ne rapportent rien, on ne repart pas de zéro. */
   catchUpFrom: 41,
+  /** 📉 PLAFOND du budget (décision de l'utilisateur, v1.296.0) : sans lui, six arbres × 9 points
+   *  sont saturés dès le niveau ~60 et plus rien ne se choisit (128 points au niveau 100). 40 =
+   *  `10 + 2 × (56 − 41)` : atteint au niveau 56, il laisse de quoi prendre les 12 lectures et
+   *  quelques voies, pas de quoi tout poser sur tout le vivier. Il borne les TOTAUX, jamais les
+   *  points déjà dépensés (aucun nœud n'est retiré à qui en avait plus). */
+  cap: 40,
   /** Délai avant qu'un point retiré soit de nouveau dépensable. */
   refundMs: 24 * 3600_000,
 } as const;
@@ -47,15 +71,51 @@ export const VET = { tier: 15 } as const;
 
 /** Les TOTAUX de points du joueur (dépensés ou non) à ce niveau de héros. */
 export function vocationBudget(heroLevel: number): number {
-  return VOCATION.start + VOCATION.perHeroLevel * Math.max(0, heroLevel - VOCATION.catchUpFrom);
+  return Math.min(
+    VOCATION.cap,
+    VOCATION.start + VOCATION.perHeroLevel * Math.max(0, heroLevel - VOCATION.catchUpFrom),
+  );
 }
 
 /** Familles de lieux qu'une lecture d'information peut annoncer. */
-export type SpawnGroup = 'fight' | 'rift' | 'ruins';
-const SPAWN_TYPES: Record<SpawnGroup, readonly PoiType[]> = {
-  fight: ['camp', 'lair', 'den'],
-  rift: ['rift'],
-  ruins: ['ruins'],
+export type SpawnGroup =
+  | 'fight'
+  | 'rift'
+  | 'ruins'
+  | 'den'
+  | 'sealChamp'
+  | 'sealGear'
+  | 'shrine'
+  | 'well'
+  | 'archive'
+  | 'fallen'
+  | 'mine'
+  | 'calm';
+
+/** Une apparition prévue (cf. `upcomingSpawns`). `perilous` : route dangereuse, tirée au spawn. */
+export interface SpawnAhead {
+  id: string;
+  type: PoiType;
+  at: number;
+  perilous?: boolean;
+}
+
+/** Ce qui range une apparition dans une famille. ⚠️ Les sceaux 🔱/⚜️ se lisent dans l'ID
+ *  (`ruinsSealKind`), donc la lecture est fiable tant que le lieu naît ; « route calme » lit le
+ *  drapeau tiré au spawn (une route peut devenir harcelée ensuite, la lecture dit « à peu près »). */
+const SPAWN_MATCH: Record<SpawnGroup, (s: SpawnAhead) => boolean> = {
+  fight: (s) => s.type === 'camp' || s.type === 'lair' || s.type === 'den',
+  rift: (s) => s.type === 'rift',
+  ruins: (s) => s.type === 'ruins',
+  den: (s) => s.type === 'den',
+  sealChamp: (s) => s.type === 'ruins' && ruinsSealKind(s) === 'champion',
+  sealGear: (s) => s.type === 'ruins' && ruinsSealKind(s) === 'gear',
+  shrine: (s) => s.type === 'shrine',
+  well: (s) => s.type === 'well',
+  archive: (s) => s.type === 'archive',
+  fallen: (s) => s.type === 'fallen',
+  mine: (s) => s.type === 'mine',
+  calm: (s) => HARVEST_TYPES.has(s.type) && !s.perilous,
 };
 
 export interface VocationNode {
@@ -71,68 +131,264 @@ export interface VocationNode {
   excl?: string;
   /** Nœud d'information : la famille de lieux dont il annonce la prochaine apparition. */
   spawn?: SpawnGroup;
+  /** Nœud d'information : le prochain monstre de chaque faille ouverte (`pulseLines`). */
+  pulse?: true;
 }
 
-/** −5 % de force sur les ennemis d'un camp ou d'un repaire (le fumigène fait −10 %). */
-const BREAKER_FOE = 0.95;
+/** −5 % de force sur les ennemis visés par une voie de force (le fumigène fait −10 %). Le MÊME
+ *  cran pour toutes (Brise-camp, Traqueur, Exorcisme, Pisteur, Mots de passe, Escorte armée,
+ *  Briseur de garde) : mesuré, ×0,95 vaut +1,9 à +3,1 points de victoire en moyenne selon le lieu
+ *  (+8 à +12 près du 50/50) ; ×0,93 doublait presque l'effet sur la tanière. */
+const GUARD_FOE = 0.95;
 /** −10 % (relatif) de chance d'embuscade sur une route dangereuse (la carte du contrebandier
  *  retire jusqu'à 25 points de pourcentage). */
 const GUARD_AMBUSH = 0.9;
+/** 👣 Pas de loup : −10 % sur une route CALME. ×0,9 et non ×0,85 : mesuré, +3 points de trajets
+ *  sans perte (3 champions) ; ×0,85 en valait +4,4, trop près d'une rune de Repérage. */
+const WOLF_AMBUSH = 0.9;
+/** 🌫️ Détour sûr : −20 % sur une route HARCELÉE (faille débordée, nid) — un sous-ensemble des
+ *  routes dangereuses, où il bat Garde de route : spécialiste contre généraliste, voulu. */
+const DETOUR_AMBUSH = 0.8;
+/** 🌧️ Pluie de flèches : les MONSTRES d'une faille (pas son gardien). Le gardien décide presque
+ *  toutes les défaites, il faut donc ×0,85 ici pour valoir ×0,93 sur lui (Contre-sort). */
+const VOLLEY_FOE = 0.85;
+/** 🔮 Contre-sort : le GARDIEN d'une faille. */
+const COUNTERSPELL_BOSS = 0.93;
 
-/** Les arbres. ⚠️ Une lignée absente = pas encore de carnet (L2 : archer, mage, homme d'armes,
- *  éclaireur, caravanier) — l'écran le dit au lieu de proposer un arbre vide. */
+const SOON = 'à peu près, sans promesse';
+const pct = (f: number) => Math.round((1 - f) * 100);
+const GUARD_TEXT = `${pct(GUARD_FOE)} % de force en moins (pas cumulable)`;
+
+/** Un nœud d'information qui annonce la prochaine apparition d'une famille de lieux. */
+const reading = (
+  lineage: Lineage,
+  key: string,
+  emoji: string,
+  label: string,
+  what: string,
+  spawn: SpawnGroup,
+): VocationNode => ({
+  id: `${lineage}.${key}`,
+  lineage,
+  kind: 'info',
+  cost: 1,
+  emoji,
+  label,
+  text: `Estime quand ${what} (${SOON}).`,
+  spawn,
+});
+
+/** Une voie majeure : 3 points, exclusive avec sa jumelle. */
+const way = (
+  lineage: Lineage,
+  key: string,
+  emoji: string,
+  label: string,
+  text: string,
+  excl: string,
+): VocationNode => ({
+  id: `${lineage}.${key}`,
+  lineage,
+  kind: 'major',
+  cost: 3,
+  emoji,
+  label,
+  text,
+  excl: `${lineage}.${excl}`,
+});
+
+/** Les arbres : une lignée sans arbre n'a pas de carnet (l'écran le dit au lieu d'un arbre vide). */
 const TREES: Partial<Record<Lineage, readonly VocationNode[]>> = {
   guerrier: [
+    reading(
+      'guerrier',
+      'flair',
+      '🏕️',
+      'Flair des bannières',
+      'apparaîtra un camp ou un repaire',
+      'fight',
+    ),
+    reading('guerrier', 'failles', '🕳️', 'Veilleur des failles', 's’ouvrira une faille', 'rift'),
+    reading(
+      'guerrier',
+      'ruines',
+      '🏛️',
+      'Œil des ruines',
+      'émergeront des ruines anciennes',
+      'ruins',
+    ),
+    way(
+      'guerrier',
+      'brise-camp',
+      '🪓',
+      'Brise-camp',
+      `Dans l’équipe, les ennemis d’un camp ou d’un repaire ont ${GUARD_TEXT}.`,
+      'garde-route',
+    ),
+    way(
+      'guerrier',
+      'garde-route',
+      '🛡️',
+      'Garde de route',
+      `Dans l’équipe, ${pct(GUARD_AMBUSH)} % d’embuscades en moins sur une route dangereuse (pas cumulable).`,
+      'brise-camp',
+    ),
+  ],
+  // 🏹 le chasseur et le guetteur
+  archer: [
+    reading('archer', 'piste', '🐾', 'Piste de la bête', 'apparaîtra une tanière', 'den'),
+    reading(
+      'archer',
+      'sceaux',
+      '🔱',
+      'Œil du sceau',
+      'émergeront des ruines à sceaux de champion',
+      'sealChamp',
+    ),
+    way(
+      'archer',
+      'traqueur',
+      '🐾',
+      'Traqueur',
+      `Dans l’équipe, la bête d’une tanière a ${GUARD_TEXT}.`,
+      'volee',
+    ),
+    way(
+      'archer',
+      'volee',
+      '🌧️',
+      'Pluie de flèches',
+      `Dans l’équipe, les monstres d’une faille ont ${pct(VOLLEY_FOE)} % de force en moins, pas leur gardien (pas cumulable).`,
+      'traqueur',
+    ),
+  ],
+  // 🪄 l'arcane des failles
+  mage: [
     {
-      id: 'guerrier.flair',
-      lineage: 'guerrier',
+      id: 'mage.pouls',
+      lineage: 'mage',
       kind: 'info',
       cost: 1,
-      emoji: '🏕️',
-      label: 'Flair des bannières',
-      text: 'Estime quand apparaîtra un camp ou un repaire (à peu près, sans promesse).',
-      spawn: 'fight',
+      emoji: '💓',
+      label: 'Pouls des failles',
+      text: 'Pour chaque faille ouverte : dans combien de temps elle gagnera un monstre de plus.',
+      pulse: true,
     },
-    {
-      id: 'guerrier.failles',
-      lineage: 'guerrier',
-      kind: 'info',
-      cost: 1,
-      emoji: '🕳️',
-      label: 'Veilleur des failles',
-      text: 'Estime quand s’ouvrira une faille (à peu près, sans promesse).',
-      spawn: 'rift',
-    },
-    {
-      id: 'guerrier.ruines',
-      lineage: 'guerrier',
-      kind: 'info',
-      cost: 1,
-      emoji: '🏛️',
-      label: 'Œil des ruines',
-      text: 'Estime quand émergeront des ruines anciennes (à peu près, sans promesse).',
-      spawn: 'ruins',
-    },
-    {
-      id: 'guerrier.brise-camp',
-      lineage: 'guerrier',
-      kind: 'major',
-      cost: 3,
-      emoji: '🪓',
-      label: 'Brise-camp',
-      text: `Dans l’équipe, les ennemis d’un camp ou d’un repaire ont ${Math.round((1 - BREAKER_FOE) * 100)} % de force en moins (pas cumulable).`,
-      excl: 'guerrier.garde-route',
-    },
-    {
-      id: 'guerrier.garde-route',
-      lineage: 'guerrier',
-      kind: 'major',
-      cost: 3,
-      emoji: '🛡️',
-      label: 'Garde de route',
-      text: `Dans l’équipe, ${Math.round((1 - GUARD_AMBUSH) * 100)} % d’embuscades en moins sur une route dangereuse (pas cumulable).`,
-      excl: 'guerrier.brise-camp',
-    },
+    reading(
+      'mage',
+      'sanctuaire',
+      '🔮',
+      'Appel du sanctuaire',
+      'apparaîtra un sanctuaire d’invocation',
+      'shrine',
+    ),
+    way(
+      'mage',
+      'contresort',
+      '🔮',
+      'Contre-sort',
+      `Dans l’équipe, le gardien d’une faille a ${pct(COUNTERSPELL_BOSS)} % de force en moins (pas cumulable).`,
+      'exorcisme',
+    ),
+    way(
+      'mage',
+      'exorcisme',
+      '🕯️',
+      'Exorcisme',
+      `Dans l’équipe, les morts-vivants d’un camp, d’un repaire ou d’une garde de récolte ont ${GUARD_TEXT}.`,
+      'contresort',
+    ),
+  ],
+  // 🔨 le soldat qui tient la ligne
+  homme_armes: [
+    reading(
+      'homme_armes',
+      'tombe',
+      '🏚️',
+      'Sillage des tombés',
+      'apparaîtront les ruines d’un héros tombé',
+      'fallen',
+    ),
+    reading(
+      'homme_armes',
+      'sceaux-objet',
+      '⚜️',
+      'Œil de l’arsenal',
+      'émergeront des ruines à sceaux d’objet',
+      'sealGear',
+    ),
+    way(
+      'homme_armes',
+      'escorte',
+      '🛡️',
+      'Escorte armée',
+      `Dans l’équipe, les gardes d’une mine, d’une source, d’un sanctuaire ou d’archives ont ${GUARD_TEXT}.`,
+      'brise-garde',
+    ),
+    way(
+      'homme_armes',
+      'brise-garde',
+      '🧱',
+      'Briseur de garde',
+      `Dans l’équipe, les gardes de ruines anciennes ou d’une caravane pillée ont ${GUARD_TEXT}.`,
+      'escorte',
+    ),
+  ],
+  // 🔪 celui qui passe sans être vu
+  eclaireur: [
+    reading('eclaireur', 'source', '⛲', 'Repère des sources', 'jaillira une source vive', 'well'),
+    reading(
+      'eclaireur',
+      'archives',
+      '📜',
+      'Repère des archives',
+      'émergeront des archives englouties',
+      'archive',
+    ),
+    way(
+      'eclaireur',
+      'pas-de-loup',
+      '👣',
+      'Pas de loup',
+      `Dans l’équipe, ${pct(WOLF_AMBUSH)} % d’embuscades en moins sur une route calme (pas cumulable).`,
+      'pisteur',
+    ),
+    way(
+      'eclaireur',
+      'pisteur',
+      '🐺',
+      'Pisteur',
+      `Dans l’équipe, les bêtes d’un camp, d’un repaire ou d’une garde de récolte (pas d’une tanière) ont ${GUARD_TEXT}.`,
+      'pas-de-loup',
+    ),
+  ],
+  // 🧳 la route et ses gens
+  caravanier: [
+    reading('caravanier', 'mine', '⛏️', 'Nez du filon d’or', 's’ouvrira une mine', 'mine'),
+    reading(
+      'caravanier',
+      'route',
+      '🧭',
+      'Route sûre',
+      'apparaîtra une récolte à route calme',
+      'calm',
+    ),
+    way(
+      'caravanier',
+      'mots-de-passe',
+      '🗝️',
+      'Mots de passe',
+      `Dans l’équipe, les bandits d’un camp, d’un repaire ou d’une garde de récolte ont ${GUARD_TEXT}.`,
+      'detour',
+    ),
+    way(
+      'caravanier',
+      'detour',
+      '🌫️',
+      'Détour sûr',
+      `Dans l’équipe, ${pct(DETOUR_AMBUSH)} % d’embuscades en moins sur une route harcelée par une faille débordée ou un nid (pas cumulable).`,
+      'mots-de-passe',
+    ),
   ],
 };
 
@@ -266,58 +522,129 @@ export function forgetNode(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ⚔️ LES DEUX EFFETS — lus par les crochets existants
+// ⚔️ LES VOIES MAJEURES — lues par les crochets existants
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Ce qu'une voie fait, par crochet. `when` dit si la voie S'APPLIQUE à ce lieu : c'est ce qui
+ *  fait passer la voie suivante de l'escorte quand celle-ci ne dit rien. */
+interface MajorEffect {
+  guard?: { factor: number; when: (poi: GuardPoi) => boolean };
+  ambush?: { factor: number; when: (poi: AmbushPoi) => boolean };
+  rift?: { foe: number; boss: number };
+}
+type GuardPoi = Pick<Poi, 'id' | 'type' | 'level'>;
+type AmbushPoi = Pick<Poi, 'perilous' | 'riftPeril' | 'nestPeril'>;
+
+/** Un lieu dont les gardes sont une troupe de faction : camp, repaire, tanière ou lieu de récolte.
+ *  ⚠️ LISTE BLANCHE, jamais « `poiForceOf` rend une faction » : `poiForceOf` passe par `campSpecOf`,
+ *  qui rend AUSSI la troupe d'un point de contrôle ennemi (forteresse, citadelle, objectifs d'île
+ *  — équilibre réglé par l'utilisateur, vocation interdite) ; et ne jamais lire `poi.faction`
+ *  (les armées en campagne le portent, le pronostic ne les voit pas). */
+const guarded = (t: PoiType) => t === 'camp' || t === 'lair' || t === 'den' || HARVEST_TYPES.has(t);
+/** Les gardes de CE lieu sont de cette faction (tanière comprise ou non). */
+const guardedBy = (faction: RaidFaction, den: boolean) => (poi: GuardPoi) =>
+  guarded(poi.type) && (den || poi.type !== 'den') && poiForceOf(poi)?.faction === faction;
+const guardTypes =
+  (...types: PoiType[]) =>
+  (poi: GuardPoi) =>
+    types.includes(poi.type);
+
+const EFFECTS: Record<string, MajorEffect> = {
+  'guerrier.brise-camp': { guard: { factor: GUARD_FOE, when: guardTypes('camp', 'lair') } },
+  'guerrier.garde-route': { ambush: { factor: GUARD_AMBUSH, when: (p) => routePerilous(p) } },
+  'archer.traqueur': { guard: { factor: GUARD_FOE, when: guardTypes('den') } },
+  'archer.volee': { rift: { foe: VOLLEY_FOE, boss: 1 } },
+  'mage.contresort': { rift: { foe: 1, boss: COUNTERSPELL_BOSS } },
+  'mage.exorcisme': { guard: { factor: GUARD_FOE, when: guardedBy('mortsvivants', true) } },
+  'homme_armes.escorte': {
+    guard: { factor: GUARD_FOE, when: guardTypes('mine', 'well', 'shrine', 'archive') },
+  },
+  'homme_armes.brise-garde': { guard: { factor: GUARD_FOE, when: guardTypes('ruins', 'plunder') } },
+  'eclaireur.pas-de-loup': { ambush: { factor: WOLF_AMBUSH, when: (p) => !routePerilous(p) } },
+  // Pas de tanière : elle est à Traqueur (sinon Pisteur ferait tout ce que fait Traqueur, et plus).
+  'eclaireur.pisteur': { guard: { factor: GUARD_FOE, when: guardedBy('betes', false) } },
+  'caravanier.mots-de-passe': { guard: { factor: GUARD_FOE, when: guardedBy('bandits', true) } },
+  'caravanier.detour': {
+    ambush: { factor: DETOUR_AMBUSH, when: (p) => !!p.riftPeril || !!p.nestPeril },
+  },
+};
+
 /**
- * 🧭 LA VOIE MAJEURE DE L'ÉQUIPE : UNE SEULE compte par mission (décision de l'utilisateur).
- * C'est la première trouvée en parcourant l'escorte DANS L'ORDRE REÇU (celui de `escort`, le
- * même pour le vrai combat et le pronostic) ; un champion n'en a qu'une (exclusivité). Les deux
- * voies ne se cumulent donc jamais, même portées par deux champions. `null` = aucune.
+ * 🧭 LA VOIE MAJEURE QUI COMPTE : on parcourt l'escorte DANS L'ORDRE REÇU (celui de `escort`, le
+ * même pour le vrai combat et le pronostic) et on retient la PREMIÈRE voie qui S'APPLIQUE à ce
+ * lieu (`pick` rend `null` sinon). Une seule, donc jamais de cumul, même entre deux champions.
  */
-function teamMajor(escort: readonly Adventurer[]): string | null {
+function firstEffect<T>(
+  escort: readonly Adventurer[],
+  pick: (e: MajorEffect) => T | null,
+): T | null {
   for (const a of escort)
-    for (const id of nodesOf(a)) if (NODE_BY_ID.get(id)?.kind === 'major') return id;
+    for (const id of nodesOf(a)) {
+      const e = EFFECTS[id];
+      const r = e && pick(e);
+      if (r) return r;
+    }
   return null;
 }
-/** 🪓 Brise-camp : la force des ennemis d'un camp ou d'un repaire, si c'est la voie de l'équipe.
- *  1 = aucun effet. */
-export function vocationGuardMult(escort: readonly Adventurer[], poi: Pick<Poi, 'type'>): number {
-  return (poi.type === 'camp' || poi.type === 'lair') && teamMajor(escort) === 'guerrier.brise-camp'
-    ? BREAKER_FOE
-    : 1;
+
+/** ⚔️ La force des gardes d'un lieu (camp, repaire, tanière, récolte gardée) : le facteur de la
+ *  première voie de l'équipe qui s'y applique. 1 = aucun effet.
+ *  ⚠️ Lu par le vrai combat (`fightCampForce`) ET par les deux pronostics (`partyWinChance`,
+ *  `attackForecast`) : le % et les pastilles 🔮 voient la même chose que le combat. */
+export function vocationGuardMult(escort: readonly Adventurer[], poi: GuardPoi): number {
+  return firstEffect(escort, (e) => (e.guard?.when(poi) ? { f: e.guard.factor } : null))?.f ?? 1;
 }
 
-/** 🛡️ Garde de route : le facteur sur la chance d'embuscade d'une route DANGEREUSE
- *  (`routePerilous`, fourni par l'appelant), si c'est la voie de l'équipe. 1 = aucun effet. */
-export function vocationAmbushMult(escort: readonly Adventurer[], perilous: boolean): number {
-  return perilous && teamMajor(escort) === 'guerrier.garde-route' ? GUARD_AMBUSH : 1;
+/** 🛣️ Le facteur sur la chance d'embuscade d'une jambe de route : la première voie de l'équipe
+ *  qui s'applique à cette ROUTE (calme, dangereuse, harcelée). 1 = aucun effet. */
+export function vocationAmbushMult(escort: readonly Adventurer[], poi: AmbushPoi): number {
+  return firstEffect(escort, (e) => (e.ambush?.when(poi) ? { f: e.ambush.factor } : null))?.f ?? 1;
+}
+
+/** 🕳️ Les facteurs sur une FAILLE : monstres et gardien. La première voie de l'équipe qui parle des
+ *  failles (Pluie de flèches OU Contre-sort), jamais les deux. Se multiplie avec la lanterne. */
+export function vocationRiftMult(escort: readonly Adventurer[]): { foe: number; boss: number } {
+  return firstEffect(escort, (e) => e.rift ?? null) ?? { foe: 1, boss: 1 };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔭 LES LECTURES D'INFORMATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Une apparition prévue (cf. `upcomingSpawns`). */
-export interface SpawnAhead {
-  id: string;
-  type: PoiType;
-  at: number;
-}
-
 /** La première apparition à venir d'une famille de lieux, `null` si aucune dans l'horizon. */
 export function nextOfGroup(spawns: readonly SpawnAhead[], group: SpawnGroup): SpawnAhead | null {
-  const types = SPAWN_TYPES[group];
-  return spawns.filter((s) => types.includes(s.type)).sort((a, b) => a.at - b.at)[0] ?? null;
+  return spawns.filter(SPAWN_MATCH[group]).sort((a, b) => a.at - b.at)[0] ?? null;
 }
 
-const SPAWN_EMO: Record<SpawnGroup, string> = { fight: '🏕️', rift: '🕳️', ruins: '🏛️' };
+const SPAWN_EMO: Record<SpawnGroup, string> = {
+  fight: '🏕️',
+  rift: '🕳️',
+  ruins: '🏛️',
+  den: '🐾',
+  sealChamp: '🔱',
+  sealGear: '⚜️',
+  shrine: '🔮',
+  well: '⛲',
+  archive: '📜',
+  fallen: '🏚️',
+  mine: '⛏️',
+  calm: '🧭',
+};
 
 /** Le nom, volontairement VAGUE, d'une famille : le type exact peut différer à l'arrivée. */
 const VAGUE_LABEL: Record<SpawnGroup, string> = {
   fight: 'un camp ou un repaire',
   rift: 'une faille',
   ruins: 'des ruines',
+  den: 'une tanière',
+  sealChamp: 'des ruines à sceaux de champion',
+  sealGear: 'des ruines à sceaux d’objet',
+  shrine: 'un sanctuaire d’invocation',
+  well: 'une source vive',
+  archive: 'des archives englouties',
+  fallen: 'les ruines d’un héros tombé',
+  mine: 'une mine',
+  calm: 'une récolte à route calme',
 };
 
 /** La phrase d'une lecture. ⚠️ AUCUNE promesse de précision : c'est une estimation de la carte
@@ -336,6 +663,48 @@ export function readableGroups(adv: Adventurer): SpawnGroup[] {
   return (vocationTree(adv) ?? [])
     .filter((n) => n.spawn && nodesOf(adv).includes(n.id))
     .map((n) => n.spawn!);
+}
+
+/** 💓 Ce champion lit-il le Pouls des failles ? */
+export function readsPulse(adv: Adventurer): boolean {
+  return (vocationTree(adv) ?? []).some((n) => n.pulse && nodesOf(adv).includes(n.id));
+}
+
+/**
+ * 💓 L'instant où cette faille gagnera un monstre de plus, `null` si elle a déjà tous les siens.
+ * ⚠️ EXACT, et non une estimation : l'effectif (`riftPopulation`) ne dépend que du temps, il est
+ * croissant jusqu'au débordement (`riftOverflowAt`) — une bissection à la seconde le trouve.
+ */
+export function nextRiftGrowth(rift: Pick<Poi, 'spawnedAt'>, now: number): number | null {
+  const base = riftPopulation(rift, now);
+  let hi = riftOverflowAt(rift);
+  if (riftPopulation(rift, hi) <= base) return null;
+  let lo = now;
+  while (hi - lo > 1000) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (riftPopulation(rift, mid) > base) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+/** Les lignes du Pouls : une par faille ouverte, la plus proche d'abord, 3 au plus. */
+export function pulseLines(
+  pois: readonly Pick<Poi, 'id' | 'type' | 'level' | 'spawnedAt'>[],
+  now: number,
+): string[] {
+  const rifts = pois
+    .filter((p) => p.type === 'rift')
+    .map((p) => ({ level: p.level, at: nextRiftGrowth(p, now) }))
+    .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
+  if (!rifts.length) return ['Aucune faille ouverte.'];
+  return rifts
+    .slice(0, 3)
+    .map((r) =>
+      r.at === null
+        ? `🕳️ La faille de niveau ${r.level} a tous ses monstres.`
+        : `🕳️ ${r.at - now < 60_000 ? 'Maintenant' : `Dans environ ${formatDuration(r.at - now)}`} : la faille de niveau ${r.level} gagne un monstre`,
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

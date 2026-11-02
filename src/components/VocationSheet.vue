@@ -39,12 +39,14 @@
           ⏳ {{ pending.length }} rendu{{ pending.length > 1 ? 's' : '' }} dans
           {{ formatDuration(pending[0]! - now) }}
         </span>
-        <span class="vc-chip dim">sur {{ total }} au total, pour tout le vivier</span>
+        <span class="vc-chip dim">
+          sur {{ total }} au total{{ total >= VOCATION.cap ? ' (le maximum)' : '' }}, pour tout le
+          vivier
+        </span>
       </div>
 
       <p v-if="!tree" class="vc-note">
-        Le carnet de la lignée « {{ lineageLabel }} » n’est pas encore ouvert. Les guerriers ouvrent
-        la marche ; les autres lignées suivront.
+        Ce champion n’a pas de lignée : il n’a pas de carnet de vocation.
       </p>
 
       <template v-if="tree">
@@ -66,6 +68,9 @@
             <p v-if="stateOf(n) === 'owned' && n.spawn" class="vc-reading">
               {{ readingFor(n.spawn) }}
             </p>
+            <template v-else-if="stateOf(n) === 'owned' && n.pulse">
+              <p v-for="l in pulse" :key="l" class="vc-reading">{{ l }}</p>
+            </template>
             <button
               type="button"
               class="vc-btn"
@@ -81,7 +86,9 @@
         </div>
 
         <h3 class="vc-sec">⚔️ Voies <span class="vc-dim">— l’une ou l’autre</span></h3>
-        <p class="vc-dim vc-rule">Une seule voie compte par équipe : la première de l’équipe.</p>
+        <p class="vc-dim vc-rule">
+          Une seule voie compte par équipe : la première qui s’applique au lieu visé.
+        </p>
         <div class="vc-grid">
           <div
             v-for="n in majorNodes"
@@ -155,7 +162,9 @@ import {
   nextOfGroup,
   nodeState,
   pendingPoints,
+  pulseLines,
   readableGroups,
+  readsPulse,
   readingText,
   vetLines,
   vocationBudget,
@@ -227,6 +236,12 @@ watch(
         : null;
   },
   { immediate: true },
+);
+// 💓 Le Pouls des failles : lu sur la carte telle qu'elle est (rien à rejouer), à l'heure du geste.
+const pulse = computed(() =>
+  adv.value && readsPulse(adv.value)
+    ? pulseLines(char.row?.expedition_map?.pois ?? [], now.value)
+    : [],
 );
 const readingFor = (g: SpawnGroup) =>
   spawns.value ? readingText(g, nextOfGroup(spawns.value, g), now.value) : 'Lecture indisponible.';

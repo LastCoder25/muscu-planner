@@ -169,16 +169,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Fléau des bandits'); // titre gagné à 15 victoires
     expect(out).toContain('4 / 15'); // bêtes : pas encore
   });
-  it('VocationSheet dit qu’une lignée sans carnet n’est pas encore ouverte', async () => {
+  it('VocationSheet dit qu’un champion sans lignée n’a pas de carnet', async () => {
     const { default: VocationSheet } = await import('@/components/VocationSheet.vue');
-    const sylve = {
+    const nobody = {
       id: 'g2',
-      name: 'Sylvane',
+      name: 'Sans-nom',
       seed: 5,
       path: [],
       level: 20,
       xp: 0,
-      championId: 'sylve',
       copies: 1,
     };
     let out = '';
@@ -186,14 +185,65 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       await mountIt(
         VocationSheet,
         { modelValue: true, advId: 'g2' },
-        { ...ROW, adventurers: [sylve] },
+        { ...ROW, adventurers: [nobody] },
         undefined,
         '/',
         (h) => (out = h),
       ),
     ).toBeNull();
-    expect(out).toContain('pas encore ouvert');
+    expect(out).toContain('pas de lignée');
     expect(out).not.toContain('Brise-camp');
+  });
+  // 📓 v1.296.0 : les cinq autres lignées ont leur carnet (archer, mage, homme d'armes…).
+  it('VocationSheet montre le carnet de l’archer et celui du mage (Pouls des failles lu)', async () => {
+    const { default: VocationSheet } = await import('@/components/VocationSheet.vue');
+    const { createMap } = await import('@/lib/expedition');
+    const base = { seed: 5, path: [], level: 20, xp: 0, copies: 1 };
+    const sylve = { ...base, id: 'g2', name: 'Sylvane', championId: 'sylve' };
+    const orsene = {
+      ...base,
+      id: 'g3',
+      name: 'Orsène',
+      championId: 'orsene',
+      vocation: { nodes: ['mage.pouls'] },
+    };
+    const map = createMap(7, Date.now(), 30, 30);
+    const withRift = {
+      ...map,
+      pois: [
+        ...map.pois,
+        {
+          id: 'rift_t',
+          type: 'rift' as const,
+          level: 30,
+          x: 60,
+          y: 60,
+          distNorm: 0.5,
+          spawnedAt: Date.now() - 24 * 3600_000,
+          expiresAt: 9e15,
+        },
+      ],
+    };
+    const row = { ...ROW, adventurers: [sylve, orsene], expedition_map: withRift };
+    let archerOut = '';
+    expect(
+      await mountIt(VocationSheet, { modelValue: true, advId: 'g2' }, row, undefined, '/', (h) => {
+        archerOut = h;
+      }),
+    ).toBeNull();
+    for (const t of ['Piste de la bête', 'Œil du sceau', 'Traqueur', 'Pluie de flèches'])
+      expect(archerOut).toContain(t);
+    expect(archerOut).not.toContain('pas de lignée');
+    let mageOut = '';
+    expect(
+      await mountIt(VocationSheet, { modelValue: true, advId: 'g3' }, row, undefined, '/', (h) => {
+        mageOut = h;
+      }),
+    ).toBeNull();
+    for (const t of ['Pouls des failles', 'Appel du sanctuaire', 'Contre-sort', 'Exorcisme'])
+      expect(mageOut).toContain(t);
+    expect(mageOut).toMatch(/gagne un monstre/); // la faille posée sur la carte est lue
+    expect(mageOut).toContain('première qui s’applique au lieu visé');
   });
 
   // 🔙 Rappeler à la base : une équipe en route se propose au rappel.

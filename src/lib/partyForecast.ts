@@ -18,7 +18,7 @@ import { partyForecastSeed } from './party';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 import { supplyFx } from './supplies';
-import { vocationGuardMult } from './vocation';
+import { vocationGuardMult, vocationRiftMult } from './vocation';
 import { fieldArmySpec } from './fieldArmy';
 
 /**
@@ -71,8 +71,18 @@ export function partyWinChance(
   const allies = partyAllies(escort, road, hero);
   if (!allies.length) return null;
   const fx = supplyFx(road.supplies);
-  if (isRiftPoi(poi))
-    return incursionWinPct(poi, allies, now, samples, fx.riftFoeMult, fx.riftBossMult);
+  if (isRiftPoi(poi)) {
+    // 📓 Pluie de flèches / Contre-sort : les MÊMES facteurs que la résolution (`resolveIncursion`).
+    const rv = vocationRiftMult(escort);
+    return incursionWinPct(
+      poi,
+      allies,
+      now,
+      samples,
+      fx.riftFoeMult * rv.foe,
+      fx.riftBossMult * rv.boss,
+    );
+  }
   // ⚔️🗼 Une armée en campagne se bat comme un camp de SA force de campagne — la MÊME spec
   // que la résolution (`fieldArmySpec`, `resolveFieldArmy`).
   const army = isFieldArmyPoi(poi) ? fieldArmySpec(poi) : null;

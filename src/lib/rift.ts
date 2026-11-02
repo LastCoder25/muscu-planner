@@ -55,6 +55,7 @@ import {
 // module-là n'importe pas les failles.
 import { partyFightSeed, partyForecastSeed } from './party';
 import { teamRuneValue, type Adventurer } from './adventurers';
+import { vocationRiftMult } from './vocation';
 import {
   offenseOf,
   seedOf,
@@ -993,13 +994,15 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
   const allies = partyAllies(escort, input.road, hero);
   const group = fuseUnits(allies, 'Groupe');
   const fx = supplyFx(input.road.supplies);
+  // 📓 Pluie de flèches / Contre-sort : même facteur que le pronostic (`partyWinChance`).
+  const vr = vocationRiftMult(escort);
   const run = simulateIncursion(
     group,
     poi,
     now,
     partyFightSeed(seed),
-    fx.riftFoeMult,
-    fx.riftBossMult,
+    fx.riftFoeMult * vr.foe,
+    fx.riftBossMult * vr.boss,
   );
 
   const bodies = incursionBodies(poi, now);

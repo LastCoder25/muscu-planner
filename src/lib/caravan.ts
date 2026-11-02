@@ -1254,13 +1254,9 @@ export function ambushChance(poi: Poi, escort: Adventurer[], extraScout = 0): nu
   // trou, elle ne le dépasse pas.
   // 🔓 Les éclaireurs ne sont plus plafonnés (`roleCut`) ; la carte garde son plafond.
   const extra = Math.min(CARAVAN.scoutMax, Math.max(0, extraScout));
-  // 📓 Garde de route (carnet de vocation) : routes dangereuses seulement.
-  return (
-    base *
-    (1 - roleCut(escort, 'scout')) *
-    (1 - extra) *
-    vocationAmbushMult(escort, routePerilous(poi))
-  );
+  // 📓 Voies de route du carnet de vocation (Garde de route, Pas de loup, Détour sûr) : la
+  // première de l'équipe qui s'applique à CETTE route.
+  return base * (1 - roleCut(escort, 'scout')) * (1 - extra) * vocationAmbushMult(escort, poi);
 }
 
 /** 🗡️ Ce que l'escorte emmène : le STOCK d'équipement des aventuriers.

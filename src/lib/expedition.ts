@@ -3035,17 +3035,23 @@ export function upcomingSpawns(
   outpostLevel: number,
   protectedPoiId?: string,
   horizonMs = 48 * 3600_000,
-): { id: string; type: PoiType; at: number }[] {
+): { id: string; type: PoiType; at: number; perilous?: true }[] {
   const STEP = 30 * 60_000;
   const seen = new Set(map.pois.map((p) => p.id));
-  const out: { id: string; type: PoiType; at: number }[] = [];
+  const out: { id: string; type: PoiType; at: number; perilous?: true }[] = [];
   let m = map;
   for (let t = now + STEP; t <= now + horizonMs; t += STEP) {
     m = advanceWorld(m, t, playerLevel, outpostLevel, protectedPoiId);
     for (const p of m.pois) {
       if (seen.has(p.id)) continue;
       seen.add(p.id);
-      out.push({ id: p.id, type: p.type, at: p.spawnedAt });
+      // la route dangereuse est tirée au spawn : la lecture « route calme » du carnet la lit ici
+      out.push({
+        id: p.id,
+        type: p.type,
+        at: p.spawnedAt,
+        ...(p.perilous ? { perilous: true as const } : {}),
+      });
     }
   }
   return out;

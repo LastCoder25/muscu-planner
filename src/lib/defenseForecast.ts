@@ -38,6 +38,7 @@ import {
 } from './expedition';
 import { fieldArmySpec, retakeBattle } from './fieldArmy';
 import { HERO_UNIT_ID, partyAllies, spareInjured, type EscortKit } from './caravan';
+import { vocationGuardMult } from './vocation';
 import { militiaLost } from './militia';
 import { partyForecastSeed } from './party';
 import { supplyFx } from './supplies';
@@ -278,7 +279,9 @@ export function attackForecast(
   const allies = partyAllies(escort, road, hero);
   if (!allies.length) return null;
   return simulate([{ poi, spec }], allies, escort, samples, {
-    foeMult: supplyFx(road.supplies).guardMult,
+    // 📓 La voie de l'équipe (Brise-camp…) : le MÊME facteur que le vrai combat (`fightCampForce`)
+    // et que le 🎯 % (`partyWinChance`) — les pastilles 🔮 l'ignoraient (défaut de la v1.283).
+    foeMult: supplyFx(road.supplies).guardMult * vocationGuardMult(escort, poi),
     medkit: supplyFx(road.supplies).medkit,
     prevWear:
       poi.control?.owner === 'enemy' && wearsDown(poi.control) ? poi.control.wear : undefined,
