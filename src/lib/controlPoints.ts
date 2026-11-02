@@ -3563,8 +3563,8 @@ export function returnsEnRoute(
  * temps de trajet depuis les tuiles d'expédition »). Un renfort en route (`reinf`) arrive
  * `gainMs` plus tôt ; un retour vers la base (`return`) rentre `gainMs` plus tôt. On ne touche
  * que les entrées de CE convoi : ses `members`, avec l'échéance `at` qu'il affiche — deux
- * envois vers le même point ne se confondent pas. Le départ (`from`) ne bouge pas : le tracé
- * avance plus vite, comme pour un voyage ordinaire (`boostVoyage`). Même carte si rien ne
+ * envois vers le même point ne se confondent pas. Le départ (`from`) avance de même que l'arrivée,
+ * comme pour un voyage ordinaire (`boostVoyage`) : le pion saute à sa nouvelle place. Même carte si rien ne
  * correspond ou si le gain est nul.
  */
 export function boostControlTrip(
@@ -3583,12 +3583,17 @@ export function boostControlTrip(
   if (!list?.some(hit)) return map;
   return withControl(map, pointId, (p) => {
     const ctl = { ...p.control! };
+    // ⚡ Le départ (`from`) avance de même que l'arrivée : la durée du trajet ne change pas, le
+    // pion saute là où il serait si ces minutes avaient passé (un renfort d'avant v0.1263 n'a
+    // pas de départ : rien à avancer).
+    const skip = <T extends { from?: number; at: number }>(r: T): T => ({
+      ...r,
+      at: r.at - gainMs,
+      ...(r.from !== undefined ? { from: r.from - gainMs } : {}),
+    });
     if (kind === 'reinf')
-      ctl.reinforcing = (ctl.reinforcing ?? []).map((r) =>
-        hit(r) ? { ...r, at: r.at - gainMs } : r,
-      );
-    else
-      ctl.returning = (ctl.returning ?? []).map((r) => (hit(r) ? { ...r, at: r.at - gainMs } : r));
+      ctl.reinforcing = (ctl.reinforcing ?? []).map((r) => (hit(r) ? skip(r) : r));
+    else ctl.returning = (ctl.returning ?? []).map((r) => (hit(r) ? skip(r) : r));
     return { ...p, control: ctl };
   });
 }

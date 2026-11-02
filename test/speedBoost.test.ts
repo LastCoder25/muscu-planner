@@ -38,6 +38,28 @@ const trip = (
   ...(o.dwellMs ? { dwellMs: o.dwellMs } : {}),
 });
 
+describe('⚡ un boost fait SAUTER le pion (v1.295.0 : « le tracé de 1 h à 3 min, les équipes encore au tiers »)', () => {
+  const frac = (v: ReturnType<typeof trip>, now: number) =>
+    (now - v.sentAt) / (v.midAt - v.sentAt);
+  it('à l’aller, le départ avance du gain : la position saute, le trajet garde sa durée', () => {
+    const v = trip(); // 60 min d'aller, parti à 0
+    const now = 2 * M; // parti depuis 2 min seulement
+    const plan = voyageBoostPlan(v, 55, now);
+    expect(typeof plan).not.toBe('string');
+    const b = boostVoyage(v, plan as never);
+    expect(b.midAt - b.sentAt).toBe(v.midAt - v.sentAt);
+    expect(b.midAt - now).toBe(3 * M);
+    // Avant : 3 % du chemin ; après : 95 % (et non 40 % comme avec un départ inchangé).
+    expect(frac(v, now)).toBeCloseTo(2 / 60);
+    expect(frac(b, now)).toBeCloseTo(57 / 60);
+  });
+  it('au retour, le départ de l’aller n’est pas touché', () => {
+    const v = trip();
+    const plan = voyageBoostPlan(v, 20, 80 * M);
+    expect(boostVoyage(v, plan as never).sentAt).toBe(0);
+  });
+});
+
 describe('⚡ consommables de vitesse', () => {
   it('les cinq boosts existent, ne partent pas avec un voyage et valent 5/10/15/30/60 min', () => {
     expect(BOOST_IDS.map((id) => BOOST_MIN[id])).toEqual([5, 10, 15, 30, 60]);
@@ -169,6 +191,17 @@ describe('⚔️🧭 attaque combinée (option B)', () => {
       { members: ['a1'], from: 120 * M, to: 110 * M },
       { members: ['a2'], from: 115 * M, to: 105 * M },
     ]);
+  });
+  it('un groupe DÉJÀ PARTI avance son départ comme son arrivée : sa position saute, son trajet garde sa durée', () => {
+    const a0 = attack(0);
+    const gone = {
+      ...a0,
+      wings: a0.wings.map((w, i) => (i === 0 ? { ...w, state: 'gone' as const, gone: ['a1'] } : w)),
+    } as CombinedAttack;
+    const before = gone.wings[0]!;
+    const { attack: a } = boostAttack(gone, { goMs: 10 * M, backMs: 0 }, 1 * M);
+    expect(a.wings[0]!.departAt).toBe(before.departAt - 10 * M);
+    expect(a.arriveAt - a.wings[0]!.departAt).toBe(gone.arriveAt - before.departAt);
   });
   it('les réservations suivent : le groupe part encore au départ avancé', () => {
     const { attack: a } = boostAttack(attack(0), { goMs: 10 * M, backMs: 0 }, 0);

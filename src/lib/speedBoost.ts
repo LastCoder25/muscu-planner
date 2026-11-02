@@ -69,10 +69,15 @@ export function voyageBoostPlan(v: Timed, minutes: number, now: number): BoostPl
   return { phase: 'back', gainMs: backMs, goMs: 0, backMs, lostMs: boost - backMs };
 }
 
-/** Le voyage accéléré selon `plan`. ⚠️ `sentAt` ne bouge pas : l'aller dure moins, le tracé
- *  va plus vite. Même référence si le gain est nul. */
+/** Le voyage accéléré selon `plan`. ⚠️ À l'ALLER, le départ avance du même temps que l'arrivée
+ *  (v1.295.0, signalé : « j'ai accéléré un tracé de plus d'une heure à 3 min et les équipes étaient
+ *  encore au tiers de la carte ») : la durée du trajet ne change pas, c'est le temps écoulé qui
+ *  saute — le pion se retrouve là où il serait si ces minutes avaient passé. Avec un départ
+ *  inchangé, le trajet raccourcissait et un groupe parti depuis peu restait près du départ.
+ *  Même référence si le gain est nul. */
 export function boostVoyage<
   T extends Pick<ActiveExpedition, 'midAt' | 'returnAt'> & {
+    sentAt?: number;
     returnLegs?: { won: number; lost: number };
   },
 >(v: T, plan: Pick<BoostPlan, 'phase' | 'goMs' | 'backMs'>): T {
@@ -80,7 +85,12 @@ export function boostVoyage<
   const go = plan.phase === 'go' ? Math.max(0, plan.goMs) : 0;
   const back = Math.min(Math.max(0, plan.backMs), Math.max(0, v.returnAt - v.midAt));
   if (go + back <= 0) return v;
-  const out = { ...v, midAt: v.midAt - go, returnAt: v.returnAt - go - back };
+  const out = {
+    ...v,
+    midAt: v.midAt - go,
+    returnAt: v.returnAt - go - back,
+    ...(go > 0 && v.sentAt !== undefined ? { sentAt: v.sentAt - go } : {}),
+  };
   // ⚠️ Les retours d'un assaut sont RECALCULÉS à l'arrivée (`shortenWonReturn`) : sans les
   // raccourcir aussi, le raccourci serait écrasé.
   if (back > 0 && v.returnLegs) {
@@ -157,7 +167,8 @@ export function boostAttack(
           returnAt,
           ...cut,
         }
-      : { ...w, returnAt, ...cut };
+      : // 🚶 Déjà en route : son départ avance de même (le pion saute, la durée du trajet reste).
+        { ...w, departAt: w.departAt - gainMs, returnAt, ...cut };
   });
   const arriveAt = a.arriveAt - gainMs;
   return {
