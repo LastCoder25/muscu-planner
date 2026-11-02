@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { militiaOwedOn, militiaRelief } from '@/lib/militiaRelief';
+import { militiaOwedOn, militiaRelief, noteStoredLosses } from '@/lib/militiaRelief';
+import { produceIslandMilitia } from '@/lib/crossing';
+import { militiaFreeSeats } from '@/lib/controlPoints';
 import { MILITIA, emptyMilitia, type MilitiaState } from '@/lib/militia';
 import type { ControlState, ExpeditionMap, ExpeditionMessage, Poi } from '@/lib/expedition';
 
@@ -164,6 +166,79 @@ describe('🛡️ militiaRelief : la base renvoie d’elle-même la relève', ()
   });
 });
 
+// ⛵ Les miliciens tombés sur une île RANGÉE : refaits à la base de l'île en cours, puis en mer.
+describe('⛵ la relève traverse vers le lieu tenu d’une île rangée', () => {
+  const stored = (owed?: number): ExpeditionMap =>
+    ({
+      pois: [],
+      archipel: { island: 2 },
+      islands: {
+        '1': {
+          pois: [point('m1', { garrison: ['mil:9'], ...(owed ? { militiaOwed: owed } : {}) })],
+          militia: { ...emptyMilitia(0), home: 0 },
+        },
+      },
+    }) as unknown as ExpeditionMap;
+  const onStored = (m: ExpeditionMap) => m.islands!['1']!;
+
+  it('les morts d’une île rangée sont dus (et comptés par la Caserne de l’île en cours)', () => {
+    const m = noteStoredLosses(onStored(stored()) as ExpeditionMap, 'm1', 2, 'r7');
+    expect(m.pois[0]!.control!.militiaOwed).toBe(2);
+    expect(m.pois[0]!.control!.reliefSeen).toBe('r7');
+    expect(militiaOwedOn(stored(3))).toBe(3);
+  });
+  it('un lieu qui n’est plus à nous ne doit rien', () => {
+    const m = onStored(stored()) as ExpeditionMap;
+    m.pois[0]!.control!.owner = 'enemy' as never;
+    expect(noteStoredLosses(m, 'm1', 2, 'r7')).toBe(m);
+  });
+  it('ils partent de la base de l’île en cours, 2 h de mer, vers le lieu où ils sont morts', () => {
+    const r = relief(stored(2), home(5));
+    expect(r!.sent).toEqual([{ id: 'm1', n: 2 }]);
+    expect(r!.militia.home).toBe(3);
+    const sail = r!.map.sailings![0]!;
+    expect(sail).toMatchObject({ from: 2, to: 1, militia: 2, militiaTo: 'm1' });
+    expect(sail.arriveAt - sail.departAt).toBe(2 * 3600_000);
+    expect(ctl(onStored(r!.map) as ExpeditionMap, 'm1').militiaOwed).toBeUndefined();
+  });
+  it('sans milicien à la base, la dette attend ; en mer, la place est gardée', () => {
+    expect(relief(stored(2), home(0))).toBeNull();
+    const r = relief(stored(2), home(1))!;
+    expect(r.sent).toEqual([{ id: 'm1', n: 1 }]);
+    expect(ctl(onStored(r.map) as ExpeditionMap, 'm1').militiaOwed).toBe(1);
+  });
+  it('un milicien en mer garde sa place : la relève suivante ne promet que le reste', () => {
+    const free = militiaFreeSeats(point('m1', { garrison: ['mil:9'] }).control);
+    const m = stored(free + 3);
+    const first = relief(m, home(free + 3))!;
+    expect(first.sent).toEqual([{ id: 'm1', n: free }]);
+    // Les places sont toutes gardées pour ceux en mer : il n'en part pas d'autres.
+    expect(relief(first.map, home(9))).toBeNull();
+  });
+  it('les places gardées pour ceux déjà en mer ne sont pas promises deux fois', () => {
+    const free = militiaFreeSeats(point('m1', { garrison: ['mil:9'] }).control);
+    const m = {
+      ...stored(3),
+      sailings: [{ from: 2, to: 1, militia: free - 1, militiaTo: 'm1', arriveAt: 9e9 }],
+    } as unknown as ExpeditionMap;
+    const r = relief(m, home(9))!;
+    expect(r.sent).toEqual([{ id: 'm1', n: 1 }]);
+  });
+  it('l’île en cours n’est jamais traversée, même si une copie traîne dans les îles', () => {
+    const m = stored(2);
+    (m as unknown as { archipel: { island: number } }).archipel.island = 1;
+    expect(relief(m, home(5))).toBeNull();
+  });
+  it('la réserve d’une île rangée ne refait pas ses morts d’elle-même', () => {
+    const m = stored(0);
+    const dead = stored(2);
+    const H = 3600_000;
+    const live = produceIslandMilitia(m, 10, 48 * H);
+    const owed = produceIslandMilitia(dead, 10, 48 * H);
+    expect(live.islands!['1']!.militia!.home).toBeGreaterThan(owed.islands!['1']!.militia!.home);
+  });
+});
+
 // Test de CÂBLAGE : le store est hors harnais, on vérifie qu'il appelle les règles ci-dessus.
 describe('🛡️ le store branche la relève', () => {
   const src = readFileSync('src/stores/character.ts', 'utf-8');
@@ -176,6 +251,12 @@ describe('🛡️ le store branche la relève', () => {
     expect(tick).toMatch(/militiaRelief\(\s*settled0,/);
     expect(tick).toMatch(
       /expedition_map: relief\.map,\s*base: \{ \.\.\.cur\.base, militia: relief\.militia \}/,
+    );
+  });
+  it('une île quittée note ses morts : leur relève traversera depuis l’île en cours', () => {
+    const at = src.indexOf('  function abandonedRetakes(');
+    expect(src.slice(at, at + 30000)).toMatch(
+      /releaseFromControl\(map, p\.id, dead, at, lvl\);[^}]*noteStoredLosses\(map, p\.id, dead\.length, msg\.id\)/,
     );
   });
   it('la Caserne de l’île en cours produit la dette, plafond ou non', () => {

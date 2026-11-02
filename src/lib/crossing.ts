@@ -605,7 +605,10 @@ export function produceIslandMilitia(
   for (const [k, im] of Object.entries(map.islands)) {
     if (!im.militia) continue;
     const seats = islandMilitiaOf({ archipel: archipelOn(Number(k)) });
-    const m = produceMilitia(im.militia, barracks, militiaOnMap(im), now, seats, militiaOwedOn(im));
+    // ⛵ Les morts d'une île rangée sont refaits à la base de l'île EN COURS : leur place reste
+    // comptée comme occupée ici, la réserve rangée ne les refait pas (`militiaRelief`).
+    const away = militiaOnMap(im) + militiaOwedOn(im);
+    const m = produceMilitia(im.militia, barracks, away, now, seats, 0);
     if (m !== im.militia) islands = { ...islands, [k]: { ...im, militia: m } };
   }
   return islands === map.islands ? map : { ...map, islands };

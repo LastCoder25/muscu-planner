@@ -217,7 +217,7 @@ import {
   returnMilitia,
   takeMilitia,
 } from '@/lib/militia';
-import { militiaOwedOn, militiaRelief } from '@/lib/militiaRelief';
+import { militiaOwedOn, militiaRelief, noteStoredLosses } from '@/lib/militiaRelief';
 import {
   advanceBase,
   markOverflow,
@@ -5622,7 +5622,11 @@ export const useCharacterStore = defineStore('character', () => {
         };
         msgs.push(msg);
         const dead = o?.party?.militiaLost ?? [];
-        if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, lvl);
+        if (held && dead.length) {
+          map = releaseFromControl(map, p.id, dead, at, lvl);
+          // ⛵ Leur relève est refaite à la base de l'île EN COURS, puis traverse (`militiaRelief`).
+          map = noteStoredLosses(map, p.id, dead.length, msg.id);
+        }
         map = held
           ? holdControl(map, p.id, at, activeDays7)
           : regainIslandTarget(

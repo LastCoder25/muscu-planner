@@ -19,8 +19,10 @@
  * ⚠️ PUR : rend un nouvel état, le store écrit.
  */
 import { militiaFreeSeats, reinforceControl } from './controlPoints';
-import type { ControlState, ExpeditionMap, Poi } from './expedition';
+import { CROSSING, nextCrossingDeparture } from './crossing';
+import type { ControlState, Crossing, ExpeditionMap, Poi } from './expedition';
 import { takeMilitia, type MilitiaState } from './militia';
+import { militiaSailingToPoint } from './militiaSea';
 
 /** Les miliciens tombés dans la dernière défense TENUE du point, pas encore comptés. Un
  *  rapport d'avant la prise du lieu (`since`) n'est pas le nôtre. */
@@ -48,12 +50,82 @@ function withOwed(map: ExpeditionMap, id: string, owed: number, seen?: string): 
 }
 
 /** 🏭 Les miliciens dus aux points tenus de la carte : ce que la Caserne doit refaire, plafond
- *  ou non. */
-export function militiaOwedOn(map: Pick<ExpeditionMap, 'pois'> | null | undefined): number {
+ *  ou non. ⛵ Les dettes des îles RANGÉES comptent aussi : leurs morts sont refaits à la base de
+ *  l'île en cours, puis traversent (`sailRelief`). */
+export function militiaOwedOn(
+  map: Pick<ExpeditionMap, 'pois' | 'islands'> | null | undefined,
+): number {
   let n = 0;
   for (const p of map?.pois ?? [])
     if (p.control?.owner === 'player') n += p.control.militiaOwed ?? 0;
+  for (const im of Object.values(map?.islands ?? {})) n += militiaOwedOn({ pois: im.pois });
   return n;
+}
+
+/** ⛵ Note `n` miliciens tombés sur un lieu tenu d'une île RANGÉE (aucun tick ne la lit comme
+ *  l'île active) : ils sont dus, et le rapport est marqué vu pour que le retour sur l'île ne les
+ *  compte pas une seconde fois. Rend la MÊME carte si le lieu n'est plus à nous. */
+export function noteStoredLosses(
+  map: ExpeditionMap,
+  id: string,
+  n: number,
+  reportId: string,
+): ExpeditionMap {
+  const c = map.pois.find((p) => p.id === id)?.control;
+  if (!c || c.owner !== 'player' || n <= 0) return map;
+  return withOwed(map, id, (c.militiaOwed ?? 0) + n, reportId);
+}
+
+/** ⛵ La relève des îles rangées : de la base de l'île en cours, vers chaque lieu tenu qui doit
+ *  des miliciens (autant que la dette, les places libres — celles gardées pour ceux déjà en mer
+ *  comprises — et la base le permettent). Même mer que `shipMilitiaToPoint` : 2 h, ils entrent
+ *  dans le lieu à l'accostage. */
+function sailRelief(
+  map: ExpeditionMap,
+  militia: MilitiaState,
+  now: number,
+): { map: ExpeditionMap; militia: MilitiaState; sent: { id: string; n: number }[] } | null {
+  const active = map.archipel?.island;
+  if (active === undefined || !map.islands) return null;
+  let out = map;
+  let state = militia;
+  let changed = false;
+  const sent: { id: string; n: number }[] = [];
+  for (const [k, im] of Object.entries(map.islands)) {
+    const island = Number(k);
+    if (island === active) continue;
+    let cur = im;
+    for (const p of im.pois) {
+      const c = p.control;
+      if (c?.owner !== 'player' || !c.militiaOwed) continue;
+      const free = Math.max(0, militiaFreeSeats(c) - militiaSailingToPoint(out, island, p.id));
+      const n = Math.min(c.militiaOwed, free, state.home);
+      const took = n > 0 ? takeMilitia(state, n) : null;
+      if (took) {
+        state = took.state;
+        const departAt = nextCrossingDeparture(now);
+        const sail: Crossing = {
+          from: active,
+          to: island,
+          bookedAt: now,
+          departAt,
+          arriveAt: departAt + CROSSING.travelMs,
+          ids: [],
+          militia: n,
+          militiaTo: p.id,
+        };
+        out = { ...out, sailings: [...(out.sailings ?? []), sail] };
+        sent.push({ id: p.id, n });
+      }
+      const left = Math.max(0, Math.min(c.militiaOwed, free) - n);
+      if (left !== c.militiaOwed) {
+        cur = withOwed(cur, p.id, left);
+        changed = true;
+      }
+    }
+    if (cur !== im) out = { ...out, islands: { ...out.islands, [k]: cur } };
+  }
+  return changed ? { map: out, militia: state, sent } : null;
 }
 
 /**
@@ -93,5 +165,7 @@ export function militiaRelief(
       changed = true;
     }
   }
+  const sea = sailRelief(out, state, now);
+  if (sea) return { map: sea.map, militia: sea.militia, sent: [...sent, ...sea.sent] };
   return changed ? { map: out, militia: state, sent } : null;
 }
