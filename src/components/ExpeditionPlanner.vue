@@ -17,30 +17,6 @@
       :states="daily"
       :reward="dailyReward ?? undefined"
     />
-    <!-- 🔁 LA DERNIÈRE VAGUE (demandé) : les mêmes équipes sur des lieux du même type, sans rien
-         recalculer. Le store refuse ce que l'envoi manuel refuserait ; ce qui ne repart pas est
-         listé avec sa raison. -->
-    <div v-if="section === 'plan' && lastWave" class="pl-wave" data-test="wave">
-      <button type="button" class="pl-all" :disabled="!!launching" @click="relaunchWave">
-        {{
-          launching === 'wave'
-            ? '⏳ Départs…'
-            : `🔁 Relancer la dernière vague (${lastWave.trips.length})`
-        }}
-      </button>
-      <div class="pl-sum">
-        <span class="pl-pill dim">il y a {{ waveAge }}</span>
-        <span v-for="c in waveChips" :key="c.key" class="pl-pill">{{ c.label }} ×{{ c.n }}</span>
-      </div>
-      <div v-if="waveResult" class="pl-sum" data-test="wave-result">
-        <span class="pl-pill ok"
-          >✅ {{ waveResult.sent }} parti{{ waveResult.sent > 1 ? 's' : '' }}</span
-        >
-        <span v-for="(s, i) in waveResult.skipped" :key="i" class="pl-pill warn">
-          ⚠️ {{ s.label }} : {{ s.reason }}
-        </span>
-      </div>
-    </div>
     <!-- 🪄 PRIORITÉS DANS L'ORDRE CLIQUÉ (demandé, 1 à 3) : la 1re est servie d'abord, la suivante
          avec ce qui reste (effectifs, lieux, consommables). -->
     <div v-if="section === 'plan'" class="pl-row">
@@ -73,7 +49,8 @@
 
     <div v-if="section === 'plan'" class="pl-row">
       <span class="pl-lab">🎯 Réussite au moins</span>
-      <div class="pl-chips">
+      <!-- Les cinq seuils sur UNE ligne, à toutes les largeurs (colonnes égales, pas de retour). -->
+      <div class="pl-chips pl-fit">
         <button
           v-for="t in THRESHOLDS"
           :key="t"
@@ -86,32 +63,6 @@
         </button>
       </div>
     </div>
-    <div v-if="section === 'plan'" class="pl-row">
-      <span class="pl-lab">Qui peut partir</span>
-      <div class="pl-chips">
-        <button
-          type="button"
-          class="pl-chip"
-          :class="{ on: withHero && heroFree, off: !heroFree }"
-          :disabled="!heroFree"
-          :title="heroFree ? '' : 'Ton héros n’est pas disponible'"
-          @click="withHero = !withHero"
-        >
-          🧝 Héros{{ heroFree ? '' : ' (pris)' }}
-        </button>
-        <button
-          v-if="section === 'plan'"
-          type="button"
-          class="pl-chip"
-          :class="{ on: withGarrisons }"
-          title="Faire sortir les champions en garnison sur tes lieux fixes"
-          @click="withGarrisons = !withGarrisons"
-        >
-          🏰 Garnisons
-        </button>
-      </div>
-    </div>
-
     <!-- 🚀 Départ automatique : au calcul terminé, tout part sans relecture. Éteint par défaut. -->
     <div v-if="section === 'plan'" class="pl-row">
       <span class="pl-lab">Lancement</span>
@@ -419,11 +370,9 @@ import { poiDifficultyLevel, poiEmo, poiLabel, type Poi } from '@/lib/expedition
 import type { PlanMode } from '@/lib/expeditionPlanner';
 import { DEPLOY_HERO_ID } from '@/lib/deployPlan';
 import { SUPPLIES, type SupplyId } from '@/lib/supplies';
-import { waveCounts } from '@/lib/lastWave';
 import DailyObjectives from '@/components/DailyObjectives.vue';
 import { useScrollWhenReady } from '@/composables/useScrollWhenReady';
 import type { ObjectiveState } from '@/lib/dailyObjectives';
-import { absenceDuration } from '@/lib/absenceSummary';
 
 const props = defineProps<{
   planner: ReturnType<typeof useExpeditionPlanner>;
@@ -455,9 +404,6 @@ const {
   compute,
   launch,
   launchAll,
-  lastWave,
-  waveResult,
-  relaunchWave,
   repoTeams,
   repoMoves,
   repoRunning,
@@ -540,12 +486,6 @@ const engaged = computed(() =>
 );
 const longest = computed(() => Math.max(0, ...(rows.value ?? []).map((r) => r.tripMin)));
 const totalXp = computed(() => (rows.value ?? []).reduce((s, r) => s + r.xp, 0));
-
-/** 🔁 La dernière vague en pastilles (un par type de lieu) et son âge. */
-const waveChips = computed(() => (lastWave.value ? waveCounts(lastWave.value) : []));
-const waveAge = computed(() =>
-  lastWave.value ? absenceDuration(Date.now() - lastWave.value.at) : '',
-);
 
 /** 🧭 Un endroit : la base ou le lieu fixe. */
 const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Base');
@@ -635,6 +575,16 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
   flex-wrap: wrap;
   gap: 6px;
 }
+/* Cinq seuils de réussite : une ligne, cinq colonnes égales. */
+.pl-fit {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  flex-wrap: nowrap;
+  .pl-chip {
+    padding: 0;
+    text-align: center;
+  }
+}
 .pl-chip {
   min-height: 36px;
   padding: 0 12px;
@@ -710,11 +660,6 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
     border-color: #ffb23f;
     line-height: 1.3;
   }
-}
-.pl-wave {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 .pl-list {
   display: flex;

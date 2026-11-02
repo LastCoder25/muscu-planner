@@ -27,29 +27,6 @@ function strip(s: string): string {
     .replace(/\s+/g, '');
 }
 
-describe('🔌 vague : une écriture, par le chemin d’envoi de « Tout lancer »', () => {
-  it('le store écrit la vague dans la carte, en UNE écriture', () => {
-    const b = code(store, 'recordWave');
-    expect(b.match(/persist\(/g)).toHaveLength(1);
-    expect(b).toMatch(/expedition_map:\{\.\.\.map,lastWave:wave\}/);
-  });
-
-  it('« Tout lancer » retient ce qui est PARTI, pas ce qui était proposé', () => {
-    const b = code(planner, 'launchAll');
-    expect(b).toMatch(/sent\.push\(r\)/);
-    expect(b).toMatch(/awaitrememberWave\(sent\)/);
-    expect(b.indexOf('sent.push(r)')).toBeGreaterThan(b.indexOf('constrefused=awaitsendRow(r)'));
-  });
-
-  it('la relance part par le MÊME chemin d’envoi et liste les refus, sans réécrire la vague', () => {
-    const b = code(planner, 'relaunchWave');
-    expect(b).toMatch(/planReplay\(wave,replayDeps\(replayWorld\(\)\)/);
-    expect(b).toMatch(/awaitsendRow\(/);
-    expect(b).toMatch(/if\(refused\)skipped\.push/);
-    expect(b).not.toMatch(/recordWave|rememberWave/);
-  });
-});
-
 describe('🔌 objectifs : le store recalcule, écrit une fois, ne croit pas l’écran', () => {
   const b = code(store, 'claimDailyObjectives');
 

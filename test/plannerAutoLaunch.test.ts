@@ -40,7 +40,6 @@ async function setup(auto: boolean) {
   const char = useCharacterStore();
   const sendParty = vi.fn(async () => null);
   (char as unknown as { sendParty: unknown }).sendParty = sendParty;
-  (char as unknown as { recordWave: unknown }).recordWave = vi.fn(async () => undefined);
   (useAuthStore() as unknown as { user: unknown }).user = { id: 'u1' };
   const R = <T>(v: T) => computed(() => v);
   let planner!: ReturnType<typeof useExpeditionPlanner>;
@@ -88,6 +87,15 @@ describe('planificateur : départ automatique', { timeout: 60000 }, () => {
     await planner.compute();
     expect(sendParty).not.toHaveBeenCalled();
     expect(planner.rows.value).toHaveLength(1);
+    app.unmount();
+  });
+
+  it('tout le monde part : héros et garnisons toujours inclus, plus de réglage « Qui peut partir »', async () => {
+    const { planner, app } = await setup(false);
+    expect(planner.withHero.value).toBe(true);
+    expect(planner.withGarrisons.value).toBe(true);
+    // Une ancienne préférence « sans garnisons » n'a plus d'effet.
+    expect(localStorage.getItem('muscu:planner:garrisons')).toBeNull();
     app.unmount();
   });
 

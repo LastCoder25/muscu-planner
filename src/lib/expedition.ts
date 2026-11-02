@@ -19,7 +19,6 @@ import { troopSize, type EnemyWear } from './enemyWear';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatCountdown, formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
-import type { LastWave } from './lastWave';
 import type { ObjectiveKind } from './dailyObjectives';
 import { labyKeyPriceAt } from '../data/labyrinths';
 import { islandSpan, islandVia, islandView, onIsland, LAND_MARGIN } from './islandShape';
@@ -987,10 +986,6 @@ export interface ExpeditionMap {
    *  (`startSailing`) : la carte active ne change pas, ils changent d'île à l'arrivée
    *  (`settleSailings`). Absent quand il n'y en a pas. */
   sailings?: Crossing[];
-  /** 🔁 La DERNIÈRE VAGUE lancée d'un coup par « Tout lancer » du planificateur (`lastWave.ts`) :
-   *  de quoi la relancer. Propre à l'île (elle vit dans sa carte, rangée avec elle). Absent =
-   *  aucune vague encore. ⚠️ `advanceWorld` reconstruit la carte champ par champ : il la recopie. */
-  lastWave?: LastWave;
   /** 🎯 Les objectifs du jour déjà ATTEINTS (`dailyObjectives.ts`, marque « latched ») : le numéro du jour
    *  logique et les types atteints. La seule chose stockée des objectifs (le reste se dérive) ; propre à l'île.
    *  Absent = rien d'atteint. ⚠️ `advanceWorld` la recopie. */
@@ -3180,7 +3175,6 @@ export function advanceWorld(
     ...(map.islands ? { islands: map.islands } : {}),
     ...(map.citadelStash ? { citadelStash: map.citadelStash } : {}),
     ...(map.heroReturnAt !== undefined ? { heroReturnAt: map.heroReturnAt } : {}),
-    ...(map.lastWave ? { lastWave: map.lastWave } : {}),
     ...(map.daily ? { daily: map.daily } : {}),
     ...(map.heroReturnFrom ? { heroReturnFrom: map.heroReturnFrom } : {}),
     ...(map.militia ? { militia: map.militia } : {}),

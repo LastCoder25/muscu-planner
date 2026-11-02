@@ -110,7 +110,6 @@ import {
   recordDeparture,
   archipelFloor,
 } from '@/lib/expedition';
-import type { LastWave } from '@/lib/lastWave';
 import {
   bonusDue,
   dailyStatesFor,
@@ -4098,17 +4097,6 @@ export const useCharacterStore = defineStore('character', () => {
   // `caravanLegMin`, et le renommer partout n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
 
-  /** 🔁 Retient la dernière vague lancée par « Tout lancer » (`lastWave.ts`) dans la carte de l'île :
-   *  UNE écriture par vague (jamais une par départ), additive dans le JSONB de la carte, sans
-   *  migration. Ne fait rien sans carte chargée. */
-  async function recordWave(userId: string, wave: LastWave): Promise<void> {
-    // Un geste : il attend que les envois en vol aient atterri avant de lire la carte.
-    await writesSettled();
-    const map = row.value?.expedition_map;
-    if (!map) return;
-    await persist(userId, { expedition_map: { ...map, lastWave: wave } });
-  }
-
   /** 🎯 Note les objectifs du jour ATTEINTS (`dailyObjectives.ts`) et, quand les TROIS le sont,
    *  verse l'UNIQUE consommable du jour — dans la MÊME écriture que la marque (jamais l'un sans
    *  l'autre). ⚠️ Le store RECALCULE la progression lui-même : il ne croit pas l'écran, et ne
@@ -7275,7 +7263,6 @@ export const useCharacterStore = defineStore('character', () => {
     attackList,
     heroEngaged,
     sendCombinedAttack,
-    recordWave,
     claimDailyObjectives,
     attackTick,
     sendParty,

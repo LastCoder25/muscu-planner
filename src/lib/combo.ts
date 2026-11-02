@@ -444,7 +444,7 @@ export function lastEnteredSet(sets: readonly ComboSet[]): ComboSet | null {
 
 /** ➕ Pas du stepper de charge : ±2,5 kg (charte), arrondi au demi-kilo ; revenir à
  *  0 rend `null` = poids du corps (le champ vide). */
-export const WEIGHT_STEP_KG = 2.5;
+const WEIGHT_STEP_KG = 2.5;
 export function stepWeight(current: number | null | undefined, dir: 1 | -1): number | null {
   const next = Math.round(((current ?? 0) + dir * WEIGHT_STEP_KG) * 2) / 2; // ≤ 0 → vide
   return next > 0 ? next : null;

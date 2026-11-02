@@ -453,7 +453,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(html).toContain('Argus');
     expect(html).toContain('🎯 94 %');
     expect(html).toContain('3 champions libres');
-    expect(html.match(/class="pl-chip on"/g)?.length).toBe(2); // 90 % et le héros
+    expect(html.match(/class="pl-chip on"/g)?.length).toBe(1); // 90 % seulement
+    // Tout le monde part : plus de rangée « Qui peut partir » ; plus de relance de vague.
+    expect(html).not.toContain('Qui peut partir');
+    expect(html).not.toContain('Garnisons');
+    expect(html).not.toContain('Relancer la dernière vague');
+    // Les cinq seuils tiennent sur une ligne (grille à cinq colonnes).
+    expect(html).toContain('pl-chips pl-fit');
     expect(html).toContain('1 lieu hors de portée');
     // 🎒 Les consommables à engager (stock affiché) et ceux qu'une proposition emporte.
     // 🎒 Repliés par défaut (demandé) : l'en-tête dit combien sont engagés, les tuiles sont cachées.
@@ -685,83 +691,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(none).not.toContain('data-test="cond-chip"');
   });
 
-  it('ExpeditionPlanner : la dernière vague, son bouton, ce qui est parti et ce qui est resté', async () => {
-    const { ref } = await import('vue');
-    const { default: ExpeditionPlanner } = await import('@/components/ExpeditionPlanner.vue');
-    let relaunched = 0;
-    const planner = {
-      threshold: ref(90),
-      modes: ref(['events']),
-      toggleMode: () => undefined,
-      nothingToPlan: ref(false),
-      withGarrisons: ref(false),
-      autoLaunch: ref(false),
-      withHero: ref(true),
-      supplyStock: ref([]),
-      toggleSupply: () => undefined,
-      heroFree: ref(true),
-      poolInfo: ref({ base: 3, garrison: 0 }),
-      running: ref(false),
-      progress: ref(0),
-      rows: ref(null),
-      unreachable: ref([]),
-      launching: ref(null),
-      compute: () => undefined,
-      reset: () => undefined,
-      launch: () => undefined,
-      launchAll: () => undefined,
-      lastWave: ref({
-        at: Date.now() - 3 * 3600_000,
-        trips: [
-          { key: 'mine', wings: [{ originId: null, advIds: ['a'], hero: false }], supplies: [] },
-          { key: 'mine', wings: [{ originId: null, advIds: ['b'], hero: false }], supplies: [] },
-          { key: 'camp', wings: [{ originId: null, advIds: ['c'], hero: false }], supplies: [] },
-        ],
-      }),
-      waveResult: ref({
-        sent: 2,
-        skipped: [{ label: '⛺ Camp', reason: 'Léa n’est pas libre' }],
-      }),
-      relaunchWave: () => relaunched++,
-      repoTeams: ref(null),
-      repoMoves: ref([]),
-      repoRunning: ref(false),
-      repoMissing: ref({ hero: false, advs: [] }),
-      repoHealable: ref({ advs: [], cost: 0, gold: 0, afford: true }),
-      healThenRepartir: () => undefined,
-      repartir: () => undefined,
-      launchAllMoves: () => undefined,
-    };
-    let html = '';
-    await mountIt(
-      ExpeditionPlanner,
-      { planner, section: 'plan' },
-      undefined,
-      undefined,
-      '/',
-      (h) => (html = h),
-      (host) => host.querySelector<HTMLElement>('[data-test="wave"] button')?.click(),
-    );
-    expect(html).toContain('Relancer la dernière vague (3)');
-    expect(html).toContain('il y a 3 h');
-    expect(html).toContain('Mine ×2');
-    expect(html).toContain('Camp ×1');
-    expect(html).toContain('2 partis');
-    expect(html).toContain('Léa n’est pas libre'); // ce qui reste est dit, avec sa raison
-    expect(relaunched).toBe(1);
-    // Hors du panneau « plan » (la répartition), la vague n'apparaît pas.
-    let repart = '';
-    await mountIt(
-      ExpeditionPlanner,
-      { planner, section: 'repart' },
-      undefined,
-      undefined,
-      '/',
-      (h) => (repart = h),
-    );
-    expect(repart).not.toContain('data-test="wave"');
-  });
-
   it('DailyObjectives : trois buts, progression, récompense, coché quand atteint, se range', async () => {
     const { default: DailyObjectives } = await import('@/components/DailyObjectives.vue');
     const states = [
@@ -841,9 +770,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       reset: () => undefined,
       launch: () => undefined,
       launchAll: () => undefined,
-      lastWave: ref(null),
-      waveResult: ref(null),
-      relaunchWave: () => undefined,
       repoTeams: ref(null),
       repoMoves: ref([]),
       repoRunning: ref(false),
@@ -915,18 +841,20 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('7 lieux disponibles');
     expect(out).toContain('Héros libre');
     expect(out).toContain('Ranger');
-    // 🔁 Sans vague mémorisée, pas de bouton ; avec, il porte le nombre de départs.
+    // 🔁 La relance de « la dernière vague » est retirée : jamais de bouton « Relancer (n) », même
+    // si un appelant passait encore l'ancienne prop.
     expect(out).not.toContain('Relancer (');
-    let withWave = '';
+    let legacy = '';
     await mountIt(
       AbsenceCard,
       { summary, away: 3600_000, relaunch: { champions: 1, heroFree: false, places: 1 }, wave: 3 },
       undefined,
       undefined,
       '/',
-      (h) => (withWave = h),
+      (h) => (legacy = h),
     );
-    expect(withWave).toContain('Relancer (3)');
+    expect(legacy).not.toContain('Relancer (');
+    expect(legacy).toContain('Planifier');
   });
 
   // ⛵ L'île 2 ouverte : toucher sa silhouette montre le bouton de traversée ; la milice de
