@@ -1115,6 +1115,49 @@ export function comboDefaultCount(
   return Math.max(0, Math.min(remaining, want));
 }
 
+/** 🎯 PLAFOND DU QUOTA DU JOUR, en séries par exo (décision de l'utilisateur : « dans les temps
+ *  + plafond »). Après des jours d'absence, tout tasser en une séance sauterait la récupération
+ *  sur laquelle le 360 est fondé : le surplus de retard reste pour demain. */
+export const COMBO_QUOTA_MAX_SETS = 5;
+
+/** Jours écoulés depuis le début du défi, aujourd'hui compris (0 avant le départ, jamais
+ *  au-delà de la durée). Même règle que `comboPace`. */
+function comboDaysElapsed(c: ComboChallenge, today: string): number {
+  if (today < c.start_date) return 0;
+  const ms = Date.parse(`${today}T00:00:00Z`) - Date.parse(`${c.start_date}T00:00:00Z`);
+  return Math.min(Math.max(1, c.duration_days), Math.round(ms / 86400000) + 1);
+}
+
+/** 🎯 « MON QUOTA DU JOUR » : par exo, ce qu'il manque pour être DANS LES TEMPS ce soir —
+ *  `ceil(objectif × jours écoulés ÷ durée) − déjà fait` —, borné au restant et à
+ *  `COMBO_QUOTA_MAX_SETS` séries. Rendu dans l'unité du compteur de la préparation de séance
+ *  (séries, reps ou secondes) ; un exo déjà dans les temps est absent. ⚠️ Le jour 1, c'est la
+ *  tranche du jour, pas un rattrapage : personne n'est en retard à l'ouverture. */
+export function comboDayQuota(
+  c: ComboChallenge,
+  today: string,
+  objective?: Objective | null,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const jours = Math.max(1, c.duration_days);
+  const elapsed = comboDaysElapsed(c, today);
+  if (elapsed <= 0) return out;
+  for (const leg of c.legs) {
+    const left = legRemaining(leg);
+    if (left <= 0 || leg.target <= 0) continue;
+    const owed = Math.ceil((leg.target * elapsed) / jours) - legDone(leg);
+    if (owed <= 0) continue;
+    const m = legMode(leg);
+    const per =
+      m === 'sets' ? 1 : m === 'time' ? legTimePerSet(leg, objective) : Math.max(1, legLastReps(leg));
+    let n = Math.min(owed, COMBO_QUOTA_MAX_SETS * per);
+    // Une durée se règle par pas de 15 s : jamais au-delà du restant.
+    if (m === 'time') n = Math.min(left, Math.ceil(n / COMBO_TIME_STEP) * COMBO_TIME_STEP);
+    out[leg.exercise_id] = n;
+  }
+  return out;
+}
+
 /** Construit une séance à partir de ce qui est CHOISI PAR EXO (indépendant).
  *  `counts` = { exercise_id: nb de séries } — sauf un exo de DURÉE, pour qui c'est une
  *  durée totale en SECONDES, découpée en séries (`comboTimeSets`). Chaque série reprend

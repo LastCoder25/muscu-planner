@@ -21,6 +21,31 @@
         chronométrés (gainage, chaise…). Chaque série ≈ 40 s d'exécution + le repos choisi.
         <b>Coche</b> les exos à faire dans cette séance (1 série chacun au départ).
       </p>
+      <!-- 🎯 Mon quota du jour : ce qu'il manque pour être dans les temps ce soir (plafonné).
+           Il coche la liste ci-dessous, qui reste modifiable. -->
+      <div v-if="quotaExos" class="express quota" :class="{ on: quotaOn }">
+        <div class="ex-head">
+          <span class="ex-title font-display">🎯 Mon quota du jour</span>
+          <span class="ex-sub"
+            >Ce qu'il manque pour être dans les temps ce soir, au plus
+            {{ COMBO_QUOTA_MAX_SETS }} séries par exo : le reste de ton retard attend demain</span
+          >
+        </div>
+        <button
+          type="button"
+          class="chip quota-chip"
+          :class="{ on: quotaOn }"
+          :aria-pressed="quotaOn"
+          @click="applyQuota"
+        >
+          {{ quotaExos }} exo{{ quotaExos > 1 ? 's' : '' }} · {{ quotaSets }} série{{
+            quotaSets > 1 ? 's' : ''
+          }}
+        </button>
+      </div>
+      <div v-else-if="c && c.status === 'active'" class="quota-ok">
+        ✅ Tu es dans les temps : aucun quota en retard aujourd'hui
+      </div>
       <!-- ⚡ Circuit express (v1.271) : N exos qui ne se fatiguent pas entre eux, une série de
            chaque, enchaînées sans repos. Il coche la liste ci-dessous, qui reste modifiable. -->
       <div v-if="expressMax >= 2" class="express" :class="{ on: expressN != null }">
@@ -328,6 +353,8 @@ import {
   comboDefaultCount,
   legTimePerSet,
   legSetsLeft,
+  comboDayQuota,
+  COMBO_QUOTA_MAX_SETS,
   COMBO_TIME_STEP,
   type ComboLeg,
   type ComboSessionExo,
@@ -535,6 +562,7 @@ const expressShort = computed(() =>
     : 0,
 );
 function setCircuit(n: number, keys: string[]) {
+  quotaOn.value = false;
   for (const leg of availableLegs.value) {
     const on = keys.includes(leg.exercise_id);
     included[leg.exercise_id] = on;
@@ -568,9 +596,39 @@ function rerollExpress() {
   for (const k of keys) expressSeen.add(k);
   setCircuit(n, keys);
 }
+// 🎯 Quota du jour : calculé d'après l'état du défi (ce qu'il manque pour être dans les temps).
+const quota = computed(() =>
+  c.value ? comboDayQuota(c.value, logicalToday(), profileStore.profile?.objective) : {},
+);
+const quotaOn = ref(false);
+const quotaExos = computed(() => Object.keys(quota.value).length);
+/** Nombre de séries du quota (reps et durées ramenées en séries). */
+const quotaSets = computed(() =>
+  availableLegs.value.reduce((a, l) => {
+    const n = quota.value[l.exercise_id];
+    if (!n) return a;
+    const m = legMode(l);
+    const per = m === 'sets' ? 1 : m === 'time' ? perSetOf(l) : Math.max(1, legLastReps(l));
+    return a + Math.max(1, Math.ceil(n / per));
+  }, 0),
+);
+function applyQuota() {
+  for (const leg of availableLegs.value) {
+    const n = quota.value[leg.exercise_id];
+    included[leg.exercise_id] = !!n;
+    if (n) counts[leg.exercise_id] = Math.min(n, maxCount(leg));
+  }
+  if (expressN.value != null) {
+    expressN.value = null;
+    expressOrder.value = [];
+    restSec.value = restBeforeExpress;
+  }
+  quotaOn.value = true;
+}
 /** Cocher à la main sort du circuit express (la pastille se rallume en en choisissant un). */
 function toggleIncluded(exId: string) {
   included[exId] = !included[exId];
+  quotaOn.value = false;
   if (expressN.value == null) return;
   expressN.value = null;
   expressOrder.value = [];
@@ -1063,6 +1121,15 @@ onUnmounted(() => {
   min-height: 44px;
   padding: 8px 4px;
   white-space: nowrap;
+}
+.quota-chip {
+  min-height: 44px;
+  width: 100%;
+}
+.quota-ok {
+  margin: 12px 0 14px;
+  font-size: 12.5px;
+  color: var(--d1);
 }
 .ex-chip:disabled {
   opacity: 0.35;
