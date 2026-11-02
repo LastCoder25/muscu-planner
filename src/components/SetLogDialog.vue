@@ -23,7 +23,39 @@
         />
         <span class="sl-hint">vide = PdC</span>
       </div>
-      <div v-if="assistable" class="sl-row">
+      <!-- 🟦 Élastique : l'assistance (il aide) et la résistance (il rend l'exo plus dur) sont
+           deux choses — un seul état à la fois. Réservé au Défi 360 (`bandable`). -->
+      <div v-if="assistable && bandable" class="sl-elastic">
+        <span class="sl-lbl">Élastique</span>
+        <div class="sl-seg" role="group" aria-label="Élastique">
+          <button
+            v-for="m in ELASTIC_MODES"
+            :key="m.id"
+            type="button"
+            class="sl-seg-b"
+            :class="{ on: elastic === m.id }"
+            :aria-pressed="elastic === m.id"
+            @click="elastic = m.id"
+          >
+            {{ m.label }}
+          </button>
+        </div>
+        <div v-if="elastic === 'resist'" class="sl-seg sl-bands" role="group" aria-label="Niveau">
+          <button
+            v-for="b in ELASTIC_BANDS"
+            :key="b.id"
+            type="button"
+            class="sl-seg-b"
+            :class="{ on: band === b.id }"
+            :aria-pressed="band === b.id"
+            @click="band = b.id"
+          >
+            {{ b.label }}
+          </button>
+        </div>
+        <span class="sl-hint">{{ elasticHint }}</span>
+      </div>
+      <div v-else-if="assistable" class="sl-row">
         <span class="sl-lbl">Assisté</span>
         <q-toggle v-model="assisted" />
         <span class="sl-hint">élastique → ×0,6</span>
@@ -50,29 +82,52 @@
 <script setup lang="ts">
 // Dialogue de saisie d'une SÉRIE (reps + poids + assisté), partagé par le Défi 360
 // (fiche + séance générée) et les défis simples en mode Séries (ChallengeDetailPage).
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
+import { ELASTIC_BANDS, type ElasticBand } from '@/lib/combo';
+
+type ElasticMode = 'none' | 'assist' | 'resist';
+const ELASTIC_MODES: { id: ElasticMode; label: string }[] = [
+  { id: 'none', label: 'Aucun' },
+  { id: 'assist', label: 'Assisté' },
+  { id: 'resist', label: 'Résistance' },
+];
 
 const props = defineProps<{
   modelValue: boolean;
   title: string;
   desc?: string;
   assistable?: boolean;
+  /** Propose l'élastique de RÉSISTANCE en plus de l'assistance (Défi 360). */
+  bandable?: boolean;
   hint?: string; // ex. « 8–12 reps » — fourchette conseillée pour cet exo
   initialReps?: number;
   initialWeight?: number | null;
   initialAssisted?: boolean;
+  initialBand?: ElasticBand | null;
   undoLabel?: string; // présent = on peut retirer une série (le parent confirme)
   saveLabel?: string; // « Enregistrer » quand on corrige une série existante
 }>();
 const emit = defineEmits<{
   'update:modelValue': [boolean];
-  save: [{ reps: number; weight: number | null; assisted: boolean }];
+  save: [{ reps: number; weight: number | null; assisted: boolean; band: ElasticBand | null }];
   undo: [];
 }>();
 
 const reps = ref(props.initialReps ?? 10);
 const weight = ref<number | null>(props.initialWeight ?? null);
 const assisted = ref(!!props.initialAssisted);
+const band = ref<ElasticBand | null>(props.initialBand ?? null);
+function modeOf(): ElasticMode {
+  return props.initialAssisted ? 'assist' : props.initialBand ? 'resist' : 'none';
+}
+const elastic = ref<ElasticMode>(modeOf());
+const elasticHint = computed(() =>
+  elastic.value === 'assist'
+    ? 'il aide → ×0,6'
+    : elastic.value === 'resist'
+      ? 'il rend l’exo plus dur'
+      : 'sans élastique',
+);
 
 // Reseed les champs à chaque ouverture (préremplissage fourni par le parent).
 watch(
@@ -82,6 +137,8 @@ watch(
     reps.value = props.initialReps ?? 10;
     weight.value = props.initialWeight ?? null;
     assisted.value = !!props.initialAssisted;
+    band.value = props.initialBand ?? null;
+    elastic.value = modeOf();
   },
 );
 
@@ -93,7 +150,12 @@ function undo() {
 function save() {
   const r = Math.max(1, Math.round(reps.value || 0));
   const w = weight.value != null && weight.value > 0 ? weight.value : null;
-  emit('save', { reps: r, weight: w, assisted: !!(props.assistable && assisted.value) });
+  // Avec le sélecteur d'élastique, l'état est celui des trois boutons ; sinon, l'ancien interrupteur.
+  const useMode = !!(props.assistable && props.bandable);
+  const isAssisted = useMode ? elastic.value === 'assist' : !!(props.assistable && assisted.value);
+  // Résistance sans niveau choisi : « moyen » (jamais une résistance sans niveau).
+  const bandOut = useMode && elastic.value === 'resist' ? (band.value ?? 'medium') : null;
+  emit('save', { reps: r, weight: w, assisted: isAssisted, band: bandOut });
   emit('update:modelValue', false);
 }
 </script>
@@ -131,6 +193,37 @@ function save() {
   font-size: 13px;
   color: var(--dim);
   min-width: 46px;
+}
+.sl-elastic {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sl-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.sl-bands {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.sl-seg-b {
+  min-height: 44px;
+  padding: 8px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sl-seg-b.on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .sl-hint {
   font-size: 11px;

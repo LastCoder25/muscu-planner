@@ -561,6 +561,8 @@
       :initial-reps="setReps"
       :initial-weight="setWeight"
       :initial-assisted="setAssisted"
+      :bandable="setLeg?.assistable"
+      :initial-band="setBand"
       :undo-label="undoLabel"
       :save-label="editIndex !== null ? 'Enregistrer' : undefined"
       @save="saveSet"
@@ -627,6 +629,8 @@ import {
   legLastReps,
   legLastWeight,
   legLastAssisted,
+  legLastBand,
+  type ElasticBand,
   legSets,
   setOriginLabel,
   legRepRange,
@@ -812,7 +816,7 @@ const pace = computed(() =>
 function segSetLabel(s: ComboSet | undefined): string {
   if (!s) return '';
   const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
-  return s.assisted ? `${base}·a` : base;
+  return s.assisted ? `${base}·a` : s.band ? `${base}·é` : base;
 }
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
@@ -822,6 +826,7 @@ const setCount = ref(1); // nb de séries identiques à ajouter (+1..+4)
 const setReps = ref<number>(10);
 const setWeight = ref<number | null>(null);
 const setAssisted = ref(false);
+const setBand = ref<ElasticBand | null>(null);
 /** Série en cours de CORRECTION (index), ou null quand on en ajoute une. */
 const editIndex = ref<number | null>(null);
 /** Case FAITE touchée : la fenêtre s’ouvre sur CETTE série, préremplie, pour la corriger
@@ -835,6 +840,7 @@ function openEdit(leg: ComboLeg, index: number) {
   setReps.value = s.reps;
   setWeight.value = s.weight ?? null;
   setAssisted.value = !!s.assisted;
+  setBand.value = s.band ?? null;
   setOpen.value = true;
 }
 /** Libellé du retrait dans la fenêtre : la série ouverte en correction, sinon la dernière. */
@@ -856,9 +862,15 @@ function openSet(leg: ComboLeg, count: number) {
   setReps.value = legLastReps(leg);
   setWeight.value = legLastWeight(leg);
   setAssisted.value = legLastAssisted(leg);
+  setBand.value = legLastBand(leg);
   setOpen.value = true;
 }
-function saveSet(v: { reps: number; weight: number | null; assisted: boolean }) {
+function saveSet(v: {
+  reps: number;
+  weight: number | null;
+  assisted: boolean;
+  band: ElasticBand | null;
+}) {
   const leg = setLeg.value;
   // ⚠️ On garde l'OBJET : si la série ferme le défi (objectif partout), `activeCombo`
   // devient null juste après — le relire ici plantait.
@@ -866,10 +878,26 @@ function saveSet(v: { reps: number; weight: number | null; assisted: boolean }) 
   if (!co || !leg) return;
   const before = comboCompleteInTime(co);
   if (editIndex.value !== null) {
-    comboStore.updateSet(co.id, leg.exercise_id, editIndex.value, v.reps, v.weight, v.assisted);
+    comboStore.updateSet(
+      co.id,
+      leg.exercise_id,
+      editIndex.value,
+      v.reps,
+      v.weight,
+      v.assisted,
+      v.band,
+    );
   } else {
     for (let i = 0; i < setCount.value; i++) {
-      comboStore.addSet(co.id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
+      comboStore.addSet(
+        co.id,
+        leg.exercise_id,
+        logicalToday(),
+        v.reps,
+        v.weight,
+        v.assisted,
+        v.band,
+      );
     }
   }
   if (!before && comboCompleteInTime(co)) celebrateCombo(co);

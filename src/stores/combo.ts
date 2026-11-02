@@ -14,6 +14,7 @@ import {
   type ComboTransferTarget,
   type ComboChallenge,
   type ComboLeg,
+  type ElasticBand,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 import type { ComboChestRecord } from '@/lib/comboChest';
@@ -165,6 +166,7 @@ export const useComboStore = defineStore('combo', () => {
     reps: number,
     weight: number | null,
     assisted = false,
+    band: ElasticBand | null = null,
     /** Heure réelle de la série (ms). La séance générée n'enregistre qu'à la fin : sans
      *  elle, toutes ses séries porteraient l'heure de l'enregistrement, et la fatigue des
      *  groupes (lue sur cette heure) croirait qu'elles ont été faites d'un coup. */
@@ -176,7 +178,14 @@ export const useComboStore = defineStore('combo', () => {
     if (!leg || legComplete(leg)) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
     const stamp = new Date(at ?? Date.now()).toISOString();
-    leg.sets.push({ date, reps, weight: weight ?? null, assisted, at: stamp });
+    leg.sets.push({
+      date,
+      reps,
+      weight: weight ?? null,
+      assisted,
+      ...(band && !assisted ? { band } : {}),
+      at: stamp,
+    });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
     // ⚠️ On SIGNALE la transition vers « terminé ». Le coffre de fin de 360 doit tomber à
     // l'instant même où le défi se boucle — or le store ne connaît ni le niveau du joueur
@@ -210,12 +219,13 @@ export const useComboStore = defineStore('combo', () => {
     reps: number,
     weight: number | null,
     assisted = false,
+    band: ElasticBand | null = null,
   ) {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps <= 0) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg?.sets?.length || index < 0 || index >= leg.sets.length) return;
-    leg.sets = updateSetAt(leg.sets, index, { reps, weight, assisted });
+    leg.sets = updateSetAt(leg.sets, index, { reps, weight, assisted, band });
     // La DERNIÈRE série porte le poids qui préremplit la suivante.
     if (index === leg.sets.length - 1) leg.weight_kg = weight ?? null;
     refreshStatus(c);

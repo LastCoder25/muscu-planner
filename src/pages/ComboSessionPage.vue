@@ -329,6 +329,8 @@
       :initial-reps="logReps"
       :initial-weight="logWeight"
       :initial-assisted="logAssisted"
+      :bandable="logAssistable"
+      :initial-band="logBand"
       @save="onLogSave"
     />
   </q-page>
@@ -353,6 +355,8 @@ import {
   comboDefaultCount,
   legTimePerSet,
   legSetsLeft,
+  legLastBand,
+  type ElasticBand,
   comboDayQuota,
   COMBO_QUOTA_MAX_SETS,
   COMBO_TIME_STEP,
@@ -508,6 +512,7 @@ interface LoggedSet {
   reps: number;
   weight: number | null;
   assisted: boolean;
+  band?: ElasticBand | null;
   at: number;
 }
 const logged = ref<Record<string, LoggedSet>>({});
@@ -777,6 +782,7 @@ const logExoName = ref('');
 const logReps = ref(10);
 const logWeight = ref<number | null>(null);
 const logAssisted = ref(false);
+const logBand = ref<ElasticBand | null>(null);
 const logAssistable = ref(false);
 const logHint = ref('');
 
@@ -790,11 +796,17 @@ function validate(i: number, j: number, reps: number) {
   logReps.value = prev?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
   logWeight.value = prev?.weight ?? exo.weight_kg ?? null;
   logAssisted.value = prev?.assisted ?? false;
+  logBand.value = prev ? (prev.band ?? null) : leg ? legLastBand(leg) : null;
   logAssistable.value = !!leg?.assistable;
   logHint.value = exoRangeLabel(exo);
   logOpen.value = true;
 }
-function onLogSave(v: { reps: number; weight: number | null; assisted: boolean }) {
+function onLogSave(v: {
+  reps: number;
+  weight: number | null;
+  assisted: boolean;
+  band: ElasticBand | null;
+}) {
   const slot = logSlot.value;
   if (!slot) return;
   const key = `${slot.i}-${slot.j}`;
@@ -883,7 +895,7 @@ function commitLogged() {
   for (const [key, v] of entries) {
     const i = Number(key.split('-')[0]);
     const exo = session.value[i];
-    if (exo) combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted, v.at);
+    if (exo) combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted, v.band ?? null, v.at);
   }
 }
 function finish() {

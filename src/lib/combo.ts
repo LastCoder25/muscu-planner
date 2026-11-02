@@ -23,11 +23,27 @@ import {
   type RepRange,
 } from './repScheme';
 
+/** 🟦 RÉSISTANCE PAR ÉLASTIQUE : un NIVEAU de bande, pas des kg (la tension dépend de
+ *  l'étirement). À l'opposé de l'assistance : l'élastique y rend l'exo plus DUR. */
+export type ElasticBand = 'light' | 'medium' | 'strong' | 'xstrong';
+export const ELASTIC_BANDS: readonly { id: ElasticBand; label: string }[] = [
+  { id: 'light', label: 'Léger' },
+  { id: 'medium', label: 'Moyen' },
+  { id: 'strong', label: 'Fort' },
+  { id: 'xstrong', label: 'Très fort' },
+];
+export function elasticBandLabel(b?: ElasticBand | null): string {
+  return ELASTIC_BANDS.find((x) => x.id === b)?.label ?? '';
+}
+
 export interface ComboSet {
   date: string; // YYYY-MM-DD
   reps: number;
   weight?: number | null; // charge de la série (kg) — poids du corps = vide
   assisted?: boolean; // exo poids du corps fait assisté (élastique/machine) → XP ×0,6
+  /** Élastique de RÉSISTANCE (niveau de bande). ⚠️ Exclusif avec `assisted` : un élastique
+   *  aide OU résiste. Absent = aucun. N'entre pas dans l'XP (non mesuré). */
+  band?: ElasticBand;
   /** Heure de saisie (ISO) : distingue les séries enchaînées des séries étalées pour le
    *  conseil de charge. Absente des séries saisies avant la v0.1159. */
   at?: string;
@@ -147,13 +163,21 @@ export function removeSetAt(sets: readonly ComboSet[], index: number): ComboSet[
 export function updateSetAt(
   sets: readonly ComboSet[],
   index: number,
-  patch: { reps: number; weight: number | null; assisted: boolean },
+  patch: { reps: number; weight: number | null; assisted: boolean; band?: ElasticBand | null },
 ): ComboSet[] {
-  return sets.map((s, i) =>
-    i === index
-      ? { ...s, reps: patch.reps, weight: patch.weight ?? null, assisted: patch.assisted }
-      : s,
-  );
+  return sets.map((s, i) => {
+    if (i !== index) return s;
+    const rest = { ...s };
+    delete rest.band; // l’ancienne bande ne survit pas à la correction
+    const band = patch.assisted ? null : patch.band;
+    return {
+      ...rest,
+      reps: patch.reps,
+      weight: patch.weight ?? null,
+      assisted: patch.assisted,
+      ...(band ? { band } : {}),
+    };
+  });
 }
 
 /** Séries réalisées (avec repli : convertit l'ancien `progress` en séries). */
@@ -379,6 +403,12 @@ export function legLastReps(leg: ComboLeg, fallback = COMBO_PLAN_REPS): number {
 export function legLastAssisted(leg: ComboLeg): boolean {
   const s = ownSets(leg);
   return s.length ? !!s[s.length - 1]!.assisted : false;
+}
+
+/** Niveau d'élastique de résistance de préremplissage : celui de la dernière série. */
+export function legLastBand(leg: ComboLeg): ElasticBand | null {
+  const s = ownSets(leg);
+  return s.length ? (s[s.length - 1]!.band ?? null) : null;
 }
 
 /** Fourchette de reps conseillée d’un exo. Repli pour les 360 créés avant qu’elle
@@ -1531,7 +1561,13 @@ function chained(a: ComboSet, b: ComboSet): boolean {
 export function loadBlocks(sets: readonly ComboSet[]): number[] {
   const last = sets[sets.length - 1];
   if (!last) return [];
-  const same = sets.filter((s) => loadOf(s) === loadOf(last) && !!s.assisted === !!last.assisted);
+  // Un autre niveau d'élastique est une autre charge : monter la bande remet les blocs à zéro.
+  const same = sets.filter(
+    (s) =>
+      loadOf(s) === loadOf(last) &&
+      !!s.assisted === !!last.assisted &&
+      (s.band ?? null) === (last.band ?? null),
+  );
   const blocks: number[] = [];
   same.forEach((s, i) => {
     if (i > 0 && chained(same[i - 1]!, s))

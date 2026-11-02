@@ -13,6 +13,9 @@
           <span class="hist-main">
             {{ s.reps }} {{ unit }}<template v-if="s.weight"> · {{ s.weight }} kg</template>
             <span v-if="s.assisted" class="hist-asst">assisté</span>
+            <span v-else-if="s.band" class="hist-band"
+              >élastique {{ elasticBandLabel(s.band).toLowerCase() }}</span
+            >
             <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
             <span v-if="s.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, s) }}</span>
           </span>
@@ -28,7 +31,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { legMode, legSets, setOriginLabel, type ComboLeg } from '@/lib/combo';
+import { legMode, legSets, setOriginLabel, elasticBandLabel, type ComboLeg } from '@/lib/combo';
 
 const props = defineProps<{ modelValue: boolean; leg: ComboLeg | null }>();
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>();
@@ -94,6 +97,11 @@ function fmtDay(iso: string): string {
   flex: 1;
   font-size: 13px;
   color: var(--text);
+}
+.hist-band {
+  font-size: 10px;
+  color: var(--accent);
+  margin-left: 6px;
 }
 .hist-asst {
   font-size: 10px;

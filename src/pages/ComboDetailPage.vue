@@ -184,7 +184,8 @@
             <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
             <template v-else
               >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }} kg</template
-              ><template v-if="s.assisted"> ·a</template></template
+              ><template v-if="s.assisted"> ·a</template
+              ><template v-else-if="s.band"> ·é</template></template
             >
           </span>
         </div>
@@ -226,6 +227,8 @@
       :initial-reps="setInitReps"
       :initial-weight="setInitWeight"
       :initial-assisted="setInitAssisted"
+      :bandable="setLeg?.assistable"
+      :initial-band="setInitBand"
       :undo-label="undoLabel"
       :save-label="editIndex !== null ? 'Enregistrer' : undefined"
       @save="onSetSave"
@@ -266,6 +269,8 @@ import {
   legLastReps,
   legLastWeight,
   legLastAssisted,
+  legLastBand,
+  type ElasticBand,
   legRepRange,
   comboExportText,
   comboBonusXp,
@@ -413,7 +418,7 @@ const undoLabel = computed(() => {
 function segSetLabel(s: ComboSet | undefined): string {
   if (!s) return '';
   const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
-  return s.assisted ? `${base}·a` : base;
+  return s.assisted ? `${base}·a` : s.band ? `${base}·é` : base;
 }
 
 // Saisie d'une série via le dialogue partagé, préremplie avec la dernière série.
@@ -423,6 +428,7 @@ const setCount = ref(1);
 const setInitReps = ref(10);
 const setInitWeight = ref<number | null>(null);
 const setInitAssisted = ref(false);
+const setInitBand = ref<ElasticBand | null>(null);
 /** Série en cours de CORRECTION (index), ou null quand on en ajoute une. */
 const editIndex = ref<number | null>(null);
 /** Case FAITE touchée : la fenêtre s’ouvre sur CETTE série, préremplie, pour la corriger
@@ -436,6 +442,7 @@ function openEdit(leg: ComboLeg, index: number) {
   setInitReps.value = s.reps;
   setInitWeight.value = s.weight ?? null;
   setInitAssisted.value = !!s.assisted;
+  setInitBand.value = s.band ?? null;
   setOpen.value = true;
 }
 function openSet(leg: ComboLeg, count: number) {
@@ -448,6 +455,7 @@ function openSet(leg: ComboLeg, count: number) {
     setInitReps.value = legLastReps(leg);
     setInitWeight.value = legLastWeight(leg) ?? recallWeight(leg.exercise_id);
     setInitAssisted.value = legLastAssisted(leg);
+    setInitBand.value = legLastBand(leg);
   } else {
     // Aucune série encore sur cet exo dans ce 360 → poids mémorisé pour cet exo (toutes
     // activités, ticket efa49f4f), sinon conseil dérivé de l'historique (ticket 5f5bad0f).
@@ -459,6 +467,7 @@ function openSet(leg: ComboLeg, count: number) {
     setInitReps.value = sug?.repMax ?? legLastReps(leg, prescribedReps(legRange(leg)));
     setInitWeight.value = recallWeight(leg.exercise_id) ?? sug?.weight ?? legLastWeight(leg);
     setInitAssisted.value = false;
+    setInitBand.value = null;
   }
   setOpen.value = true;
 }
@@ -472,16 +481,21 @@ function celebrateObjective(co: ComboChallenge) {
     rarity: 'divin',
   });
 }
-function onSetSave(v: { reps: number; weight: number | null; assisted: boolean }) {
+function onSetSave(v: {
+  reps: number;
+  weight: number | null;
+  assisted: boolean;
+  band: ElasticBand | null;
+}) {
   const leg = setLeg.value;
   if (!auth.user?.id || !c.value || !leg) return;
   rememberWeight(leg.exercise_id, v.weight); // mémorise le poids pour cet exo (ticket efa49f4f)
   const before = comboCompleteInTime(c.value);
   if (editIndex.value !== null) {
-    combo.updateSet(id, leg.exercise_id, editIndex.value, v.reps, v.weight, v.assisted);
+    combo.updateSet(id, leg.exercise_id, editIndex.value, v.reps, v.weight, v.assisted, v.band);
   } else {
     for (let i = 0; i < setCount.value; i++) {
-      combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted);
+      combo.addSet(id, leg.exercise_id, logicalToday(), v.reps, v.weight, v.assisted, v.band);
     }
   }
   if (!before && comboCompleteInTime(c.value)) celebrateObjective(c.value);
