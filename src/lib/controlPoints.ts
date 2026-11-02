@@ -4453,15 +4453,11 @@ export function garrisonDots(row: ControlRosterRow): string {
   // qui faisait tomber TOUT le rendu de la carte (signalé : carte noire après la prise).
   const free = (used: number) =>
     Number.isFinite(row.seats) ? 'f'.repeat(Math.max(0, row.seats - used)) : '';
-  if (row.poi.control?.owner !== 'player') {
-    // ⚔️ Un point ennemi qu'on attaque : nos champions en marche occupent déjà leurs places
-    // (au plus celles du point — ceux en trop rentrent après la prise).
-    if (!row.assault) return '';
-    // 🧝 Le héros qui mène l'assaut prend ses 2 places, reliées (`g`), avant les champions.
-    const hero = row.assault.hero ? 'g'.repeat(MILITIA.heroSeats) : '';
-    const go = Math.max(0, Math.min(row.assault.ids.length, row.seats - hero.length));
-    return hero + 'r'.repeat(go) + free(hero.length + go);
-  }
+  // 🙈 UN LIEU ENNEMI N'A AUCUNE BOULE, attaqué ou non (v1.294.0, demandé : « sur une attaque de
+  // lieu fixe ou forteresse je ne dois pas voir les boules tant que l'attaque n'est pas faite,
+  // sinon ça spoile le résultat »). Nos champions en marche y dessinaient leurs places comme
+  // si le lieu était déjà pris ; les boules n'apparaissent qu'une fois le lieu à nous.
+  if (row.poi.control?.owner !== 'player') return '';
   // ⚔️⏳ Un champion réservé pour une attaque combinée est encore là, mais engagé : il se
   // dessine comme en expédition (demandé : « les montrer comme occupés »).
   const engaged = new Set(row.engaged);

@@ -146,7 +146,8 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     expect(garrisonDots(held)).toBe('cm');
     const enemy = row(controlRoster(base(), [], 0, L, new Set(), null), MINE);
     const assault = { ...enemy, seats: Infinity, assault: { ids: ['a', 'b'] } } as typeof enemy;
-    expect(garrisonDots(assault)).toBe('rr');
+    // 🙈 Un lieu ennemi attaqué ne montre aucune boule (elle spoilerait l'issue).
+    expect(garrisonDots(assault)).toBe('');
   });
 
   it('un TRANSFERT depuis une autre place forte compte comme en route', () => {
@@ -171,7 +172,7 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     expect(garrisonDots(r)).toBe('mmrrr' + 'f'.repeat(Math.max(0, r.seats - 5)));
   });
 
-  it('ennemi ATTAQUÉ : nos champions en marche prennent leurs places, au plus celles du point', () => {
+  it('🙈 ennemi ATTAQUÉ : aucune boule, quelle que soit la taille de l’équipe (elle spoilerait l’issue)', () => {
     const march = (ids: string[]) =>
       garrisonDots(
         row(
@@ -180,9 +181,15 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
         ),
       );
     const seats = seatsOf('mine');
-    expect(march(['a', 'b'])).toBe('rr' + 'f'.repeat(Math.max(0, seats - 2)));
+    expect(march(['a', 'b'])).toBe('');
     const many = Array.from({ length: seats + 3 }, (_, i) => `x${i}`);
-    expect(march(many)).toBe('r'.repeat(seats));
+    expect(march(many)).toBe('');
+    // Le roster, lui, sait toujours qui marche : seul le dessin se tait.
+    const r = row(
+      controlRoster(base(), [{ poiId: MINE, midAt: 5 * H, ids: ['a', 'b'] }], 2 * H, L, new Set(), null),
+      MINE,
+    );
+    expect(r.assault?.ids).toEqual(['a', 'b']);
     // L'équipe déjà arrivée (assaut passé), on ne sait plus rien de la garnison ennemie.
     expect(
       garrisonDots(
@@ -238,9 +245,10 @@ describe('⚫⚫ garrisonDotRows — champions en haut, miliciens en dessous', (
     expect(garrisonDotRows({ ...r, kind: 'objective', seats: 5 })).toEqual(['cffff', '']);
   });
 
-  it('ennemi : tout sur la première rangée', () => {
+  it('ennemi attaqué : aucune boule avant la prise, sur aucune des deux rangées', () => {
     const enemy = row(controlRoster(base(), [], 0, L, new Set(), null), MINE);
     const assault = { ...enemy, seats: Infinity, assault: { ids: ['a', 'b'] } } as typeof enemy;
-    expect(garrisonDotRows(assault)).toEqual(['rr', '']);
+    expect(garrisonDotRows(assault)).toEqual(['', '']);
+    expect(garrisonDotRows({ ...assault, assault: { ids: ['a'], hero: true } } as typeof assault)).toEqual(['', '']);
   });
 });

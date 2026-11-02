@@ -46,8 +46,8 @@ describe('🪦 icônes des lieux ennemis des îles', () => {
   });
 });
 
-describe('⚫ un assaut mené par le héros se dessine', () => {
-  it('le héros prend 2 places reliées, puis ses champions', () => {
+describe('⚫ un assaut mené par le héros ne se dessine pas avant la prise', () => {
+  it('le roster garde le héros, mais aucune boule n’est dessinée sous le lieu ennemi', () => {
     const L = 30;
     const m = ensureControls(createMap(3, 0, L, 1), 0, L);
     const id = controlIdOf(CONTROL.kinds[0]!);
@@ -61,6 +61,6 @@ describe('⚫ un assaut mené par le héros se dessine', () => {
     );
     const r = rows.find((x) => x.poi.id === id)!;
     expect(r.assault?.hero).toBe(true);
-    expect(garrisonDots(r).startsWith('ggr')).toBe(true);
+    expect(garrisonDots(r)).toBe('');
   });
 });
