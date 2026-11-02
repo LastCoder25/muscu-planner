@@ -75,6 +75,7 @@ const THRESHOLD_KEY = 'muscu:planner:threshold';
 const MODE_KEY = 'muscu:planner:mode';
 const GARRISON_KEY = 'muscu:planner:garrisons';
 const SUPPLY_KEY = 'muscu:planner:supplies';
+const AUTO_KEY = 'muscu:planner:autolaunch';
 
 /** 🕳️ Mode « Failles » : seulement les failles, la plus urgente d'abord ; sinon tous les lieux. */
 const planTargets = (pois: Poi[], mode: PlanMode): Poi[] =>
@@ -173,6 +174,11 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     modes.value = toggleModeIn(modes.value, id);
   }
   watch(withGarrisons, (v) => save(GARRISON_KEY, v ? '1' : '0'));
+  /** 🚀 Lancer les expéditions DÈS QU'ELLES SONT CALCULÉES, sans relecture (demandé). Éteint par
+   *  défaut : un départ n'est pas annulable. ⚠️ Ce n'est pas un réglage de calcul : le changer
+   *  n'efface pas la proposition (il n'est pas dans le `reset`). */
+  const autoLaunch = ref(readStr(AUTO_KEY) === '1');
+  watch(autoLaunch, (v) => save(AUTO_KEY, v ? '1' : '0'));
   /** 🎒 Les consommables que le joueur AUTORISE dans les simulations (demandé : « pouvoir
    *  rajouter des consommables sur les simulations d'optimisation des expéditions »). Rien par
    *  défaut : on ne dépense jamais un objet que le joueur n'a pas choisi d'engager. */
@@ -249,6 +255,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     progress.value = 0;
     rows.value = null;
     unreachable.value = [];
+    let launchNow = false;
     try {
       const now = ctx.coarseNow.value;
       const map = char.row?.expedition_map;
@@ -409,9 +416,13 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       }));
       unreachable.value = res.unreachable;
       progress.value = 1;
+      launchNow = autoLaunch.value && rows.value.length > 0;
     } finally {
       if (me === run) running.value = false;
     }
+    // 🚀 Départ automatique : APRÈS la fin du calcul (le panneau n'est plus « en calcul »), et
+    // seulement si ce calcul est toujours le dernier (un réglage changé entre-temps l'annule).
+    if (launchNow && me === run) await launchAllAuto();
   }
 
   /**
@@ -649,6 +660,19 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     }
   }
 
+  /** Le départ automatique : `launchAll`, puis ce qui est parti est DIT (le départ à la main se
+   *  voit sur l'écran ; celui-ci n'a pas de clic derrière lequel l'attendre). */
+  async function launchAllAuto() {
+    const n = rows.value?.length ?? 0;
+    await launchAll();
+    const sent = n - (rows.value?.length ?? 0);
+    if (sent > 0)
+      $q.notify({
+        type: 'positive',
+        message: `🚀 ${sent} expédition${sent > 1 ? 's' : ''} lancée${sent > 1 ? 's' : ''} automatiquement`,
+      });
+  }
+
   async function launchAll() {
     if (launching.value || !rows.value?.length) return;
     launching.value = '*';
@@ -781,6 +805,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     riftCount,
     nothingToPlan,
     withGarrisons,
+    autoLaunch,
     withHero,
     supplyStock,
     toggleSupply,

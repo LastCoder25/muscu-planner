@@ -389,6 +389,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       toggleMode: () => undefined,
       nothingToPlan: ref(false),
       withGarrisons: ref(false),
+      autoLaunch: ref(false),
       withHero: ref(true),
       supplyStock: ref([
         {
@@ -694,6 +695,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       toggleMode: () => undefined,
       nothingToPlan: ref(false),
       withGarrisons: ref(false),
+      autoLaunch: ref(false),
       withHero: ref(true),
       supplyStock: ref([]),
       toggleSupply: () => undefined,
@@ -824,6 +826,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       toggleMode: () => undefined,
       nothingToPlan: ref(false),
       withGarrisons: ref(false),
+      autoLaunch: ref(false),
       withHero: ref(true),
       supplyStock: ref([]),
       toggleSupply: () => undefined,

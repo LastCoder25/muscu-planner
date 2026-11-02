@@ -112,6 +112,28 @@
       </div>
     </div>
 
+    <!-- 🚀 Départ automatique : au calcul terminé, tout part sans relecture. Éteint par défaut. -->
+    <div v-if="section === 'plan'" class="pl-row">
+      <span class="pl-lab">Lancement</span>
+      <div class="pl-chips">
+        <button
+          type="button"
+          class="pl-chip"
+          :class="{ on: autoLaunch }"
+          :aria-pressed="autoLaunch"
+          data-test="auto-launch"
+          title="Les expéditions proposées partent dès que le calcul est fini, sans que tu les relises"
+          @click="autoLaunch = !autoLaunch"
+        >
+          🚀 Lancer dès que c’est calculé
+        </button>
+      </div>
+      <p v-if="autoLaunch" class="pl-note" data-test="auto-launch-note">
+        Les départs ne s’annulent pas : relis tes réglages (réussite, consommables) avant de
+        calculer.
+      </p>
+    </div>
+
     <!-- 🎒 LES CONSOMMABLES DANS LES SIMULATIONS (demandé) : on coche ceux qu'on accepte
          d'engager ; une expédition n'en emporte que si son effectif ne passe pas le seuil
          (attaque et embuscades), et alors le minimum, tant qu'il en reste en stock — son
@@ -162,7 +184,18 @@
         @click="compute"
       >
         <span v-if="running">⏳ Calcul… {{ Math.round(progress * 100) }} %</span>
-        <span v-else>🪄 {{ rows ? 'Recalculer' : 'Proposer des expéditions' }}</span>
+        <span v-else
+          >🪄
+          {{
+            rows
+              ? autoLaunch
+                ? 'Recalculer et lancer'
+                : 'Recalculer'
+              : autoLaunch
+                ? 'Proposer et lancer'
+                : 'Proposer des expéditions'
+          }}</span
+        >
       </button>
       <!-- 🧭 RÉPARTIR : placer tout l’effectif (base, lieux tenus, forteresse) pour couvrir
            l’île ; le 🪄 part ensuite de ces garnisons. -->
@@ -408,6 +441,7 @@ const {
   toggleMode,
   nothingToPlan,
   withGarrisons,
+  autoLaunch,
   withHero,
   supplyStock,
   toggleSupply,
