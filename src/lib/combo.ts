@@ -442,6 +442,14 @@ export function lastEnteredSet(sets: readonly ComboSet[]): ComboSet | null {
   return best;
 }
 
+/** ➕ Pas du stepper de charge : ±2,5 kg (charte), arrondi au demi-kilo ; revenir à
+ *  0 rend `null` = poids du corps (le champ vide). */
+export const WEIGHT_STEP_KG = 2.5;
+export function stepWeight(current: number | null | undefined, dir: 1 | -1): number | null {
+  const next = Math.round(((current ?? 0) + dir * WEIGHT_STEP_KG) * 2) / 2; // ≤ 0 → vide
+  return next > 0 ? next : null;
+}
+
 /** 🔢 REPS À PORTÉE DE POUCE : les valeurs proposées en pastilles dans la saisie d'une série.
  *  Toute la fourchette de l'exo quand elle tient en 6 pastilles ; au-delà, 6 valeurs réparties
  *  (bornes comprises). Sans fourchette : 8 à 12. Un exo de durée (secondes) : aucune. */

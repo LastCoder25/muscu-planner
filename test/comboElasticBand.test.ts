@@ -9,6 +9,7 @@ import {
   lastEnteredSet,
   exerciseHistorySets,
   repQuickPicks,
+  stepWeight,
   elasticBandLabel,
   ELASTIC_BANDS,
   type ComboChallenge,
@@ -126,4 +127,17 @@ describe('repQuickPicks — pastilles de reps', () => {
     expect(p[5]).toBe(30);
   });
   it('durée : aucune pastille', () => expect(repQuickPicks(30, 60, true)).toEqual([]));
+});
+
+describe('stepWeight — stepper de charge', () => {
+  it('poids du corps → +2,5 kg ; retour à 0 → vide', () => {
+    expect(stepWeight(null, 1)).toBe(2.5);
+    expect(stepWeight(2.5, -1)).toBeNull();
+    expect(stepWeight(null, -1)).toBeNull();
+  });
+  it('de 2,5 en 2,5, arrondi au demi-kilo', () => {
+    expect(stepWeight(40, 1)).toBe(42.5);
+    expect(stepWeight(40, -1)).toBe(37.5);
+    expect(stepWeight(41.25, 1)).toBe(44);
+  });
 });
