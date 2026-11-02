@@ -5,6 +5,7 @@ import {
   updateSetAt,
   loadBlocks,
   legLastBand,
+  setCellLabel,
   elasticBandLabel,
   ELASTIC_BANDS,
   type ComboLeg,
@@ -72,5 +73,15 @@ describe('élastique de résistance', () => {
     const leg = { sets: [set({ band: 'light' }), set({ band: 'strong' })] } as unknown as ComboLeg;
     expect(legLastBand(leg)).toBe('strong');
     expect(legLastBand({ sets: [] } as unknown as ComboLeg)).toBeNull();
+  });
+});
+
+describe('setCellLabel — étiquette compacte d’une cellule', () => {
+  it('poids du corps, lest, assisté, résistance', () => {
+    expect(setCellLabel(set({ reps: 12 }))).toBe('12');
+    expect(setCellLabel(set({ reps: 12, weight: 15 }))).toBe('12×15kg');
+    expect(setCellLabel(set({ reps: 8, assisted: true }))).toBe('8 🟧');
+    expect(setCellLabel(set({ reps: 9, weight: 5, band: 'strong' }))).toBe('9×5kg 🟦');
+    expect(setCellLabel(undefined)).toBe('');
   });
 });

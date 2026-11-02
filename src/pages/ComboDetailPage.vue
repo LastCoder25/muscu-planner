@@ -184,8 +184,8 @@
             <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
             <template v-else
               >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }} kg</template
-              ><template v-if="s.assisted"> ·a</template
-              ><template v-else-if="s.band"> ·é</template></template
+              ><template v-if="s.assisted"> 🟧</template
+              ><template v-else-if="s.band"> 🟦</template></template
             >
           </span>
         </div>
@@ -270,13 +270,13 @@ import {
   legLastWeight,
   legLastAssisted,
   legLastBand,
+  setCellLabel,
   type ElasticBand,
   legRepRange,
   comboExportText,
   comboBonusXp,
   comboCompleteInTime,
   type ComboLeg,
-  type ComboSet,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
@@ -415,11 +415,7 @@ const undoLabel = computed(() => {
   return last ? `↩ Retirer la dernière (${segSetLabel(last)})` : undefined;
 });
 
-function segSetLabel(s: ComboSet | undefined): string {
-  if (!s) return '';
-  const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
-  return s.assisted ? `${base}·a` : s.band ? `${base}·é` : base;
-}
+const segSetLabel = setCellLabel;
 
 // Saisie d'une série via le dialogue partagé, préremplie avec la dernière série.
 const setOpen = ref(false);

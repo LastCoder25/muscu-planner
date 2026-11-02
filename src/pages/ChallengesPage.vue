@@ -630,6 +630,7 @@ import {
   legLastWeight,
   legLastAssisted,
   legLastBand,
+  setCellLabel,
   type ElasticBand,
   legSets,
   setOriginLabel,
@@ -643,7 +644,6 @@ import {
   comboBonusXp,
   comboCompleteInTime,
   type ComboLeg,
-  type ComboSet,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 import {
@@ -813,11 +813,7 @@ const pace = computed(() =>
 
 // Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
 // du corps, « 12·a » si assisté). Vide si la série n'existe pas encore.
-function segSetLabel(s: ComboSet | undefined): string {
-  if (!s) return '';
-  const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
-  return s.assisted ? `${base}·a` : s.band ? `${base}·é` : base;
-}
+const segSetLabel = setCellLabel;
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
 const setOpen = ref(false);

@@ -405,6 +405,15 @@ export function legLastAssisted(leg: ComboLeg): boolean {
   return s.length ? !!s[s.length - 1]!.assisted : false;
 }
 
+/** Étiquette COMPACTE d'une série dans une cellule d'avancement : « 12 », « 12×15kg », puis
+ *  🟧 si l'élastique aide, 🟦 s'il rend l'exo plus dur (le détail est dans l'historique).
+ *  ⚠️ Une seule règle, lue par la fiche du 360 ET l'onglet 🎯 (elle y était recopiée). */
+export function setCellLabel(s: ComboSet | undefined): string {
+  if (!s) return '';
+  const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
+  return s.assisted ? `${base} 🟧` : s.band ? `${base} 🟦` : base;
+}
+
 /** Niveau d'élastique de résistance de préremplissage : celui de la dernière série. */
 export function legLastBand(leg: ComboLeg): ElasticBand | null {
   const s = ownSets(leg);

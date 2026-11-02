@@ -11,21 +11,28 @@
         <span class="sl-lbl">Reps</span>
         <q-input v-model.number="reps" type="number" filled dense style="max-width: 110px" />
       </div>
-      <div class="sl-row">
-        <span class="sl-lbl">Poids</span>
-        <q-input
-          v-model.number="weight"
-          type="number"
-          filled
-          dense
-          suffix="kg"
-          style="max-width: 130px"
-        />
-        <span class="sl-hint">vide = PdC</span>
-      </div>
+      <!-- Exo au poids du corps (360) : lest et élastique forment UN bloc « Charge ». Assisté →
+           plus de lest (une aide et un lest se contredisent) ; résistance → les deux comptent. -->
+      <div :class="{ 'sl-charge': chargeBlock }">
+        <div v-if="chargeBlock" class="sl-charge-h">Charge</div>
+        <div class="sl-row">
+          <span class="sl-lbl">{{ chargeBlock ? 'Lest' : 'Poids' }}</span>
+          <q-input
+            v-model.number="weight"
+            type="number"
+            filled
+            dense
+            suffix="kg"
+            :disable="lestOff"
+            style="max-width: 130px"
+          />
+          <span class="sl-hint">{{
+            lestOff ? 'sans lest quand il aide' : chargeBlock ? 'vide = poids du corps' : 'vide = PdC'
+          }}</span>
+        </div>
       <!-- 🟦 Élastique : l'assistance (il aide) et la résistance (il rend l'exo plus dur) sont
            deux choses — un seul état à la fois. Réservé au Défi 360 (`bandable`). -->
-      <div v-if="assistable && bandable" class="sl-elastic">
+      <div v-if="chargeBlock" class="sl-elastic">
         <span class="sl-lbl">Élastique</span>
         <div class="sl-seg" role="group" aria-label="Élastique">
           <button
@@ -59,6 +66,7 @@
         <span class="sl-lbl">Assisté</span>
         <q-toggle v-model="assisted" />
         <span class="sl-hint">élastique → ×0,6</span>
+      </div>
       </div>
       <div class="sl-actions">
         <!-- Retrait d’une série : il vivait en bouton ↩ sur CHAQUE ligne d'exo et leur prenait
@@ -121,6 +129,10 @@ function modeOf(): ElasticMode {
   return props.initialAssisted ? 'assist' : props.initialBand ? 'resist' : 'none';
 }
 const elastic = ref<ElasticMode>(modeOf());
+/** Exo au poids du corps du Défi 360 : lest + élastique regroupés. */
+const chargeBlock = computed(() => !!(props.assistable && props.bandable));
+/** Assisté : pas de lest (grisé, et non enregistré). */
+const lestOff = computed(() => chargeBlock.value && elastic.value === 'assist');
 const elasticHint = computed(() =>
   elastic.value === 'assist'
     ? 'il aide → ×0,6'
@@ -149,7 +161,7 @@ function undo() {
 
 function save() {
   const r = Math.max(1, Math.round(reps.value || 0));
-  const w = weight.value != null && weight.value > 0 ? weight.value : null;
+  const w = weight.value != null && weight.value > 0 && !lestOff.value ? weight.value : null;
   // Avec le sélecteur d'élastique, l'état est celui des trois boutons ; sinon, l'ancien interrupteur.
   const useMode = !!(props.assistable && props.bandable);
   const isAssisted = useMode ? elastic.value === 'assist' : !!(props.assistable && assisted.value);
@@ -194,6 +206,20 @@ function save() {
   color: var(--dim);
   min-width: 46px;
 }
+.sl-charge {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 10px 2px;
+  margin-bottom: 10px;
+}
+.sl-charge-h {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
 .sl-elastic {
   display: flex;
   flex-direction: column;
@@ -235,6 +261,9 @@ function save() {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
+}
+.sl-actions :deep(.q-btn) {
+  min-height: 44px;
 }
 .sl-undo {
   margin-right: auto;

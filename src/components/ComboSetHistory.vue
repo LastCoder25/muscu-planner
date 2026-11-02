@@ -11,10 +11,11 @@
         <div v-for="(s, i) in sets" :key="i" class="hist-row">
           <span class="hist-n">{{ sets.length - i }}</span>
           <span class="hist-main">
-            {{ s.reps }} {{ unit }}<template v-if="s.weight"> · {{ s.weight }} kg</template>
-            <span v-if="s.assisted" class="hist-asst">assisté</span>
-            <span v-else-if="s.band" class="hist-band"
-              >élastique {{ elasticBandLabel(s.band).toLowerCase() }}</span
+            {{ s.reps }} {{ unit }}
+            <span v-if="s.weight" class="hist-pill hist-kg">{{ s.weight }} kg</span>
+            <span v-if="s.assisted" class="hist-pill hist-asst">🟧 assisté</span>
+            <span v-else-if="s.band" class="hist-pill hist-band"
+              >🟦 élastique {{ elasticBandLabel(s.band).toLowerCase() }}</span
             >
             <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
             <span v-if="s.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, s) }}</span>
@@ -98,15 +99,27 @@ function fmtDay(iso: string): string {
   font-size: 13px;
   color: var(--text);
 }
-.hist-band {
-  font-size: 10px;
-  color: var(--accent);
+.hist-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 8px;
   margin-left: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.hist-kg {
+  color: var(--text);
+}
+.hist-band {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .hist-asst {
-  font-size: 10px;
   color: var(--d3, #ffb23f);
-  margin-left: 6px;
+  border-color: var(--d3, #ffb23f);
 }
 .hist-origin {
   display: block;
