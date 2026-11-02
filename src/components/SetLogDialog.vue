@@ -9,7 +9,28 @@
       <div v-if="hint" class="sl-goal">🎯 {{ hint }}</div>
       <div class="sl-row">
         <span class="sl-lbl">Reps</span>
-        <q-input v-model.number="reps" type="number" filled dense style="max-width: 110px" />
+        <q-input
+          v-model.number="reps"
+          type="number"
+          inputmode="numeric"
+          filled
+          dense
+          style="max-width: 84px"
+        />
+      </div>
+      <!-- 🔢 Saisie rapide : la fourchette de l'exo en pastilles (8 à 12 par défaut). -->
+      <div v-if="quickReps.length" class="sl-quick" role="group" aria-label="Reps rapides">
+        <button
+          v-for="n in quickReps"
+          :key="n"
+          type="button"
+          class="sl-seg-b"
+          :class="{ on: reps === n }"
+          :aria-pressed="reps === n"
+          @click="reps = n"
+        >
+          {{ n }}
+        </button>
       </div>
       <!-- Exo au poids du corps (360) : lest et élastique forment UN bloc « Charge ». Assisté →
            plus de lest (une aide et un lest se contredisent) ; résistance → les deux comptent. -->
@@ -33,14 +54,14 @@
       <!-- 🟦 Élastique : l'assistance (il aide) et la résistance (il rend l'exo plus dur) sont
            deux choses — un seul état à la fois. Réservé au Défi 360 (`bandable`). -->
       <div v-if="chargeBlock" class="sl-elastic">
-        <span class="sl-lbl">Élastique</span>
+        <span class="sl-lbl">Élastique <span class="sl-one">· un seul à la fois</span></span>
         <div class="sl-seg" role="group" aria-label="Élastique">
           <button
             v-for="m in ELASTIC_MODES"
             :key="m.id"
             type="button"
             class="sl-seg-b"
-            :class="{ on: elastic === m.id }"
+            :class="[`m-${m.id}`, { on: elastic === m.id }]"
             :aria-pressed="elastic === m.id"
             @click="elastic = m.id"
           >
@@ -60,7 +81,7 @@
             {{ b.label }}
           </button>
         </div>
-        <span class="sl-hint">{{ elasticHint }}</span>
+        <p class="sl-rule" :class="`m-${elastic}`" data-test="elastic-rule">{{ elasticHint }}</p>
       </div>
       <div v-else-if="assistable" class="sl-row">
         <span class="sl-lbl">Assisté</span>
@@ -91,13 +112,13 @@
 // Dialogue de saisie d'une SÉRIE (reps + poids + assisté), partagé par le Défi 360
 // (fiche + séance générée) et les défis simples en mode Séries (ChallengeDetailPage).
 import { ref, watch, computed } from 'vue';
-import { ELASTIC_BANDS, type ElasticBand } from '@/lib/combo';
+import { ELASTIC_BANDS, repQuickPicks, type ElasticBand } from '@/lib/combo';
 
 type ElasticMode = 'none' | 'assist' | 'resist';
 const ELASTIC_MODES: { id: ElasticMode; label: string }[] = [
   { id: 'none', label: 'Aucun' },
-  { id: 'assist', label: 'Assisté' },
-  { id: 'resist', label: 'Résistance' },
+  { id: 'assist', label: '🟧 Assisté' },
+  { id: 'resist', label: '🟦 Résistance' },
 ];
 
 const props = defineProps<{
@@ -105,6 +126,8 @@ const props = defineProps<{
   title: string;
   desc?: string;
   assistable?: boolean;
+  /** Reps proposées en pastilles (saisie rapide). Absent = 8 à 12 ; vide = aucune (durée). */
+  repOptions?: number[];
   /** Propose l'élastique de RÉSISTANCE en plus de l'assistance (Défi 360). */
   bandable?: boolean;
   hint?: string; // ex. « 8–12 reps » — fourchette conseillée pour cet exo
@@ -122,6 +145,7 @@ const emit = defineEmits<{
 }>();
 
 const reps = ref(props.initialReps ?? 10);
+const quickReps = computed(() => props.repOptions ?? repQuickPicks());
 const weight = ref<number | null>(props.initialWeight ?? null);
 const assisted = ref(!!props.initialAssisted);
 const band = ref<ElasticBand | null>(props.initialBand ?? null);
@@ -133,12 +157,13 @@ const elastic = ref<ElasticMode>(modeOf());
 const chargeBlock = computed(() => !!(props.assistable && props.bandable));
 /** Assisté : pas de lest (grisé, et non enregistré). */
 const lestOff = computed(() => chargeBlock.value && elastic.value === 'assist');
+/** La règle de l'état choisi, en clair : ce qui s'exclut et ce qui se cumule. */
 const elasticHint = computed(() =>
   elastic.value === 'assist'
-    ? 'il aide → ×0,6'
+    ? 'L’élastique t’aide : pas de lest, la série compte ×0,6.'
     : elastic.value === 'resist'
-      ? 'il rend l’exo plus dur'
-      : 'sans élastique',
+      ? 'L’élastique rend l’exo plus dur : il s’ajoute au lest, si tu en mets.'
+      : 'Poids du corps, plus un lest si tu en ajoutes.',
 );
 
 // Reseed les champs à chaque ouverture (préremplissage fourni par le parent).
@@ -226,6 +251,13 @@ function save() {
   gap: 8px;
   margin-bottom: 10px;
 }
+.sl-quick {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin: -2px 0 12px;
+}
 .sl-seg {
   display: grid;
   grid-auto-flow: column;
@@ -250,6 +282,29 @@ function save() {
 .sl-seg-b.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+.sl-seg-b.m-assist.on {
+  border-color: var(--d3, #ffb23f);
+  color: var(--d3, #ffb23f);
+}
+.sl-one {
+  font-size: 11px;
+  color: var(--dim);
+}
+.sl-rule {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.sl-rule.m-assist {
+  border-color: var(--d3, #ffb23f);
+}
+.sl-rule.m-resist {
+  border-color: var(--accent);
 }
 .sl-hint {
   font-size: 11px;

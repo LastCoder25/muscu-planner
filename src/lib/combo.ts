@@ -414,6 +414,48 @@ export function setCellLabel(s: ComboSet | undefined): string {
   return s.assisted ? `${base} 🟧` : s.band ? `${base} 🟦` : base;
 }
 
+/** Séries faites sur CET exo dans tous les défis 360 (hors séries basculées d'un autre exo). */
+export function exerciseHistorySets(
+  list: readonly ComboChallenge[],
+  exerciseId: string,
+): ComboSet[] {
+  return list.flatMap((c) =>
+    c.legs.filter((l) => l.exercise_id === exerciseId).flatMap((l) => ownSets(l)),
+  );
+}
+
+/** 🕘 LA DERNIÈRE SÉRIE SAISIE (reps > 0), la plus récente par heure — sinon par jour. Sert à
+ *  préremplir la PREMIÈRE série d'un nouveau défi : reps, charge, assistance et bande de la
+ *  dernière fois, pas une moyenne. ⚠️ Indépendant de l'ordre de la liste (plusieurs défis,
+ *  rangés comme ils viennent) ; à égalité, la dernière de la liste. */
+export function lastEnteredSet(sets: readonly ComboSet[]): ComboSet | null {
+  let best: ComboSet | null = null;
+  let bestKey = '';
+  for (const s of sets) {
+    if (!(s.reps > 0)) continue;
+    const key = s.at ?? `${s.date}T12:00:00.000Z`;
+    if (best === null || key >= bestKey) {
+      best = s;
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
+/** 🔢 REPS À PORTÉE DE POUCE : les valeurs proposées en pastilles dans la saisie d'une série.
+ *  Toute la fourchette de l'exo quand elle tient en 6 pastilles ; au-delà, 6 valeurs réparties
+ *  (bornes comprises). Sans fourchette : 8 à 12. Un exo de durée (secondes) : aucune. */
+export function repQuickPicks(min?: number | null, max?: number | null, time = false): number[] {
+  if (time) return [];
+  const lo = Math.max(1, Math.round(min ?? 8));
+  const hi = Math.max(lo, Math.round(max ?? 12));
+  const n = hi - lo + 1;
+  if (n <= 6) return Array.from({ length: n }, (_, i) => lo + i);
+  const out = new Set<number>();
+  for (let i = 0; i < 6; i++) out.add(Math.round(lo + ((hi - lo) * i) / 5));
+  return [...out];
+}
+
 /** Niveau d'élastique de résistance de préremplissage : celui de la dernière série. */
 export function legLastBand(leg: ComboLeg): ElasticBand | null {
   const s = ownSets(leg);

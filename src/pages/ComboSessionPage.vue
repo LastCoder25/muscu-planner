@@ -329,6 +329,7 @@
       :initial-reps="logReps"
       :initial-weight="logWeight"
       :initial-assisted="logAssisted"
+      :rep-options="logRepOptions"
       :bandable="logAssistable"
       :initial-band="logBand"
       @save="onLogSave"
@@ -341,6 +342,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from
 import { useRouter, useRoute } from 'vue-router';
 import { backOr, backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
+import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useComboStore } from '@/stores/combo';
 import {
   buildComboSessionFromCounts,
@@ -356,6 +358,10 @@ import {
   legTimePerSet,
   legSetsLeft,
   legLastBand,
+  lastEnteredSet,
+  exerciseHistorySets,
+  ownSets,
+  repQuickPicks,
   type ElasticBand,
   comboDayQuota,
   COMBO_QUOTA_MAX_SETS,
@@ -785,6 +791,7 @@ const logAssisted = ref(false);
 const logBand = ref<ElasticBand | null>(null);
 const logAssistable = ref(false);
 const logHint = ref('');
+const logRepOptions = ref<number[] | undefined>(undefined);
 
 function validate(i: number, j: number, reps: number) {
   const exo = session.value[i];
@@ -793,10 +800,23 @@ function validate(i: number, j: number, reps: number) {
   const prev = logged.value[`${i}-${j}`];
   logSlot.value = { i, j };
   logExoName.value = exo.exercise_name;
-  logReps.value = prev?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
-  logWeight.value = prev?.weight ?? exo.weight_kg ?? null;
-  logAssisted.value = prev?.assisted ?? false;
-  logBand.value = prev ? (prev.band ?? null) : leg ? legLastBand(leg) : null;
+  // Valeurs de départ : la série déjà saisie ici, sinon la DERNIÈRE saisie de la séance sur cet
+  // exo, sinon (première série d'un nouveau défi) la dernière saisie d'un défi précédent.
+  let before: LoggedSet | undefined;
+  for (let k = j - 1; k >= 0 && !before; k--) before = logged.value[`${i}-${k}`];
+  const hist =
+    !prev && !before && leg && !ownSets(leg).length
+      ? lastEnteredSet(exerciseHistorySets(combo.list, leg.exercise_id))
+      : null;
+  const seed = prev ?? before ?? (hist ? { ...hist, assisted: !!hist.assisted } : null);
+  logReps.value =
+    seed?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
+  logWeight.value = seed
+    ? (seed.weight ?? (leg?.assistable ? null : (recallWeight(exo.exercise_id) ?? exo.weight_kg ?? null)))
+    : (exo.weight_kg ?? recallWeight(exo.exercise_id));
+  logAssisted.value = seed?.assisted ?? false;
+  logBand.value = seed ? (seed.band ?? null) : leg ? legLastBand(leg) : null;
+  logRepOptions.value = repQuickPicks(exo.rep_min, exo.rep_max, !!leg && legMode(leg) === 'time');
   logAssistable.value = !!leg?.assistable;
   logHint.value = exoRangeLabel(exo);
   logOpen.value = true;
@@ -895,7 +915,10 @@ function commitLogged() {
   for (const [key, v] of entries) {
     const i = Number(key.split('-')[0]);
     const exo = session.value[i];
-    if (exo) combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted, v.band ?? null, v.at);
+    if (exo) {
+      combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted, v.band ?? null, v.at);
+      rememberWeight(exo.exercise_id, v.weight); // la fiche du 360 le faisait déjà, pas la séance
+    }
   }
 }
 function finish() {

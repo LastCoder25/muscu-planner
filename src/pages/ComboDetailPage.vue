@@ -224,6 +224,7 @@
       "
       :assistable="setLeg?.assistable"
       :hint="setLeg ? rangeLabel(setLeg) : undefined"
+      :rep-options="setRepOptions"
       :initial-reps="setInitReps"
       :initial-weight="setInitWeight"
       :initial-assisted="setInitAssisted"
@@ -270,6 +271,8 @@ import {
   legLastWeight,
   legLastAssisted,
   legLastBand,
+  lastEnteredSet,
+  repQuickPicks,
   setCellLabel,
   type ElasticBand,
   legRepRange,
@@ -420,6 +423,12 @@ const segSetLabel = setCellLabel;
 // Saisie d'une série via le dialogue partagé, préremplie avec la dernière série.
 const setOpen = ref(false);
 const setLeg = ref<ComboLeg | null>(null);
+const setRepOptions = computed(() => {
+  const l = setLeg.value;
+  if (!l) return undefined;
+  const r = legRange(l);
+  return repQuickPicks(r.min, r.max, legMode(l) === 'time');
+});
 const setCount = ref(1);
 const setInitReps = ref(10);
 const setInitWeight = ref<number | null>(null);
@@ -459,11 +468,25 @@ function openSet(leg: ComboLeg, count: number) {
       .flatMap((cc) => cc.legs)
       .filter((l) => l.exercise_id === leg.exercise_id)
       .flatMap((l) => ownSets(l));
-    const sug = suggestSetFromHistory(hist);
-    setInitReps.value = sug?.repMax ?? legLastReps(leg, prescribedReps(legRange(leg)));
-    setInitWeight.value = recallWeight(leg.exercise_id) ?? sug?.weight ?? legLastWeight(leg);
-    setInitAssisted.value = false;
-    setInitBand.value = null;
+    // 🕘 Première série d'un nouveau défi : ce qui a été saisi LA DERNIÈRE FOIS (reps, charge,
+    // élastique), pas une moyenne de l'historique.
+    const lastH = lastEnteredSet(hist);
+    if (lastH) {
+      setInitReps.value = lastH.reps;
+      // Exo au poids du corps : « sans charge » est une vraie réponse ; sinon on reprend le
+      // dernier poids mémorisé plutôt que de laisser le champ vide.
+      setInitWeight.value =
+        lastH.weight ??
+        (leg.assistable ? null : (recallWeight(leg.exercise_id) ?? legLastWeight(leg)));
+      setInitAssisted.value = !!lastH.assisted;
+      setInitBand.value = lastH.band ?? null;
+    } else {
+      const sug = suggestSetFromHistory(hist);
+      setInitReps.value = sug?.repMax ?? legLastReps(leg, prescribedReps(legRange(leg)));
+      setInitWeight.value = recallWeight(leg.exercise_id) ?? sug?.weight ?? legLastWeight(leg);
+      setInitAssisted.value = false;
+      setInitBand.value = null;
+    }
   }
   setOpen.value = true;
 }

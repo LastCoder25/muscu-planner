@@ -560,6 +560,7 @@
       "
       :initial-reps="setReps"
       :initial-weight="setWeight"
+      :rep-options="setRepOptions"
       :initial-assisted="setAssisted"
       :bandable="setLeg?.assistable"
       :initial-band="setBand"
@@ -606,6 +607,7 @@ import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
+import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useComboStore } from '@/stores/combo';
 import { useProfileStore } from '@/stores/profile';
 import { repRangeLabel } from '@/lib/repScheme';
@@ -630,6 +632,10 @@ import {
   legLastWeight,
   legLastAssisted,
   legLastBand,
+  lastEnteredSet,
+  exerciseHistorySets,
+  ownSets,
+  repQuickPicks,
   setCellLabel,
   type ElasticBand,
   legSets,
@@ -823,6 +829,12 @@ const setReps = ref<number>(10);
 const setWeight = ref<number | null>(null);
 const setAssisted = ref(false);
 const setBand = ref<ElasticBand | null>(null);
+const setRepOptions = computed(() => {
+  const l = setLeg.value;
+  if (!l) return undefined;
+  const r = legRepRange(l, profileStore.profile?.objective);
+  return repQuickPicks(r.min, r.max, legMode(l) === 'time');
+});
 /** Série en cours de CORRECTION (index), ou null quand on en ajoute une. */
 const editIndex = ref<number | null>(null);
 /** Case FAITE touchée : la fenêtre s’ouvre sur CETTE série, préremplie, pour la corriger
@@ -855,10 +867,23 @@ function openSet(leg: ComboLeg, count: number) {
   setLeg.value = leg;
   setCount.value = count;
   editIndex.value = null;
-  setReps.value = legLastReps(leg);
-  setWeight.value = legLastWeight(leg);
-  setAssisted.value = legLastAssisted(leg);
-  setBand.value = legLastBand(leg);
+  // 🕘 Première série d'un nouveau défi : la dernière saisie de cet exo (tous défis confondus).
+  const lastH = ownSets(leg).length
+    ? null
+    : lastEnteredSet(exerciseHistorySets(comboStore.list, leg.exercise_id));
+  if (lastH) {
+    setReps.value = lastH.reps;
+    setWeight.value =
+      lastH.weight ??
+      (leg.assistable ? null : (recallWeight(leg.exercise_id) ?? legLastWeight(leg)));
+    setAssisted.value = !!lastH.assisted;
+    setBand.value = lastH.band ?? null;
+  } else {
+    setReps.value = legLastReps(leg);
+    setWeight.value = legLastWeight(leg);
+    setAssisted.value = legLastAssisted(leg);
+    setBand.value = legLastBand(leg);
+  }
   setOpen.value = true;
 }
 function saveSet(v: {
@@ -896,6 +921,8 @@ function saveSet(v: {
       );
     }
   }
+  // Le poids saisi se retient pour la prochaine fois (la fiche du 360 le faisait déjà).
+  rememberWeight(leg.exercise_id, v.weight);
   if (!before && comboCompleteInTime(co)) celebrateCombo(co);
 }
 // Mode DURÉE : ajoute directement N secondes (dans le champ reps, pas de poids).

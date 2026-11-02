@@ -6,8 +6,12 @@ import {
   loadBlocks,
   legLastBand,
   setCellLabel,
+  lastEnteredSet,
+  exerciseHistorySets,
+  repQuickPicks,
   elasticBandLabel,
   ELASTIC_BANDS,
+  type ComboChallenge,
   type ComboLeg,
   type ComboSet,
 } from '@/lib/combo';
@@ -84,4 +88,42 @@ describe('setCellLabel — étiquette compacte d’une cellule', () => {
     expect(setCellLabel(set({ reps: 9, weight: 5, band: 'strong' }))).toBe('9×5kg 🟦');
     expect(setCellLabel(undefined)).toBe('');
   });
+});
+
+describe('1re série d’un nouveau défi : la dernière saisie', () => {
+  const at = (m: number) => `${D}T08:${String(m).padStart(2, '0')}:00Z`;
+  it('lastEnteredSet : la plus récente par heure, quel que soit l’ordre de la liste', () => {
+    const a = set({ reps: 8, weight: 20, at: at(5) });
+    const b = set({ reps: 12, weight: 25, at: at(40) });
+    const c = set({ reps: 9, weight: 22, at: at(10) });
+    expect(lastEnteredSet([a, b, c])).toBe(b);
+    expect(lastEnteredSet([b, c, a])).toBe(b);
+  });
+  it('sans heure : par jour ; une série à 0 rep est ignorée ; liste vide → null', () => {
+    const old = set({ date: '2099-01-03', reps: 7 });
+    const recent = set({ date: '2099-01-08', reps: 11 });
+    expect(lastEnteredSet([recent, old])).toBe(recent);
+    expect(lastEnteredSet([old, set({ date: '2099-02-01', reps: 0 })])).toBe(old);
+    expect(lastEnteredSet([])).toBeNull();
+  });
+  it('exerciseHistorySets : seulement cet exo, sans les séries basculées', () => {
+    const mk = (id: string, sets: ComboSet[]) =>
+      ({ id: 'c', name: '', start_date: D, duration_days: 7, status: 'done', legs: [{ exercise_id: id, sets }] }) as unknown as ComboChallenge;
+    const moved = set({ reps: 5, origin: { exercise_id: 'x', exercise_name: 'X', rep_weight: 1 } });
+    const out = exerciseHistorySets([mk('a', [set({ reps: 10 }), moved]), mk('b', [set({ reps: 3 })])], 'a');
+    expect(out).toHaveLength(1);
+    expect(out[0]!.reps).toBe(10);
+  });
+});
+
+describe('repQuickPicks — pastilles de reps', () => {
+  it('sans fourchette : 8 à 12', () => expect(repQuickPicks()).toEqual([8, 9, 10, 11, 12]));
+  it('fourchette courte : toutes les valeurs', () => expect(repQuickPicks(12, 15)).toEqual([12, 13, 14, 15]));
+  it('fourchette large : 6 valeurs réparties, bornes comprises', () => {
+    const p = repQuickPicks(10, 30);
+    expect(p).toHaveLength(6);
+    expect(p[0]).toBe(10);
+    expect(p[5]).toBe(30);
+  });
+  it('durée : aucune pastille', () => expect(repQuickPicks(30, 60, true)).toEqual([]));
 });
