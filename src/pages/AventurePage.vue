@@ -293,6 +293,9 @@
                  porte déjà et ouvre la liste des rangs. -->
             </div>
 
+            <!-- 🔁 Récap d'une série de lancers (×5, ×10, Max). -->
+            <BatchRunReport v-model="batchReportOpen" :summary="batchReport" />
+
             <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
             <q-dialog v-model="ranksOpen" position="bottom">
               <q-card class="adv-modal">
@@ -1504,6 +1507,22 @@
                 Explorer ({{ it.dungeon.energyCost }} ⚡)
               </button>
               <button v-else class="fight" disabled>Verrouillé</button>
+              <!-- 🔁 ×5 / ×10 / Max selon l'énergie : une série, un seul récap. -->
+              <div
+                v-if="dungeonUnlocked(it.dungeon) && dungeonBatchChoices(it.dungeon).length"
+                class="batch-tiles"
+              >
+                <button
+                  v-for="ch in dungeonBatchChoices(it.dungeon)"
+                  :key="ch.n"
+                  class="batch-tile"
+                  :disabled="busy || batchRunning || !!char.row?.pending_reward"
+                  @click="exploreMany(it.dungeon, ch.n)"
+                >
+                  {{ ch.max ? 'Max ' : '' }}×{{ ch.n }}
+                  <small>{{ ch.n * it.dungeon.energyCost }} ⚡</small>
+                </button>
+              </div>
             </div>
 
             <!-- Portail sans fin (end-game infini) — visible sur la dernière région -->
@@ -1644,6 +1663,19 @@
               >
                 ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ summonCostFor(b) }} 🔮)
               </button>
+              <!-- 🔁 ×5 / ×10 / Max selon les pierres 🔮 : une série, un seul récap. -->
+              <div v-if="bossUnlocked(b) && bossBatchChoices(b).length" class="batch-tiles">
+                <button
+                  v-for="ch in bossBatchChoices(b)"
+                  :key="ch.n"
+                  class="batch-tile"
+                  :disabled="busy || batchRunning || !!char.row?.pending_reward"
+                  @click="fightBossMany(b, ch.n)"
+                >
+                  {{ ch.max ? 'Max ' : '' }}×{{ ch.n }}
+                  <small>{{ ch.n * summonCostFor(b) }} 🔮</small>
+                </button>
+              </div>
               <!-- ⚠️ Rien ne doit s'intercaler entre le bouton ci-dessus et les deux v-else
                  qui suivent : un élément glissé ici devenait la tête de la chaîne, et un
                  boss DÉBLOQUÉ affichait en plus le bouton grisé « 🔒 ». -->
@@ -3162,6 +3194,7 @@ const ExpeditionMapPage = defineAsyncComponent(() => import('@/pages/ExpeditionM
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import BatchRunReport from '@/components/BatchRunReport.vue';
 import ResourceTray from '@/components/ResourceTray.vue';
 import GameTutorial from '@/components/GameTutorial.vue';
 import ResourceGains from '@/components/ResourceGains.vue';
@@ -3269,6 +3302,7 @@ import {
   type Rarity,
   bestGearLoadout,
 } from '@/lib/items';
+import { addToBatch, batchChoices, newBatch, type BatchSummary } from '@/lib/batchRun';
 import { FUSION_SIZE, fusionResultRank } from '@/lib/companionFusion';
 import {
   talentsEarned,
@@ -5104,14 +5138,62 @@ async function enterArena() {
   }
 }
 
-async function explore(d: Dungeon) {
+/** 🔁 La série en cours (×5, ×10, Max) : tant qu'elle est posée, `explore`/`fightBoss` cumulent
+ *  leur résultat ici au lieu d'ouvrir le rapport animé de chaque combat. */
+let batch: BatchSummary | null = null;
+const batchReport = ref<BatchSummary | null>(null);
+const batchReportOpen = ref(false);
+const batchRunning = ref(false);
+/** Joue `n` fois la même action (un vrai lancer à chaque fois : mêmes règles, mêmes écritures),
+ *  puis ouvre UN récap. S'arrête dès qu'un lancer ne part pas (récompense en attente, stock
+ *  épuisé, erreur) — jamais de lancer « à vide ». */
+async function runBatch(
+  name: string,
+  kind: 'dungeon' | 'boss',
+  n: number,
+  once: () => Promise<boolean>,
+) {
+  if (batch || busy.value || n < 2) return;
+  const b = newBatch(name, kind, n);
+  batch = b;
+  batchRunning.value = true;
+  try {
+    for (let i = 0; i < n; i++) {
+      if (!(await once())) break;
+    }
+  } finally {
+    batch = null;
+    batchRunning.value = false;
+  }
+  if (b.runs < n)
+    b.stoppedBecause = char.row?.pending_reward
+      ? 'une récompense attend ton choix'
+      : b.runs === 0
+        ? 'le lancer n’a pas pu partir'
+        : 'plus assez de ressources ou lancer interrompu';
+  if (!b.runs) return;
+  batchReport.value = b;
+  batchReportOpen.value = true;
+}
+const dungeonBatchChoices = (d: Dungeon) => batchChoices(c.value.energy, d.energyCost);
+const bossBatchChoices = (b: MilestoneBoss) =>
+  batchChoices(char.row?.summon_stones ?? 0, summonCostFor(b));
+function exploreMany(d: Dungeon, n: number) {
+  void runBatch(d.name, 'dungeon', n, () => explore(d));
+}
+function fightBossMany(b: MilestoneBoss, n: number) {
+  void runBatch(b.name, 'boss', n, () => fightBoss(b));
+}
+
+async function explore(d: Dungeon): Promise<boolean> {
   const uid = auth.user?.id;
-  if (expeBlocked()) return;
-  if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return;
-  if (!dungeonUnlocked(d)) return;
+  if (expeBlocked()) return false;
+  if (!uid || !char.row || busy.value || c.value.energy < d.energyCost) return false;
+  if (!dungeonUnlocked(d)) return false;
   if (char.row.pending_reward) {
-    $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
-    return;
+    if (!batch)
+      $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
+    return false;
   }
   lastDungeon.value = d;
   lastBoss.value = null;
@@ -5155,7 +5237,7 @@ async function explore(d: Dungeon) {
       if (rolled) {
         const dr: Item = { ...rolled, id: crypto.randomUUID() };
         drops.push(dr);
-        queueFx(() => celebrateRareDrop(dr));
+        if (!batch) queueFx(() => celebrateRareDrop(dr));
       }
     }
     // (Les familiers ne tombent PLUS dans les donjons — uniquement au Labyrinthe.)
@@ -5187,6 +5269,17 @@ async function explore(d: Dungeon) {
       // Dressage d'ATTAQUE : ∝ la profondeur du donjon et ce qu'on y a abattu.
     });
     // En bandeau, comme au boss : un donjon se refarme, un éclat plein écran bloquerait la suite.
+    if (batch) {
+      addToBatch(batch, {
+        cleared: r.cleared,
+        gold,
+        drops,
+        summonStones,
+        talentDrops,
+        firstClear: r.cleared && lastRunFirstVisit.value,
+      });
+      return true;
+    }
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
       name: d.name,
@@ -5228,8 +5321,10 @@ async function explore(d: Dungeon) {
         }),
       );
     openReport();
+    return true;
   } catch {
     $q.notify({ type: 'negative', message: 'Échec de l’exploration.' });
+    return false;
   } finally {
     busy.value = false;
   }
@@ -5338,22 +5433,24 @@ function itemStatCmp(
   if (leg) out.push({ text: `${leg.emoji} ${leg.name}`, cls: '' });
   return out;
 }
-async function fightBoss(b: MilestoneBoss) {
+async function fightBoss(b: MilestoneBoss): Promise<boolean> {
   const uid = auth.user?.id;
-  if (expeBlocked()) return;
+  if (expeBlocked()) return false;
   const summonCost = summonCostFor(b);
-  if (!uid || !char.row || busy.value || char.row.summon_stones < summonCost) return;
+  if (!uid || !char.row || busy.value || char.row.summon_stones < summonCost) return false;
   if (!hasBossAltar.value) {
     $q.notify({
       type: 'warning',
       message: 'Construis l’Autel des boss (dans ton village) pour affronter les boss.',
     });
-    return void (tab.value = 'base');
+    tab.value = 'base';
+    return false;
   }
-  if (!bossUnlocked(b)) return;
+  if (!bossUnlocked(b)) return false;
   if (char.row.pending_reward) {
-    $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
-    return;
+    if (!batch)
+      $q.notify({ type: 'warning', message: 'Choisis d’abord ta récompense en attente.' });
+    return false;
   }
   lastBoss.value = b;
   lastDungeon.value = null;
@@ -5396,7 +5493,7 @@ async function fightBoss(b: MilestoneBoss) {
       drops.push(dr);
       // Boss = on enchaîne les tentatives : le drop s'annonce en bandeau discret, jamais
       // en overlay bloquant (plusieurs overlays d'affilée gelaient « Réattaquer »).
-      queueFx(() => celebrateRareDrop(dr, true));
+      if (!batch) queueFx(() => celebrateRareDrop(dr, true));
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     // Drop de TALENT au boss (source plus généreuse que les donjons) : ~25 % à la
@@ -5425,6 +5522,16 @@ async function fightBoss(b: MilestoneBoss) {
       ...(talentDrops.length ? { talentDrops } : {}),
       // Dressage d'ATTAQUE : le familier se bat aussi contre les boss.
     });
+    if (batch) {
+      addToBatch(batch, {
+        cleared: win,
+        gold,
+        drops,
+        talentDrops,
+        firstClear: win && lastRunFirstVisit.value,
+      });
+      return true;
+    }
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
       name: b.name,
@@ -5465,8 +5572,10 @@ async function fightBoss(b: MilestoneBoss) {
         }),
       );
     openReport();
+    return true;
   } catch {
     $q.notify({ type: 'negative', message: 'Échec du combat.' });
+    return false;
   } finally {
     busy.value = false;
   }
@@ -10709,6 +10818,40 @@ button.pt-mini:active {
   background: transparent;
   color: var(--dim);
   border-color: var(--line);
+  cursor: not-allowed;
+}
+/* 🔁 Tuiles ×5 / ×10 / Max sous le bouton de lancer. */
+.batch-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.batch-tile {
+  flex: 1 1 0;
+  min-width: 64px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.batch-tile small {
+  color: var(--dim);
+  font-weight: 500;
+  font-size: 11px;
+}
+.batch-tile:disabled {
+  border-color: var(--line);
+  color: var(--dim);
   cursor: not-allowed;
 }
 
