@@ -132,8 +132,11 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
     s.cardio.push({ performed_at: at(addDays(MON, 1)), payload: { duration_min: 40 } });
     s.tennis.push({ performed_at: at(addDays(MON, 2)) });
     // Le tennis n'est proposé qu'à qui en a déjà fait (cf. `isShown`).
-    s.tennis.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -9)) });
-    s.sessions.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -9)) });
+    s.tennis.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -25)) });
+    s.sessions.push(
+      { performed_at: at(addDays(MON, -8)) },
+      { performed_at: at(addDays(MON, -25)) },
+    );
     expect(quest(s, 'strength_days').done).toBe(1);
     expect(quest(s, 'tennis_days').done).toBe(1);
   });
@@ -160,7 +163,7 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
       },
     );
     expect(questEntries(s).map((e) => e.kind)).toEqual(['tennis', 'other', 'tennis']);
-    s.tennis.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -9)) });
+    s.tennis.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -25)) });
     expect(quest(s, 'tennis_days', addDays(MON, 6)).done).toBe(2);
   });
   it('la régularité compte les deux moitiés de la semaine', () => {
@@ -214,6 +217,21 @@ describe('🗓️ quêtes de la semaine — les objectifs de tes sports, tes spo
     expect(ids(s)).not.toContain('tennis_days');
     expect(ids(s)).not.toContain('cardio_minutes');
     expect(ids(s)).toContain('strength_days');
+  });
+  it('⚠️ du tennis saisi en vacances (quelques jours d’affilée) n’en fait pas ton sport', () => {
+    // Le cas réel : 17, 18 et 22 octobre, deux semaines civiles mais six jours d'écart.
+    const s = history(3, 0);
+    for (const d of [-4, -3, 1])
+      s.sessions.push({
+        performed_at: at(addDays(MON, -14 + d)),
+        payload: { discipline: 'autre_sport', name: 'Tennis' },
+      });
+    expect(ids(s)).not.toContain('tennis_days');
+  });
+  it('deux parties espacées de deux semaines : c’est une habitude', () => {
+    const s = history(3, 0);
+    for (const d of [-20, -6]) s.tennis.push({ performed_at: at(addDays(MON, d)) });
+    expect(ids(s)).toContain('tennis_days');
   });
   it('un joueur de tennis d’avant la pause garde sa quête tennis', () => {
     const s = empty();

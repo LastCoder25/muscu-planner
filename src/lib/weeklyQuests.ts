@@ -76,6 +76,10 @@ export const WEEKLY_QUESTS = {
    *  d'historique (≈ un jour toutes les deux semaines) : une sortie isolée il y a un mois ne
    *  suffit pas à t'imposer une quête de ce sport. */
   practiceMinDays: 2,
+  /** ⚠️ …ET ces jours doivent S'ÉTALER d'au moins autant de jours (v1.301.2, signalé : « il a
+   *  saisi du tennis en vacances mais il n'en fait pas le reste du temps ») : un séjour tient
+   *  en quelques jours, une habitude s'étale. Trois parties en six jours ne font pas un sport. */
+  practiceMinSpanDays: 14,
   /** Part des jours de sortie qu'une activité doit couvrir pour nommer la quête. */
   mainActivityShare: 0.75,
 } as const;
@@ -241,8 +245,7 @@ function practicedKinds(entries: QuestEntry[], monday: string): Set<SportKind> {
   };
   for (const e of entries) if (e.day >= from && e.day < monday) days[e.kind].add(e.day);
   const out = new Set<SportKind>();
-  for (const k of Object.keys(days) as SportKind[])
-    if (days[k].size >= WEEKLY_QUESTS.practiceMinDays) out.add(k);
+  for (const k of Object.keys(days) as SportKind[]) if (isHabit(days[k])) out.add(k);
   if ([...out].some((k) => k !== 'other')) return out;
   // ⚠️ RIEN DE CONNU SUR 4 SEMAINES (reprise après une pause, saison creuse) ≠ « pas de sport »
   // (signalé : « les quêtes ont toujours du tennis, même pour ceux qui n'en font pas ») :
@@ -254,9 +257,15 @@ function practicedKinds(entries: QuestEntry[], monday: string): Set<SportKind> {
     other: new Set(),
   };
   for (const e of entries) if (e.day < monday) ever[e.kind].add(e.day);
-  for (const k of Object.keys(ever) as SportKind[])
-    if (ever[k].size >= WEEKLY_QUESTS.practiceMinDays) out.add(k);
+  for (const k of Object.keys(ever) as SportKind[]) if (isHabit(ever[k])) out.add(k);
   return out;
+}
+
+/** Une pratique, c'est des jours QUI S'ÉTALENT (cf. `practiceMinSpanDays`), pas un séjour. */
+function isHabit(days: Set<string>): boolean {
+  if (days.size < WEEKLY_QUESTS.practiceMinDays) return false;
+  const t = [...days].map(parse);
+  return (Math.max(...t) - Math.min(...t)) / DAY_MS >= WEEKLY_QUESTS.practiceMinSpanDays;
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
