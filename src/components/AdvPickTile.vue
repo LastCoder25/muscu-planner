@@ -344,6 +344,7 @@ const rar = computed(() => advGradeBadge(props.adv));
   border-radius: 999px;
   font-size: 11px;
   line-height: 1.5;
+  white-space: nowrap;
   color: var(--accent);
 }
 .ca-awk {

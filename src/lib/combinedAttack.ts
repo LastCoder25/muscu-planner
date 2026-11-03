@@ -419,8 +419,10 @@ export function attackWingVoyages(
  * 🎖️ L'équipe cochée DANS L'ORDRE DES CLICS (et non celui du vivier) : le premier coché est le
  * champion « en tête » — celui que lisent les voies d'équipe (`firstEffect`) et la quête
  * personnelle (`questHitOf` : `party.escort[0]`). Un id coché qui n'est plus dans `pool` (parti
- * en convoi entre-temps) sort de l'équipe. ⚠️ Source UNIQUE de l'ordre envoyé : le pronostic, le
- * vrai combat et le rapport lisent la même suite.
+ * en convoi entre-temps) sort de l'équipe. ⚠️ Source UNIQUE de l'ordre envoyé pour un départ
+ * simple : le pronostic, le vrai combat et le rapport lisent la même suite. Pour une ATTAQUE
+ * COMBINÉE, le vrai combat concatène les ailes dans l'ordre de `wingPlan` (par proximité), qui
+ * peut différer de l'ordre des clics : limite connue, la quête n'y est pas concernée.
  */
 export function escortInClickOrder<T extends { id: string }>(
   pool: readonly T[],
