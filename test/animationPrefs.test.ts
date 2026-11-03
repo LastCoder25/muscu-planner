@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { useAdvXpFx } from '@/composables/useAdvXpFx';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -32,9 +34,23 @@ describe('animationPrefs', () => {
     rift: ['src/composables/useRiftAutoReplay.ts'],
     overflow: ['src/composables/useOverflowReplay.ts'],
     fboss: ['src/pages/FriendBossPage.vue'],
+    champxp: ['src/composables/useAdvXpFx.ts'],
   };
   it.each(ANIMATION_OPTIONS.map((o) => o.id))('« %s » est lu par son lanceur', (kind) => {
     for (const file of READERS[kind]) expect(src(file)).toContain(`anim.on.${kind}`);
+  });
+
+  it('⭐ XP des champions éteinte : la barre ne s’ouvre pas, rallumée elle s’ouvre', () => {
+    const fx = useAdvXpFx();
+    const prefs = useAnimationPrefs();
+    const tracks = [{ xp: 40 }] as never;
+    prefs.set('champxp', false);
+    fx.show(tracks);
+    expect(fx.current.value).toBeNull();
+    prefs.set('champxp', true);
+    fx.show(tracks);
+    expect(fx.current.value).not.toBeNull();
+    fx.dismiss();
   });
 
   it('la page Base affiche les interrupteurs', () => {

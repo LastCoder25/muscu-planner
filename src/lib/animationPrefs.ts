@@ -6,7 +6,7 @@
 // Tout est ACTIVÉ par défaut ; seul « 0 » éteint (une valeur inconnue ou un stockage
 // indisponible ne doivent jamais couper une animation en silence).
 
-export type AnimationKind = 'siege' | 'rift' | 'overflow' | 'fboss';
+export type AnimationKind = 'siege' | 'rift' | 'overflow' | 'fboss' | 'champxp';
 
 export interface AnimationOption {
   id: AnimationKind;
@@ -39,6 +39,12 @@ export const ANIMATION_OPTIONS: readonly AnimationOption[] = [
     emoji: '🐉',
     label: 'Boss entre amis',
     hint: 'les frappes des amis depuis ta dernière visite',
+  },
+  {
+    id: 'champxp',
+    emoji: '⭐',
+    label: 'XP des champions',
+    hint: 'la barre d’étoile au retour de mission',
   },
 ];
 

@@ -6,6 +6,7 @@
 // 🎓 Elle part À L'ARRIVÉE DU RAPPORT (c'est là que l'XP est versée), plus à l'encaissement.
 import { ref } from 'vue';
 import type { AdvXpTrack } from '@/lib/adventurers';
+import { useAnimationPrefs } from './useAnimationPrefs';
 
 interface AdvXpEvent {
   id: number;
@@ -26,8 +27,11 @@ function next(): void {
 }
 
 export function useAdvXpFx() {
+  const anim = useAnimationPrefs();
   /** Rien à montrer sans gain : l'overlay ne s'ouvre pas pour une mission sans XP. */
   function show(tracks: readonly AdvXpTrack[] | undefined, title = 'Retour de mission'): void {
+    // 🎬 Interrupteur de la page Base : l'XP est versée quoi qu'il arrive, seule la barre disparaît.
+    if (!anim.on.champxp) return;
     const list = (tracks ?? []).filter((t) => t.xp > 0);
     if (!list.length) return;
     queue.push({ id: ++seq, title, tracks: list });

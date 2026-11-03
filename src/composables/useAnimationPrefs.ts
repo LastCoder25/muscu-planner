@@ -16,6 +16,7 @@ const state = reactive<Record<AnimationKind, boolean>>({
   rift: read('rift'),
   overflow: read('overflow'),
   fboss: read('fboss'),
+  champxp: read('champxp'),
 });
 
 export function useAnimationPrefs() {
