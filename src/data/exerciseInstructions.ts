@@ -367,11 +367,11 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
   },
   ex_glute_machine: {
     steps: [
-      'Installe-toi sur la machine à fessiers (hip thrust), dos calé, barre/coussin sur les hanches.',
-      'Pousse dans les talons pour monter le bassin jusqu’à l’extension complète des hanches.',
-      'Serre les fessiers en haut, puis redescends en contrôlant.',
+      'À quatre pattes (ou sur la machine à fessiers), dos plat, appuis sur les mains et un genou.',
+      'Envoie une jambe en arrière et vers le haut, genou plié, talon vers le plafond.',
+      'Serre le fessier en haut, puis ramène le genou sous la hanche en contrôlant.',
     ],
-    tip: 'Cible les fessiers ; ne cambre pas le bas du dos en haut.',
+    tip: 'Cible les fessiers ; ne cambre pas le bas du dos en haut. Alterne les jambes.',
   },
   ex_adductors: {
     steps: [
