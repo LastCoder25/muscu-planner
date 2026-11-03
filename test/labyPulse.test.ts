@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateDungeon, pulseRoomOf } from '@/lib/dungeonCrawl';
+import { animationsSkipped, generateDungeon, pulseRoomOf } from '@/lib/dungeonCrawl';
 
 describe('🫧 pulseRoomOf — l’effet d’une salle ne survit pas à son étage', () => {
   const dungeon = generateDungeon(7, 3);
@@ -22,5 +22,16 @@ describe('🫧 pulseRoomOf — l’effet d’une salle ne survit pas à son éta
 
   it('rend null quand la salle n’existe pas sur l’étage affiché (nouveau run)', () => {
     expect(pulseRoomOf({ id: 999, floor: 0 }, 0, dungeon[0]!)).toBeNull();
+  });
+});
+
+describe('⏭️ animationsSkipped', () => {
+  it('saute en auto ou en série quand demandé', () => {
+    expect(animationsSkipped(true, true, false)).toBe(true);
+    expect(animationsSkipped(true, false, true)).toBe(true);
+  });
+  it('ne saute jamais à la main, ni si le joueur ne l’a pas demandé', () => {
+    expect(animationsSkipped(true, false, false)).toBe(false);
+    expect(animationsSkipped(false, true, true)).toBe(false);
   });
 });

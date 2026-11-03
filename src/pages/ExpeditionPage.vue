@@ -216,9 +216,21 @@
            la vitesse des déplacements, et l'auto à lancer. -->
       <Teleport to="body">
         <div v-if="phase === 'running' && !over" class="auto-float">
-          <span v-if="autoMode" class="af-txt"
-            >⚡ Auto · run {{ (series?.done ?? 0) + 1 }}/{{ series?.total ?? 1 }}</span
-          >
+          <template v-if="autoMode">
+            <span class="af-txt"
+              >⚡ Auto · run {{ (series?.done ?? 0) + 1 }}/{{ series?.total ?? 1 }}</span
+            >
+            <button
+              type="button"
+              class="af-speed af-skip"
+              :class="{ on: skipAnim }"
+              :aria-pressed="skipAnim"
+              title="Sans animation : saute les animations de tous les runs de la série"
+              @click="toggleSkipAnim"
+            >
+              ⏭️ Sans animation
+            </button>
+          </template>
           <template v-else>
             <button
               type="button"
@@ -750,6 +762,7 @@ import {
   applyDamage,
   descend,
   isVisible,
+  animationsSkipped,
   pulseRoomOf,
   ROOM_EMOJI,
   type Floor,
@@ -978,6 +991,30 @@ function toggleSpeed() {
 const MAX_SPEED = SPEED_STEPS[SPEED_STEPS.length - 1]!;
 const speed = computed(() => (autoMode.value || series.value ? MAX_SPEED : autoSpeed.value));
 
+// ⏭️ SANS ANIMATION (demandé : « quand je lance le labyrinthe en boucle on doit pouvoir skip les
+// animations sur toutes les occurrences »). Vaut pour tout run en AUTO, donc pour TOUS ceux d'une
+// série, et se bascule en cours de route : plus de pas du héros, d'anneau de salle, d'overlay de
+// descente ni d'éclat plein écran (salle secrète, familier) — le récap de fin dit tout. Les
+// combats, eux, sont déjà sautés en auto (vitesse maximale). Mémorisé ; actif par défaut.
+const SKIP_KEY = 'muscu:laby:noanim';
+function readSkip(): boolean {
+  try {
+    return localStorage.getItem(SKIP_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+const skipAnim = ref(readSkip());
+function toggleSkipAnim() {
+  skipAnim.value = !skipAnim.value;
+  try {
+    localStorage.setItem(SKIP_KEY, skipAnim.value ? '1' : '0');
+  } catch {
+    /* stockage indispo → réglage gardé en mémoire seulement */
+  }
+}
+const fastFx = computed(() => animationsSkipped(skipAnim.value, autoMode.value, !!series.value));
+
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
   computeCharacter(
@@ -1106,6 +1143,7 @@ let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 // Durée de l'effet, raccourcie avec la vitesse de l'auto (jamais sous 250 ms : on doit le voir).
 const pulseMs = computed(() => Math.max(250, Math.round(1100 / speed.value)));
 function pulse(id: number, kind: 'chest' | 'trap' | 'vault', text: string) {
+  if (fastFx.value) return;
   roomPulse.value = { id, floor: run.value.floor, kind, text, n: ++pulseSeq };
   if (pulseTimer) clearTimeout(pulseTimer);
   pulseTimer = setTimeout(() => (roomPulse.value = null), pulseMs.value);
@@ -1262,7 +1300,7 @@ const heroPos = computed(() => {
   };
 });
 // Le pas du héros suit celui du déplacement automatique (et la vitesse de l'auto).
-const walkMs = computed(() => Math.round(WALK_STEP_MS / speed.value));
+const walkMs = computed(() => (fastFx.value ? 0 : Math.round(WALK_STEP_MS / speed.value)));
 // Illustration du gardien d'un palier, ou null (repli sur son emoji). Un fichier qui ne
 // charge pas retombe aussi sur l'emoji.
 const artFailed = ref(new Set<string>());
@@ -1453,13 +1491,14 @@ function openVault(id: number) {
     kind: 'good',
     text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙`,
   };
-  gameFx.celebrate({
-    kind: 'drop',
-    emoji: '💎',
-    title: 'Salle secrète !',
-    subtitle: item ? `${item.name} · ${gradeLabel(item)}` : 'Coffre au trésor',
-    rarity: item ? fxRarity(item.rarity) : 'legendary',
-  });
+  if (!fastFx.value)
+    gameFx.celebrate({
+      kind: 'drop',
+      emoji: '💎',
+      title: 'Salle secrète !',
+      subtitle: item ? `${item.name} · ${gradeLabel(item)}` : 'Coffre au trésor',
+      rarity: item ? fxRarity(item.rarity) : 'legendary',
+    });
   if (item) {
     lastEvent.value = { ...lastEvent.value, item };
     bumpLoot();
@@ -1563,6 +1602,7 @@ function goDown() {
   roomPulse.value = null;
   lastEvent.value = null;
   // Animation de descente d'étage (l'étage suivant est déjà chargé derrière).
+  if (fastFx.value) return;
   roomFx.value = { kind: 'descend' };
   setTimeout(() => {
     if (roomFx.value?.kind === 'descend') closeFx();
@@ -1797,7 +1837,7 @@ function autoTick() {
   if (onBoss.value) return void finish(); // sur le boss (déjà affronté) → écran de fin
   if (onStairs.value) {
     goDown();
-    return scheduleAuto(1500);
+    return scheduleAuto(fastFx.value ? 300 : 1500);
   }
   // Il reste l'escalier ou le boss non visité → on y va (dernières cases).
   const exitHop = hopToNearest((r) => isUnvisited(r) && (r.type === 'stairs' || r.type === 'boss'));
@@ -1880,15 +1920,16 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         ...(selectedLaby.value ? { rankCap: RARITY_RANK[selectedLaby.value.rank] } : {}),
       });
       loot.value.push({ ...fam, id: crypto.randomUUID() });
-      gameFx.celebrate({
-        kind: 'familiar',
-        emoji: fam.emoji,
-        title: 'Familier trouvé !',
-        subtitle: `${fam.name} · rang ${rarityRank(fam.rarity).name}`,
-        rarity: fxRarity(fam.rarity),
-        // En série, un éclat plein écran par run bloquerait l'enchaînement : bandeau discret.
-        ...(series.value ? { quiet: true } : {}),
-      });
+      if (!fastFx.value)
+        gameFx.celebrate({
+          kind: 'familiar',
+          emoji: fam.emoji,
+          title: 'Familier trouvé !',
+          subtitle: `${fam.name} · rang ${rarityRank(fam.rarity).name}`,
+          rarity: fxRarity(fam.rarity),
+          // En série, un éclat plein écran par run bloquerait l'enchaînement : bandeau discret.
+          ...(series.value ? { quiet: true } : {}),
+        });
     }
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé
     // (profond = pardonne moins). Les objets restent perdus. Retraite/clear = tout gardé.
@@ -2348,6 +2389,9 @@ function returnToLobby() {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
+}
+.af-skip {
+  min-height: 44px;
 }
 .af-resume {
   border-color: var(--accent);

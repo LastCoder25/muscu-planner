@@ -277,6 +277,13 @@ export function pulseRoomOf(
   if (!pulse || pulse.floor !== floorIndex) return null;
   return floor.rooms[pulse.id] ?? null;
 }
+/**
+ * ⏭️ Les animations du Labyrinthe sont-elles sautées ? Seulement pour un run en AUTO (donc tous
+ * ceux d'une série) et si le joueur l'a demandé : à la main, on joue toujours les siennes.
+ */
+export function animationsSkipped(skip: boolean, auto: boolean, inSeries: boolean): boolean {
+  return skip && (auto || inSeries);
+}
 /** « Frontière » du brouillard : salles adjacentes à une salle visitée, non visitées. */
 export function frontier(floor: Floor, state: RunState): number[] {
   const out = new Set<number>();
