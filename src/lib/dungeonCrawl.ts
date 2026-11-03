@@ -262,6 +262,21 @@ export function descend(state: RunState, next: Floor | null): RunState {
   if (!next) return { ...state, status: 'cleared' };
   return { ...state, floor: state.floor + 1, current: next.startId, visited: [next.startId] };
 }
+/**
+ * 🫧 La salle où dessiner l'effet qu'on vient de déclencher (coffre, piège, salle secrète), ou
+ * `null`. ⚠️ L'effet vit quelques centaines de ms : en auto rapide, le héros peut avoir DESCENDU
+ * (ou un nouveau run de la série a pu partir) entre-temps. L'id de la salle ne vaut alors plus
+ * rien sur l'étage affiché — il y désigne une autre salle, ou aucune (« cannot read properties
+ * of undefined (reading 'x') », écran « cet écran a planté »). Il porte donc son étage.
+ */
+export function pulseRoomOf(
+  pulse: { id: number; floor: number } | null,
+  floorIndex: number,
+  floor: Floor,
+): Room | null {
+  if (!pulse || pulse.floor !== floorIndex) return null;
+  return floor.rooms[pulse.id] ?? null;
+}
 /** « Frontière » du brouillard : salles adjacentes à une salle visitée, non visitées. */
 export function frontier(floor: Floor, state: RunState): number[] {
   const out = new Set<number>();

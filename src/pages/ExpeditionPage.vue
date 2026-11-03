@@ -229,11 +229,7 @@
             >
               ⏩ ×{{ autoSpeed }}
             </button>
-            <button
-              type="button"
-              class="af-stop af-resume"
-              @click="resumeAuto"
-            >
+            <button type="button" class="af-stop af-resume" @click="resumeAuto">
               ⚡ Lancer l'auto
             </button>
           </template>
@@ -447,23 +443,19 @@
             <!-- Effet de la salle qu'on vient d'ouvrir : anneau + texte qui monte (coffre, piège,
                salle secrète). Remplace la modale qui s'ouvrait à chaque salle. -->
             <g
-              v-if="roomPulse"
+              v-if="roomPulse && pulseRoom"
               :key="'pulse' + roomPulse.n"
               class="pulse"
               :class="roomPulse.kind"
               :style="{ '--pulse-ms': pulseMs + 'ms' }"
             >
               <circle
-                :cx="cx(floor.rooms[roomPulse.id]!)"
-                :cy="cy(floor.rooms[roomPulse.id]!)"
+                :cx="cx(pulseRoom)"
+                :cy="cy(pulseRoom)"
                 :r="SIZE / 2 + 2"
                 class="pulse-ring"
               />
-              <text
-                :x="cx(floor.rooms[roomPulse.id]!)"
-                :y="cy(floor.rooms[roomPulse.id]!) - SIZE / 2 - 4"
-                class="pulse-txt"
-              >
+              <text :x="cx(pulseRoom)" :y="cy(pulseRoom) - SIZE / 2 - 4" class="pulse-txt">
                 {{ roomPulse.text }}
               </text>
             </g>
@@ -758,6 +750,7 @@ import {
   applyDamage,
   descend,
   isVisible,
+  pulseRoomOf,
   ROOM_EMOJI,
   type Floor,
   type Room,
@@ -1100,16 +1093,20 @@ const roomFx = ref<{ kind: 'combat' | 'descend'; win?: boolean } | null>(null);
 // Effet posé sur la salle qu'on vient d'ouvrir : anneau + texte qui monte.
 const roomPulse = ref<{
   id: number;
+  /** L'étage où il a été posé (`pulseRoomOf`). */
+  floor: number;
   kind: 'chest' | 'trap' | 'vault';
   text: string;
   n: number;
 } | null>(null);
+/** La salle de l'effet, sur l'étage AFFICHÉ (null s'il a changé depuis). */
+const pulseRoom = computed(() => pulseRoomOf(roomPulse.value, run.value.floor, floor.value));
 let pulseSeq = 0;
 let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 // Durée de l'effet, raccourcie avec la vitesse de l'auto (jamais sous 250 ms : on doit le voir).
 const pulseMs = computed(() => Math.max(250, Math.round(1100 / speed.value)));
 function pulse(id: number, kind: 'chest' | 'trap' | 'vault', text: string) {
-  roomPulse.value = { id, kind, text, n: ++pulseSeq };
+  roomPulse.value = { id, floor: run.value.floor, kind, text, n: ++pulseSeq };
   if (pulseTimer) clearTimeout(pulseTimer);
   pulseTimer = setTimeout(() => (roomPulse.value = null), pulseMs.value);
 }
@@ -1563,6 +1560,7 @@ function regen(pct: number) {
 function goDown() {
   const next = dungeon.value[run.value.floor + 1] ?? null;
   run.value = descend(run.value, next);
+  roomPulse.value = null;
   lastEvent.value = null;
   // Animation de descente d'étage (l'étage suivant est déjà chargé derrière).
   roomFx.value = { kind: 'descend' };
@@ -1627,6 +1625,7 @@ function rollTreasure(): Item | null {
 function freshRun() {
   dungeon.value = generateDungeon(seed.value, floorsWanted.value);
   run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
+  roomPulse.value = null;
   relicGauge.value = 0;
   barrierLeft.value = undefined;
   gold.value = 0;
