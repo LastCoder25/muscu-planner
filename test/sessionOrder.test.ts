@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { muscleProfile, planSessionOrder, type OrderCandidate } from '@/lib/muscleFatigue';
+import {
+  displayOrder,
+  muscleProfile,
+  planSessionOrder,
+  type OrderCandidate,
+} from '@/lib/muscleFatigue';
 import { comboStepMs } from '@/lib/combo';
 
 // Ordre CALCULÉ des séries d'une séance du 360 (v1.249) : groupes alternés, muscles frais.
@@ -102,5 +107,29 @@ describe('🧠 ordre calculé des séries d’une séance du 360', () => {
   it('un seul exo : ses séries s’enchaînent (rien d’autre à intercaler)', () => {
     expect(plan([cand('B', bench, 3)])).toEqual(['B', 'B', 'B']);
     expect(plan([])).toEqual([]);
+  });
+});
+
+describe('📋 ordre d’affichage = ordre d’exécution (signalé sur le 360)', () => {
+  it('les exos sont listés dans l’ordre où le plan les fait démarrer', () => {
+    expect(displayOrder([2, 0, 2, 1, 0], 3)).toEqual([2, 0, 1]);
+  });
+  it('un exo absent du plan (plus rien à faire) passe après, dans son ordre d’origine', () => {
+    expect(displayOrder([3, 1], 5)).toEqual([3, 1, 0, 2, 4]);
+    expect(displayOrder([], 3)).toEqual([0, 1, 2]);
+  });
+  it('ignore un index hors séance', () => {
+    expect(displayOrder([7, 1, -1], 2)).toEqual([1, 0]);
+  });
+  it('⚠️ avec le vrai plan : l’exo annoncé en premier est en tête de liste', () => {
+    // Construit dans l’ordre pecs, pecs, dos : le plan intercale le dos avant la 2e série de pecs.
+    const cands = [cand('B', bench, 2), cand('P', pushup, 2), cand('R', row, 2)];
+    const keys = plan(cands);
+    const idx = keys.map((k) => cands.findIndex((c) => c.key === k));
+    const listed = displayOrder(idx, cands.length);
+    expect(listed[0]).toBe(idx[0]);
+    expect(new Set(listed).size).toBe(cands.length);
+    // Le dos (index 2) ne reste pas relégué en dernier : il apparaît au plus tard en 2e.
+    expect(listed.indexOf(2)).toBeLessThanOrEqual(1);
   });
 });

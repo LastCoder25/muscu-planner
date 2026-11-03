@@ -207,7 +207,7 @@
       </div>
 
       <div
-        v-for="(exo, i) in session"
+        v-for="{ exo, i } in listed"
         :key="exo.exercise_id"
         class="s-exo"
         :class="{ next: nextStep?.exo === i }"
@@ -380,6 +380,7 @@ import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useComboFatigue } from '@/composables/useComboFatigue';
 import {
   fatigueLabel,
+  displayOrder,
   muscleGroupOf,
   planSessionOrder,
   type FatigueHit,
@@ -511,6 +512,12 @@ function exoRangeLabel(e: ComboSessionExo): string {
 }
 
 const session = ref<ComboSessionExo[]>([]);
+/** 📋 L'ordre d'AFFICHAGE des exos, figé au démarrage dans l'ordre d'exécution (le plan se
+ *  recalcule après chaque série : la liste, elle, ne doit pas bouger sous le doigt). */
+const listOrder = ref<number[]>([]);
+const listed = computed(() =>
+  listOrder.value.flatMap((i) => (session.value[i] ? [{ exo: session.value[i], i }] : [])),
+);
 // Séries validées, clé `i-j` → { reps, weight, assisted } saisis par l'utilisateur.
 // `at` = l'heure où la série a été faite : elle part au défi telle quelle (sinon toutes les
 // séries de la séance porteraient l'heure de l'enregistrement) et nourrit la fatigue.
@@ -774,6 +781,7 @@ function start() {
   // Copie profonde des sets (tableaux mutables → ajout/retrait de séries).
   session.value = previewSession.value.map((e) => ({ ...e, sets: [...e.sets] }));
   logged.value = {};
+  listOrder.value = displayOrder(plan.value, session.value.length);
   phase.value = 'run';
   tick = setInterval(() => {
     elapsed.value++;

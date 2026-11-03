@@ -175,6 +175,17 @@ function canFinish(counts: ReadonlyMap<string, number>, last: string): boolean {
   return true;
 }
 
+/** 📋 L'ORDRE D'AFFICHAGE d'une séance : les exos dans l'ordre où le plan les fait démarrer
+ *  (première apparition de chacun), puis ceux que le plan ne contient pas (plus rien à faire)
+ *  dans leur ordre d'origine. Sans lui, la liste suivait l'ordre de construction du défi et la
+ *  série annoncée sautait d'un bout à l'autre de l'écran (signalé sur le 360). */
+export function displayOrder(plan: readonly number[], total: number): number[] {
+  const seen = new Set<number>();
+  for (const i of plan) if (i >= 0 && i < total) seen.add(i);
+  for (let i = 0; i < total; i++) seen.add(i);
+  return [...seen];
+}
+
 /** L'ordre des séries restantes (une clé par série). `hits` = séries déjà faites (le défi
  *  du jour et la séance), `lastGroup` = le groupe de la dernière série faite, `stepMs` =
  *  durée d'une série repos compris. */
