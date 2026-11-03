@@ -17,6 +17,10 @@ import {
   vetFactOf,
   vetFactionOf,
   vetLines,
+  QUESTS,
+  questHitOf,
+  questLines,
+  recordQuest,
   vocationAmbushMult,
   vocationBudget,
   vocationFree,
@@ -531,9 +535,19 @@ describe('🏅 vétérance : un titre à 15 victoires, titre seul', () => {
   };
   it('à l’encaissement : compté UNE fois (jamais si l’XP l’a été à l’arrivée)', () => {
     const p = win();
-    const old = partyClaimRoster(p, [guerrier('a')], { ...ctx, xpGranted: false, vet: 'betes' });
+    const old = partyClaimRoster(p, [guerrier('a')], {
+      ...ctx,
+      xpGranted: false,
+      vet: 'betes',
+      quest: null,
+    });
     expect(old.adventurers[0]!.vet).toEqual({ betes: 1 });
-    const arrived = partyClaimRoster(p, [guerrier('a')], { ...ctx, xpGranted: true, vet: 'betes' });
+    const arrived = partyClaimRoster(p, [guerrier('a')], {
+      ...ctx,
+      xpGranted: true,
+      vet: 'betes',
+      quest: null,
+    });
     expect(arrived.adventurers[0]!.vet).toBeUndefined();
   });
 });
@@ -1050,5 +1064,189 @@ describe('💾 le carnet survit au chargement', () => {
     normalizeCharacterRow(r);
     expect(r.adventurers![0]!.vocation).toEqual(a.vocation);
     expect(r.adventurers![0]!.vet).toEqual({ betes: 3 });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎖️ v1.300.0 — LA QUÊTE PERSONNELLE DU GUERRIER : « Chef de bande »
+// ─────────────────────────────────────────────────────────────────────────────
+describe('🎖️ quête personnelle : le guerrier en tête, escorte ≤ 2, sans le héros', () => {
+  const Q = QUESTS[0]!;
+  /** Un rapport gagné contre des bandits, le guerrier `a` en tête, deux compagnons. */
+  const win = (over: Partial<PartyResult> = {}): PartyResult =>
+    ({
+      hero: false,
+      faction: 'bandits',
+      escort: ['a', 'b', 'c'],
+      win: true,
+      foes: 3,
+      slain: 3,
+      kills: {},
+      heroKills: 0,
+      xp: { a: 10, b: 10, c: 10 },
+      hurt: [],
+      journal: [],
+      ...over,
+    }) as unknown as PartyResult;
+  const hit = (p: PartyResult, t: PoiType = 'camp') => questHitOf(p, t);
+  /** Compte un rapport pour tout le vivier (comme le fait `grantReportXp`). */
+  const count = (roster: Adventurer[], p: PartyResult, t: PoiType = 'camp') =>
+    roster.map((a) => recordQuest(a, hit(p, t)));
+
+  it('un camp gagné, guerrier en tête, 3 champions sans héros : +1', () => {
+    const [a] = count([guerrier('a')], win());
+    expect(a!.quest).toEqual({ [Q.id]: 1 });
+  });
+
+  it('le seuil est 3 victoires, et le compte s’arrête au but', () => {
+    let a = guerrier('a');
+    for (let i = 0; i < 6; i++) a = recordQuest(a, hit(win()));
+    expect(a.quest).toEqual({ [Q.id]: Q.wins });
+    expect(Q.wins).toBe(3);
+    expect(questLines(a)[0]).toMatchObject({ wins: 3, total: 3, done: true });
+  });
+
+  it('SANS le héros : avec lui, rien ne compte', () => {
+    expect(hit(win({ hero: true }))).toBeNull();
+  });
+
+  it('escorte ≤ 2 : 3 champions comptent, 4 non', () => {
+    const [ok] = count([guerrier('a')], win({ escort: ['a', 'b', 'c'] }));
+    expect(ok!.quest?.[Q.id]).toBe(1);
+    const [trop] = count([guerrier('a')], win({ escort: ['a', 'b', 'c', 'd'] }));
+    expect(trop).toEqual(guerrier('a'));
+    const [seul] = count([guerrier('a')], win({ escort: ['a'] }));
+    expect(seul!.quest?.[Q.id]).toBe(1);
+  });
+
+  it('le guerrier doit être EN TÊTE : second ou troisième de l’escorte, rien', () => {
+    const r = count([guerrier('a'), guerrier('b')], win({ escort: ['b', 'a'] }));
+    expect(r[0]!.quest).toBeUndefined(); // a est second
+    expect(r[1]!.quest?.[Q.id]).toBe(1); // b est en tête
+  });
+
+  it('la lignée compte : un archer en tête ne fait pas avancer la quête du guerrier', () => {
+    const [x] = count([archer('a')], win());
+    expect(x!.quest).toBeUndefined();
+  });
+
+  it('seuls les camps, repaires et tanières de la faction de l’île comptent', () => {
+    for (const t of ['camp', 'lair', 'den'] as const)
+      expect(recordQuest(guerrier('a'), hit(win(), t)).quest?.[Q.id], t).toBe(1);
+    for (const t of ['mine', 'rift', 'warband'] as const)
+      expect(recordQuest(guerrier('a'), hit(win(), t)).quest, t).toBeUndefined();
+    expect(recordQuest(guerrier('a'), hit(win({ faction: 'betes' }))).quest).toBeUndefined();
+  });
+
+  it('défaite, convoi, point de contrôle, arrivée tardive, combat vide : aucun coup, aucune perte', () => {
+    for (const over of [
+      { win: false },
+      { convoy: true },
+      { controlId: 'ctl_x' },
+      { defense: true },
+      { late: true },
+      { foes: 0 },
+    ] as Partial<PartyResult>[])
+      expect(hit(win(over)), JSON.stringify(over)).toBeNull();
+    expect(hit(win(), 'control')).toBeNull();
+    expect(questHitOf(win({ escort: [] }), 'camp')).toBeNull();
+    // une défaite après 2 victoires ne retire rien
+    const a = guerrier('a', { quest: { [Q.id]: 2 } });
+    expect(recordQuest(a, hit(win({ win: false })))).toBe(a);
+  });
+
+  it('rend le MÊME objet quand rien ne bouge', () => {
+    const a = guerrier('a');
+    expect(recordQuest(a, null)).toBe(a);
+    const done = guerrier('a', { quest: { [Q.id]: Q.wins } });
+    expect(recordQuest(done, hit(win()))).toBe(done);
+  });
+
+  it('IDEMPOTENT : un rapport déjà versé (xpGranted) ne recompte pas, ni au rechargement', () => {
+    const m = {
+      id: 'm1',
+      level: 20,
+      win: true,
+      text: '',
+      gold: 0,
+      energy: 0,
+      key: 0,
+      resolvedAt: 0,
+      claimAt: 0,
+      claimed: false,
+      read: false,
+      poiType: 'camp',
+      party: win(),
+    } as ExpeditionMessage;
+    const first = grantReportXp([m], [m], [guerrier('a')], 30, 20);
+    expect(first.adventurers[0]!.quest).toEqual({ [Q.id]: 1 });
+    expect(first.messages[0]!.xpGranted).toBe(true);
+    // le même message, rejoué (second appareil, rechargement) : plus rien à verser
+    const again = grantReportXp(first.messages, first.messages, first.adventurers, 30, 20);
+    expect(again.adventurers[0]!.quest).toEqual({ [Q.id]: 1 });
+    // l'encaissement d'un rapport déjà versé ne recompte pas non plus
+    const ctx = {
+      pantheonLevel: 30,
+      heroLevel: 20,
+      infirmaryLevel: 0,
+      backAt: 1,
+      now: 1,
+      healMult: 1,
+      vet: 'bandits' as const,
+      quest: hit(win()),
+    };
+    const claimed = partyClaimRoster(win(), first.adventurers, { ...ctx, xpGranted: true });
+    expect(claimed.adventurers[0]!.quest).toEqual({ [Q.id]: 1 });
+    // un rapport d'AVANT le versement à l'arrivée compte à l'encaissement, une fois
+    const old = partyClaimRoster(win(), [guerrier('a')], { ...ctx, xpGranted: false });
+    expect(old.adventurers[0]!.quest).toEqual({ [Q.id]: 1 });
+  });
+
+  it('le trait n’existe qu’à l’accomplissement, et UNE seule fois', () => {
+    const a = guerrier('a', { quest: { [Q.id]: Q.wins - 1 } });
+    expect(readableGroups(a)).not.toContain('fallen');
+    expect(questLines(a)[0]).toMatchObject({ wins: 2, done: false });
+    const b = recordQuest(a, hit(win()));
+    expect(readableGroups(b)).toContain('fallen');
+    expect(readableGroups(b).filter((g) => g === 'fallen')).toHaveLength(1);
+    expect(readableGroups(recordQuest(b, hit(win())))).toEqual(readableGroups(b));
+  });
+
+  it('le trait est une INFORMATION : ni point, ni nœud, ni effet au combat', () => {
+    const base = guerrier('a');
+    const done = guerrier('a', { quest: { [Q.id]: Q.wins } });
+    expect(vocationFree([done], 60, NOW)).toBe(vocationFree([base], 60, NOW));
+    expect(vocationTree(done)).toEqual(vocationTree(base));
+    const camp = gp('camp', 'bandits');
+    expect(vocationGuardMult([done], camp)).toBe(vocationGuardMult([base], camp));
+    expect(vocationAmbushMult([done], { type: 'camp', perilous: true } as never)).toBe(1);
+    expect(vetLines(done)).toEqual(vetLines(base));
+  });
+
+  it('la lecture du trait s’ajoute à celles des nœuds, sans doublon', () => {
+    const a = guerrier('a', { vocation: { nodes: ['guerrier.flair'] }, quest: { [Q.id]: Q.wins } });
+    expect(readableGroups(a)).toEqual(['fight', 'fallen']);
+  });
+
+  it('la table : une quête par (lignée, île), île connue, trait = lecture', () => {
+    const keys = QUESTS.map((q) => `${q.lineage}/${q.island}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const q of QUESTS) {
+      expect(q.island).toBeGreaterThanOrEqual(1);
+      expect(q.wins).toBeGreaterThan(0);
+      expect(q.trait.spawn).toBeTruthy();
+    }
+  });
+
+  it('rien ne s’affiche pour une lignée sans quête, ni pour un champion sans lignée', () => {
+    expect(questLines(archer('a'))).toEqual([]);
+    expect(questLines({ ...guerrier('a'), championId: undefined })).toEqual([]);
+  });
+
+  it('💾 la quête survit au chargement', () => {
+    const a = guerrier('a', { quest: { [Q.id]: 2 } });
+    const r = { adventurers: [a] } as unknown as Parameters<typeof normalizeCharacterRow>[0];
+    normalizeCharacterRow(r);
+    expect(r.adventurers![0]!.quest).toEqual({ [Q.id]: 2 });
   });
 });

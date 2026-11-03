@@ -122,6 +122,46 @@
         </div>
       </template>
 
+      <template v-if="quests.length">
+        <h3 class="vc-sec">🎖️ Quête personnelle</h3>
+        <div class="vc-grid">
+          <div
+            v-for="q in quests"
+            :key="q.id"
+            class="vc-tile quest"
+            :class="{ owned: q.done }"
+            data-quest
+          >
+            <div class="vc-tile-top">
+              <span class="vc-emo" aria-hidden="true">{{ q.emoji }}</span>
+              <span class="vc-tile-main">
+                <b>{{ q.label }}</b>
+                <span class="vc-dim">{{ q.goal }}</span>
+              </span>
+            </div>
+            <div class="vc-chips">
+              <span class="vc-chip" :class="{ pts: q.done }">
+                {{ q.done ? '✅ Accomplie' : `${q.wins} / ${q.total}` }}
+              </span>
+              <span class="vc-chip dim">{{ q.island }}</span>
+            </div>
+            <div class="vc-bar" aria-hidden="true">
+              <span :style="{ width: (q.wins / q.total) * 100 + '%' }" />
+            </div>
+            <div class="vc-trait" :class="{ off: !q.done }">
+              <span class="vc-tile-main">
+                <b
+                  >{{ q.trait.emoji }} {{ q.done ? 'Trait gagné' : 'Trait à gagner' }} :
+                  {{ q.trait.label }}</b
+                >
+                <span class="vc-dim">{{ q.trait.text }}</span>
+              </span>
+              <p v-if="q.done" class="vc-reading">{{ readingFor(q.trait.spawn) }}</p>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <h3 class="vc-sec">
         🏅 Vétérance <span class="vc-dim">— un titre à {{ VET.tier }} victoires, sans effet</span>
       </h3>
@@ -164,6 +204,7 @@ import {
   pendingPoints,
   pulseLines,
   readableGroups,
+  questLines,
   readsPulse,
   readingText,
   vetLines,
@@ -200,6 +241,7 @@ const free = computed(() => vocationFree(roster.value, heroLevel.value, now.valu
 const pending = computed(() => pendingPoints(roster.value, now.value));
 const total = computed(() => vocationBudget(heroLevel.value));
 const vet = computed(() => (adv.value ? vetLines(adv.value) : []));
+const quests = computed(() => (adv.value ? questLines(adv.value) : []));
 const lineageLabel = computed(() => {
   const l = adv.value ? advChampion(adv.value)?.lineage : undefined;
   return l ? (LINEAGE_LABEL[l] ?? l) : 'sans lignée';
@@ -445,6 +487,20 @@ function forget(n: VocationNode) {
   cursor: default;
   border-color: var(--line);
   background: transparent;
+}
+.vc-trait {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  min-width: 0;
+}
+.vc-trait.off {
+  border-style: dashed;
+  opacity: 0.75;
 }
 .vc-bar {
   height: 6px;

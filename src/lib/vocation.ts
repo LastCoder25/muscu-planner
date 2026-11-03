@@ -11,6 +11,9 @@
  *    effets de situation modestes. Les SIX lignées ont le leur (v1.296.0) : le guerrier en a 3
  *    de lecture (livré tel quel), les cinq autres 2 — celles qui apprennent vraiment quelque chose.
  * 3. 🏅 LA VÉTÉRANCE — un titre par faction à `VET.tier` victoires. TITRE SEUL : aucun effet.
+ * 4. 🎖️ LA QUÊTE PERSONNELLE (v1.300.0) — un compteur par île et par lignée, qui n'avance que sous
+ *    une COMPOSITION de lignée ; le trait gagné est une LECTURE d'information de plus (jamais un
+ *    effet au combat). Voir la section en bas de ce fichier.
  *
  * ⚠️ Aucune récompense d'XP, aucune monnaie, aucun % général de puissance. ⚠️ Les effets passent
  * par des crochets qui existent déjà : `fightCampForce`/`partyWinChance`/`attackForecast` pour la
@@ -37,8 +40,9 @@ import {
 } from './expedition';
 import { riftOverflowAt, riftPopulation } from './rift';
 import { formatDuration } from './duration';
-import type { RaidFaction } from './raid';
+import { FACTION_LABEL, type RaidFaction } from './raid';
 import type { PoiFact } from './poiFacts';
+import { ISLANDS } from './archipelago';
 
 /** Ce qu'un champion a acquis. `freeAt` : un instant par point RETIRÉ qui n'est pas encore
  *  redevenu dépensable (purgé à chaque écriture ; au plus autant d'entrées que de points du budget). */
@@ -49,6 +53,9 @@ export interface AdvVocation {
 
 /** Victoires par faction, comptées sous la garde `xpGranted` (une fois par rapport). */
 export type AdvVet = Partial<Record<RaidFaction, number>>;
+
+/** 🎖️ Victoires comptées pour chaque quête personnelle (id de quête → compte, BORNÉ au but). */
+export type AdvQuest = Record<string, number>;
 
 export const VOCATION = {
   /** Points au départ, puis par niveau de héros au-delà de `catchUpFrom`. */
@@ -660,9 +667,14 @@ export function readingText(group: SpawnGroup, next: SpawnAhead | null, now: num
 
 /** Les familles que ce champion sait lire (nœuds d'information acquis). */
 export function readableGroups(adv: Adventurer): SpawnGroup[] {
-  return (vocationTree(adv) ?? [])
+  const fromNodes = (vocationTree(adv) ?? [])
     .filter((n) => n.spawn && nodesOf(adv).includes(n.id))
     .map((n) => n.spawn!);
+  // 🎖️ Les traits de quête accomplie lisent aussi : sans point, sans pool, sans les retirer.
+  const fromTraits = questLines(adv)
+    .filter((l) => l.done)
+    .map((l) => l.trait.spawn);
+  return [...new Set([...fromNodes, ...fromTraits])];
 }
 
 /** 💓 Ce champion lit-il le Pouls des failles ? */
@@ -785,4 +797,132 @@ export function bestVetTitle(
     for (const l of vetLines(a))
       if (l.earned && (!best || l.wins > best.line.wins)) best = { line: l, by: a.name };
   return best && { emoji: best.line.emoji, label: best.line.label, by: best.by };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎖️ LA QUÊTE PERSONNELLE D'UN CHAMPION (v1.300.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Une quête de lignée : un COMPTEUR sur les rapports de voyage existants (aucun lieu, aucune
+ *  monnaie), sous une condition de COMPOSITION propre à la lignée. */
+export interface HeroQuest {
+  id: string;
+  lineage: Lineage;
+  /** L'île dont elle suit le jalon (`ISLANDS[].id`) : UN trait par île et par lignée. */
+  island: number;
+  emoji: string;
+  label: string;
+  /** Les ennemis à battre : la faction de l'île, sur ces types de lieux tenus. */
+  faction: RaidFaction;
+  types: readonly PoiType[];
+  /** Victoires conformes pour accomplir la quête. */
+  wins: number;
+  /** Composition : le champion de la lignée EN TÊTE, et au plus ce nombre d'autres à sa suite. */
+  maxEscort: number;
+  /** Le trait gagné : une lecture d'information, rien d'autre. */
+  trait: { emoji: string; label: string; text: string; spawn: SpawnGroup };
+}
+
+/** La table, une entrée par (lignée, île). Ajouter l'île suivante = une entrée de plus.
+ *  ⚠️ Un trait est une LECTURE (`spawn`) : il ne touche ni au combat, ni à l'XP, ni à l'or,
+ *  ni aux drops, ni au budget de points. */
+export const QUESTS: readonly HeroQuest[] = [
+  {
+    id: 'guerrier.chef-de-bande',
+    lineage: 'guerrier',
+    island: 1,
+    emoji: '🎖️',
+    label: 'Chef de bande',
+    faction: 'bandits',
+    types: ['camp', 'lair', 'den'],
+    wins: 3,
+    maxEscort: 2,
+    trait: {
+      emoji: '🏚️',
+      label: 'Veilleur des tombés',
+      text: `Estime quand surgiront les ruines d’un héros tombé (${SOON}).`,
+      spawn: 'fallen',
+    },
+  },
+];
+
+/** Ce qu'un rapport apporte aux quêtes : le champion de TÊTE et ce qu'il a battu. */
+export interface QuestHit {
+  headId: string;
+  faction: RaidFaction;
+  poiType: PoiType;
+  /** Combien de champions en tout (lui compris) étaient du voyage. */
+  size: number;
+}
+
+/**
+ * Le « coup » qu'un rapport porte aux quêtes, ou `null`. Règles :
+ * - une victoire de vétérance (`vetFactionOf` : ni défaite, ni convoi, ni point de contrôle, ni
+ *   arrivée tardive, ni combat vide) — une défaite ne retire donc jamais rien ;
+ * - SANS le héros (`party.hero`) ;
+ * - le champion de TÊTE = le premier de `party.escort` (l'ordre d'envoi).
+ * La composition de lignée (`maxEscort`) et le type de lieu se jugent par quête (`recordQuest`).
+ */
+export function questHitOf(
+  party: Pick<
+    PartyResult,
+    'win' | 'faction' | 'late' | 'convoy' | 'controlId' | 'defense' | 'foes' | 'hero' | 'escort'
+  >,
+  poiType: PoiType | undefined,
+): QuestHit | null {
+  if (party.hero || !party.escort?.length) return null;
+  const faction = vetFactionOf(party, poiType);
+  if (!faction || !poiType) return null;
+  return { headId: party.escort[0]!, faction, poiType, size: party.escort.length };
+}
+
+/** Compte `hit` pour ce champion s'il est celui de TÊTE, de la bonne lignée, et que la troupe
+ *  respecte la composition. Rend le MÊME objet si rien ne bouge. ⚠️ L'idempotence est celle de
+ *  l'appelant (`xpGranted`), comme la vétérance. */
+export function recordQuest(adv: Adventurer, hit: QuestHit | null): Adventurer {
+  if (!hit || adv.id !== hit.headId) return adv;
+  const lineage = advChampion(adv)?.lineage;
+  let quest = adv.quest;
+  for (const q of QUESTS) {
+    if (q.lineage !== lineage || q.faction !== hit.faction || !q.types.includes(hit.poiType))
+      continue;
+    if (hit.size > q.maxEscort + 1) continue;
+    const have = quest?.[q.id] ?? 0;
+    if (have >= q.wins) continue;
+    quest = { ...quest, [q.id]: have + 1 };
+  }
+  return quest === adv.quest ? adv : { ...adv, quest };
+}
+
+export interface QuestLine {
+  id: string;
+  emoji: string;
+  label: string;
+  /** Le but, dans les mots du joueur. */
+  goal: string;
+  island: string;
+  wins: number;
+  total: number;
+  done: boolean;
+  trait: HeroQuest['trait'];
+}
+
+/** Les quêtes de la lignée de ce champion, avec leur avancement. Vide sans lignée. */
+export function questLines(adv: Adventurer): QuestLine[] {
+  const lineage = advChampion(adv)?.lineage;
+  return QUESTS.filter((q) => q.lineage === lineage).map((q) => {
+    const wins = Math.min(q.wins, adv.quest?.[q.id] ?? 0);
+    const isl = ISLANDS.find((i) => i.id === q.island);
+    return {
+      id: q.id,
+      emoji: q.emoji,
+      label: q.label,
+      goal: `${q.wins} camps pris contre les ${FACTION_LABEL[q.faction].toLowerCase()}, en tête d’une troupe de ${q.maxEscort + 1} champions au plus, sans le héros`,
+      island: isl ? `${isl.emoji} ${isl.name}` : `Île ${q.island}`,
+      wins,
+      total: q.wins,
+      done: wins >= q.wins,
+      trait: q.trait,
+    };
+  });
 }

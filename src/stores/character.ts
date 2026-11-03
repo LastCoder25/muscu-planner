@@ -373,7 +373,7 @@ import {
   RECALL_BLOCK_LABEL,
   type RecallTarget,
 } from '@/lib/party';
-import { forgetNode, learnNode, vetFactionOf } from '@/lib/vocation';
+import { forgetNode, learnNode, questHitOf, vetFactionOf } from '@/lib/vocation';
 import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
@@ -3160,6 +3160,7 @@ export const useCharacterStore = defineStore('character', () => {
         xpGranted: !!m.xpGranted,
         // 🏅 Sa victoire n'est comptée ici que si l'XP ne l'a pas été à l'arrivée.
         vet: vetFactionOf(party, m.poiType),
+        quest: questHitOf(party, m.poiType),
         // 🕯️ L'hospice tenu de l'île abrège les soins (1 sans hospice, hors archipel).
         healMult: hospiceHealMult(cur.expedition_map),
       });
@@ -5985,6 +5986,7 @@ export const useCharacterStore = defineStore('character', () => {
           now,
           xpGranted: true,
           vet: null,
+          quest: null,
           // 🕯️ L'hospice tel qu'il est APRÈS l'attaque (perdu, il ne soigne plus).
           healMult: hospiceHealMult(map),
         }).adventurers;

@@ -169,6 +169,55 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Fléau des bandits'); // titre gagné à 15 victoires
     expect(out).toContain('4 / 15'); // bêtes : pas encore
   });
+  // 🎖️ Quête personnelle : progression « 2 / 3 » puis trait gagné, lu sur la carte.
+  it('VocationSheet montre la quête du guerrier (2 / 3) puis son trait gagné et sa lecture', async () => {
+    const { default: VocationSheet } = await import('@/components/VocationSheet.vue');
+    const { createMap } = await import('@/lib/expedition');
+    const roan = (quest: Record<string, number>) => ({
+      id: 'g1',
+      name: 'Roän',
+      seed: 4,
+      path: [],
+      level: 20,
+      xp: 0,
+      championId: 'roan',
+      copies: 1,
+      quest,
+    });
+    for (const [wins, done] of [
+      [2, false],
+      [3, true],
+    ] as const) {
+      let out = '';
+      expect(
+        await mountIt(
+          VocationSheet,
+          { modelValue: true, advId: 'g1' },
+          {
+            ...ROW,
+            reward_level: 45,
+            adventurers: [roan({ 'guerrier.chef-de-bande': wins })],
+            expedition_map: createMap(7, Date.now(), 30, 30),
+          },
+          undefined,
+          '/',
+          (h) => (out = h),
+        ),
+      ).toBeNull();
+      expect(out).toContain('Quête personnelle');
+      expect(out).toContain('Chef de bande');
+      expect(out).toContain('Veilleur des tombés');
+      if (done) {
+        expect(out).toContain('Accomplie');
+        expect(out).toContain('Trait gagné');
+        expect(out).toMatch(/(Dans environ [^<]*|Maintenant|Rien d’annoncé[^<]*)/); // la lecture
+      } else {
+        expect(out).toContain('2 / 3');
+        expect(out).toContain('Trait à gagner');
+        expect(out).not.toContain('Trait gagné');
+      }
+    }
+  });
   it('VocationSheet dit qu’un champion sans lignée n’a pas de carnet', async () => {
     const { default: VocationSheet } = await import('@/components/VocationSheet.vue');
     const nobody = {

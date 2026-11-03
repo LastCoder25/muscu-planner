@@ -66,7 +66,7 @@ import {
   type SkillId,
 } from './skillRunes';
 import type { ChampionSlots } from './runeBank';
-import type { AdvVet, AdvVocation } from './vocation';
+import type { AdvQuest, AdvVet, AdvVocation } from './vocation';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -1360,6 +1360,8 @@ export interface Adventurer {
   vocation?: AdvVocation;
   /** 🏅 Ses victoires par faction (`vocation.ts`), source des titres. Absent = aucune. */
   vet?: AdvVet;
+  /** 🎖️ Sa QUÊTE PERSONNELLE (`vocation.ts`) : victoires conformes par quête. Absent = aucune. */
+  quest?: AdvQuest;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
