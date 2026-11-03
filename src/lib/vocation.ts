@@ -834,7 +834,8 @@ export const QUESTS: readonly HeroQuest[] = [
     emoji: '🎖️',
     label: 'Chef de bande',
     faction: 'bandits',
-    types: ['camp', 'lair', 'den'],
+    // ⚠️ Pas `den` : une tanière est TOUJOURS « bêtes » (`campSpecOf`), jamais bandits.
+    types: ['camp', 'lair'],
     wins: 3,
     maxEscort: 2,
     trait: {
@@ -917,7 +918,7 @@ export function questLines(adv: Adventurer): QuestLine[] {
       id: q.id,
       emoji: q.emoji,
       label: q.label,
-      goal: `${q.wins} camps pris contre les ${FACTION_LABEL[q.faction].toLowerCase()}, en tête d’une troupe de ${q.maxEscort + 1} champions au plus, sans le héros`,
+      goal: `${q.wins} camps ou repaires pris contre les ${FACTION_LABEL[q.faction].toLowerCase()}, en tête d’une troupe de ${q.maxEscort + 1} champions au plus (lui + ${q.maxEscort}), sans le héros`,
       island: isl ? `${isl.emoji} ${isl.name}` : `Île ${q.island}`,
       wins,
       total: q.wins,

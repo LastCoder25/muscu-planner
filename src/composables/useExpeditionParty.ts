@@ -48,6 +48,7 @@ import {
   COMBINED_BLOCK_LABEL,
   byReach,
   combinedBlocker,
+  escortInClickOrder,
   originGroupState,
   originGroupsWithSomeone,
   toggleOriginGroupWithHero,
@@ -229,7 +230,11 @@ export function useExpeditionParty(ctx: PartyCtx) {
       ?.id ?? 'base';
   /** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
    *  sort du groupe de lui-même — le store le refuserait de toute façon). */
-  const partyAdvs = computed(() => partyPool.value.filter((a) => partyEscort.value.includes(a.id)));
+  // 🎖️ DANS L'ORDRE DES CLICS, pas celui du vivier : le premier coché est « en tête » (voies
+  // d'équipe, quête personnelle). « Lieu » et « tous » posent l'ordre de l'écran.
+  const partyAdvs = computed(() => escortInClickOrder(partyPool.value, partyEscort.value));
+  /** Le champion en tête de l'équipe cochée, `null` si personne. */
+  const partyLeadId = computed(() => partyAdvs.value[0]?.id ?? null);
   /** 🧝 D'où part le HÉROS : le lieu tenu où il est posté, sinon la base (signalé : il partait
    *  de la base alors qu'il était à l'Ossuaire). */
   const heroPost = computed(() => heroPostOf(char.row?.expedition_map) ?? null);
@@ -586,10 +591,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** L'équipe cochée SANS `a` et AVEC `a`, dans l'ordre du vivier (celui de `partyAdvs` une fois
    *  la case touchée) : la paire dont chaque apport de la tuile est l'écart. */
   function teamsAround(a: Adventurer): { without: Adventurer[]; withA: Adventurer[] } {
-    const ids = new Set(partyEscort.value).add(a.id);
     return {
       without: partyAdvs.value.filter((x) => x.id !== a.id),
-      withA: partyPool.value.filter((x) => ids.has(x.id)),
+      // ⚠️ Cocher `a` l'ajoute À LA FIN (ordre des clics) ; déjà coché, il garde sa place.
+      withA: partyEscort.value.includes(a.id)
+        ? partyAdvs.value
+        : [...partyAdvs.value, ...partyPool.value.filter((x) => x.id === a.id)],
     };
   }
   /** ⛑️➕ Ce que chaque champion change aux PREMIERS SECOURS de la troupe (`firstAidGain`), en
@@ -1384,6 +1391,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyHero,
     partyEscort,
     partyAdvs,
+    partyLeadId,
     showBlocked,
     partyBlocked,
     partyHeroBlock,

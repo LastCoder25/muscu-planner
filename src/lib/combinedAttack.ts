@@ -416,6 +416,21 @@ export function attackWingVoyages(
 }
 
 /**
+ * 🎖️ L'équipe cochée DANS L'ORDRE DES CLICS (et non celui du vivier) : le premier coché est le
+ * champion « en tête » — celui que lisent les voies d'équipe (`firstEffect`) et la quête
+ * personnelle (`questHitOf` : `party.escort[0]`). Un id coché qui n'est plus dans `pool` (parti
+ * en convoi entre-temps) sort de l'équipe. ⚠️ Source UNIQUE de l'ordre envoyé : le pronostic, le
+ * vrai combat et le rapport lisent la même suite.
+ */
+export function escortInClickOrder<T extends { id: string }>(
+  pool: readonly T[],
+  escort: readonly string[],
+): T[] {
+  const byId = new Map(pool.map((a) => [a.id, a] as const));
+  return escort.map((id) => byId.get(id)).filter((a): a is T => !!a);
+}
+
+/**
  * 🧭 Toucher un LIEU de départ coche tous ses champions, ou les décoche tous s'ils sont
  * déjà tous cochés (demandé par l'utilisateur). Les champions des AUTRES lieux ne bougent
  * pas. On n'ajoute jamais au-delà de `max` (le plafond de l'équipe) : les premiers du lieu,

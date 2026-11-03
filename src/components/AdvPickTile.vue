@@ -50,6 +50,12 @@
          de la Guilde donne le /6. -->
         <span v-if="awaken" class="ca-awk">✨{{ awaken }}</span>
       </span>
+      <span
+        v-if="lead && on"
+        class="ca-lead"
+        title="Le premier coché mène l'équipe : c'est lui que lisent sa voie d'équipe et sa quête personnelle."
+        >🎖️ en tête</span
+      >
       <!-- 🔮 CE QU'IL VA GAGNER ICI (demandé) : on choisissait une destination sans savoir que,
          selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
@@ -182,6 +188,8 @@ import type { MissionXpPreview } from '@/lib/caravan';
 const props = defineProps<{
   adv: Adventurer;
   on: boolean;
+  /** 🎖️ Le premier coché de l'équipe : « en tête » (voies d'équipe, quête personnelle). */
+  lead?: boolean;
   reason?: string | null;
   /** ⏱️ Un avertissement NON bloquant (la tuile reste cochable). */
   warn?: string | null;
@@ -328,6 +336,16 @@ const rar = computed(() => advGradeBadge(props.adv));
 }
 /* Les étoiles : le travail de terrain, dans la teinte de son rang. */
 /* ✨ Même teinte que le Codex et la Guilde : une seule couleur pour l’Éveil. */
+/* 🎖️ « en tête » : une pastille à contour, sur sa propre ligne (ne pousse pas le rang). */
+.ca-lead {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--accent);
+}
 .ca-awk {
   font-size: 11px;
   line-height: 1;

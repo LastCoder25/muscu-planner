@@ -18,6 +18,7 @@ import {
   vetFactionOf,
   vetLines,
   QUESTS,
+  type HeroQuest,
   questHitOf,
   questLines,
   recordQuest,
@@ -53,6 +54,7 @@ import {
   type EscortKit,
 } from '@/lib/caravan';
 import { fightCampForce, type PartyInput } from '@/lib/camp';
+import { escortInClickOrder } from '@/lib/combinedAttack';
 import { partyWinChance } from '@/lib/partyForecast';
 import { normalizeCharacterRow } from '@/lib/characterRow';
 import type { Adventurer } from '@/lib/adventurers';
@@ -1130,10 +1132,10 @@ describe('🎖️ quête personnelle : le guerrier en tête, escorte ≤ 2, sans
     expect(x!.quest).toBeUndefined();
   });
 
-  it('seuls les camps, repaires et tanières de la faction de l’île comptent', () => {
-    for (const t of ['camp', 'lair', 'den'] as const)
+  it('seuls les camps et repaires de la faction de l’île comptent (une tanière est toujours « bêtes »)', () => {
+    for (const t of ['camp', 'lair'] as const)
       expect(recordQuest(guerrier('a'), hit(win(), t)).quest?.[Q.id], t).toBe(1);
-    for (const t of ['mine', 'rift', 'warband'] as const)
+    for (const t of ['den', 'mine', 'rift', 'warband'] as const)
       expect(recordQuest(guerrier('a'), hit(win(), t)).quest, t).toBeUndefined();
     expect(recordQuest(guerrier('a'), hit(win({ faction: 'betes' }))).quest).toBeUndefined();
   });
@@ -1223,9 +1225,28 @@ describe('🎖️ quête personnelle : le guerrier en tête, escorte ≤ 2, sans
     expect(vetLines(done)).toEqual(vetLines(base));
   });
 
-  it('la lecture du trait s’ajoute à celles des nœuds, sans doublon', () => {
+  it('la lecture du trait s’ajoute à celles des nœuds', () => {
     const a = guerrier('a', { vocation: { nodes: ['guerrier.flair'] }, quest: { [Q.id]: Q.wins } });
     expect(readableGroups(a)).toEqual(['fight', 'fallen']);
+  });
+
+  it('sans doublon : un nœud qui lit déjà « fallen » + un trait qui lit « fallen » = une seule fois', () => {
+    // L'homme d'armes lit « fallen » par un nœud ; on lui prête (le temps du test) une quête dont
+    // le trait lit le même groupe.
+    const fake = { ...Q, id: 'homme_armes.test', lineage: 'homme_armes' as const };
+    (QUESTS as unknown as HeroQuest[]).push(fake);
+    try {
+      const nodeId = vocationTree(vocAdv('h', 'homme_armes', []))!.find(
+        (n) => n.spawn === 'fallen',
+      )!.id;
+      const a = vocAdv('h', 'homme_armes', [nodeId]);
+      expect(readableGroups(a)).toEqual(['fallen']);
+      const done = { ...a, quest: { [fake.id]: fake.wins } };
+      expect(questLines(done)[0]).toMatchObject({ done: true });
+      expect(readableGroups(done)).toEqual(['fallen']);
+    } finally {
+      (QUESTS as unknown as HeroQuest[]).pop();
+    }
   });
 
   it('la table : une quête par (lignée, île), île connue, trait = lecture', () => {
@@ -1241,6 +1262,22 @@ describe('🎖️ quête personnelle : le guerrier en tête, escorte ≤ 2, sans
   it('rien ne s’affiche pour une lignée sans quête, ni pour un champion sans lignée', () => {
     expect(questLines(archer('a'))).toEqual([]);
     expect(questLines({ ...guerrier('a'), championId: undefined })).toEqual([]);
+  });
+
+  it('🖱️ l’ordre des CLICS fait la tête de l’équipe, pas l’ordre du vivier', () => {
+    // vivier : a avant b ; le joueur coche b d'abord
+    const pool = [guerrier('a'), guerrier('b'), guerrier('c')];
+    expect(escortInClickOrder(pool, ['b', 'a']).map((x) => x.id)).toEqual(['b', 'a']);
+    expect(escortInClickOrder(pool, ['c', 'a', 'b']).map((x) => x.id)).toEqual(['c', 'a', 'b']);
+    // un coché qui n'est plus au vivier (parti en convoi) sort de l'équipe, l'ordre des autres tient
+    expect(escortInClickOrder(pool, ['z', 'b', 'a']).map((x) => x.id)).toEqual(['b', 'a']);
+    expect(escortInClickOrder(pool, [])).toEqual([]);
+    // de bout en bout : le rapport envoyé dans cet ordre fait avancer LA QUÊTE DE b, pas celle de a
+    const escort = escortInClickOrder(pool, ['b', 'a']).map((x) => x.id);
+    const h = questHitOf(win({ escort }), 'camp');
+    expect(h!.headId).toBe('b');
+    expect(recordQuest(pool[1]!, h).quest?.[Q.id]).toBe(1);
+    expect(recordQuest(pool[0]!, h).quest).toBeUndefined();
   });
 
   it('💾 la quête survit au chargement', () => {

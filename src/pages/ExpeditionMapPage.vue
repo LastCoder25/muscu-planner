@@ -1311,6 +1311,7 @@
                   :key="a.id"
                   :adv="a"
                   :on="partyEscort.includes(a.id)"
+                  :lead="partyLeadId === a.id"
                   :warn="interceptWarn(a.id)"
                   :xp="partyXp[a.id]"
                   :gain="partyGain[a.id]"
@@ -1353,6 +1354,7 @@
                 :key="a.id"
                 :adv="a"
                 :on="partyEscort.includes(a.id)"
+                :lead="partyLeadId === a.id"
                 :warn="interceptWarn(a.id)"
                 :xp="partyXp[a.id]"
                 :gain="partyGain[a.id]"
@@ -6341,6 +6343,7 @@ const {
   partyHero,
   partyEscort,
   partyAdvs,
+  partyLeadId,
   showBlocked,
   partyBlocked,
   partyHeroBlock,
