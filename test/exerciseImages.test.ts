@@ -33,7 +33,6 @@ describe('illustrations d’exercices', () => {
       'ex_tn_single_leg_hop',
       'ex_tn_box_jump',
       'ex_tn_line_hops',
-      'ex_tn_band_forehand',
       'ex_tn_plank',
       'ex_tn_dead_bug',
       'ex_tn_reverse_lunge',
@@ -45,5 +44,11 @@ describe('illustrations d’exercices', () => {
       'ex_pp_leg_swings',
     ])
       expect(exerciseFrames(id), id).toBeDefined();
+  });
+  it('pas d’image vaut mieux qu’une image fausse : ces exos n’ont pas de bon cliché', () => {
+    // Tricep pushdown ≠ extension au-dessus de la tête, pompes pike ≠ pompes en poirier, rotation
+    // élastique ≠ Pallof press. Les remettre exige une photo du BON mouvement.
+    for (const id of ['ex_band_pushdown', 'ex_pike_pushup', 'ex_tn_band_forehand'])
+      expect(exerciseImage(id), id).toBeUndefined();
   });
 });

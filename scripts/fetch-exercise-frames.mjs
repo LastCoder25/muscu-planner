@@ -13,7 +13,6 @@ const BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/ex
 const MAP = {
   ex_band_curl: 'Close-Grip_EZ-Bar_Curl_with_Band',
   ex_band_pull_apart: 'Band_Pull_Apart',
-  ex_band_pushdown: 'Speed_Band_Overhead_Triceps',
   ex_band_row: 'Seated_Cable_Rows',
   ex_band_squat: 'Squats_-_With_Bands',
   ex_bench_barbell: 'Barbell_Bench_Press_-_Medium_Grip',
@@ -44,7 +43,6 @@ const MAP = {
   ex_leg_press: 'Leg_Press',
   ex_ohp_barbell: 'Standing_Military_Press',
   ex_pec_deck: 'Butterfly',
-  ex_pike_pushup: 'Handstand_Push-Ups',
   ex_plank: 'Plank',
   ex_pullup: 'Pullups',
   ex_pullup_assisted: 'Band_Assisted_Pull-Up',
@@ -109,7 +107,6 @@ const MAP = {
   ex_tn_single_leg_hop: 'Single-Leg_Hop_Progression',
   ex_tn_box_jump: 'Front_Box_Jump',
   ex_tn_line_hops: 'Lateral_Cone_Hops',
-  ex_tn_band_forehand: 'Pallof_Press_With_Rotation',
   ex_tn_dead_bug: 'Dead_Bug',
   ex_tn_reverse_lunge: 'Dumbbell_Rear_Lunge',
   ex_tn_band_external_rotation: 'External_Rotation_with_Band',
