@@ -243,6 +243,19 @@ function practicedKinds(entries: QuestEntry[], monday: string): Set<SportKind> {
   const out = new Set<SportKind>();
   for (const k of Object.keys(days) as SportKind[])
     if (days[k].size >= WEEKLY_QUESTS.practiceMinDays) out.add(k);
+  if ([...out].some((k) => k !== 'other')) return out;
+  // ⚠️ RIEN DE CONNU SUR 4 SEMAINES (reprise après une pause, saison creuse) ≠ « pas de sport »
+  // (signalé : « les quêtes ont toujours du tennis, même pour ceux qui n'en font pas ») :
+  // on relit TOUT l'historique d'avant cette semaine, avec le même seuil de jours.
+  const ever: Record<SportKind, Set<string>> = {
+    muscu: new Set(),
+    cardio: new Set(),
+    tennis: new Set(),
+    other: new Set(),
+  };
+  for (const e of entries) if (e.day < monday) ever[e.kind].add(e.day);
+  for (const k of Object.keys(ever) as SportKind[])
+    if (ever[k].size >= WEEKLY_QUESTS.practiceMinDays) out.add(k);
   return out;
 }
 
@@ -341,13 +354,16 @@ function questOrder(practiced: Set<SportKind>): QuestKind[] {
  *  tennis dans la quête de Cypher, il n'en fait pas, il ne pourra pas la finir »). Un objectif
  *  de MUSCU, de CARDIO ou de TENNIS n'est affiché que si c'est une de tes pratiques. La
  *  variété (n'importe quel 2ᵉ sport) et la régularité valent pour tous et restent. Sans
- *  aucune pratique connue (joueur neuf, ou rien depuis 4 semaines), on ne sait pas ce que tu
- *  fais : tout est proposé. */
+ *  aucune pratique connue (joueur neuf, même en relisant tout l'historique), on ne sait pas ce
+ *  que tu fais : tout est proposé, sauf le tennis. */
 function isShown(k: QuestKind, practiced: Set<SportKind>): boolean {
   const sport = PRACTICE_OF[k];
   if (!sport) return true;
   const knowsSport = [...practiced].some((p) => p !== 'other');
-  return !knowsSport || practiced.has(sport);
+  // ⚠️ Sans pratique connue, tout reste proposé SAUF le tennis : sport de niche, qu'on ne
+  // devine pas (et que la muscu et la sortie, elles, n'ont pas besoin de prouver d'abord).
+  if (!knowsSport) return sport !== 'tennis';
+  return practiced.has(sport);
 }
 
 /** Objectif d'un de TES sports ? Régularité et variété n'appartiennent à aucun sport : la

@@ -131,6 +131,9 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
     s.sessions.push({ performed_at: at(MON) });
     s.cardio.push({ performed_at: at(addDays(MON, 1)), payload: { duration_min: 40 } });
     s.tennis.push({ performed_at: at(addDays(MON, 2)) });
+    // Le tennis n'est proposé qu'à qui en a déjà fait (cf. `isShown`).
+    s.tennis.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -9)) });
+    s.sessions.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -9)) });
     expect(quest(s, 'strength_days').done).toBe(1);
     expect(quest(s, 'tennis_days').done).toBe(1);
   });
@@ -157,6 +160,7 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
       },
     );
     expect(questEntries(s).map((e) => e.kind)).toEqual(['tennis', 'other', 'tennis']);
+    s.tennis.push({ performed_at: at(addDays(MON, -8)) }, { performed_at: at(addDays(MON, -9)) });
     expect(quest(s, 'tennis_days', addDays(MON, 6)).done).toBe(2);
   });
   it('la régularité compte les deux moitiés de la semaine', () => {
@@ -195,8 +199,27 @@ describe('🗓️ quêtes de la semaine — les objectifs de tes sports, tes spo
       expect(q[0]!.kind).toBe('active_days');
     }
   });
-  it('sans pratique connue : les six objectifs sont proposés', () => {
-    expect(kinds(empty())).toHaveLength(6);
+  it('sans pratique connue : tout est proposé SAUF le tennis (signalé : du tennis pour tous)', () => {
+    expect(ids(empty())).toEqual([
+      'active_days',
+      'regularity',
+      'strength_days',
+      'cardio_minutes',
+      'variety',
+    ]);
+  });
+  it('⚠️ rien depuis 4 semaines mais de la muscu avant : c’est de la muscu, pas « inconnu »', () => {
+    const s = empty();
+    for (let w = 6; w <= 9; w++) s.sessions.push({ performed_at: at(addDays(MON, -7 * w)) });
+    expect(ids(s)).not.toContain('tennis_days');
+    expect(ids(s)).not.toContain('cardio_minutes');
+    expect(ids(s)).toContain('strength_days');
+  });
+  it('un joueur de tennis d’avant la pause garde sa quête tennis', () => {
+    const s = empty();
+    for (let w = 6; w <= 9; w++) s.tennis.push({ performed_at: at(addDays(MON, -7 * w)) });
+    expect(ids(s)).toContain('tennis_days');
+    expect(ids(s)).not.toContain('strength_days');
   });
   it('⚠️ jamais l’objectif d’un sport que tu ne pratiques pas (signalé : du tennis chez Cypher)', () => {
     expect(ids(history(3, 0))).not.toContain('tennis_days');
@@ -218,14 +241,15 @@ describe('🗓️ quêtes de la semaine — les objectifs de tes sports, tes spo
       'variety',
     ]);
   });
-  it('un « autre sport » seul ne dit rien de tes sports : tout reste proposé', () => {
+  it('un « autre sport » seul ne dit rien de tes sports : tout reste proposé, sauf le tennis', () => {
     const s = empty();
     for (let w = 1; w <= 3; w++)
       s.sessions.push({
         performed_at: at(addDays(MON, -7 * w)),
         payload: { discipline: 'autre_sport', name: 'Yoga' },
       });
-    expect(kinds(s)).toHaveLength(6);
+    expect(ids(s)).not.toContain('tennis_days');
+    expect(kinds(s)).toHaveLength(5);
   });
   it('100 % muscu : la muscu en tête, la variété proposée en retrait', () => {
     const q = kinds(history(3, 0));
