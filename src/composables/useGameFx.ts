@@ -13,6 +13,7 @@ import { harvestPieces, harvestRarity, harvestTitle, type HaulPiece } from '@/li
 import type { SupplyStock } from '@/lib/supplies';
 import type { RuneTier, SkillId } from '@/lib/skillRunes';
 import { runeApplyFx, type RuneFxKind } from '@/lib/runeFx';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 
 type GameFxKind =
   | 'drop'
@@ -69,6 +70,7 @@ const toasts = ref<GameFx[]>([]);
 let seq = 0;
 
 export function useGameFx() {
+  const anim = useAnimationPrefs();
   function celebrate(fx: Omit<GameFx, 'id'>): void {
     const item = { ...fx, id: ++seq };
     if (!fx.quiet) {
@@ -130,6 +132,7 @@ export function useGameFx() {
     level: number,
     up = 0,
   ): void {
+    if (!anim.on.runes) return; // 🎬 coupée dans la Base : la rune est posée, sans mise en scène
     const r = runeApplyFx(kind, drawn, advName, level, up);
     celebrate({ kind: 'rune', emoji: r.emoji, title: r.title, subtitle: r.subtitle, rune: r.tier });
   }

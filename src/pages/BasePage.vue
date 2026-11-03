@@ -636,7 +636,15 @@
       />
     </q-dialog>
 
-    <!-- Revoir le dernier assaut -->
+    <!-- ⚙️ RÉGLAGES — les notifications et les animations, rangées À PART du jeu (demandé).
+         Deux familles distinctes : ce qui te PRÉVIENT (push, par compte) et ce qui se MET EN
+         SCÈNE (animations, par appareil). Aucune ne change le jeu. -->
+    <div class="settings-head">
+      <span class="settings-emo" aria-hidden="true">⚙️</span>
+      <span class="settings-title font-display">Réglages</span>
+      <span class="settings-chip">🔔 notifications</span>
+      <span class="settings-chip">🎬 animations</span>
+    </div>
     <!-- ⚠️ Sans notification, le PRÉAVIS que la Tour de guet fait payer ne sert qu'à
          ceux qui ouvraient l'app de toute façon. C'est l'objet de cet interrupteur. -->
     <div v-if="pushOk" class="panel push-panel">
@@ -2162,6 +2170,27 @@ function doHarvest() {
 <style scoped>
 .base-page {
   padding: 0 12px 28px;
+}
+/* ⚙️ Entête de la section Réglages (notifications + animations). */
+.settings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 2px 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.settings-title {
+  font-size: 18px;
+  margin-right: auto;
+}
+.settings-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  color: var(--dim);
 }
 /* 🔕 Notifications type par type : des pastilles à toucher, regroupées. */
 .push-hint {

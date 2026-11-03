@@ -126,6 +126,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { awakenLevel } from '@/lib/adventurers';
 import GachaReveal from './GachaReveal.vue';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 import {
   buildReveal,
   buildLotReveal,
@@ -141,6 +142,7 @@ defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
 const $q = useQuasar();
+const anim = useAnimationPrefs();
 const auth = useAuthStore();
 const char = useCharacterStore();
 /** Le niveau du JOUEUR : c'est lui qui fixe le rang d'une pièce B tirée. */
@@ -224,7 +226,8 @@ async function askPull(n: number) {
   revealPlan.value = null;
   revealVerdict.value = null;
   lastWasLot.value = n > 1;
-  pending.value = n;
+  // 🎬 Coupée dans la Base : pas d'écran d'invocation, le tirage est payé et annoncé en une ligne.
+  pending.value = anim.on.summon ? n : null;
   await (n > 1 ? doPullTen() : doPull());
   // Refusé (mana partie entre-temps, réseau) : on referme plutôt que de laisser un cercle
   // tourner dans le vide pour toujours.
@@ -252,6 +255,30 @@ function reducedMotion(): boolean {
 }
 
 /**
+ * 🎰 TIRAGE SANS ANIMATION : le résultat se dit en une ligne par carte (grade, nom, issue),
+ * jamais muet — ce qui a été tiré est déjà crédité.
+ */
+function announcePull(items: readonly LotItem[]) {
+  $q.notify({
+    type: 'positive',
+    multiLine: true,
+    timeout: 6000,
+    html: true,
+    message: items
+      .map((it) => {
+        const c = cellOf(it);
+        const tail = it.champion
+          ? it.duplicate
+            ? ` · exemplaire ×${it.copies}`
+            : ' · NOUVEAU'
+          : ' · pièce';
+        return `${c.emoji} ${GRADE_LABEL[c.grade]} · ${c.name}${tail}`;
+      })
+      .join('<br>'),
+  });
+}
+
+/**
  * 🎰 LE LOT DE 10 — dix orbes lancées ensemble qui retombent en cartes (v1.002) ; les A et
  * les S se révèlent au toucher, au centre du cercle.
  */
@@ -269,7 +296,11 @@ async function doPullTen() {
     revealVerdict.value = null;
     revealLot.value = lot;
     lastWasLot.value = true;
-    revealPlan.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
+    if (anim.on.summon) {
+      revealPlan.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
+    } else {
+      announcePull(lot);
+    }
   } finally {
     busy.value = false;
   }
@@ -294,7 +325,11 @@ async function doPull() {
       awaken: awakenLevel(r.copies),
       piece: !r.champion,
     };
-    revealPlan.value = buildReveal(cellOf(r), Math.random, { reduced: reducedMotion() });
+    if (anim.on.summon) {
+      revealPlan.value = buildReveal(cellOf(r), Math.random, { reduced: reducedMotion() });
+    } else {
+      announcePull([r]);
+    }
   } finally {
     busy.value = false;
   }

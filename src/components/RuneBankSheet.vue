@@ -305,6 +305,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useGameFx } from '@/composables/useGameFx';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 import RuneIcon from '@/components/RuneIcon.vue';
 import RuneReveal from '@/components/RuneReveal.vue';
 import RuneFuseFx from '@/components/RuneFuseFx.vue';
@@ -356,6 +357,7 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 const gameFx = useGameFx();
+const anim = useAnimationPrefs();
 
 const bank = computed(() => char.row?.runes ?? emptyBank());
 const busy = ref(false);
@@ -516,7 +518,7 @@ function askFuseAll(only: SkillRef | null) {
       const r = await char.fuseAllRuneSkills(uid, only && { id: only.id, up: riseOf(only) });
       if (!r.ok) throw new Error(r.reason);
       back();
-      fusing.value = r.groups;
+      showFuse(r.groups);
     });
   });
 }
@@ -551,7 +553,31 @@ function doOpen(count: number) {
     if (!r.ok) throw new Error(r.reason);
     lastOpened.value = r.opened;
     lastCount.value = count;
-    revealing.value = r.opened;
+    // 🎬 Coupée dans la Base : les runes sont créditées et restent listées ci-dessous.
+    if (anim.on.runes) revealing.value = r.opened;
+    else {
+      const n = r.opened.length;
+      $q.notify({
+        type: 'positive',
+        message: `🔮 ${n} rune${n > 1 ? 's' : ''} ouverte${n > 1 ? 's' : ''}`,
+      });
+    }
+  });
+}
+
+/** L'écran de fusion, ou — animation coupée — une simple ligne qui dit le résultat. */
+function showFuse(groups: FuseGroup[]) {
+  if (anim.on.runes) {
+    fusing.value = groups;
+    return;
+  }
+  $q.notify({
+    type: 'positive',
+    multiLine: true,
+    message: groups
+      .map((g) => `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} : ${fuseGroupText(g)}`)
+      .join('<br>'),
+    html: true,
   });
 }
 
@@ -563,7 +589,7 @@ function fusePicked() {
     const r = await char.fuseRuneSkills(uid, uids);
     if (!r.ok) throw new Error(r.reason);
     back();
-    fusing.value = [r.group];
+    showFuse([r.group]);
   });
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
+import { useGameFx } from '@/composables/useGameFx';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -35,6 +36,8 @@ describe('animationPrefs', () => {
     overflow: ['src/composables/useOverflowReplay.ts'],
     fboss: ['src/pages/FriendBossPage.vue'],
     champxp: ['src/composables/useAdvXpFx.ts'],
+    runes: ['src/composables/useGameFx.ts', 'src/components/RuneBankSheet.vue'],
+    summon: ['src/components/SummonPanel.vue'],
   };
   it.each(ANIMATION_OPTIONS.map((o) => o.id))('« %s » est lu par son lanceur', (kind) => {
     for (const file of READERS[kind]) expect(src(file)).toContain(`anim.on.${kind}`);
@@ -51,6 +54,32 @@ describe('animationPrefs', () => {
     fx.show(tracks);
     expect(fx.current.value).not.toBeNull();
     fx.dismiss();
+  });
+
+  it('🔮 Runes éteintes : la pose d’une rune ne met rien en file, rallumée elle y entre', () => {
+    const fx = useGameFx();
+    const prefs = useAnimationPrefs();
+    fx.queue.value.length = 0;
+    prefs.set('runes', false);
+    fx.celebrateRune('rise', 'speed', 'Aldo', 1);
+    expect(fx.queue.value.length).toBe(0);
+    prefs.set('runes', true);
+    fx.celebrateRune('rise', 'speed', 'Aldo', 1);
+    expect(fx.queue.value.length).toBe(1);
+    fx.queue.value.length = 0;
+  });
+
+  it('🎰 Tirages et 🔮 runes : coupés, l’écran ne s’ouvre pas MAIS le résultat est annoncé', () => {
+    // Le tirage est déjà crédité : sans écran, une ligne doit le dire (jamais muet).
+    expect(src('src/components/SummonPanel.vue')).toContain('announcePull');
+    expect(src('src/components/RuneBankSheet.vue')).toContain('showFuse');
+  });
+
+  it('la page Base range notifications et animations dans une section Réglages', () => {
+    const page = src('src/pages/BasePage.vue');
+    expect(page).toContain('settings-head');
+    expect(page.indexOf('settings-head')).toBeLessThan(page.indexOf('🔔 Me prévenir'));
+    expect(page.indexOf('🔔 Me prévenir')).toBeLessThan(page.indexOf('🎬 Animations'));
   });
 
   it('la page Base affiche les interrupteurs', () => {

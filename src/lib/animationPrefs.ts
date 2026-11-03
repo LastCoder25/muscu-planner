@@ -6,7 +6,14 @@
 // Tout est ACTIVÉ par défaut ; seul « 0 » éteint (une valeur inconnue ou un stockage
 // indisponible ne doivent jamais couper une animation en silence).
 
-export type AnimationKind = 'siege' | 'rift' | 'overflow' | 'fboss' | 'champxp';
+export type AnimationKind =
+  | 'siege'
+  | 'rift'
+  | 'overflow'
+  | 'fboss'
+  | 'champxp'
+  | 'runes'
+  | 'summon';
 
 export interface AnimationOption {
   id: AnimationKind;
@@ -45,6 +52,18 @@ export const ANIMATION_OPTIONS: readonly AnimationOption[] = [
     emoji: '⭐',
     label: 'XP des champions',
     hint: 'la barre d’étoile au retour de mission',
+  },
+  {
+    id: 'runes',
+    emoji: '🔮',
+    label: 'Runes',
+    hint: 'ouverture, fusion, élévation et pose d’une rune',
+  },
+  {
+    id: 'summon',
+    emoji: '🎰',
+    label: 'Tirages',
+    hint: 'l’invocation des champions (×1 et ×10)',
   },
 ];
 
