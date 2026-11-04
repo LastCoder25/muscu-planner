@@ -126,16 +126,60 @@ export function swapSlotsOf(slotKey: string): string[] {
 // défi par mouvement). Chaque groupe = ids d'un même mouvement.
 const EXERCISE_VARIANT_FAMILIES: string[][] = [
   // Pompes : toutes les variations de pompes au sol.
-  ['ex_pushup', 'ex_pushup_knees', 'ex_diamond_pushup', 'ex_pike_pushup'],
-  ['ex_dips', 'ex_dips_assisted'], // dips / dips assistés (élastique)
+  [
+    'ex_pushup',
+    'ex_pushup_knees',
+    'ex_diamond_pushup',
+    'ex_pike_pushup',
+    'ex_pushup_incline',
+    'ex_pushup_decline',
+    'ex_pushup_wide',
+    'ex_pushup_archer',
+  ],
+  ['ex_dips', 'ex_dips_assisted', 'ex_dips_bench'], // dips / assistés (élastique) / sur banc
   // Tractions / tirage vertical (tractions, assistées élastique, tirage machine).
-  ['ex_pullup', 'ex_pullup_assisted', 'ex_lat_pulldown'],
+  [
+    'ex_pullup',
+    'ex_pullup_assisted',
+    'ex_lat_pulldown',
+    'ex_chinup',
+    'ex_pullup_neutral',
+    'ex_pullup_wide',
+  ],
   // Squat : au poids du corps, chargé, élastique, goblet.
-  ['ex_squat_barbell', 'ex_bw_squat', 'ex_band_squat', 'ex_kb_goblet_squat'],
+  [
+    'ex_squat_barbell',
+    'ex_bw_squat',
+    'ex_band_squat',
+    'ex_kb_goblet_squat',
+    'ex_squat_sumo',
+    'ex_squat_pistol_assisted',
+  ],
+  // Fentes : avant, arrière, marchées, bulgare (pied arrière surélevé).
+  ['ex_bw_lunge', 'ex_lunge_reverse', 'ex_lunge_walking', 'ex_squat_bulgarian'],
+  // Pont fessier : deux jambes, une jambe, hip thrust.
+  ['ex_glute_bridge', 'ex_glute_bridge_single', 'ex_hip_thrust'],
+  // Soulevé de terre roumain : deux jambes / une jambe.
+  ['ex_romanian_deadlift', 'ex_rdl_single'],
   // Rowing / tirage horizontal (barre, haltère, kettlebell, élastique, machine).
-  ['ex_row_barbell', 'ex_row_dumbbell', 'ex_kb_row', 'ex_band_row', 'ex_seated_row'],
+  [
+    'ex_row_barbell',
+    'ex_row_dumbbell',
+    'ex_kb_row',
+    'ex_band_row',
+    'ex_seated_row',
+    'ex_row_bent_supinated',
+  ],
   // Curl biceps (barre, haltères, élastique).
-  ['ex_curl_barbell', 'ex_curl_dumbbell', 'ex_band_curl', 'ex_curl_ez'],
+  [
+    'ex_curl_barbell',
+    'ex_curl_dumbbell',
+    'ex_band_curl',
+    'ex_curl_ez',
+    'ex_curl_concentration',
+    'ex_curl_incline',
+    'ex_curl_preacher_ez',
+  ],
   // Triceps au front (barre droite / barre EZ).
   ['ex_skullcrusher', 'ex_skullcrusher_ez'],
   // Extension triceps à la poulie / élastique.
@@ -145,9 +189,17 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
   // Développé incliné (haltères, machine).
   ['ex_incline_dumbbell', 'ex_incline_machine'],
   // Développé épaules (haltères, kettlebell, militaire barre).
-  ['ex_shoulder_press_db', 'ex_kb_press', 'ex_ohp_barbell'],
+  ['ex_shoulder_press_db', 'ex_kb_press', 'ex_ohp_barbell', 'ex_arnold_press'],
+  // Élévations latérales (haltères / élastique).
+  ['ex_lateral_raise', 'ex_lateral_raise_band'],
+  // Gainage de face / latéral.
+  ['ex_plank', 'ex_plank_side'],
+  // Crunch / bicycle crunch.
+  ['ex_crunch', 'ex_bicycle_crunch'],
+  // Relevé de jambes : suspendu / au sol.
+  ['ex_hanging_leg_raise', 'ex_leg_raise_floor'],
   // Mollets debout (machine / poids du corps).
-  ['ex_calf_raise', 'ex_calf_raise_bw'],
+  ['ex_calf_raise', 'ex_calf_raise_bw', 'ex_calf_raise_single'],
 ];
 
 // id de variante → clé de famille (= 1er id du groupe). Absent = pas de variante.

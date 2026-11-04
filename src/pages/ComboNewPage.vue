@@ -750,7 +750,13 @@ function candidates(slot: ComboSlot): ExerciseRow[] {
         !isTennisExercise(e) &&
         !challengeFamilies.value.has(variantFamilyKey(e.id)),
     )
-    .sort((a, b) => (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0));
+    .sort(
+      (a, b) =>
+        (favSet.value.has(b.id) ? 1 : 0) - (favSet.value.has(a.id) ? 1 : 0) ||
+        // Les variantes après les exos de base : la présélection ne prend jamais « pompes archer »
+        // avant « pompes ».
+        (a.tags?.includes('variante') ? 1 : 0) - (b.tags?.includes('variante') ? 1 : 0),
+    );
 }
 // Matériel possédé (atomes) → un exo est « faisable » si TOUS ses atomes requis
 // sont possédés (poids du corps = aucun atome → toujours faisable).

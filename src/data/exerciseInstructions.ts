@@ -485,6 +485,239 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Dos JAMAIS arrondi. Commence léger pour maîtriser la charnière de hanche.',
   },
+  // ── Variantes (migration 0112) : chacune rangée avec son mouvement (EXERCISE_VARIANT_FAMILIES) ──
+  ex_pushup_incline: {
+    steps: [
+      'Mains sur un support stable (banc, canapé, rebord), corps gainé de la tête aux talons.',
+      'Descends la poitrine vers le support en gardant les coudes à 45° du corps.',
+      'Repousse jusqu’à bras tendus.',
+    ],
+    tip: 'Plus le support est haut, plus c’est facile : baisse-le pour progresser vers les pompes classiques.',
+  },
+  ex_pushup_decline: {
+    steps: [
+      'Pieds sur un support stable, mains au sol sous les épaules, corps gainé.',
+      'Descends la poitrine vers le sol sans cambrer le bas du dos.',
+      'Repousse jusqu’à bras tendus.',
+    ],
+    tip: 'Plus les pieds sont hauts, plus le haut des pectoraux et les épaules travaillent.',
+  },
+  ex_pushup_wide: {
+    steps: [
+      'Mains plus larges que les épaules, corps gainé de la tête aux talons.',
+      'Descends la poitrine vers le sol, coudes vers l’extérieur.',
+      'Repousse jusqu’à bras tendus.',
+    ],
+    tip: 'Les pectoraux travaillent davantage, les triceps moins : descends moins bas si les épaules tirent.',
+  },
+  ex_pushup_archer: {
+    steps: [
+      'Mains très écartées, corps gainé.',
+      'Descends sur un côté en gardant l’autre bras tendu sur le côté.',
+      'Remonte, puis alterne : une série = les deux côtés.',
+    ],
+    tip: 'Étape avant la pompe à un bras : le bras tendu aide juste à l’équilibre.',
+  },
+  ex_dips_bench: {
+    steps: [
+      'Mains sur le bord d’un banc ou d’une chaise stable, jambes tendues ou pliées devant toi.',
+      'Plie les coudes vers l’arrière pour descendre les fesses près du support.',
+      'Repousse jusqu’à bras tendus.',
+    ],
+    tip: 'Garde le dos proche du banc et les épaules basses ; plie les jambes pour faciliter.',
+  },
+  ex_squat_bulgarian: {
+    steps: [
+      'Un pied posé derrière toi sur un banc ou une chaise, l’autre pied devant.',
+      'Descends en pliant le genou avant, buste droit.',
+      'Remonte en poussant dans le talon de la jambe avant, puis change de jambe.',
+    ],
+    tip: 'Le genou avant ne s’effondre pas vers l’intérieur ; avance le pied si le genou dépasse trop les orteils.',
+  },
+  ex_squat_pistol_assisted: {
+    steps: [
+      'Debout sur une jambe, l’autre tendue devant, une main tenant un appui (porte, montant).',
+      'Descends le plus bas possible en gardant le talon au sol.',
+      'Remonte en t’aidant le moins possible de l’appui, puis change de jambe.',
+    ],
+    tip: 'Réduis l’aide de la main au fil des séances pour tendre vers le pistol complet.',
+  },
+  ex_squat_sumo: {
+    steps: [
+      'Pieds bien plus larges que les épaules, pointes tournées vers l’extérieur.',
+      'Descends en poussant les genoux dans l’axe des pieds, buste droit.',
+      'Remonte en contractant les fessiers.',
+    ],
+    tip: 'Cible davantage l’intérieur des cuisses et les fessiers.',
+  },
+  ex_lunge_reverse: {
+    steps: [
+      'Debout, pas en arrière avec une jambe.',
+      'Descends jusqu’à ce que les deux genoux soient à environ 90°.',
+      'Reviens en poussant dans la jambe avant, puis change de jambe.',
+    ],
+    tip: 'Plus facile pour les genoux et l’équilibre que les fentes avant.',
+  },
+  ex_lunge_walking: {
+    steps: [
+      'Fais un grand pas en avant et descends en fente.',
+      'Pousse dans la jambe avant pour amener l’autre jambe devant, en marchant.',
+      'Enchaîne en alternant les jambes sur la distance voulue.',
+    ],
+    tip: 'Garde un pas régulier et le buste droit ; prévois de la place devant toi.',
+  },
+  ex_calf_raise_single: {
+    steps: [
+      'Debout sur une jambe, une main sur un appui pour l’équilibre.',
+      'Monte sur la pointe du pied le plus haut possible.',
+      'Redescends lentement, puis change de jambe.',
+    ],
+    tip: 'Fais-le sur une marche pour descendre le talon sous le niveau de la pointe : plus d’amplitude.',
+  },
+  ex_glute_bridge_single: {
+    steps: [
+      'Allongé sur le dos, un pied au sol, l’autre jambe tendue en l’air.',
+      'Pousse dans le talon pour monter le bassin jusqu’à l’alignement épaules-hanches-genou.',
+      'Redescends en contrôle, puis change de jambe.',
+    ],
+    tip: 'Garde le bassin à plat, sans te laisser tourner du côté de la jambe en l’air.',
+  },
+  ex_hip_thrust: {
+    steps: [
+      'Haut du dos contre le bord d’un banc, pieds au sol, genoux pliés.',
+      'Pousse dans les talons pour monter le bassin jusqu’à l’horizontale.',
+      'Contracte les fessiers en haut, puis redescends en contrôle.',
+    ],
+    tip: 'Menton rentré et regard vers l’avant ; ne cambre pas le bas du dos en haut.',
+  },
+  ex_rdl_single: {
+    steps: [
+      'Debout sur une jambe légèrement fléchie, un haltère dans la main opposée.',
+      'Penche le buste en poussant l’autre jambe vers l’arrière, dos plat.',
+      'Remonte en contractant les fessiers, puis change de jambe.',
+    ],
+    tip: 'Choisis léger : l’équilibre est la difficulté principale.',
+  },
+  ex_curl_concentration: {
+    steps: [
+      'Assis, coude appuyé contre l’intérieur de la cuisse, haltère en main bras tendu.',
+      'Monte l’haltère vers l’épaule en contractant le biceps.',
+      'Redescends lentement, puis change de bras.',
+    ],
+    tip: 'Le coude reste fixe contre la cuisse : c’est ce qui isole le biceps.',
+  },
+  ex_curl_incline: {
+    steps: [
+      'Assis sur un banc incliné, dos appuyé, un haltère dans chaque main bras tendus vers le bas.',
+      'Monte les haltères vers les épaules, coudes en arrière du corps.',
+      'Redescends lentement jusqu’à l’extension complète.',
+    ],
+    tip: 'Le bras en arrière étire le biceps : prends plus léger qu’au curl debout.',
+  },
+  ex_curl_preacher_ez: {
+    steps: [
+      'Assis face à un pupitre, bras posés dessus, barre EZ en supination.',
+      'Monte la barre vers les épaules sans décoller les bras.',
+      'Redescends lentement sans verrouiller brutalement le coude.',
+    ],
+    tip: 'Sans pupitre, un banc incliné à 45° fait l’affaire : appuie les bras sur le dossier.',
+  },
+  ex_arnold_press: {
+    steps: [
+      'Assis ou debout, haltères devant la poitrine, paumes vers toi.',
+      'Monte en tournant les poignets pour finir paumes vers l’avant, bras tendus.',
+      'Redescends en inversant la rotation.',
+    ],
+    tip: 'Le mouvement fluide et contrôlé fait travailler les trois faisceaux de l’épaule.',
+  },
+  ex_lateral_raise_band: {
+    steps: [
+      'Debout sur l’élastique, une poignée dans chaque main le long du corps.',
+      'Monte les bras sur les côtés jusqu’à hauteur d’épaules, coudes légèrement fléchis.',
+      'Redescends lentement.',
+    ],
+    tip: 'Ne monte pas au-dessus des épaules ; ne hausse pas les épaules vers les oreilles.',
+  },
+  ex_row_bent_supinated: {
+    steps: [
+      'Buste penché à 45°, dos plat, barre tenue paumes vers le haut, bras tendus.',
+      'Tire la barre vers le bas du ventre en serrant les omoplates.',
+      'Redescends en contrôle.',
+    ],
+    tip: 'La prise en supination sollicite davantage les biceps et le bas du dos.',
+  },
+  ex_upright_row: {
+    steps: [
+      'Debout, un haltère dans chaque main devant les cuisses, paumes vers toi.',
+      'Monte les haltères le long du corps jusqu’au milieu de la poitrine, coudes en haut.',
+      'Redescends lentement.',
+    ],
+    tip: 'Ne monte pas au-dessus du sternum : au-delà, les épaules se compriment.',
+  },
+  ex_pullover_db: {
+    steps: [
+      'Allongé sur le dos (au sol ou sur un banc), un haltère tenu à deux mains au-dessus de la poitrine.',
+      'Descends l’haltère derrière la tête, bras quasi tendus.',
+      'Ramène-le au-dessus de la poitrine en contractant le dos.',
+    ],
+    tip: 'Garde les coudes légèrement fléchis et fixes : seul l’épaule bouge.',
+  },
+  ex_plank_side: {
+    steps: [
+      'Sur le côté, appui sur l’avant-bras, jambes tendues et empilées.',
+      'Soulève le bassin pour aligner chevilles, hanches et épaule.',
+      'Tiens la position, puis change de côté.',
+    ],
+    tip: 'Genou du dessous au sol pour faciliter ; pied du dessus devant pour l’équilibre.',
+  },
+  ex_dead_bug: {
+    steps: [
+      'Sur le dos, bras tendus vers le plafond, hanches et genoux à 90°.',
+      'Descends le bras droit et la jambe gauche vers le sol sans cambrer.',
+      'Reviens et alterne : une rep = les deux côtés.',
+    ],
+    tip: 'Garde le bas du dos plaqué au sol : si ça décolle, amplitude plus petite.',
+  },
+  ex_bicycle_crunch: {
+    steps: [
+      'Sur le dos, mains derrière la tête, jambes décollées.',
+      'Amène le coude droit vers le genou gauche, l’autre jambe tendue.',
+      'Alterne en pédalant, sans tirer sur la nuque.',
+    ],
+    tip: 'C’est la rotation du buste qui compte, pas la vitesse.',
+  },
+  ex_leg_raise_floor: {
+    steps: [
+      'Sur le dos, jambes tendues, mains sous les fesses ou le long du corps.',
+      'Monte les jambes à la verticale sans décoller le bas du dos.',
+      'Redescends lentement sans toucher le sol.',
+    ],
+    tip: 'Plie légèrement les genoux pour faciliter ; descends moins bas si le dos se creuse.',
+  },
+  ex_chinup: {
+    steps: [
+      'Suspendu à la barre, paumes vers toi, mains à largeur d’épaules.',
+      'Tire pour amener le menton au-dessus de la barre, coudes vers le bas.',
+      'Redescends en contrôle jusqu’aux bras tendus.',
+    ],
+    tip: 'Plus accessible que la traction en pronation : le biceps aide davantage.',
+  },
+  ex_pullup_neutral: {
+    steps: [
+      'Suspendu à des poignées parallèles, paumes face à face.',
+      'Tire jusqu’à amener le menton au niveau des mains, coudes vers le bas.',
+      'Redescends en contrôle jusqu’aux bras tendus.',
+    ],
+    tip: 'La prise la plus confortable pour les épaules et les poignets.',
+  },
+  ex_pullup_wide: {
+    steps: [
+      'Suspendu à la barre, mains nettement plus larges que les épaules, paumes vers l’avant.',
+      'Tire pour amener le menton au-dessus de la barre, en serrant les omoplates.',
+      'Redescends en contrôle jusqu’aux bras tendus.',
+    ],
+    tip: 'Sollicite surtout les grands dorsaux ; amplitude plus courte, c’est normal.',
+  },
 };
 
 export function exerciseInstructions(id: string): ExerciseGuide | undefined {

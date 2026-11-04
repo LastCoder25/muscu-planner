@@ -21,7 +21,12 @@ export interface ExerciseDef {
   unilateral?: boolean | null; // travaillé un côté à la fois (fentes, rowing 1 bras…)
   challenge_only?: boolean | null; // réservé aux défis → jamais dans un programme généré
   category?: string | null; // 'musculation' (défaut) ou 'prepa_physique' (exclu du muscu)
+  tags?: string[] | null; // 'variante' : choix manuel seulement, jamais dans un programme généré
 }
+
+/** ⚠️ Une VARIANTE (pompes archer, squat bulgare…) se choisit à la main : le générateur ne la
+ *  pioche jamais, sinon l'ajout de variantes réécrirait les programmes de tout le monde. */
+const isVariant = (e: { tags?: string[] | null }) => (e.tags ?? []).includes('variante');
 
 // Groupes musculaires primaires présents dans la bibliothèque.
 const MUSCLES = [
@@ -220,6 +225,7 @@ function pickForMuscle(
     (e) =>
       e.muscle_primary === muscle &&
       !e.challenge_only &&
+      !isVariant(e) &&
       !avoidIds.has(e.id) &&
       (e.equipment_required ?? []).every((req) => available.has(req)),
   );
@@ -419,6 +425,7 @@ export function buildBeginnerSession(
         (e) =>
           e.muscle_primary === muscle &&
           !e.challenge_only &&
+          !isVariant(e) &&
           e.category !== 'prepa_physique' &&
           (e.difficulty ?? 1) <= 2 &&
           (e.equipment_required ?? []).every((req) => available.has(req)),

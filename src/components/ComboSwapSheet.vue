@@ -433,7 +433,11 @@ const fresh = computed(() => {
         comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }, effScope.value) ===
           null,
     )
-    .sort((a, b) => (fav.has(b.id) ? 1 : 0) - (fav.has(a.id) ? 1 : 0));
+    .sort(
+      (a, b) =>
+        (fav.has(b.id) ? 1 : 0) - (fav.has(a.id) ? 1 : 0) ||
+        (a.tags?.includes('variante') ? 1 : 0) - (b.tags?.includes('variante') ? 1 : 0),
+    );
   // ⚠️ Seulement ce que tu peux faire avec TON matériel (signalé : des machines de salle chez
   // quelqu'un qui n'y va pas). Rien de faisable → on montre tout plutôt qu'une feuille vide.
   const owned = new Set<string>(profile.profile?.available_equipment ?? []);
