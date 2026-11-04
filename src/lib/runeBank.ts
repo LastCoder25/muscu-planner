@@ -28,6 +28,7 @@ import {
   riseSkill,
   type RiseBlock,
   sameSkill,
+  skillTier,
   skillsOfTier,
   withRise,
   type ChampSkill,
@@ -511,13 +512,24 @@ export function riseStockSkill(
  *  couleur — elle prend sa place (la sienne revient au stock). */
 export type GiveKind = 'new' | 'stack' | 'replace' | 'swap';
 
-export type GiveBlock = 'missing' | 'over' | 'full';
+export type GiveBlock = 'missing' | 'over' | 'full' | 'downgrade';
 
 export const GIVE_BLOCK_LABEL: Record<GiveBlock, string> = {
   missing: 'introuvable',
   over: `dépasserait le niveau ${SKILL_MAX_LEVEL}`,
   full: 'choisis la compétence à remplacer',
+  downgrade: 'ses runes sont plus rares que celle-ci',
 };
+
+/** La rareté d'un exemplaire (élévation comprise), en rang : 0 = verte … 3 = dorée. */
+const tierRank = (s: Pick<ChampSkill, 'id' | 'up'>): number => RUNE_TIERS.indexOf(skillTier(s));
+
+/** ⚠️ Remplacer une rune du champion par une MOINS rare est une rétrogradation : jamais
+ *  proposée (demandé par l'utilisateur : « quand on sélectionne une rune dans le stock, ne pas
+ *  proposer de l'échanger contre une de rareté inférieure sur un champion »). Même rareté ou
+ *  plus rare : permis. */
+const isDowngrade = (out: Pick<ChampSkill, 'id' | 'up'>, into: Pick<ChampSkill, 'id' | 'up'>) =>
+  tierRank(out) > tierRank(into);
 
 export interface ChampionSlots {
   skills: readonly ChampSkill[];
@@ -554,11 +566,17 @@ export function giveBlocker(
     const cur = c.skills.find((s) => s.id === sk.id)!;
     return cur.level + sk.level > SKILL_MAX_LEVEL ? 'over' : null;
   }
-  if (
-    kind === 'replace' &&
-    (replaceIndex === null || replaceIndex < 0 || replaceIndex >= c.skills.length)
-  )
-    return 'full';
+  // La même compétence dans une autre couleur prend sa place : pas de retour en arrière.
+  if (kind === 'swap') {
+    const cur = c.skills.find((s) => s.id === sk.id)!;
+    return isDowngrade(cur, sk) ? 'downgrade' : null;
+  }
+  if (kind === 'replace') {
+    // Plein et AUCUNE de ses runes n'est remplaçable : on le dit au lieu de proposer un choix vide.
+    if (c.skills.length > 0 && c.skills.every((s) => isDowngrade(s, sk))) return 'downgrade';
+    if (replaceIndex === null || replaceIndex < 0 || replaceIndex >= c.skills.length) return 'full';
+    if (isDowngrade(c.skills[replaceIndex]!, sk)) return 'downgrade';
+  }
   return null;
 }
 

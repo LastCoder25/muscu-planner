@@ -283,6 +283,42 @@ describe('donner à un champion', () => {
     ]);
   });
 
+  it('⚠️ jamais remplacer une rune du champion par une MOINS rare (rétrogradation)', () => {
+    // Stock : Vitesse (verte). Champion plein : PV (bleue) et Dégâts (bleue).
+    const green = bank(0, [sk('a', 'speed', 2)]);
+    const blues = c(
+      [
+        { id: 'pv', level: 3 },
+        { id: 'damage', level: 1 },
+      ],
+      2,
+    );
+    expect(giveBlocker(green, 'a', blues)).toBe('downgrade');
+    expect(giveBlocker(green, 'a', blues, 0)).toBe('downgrade');
+    expect(giveSkill(green, 'a', blues, 0)).toBeNull();
+    // Stock : PV (bleue). Champion : Critique (violette) et Vitesse (verte) → seule la verte part.
+    const blue = bank(0, [sk('a', 'pv', 1)]);
+    const mixed = c(
+      [
+        { id: 'crit', level: 2 },
+        { id: 'speed', level: 1 },
+      ],
+      2,
+    );
+    expect(giveBlocker(blue, 'a', mixed)).toBe('full'); // il reste un choix à faire
+    expect(giveBlocker(blue, 'a', mixed, 0)).toBe('downgrade');
+    expect(giveBlocker(blue, 'a', mixed, 1)).toBeNull();
+    // Même rareté : permis.
+    expect(giveBlocker(blue, 'a', blues, 0)).toBeNull();
+  });
+
+  it('⚠️ la même compétence dans une couleur plus rare ne se remplace pas par une moins rare', () => {
+    const base = bank(0, [{ uid: 'a', id: 'pv', level: 1 }]);
+    const risen = c([{ id: 'pv', level: 1, up: 1 }]);
+    expect(giveKind(risen, { id: 'pv' })).toBe('swap');
+    expect(giveBlocker(base, 'a', risen)).toBe('downgrade');
+  });
+
   it('annonce ce que le don ferait (pastille de l’écran)', () => {
     expect(giveKind(c([]), { id: 'crit' })).toBe('new');
     expect(giveKind(c([{ id: 'crit', level: 1 }]), { id: 'crit' })).toBe('stack');

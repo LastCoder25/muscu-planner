@@ -79,7 +79,7 @@
               type="button"
               class="rb-row"
               :class="'t-' + skillTier(s)"
-              :disabled="busy"
+              :disabled="busy || replaceBlocked(replaceFor, i)"
               @click="confirmReplace(replaceFor, i)"
             >
               <span class="rb-row-emo">{{ SKILLS[s.id].emoji }}</span>
@@ -89,7 +89,8 @@
                 >
                 <span class="rb-row-sub">{{ skillEffectText(s) }}</span>
               </span>
-              <span class="rb-pill bad">🔁 Remplacer</span>
+              <span v-if="replaceBlocked(replaceFor, i)" class="rb-pill off">plus rare</span>
+              <span v-else class="rb-pill bad">🔁 Remplacer</span>
             </button>
           </div>
           <button type="button" class="rb-back" @click="replaceFor = null">‹ Autre champion</button>
@@ -620,6 +621,13 @@ function give(r: GiveRow) {
     return;
   }
   doGive(r.adv, null);
+}
+
+/** Cette rune du champion est plus rare que celle du stock : la remplacer serait reculer. */
+function replaceBlocked(adv: Adventurer, index: number): boolean {
+  const s = sel.value;
+  if (!s) return false;
+  return giveBlocker(bank.value, s.uid, advChampionSlots(adv), index) === 'downgrade';
 }
 
 /** ⚠️ Le remplacement DIT ce qui part avant de le faire (au stock, niveaux gardés). */

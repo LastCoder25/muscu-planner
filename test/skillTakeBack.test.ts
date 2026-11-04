@@ -62,7 +62,7 @@ describe('🎁 giveSkill — élévation dans la foulée, l’ancienne revient a
 
   it('remplacement (places pleines) : la remplacée revient au stock, niveaux et couleur', () => {
     const r = giveSkill(
-      bank([sk('a', 'haul', 2), sk('rb1', 'scout', 1)]),
+      bank([sk('a', 'crit', 2), sk('rb1', 'scout', 1)]),
       'a',
       c([
         { id: 'pv', level: 3, up: 1 },
@@ -71,7 +71,7 @@ describe('🎁 giveSkill — élévation dans la foulée, l’ancienne revient a
       0,
     )!;
     expect(r.skills).toEqual([
-      { id: 'haul', level: 2 },
+      { id: 'crit', level: 2 },
       { id: 'damage', level: 2 },
     ]);
     // ⚠️ un uid libre, jamais celui d'un exemplaire déjà au stock
