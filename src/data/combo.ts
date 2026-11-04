@@ -135,7 +135,9 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
   // Rowing / tirage horizontal (barre, haltère, kettlebell, élastique, machine).
   ['ex_row_barbell', 'ex_row_dumbbell', 'ex_kb_row', 'ex_band_row', 'ex_seated_row'],
   // Curl biceps (barre, haltères, élastique).
-  ['ex_curl_barbell', 'ex_curl_dumbbell', 'ex_band_curl'],
+  ['ex_curl_barbell', 'ex_curl_dumbbell', 'ex_band_curl', 'ex_curl_ez'],
+  // Triceps au front (barre droite / barre EZ).
+  ['ex_skullcrusher', 'ex_skullcrusher_ez'],
   // Extension triceps à la poulie / élastique.
   ['ex_triceps_pushdown', 'ex_band_pushdown'],
   // Développé couché à plat (barre, haltères).

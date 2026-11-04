@@ -79,7 +79,7 @@ function deriveCoarseEquipment(items: EquipmentItem[]): Equipment {
   const has = (x: EquipmentItem) => items.includes(x);
   if (has('machine') && has('cable') && has('barbell')) return 'salle_complete';
   if (has('barbell') || has('machine') || has('cable') || has('rack')) return 'home_gym';
-  if (has('dumbbells') || has('kettlebell') || has('bands')) return 'halteres';
+  if (has('dumbbells') || has('kettlebell') || has('bands') || has('ez_bar')) return 'halteres';
   return 'poids_du_corps';
 }
 
@@ -98,6 +98,7 @@ const LEGACY_EQUIPMENT: Record<string, EquipmentItem[]> = {
 const VALID_EQUIPMENT_SET: Record<EquipmentItem, true> = {
   barbell: true,
   rack: true,
+  ez_bar: true,
   bench: true,
   dumbbells: true,
   kettlebell: true,

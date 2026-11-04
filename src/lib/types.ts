@@ -17,6 +17,7 @@ export type Difficulty = 1 | 2 | 3 | 4;
 export type EquipmentItem =
   | 'barbell'
   | 'rack'
+  | 'ez_bar'
   | 'bench'
   | 'dumbbells'
   | 'kettlebell'

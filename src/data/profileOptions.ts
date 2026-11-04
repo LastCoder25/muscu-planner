@@ -55,6 +55,7 @@ export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
     group: 'Charges libres',
     items: [
       { value: 'dumbbells', label: 'Haltères' },
+      { value: 'ez_bar', label: 'Barre EZ', desc: 'Curl, triceps au front, développé serré…' },
       { value: 'kettlebell', label: 'Kettlebell' },
       { value: 'bands', label: 'Élastiques / bandes' },
     ],

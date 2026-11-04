@@ -425,7 +425,7 @@ const fresh = computed(() => {
     if (ch.status === 'active' && !isCardioChallengeRow(ch))
       taken.add(variantFamilyKey(ch.exercise_id));
   const fav = new Set(profile.profile?.favorite_exercises ?? []);
-  return lib.value
+  const all = lib.value
     .filter(
       (e) =>
         !isTennisExercise(e) &&
@@ -434,6 +434,11 @@ const fresh = computed(() => {
           null,
     )
     .sort((a, b) => (fav.has(b.id) ? 1 : 0) - (fav.has(a.id) ? 1 : 0));
+  // ⚠️ Seulement ce que tu peux faire avec TON matériel (signalé : des machines de salle chez
+  // quelqu'un qui n'y va pas). Rien de faisable → on montre tout plutôt qu'une feuille vide.
+  const owned = new Set<string>(profile.profile?.available_equipment ?? []);
+  const mine = all.filter((e) => (e.equipment_required ?? []).every((r) => owned.has(r)));
+  return mine.length ? mine : all;
 });
 
 const hasAnim = (id: string) => !!exerciseFrames(id);

@@ -343,6 +343,38 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Garde les coudes serrés et immobiles.',
   },
+  ex_curl_ez: {
+    steps: [
+      'Debout, barre EZ tenue sur les prises coudées, paumes vers le haut, coudes près du corps.',
+      'Monte la barre vers les épaules en contractant les biceps, sans balancer.',
+      'Redescends lentement jusqu’à l’extension.',
+    ],
+    tip: 'La barre coudée soulage les poignets par rapport à une barre droite.',
+  },
+  ex_curl_reverse_ez: {
+    steps: [
+      'Debout, barre EZ tenue en pronation (paumes vers le bas), coudes près du corps.',
+      'Monte la barre vers les épaules en gardant les poignets neutres.',
+      'Redescends lentement.',
+    ],
+    tip: 'Travaille les avant-bras et le brachial : prends plus léger qu’au curl classique.',
+  },
+  ex_skullcrusher_ez: {
+    steps: [
+      'Allongé sur un banc, barre EZ au-dessus du front sur la prise coudée, bras tendus.',
+      'Plie les coudes pour descendre la barre vers le front, coudes fixes et serrés.',
+      'Tends les bras en contractant les triceps.',
+    ],
+    tip: 'Demande à quelqu’un de t’aider à poser la barre si tu pars lourd.',
+  },
+  ex_close_bench_ez: {
+    steps: [
+      'Allongé sur un banc, barre EZ tenue sur la prise intérieure, mains un peu plus serrées que les épaules.',
+      'Descends la barre vers le bas de la poitrine, coudes près du corps.',
+      'Pousse jusqu’à extension complète en contractant les triceps.',
+    ],
+    tip: 'Les coudes restent serrés : c’est ce qui déplace le travail vers les triceps.',
+  },
   ex_triceps_pushdown: {
     steps: [
       'Poulie haute, barre/corde en main, coudes collés au corps.',

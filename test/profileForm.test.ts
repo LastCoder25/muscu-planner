@@ -22,6 +22,11 @@ describe('matériel du profil', () => {
     expect(roundTrip(['rower', 'punching_bag'])).toEqual(['rower', 'punching_bag']);
   });
 
+  it('🏋️ la barre EZ est proposée, conservée, et suffit à un profil « haltères »', () => {
+    expect(EQUIPMENT_ITEMS.map((o) => o.value)).toContain('ez_bar');
+    expect(roundTrip(['ez_bar'])).toEqual(['ez_bar']);
+  });
+
   it('un atome inconnu reste écarté', () => {
     expect(roundTrip(['rower', 'trampoline'])).toEqual(['rower']);
   });

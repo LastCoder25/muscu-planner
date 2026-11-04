@@ -318,8 +318,19 @@
 
         <!-- Autres exos (matériel de salle non possédé) — accessibles si tu vas en salle -->
         <template v-if="otherCandidates(curSlot).length">
-          <div class="grp-label alt">🏋️ En salle (autre matériel)</div>
-          <div class="tile-grid">
+          <!-- 🏋️ Replié par défaut : pas de machine de salle sous les yeux de qui n'y va pas. -->
+          <button
+            v-if="mineCandidates(curSlot).length"
+            type="button"
+            class="gym-toggle"
+            :aria-expanded="showGym"
+            @click="showGym = !showGym"
+          >
+            🏋️ {{ showGym ? 'Masquer' : 'Voir' }} le matériel de salle
+            <span class="gym-count">{{ otherCandidates(curSlot).length }}</span>
+          </button>
+          <div v-if="showGymNow" class="grp-label alt">🏋️ En salle (autre matériel)</div>
+          <div v-if="showGymNow" class="tile-grid">
             <button
               v-for="e in otherCandidates(curSlot)"
               :key="e.id"
@@ -754,6 +765,12 @@ function mineCandidates(slot: ComboSlot): ExerciseRow[] {
 function otherCandidates(slot: ComboSlot): ExerciseRow[] {
   return candidates(slot).filter((e) => !canDo(e));
 }
+/** Le matériel de salle : replié, sauf si rien n'est faisable chez toi pour cet emplacement
+ *  (sinon l'écran serait vide) ou si tu l'as déplié. */
+const showGym = ref(false);
+const showGymNow = computed(
+  () => !!curSlot.value && (showGym.value || !mineCandidates(curSlot.value).length),
+);
 function selectedExos(key: string): ExerciseRow[] {
   const ids = picks[key]?.exercise_ids ?? [];
   return ids.map((id) => lib.value.find((e) => e.id === id)).filter((e): e is ExerciseRow => !!e);
@@ -872,7 +889,10 @@ function applyPlan() {
     // Pré-sélection : d'abord les exos FAISABLES avec ton matériel, puis les autres.
     // Dédup par famille de variantes : jamais pompes ET pompes sur genoux d'office.
     const seenFam = new Set<string>();
-    const cands = [...mineCandidates(slot), ...otherCandidates(slot)].filter((e) => {
+    // ⚠️ Seulement ce que tu PEUX faire : l'ancien « puis les autres » plaçait d'office des
+    // machines de salle chez quelqu'un qui n'en a pas (signalé). Un emplacement sans exo
+    // faisable reste inactif ; le groupe « salle » se déplie à la main.
+    const cands = mineCandidates(slot).filter((e) => {
       const fam = variantFamilyKey(e.id);
       if (seenFam.has(fam)) return false;
       seenFam.add(fam);
@@ -1321,6 +1341,29 @@ onMounted(async () => {
   font-weight: 700;
   color: var(--accent);
   margin: 6px 0 8px;
+}
+.gym-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  margin: 10px 0 4px;
+  padding: 6px 14px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.gym-count {
+  padding: 1px 8px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
 }
 .grp-label.alt {
   color: var(--dim);

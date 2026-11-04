@@ -491,6 +491,35 @@ describe('suggestFullBodyPlan (volume + variété, full-body)', () => {
   });
 });
 
+describe('🏋️ Défi 360 : jamais de matériel de salle d’office chez qui n’en a pas', () => {
+  it('la présélection ne pioche que dans les exos faisables, et le groupe « salle » est replié', async () => {
+    const { readFileSync } = await import('node:fs');
+    const page = readFileSync('src/pages/ComboNewPage.vue', 'utf8');
+    expect(page.includes('...mineCandidates(slot), ...otherCandidates(slot)')).toBe(false);
+    expect(page).toContain('showGymNow');
+    const swap = readFileSync('src/components/ComboSwapSheet.vue', 'utf8');
+    expect(swap).toContain('available_equipment');
+  });
+});
+
+describe('🏋️ barre EZ : ses variantes sont rangées avec leur mouvement', () => {
+  it('curl EZ avec les curls, barre EZ au front avec la barre au front', async () => {
+    const { variantFamilyKey } = await import('@/data/combo');
+    expect(variantFamilyKey('ex_curl_ez')).toBe(variantFamilyKey('ex_curl_barbell'));
+    expect(variantFamilyKey('ex_skullcrusher_ez')).toBe(variantFamilyKey('ex_skullcrusher'));
+  });
+  it('chaque exo EZ de la migration a ses instructions', async () => {
+    const { exerciseInstructions } = await import('@/data/exerciseInstructions');
+    for (const id of [
+      'ex_curl_ez',
+      'ex_curl_reverse_ez',
+      'ex_skullcrusher_ez',
+      'ex_close_bench_ez',
+    ])
+      expect(exerciseInstructions(id)?.steps.length, id).toBeGreaterThan(0);
+  });
+});
+
 describe('variantFamilyKey (variantes normale/assistée exclusives)', () => {
   it('les variations d’un même mouvement partagent une clé', async () => {
     const { variantFamilyKey } = await import('@/data/combo');
