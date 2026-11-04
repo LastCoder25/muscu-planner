@@ -98,6 +98,33 @@ const EXERCISE_IMAGES: Record<string, string> = {
   // Wikimedia Commons (licences CC → crédit OBLIGATOIRE, cf. EXERCISE_IMAGE_CREDITS).
   ex_burpees: '/exercises/ex_burpees.jpg',
   ex_pp_bird_dog: '/exercises/ex_pp_bird_dog.jpg',
+  // Barre EZ + variantes d'exercices (v1.303-1.304) : free-exercise-db, correspondances fidèles.
+  ex_curl_ez: '/exercises/ex_curl_ez.jpg',
+  ex_curl_reverse_ez: '/exercises/ex_curl_reverse_ez.jpg',
+  ex_skullcrusher_ez: '/exercises/ex_skullcrusher_ez.jpg',
+  ex_close_bench_ez: '/exercises/ex_close_bench_ez.jpg',
+  ex_pushup_incline: '/exercises/ex_pushup_incline.jpg',
+  ex_pushup_decline: '/exercises/ex_pushup_decline.jpg',
+  ex_pushup_wide: '/exercises/ex_pushup_wide.jpg',
+  ex_dips_bench: '/exercises/ex_dips_bench.jpg',
+  ex_lunge_walking: '/exercises/ex_lunge_walking.jpg',
+  ex_glute_bridge_single: '/exercises/ex_glute_bridge_single.jpg',
+  ex_hip_thrust: '/exercises/ex_hip_thrust.jpg',
+  ex_curl_concentration: '/exercises/ex_curl_concentration.jpg',
+  ex_curl_incline: '/exercises/ex_curl_incline.jpg',
+  ex_curl_preacher_ez: '/exercises/ex_curl_preacher_ez.jpg',
+  ex_arnold_press: '/exercises/ex_arnold_press.jpg',
+  ex_lateral_raise_band: '/exercises/ex_lateral_raise_band.jpg',
+  ex_row_bent_supinated: '/exercises/ex_row_bent_supinated.jpg',
+  ex_upright_row: '/exercises/ex_upright_row.jpg',
+  ex_pullover_db: '/exercises/ex_pullover_db.jpg',
+  ex_plank_side: '/exercises/ex_plank_side.jpg',
+  ex_dead_bug: '/exercises/ex_dead_bug.jpg',
+  ex_bicycle_crunch: '/exercises/ex_bicycle_crunch.jpg',
+  ex_leg_raise_floor: '/exercises/ex_leg_raise_floor.jpg',
+  ex_chinup: '/exercises/ex_chinup.jpg',
+  ex_pullup_neutral: '/exercises/ex_pullup_neutral.jpg',
+  ex_pullup_wide: '/exercises/ex_pullup_wide.jpg',
 };
 
 /** Illustrations FIXES : une seule photo, pas de seconde pose — donc pas d'animation.

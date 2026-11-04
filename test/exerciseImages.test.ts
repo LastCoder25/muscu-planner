@@ -45,6 +45,49 @@ describe('illustrations d’exercices', () => {
     ])
       expect(exerciseFrames(id), id).toBeDefined();
   });
+  it('🧩 la barre EZ et les variantes d’exercices fidèles sont animées', () => {
+    for (const id of [
+      'ex_curl_ez',
+      'ex_curl_reverse_ez',
+      'ex_skullcrusher_ez',
+      'ex_close_bench_ez',
+      'ex_pushup_incline',
+      'ex_pushup_decline',
+      'ex_pushup_wide',
+      'ex_dips_bench',
+      'ex_lunge_walking',
+      'ex_glute_bridge_single',
+      'ex_hip_thrust',
+      'ex_curl_concentration',
+      'ex_curl_incline',
+      'ex_curl_preacher_ez',
+      'ex_arnold_press',
+      'ex_lateral_raise_band',
+      'ex_row_bent_supinated',
+      'ex_upright_row',
+      'ex_pullover_db',
+      'ex_plank_side',
+      'ex_dead_bug',
+      'ex_bicycle_crunch',
+      'ex_leg_raise_floor',
+      'ex_chinup',
+      'ex_pullup_neutral',
+      'ex_pullup_wide',
+    ])
+      expect(exerciseFrames(id), id).toBeDefined();
+  });
+  it('🧩 variantes sans bon cliché : l’icône vaut mieux qu’une image fausse', () => {
+    for (const id of [
+      'ex_pushup_archer',
+      'ex_squat_bulgarian',
+      'ex_squat_pistol_assisted',
+      'ex_squat_sumo',
+      'ex_lunge_reverse',
+      'ex_calf_raise_single',
+      'ex_rdl_single',
+    ])
+      expect(exerciseImage(id), id).toBeUndefined();
+  });
   it('pas d’image vaut mieux qu’une image fausse : ces exos n’ont pas de bon cliché', () => {
     // Tricep pushdown ≠ extension au-dessus de la tête, pompes pike ≠ pompes en poirier, rotation
     // élastique ≠ Pallof press. Les remettre exige une photo du BON mouvement.

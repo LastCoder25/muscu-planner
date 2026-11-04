@@ -114,11 +114,44 @@ const MAP = {
   ex_tn_ytw: 'Lying_Rear_Delt_Raise',
   ex_tn_wrist_curl: 'Seated_One-Arm_Dumbbell_Palms-Up_Wrist_Curl',
   ex_pp_leg_swings: 'Front_Leg_Raises',
+  // Barre EZ (v1.303.0) + variantes d'exercices (v1.304.0). Seulement les clichés FIDÈLES : rien
+  // de bon pour pompes archer, squat bulgare, pistol assisté, squat sumo au poids du corps,
+  // fentes arrière sans croisement, mollets à une jambe au sol, roumain à une jambe aux haltères
+  // — mieux vaut l'icône qu'une image fausse.
+  ex_curl_ez: 'EZ-Bar_Curl',
+  ex_curl_reverse_ez: 'Reverse_Barbell_Curl',
+  ex_skullcrusher_ez: 'EZ-Bar_Skullcrusher',
+  ex_close_bench_ez: 'Close-Grip_EZ-Bar_Press',
+  ex_pushup_incline: 'Incline_Push-Up',
+  ex_pushup_decline: 'Decline_Push-Up',
+  ex_pushup_wide: 'Push-Up_Wide',
+  ex_dips_bench: 'Bench_Dips',
+  ex_lunge_walking: 'Bodyweight_Walking_Lunge',
+  ex_glute_bridge_single: 'Single_Leg_Glute_Bridge',
+  ex_hip_thrust: 'Barbell_Hip_Thrust',
+  ex_curl_concentration: 'Concentration_Curls',
+  ex_curl_incline: 'Incline_Dumbbell_Curl',
+  ex_curl_preacher_ez: 'Preacher_Curl',
+  ex_arnold_press: 'Arnold_Dumbbell_Press',
+  ex_lateral_raise_band: 'Lateral_Raise_-_With_Bands',
+  ex_row_bent_supinated: 'Reverse_Grip_Bent-Over_Rows',
+  ex_upright_row: 'Standing_Dumbbell_Upright_Row',
+  ex_pullover_db: 'Straight-Arm_Dumbbell_Pullover',
+  ex_plank_side: 'Side_Bridge',
+  ex_dead_bug: 'Dead_Bug',
+  ex_bicycle_crunch: 'Air_Bike',
+  ex_leg_raise_floor: 'Flat_Bench_Lying_Leg_Raise',
+  ex_chinup: 'Chin-Up',
+  ex_pullup_neutral: 'V-Bar_Pullup',
+  ex_pullup_wide: 'Wide-Grip_Rear_Pull-Up',
 };
+// Usage ciblé : `node scripts/fetch-exercise-frames.mjs ex_a ex_b` ne retélécharge que ces exos.
+const ONLY = new Set(process.argv.slice(2));
 mkdirSync('public/exercises', { recursive: true });
 let ok = 0,
   fail = 0;
 for (const [id, src] of Object.entries(MAP)) {
+  if (ONLY.size && !ONLY.has(id)) continue;
   for (const [frame, out] of [
     [0, id + '.jpg'],
     [1, id + '-1.jpg'],
