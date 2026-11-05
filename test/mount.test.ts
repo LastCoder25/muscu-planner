@@ -5813,11 +5813,13 @@ describe('🏅 MuscleBody : niveaux par muscle', () => {
 
 describe('⛰️ saisie cardio : le dénivelé selon l’activité', () => {
   it.each([
-    ['velo', true],
-    ['velo_appart', true],
-    ['course', true],
-    ['course_tapis', false],
-  ])('« %s » : champs D+ / D- visibles = %s', async (activity, shown) => {
+    // [activité, D+ visible, D- visible, pente visible]
+    ['velo', true, true, false],
+    ['velo_appart', true, true, false],
+    ['course', true, true, false],
+    ['course_tapis', true, false, true],
+    ['marche_tapis', true, false, true],
+  ])('« %s » : D+ %s · D- %s · pente %s', async (activity, dplus, dminus, pente) => {
     const { default: CardioPage } = await import('@/pages/CardioPage.vue');
     let html = '';
     await mountIt(
@@ -5828,7 +5830,8 @@ describe('⛰️ saisie cardio : le dénivelé selon l’activité', () => {
       '/?new=1&activity=' + activity,
       (h) => (html = h),
     );
-    expect(html.includes('D+ (m)'), activity).toBe(shown);
-    expect(html.includes('D- (m)'), activity).toBe(shown);
+    expect(html.includes('D+ (m)'), activity).toBe(dplus);
+    expect(html.includes('D- (m)'), activity).toBe(dminus);
+    expect(html.includes('Pente (%)'), activity).toBe(pente);
   });
 });

@@ -326,6 +326,7 @@ export interface CardioLog {
   load_kg?: number; // charge portée (veste/sac lesté) → valorise le poids dans l'XP
   elevation_m?: number; // D+ (dénivelé positif)
   descent_m?: number; // D- (dénivelé négatif)
+  incline_pct?: number; // pente / inclinaison du tapis en % (le D+ en est dérivé : distance × pente)
   rpe?: Difficulty; // ressenti 1–4
   performed_at?: string;
   comment?: string;

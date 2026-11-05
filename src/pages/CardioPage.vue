@@ -91,7 +91,30 @@
           label="Charge portée (kg)"
           hint="Veste/sac lesté — valorise le poids (+3 %/kg)"
         />
-        <div v-if="hasElevation" class="fields-row">
+        <!-- 🏃 Tapis : la PENTE (%) ou le dénivelé, au choix — l'un calcule l'autre à partir de la
+             distance. Jamais de D- sur un tapis. -->
+        <div v-if="hasIncline" class="fields-row">
+          <q-input
+            v-model.number="incline"
+            type="number"
+            step="0.5"
+            min="0"
+            max="40"
+            filled
+            label="Pente (%)"
+            hint="Inclinaison du tapis"
+            @update:model-value="onIncline"
+          />
+          <q-input
+            v-model.number="dplus"
+            type="number"
+            filled
+            label="D+ (m)"
+            hint="Distance × pente"
+            @update:model-value="onDplus"
+          />
+        </div>
+        <div v-else-if="hasElevation" class="fields-row">
           <q-input v-model.number="dplus" type="number" filled label="D+ (m)" />
           <q-input v-model.number="dminus" type="number" filled label="D- (m)" />
         </div>
@@ -187,6 +210,7 @@
             <template v-if="l.payload.duration_min"> · {{ l.payload.duration_min }} min</template>
             <template v-if="l.payload.steps"> · {{ l.payload.steps }} pas</template>
             <template v-if="l.payload.load_kg"> · 🎒 {{ l.payload.load_kg }} kg</template>
+            <template v-if="l.payload.incline_pct"> · pente {{ l.payload.incline_pct }} %</template>
             <template v-if="l.payload.elevation_m"> · +{{ l.payload.elevation_m }} m</template>
             <template v-if="l.payload.descent_m"> · −{{ l.payload.descent_m }} m</template>
           </div>
@@ -210,7 +234,7 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { localDayIso } from '@/lib/localDay';
 import { hoursMinutesToMin } from '@/lib/duration';
 import { useRouter, useRoute } from 'vue-router';
@@ -226,6 +250,9 @@ import {
   ACTIVITY_ICONS,
   ACTIVITY_EMOJI,
   activityHasElevation,
+  activityHasIncline,
+  elevationFromIncline,
+  inclineFromElevation,
   implausibleDuration,
   paceLabel,
   speedKmh,
@@ -289,6 +316,39 @@ const comment = ref('');
 const saving = ref(false);
 
 const hasElevation = computed(() => activityHasElevation(activity.value));
+const hasIncline = computed(() => activityHasIncline(activity.value));
+// Le D- n'existe que sur une sortie extérieure : ni sur tapis (pente seule), ni sans dénivelé.
+const hasDescent = computed(() => hasElevation.value && !hasIncline.value);
+/** Pente du tapis (%) : l'autre façon de saisir le dénivelé (cf. `onIncline` / `onDplus`). */
+const incline = ref<number | null>(null);
+/** Lequel des deux champs a été touché en dernier : c'est lui qui fait foi quand la distance change. */
+const lastEdited = ref<'incline' | 'dplus'>('incline');
+function syncFromIncline() {
+  dplus.value = elevationFromIncline(distance.value, incline.value);
+}
+function syncFromDplus() {
+  incline.value = inclineFromElevation(distance.value, dplus.value);
+}
+function onIncline() {
+  lastEdited.value = 'incline';
+  syncFromIncline();
+}
+function onDplus() {
+  lastEdited.value = 'dplus';
+  syncFromDplus();
+}
+// La distance bouge : le champ NON touché suit (pente fixée → D+ recalculé, et inversement).
+watch(distance, () => {
+  if (!hasIncline.value) return;
+  if (lastEdited.value === 'incline') {
+    if (incline.value) syncFromIncline();
+  } else if (dplus.value) syncFromDplus();
+});
+// Changer d'activité : la pente n'a de sens que sur tapis, le D- jamais dessus.
+watch(activity, () => {
+  if (!hasIncline.value) incline.value = null;
+  else dminus.value = null;
+});
 // Les pas sont pertinents à pied (pas à vélo).
 const hasSteps = computed(() => activity.value !== 'velo' && activity.value !== 'velo_appart');
 const hasDeniv = computed(() => !!(dplus.value || dminus.value));
@@ -387,7 +447,8 @@ async function save() {
       ...(steps.value && hasSteps.value ? { steps: steps.value } : {}),
       ...(load.value ? { load_kg: load.value } : {}),
       ...(dplus.value && hasElevation.value ? { elevation_m: dplus.value } : {}),
-      ...(dminus.value && hasElevation.value ? { descent_m: dminus.value } : {}),
+      ...(dminus.value && hasDescent.value ? { descent_m: dminus.value } : {}),
+      ...(incline.value && hasIncline.value ? { incline_pct: incline.value } : {}),
       ...(rpe.value ? { rpe: rpe.value } : {}),
       ...(comment.value.trim() ? { comment: comment.value.trim() } : {}),
     };
@@ -456,6 +517,7 @@ async function save() {
     load.value = null;
     dplus.value = null;
     dminus.value = null;
+    incline.value = null;
     rpe.value = null;
     comment.value = '';
     // Sortie enregistrée → retour à l'accueil (l'animation d'XP est un overlay global, elle

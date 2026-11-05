@@ -12,6 +12,9 @@ export interface ActivityDef {
   /** D+/D- saisissables : l'extérieur, ET le vélo d'appartement (appareil connecté, parcours
    *  virtuel : il affiche un dénivelé). Seuls les TAPIS n'en ont pas. */
   hasElevation: boolean;
+  /** Pente (%) saisissable : le TAPIS. Son D+ se dérive de la pente et de la distance, et il
+   *  n'a jamais de D- (un tapis ne descend pas). */
+  hasIncline?: boolean;
 }
 
 export const CARDIO_ACTIVITIES: ActivityDef[] = [
@@ -32,14 +35,16 @@ export const CARDIO_ACTIVITIES: ActivityDef[] = [
     label: 'Marche tapis',
     icon: 'directions_walk',
     emoji: '🚶',
-    hasElevation: false,
+    hasElevation: true,
+    hasIncline: true,
   },
   {
     id: 'course_tapis',
     label: 'Course tapis',
     icon: 'directions_run',
     emoji: '🏃',
-    hasElevation: false,
+    hasElevation: true,
+    hasIncline: true,
   },
 ];
 
@@ -55,6 +60,30 @@ export const ACTIVITY_EMOJI = Object.fromEntries(
 
 export function activityHasElevation(a: CardioActivity): boolean {
   return CARDIO_ACTIVITIES.find((x) => x.id === a)?.hasElevation ?? false;
+}
+
+/** Pente (%) saisissable ? (tapis) */
+export function activityHasIncline(a: CardioActivity): boolean {
+  return CARDIO_ACTIVITIES.find((x) => x.id === a)?.hasIncline ?? false;
+}
+
+/** D+ (m) d'une sortie à pente constante : distance × pente. 5 km à 5 % = 250 m. `null` sans
+ *  distance ni pente (rien à calculer). */
+export function elevationFromIncline(
+  distanceKm?: number | null,
+  pct?: number | null,
+): number | null {
+  if (!distanceKm || distanceKm <= 0 || !pct || pct <= 0) return null;
+  return Math.round(distanceKm * 10 * pct);
+}
+
+/** Pente (%) qui donne ce D+ sur cette distance (l'inverse), arrondie au dixième. */
+export function inclineFromElevation(
+  distanceKm?: number | null,
+  dplus?: number | null,
+): number | null {
+  if (!distanceKm || distanceKm <= 0 || !dplus || dplus <= 0) return null;
+  return Math.round((dplus / (distanceKm * 10)) * 10) / 10;
 }
 
 // Défis cardio alimentés par une sortie de cette activité. Marche/rando/tapis
