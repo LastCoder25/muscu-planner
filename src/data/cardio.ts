@@ -206,11 +206,45 @@ export function implausibleDuration(
   return null;
 }
 
-/** Distance-effort (km-effort) : distance + (D+ + D-)/100.
- *  Chaque 100 m de dénivelé (montée OU descente) ≈ 1 km à plat. */
-export function effortKm(distanceKm?: number, dplus?: number, dminus?: number): number | null {
+/** ⛰️ KM À PLAT QUE VAUT UNE MONTÉE DE 100 m, selon l'activité.
+ *  À PIED : 1 km — la convention du trail (kilomètre-effort : distance + D+/100).
+ *  À VÉLO : 3 km (v1.308.0, choix de l'utilisateur après recherche) — il n'existe pas de règle
+ *  standard ; on compose deux conventions : 100 m = 1 km en course, et 1 km de course ≈ 3 km de
+ *  vélo. Prudent face à la mécanique pure (≈ 6 km à 25 km/h : monter 100 m = ≈ 78 kJ contre
+ *  ≈ 12 kJ le km à plat) ; les études de choix d'itinéraire donnent beaucoup moins (≈ 0,8 km). */
+const KM_PER_100M_CLIMB: Partial<Record<CardioActivity, number>> = {
+  velo: 3,
+  velo_appart: 3,
+};
+export function climbKmPer100m(activity?: CardioActivity): number {
+  return (activity && KM_PER_100M_CLIMB[activity]) || 1;
+}
+
+/** Poids de la DESCENTE (D-) dans l'effort et l'XP : 1 à pied (la descente sollicite d'autres
+ *  muscles), 0 à vélo (elle ne coûte presque rien) et sur tapis (un tapis ne descend pas). */
+const NO_DESCENT: ReadonlySet<CardioActivity> = new Set([
+  'velo',
+  'velo_appart',
+  'marche_tapis',
+  'course_tapis',
+]);
+export function descentWeight(activity?: CardioActivity): number {
+  return activity && NO_DESCENT.has(activity) ? 0 : 1;
+}
+
+/** Distance-effort (km-effort) : distance + montée × km/100 m + descente/100.
+ *  À pied : chaque 100 m de dénivelé (montée OU descente) ≈ 1 km à plat. À vélo : 100 m de
+ *  montée ≈ 3 km, la descente ne compte pas (cf. `climbKmPer100m`, `descentWeight`). */
+export function effortKm(
+  distanceKm?: number,
+  dplus?: number,
+  dminus?: number,
+  activity?: CardioActivity,
+): number | null {
   if (!distanceKm || distanceKm <= 0) return null;
-  return Math.round((distanceKm + ((dplus ?? 0) + (dminus ?? 0)) / 100) * 100) / 100;
+  const climb = ((dplus ?? 0) / 100) * climbKmPer100m(activity);
+  const descent = ((dminus ?? 0) / 100) * descentWeight(activity);
+  return Math.round((distanceKm + climb + descent) * 100) / 100;
 }
 
 /** Allure d'effort (ramenée à du plat) « m:ss/km ». */
@@ -219,8 +253,9 @@ export function effortPace(
   durationMin?: number,
   dplus?: number,
   dminus?: number,
+  activity?: CardioActivity,
 ): string | null {
-  const ek = effortKm(distanceKm, dplus, dminus);
+  const ek = effortKm(distanceKm, dplus, dminus, activity);
   if (!ek || !durationMin || durationMin <= 0) return null;
   return fmtPace((durationMin * 60) / ek);
 }
@@ -231,8 +266,9 @@ export function effortSpeedKmh(
   durationMin?: number,
   dplus?: number,
   dminus?: number,
+  activity?: CardioActivity,
 ): number | null {
-  const ek = effortKm(distanceKm, dplus, dminus);
+  const ek = effortKm(distanceKm, dplus, dminus, activity);
   if (!ek || !durationMin || durationMin <= 0) return null;
   return Math.round((ek / (durationMin / 60)) * 10) / 10;
 }

@@ -5814,8 +5814,8 @@ describe('🏅 MuscleBody : niveaux par muscle', () => {
 describe('⛰️ saisie cardio : le dénivelé selon l’activité', () => {
   it.each([
     // [activité, D+ visible, D- visible, pente visible]
-    ['velo', true, true, false],
-    ['velo_appart', true, true, false],
+    ['velo', true, false, false],
+    ['velo_appart', true, false, false],
     ['course', true, true, false],
     ['course_tapis', true, false, true],
     ['marche_tapis', true, false, true],

@@ -3,6 +3,7 @@
 // Pur/testable, aucune dépendance Vue.
 import type { SessionLog, Session, DrillLog, CardioLog } from './types';
 import { activityIntensity, sportIntensity } from './statSignature';
+import { descentWeight } from '@/data/cardio';
 
 // Le poids d'une activité cardio n'est PLUS un facteur arbitraire : il dérive de
 // son INTENSITÉ (somme du vecteur de bénéfices, adossée au MET), normalisée par
@@ -60,7 +61,8 @@ export function estimateKm(log: { distance_km?: number | null; steps?: number | 
 export function cardioSessionXp(log: CardioLog): number {
   const km = estimateKm(log);
   const dplus = log.elevation_m ?? 0;
-  const dminus = log.descent_m ?? 0;
+  // La descente ne compte pas à vélo ni sur tapis (cf. `descentWeight`).
+  const dminus = (log.descent_m ?? 0) * descentWeight(log.activity);
   const dur = log.duration_min ?? 0;
   const factor = activityIntensity(log.activity) / 100;
   // Charge portée (veste/sac lesté) : chaque kg = +3 % d'effort (plafonné +60 %)

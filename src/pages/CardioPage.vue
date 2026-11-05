@@ -116,7 +116,7 @@
         </div>
         <div v-else-if="hasElevation" class="fields-row">
           <q-input v-model.number="dplus" type="number" filled label="D+ (m)" />
-          <q-input v-model.number="dminus" type="number" filled label="D- (m)" />
+          <q-input v-if="hasDescent" v-model.number="dminus" type="number" filled label="D- (m)" />
         </div>
       </div>
 
@@ -141,9 +141,7 @@
           </div>
         </template>
       </div>
-      <p v-if="hasDeniv" class="eff-note">
-        Effort = distance + (D+ + D-)/100 (100 m de dénivelé ≈ 1 km à plat).
-      </p>
+      <p v-if="hasDeniv" class="eff-note">{{ effortNote }}</p>
 
       <div class="section-lbl">Ressenti</div>
       <div class="rate-btns">
@@ -251,6 +249,8 @@ import {
   ACTIVITY_EMOJI,
   activityHasElevation,
   activityHasIncline,
+  climbKmPer100m,
+  descentWeight,
   elevationFromIncline,
   inclineFromElevation,
   implausibleDuration,
@@ -318,7 +318,18 @@ const saving = ref(false);
 const hasElevation = computed(() => activityHasElevation(activity.value));
 const hasIncline = computed(() => activityHasIncline(activity.value));
 // Le D- n'existe que sur une sortie extérieure : ni sur tapis (pente seule), ni sans dénivelé.
-const hasDescent = computed(() => hasElevation.value && !hasIncline.value);
+const hasDescent = computed(() => hasElevation.value && descentWeight(activity.value) > 0);
+const effortNote = computed(() => {
+  const km = climbKmPer100m(activity.value);
+  return hasDescent.value
+    ? 'Effort = distance + (D+ + D-)/100 (100 m de dénivelé ≈ ' + km + ' km à plat).'
+    : 'Effort = distance + D+ × ' +
+        km +
+        '/100 (100 m de montée ≈ ' +
+        km +
+        ' km à plat' +
+        (hasIncline.value ? ').' : ' ; la descente ne compte pas).');
+});
 /** Pente du tapis (%) : l'autre façon de saisir le dénivelé (cf. `onIncline` / `onDplus`). */
 const incline = ref<number | null>(null);
 /** Lequel des deux champs a été touché en dernier : c'est lui qui fait foi quand la distance change. */
@@ -361,6 +372,7 @@ const ePace = computed(() =>
     duration.value ?? undefined,
     dplus.value ?? undefined,
     dminus.value ?? undefined,
+    activity.value,
   ),
 );
 const eSpeed = computed(() =>
@@ -369,13 +381,14 @@ const eSpeed = computed(() =>
     duration.value ?? undefined,
     dplus.value ?? undefined,
     dminus.value ?? undefined,
+    activity.value,
   ),
 );
 
 const paceOf = (l: CardioLog) => paceLabel(l.distance_km, l.duration_min);
 const effortPaceOf = (l: CardioLog) =>
   l.elevation_m || l.descent_m
-    ? effortPace(l.distance_km, l.duration_min, l.elevation_m, l.descent_m)
+    ? effortPace(l.distance_km, l.duration_min, l.elevation_m, l.descent_m, l.activity)
     : null;
 const xpOf = (l: CardioLog) => cardioSessionXp(l);
 

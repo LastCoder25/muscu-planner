@@ -3,6 +3,8 @@ import {
   CARDIO_ACTIVITIES,
   activityHasElevation,
   activityHasIncline,
+  climbKmPer100m,
+  descentWeight,
   effortKm,
   elevationFromIncline,
   inclineFromElevation,
@@ -68,19 +70,40 @@ describe('⛰️ dénivelé : saisi et pris en compte pour toutes les sorties qu
   });
 
   it.each(['velo', 'velo_appart', 'marche', 'course'] as const)(
-    '« %s » : le dénivelé (D+ ET D-) rapporte de l’XP',
+    '« %s » : la montée rapporte de l’XP',
     (a) => {
       const flat = cardioSessionXp(log(a));
       expect(cardioSessionXp(log(a, { elevation_m: 300 }))).toBeGreaterThan(flat);
-      expect(cardioSessionXp(log(a, { descent_m: 300 }))).toBeGreaterThan(flat);
-      // même barème que la marche et la course : (D+ + D-) / 10 d'XP, avant le multiplicateur
-      const both = cardioSessionXp(log(a, { elevation_m: 200, descent_m: 100 }));
-      const dplus = cardioSessionXp(log(a, { elevation_m: 300 }));
-      expect(both).toBe(dplus);
     },
   );
 
-  it('le dénivelé compte pareil à vélo et à pied (même distance-effort)', () => {
-    expect(effortKm(20, 400, 400)).toBe(28);
+  it.each(['marche', 'rando', 'course', 'trail'] as const)(
+    '« %s » : la descente compte à plein, comme la montée',
+    (a) => {
+      const flat = cardioSessionXp(log(a));
+      expect(cardioSessionXp(log(a, { descent_m: 300 }))).toBeGreaterThan(flat);
+      expect(cardioSessionXp(log(a, { elevation_m: 200, descent_m: 100 }))).toBe(
+        cardioSessionXp(log(a, { elevation_m: 300 })),
+      );
+    },
+  );
+
+  it.each(['velo', 'velo_appart', 'marche_tapis', 'course_tapis'] as const)(
+    '🚲 « %s » : la descente ne rapporte rien (ni XP ni effort)',
+    (a) => {
+      expect(descentWeight(a)).toBe(0);
+      expect(cardioSessionXp(log(a, { descent_m: 800 }))).toBe(cardioSessionXp(log(a)));
+      expect(effortKm(20, 0, 800, a)).toBe(20);
+    },
+  );
+
+  it('⛰️ 100 m de montée valent 3 km à vélo, 1 km à pied', () => {
+    expect(climbKmPer100m('velo')).toBe(3);
+    expect(climbKmPer100m('velo_appart')).toBe(3);
+    for (const a of ['marche', 'rando', 'course', 'trail', 'marche_tapis', 'course_tapis'] as const)
+      expect(climbKmPer100m(a), a).toBe(1);
+    expect(effortKm(40, 500, 500, 'velo')).toBe(55); // 40 + 5 × 3 ; descente ignorée
+    expect(effortKm(10, 200, 100, 'course')).toBe(13); // 10 + 3, inchangé
+    expect(effortKm(10, 200, 100)).toBe(13); // sans activité : comme à pied
   });
 });
