@@ -5810,3 +5810,25 @@ describe('🏅 MuscleBody : niveaux par muscle', () => {
     expect(out).not.toContain('mtile');
   }, 30_000);
 });
+
+describe('⛰️ saisie cardio : le dénivelé selon l’activité', () => {
+  it.each([
+    ['velo', true],
+    ['velo_appart', true],
+    ['course', true],
+    ['course_tapis', false],
+  ])('« %s » : champs D+ / D- visibles = %s', async (activity, shown) => {
+    const { default: CardioPage } = await import('@/pages/CardioPage.vue');
+    let html = '';
+    await mountIt(
+      CardioPage,
+      {},
+      undefined,
+      undefined,
+      '/?new=1&activity=' + activity,
+      (h) => (html = h),
+    );
+    expect(html.includes('D+ (m)'), activity).toBe(shown);
+    expect(html.includes('D- (m)'), activity).toBe(shown);
+  });
+});

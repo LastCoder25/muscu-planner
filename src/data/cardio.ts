@@ -9,7 +9,9 @@ export interface ActivityDef {
    *  rend du texte SVG, pas une icône Quasar) et une table séparée aurait divergé au
    *  premier ajout d'activité. */
   emoji: string;
-  hasElevation: boolean; // D+/D- pertinents (extérieur)
+  /** D+/D- saisissables : l'extérieur, ET le vélo d'appartement (appareil connecté, parcours
+   *  virtuel : il affiche un dénivelé). Seuls les TAPIS n'en ont pas. */
+  hasElevation: boolean;
 }
 
 export const CARDIO_ACTIVITIES: ActivityDef[] = [
@@ -23,7 +25,7 @@ export const CARDIO_ACTIVITIES: ActivityDef[] = [
     label: "Vélo d'appart",
     icon: 'pedal_bike',
     emoji: '🚲',
-    hasElevation: false,
+    hasElevation: true,
   },
   {
     id: 'marche_tapis',
