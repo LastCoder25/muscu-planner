@@ -95,7 +95,7 @@ const CARDS: Card[] = [
     lines: [
       'Ton <b>niveau et tes stats</b> viennent de tes séances réelles : rien à répartir.',
       "Chaque séance rapporte de l'<b>énergie</b> ⚡, la monnaie qui paie les donjons, le Labyrinthe et le Portail.",
-      'Onglets <b>Héros</b> (fiche, talents, familier) et <b>Équipement</b> : la 🪄 équipe le meilleur build.',
+      "Onglets <b>Héros</b> (fiche, talents, familier) et <b>Équipement</b> : la 🪄 équipe le meilleur build.",
     ],
     res: [R.energy!],
   },
@@ -103,7 +103,7 @@ const CARDS: Card[] = [
     emo: '🏰',
     title: 'Explorer : donjons et boss',
     lines: [
-      "Onglet <b>Explorer</b> : nettoie des <b>donjons</b> pour gagner de l'équipement et des 🔮.",
+      'Onglet <b>Explorer</b> : nettoie des <b>donjons</b> pour gagner de l\'équipement et des 🔮.',
       'Les 🔮 tentent un <b>boss de palier</b> : il lâche les pièces de <b>set</b>.',
       'Le <b>Labyrinthe</b> (🗝️) est un donjon à étages ; il se débloque avec sa porte, à la Base.',
     ],
@@ -124,7 +124,7 @@ const CARDS: Card[] = [
     title: 'Base et champions',
     lines: [
       'Onglet <b>Base</b> : bâtiments et enceinte contre les <b>sièges</b> ; la milice et la garnison défendent.',
-      'Au <b>Panthéon</b>, invoque des <b>champions</b> avec 💠 et 🎟️, puis fais-les monter et ascensionner.',
+      "Au <b>Panthéon</b>, invoque des <b>champions</b> avec 💠 et 🎟️, puis fais-les monter et ascensionner.",
       "Les <b>runes</b> s'ouvrent au Panthéon pour de nouvelles compétences.",
     ],
     res: [R.mana!, R.tickets!, R.runes!],

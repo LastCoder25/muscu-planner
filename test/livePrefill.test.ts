@@ -37,22 +37,8 @@ describe('🏋️ la charge reprend celle de la dernière séance', () => {
 
   it('⚠️ ne réécrit jamais une charge posée, une série faite, le poids du corps ni une pyramide', () => {
     const logs = [log('a', 'x', [70])];
-    const pose = {
-      id: 'x',
-      bodyweight: false,
-      sets: [
-        { load_kg: 40, done: false },
-        { load_kg: 0, done: false },
-      ],
-    };
-    const fait = {
-      id: 'x',
-      bodyweight: false,
-      sets: [
-        { load_kg: 0, done: true },
-        { load_kg: 0, done: false },
-      ],
-    };
+    const pose = { id: 'x', bodyweight: false, sets: [{ load_kg: 40, done: false }, { load_kg: 0, done: false }] };
+    const fait = { id: 'x', bodyweight: false, sets: [{ load_kg: 0, done: true }, { load_kg: 0, done: false }] };
     const pdc = { id: 'x', bodyweight: true, sets: blank() };
     const pyr = { id: 'x', bodyweight: false, prescribed: true, sets: blank() };
     expect(prefillLoads([pose, fait, pdc, pyr], logs)).toBe(0);

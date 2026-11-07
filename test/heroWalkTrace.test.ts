@@ -71,10 +71,7 @@ describe('le héros à pied se dessine', () => {
   it('rien à dessiner : arrivé, ou retour sans point de départ (sauvegarde d’avant)', () => {
     expect(heroWalkVoyage(map([post({})], { heroReturnAt: NOW + 5000 }), NOW)).toBeNull();
     expect(
-      heroWalkVoyage(
-        map([post({})], { heroReturnAt: NOW - 1, heroReturnFrom: { x: 0, y: 0, at: 0 } }),
-        NOW,
-      ),
+      heroWalkVoyage(map([post({})], { heroReturnAt: NOW - 1, heroReturnFrom: { x: 0, y: 0, at: 0 } }), NOW),
     ).toBeNull();
     expect(heroWalkVoyage(map([post({})]), NOW)).toBeNull();
   });

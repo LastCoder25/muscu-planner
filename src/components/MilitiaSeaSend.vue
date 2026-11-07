@@ -6,7 +6,12 @@
 -->
 <template>
   <div v-if="max > 0 && destinations.length" class="mss">
-    <button type="button" class="mss-toggle" :aria-expanded="open" @click="open = !open">
+    <button
+      type="button"
+      class="mss-toggle"
+      :aria-expanded="open"
+      @click="open = !open"
+    >
       ⛵ Envoyer sur une autre île
       <span class="mss-chev">{{ open ? '▾' : '▸' }}</span>
     </button>

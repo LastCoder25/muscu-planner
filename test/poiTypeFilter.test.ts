@@ -100,11 +100,7 @@ describe('le filtre par type de lieu', () => {
   });
 
   it('une puce par type présent, dans l’ordre, avec son compte', () => {
-    const pois = [
-      { type: 'camp' as PoiType },
-      { type: 'mine' as PoiType },
-      { type: 'mine' as PoiType },
-    ];
+    const pois = [{ type: 'camp' as PoiType }, { type: 'mine' as PoiType }, { type: 'mine' as PoiType }];
     expect(typeOptions(pois)).toEqual([
       { type: 'mine', total: 2 },
       { type: 'camp', total: 1 },
@@ -127,7 +123,9 @@ describe('🎚️ le résumé des filtres repliés', () => {
     expect(filterSummary({ only: ['mine'], hidden: ['camp'] }, present).text).toBe(
       'Mine seulement',
     );
-    expect(filterSummary({ only: [], hidden: ['camp'] }, present).text).toBe('sans Camp');
+    expect(filterSummary({ only: [], hidden: ['camp'] }, present).text).toBe(
+      'sans Camp',
+    );
   });
   it('au-delà de deux types, un compte', () => {
     const f = { only: ['mine', 'camp', 'rift'] as PoiType[], hidden: [] };
@@ -144,7 +142,9 @@ describe('🗺️ le filtre effectif (types présents aujourd’hui)', () => {
     const f = effectiveTypeFilter({ only: ['arena'], hidden: [] }, present);
     expect(present.filter((t) => typeShown(f, t))).toEqual(present);
     // …et le résumé le dit : rien n’est filtré.
-    expect(filterSummary({ only: ['arena'], hidden: [] }, present).active).toBe(false);
+    expect(filterSummary({ only: ['arena'], hidden: [] }, present).active).toBe(
+      false,
+    );
   });
   // 🚶 Demandé : « rajoute un filtre pour les déplacements de troupes ». Masqués, le résumé
   // replié le DIT — sinon des voyages en cours invisibles se liraient comme une carte vide.

@@ -21,7 +21,6 @@ L'esquive existe dans le calcul (`dodgeAdd`) mais seuls les talents la donnent :
 objet n'en porte.
 
 **Difficulté de chaque boost :**
-
 - 🟢 **existe** : il suffit de le proposer sur cet emplacement ;
 - 🟡 **simple** : le moteur a déjà le champ qu'il faut, il faut juste le brancher ;
 - 🟠 **nouveau** : il faut ajouter une petite règle au moteur de combat ;
@@ -34,50 +33,50 @@ changeraient de résultat, et avec eux toute la calibration du jeu.
 
 ### ⚔️ Arme — le coup porté
 
-| Boost                 | Ce qu'il fait                                                    | Difficulté | Avis                                                                                                                        |
-| --------------------- | ---------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Dégâts                | + % sur chaque coup                                              | 🟢         | ✅ stat principale                                                                                                          |
-| Élan                  | + dégâts à chaque coup porté pendant le combat, jusqu'à 6 coups  | 🟢         | ✅                                                                                                                          |
-| Vol de vie            | tu récupères une part des dégâts infligés                        | 🟢         | ✅                                                                                                                          |
-| Exécution             | + dégâts quand l'ennemi a moins de 25 % de ses PV                | 🟢         | ✅                                                                                                                          |
-| Critique (chance)     | chance de faire un coup critique                                 | 🟢         | ⚠️ plafonné vers le niveau 30 : à mettre plutôt sur l'accessoire, voir plus bas                                             |
-| **Dégâts critiques**  | un critique fait plus que ×2                                     | 🟡         | ✅ **à ajouter**. Pas de plafond, garde sa valeur en fin de partie                                                          |
-| **Précision**         | réduit la chance d'esquive de l'ennemi                           | 🟡         | ✅ utile contre les monstres « insaisissables »                                                                             |
-| **Vitesse d'attaque** | + coups par tour                                                 | 🟡         | ⚠️ très puissant : chaque coup profite aussi du vol de vie et de l'élan. À réserver aux valeurs faibles ou aux pièces rares |
-| **Saignement**        | les coups laissent des dégâts qui continuent sur plusieurs tours | 🟠         | 👍 donne un vrai style de jeu                                                                                               |
-| **Étourdissement**    | chance que l'ennemi saute son prochain tour                      | 🟠         | ⚠️ fort contre les boss, à limiter en fréquence                                                                             |
-| Pénétration           | ignore une part de la réduction de l'ennemi                      | 🟡         | ❌ très peu de monstres ont de la réduction, donc presque sans effet                                                        |
+| Boost | Ce qu'il fait | Difficulté | Avis |
+| --- | --- | --- | --- |
+| Dégâts | + % sur chaque coup | 🟢 | ✅ stat principale |
+| Élan | + dégâts à chaque coup porté pendant le combat, jusqu'à 6 coups | 🟢 | ✅ |
+| Vol de vie | tu récupères une part des dégâts infligés | 🟢 | ✅ |
+| Exécution | + dégâts quand l'ennemi a moins de 25 % de ses PV | 🟢 | ✅ |
+| Critique (chance) | chance de faire un coup critique | 🟢 | ⚠️ plafonné vers le niveau 30 : à mettre plutôt sur l'accessoire, voir plus bas |
+| **Dégâts critiques** | un critique fait plus que ×2 | 🟡 | ✅ **à ajouter**. Pas de plafond, garde sa valeur en fin de partie |
+| **Précision** | réduit la chance d'esquive de l'ennemi | 🟡 | ✅ utile contre les monstres « insaisissables » |
+| **Vitesse d'attaque** | + coups par tour | 🟡 | ⚠️ très puissant : chaque coup profite aussi du vol de vie et de l'élan. À réserver aux valeurs faibles ou aux pièces rares |
+| **Saignement** | les coups laissent des dégâts qui continuent sur plusieurs tours | 🟠 | 👍 donne un vrai style de jeu |
+| **Étourdissement** | chance que l'ennemi saute son prochain tour | 🟠 | ⚠️ fort contre les boss, à limiter en fréquence |
+| Pénétration | ignore une part de la réduction de l'ennemi | 🟡 | ❌ très peu de monstres ont de la réduction, donc presque sans effet |
 
 ### 🛡️ Armure — les coups encaissés
 
-| Boost                        | Ce qu'il fait                                                  | Difficulté | Avis                                                                                                                                                                  |
-| ---------------------------- | -------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PV                           | + % de PV max                                                  | 🟢         | ✅ stat principale                                                                                                                                                    |
-| Réduction de dégâts          | − % sur chaque coup reçu, plafonné à 50 %                      | 🟢         | ✅ stat principale                                                                                                                                                    |
-| Épines                       | renvoie une part des dégâts reçus à l'ennemi                   | 🟢         | ✅                                                                                                                                                                    |
-| Régénération                 | + PV récupérés **entre** deux combats                          | 🟢         | ✅                                                                                                                                                                    |
-| **Blocage**                  | chance d'encaisser un coup presque sans dégâts (−75 %)         | 🟠         | ✅ **ta proposition, et elle est bonne**. La réduction enlève un peu sur chaque coup, le blocage enlève beaucoup sur quelques coups : c'est un autre style de défense |
-| **Résistance aux critiques** | les critiques de l'ennemi font moins mal                       | 🟡         | ✅ utile contre les monstres « féroces »                                                                                                                              |
-| **Bouclier de départ**       | tu commences le combat avec une barrière égale à X % de tes PV | 🟠         | 👍 simple à comprendre, facile à montrer dans l'animation                                                                                                             |
-| **Récupération en combat**   | + X % de PV à chaque tour                                      | 🟠         | ⚠️ c'est le risque de héros impossible à tuer : il faut qu'elle compte dans la même limite de soin par tour que le vol de vie                                         |
-| **Riposte**                  | chance de contre-attaquer quand on te frappe                   | 🟠         | 👍 correspond bien à « l'armure qui encaisse et répond »                                                                                                              |
-| Plafond par coup             | aucun coup ne retire plus de X % de tes PV                     | 🟠         | ❌ c'est déjà l'effet du set complet du Colosse, ce serait un doublon                                                                                                 |
+| Boost | Ce qu'il fait | Difficulté | Avis |
+| --- | --- | --- | --- |
+| PV | + % de PV max | 🟢 | ✅ stat principale |
+| Réduction de dégâts | − % sur chaque coup reçu, plafonné à 50 % | 🟢 | ✅ stat principale |
+| Épines | renvoie une part des dégâts reçus à l'ennemi | 🟢 | ✅ |
+| Régénération | + PV récupérés **entre** deux combats | 🟢 | ✅ |
+| **Blocage** | chance d'encaisser un coup presque sans dégâts (−75 %) | 🟠 | ✅ **ta proposition, et elle est bonne**. La réduction enlève un peu sur chaque coup, le blocage enlève beaucoup sur quelques coups : c'est un autre style de défense |
+| **Résistance aux critiques** | les critiques de l'ennemi font moins mal | 🟡 | ✅ utile contre les monstres « féroces » |
+| **Bouclier de départ** | tu commences le combat avec une barrière égale à X % de tes PV | 🟠 | 👍 simple à comprendre, facile à montrer dans l'animation |
+| **Récupération en combat** | + X % de PV à chaque tour | 🟠 | ⚠️ c'est le risque de héros impossible à tuer : il faut qu'elle compte dans la même limite de soin par tour que le vol de vie |
+| **Riposte** | chance de contre-attaquer quand on te frappe | 🟠 | 👍 correspond bien à « l'armure qui encaisse et répond » |
+| Plafond par coup | aucun coup ne retire plus de X % de tes PV | 🟠 | ❌ c'est déjà l'effet du set complet du Colosse, ce serait un doublon |
 
 ### 💍 Accessoire — les bonus indirects
 
-| Boost                      | Ce qu'il fait                                           | Difficulté | Avis                                                                                                   |
-| -------------------------- | ------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| Critique (chance)          | chance de faire un coup critique                        | 🟢         | ✅ stat principale, à associer aux dégâts critiques de l'arme                                          |
-| Rage                       | + dégâts quand tu as moins de 30 % de tes PV            | 🟢         | ✅                                                                                                     |
-| Initiative                 | tu commences le combat en premier plus souvent          | 🟢         | ✅                                                                                                     |
-| Or                         | + or gagné                                              | 🟢         | ✅                                                                                                     |
-| Découverte d'objets        | + chance de meilleurs objets (déjà limitée à ton rang)  | 🟢         | ✅                                                                                                     |
-| Régénération               | + PV récupérés entre deux combats                       | 🟢         | ✅ si tu la veux aussi ici                                                                             |
-| **Esquive**                | chance d'éviter complètement un coup (plafonnée à 40 %) | 🟡         | ✅ déjà calculée pour les talents, un « anneau d'agilité » a du sens                                   |
-| **Dressage des familiers** | + XP gagnée par ton familier                            | 🟡         | 👍 indirect et ne touche pas au sport                                                                  |
-| XP ou énergie              | + XP ou énergie gagnée                                  | —          | ❌ **exclu** : le sport doit rester la seule source de progression                                     |
-| Pierres d'invocation, clés | + ressources de boss ou de Labyrinthe                   | —          | ❌ **exclu** : ces ressources relient les activités entre elles, les donner en bonus casserait ce lien |
-| Trajet des expéditions     | expéditions plus rapides                                | —          | ❌ c'est déjà le rôle de l'Avant-poste                                                                 |
+| Boost | Ce qu'il fait | Difficulté | Avis |
+| --- | --- | --- | --- |
+| Critique (chance) | chance de faire un coup critique | 🟢 | ✅ stat principale, à associer aux dégâts critiques de l'arme |
+| Rage | + dégâts quand tu as moins de 30 % de tes PV | 🟢 | ✅ |
+| Initiative | tu commences le combat en premier plus souvent | 🟢 | ✅ |
+| Or | + or gagné | 🟢 | ✅ |
+| Découverte d'objets | + chance de meilleurs objets (déjà limitée à ton rang) | 🟢 | ✅ |
+| Régénération | + PV récupérés entre deux combats | 🟢 | ✅ si tu la veux aussi ici |
+| **Esquive** | chance d'éviter complètement un coup (plafonnée à 40 %) | 🟡 | ✅ déjà calculée pour les talents, un « anneau d'agilité » a du sens |
+| **Dressage des familiers** | + XP gagnée par ton familier | 🟡 | 👍 indirect et ne touche pas au sport |
+| XP ou énergie | + XP ou énergie gagnée | — | ❌ **exclu** : le sport doit rester la seule source de progression |
+| Pierres d'invocation, clés | + ressources de boss ou de Labyrinthe | — | ❌ **exclu** : ces ressources relient les activités entre elles, les donner en bonus casserait ce lien |
+| Trajet des expéditions | expéditions plus rapides | — | ❌ c'est déjà le rôle de l'Avant-poste |
 
 ### Ce qui en ressort
 
@@ -134,17 +133,17 @@ fonctionnent déjà sur une condition et qu'on les garde tels quels.
 
 ### Des pouvoirs possibles
 
-| Pouvoir                | Type           | Effet                                                          | Ce que la rareté améliore |
-| ---------------------- | -------------- | -------------------------------------------------------------- | ------------------------- |
-| ⚡ **Frappe céleste**  | jauge, attaque | retire X % des PV max de l'ennemi                              | la valeur de X            |
-| 🛡️ **Bouclier sacré**  | jauge, défense | barrière égale à X % de tes PV                                 | la taille de la barrière  |
-| 🔥 **Phénix**          | condition      | un coup mortel ne te tue pas, tu repars avec X % de PV         | la valeur de X            |
-| 💨 **Second souffle**  | condition      | tu récupères X % de tes PV la 1re fois que tu passes sous 30 % | la valeur de X            |
-| ⏳ **Arrêt du temps**  | jauge          | tu joues un tour de plus                                       | la vitesse de recharge    |
-| 🕯️ **Malédiction**     | jauge          | l'ennemi fait −X % de dégâts pendant N tours                   | X et N                    |
-| 👻 **Drain d'âme**     | jauge          | tu retires X % des PV max de l'ennemi et tu les récupères      | la valeur de X            |
-| 🥁 **Totem de guerre** | jauge          | + X % de dégâts pendant N tours                                | X et N                    |
-| 🪞 **Miroir**          | jauge          | le prochain coup reçu est renvoyé à l'ennemi                   | la part renvoyée          |
+| Pouvoir | Type | Effet | Ce que la rareté améliore |
+| --- | --- | --- | --- |
+| ⚡ **Frappe céleste** | jauge, attaque | retire X % des PV max de l'ennemi | la valeur de X |
+| 🛡️ **Bouclier sacré** | jauge, défense | barrière égale à X % de tes PV | la taille de la barrière |
+| 🔥 **Phénix** | condition | un coup mortel ne te tue pas, tu repars avec X % de PV | la valeur de X |
+| 💨 **Second souffle** | condition | tu récupères X % de tes PV la 1re fois que tu passes sous 30 % | la valeur de X |
+| ⏳ **Arrêt du temps** | jauge | tu joues un tour de plus | la vitesse de recharge |
+| 🕯️ **Malédiction** | jauge | l'ennemi fait −X % de dégâts pendant N tours | X et N |
+| 👻 **Drain d'âme** | jauge | tu retires X % des PV max de l'ennemi et tu les récupères | la valeur de X |
+| 🥁 **Totem de guerre** | jauge | + X % de dégâts pendant N tours | X et N |
+| 🪞 **Miroir** | jauge | le prochain coup reçu est renvoyé à l'ennemi | la part renvoyée |
 
 ⚠️ **Plafonner les effets en « % des PV max de l'ennemi »**, sinon ils écrasent les boss
 qui ont beaucoup de PV. L'effet légendaire Rétorsion (7 % des PV max par coup) montre
@@ -155,15 +154,15 @@ déjà l'ordre de grandeur acceptable.
 **Il y a 8 voies et 8 sets de voie. Chaque set pourrait avoir sa relique, avec le pouvoir
 de sa voie :**
 
-| Voie          | Pouvoir de sa relique             |
-| ------------- | --------------------------------- |
-| 💥 Berserker  | Totem de guerre                   |
-| 🛡️ Gardien    | Bouclier sacré                    |
-| 🗡️ Assassin   | Frappe céleste                    |
-| 🩸 Vampire    | Drain d'âme                       |
-| 🪨 Colosse    | Phénix                            |
-| 🤺 Duelliste  | Arrêt du temps                    |
-| 🌵 Épineux    | Miroir                            |
+| Voie | Pouvoir de sa relique |
+| --- | --- |
+| 💥 Berserker | Totem de guerre |
+| 🛡️ Gardien | Bouclier sacré |
+| 🗡️ Assassin | Frappe céleste |
+| 🩸 Vampire | Drain d'âme |
+| 🪨 Colosse | Phénix |
+| 🤺 Duelliste | Arrêt du temps |
+| 🌵 Épineux | Miroir |
 | 🌀 Frénétique | Malédiction, ou un pouvoir d'élan |
 
 Les reliques trouvées en dehors des sets tirent un pouvoir au hasard dans la liste. La
@@ -235,11 +234,11 @@ L'étourdissement quitte l'arme et devient la **Parade**, sur l'armure. Tu as pa
 bouclier : il n'y a pas d'emplacement bouclier, donc ces stats vont sur l'armure. Si tu
 veux que ça se voie, on peut ajouter « Écu » et « Pavois » aux noms d'armure.
 
-| Stat        | Quand elle se déclenche         | Ce qu'elle fait                                        | Ce qu'elle ne fait pas     |
-| ----------- | ------------------------------- | ------------------------------------------------------ | -------------------------- |
-| **Blocage** | une chance sur chaque coup reçu | le coup ne fait que 25 % de ses dégâts                 | pas de contre-attaque      |
-| **Parade**  | une chance sur chaque coup reçu | tu évites le coup, et l'ennemi saute son prochain tour | pas de dégâts              |
-| **Riposte** | une chance sur chaque coup reçu | tu évites le coup et tu contre-attaques                | l'ennemi n'est pas étourdi |
+| Stat | Quand elle se déclenche | Ce qu'elle fait | Ce qu'elle ne fait pas |
+| --- | --- | --- | --- |
+| **Blocage** | une chance sur chaque coup reçu | le coup ne fait que 25 % de ses dégâts | pas de contre-attaque |
+| **Parade** | une chance sur chaque coup reçu | tu évites le coup, et l'ennemi saute son prochain tour | pas de dégâts |
+| **Riposte** | une chance sur chaque coup reçu | tu évites le coup et tu contre-attaques | l'ennemi n'est pas étourdi |
 
 ⚠️ **La parade est la plus dangereuse pour l'équilibrage.** Quand l'ennemi saute un tour,
 toi tu frappes plusieurs fois pendant ce tour (multi-frappe). Il faut trois limites : la
@@ -273,36 +272,36 @@ de trop, voir la question 1 en fin de document.
 La relique renforce un build : elle est d'autant plus efficace que le reste de l'équipement
 déclenche souvent l'action qui la charge.
 
-| Pouvoir                 | Ce qui remplit la jauge                                                 | Ce qu'il fait quand elle est pleine                                    | Stat liée        |
-| ----------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------- |
-| 🛡️ **Rempart vengeur**  | les dégâts évités par tes blocages s'accumulent                         | renvoie tout le stock à l'ennemi d'un coup                             | blocage          |
-| 🌵 **Éclat de ronces**  | les dégâts renvoyés par tes épines s'accumulent                         | une explosion qui inflige tout ce qui a été accumulé                   | épines           |
-| 🎯 **Coup fatal**       | chaque coup critique                                                    | ton prochain coup est un critique ×3 que l'ennemi ne peut pas esquiver | critique         |
-| 🩸 **Festin**           | le soin perdu parce que ton vol de vie a atteint sa limite              | ce soin perdu est converti en dégâts, ou en barrière                   | vol de vie       |
-| 🌀 **Tempête**          | l'élan arrive à son maximum                                             | l'élan retombe à zéro, en échange d'une rafale de coups gratuits       | élan             |
-| 💨 **Contre-temps**     | chaque coup esquivé                                                     | tu joues un tour de plus                                               | esquive          |
-| 🤺 **Riposte parfaite** | chaque parade                                                           | ta prochaine riposte est un critique certain                           | parade / riposte |
-| 🔥 **Brasier**          | la jauge ne se remplit que si tu as moins de 30 % de PV, mais très vite | un coup dont la force dépend des PV qui te manquent                    | rage             |
-| 🧱 **Carapace**         | les dégâts que tu encaisses                                             | une barrière égale à une part de ces dégâts                            | PV / réduction   |
-| 💧 **Source**           | un peu à chaque tour                                                    | tu récupères X % de tes PV max                                         | régénération     |
-| ⚡ **Ouverture**        | la jauge est **pleine au début du combat**, puis se recharge lentement  | une grosse frappe dès le premier tour                                  | initiative       |
-| ⚰️ **Moisson**          | chaque monstre tué pendant un donjon                                    | le combat suivant commence avec un bonus de dégâts                     | exécution        |
+| Pouvoir | Ce qui remplit la jauge | Ce qu'il fait quand elle est pleine | Stat liée |
+| --- | --- | --- | --- |
+| 🛡️ **Rempart vengeur** | les dégâts évités par tes blocages s'accumulent | renvoie tout le stock à l'ennemi d'un coup | blocage |
+| 🌵 **Éclat de ronces** | les dégâts renvoyés par tes épines s'accumulent | une explosion qui inflige tout ce qui a été accumulé | épines |
+| 🎯 **Coup fatal** | chaque coup critique | ton prochain coup est un critique ×3 que l'ennemi ne peut pas esquiver | critique |
+| 🩸 **Festin** | le soin perdu parce que ton vol de vie a atteint sa limite | ce soin perdu est converti en dégâts, ou en barrière | vol de vie |
+| 🌀 **Tempête** | l'élan arrive à son maximum | l'élan retombe à zéro, en échange d'une rafale de coups gratuits | élan |
+| 💨 **Contre-temps** | chaque coup esquivé | tu joues un tour de plus | esquive |
+| 🤺 **Riposte parfaite** | chaque parade | ta prochaine riposte est un critique certain | parade / riposte |
+| 🔥 **Brasier** | la jauge ne se remplit que si tu as moins de 30 % de PV, mais très vite | un coup dont la force dépend des PV qui te manquent | rage |
+| 🧱 **Carapace** | les dégâts que tu encaisses | une barrière égale à une part de ces dégâts | PV / réduction |
+| 💧 **Source** | un peu à chaque tour | tu récupères X % de tes PV max | régénération |
+| ⚡ **Ouverture** | la jauge est **pleine au début du combat**, puis se recharge lentement | une grosse frappe dès le premier tour | initiative |
+| ⚰️ **Moisson** | chaque monstre tué pendant un donjon | le combat suivant commence avec un bonus de dégâts | exécution |
 
 **Phénix** et **Second souffle** (aujourd'hui des effets légendaires de relique) restent des
 pouvoirs **déclenchés par une condition**, sans jauge : ce sont des filets de sécurité.
 
 #### Le pouvoir de chaque voie (la relique de son set)
 
-| Voie          | Pouvoir de sa relique | Pourquoi                                       |
-| ------------- | --------------------- | ---------------------------------------------- |
-| 💥 Berserker  | 🔥 Brasier            | plus il perd de PV, plus il frappe fort        |
-| 🛡️ Gardien    | 🛡️ Rempart vengeur    | il bloque les coups et les rend d'un seul coup |
-| 🗡️ Assassin   | 🎯 Coup fatal         | le critique qui achève                         |
-| 🩸 Vampire    | 🩸 Festin             | le soin en trop devient une arme               |
-| 🪨 Colosse    | 🧱 Carapace           | il encaisse et se renforce                     |
-| 🤺 Duelliste  | 🤺 Riposte parfaite   | parer, puis punir                              |
-| 🌵 Épineux    | 🌵 Éclat de ronces    | les épines accumulées explosent                |
-| 🌀 Frénétique | 🌀 Tempête            | l'élan qui déborde en rafale                   |
+| Voie | Pouvoir de sa relique | Pourquoi |
+| --- | --- | --- |
+| 💥 Berserker | 🔥 Brasier | plus il perd de PV, plus il frappe fort |
+| 🛡️ Gardien | 🛡️ Rempart vengeur | il bloque les coups et les rend d'un seul coup |
+| 🗡️ Assassin | 🎯 Coup fatal | le critique qui achève |
+| 🩸 Vampire | 🩸 Festin | le soin en trop devient une arme |
+| 🪨 Colosse | 🧱 Carapace | il encaisse et se renforce |
+| 🤺 Duelliste | 🤺 Riposte parfaite | parer, puis punir |
+| 🌵 Épineux | 🌵 Éclat de ronces | les épines accumulées explosent |
+| 🌀 Frénétique | 🌀 Tempête | l'élan qui déborde en rafale |
 
 Ça fait **14 pouvoirs** : 8 pour les voies et 6 autres (Contre-temps, Source, Ouverture,
 Moisson, Phénix, Second souffle). Une relique trouvée en dehors d'un set tire un pouvoir
@@ -340,15 +339,15 @@ Chaque objet peut avoir des stats qui lui correspondent, avec moins de stats par
 Avec quatre emplacements, l'armure devait tout porter : PV, réduction, blocage, parade,
 épines. Sur sept, chaque objet a un rôle clair.
 
-| Emplacement     | Stats principales             | Stats de soutien                                  | Rôle                 |
-| --------------- | ----------------------------- | ------------------------------------------------- | -------------------- |
-| ⚔️ **Arme**     | dégâts · dégâts critiques     | élan · vol de vie · exécution · précision         | le coup porté        |
-| 🥋 **Armure**   | PV · réduction                | épines · régénération                             | encaisser            |
-| 🛡️ **Bouclier** | blocage · réduction           | parade · riposte · épines                         | arrêter le coup      |
-| ⛑️ **Casque**   | PV · résistance aux critiques | initiative · découverte d'objets                  | protéger, voir venir |
-| 🥾 **Bottes**   | esquive · initiative          | vitesse d'attaque (faible) · régénération         | le jeu de jambes     |
-| 💍 **Anneau**   | chance de critique · rage     | or · découverte d'objets · dressage des familiers | bonus indirects      |
-| 🔮 **Relique**  | **un pouvoir** (Partie 3)     | aucune                                            | l'attaque spéciale   |
+| Emplacement | Stats principales | Stats de soutien | Rôle |
+| --- | --- | --- | --- |
+| ⚔️ **Arme** | dégâts · dégâts critiques | élan · vol de vie · exécution · précision | le coup porté |
+| 🥋 **Armure** | PV · réduction | épines · régénération | encaisser |
+| 🛡️ **Bouclier** | blocage · réduction | parade · riposte · épines | arrêter le coup |
+| ⛑️ **Casque** | PV · résistance aux critiques | initiative · découverte d'objets | protéger, voir venir |
+| 🥾 **Bottes** | esquive · initiative | vitesse d'attaque (faible) · régénération | le jeu de jambes |
+| 💍 **Anneau** | chance de critique · rage | or · découverte d'objets · dressage des familiers | bonus indirects |
+| 🔮 **Relique** | **un pouvoir** (Partie 3) | aucune | l'attaque spéciale |
 
 **4 à 7 stats par emplacement**, contre 6 visées dans la Partie 3. Ça suffit : avec sept
 emplacements, c'est l'ensemble de l'équipement qui fait la variété, plus un objet isolé.
@@ -447,16 +446,16 @@ Ce chantier inclut tout le reste : les stats par emplacement, les nouvelles stat
 relique à pouvoir. Mieux vaut tout faire dans le même chantier : sinon il faudrait
 rééquilibrer deux fois.
 
-| Étape                                                                                                                               | Estimation       |
-| ----------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| Types, emplacements, tirage des drops, stats par emplacement, pièces de départ                                                      | 1 j              |
-| Nouvelles stats dans le moteur de combat (dégâts critiques, blocage, parade, riposte, esquive, résistance aux critiques, précision) | 1 à 1,5 j        |
-| Relique à pouvoir (jauge, 14 pouvoirs, animation)                                                                                   | 2 à 3 j          |
-| Sets sur 6 emplacements, nouvelle répartition des légendaires                                                                       | ½ j              |
-| Nouvel optimiseur, avec mesure du temps et du résultat                                                                              | 1 j              |
-| Écran : grille, avatar (bouclier, casque, bottes), fiches                                                                           | 1 à 1,5 j        |
-| Mesures et recalibration (puissance, donjons, boss, Labyrinthe, sets, voies, drops)                                                 | 2 j              |
-| **Total**                                                                                                                           | **9 à 11 jours** |
+| Étape | Estimation |
+| --- | --- |
+| Types, emplacements, tirage des drops, stats par emplacement, pièces de départ | 1 j |
+| Nouvelles stats dans le moteur de combat (dégâts critiques, blocage, parade, riposte, esquive, résistance aux critiques, précision) | 1 à 1,5 j |
+| Relique à pouvoir (jauge, 14 pouvoirs, animation) | 2 à 3 j |
+| Sets sur 6 emplacements, nouvelle répartition des légendaires | ½ j |
+| Nouvel optimiseur, avec mesure du temps et du résultat | 1 j |
+| Écran : grille, avatar (bouclier, casque, bottes), fiches | 1 à 1,5 j |
+| Mesures et recalibration (puissance, donjons, boss, Labyrinthe, sets, voies, drops) | 2 j |
+| **Total** | **9 à 11 jours** |
 
 **Découpage conseillé** : chaque étape peut être livrée seule sans casser le jeu.
 

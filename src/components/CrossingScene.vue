@@ -3,12 +3,7 @@
        temps réel, l'île quittée qui s'éloigne et celle d'arrivée qui grandit — dans le ciel et
        les effets de l'île de destination (`crossingTheme`). Le compte à rebours dit quand on
        accoste. Ne décide rien : l'accostage reste celui du store. -->
-  <div
-    class="xsea"
-    :class="['m-' + theme.mood, { still: reduced }]"
-    role="status"
-    aria-live="polite"
-  >
+  <div class="xsea" :class="['m-' + theme.mood, { still: reduced }]" role="status" aria-live="polite">
     <svg
       class="xs-svg"
       viewBox="40 -140 320 440"

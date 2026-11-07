@@ -3,13 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { archipelOn, ISLAND_OUTPOST_LEVEL, ISLANDS } from '@/lib/archipelago';
 import { createMap, poiEmo, type ExpeditionMap } from '@/lib/expedition';
-import {
-  CONTROL,
-  controlIdOf,
-  controlRoster,
-  ensureControls,
-  garrisonDots,
-} from '@/lib/controlPoints';
+import { CONTROL, controlIdOf, controlRoster, ensureControls, garrisonDots } from '@/lib/controlPoints';
 import { ensureIslandConquest } from '@/lib/islandConquest';
 
 const NOW = 1_800_000_000_000;

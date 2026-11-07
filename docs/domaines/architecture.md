@@ -109,7 +109,6 @@ entrée plus récente marquée « SOURCE DE VÉRITÉ ».
     - ⚠️ **ET C’EST LA ROUTE PÉRILLEUSE QUI DISCRIMINE — la mutation l’a montré.** Ma première rédaction ne mesurait que la route calme : la mutation « offense sans signatures » y passait au **VERT**, parce que le défaut n’y coûte que 2 points au niveau 85 (94 → 96). Sur route DANGEREUSE il en coûte **13** (34 → 48) : la fin de partie y basculait de « pari » à « formalité ». Le test borne donc le périlleux sous 40 % à tout niveau — **borner le cas confortable ne prouve rien**.
 
   - **7 mutations, 7 rouges** (on jette les non-encaissés · on garde les plus vieux · plus de sortie rapide · purge désactivée · offense sans signatures · survie sans esquive · l’arrondi remis DANS le `min`, soit la cargaison bloquée de la v0.796).
-
 - **🧹 QUATRE DETTES RELEVÉES ET JAMAIS TRAITÉES (v0.789)**.
   - **L’horloge de la Guilde ne se nettoyait pas** : `setInterval` posé au niveau du setup, jamais arrêté — il battait après la fermeture du panneau en retenant la ref ET le composant. Exactement la fuite corrigée sur la carte d’expédition en v0.732, jamais répercutée.
   - **Quatre copies de `mulberry32`** (adventurers, caravan, siegeStage, combat). ⚠️ **Vérifié AVANT de toucher** : arithmétiquement **identiques**, seul l’idiome différait — donc aucun tirage ne bouge — et `combat.ts` n’importe rien, donc aucun cycle. `siegeStage` importait déjà `mulberry32` **vingt lignes au-dessus de sa propre copie**, dont le commentaire « sans dépendance » avait cessé d’être vrai. La garde `|| 1` sur la graine 0 est conservée.

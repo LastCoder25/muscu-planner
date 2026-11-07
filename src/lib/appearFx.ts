@@ -95,8 +95,7 @@ export function freshAppearances(
   const targets = enemyIslandTargets(map);
   const keys = targets.map(appearKey);
   const known = new Set(seen ?? []);
-  const show =
-    seen === null ? (firstTime ? targets : []) : targets.filter((p) => !known.has(appearKey(p)));
+  const show = seen === null ? (firstTime ? targets : []) : targets.filter((p) => !known.has(appearKey(p)));
   return {
     fresh: show.map((p, i) => ({
       key: appearKey(p),

@@ -39,7 +39,9 @@
             <div v-if="rows[b]?.pop === 'rank'" class="ax-note rank">
               {{ seg(b).rankEmoji }} Nouveau rang : {{ seg(b).rankName }} !
             </div>
-            <div v-else-if="rows[b]?.pop === 'star'" class="ax-note">⭐ Une étoile de plus !</div>
+            <div v-else-if="rows[b]?.pop === 'star'" class="ax-note">
+              ⭐ Une étoile de plus !
+            </div>
             <div v-else-if="rows[b]?.done && t.ascendReady" class="ax-note asc">
               ⬆️ ★★★★★ — prêt pour l’ascension
             </div>
@@ -74,9 +76,12 @@
                   <div class="ax-g-head">
                     <span class="ax-g-name ellipsis">{{ g.name }}</span>
                     <span class="ax-stars" :class="{ bump: rows[gb]?.pop }"
-                      >{{ seg(gb).rankEmoji }} {{ rankStarStr(seg(gb).star) }}</span
+                      >{{ seg(gb).rankEmoji }}
+                      {{ rankStarStr(seg(gb).star) }}</span
                     >
-                    <span class="ax-pct">{{ Math.round((rows[gb]?.width ?? 0) * 100) }} %</span>
+                    <span class="ax-pct"
+                      >{{ Math.round((rows[gb]?.width ?? 0) * 100) }} %</span
+                    >
                   </div>
                   <div class="ax-bar forge">
                     <div class="ax-fill" :style="fillStyle(gb)" />

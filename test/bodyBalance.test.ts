@@ -878,10 +878,7 @@ describe('needsChallenge — on propose un challenge dès que le prévu reste so
   });
   it('un groupe ok (≥ 60 %) mais sous la cible est proposé — c’est le changement', () => {
     const r = bodyBalance(
-      input({
-        targets: { dos: 10 },
-        sessions: [session('2026-09-15', [{ id: 'row', muscle: 'dos', sets: 7 }])],
-      }),
+      input({ targets: { dos: 10 }, sessions: [session('2026-09-15', [{ id: 'row', muscle: 'dos', sets: 7 }])] }),
       'week',
     )[0]!;
     expect(r.state).toBe('ok');

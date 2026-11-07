@@ -186,14 +186,7 @@ describe('⚫ garrisonDots — la garnison en points sous le fort', () => {
     expect(march(many)).toBe('');
     // Le roster, lui, sait toujours qui marche : seul le dessin se tait.
     const r = row(
-      controlRoster(
-        base(),
-        [{ poiId: MINE, midAt: 5 * H, ids: ['a', 'b'] }],
-        2 * H,
-        L,
-        new Set(),
-        null,
-      ),
+      controlRoster(base(), [{ poiId: MINE, midAt: 5 * H, ids: ['a', 'b'] }], 2 * H, L, new Set(), null),
       MINE,
     );
     expect(r.assault?.ids).toEqual(['a', 'b']);
@@ -256,8 +249,6 @@ describe('⚫⚫ garrisonDotRows — champions en haut, miliciens en dessous', (
     const enemy = row(controlRoster(base(), [], 0, L, new Set(), null), MINE);
     const assault = { ...enemy, seats: Infinity, assault: { ids: ['a', 'b'] } } as typeof enemy;
     expect(garrisonDotRows(assault)).toEqual(['', '']);
-    expect(
-      garrisonDotRows({ ...assault, assault: { ids: ['a'], hero: true } } as typeof assault),
-    ).toEqual(['', '']);
+    expect(garrisonDotRows({ ...assault, assault: { ids: ['a'], hero: true } } as typeof assault)).toEqual(['', '']);
   });
 });

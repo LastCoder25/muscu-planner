@@ -101,13 +101,7 @@ describe('🎯 la forteresse vise d’abord les objectifs qu’on tient', () => 
     expect(poi(r, fixedId)!.control!.attackAt).toBeGreaterThan(NOW);
     expect(dueRetakes(r, NOW)).toEqual([]);
     // L'armée est sur la carte dès maintenant, partie de la forteresse.
-    const seen = syncFieldArmies(r, {
-      raid: null,
-      detectR: 0,
-      reach: 200,
-      now: NOW,
-      playerLevel: 20,
-    });
+    const seen = syncFieldArmies(r, { raid: null, detectR: 0, reach: 200, now: NOW, playerLevel: 20 });
     const army = seen.pois.find((p) => p.army?.kind === 'retake' && p.army.targetId === OBJ);
     expect(army).toBeDefined();
   });

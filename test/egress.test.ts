@@ -30,10 +30,7 @@ describe('📉 écrire sans relire la ligne', () => {
   });
 });
 
-const duel = {
-  maxPv: 100,
-  steps: [{ pv: 1, crit: false, dealt: 1, taken: 0, bossPv: 0, bossTurns: 0, groupTurns: 1 }],
-};
+const duel = { maxPv: 100, steps: [{ pv: 1, crit: false, dealt: 1, taken: 0, bossPv: 0, bossTurns: 0, groupTurns: 1 }] };
 function report(i: number, withDuel = true): ExpeditionMessage {
   return {
     id: `m${i}`,
@@ -47,13 +44,7 @@ function report(i: number, withDuel = true): ExpeditionMessage {
     read: true,
     party: {
       win: true,
-      rift: {
-        level: 1,
-        maxPv: 10,
-        pvTrail: [5],
-        foeTrail: [],
-        ...(withDuel ? { boss: duel } : {}),
-      },
+      rift: { level: 1, maxPv: 10, pvTrail: [5], foeTrail: [], ...(withDuel ? { boss: duel } : {}) },
     } as unknown as ExpeditionMessage['party'],
   } as ExpeditionMessage;
 }

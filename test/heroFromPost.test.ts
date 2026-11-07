@@ -22,11 +22,7 @@ function ossuary(extra: object = {}): Poi {
 }
 const map = (pois: Poi[]) => ({ pois }) as unknown as ExpeditionMap;
 const target = { type: 'camp' } as const;
-const w = (originId: string | null, members: string[], hero = false) => ({
-  originId,
-  members,
-  hero,
-});
+const w = (originId: string | null, members: string[], hero = false) => ({ originId, members, hero });
 
 describe('attaque combinée : le héros part de son poste', () => {
   it('posté, son groupe est celui de son lieu, pas celui de la base', () => {

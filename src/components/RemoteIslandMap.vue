@@ -56,7 +56,12 @@
     </div>
     <!-- 🛡️ Les lieux tenus, en tuiles : le lieu touché (sur la carte ou ici) se gère dessous. -->
     <div class="rim-list">
-      <button type="button" class="rim-tile" :class="{ sel: sel === BASE }" @click="toggle(BASE)">
+      <button
+        type="button"
+        class="rim-tile"
+        :class="{ sel: sel === BASE }"
+        @click="toggle(BASE)"
+      >
         <span class="rt-emo">{{ island.id === 1 ? '🏰' : '🏘️' }}</span>
         <span class="rt-name">{{ townName }}</span>
         <span class="rt-n">🛡️ {{ reserve }}</span>
@@ -108,7 +113,9 @@
         >
           ⛵ Faire venir {{ shipN }} milicien{{ shipN > 1 ? 's' : '' }} sur l'île {{ activeId }}
         </button>
-        <p class="rm-note">2 h de mer. La réserve part d'abord, puis les lieux les plus garnis.</p>
+        <p class="rm-note">
+          2 h de mer. La réserve part d'abord, puis les lieux les plus garnis.
+        </p>
       </template>
       <p v-else class="rm-note">
         {{

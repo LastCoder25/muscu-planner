@@ -17,8 +17,7 @@ describe('🏋️ le sélecteur de la séance libre', () => {
   it('⚠️ toutes les orthographes de l’élastique sont sans charge', () => {
     for (const c of ['poids_du_corps', 'élastique', 'elastique', 'bands'])
       expect(isUnloadedEquipment(c)).toBe(true);
-    for (const c of ['barre', 'halteres', 'machine', null])
-      expect(isUnloadedEquipment(c)).toBe(false);
+    for (const c of ['barre', 'halteres', 'machine', null]) expect(isUnloadedEquipment(c)).toBe(false);
   });
 
   it('les exos récents, du plus récent, sans doublon', () => {

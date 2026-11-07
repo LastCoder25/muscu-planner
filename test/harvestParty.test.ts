@@ -287,15 +287,7 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
     expect(caravanHaulMult(team(1), road.advGear, 0)).toBeGreaterThan(1);
     let vues = 0;
     for (let seed = 1; seed <= 20; seed++) {
-      const o = resolveHarvestParty({
-        poi: p,
-        escort: team(1),
-        road,
-        hero,
-        seed,
-        playerLevel: 26,
-        pantheonLevel: 26,
-      });
+      const o = resolveHarvestParty({ poi: p, escort: team(1), road, hero, seed, playerLevel: 26, pantheonLevel: 26 });
       if (!o.win) continue;
       const solo = resolveOutcome(hero.combatant, p, seed, 26);
       if (solo.energy > 0) vues++;

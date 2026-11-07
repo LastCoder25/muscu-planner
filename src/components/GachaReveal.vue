@@ -87,10 +87,7 @@
                   >
                   <span
                     class="ivk-front-l font-display"
-                    :class="{
-                      word: GRADE_LABEL[c.grade].length > 1,
-                      long: GRADE_LABEL[c.grade].length > 7,
-                    }"
+                    :class="{ word: GRADE_LABEL[c.grade].length > 1, long: GRADE_LABEL[c.grade].length > 7 }"
                     >{{ GRADE_LABEL[c.grade] }}</span
                   >
                   <span class="ivk-front-n">{{ c.cell.name }}</span>
@@ -2031,7 +2028,11 @@ onBeforeUnmount(() => {
    plein — il n’était qu’un mot de 12 px posé sur l’illustration et un liseré de 2 px. */
 .ivk-front {
   transform: rotateY(180deg);
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--c) 38%, #120f0b), #120f0b 78%);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--c) 38%, #120f0b),
+    #120f0b 78%
+  );
   border: 3px solid var(--c);
   box-shadow: 0 0 14px color-mix(in srgb, var(--c) 55%, transparent);
   display: flex;

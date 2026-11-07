@@ -8,7 +8,12 @@ import {
   harvestGuardOf,
 } from '@/lib/expedition';
 import { resolveHarvestParty } from '@/lib/harvestParty';
-import { caravanHurtMs, caravanLegMin, refAdvGear, refAdventurer } from '@/lib/caravan';
+import {
+  caravanHurtMs,
+  caravanLegMin,
+  refAdvGear,
+  refAdventurer,
+} from '@/lib/caravan';
 import { engageCap, type Adventurer } from '@/lib/adventurers';
 import { campWinPct, forceLootPreview, resolveCamp } from '@/lib/camp';
 import { partyAllies } from '@/lib/caravan';

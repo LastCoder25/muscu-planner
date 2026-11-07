@@ -50,9 +50,7 @@
           <div class="xf-label">{{ r.label }}</div>
           <!-- Le chiffre n'apparaît qu'au tour de l'anneau : un « +0 XP » en attente se lit comme
                « rien gagné ». -->
-          <div v-if="r.gain" class="xf-gain font-display" :class="{ on: st[i]?.started }">
-            +{{ st[i]?.gain ?? 0 }} XP
-          </div>
+          <div v-if="r.gain" class="xf-gain font-display" :class="{ on: st[i]?.started }">+{{ st[i]?.gain ?? 0 }} XP</div>
           <div v-if="(st[i]?.bursts ?? 0) > 0" :key="'up' + st[i]!.bursts" class="xf-up">
             ⬆ Niveau {{ st[i]?.level }} !
           </div>
@@ -248,11 +246,7 @@ onBeforeUnmount(stop);
   position: absolute;
   inset: 8px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--c) 35%, transparent),
-    transparent 70%
-  );
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 35%, transparent), transparent 70%);
   opacity: 0.35;
   transition: opacity 0.3s;
 }
@@ -296,12 +290,7 @@ onBeforeUnmount(stop);
   position: absolute;
   inset: -20px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    #fff 0%,
-    color-mix(in srgb, var(--c) 70%, transparent) 30%,
-    transparent 65%
-  );
+  background: radial-gradient(circle, #fff 0%, color-mix(in srgb, var(--c) 70%, transparent) 30%, transparent 65%);
   pointer-events: none;
   animation: xf-flash 0.6s ease-out forwards;
 }
@@ -318,9 +307,7 @@ onBeforeUnmount(stop);
   margin: -3.5px 0 0 -3.5px;
   border-radius: 50%;
   background: var(--c);
-  box-shadow:
-    0 0 8px var(--c),
-    0 0 2px #fff;
+  box-shadow: 0 0 8px var(--c), 0 0 2px #fff;
   animation: xf-spark 0.8s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
 }
 .xf-label {

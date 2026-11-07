@@ -47,9 +47,7 @@ describe('le siège ne compte pas un héros retenu sur la carte', () => {
     expect(heroAwayOnMapAt(m, NOW + 10 * MIN)).toBe(false);
   });
   it('en mer à partir du départ du bateau', () => {
-    const m = map([], {
-      crossing: { from: 1, to: 2, bookedAt: 0, departAt: NOW, arriveAt: NOW + 1, ids: [] },
-    });
+    const m = map([], { crossing: { from: 1, to: 2, bookedAt: 0, departAt: NOW, arriveAt: NOW + 1, ids: [] } });
     expect(heroAwayOnMapAt(m, NOW - 1)).toBe(false);
     expect(heroAwayOnMapAt(m, NOW)).toBe(true);
   });
@@ -68,13 +66,7 @@ describe('une attaque combinée partant de la base ne prend pas un héros absent
     returnAt: NOW + 90 * MIN,
     state: 'waiting',
   };
-  const ctx = (m: ExpeditionMap) => ({
-    now: NOW,
-    map: m,
-    advs: [],
-    raidAt: null,
-    heroWoundedAt: () => false,
-  });
+  const ctx = (m: ExpeditionMap) => ({ now: NOW, map: m, advs: [], raidAt: null, heroWoundedAt: () => false });
   it('à la base il part ; en marche vers la base, non', () => {
     expect(wingDeparture(wing, ctx(map([])))).toEqual({ members: [], hero: true });
     expect(wingDeparture(wing, ctx(map([], { heroReturnAt: NOW + MIN })))).toEqual({
@@ -86,13 +78,7 @@ describe('une attaque combinée partant de la base ne prend pas un héros absent
 
 describe('déjà en route vers la base, il ne reprend pas son ancien poste', () => {
   it('heroBackToPost ne le remet pas en garnison', () => {
-    const m = heroBackToPost(
-      map([post('a')], { heroReturnAt: NOW + 20 * MIN }),
-      'a',
-      unit,
-      NOW,
-      15,
-    );
+    const m = heroBackToPost(map([post('a')], { heroReturnAt: NOW + 20 * MIN }), 'a', unit, NOW, 15);
     expect(m.pois[0]!.control!.hero).toBeUndefined();
     expect(m.heroReturnAt).toBe(NOW + 20 * MIN);
   });
@@ -114,25 +100,15 @@ describe('la production faite avec lui reste acquise quand il part', () => {
     expect(m.pois[0]!.control!.hero).toBe(true);
   });
   it('embarquer à la forteresse met de côté, un simple aperçu non', () => {
-    const f = post(
-      'isl_fortress',
-      { hero: true, heroUnit: unit, collectedAt: NOW - 60 * MIN },
-      'fortress',
-    );
+    const f = post('isl_fortress', { hero: true, heroUnit: unit, collectedAt: NOW - 60 * MIN }, 'fortress');
     expect(boardFromFortress(map([f])).map.pois[0]!.control!.collectedAt).toBe(NOW - 60 * MIN);
-    expect(
-      boardFromFortress(map([f]), undefined, true, NOW).map.pois[0]!.control!.collectedAt,
-    ).toBe(NOW);
+    expect(boardFromFortress(map([f]), undefined, true, NOW).map.pois[0]!.control!.collectedAt).toBe(NOW);
   });
 });
 
 describe('quitter une île emmène aussi le héros en route vers un poste', () => {
   it('stripChampions retire heroComing', () => {
-    const m = stripChampions(
-      map([post('a', { heroComing: { from: NOW, at: NOW + MIN, unit } })]),
-      NOW,
-      30,
-    );
+    const m = stripChampions(map([post('a', { heroComing: { from: NOW, at: NOW + MIN, unit } })]), NOW, 30);
     expect(m.pois[0]!.control!.heroComing).toBeUndefined();
   });
 });
@@ -180,9 +156,7 @@ describe('resté sur le point pris, son voyage s’arrête', () => {
     expect(s?.party?.reported).toBe(true);
   });
   it('personne ne rentre : le voyage se termine', () => {
-    expect(heroStayedSplit(exp(true), true, new Set(['c1', 'c2', 'c3']), NOW, 'x')).toEqual({
-      party: null,
-    });
+    expect(heroStayedSplit(exp(true), true, new Set(['c1', 'c2', 'c3']), NOW, 'x')).toEqual({ party: null });
   });
   it('rien à séparer s’il n’est pas resté, a perdu, ou n’est pas posté là', () => {
     expect(heroStayedSplit(exp(false), true, new Set(), NOW, 'x')).toBeNull();

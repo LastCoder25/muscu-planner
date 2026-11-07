@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { nextSessionDeterministic, setAdvice, instancesOf, verdictLabel } from '@/lib/progression';
-import type { Session, SessionLog, LevelConfig, PerformedSet, LoggedExercise } from '@/lib/types';
+import type {
+  Session,
+  SessionLog,
+  LevelConfig,
+  PerformedSet,
+  LoggedExercise,
+} from '@/lib/types';
 
 const cfg = { default_progression: 'linear' } as LevelConfig;
 
@@ -132,10 +138,8 @@ describe('setAdvice — servir un exercice qui n’a pas de cible', () => {
       performed: reps.map((r, i) => ({ set: i + 1, load_kg: load, reps: r, difficulty: diff })),
     }) as LoggedExercise;
 
-  const advice = (
-    instances: LoggedExercise[],
-    over: Partial<Parameters<typeof setAdvice>[0]> = {},
-  ) => setAdvice({ instances, range: R, scheme: 'linear', musclePrimary: 'quadriceps', ...over });
+  const advice = (instances: LoggedExercise[], over: Partial<Parameters<typeof setAdvice>[0]> = {}) =>
+    setAdvice({ instances, range: R, scheme: 'linear', musclePrimary: 'quadriceps', ...over });
 
   it('jamais fait : on ouvre en bas de fourchette, sans rien promettre', () => {
     const a = advice([]);
@@ -233,11 +237,7 @@ describe('instancesOf — les séances passées d’UN exercice', () => {
     }) as SessionLog;
 
   it('garde l’ordre reçu (le plus récent d’abord) et ignore les bilans sans cet exo', () => {
-    const got = instancesOf('squat', [
-      mkLog('a', 'squat'),
-      mkLog('b', 'bench'),
-      mkLog('c', 'squat'),
-    ]);
+    const got = instancesOf('squat', [mkLog('a', 'squat'), mkLog('b', 'bench'), mkLog('c', 'squat')]);
     expect(got).toHaveLength(2);
   });
 

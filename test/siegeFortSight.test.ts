@@ -9,13 +9,7 @@ import {
   siegeSightLeadMs,
   type DetectCircle,
 } from '@/lib/fieldArmy';
-import {
-  advanceBase,
-  emptyBase,
-  rollRaid,
-  type BaseState,
-  type DefenseStructure,
-} from '@/lib/raid';
+import { advanceBase, emptyBase, rollRaid, type BaseState, type DefenseStructure } from '@/lib/raid';
 import { EXPE } from '@/lib/expedition';
 import { planPushes, type PushContext } from '@/lib/push';
 
@@ -129,7 +123,8 @@ describe('🔔 la notification « armée repérée » suit le même préavis', (
       condition: null,
       controls: [],
     });
-    const at = (fort: number) => planPushes(ctx(fort), T0).find((p) => p.kind === 'siege')!.sendAt;
+    const at = (fort: number) =>
+      planPushes(ctx(fort), T0).find((p) => p.kind === 'siege')!.sendAt;
     expect(at(12 * H)).toBe(b.nextRaidAt - 12 * H);
     expect(at(12 * H)).toBeLessThan(at(0));
   });

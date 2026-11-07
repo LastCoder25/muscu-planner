@@ -14,9 +14,7 @@ function body(name: string): string {
 
 describe('le store applique les règles du héros posté', () => {
   it('le siège exclut un héros retenu sur la carte', () => {
-    expect(body('baseTickInner')).toMatch(
-      /heroHomeAt\(outings, at\) && !heroAwayOnMapAt\(cur\.expedition_map, at\)/,
-    );
+    expect(body('baseTickInner')).toMatch(/heroHomeAt\(outings, at\) && !heroAwayOnMapAt\(cur\.expedition_map, at\)/);
   });
   it('se poster suit la même règle que l’écran (heroEngaged)', () => {
     expect(body('sendHeroToPost')).toMatch(/if \(heroEngaged\.value\) return/);
@@ -28,9 +26,7 @@ describe('le store applique les règles du héros posté', () => {
   });
   it('blessé, il rentre à la base depuis le lieu du combat, ses champions vers le poste', () => {
     const b = body('expeTick');
-    expect(b).toMatch(
-      /heroHurtSplit\(\s*exp2,\s*heroHomeLegMin\(cur, mapOut, exp\.poi, exp\.midAt\)/,
-    );
+    expect(b).toMatch(/heroHurtSplit\(\s*exp2,\s*heroHomeLegMin\(cur, mapOut, exp\.poi, exp\.midAt\)/);
     expect(b).toMatch(/const parted = split\?\.party \?\? hurt\?\.party/);
   });
   it('blessé au retour d’une sortie, il rentre à pied (convalescence à l’arrivée)', () => {

@@ -317,7 +317,10 @@ const FLIGHT_MS = 420;
 
 /** Point de départ d'une attaque : le BORD du médaillon de l'auteur, côté boss — pas son
  *  centre (le projectile semblait sortir du visage). Repli sur le centre de la tuile. */
-function launchFrom(userId: string, to: { x: number; y: number }): { x: number; y: number } | null {
+function launchFrom(
+  userId: string,
+  to: { x: number; y: number },
+): { x: number; y: number } | null {
   const tile = allyEls.get(userId);
   const av = tile?.querySelector<HTMLElement>('.fbs-ally-av') ?? tile;
   const c = centerOf(av);

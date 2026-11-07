@@ -69,11 +69,7 @@
           <button
             v-if="notifState !== 'unsupported'"
             class="pill alert-pill"
-            :title="
-              notifState === 'blocked'
-                ? 'Notifications bloquées par le navigateur'
-                : 'Alerte de fin de repos (notification)'
-            "
+            :title="notifState === 'blocked' ? 'Notifications bloquées par le navigateur' : 'Alerte de fin de repos (notification)'"
             :class="{ on: notifState === 'on' }"
             :disabled="notifState === 'blocked'"
             data-test="rest-alert"
@@ -515,8 +511,7 @@ function endRest() {
   } catch {
     /* pas de vibration : tant pis */
   }
-  if (document.visibilityState === 'hidden' && restWhat && restAlertOn())
-    void showRestNotice(restWhat);
+  if (document.visibilityState === 'hidden' && restWhat && restAlertOn()) void showRestNotice(restWhat);
   skipRest();
 }
 

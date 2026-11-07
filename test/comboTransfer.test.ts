@@ -351,12 +351,7 @@ describe('bascule du RESTE seulement (l’exo reste, ce qui manquait part)', () 
 
   it('refusé sans rien de fait, sans reste, ou vers une variante du même mouvement', () => {
     expect(
-      comboTransferBlocker(
-        combo([leg({}), dips()]),
-        'ex_bench_barbell',
-        { leg: 'ex_dips' },
-        'rest',
-      ),
+      comboTransferBlocker(combo([leg({}), dips()]), 'ex_bench_barbell', { leg: 'ex_dips' }, 'rest'),
     ).toBe('nothingDone');
     const done = leg({ target: 2, sets: bench().sets });
     expect(
@@ -368,13 +363,7 @@ describe('bascule du RESTE seulement (l’exo reste, ce qui manquait part)', () 
   });
 
   it('en mode reps, le reste est converti dans l’unité de la cible', () => {
-    const r = leg({
-      count_mode: 'reps',
-      target: 60,
-      rep_min: 8,
-      rep_max: 12,
-      sets: [{ date: D1, reps: 20 }],
-    });
+    const r = leg({ count_mode: 'reps', target: 60, rep_min: 8, rep_max: 12, sets: [{ date: D1, reps: 20 }] });
     const p = comboTransferPlan(
       combo([r, dips()].map((l) => ({ ...l, count_mode: 'reps' as const }))),
       'ex_bench_barbell',

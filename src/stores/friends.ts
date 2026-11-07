@@ -363,7 +363,7 @@ export const useFriendsStore = defineStore('friends', () => {
       .eq('user_id', friendId)
       .maybeSingle();
     if (error) throw error;
-    return data ?? null;
+    return (data) ?? null;
   }
 
   return {

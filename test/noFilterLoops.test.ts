@@ -22,8 +22,7 @@ function infiniteFilterLoops(dir: string, out: string[] = []): string[] {
       while ((m = re.exec(s))) {
         const name = m[1]!;
         if (!/filter\s*:/.test(m[2]!)) continue;
-        if (new RegExp(`animation:[^;]*\\b${name}\\b[^;]*infinite`).test(s))
-          out.push(`${e.name} ${name}`);
+        if (new RegExp(`animation:[^;]*\\b${name}\\b[^;]*infinite`).test(s)) out.push(`${e.name} ${name}`);
       }
     }
   }

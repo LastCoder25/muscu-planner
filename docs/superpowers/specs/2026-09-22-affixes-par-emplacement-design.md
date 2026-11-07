@@ -12,11 +12,11 @@ d'objet dise ce qu'il fait, sans avoir à lire ses stats.
 tire un affixe par tier (`AFFIX_TIERS`), et ces pools sont les mêmes pour les quatre
 emplacements :
 
-| Tier       | Affixe                  | Tiré parmi (quel que soit l'emplacement)             |
-| ---------- | ----------------------- | ---------------------------------------------------- |
-| Majeur     | #1, toujours présent    | dégâts · PV · réduction · critique                   |
-| Secondaire | #2, à partir de Magique | vol de vie · épines · exécution · rage · élan        |
-| Mineur     | #3, à partir d'Épique   | or · découverte d'objets · régénération · initiative |
+| Tier | Affixe | Tiré parmi (quel que soit l'emplacement) |
+| --- | --- | --- |
+| Majeur | #1, toujours présent | dégâts · PV · réduction · critique |
+| Secondaire | #2, à partir de Magique | vol de vie · épines · exécution · rage · élan |
+| Mineur | #3, à partir d'Épique | or · découverte d'objets · régénération · initiative |
 
 D'où ce qu'on voit en jeu :
 
@@ -67,12 +67,12 @@ Bracelet) et relique (Éclat, Totem, Sceau, Idole).
 Le principe : **l'arme frappe, l'armure encaisse, l'accessoire affûte, la relique
 protège la vie.**
 
-| Emplacement       | Majeur (#1)            | Secondaire (#2)                       | Mineur (#3)                      |
-| ----------------- | ---------------------- | ------------------------------------- | -------------------------------- |
-| ⚔️ **Arme**       | **dégâts** · critique  | vol de vie · **exécution** · **élan** | initiative                       |
-| 🛡️ **Armure**     | **PV** · **réduction** | **épines** · vol de vie¹              | régénération                     |
-| 💍 **Accessoire** | critique · dégâts      | vol de vie · élan · rage              | **or** · **découverte d'objets** |
-| 🔮 **Relique**    | PV · réduction         | **rage** · exécution · épines         | régénération · initiative        |
+| Emplacement | Majeur (#1) | Secondaire (#2) | Mineur (#3) |
+| --- | --- | --- | --- |
+| ⚔️ **Arme** | **dégâts** · critique | vol de vie · **exécution** · **élan** | initiative |
+| 🛡️ **Armure** | **PV** · **réduction** | **épines** · vol de vie¹ | régénération |
+| 💍 **Accessoire** | critique · dégâts | vol de vie · élan · rage | **or** · **découverte d'objets** |
+| 🔮 **Relique** | PV · réduction | **rage** · exécution · épines | régénération · initiative |
 
 ¹ Pour que le tier secondaire de l'armure ne soit pas vide avant le niveau 9 (contrainte 4).
 Ça reprend ce que fait déjà l'effet légendaire Soif, qui est sur l'armure. Autre solution :
@@ -158,7 +158,7 @@ Je ne le conseille pas : le joueur verrait des objets changer sans raison.
 ## 6. Plan d'implémentation (si tu valides)
 
 1. Remplacer `SLOT_EFFECTS` par une table `SLOT_AFFIXES: Record<ItemSlot, Record<AffixTier,
-EffectType[]>>`, en `Record` exhaustif pour qu'un emplacement ou une stat oubliés
+   EffectType[]>>`, en `Record` exhaustif pour qu'un emplacement ou une stat oubliés
    bloquent la compilation.
 2. `tierPool(tier, level)` → `slotTierPool(slot, tier, level)`, avec la stat par défaut
    de l'emplacement si le pool est vide. Utilisé par `rollDrop`, `rollSetPiece` (affixes #2

@@ -28,12 +28,7 @@ describe('élastique de résistance', () => {
   });
 
   it('corriger une série pose la bande', () => {
-    const out = updateSetAt([set()], 0, {
-      reps: 12,
-      weight: null,
-      assisted: false,
-      band: 'strong',
-    });
+    const out = updateSetAt([set()], 0, { reps: 12, weight: null, assisted: false, band: 'strong' });
     expect(out[0]!.band).toBe('strong');
     expect(out[0]!.reps).toBe(12);
   });
@@ -76,9 +71,7 @@ describe('élastique de résistance', () => {
     // La dernière est à « fort » : seules les séries « fort » comptent.
     expect(loadBlocks(sets)).toEqual([6]);
     // Même bande partout : les trois se comparent.
-    expect(loadBlocks(sets.map((s) => ({ ...s, band: 'light' as const }))).length).toBeGreaterThan(
-      0,
-    );
+    expect(loadBlocks(sets.map((s) => ({ ...s, band: 'light' as const }))).length).toBeGreaterThan(0);
   });
 
   it('le niveau de la dernière série préremplit la suivante', () => {
@@ -116,19 +109,9 @@ describe('1re série d’un nouveau défi : la dernière saisie', () => {
   });
   it('exerciseHistorySets : seulement cet exo, sans les séries basculées', () => {
     const mk = (id: string, sets: ComboSet[]) =>
-      ({
-        id: 'c',
-        name: '',
-        start_date: D,
-        duration_days: 7,
-        status: 'done',
-        legs: [{ exercise_id: id, sets }],
-      }) as unknown as ComboChallenge;
+      ({ id: 'c', name: '', start_date: D, duration_days: 7, status: 'done', legs: [{ exercise_id: id, sets }] }) as unknown as ComboChallenge;
     const moved = set({ reps: 5, origin: { exercise_id: 'x', exercise_name: 'X', rep_weight: 1 } });
-    const out = exerciseHistorySets(
-      [mk('a', [set({ reps: 10 }), moved]), mk('b', [set({ reps: 3 })])],
-      'a',
-    );
+    const out = exerciseHistorySets([mk('a', [set({ reps: 10 }), moved]), mk('b', [set({ reps: 3 })])], 'a');
     expect(out).toHaveLength(1);
     expect(out[0]!.reps).toBe(10);
   });
@@ -136,8 +119,7 @@ describe('1re série d’un nouveau défi : la dernière saisie', () => {
 
 describe('repQuickPicks — pastilles de reps', () => {
   it('sans fourchette : 8 à 12', () => expect(repQuickPicks()).toEqual([8, 9, 10, 11, 12]));
-  it('fourchette courte : toutes les valeurs', () =>
-    expect(repQuickPicks(12, 15)).toEqual([12, 13, 14, 15]));
+  it('fourchette courte : toutes les valeurs', () => expect(repQuickPicks(12, 15)).toEqual([12, 13, 14, 15]));
   it('fourchette large : 6 valeurs réparties, bornes comprises', () => {
     const p = repQuickPicks(10, 30);
     expect(p).toHaveLength(6);

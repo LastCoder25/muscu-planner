@@ -13,7 +13,7 @@ function rule(file: string, selector: string): string {
   return src.slice(i, src.indexOf('}', i));
 }
 
-describe('écran de fin du siège', () => {
+describe("écran de fin du siège", () => {
   it('la vue de la cour est un seul calque', () => {
     expect(rule('src/components/YardStage.vue', '.yard')).toMatch(/isolation:\s*isolate/);
   });

@@ -26,7 +26,9 @@ describe('🗂️ stock rangé par lettre', () => {
   it('S puis A puis B, et rien ne se perd', () => {
     const g = groupGearByGrade(stock);
     expect(g.map((x) => x.grade)).toEqual(['S', 'A', 'B']);
-    expect(g.flatMap((x) => x.gear.map((p) => p.id)).sort()).toEqual(stock.map((p) => p.id).sort());
+    expect(g.flatMap((x) => x.gear.map((p) => p.id)).sort()).toEqual(
+      stock.map((p) => p.id).sort(),
+    );
     expect(g.every((x) => x.gear.every((p) => p.grade === x.grade))).toBe(true);
   });
 

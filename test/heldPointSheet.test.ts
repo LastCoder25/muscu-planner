@@ -16,8 +16,6 @@ describe('🏰 la fiche d’un lieu tenu n’est jamais « déjà attaquée »',
     expect(body).toMatch(/liveControl\.value\?\.owner === 'player'\) return null/);
   });
   it('et c’est bien engagedTrip qui garde le panneau du lieu tenu', () => {
-    expect(src).toMatch(
-      /<template v-if="!engagedTrip">[\s\S]{0,400}liveControl\?\.owner === 'player'/,
-    );
+    expect(src).toMatch(/<template v-if="!engagedTrip">[\s\S]{0,400}liveControl\?\.owner === 'player'/);
   });
 });

@@ -26,12 +26,12 @@ visage, le nom.
 compétence**. Les noms de rang (Bronze, Argent, Or…) et les lettres du gacha (B / A / S) sont
 déjà employés ailleurs : les crans sont désignés par **une couleur**.
 
-| Cran | Rune        | Posable sur                     |
-| ---- | ----------- | ------------------------------- |
-| 1    | 🟢 Verte    | tout champion                   |
-| 2    | 🔵 Bleue    | tout champion                   |
-| 3    | 🟣 Violette | champion de rang Argent ou plus |
-| 4    | 🟠 Dorée    | champion de rang Or ou plus     |
+| Cran | Rune | Posable sur |
+|---|---|---|
+| 1 | 🟢 Verte | tout champion |
+| 2 | 🔵 Bleue | tout champion |
+| 3 | 🟣 Violette | champion de rang Argent ou plus |
+| 4 | 🟠 Dorée | champion de rang Or ou plus |
 
 Le garde-fou de rang reprend la règle du jeu « rareté ≤ rang » (équipement, familiers) : un
 champion fraîchement tiré ne devient pas un monstre en une rune.
@@ -41,12 +41,12 @@ champion fraîchement tiré ne devient pas un monstre en une rune.
 **Chaque compétence appartient à UN SEUL cran** (décision de l'utilisateur) : la Vitesse
 n'existe qu'en vert. Utilitaire en bas, combat en haut.
 
-| Cran          | Compétences                                                                |
-| ------------- | -------------------------------------------------------------------------- |
-| 🟢 Utilitaire | 🧭 Vitesse · 🩺 Soin · 🐫 Cargaison · 👁️ Repérage                          |
-| 🔵 Soutien    | ❤️ PV · ⚔️ Dégâts · 🛡️ Réduction · 🎓 Mentor                               |
-| 🟣 Combat     | 💥 Critique · 🩸 Vol de vie · 🌵 Épines · 🪓 Exécution · 🔥 Rage · 🌀 Élan |
-| 🟠 Sommet     | 🧲 Pillard · 🕳️ Scelleur de failles · ⚡ Premier sang · ✨ Second souffle  |
+| Cran | Compétences |
+|---|---|
+| 🟢 Utilitaire | 🧭 Vitesse · 🩺 Soin · 🐫 Cargaison · 👁️ Repérage |
+| 🔵 Soutien | ❤️ PV · ⚔️ Dégâts · 🛡️ Réduction · 🎓 Mentor |
+| 🟣 Combat | 💥 Critique · 🩸 Vol de vie · 🌵 Épines · 🪓 Exécution · 🔥 Rage · 🌀 Élan |
+| 🟠 Sommet | 🧲 Pillard · 🕳️ Scelleur de failles · ⚡ Premier sang · ✨ Second souffle |
 
 Les effets réutilisent ce que le jeu sait déjà appliquer : les rôles de convoi (`CARAVAN.*`),
 les effets de combat (`EffectType`, joués par `simulateCombat`), le Mentor (v0.1223).
@@ -74,12 +74,12 @@ Elles se cumulent comme les autres jusqu'au niveau 5 — plus rare, donc à long
 
 Valeurs de départ (le tableau d'origine) :
 
-| Compétence             | Effet                                                                                              | Niv. 1 → Niv. 5    |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | ------------------ |
-| 🧲 Pillard             | chance, sur un lieu de récolte, de ramener une **seconde cargaison**, quelle que soit la ressource | 10 % → 30 %        |
-| 🕳️ Scelleur de failles | **mana** en plus quand l'équipe referme une faille                                                 | +10 % → +40 %      |
-| ⚡ Premier sang        | **dégâts de l'équipe** au premier tour de chaque combat                                            | +30 % → +100 %     |
-| ✨ Second souffle      | une fois par mission, l'équipe **survit à un coup fatal** avec une part de ses PV                  | 20 % → 40 % des PV |
+| Compétence | Effet | Niv. 1 → Niv. 5 |
+|---|---|---|
+| 🧲 Pillard | chance, sur un lieu de récolte, de ramener une **seconde cargaison**, quelle que soit la ressource | 10 % → 30 % |
+| 🕳️ Scelleur de failles | **mana** en plus quand l'équipe referme une faille | +10 % → +40 % |
+| ⚡ Premier sang | **dégâts de l'équipe** au premier tour de chaque combat | +30 % → +100 % |
+| ✨ Second souffle | une fois par mission, l'équipe **survit à un coup fatal** avec une part de ses PV | 20 % → 40 % des PV |
 
 ⚠️ Dans les camps et les failles l'équipe est FUSIONNÉE en un seul combattant : ces effets
 s'appliquent à l'équipe entière. Pillard et Scelleur touchent l'économie (or, ressources,
@@ -98,14 +98,14 @@ mana → gacha) : leurs plafonds se fixent contre `goldSink`, `campEconomy` et
 
 Barème indicatif (_à mesurer_) :
 
-| Compétence       | Niv. 1              | Niv. 5     | Référence actuelle               |
-| ---------------- | ------------------- | ---------- | -------------------------------- |
-| 🧭 Vitesse       | −6 % trajet         | −15 %      | rôle : −8 %/cran, plafond −30 %  |
-| 🐫 Cargaison     | +8 %                | +22 %      | rôle : +12 %/cran, plafond +40 % |
-| 👁️ Repérage      | −8 % embuscades     | −22 %      | rôle : −12 %/cran, plafond −40 % |
-| 🩺 Soin          | −15 % convalescence | −40 %      | rôle : −25 %/cran, plafond −60 % |
-| 🎓 Mentor        | +8 % XP équipe      | +20 %      | rôle : +15 %/cran, plafond +30 % |
-| Combat (🔵 à 🟠) | selon cran          | selon cran | signature : 12 % par niveau      |
+| Compétence | Niv. 1 | Niv. 5 | Référence actuelle |
+|---|---|---|---|
+| 🧭 Vitesse | −6 % trajet | −15 % | rôle : −8 %/cran, plafond −30 % |
+| 🐫 Cargaison | +8 % | +22 % | rôle : +12 %/cran, plafond +40 % |
+| 👁️ Repérage | −8 % embuscades | −22 % | rôle : −12 %/cran, plafond −40 % |
+| 🩺 Soin | −15 % convalescence | −40 % | rôle : −25 %/cran, plafond −60 % |
+| 🎓 Mentor | +8 % XP équipe | +20 % | rôle : +15 %/cran, plafond +30 % |
+| Combat (🔵 à 🟠) | selon cran | selon cran | signature : 12 % par niveau |
 
 ⚠️ **La vitesse est le plus gros levier économique du jeu** (mesuré v0.935 : −20 % de trajet →
 +25 % de revenu/jour ; −50 % → +90 à +100 %). Aucune valeur de vitesse ne dépasse le plafond
@@ -113,11 +113,11 @@ d'équipe actuel.
 
 ## 4. Emplacements et remplacement
 
-| Lettre         | Emplacements |
-| -------------- | ------------ |
-| A              | 2            |
-| S              | 3            |
-| X (Adamantium) | 4            |
+| Lettre | Emplacements |
+|---|---|
+| A | 2 |
+| S | 3 |
+| X (Adamantium) | 4 |
 
 Quand une rune est utilisée sur un champion :
 
@@ -160,12 +160,12 @@ interceptées, ruines, tanières, caravanes pillées, points de contrôle. La li
 ce qui n'est pas un lieu — sièges, donjons, boss de palier, Labyrinthe, boss entre amis,
 Défi 360.
 
-| Lieu, comparé à ton rang          | Chance | Couleur (🟢 / 🔵 / 🟣 / 🟠) |
-| --------------------------------- | ------ | --------------------------- |
-| en dessous                        | 2 %    | 85 / 13 / 2 / 0 %           |
-| ton rang                          | 5 %    | 70 / 22 / 7 / 1 %           |
-| au-dessus                         | 12 %   | 45 / 33 / 18 / 4 %          |
-| faille au-dessus, mûre (≥ mi-vie) | 24 %   | 25 / 35 / 28 / 12 %         |
+| Lieu, comparé à ton rang | Chance | Couleur (🟢 / 🔵 / 🟣 / 🟠) |
+|---|---|---|
+| en dessous | 2 % | 85 / 13 / 2 / 0 % |
+| ton rang | 5 % | 70 / 22 / 7 / 1 % |
+| au-dessus | 12 % | 45 / 33 / 18 / 4 % |
+| faille au-dessus, mûre (≥ mi-vie) | 24 % | 25 / 35 / 28 / 12 % |
 
 Une faille refermée compte **double** (treize combats et un gardien). Une mission ratée ne
 donne rien.
@@ -174,13 +174,14 @@ donne rien.
 2 missions du héros, 80 % de réussite, profil régulier 700 XP/jour, ascension comprise) :
 
 | Niveau | Missions / jour | Chance moyenne | Runes / jour | Runes / champion / rang |
-| ------ | --------------- | -------------- | ------------ | ----------------------- |
-| 15     | 6,4             | 4,3 %          | 0,27         | 1,8                     |
-| 35     | 11,2            | 3,5 %          | 0,40         | 2,1                     |
-| 65     | 20,8            | 3,5 %          | 0,73         | 3,1                     |
-| 95     | 28,0            | 3,1 %          | 0,87         | 3,5                     |
+|---|---|---|---|---|
+| 15 | 6,4 | 4,3 % | 0,27 | 1,8 |
+| 35 | 11,2 | 3,5 % | 0,40 | 2,1 |
+| 65 | 20,8 | 3,5 % | 0,73 | 3,1 |
+| 95 | 28,0 | 3,1 % | 0,87 | 3,5 |
 
-Cible : ~3 runes par champion et par rang, soit un build S presque complet (≈ 13 runes sur 15) vers le rang 5. ⚠️ Le rythme monte avec le niveau (les créneaux croissent plus vite que
+Cible : ~3 runes par champion et par rang, soit un build S presque complet (≈ 13 runes sur
+15) vers le rang 5. ⚠️ Le rythme monte avec le niveau (les créneaux croissent plus vite que
 le vivier engagé) ; à surveiller à l'usage.
 
 ### La faille d'un rang au-dessus
@@ -192,13 +193,13 @@ dans la tranche de ce rang). Pas de faille à +2 rangs.
 Mesuré le 2026-09-27 (`resolveIncursion`, 80 incursions par case), champions de référence
 **Or noir ★5** (niveau 40, budget S), équipés au niveau 40, **sans le héros**, faille **mûre** :
 
-| Faille                   | 3 champions | 5     | 8     | 12    |
-| ------------------------ | ----------- | ----- | ----- | ----- |
-| Ton rang (niv. 40)       | 76 %        | 100 % | 100 % | 100 % |
-| +1 rang, bas (niv. 45)   | 0 %         | 66 %  | 100 % | 100 % |
-| +1 rang, haut (niv. 50)  | 0 %         | 36 %  | 100 % | 100 % |
-| +2 rangs, bas (niv. 55)  | 0 %         | 0 %   | 15 %  | 99 %  |
-| +2 rangs, haut (niv. 60) | 0 %         | 0 %   | 3 %   | 74 %  |
+| Faille | 3 champions | 5 | 8 | 12 |
+|---|---|---|---|---|
+| Ton rang (niv. 40) | 76 % | 100 % | 100 % | 100 % |
+| +1 rang, bas (niv. 45) | 0 % | 66 % | 100 % | 100 % |
+| +1 rang, haut (niv. 50) | 0 % | 36 % | 100 % | 100 % |
+| +2 rangs, bas (niv. 55) | 0 % | 0 % | 15 % | 99 % |
+| +2 rangs, haut (niv. 60) | 0 % | 0 % | 3 % | 74 % |
 
 Avec l'Éveil complet (6 crans) : +1 rang haut 19 / 99 / 100 % (3 / 5 / 8) ; +2 rangs bas
 0 / 11 / 98 % ; +2 rangs haut 0 / 0 / 78 %. Une faille jeune (1 jour) est nettement plus
@@ -219,21 +220,22 @@ Gain de puissance d'un champion de référence (`combatPowerRaw`, contre le mêm
 compétence) : signatures fixes d'aujourd'hui contre **build moyen de runes** simulé au rythme
 mesuré (§ 5), joueur qui ne remplace qu'une compétence d'un cran plus bas.
 
-| Rang                          | Signatures fixes | Runes         |
-| ----------------------------- | ---------------- | ------------- |
-| Bronze                        | ×1,04            | ×1,01         |
-| Argent                        | ×1,07            | ×1,02         |
-| Or                            | ×1,17            | ×1,05         |
-| Or noir                       | ×1,17            | ×1,08         |
-| Légendaire                    | ×1,17            | ×1,11         |
-| Demi-dieu                     | ×1,19            | ×1,14         |
-| Divin                         | ×1,21            | ×1,16         |
-| Divin céleste → Tout-puissant | ×1,15            | ×1,18 à ×1,20 |
+| Rang | Signatures fixes | Runes |
+|---|---|---|
+| Bronze | ×1,04 | ×1,01 |
+| Argent | ×1,07 | ×1,02 |
+| Or | ×1,17 | ×1,05 |
+| Or noir | ×1,17 | ×1,08 |
+| Légendaire | ×1,17 | ×1,11 |
+| Demi-dieu | ×1,19 | ×1,14 |
+| Divin | ×1,21 | ×1,16 |
+| Divin céleste → Tout-puissant | ×1,15 | ×1,18 à ×1,20 |
 
 La fin est équivalente, le milieu plus faible (−10 % vers Or) : les premières runes sont
 surtout vertes, utilitaires. Un réglage uniforme ne corrige pas une différence de FORME.
 **Décision proposée** : barème inchangé, et les champions de référence portent le build moyen
 de leur rang — routes, camps et failles se dimensionnent sur eux, donc suivent d'eux-mêmes.
+
 
 - **Calibration des combats** : routes, camps, failles et sièges se mesurent contre des
   champions de référence (`REF_CHAMPIONS_BY_RANK`) aux compétences fixes. Il faut leur définir

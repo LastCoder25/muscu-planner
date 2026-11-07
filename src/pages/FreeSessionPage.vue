@@ -7,8 +7,7 @@
         <div class="top-sub">
           {{ clock
           }}<template v-if="run">
-            · {{ run.exercises.length }} exo{{ run.exercises.length > 1 ? 's' : '' }} · vol
-            {{ totalVolume }} kg</template
+            · {{ run.exercises.length }} exo{{ run.exercises.length > 1 ? 's' : '' }} · vol {{ totalVolume }} kg</template
           >
         </div>
       </div>
@@ -385,8 +384,7 @@
               ><q-icon :name="exIcon(e)" size="26px"
             /></span>
             <div class="tile-name">
-              <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span
-              >{{ e.name }}
+              <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span>{{ e.name }}
             </div>
             <div v-if="e.muscle_primary" class="tile-mus" :style="{ color: exColor(e) }">
               {{ e.muscle_primary }}
@@ -403,18 +401,23 @@
         </div>
 
         <template v-else>
-          <button v-for="{ ex: e, tag } in filteredLib" :key="e.id" class="alt" @click="pick(e)">
+          <button
+            v-for="{ ex: e, tag } in filteredLib"
+            :key="e.id"
+            class="alt"
+            @click="pick(e)"
+          >
             <span class="alt-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"
               ><q-icon :name="exIcon(e)" size="20px"
             /></span>
             <div class="alt-main">
               <div class="alt-name">
-                <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span
-                >{{ e.name }}
+                <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span>{{ e.name }}
               </div>
               <div class="alt-meta">
-                {{ e.muscle_primary
-                }}<template v-if="e.equipment"> · {{ equipmentLabel(e.equipment) }}</template>
+                {{ e.muscle_primary }}<template v-if="e.equipment">
+                  · {{ equipmentLabel(e.equipment) }}</template
+                >
               </div>
             </div>
             <q-icon
@@ -506,12 +509,7 @@ import { setAdvice, instancesOf, verdictLabel, type SetAdvice } from '@/lib/prog
 import { repRangeForExercise, repRangeLabel } from '@/lib/repScheme';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
-import {
-  equipmentLabel,
-  isUnloadedEquipment,
-  pickerOrder,
-  recentExerciseIds,
-} from '@/lib/freePicker';
+import { equipmentLabel, isUnloadedEquipment, pickerOrder, recentExerciseIds } from '@/lib/freePicker';
 
 const router = useRouter();
 const $q = useQuasar();
