@@ -156,7 +156,9 @@ describe('🔙 le demi-tour des renforts', () => {
   it('arrivés, sans départ connu, ou en transfert : impossible', () => {
     expect(recallReinforcements(held(), ID, ['r1'], 40 * M)).toBeNull();
     const m = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), ID, ['g'], 0, 7);
-    expect(recallReinforcements(reinforceControl(m, ID, ['r'], 40 * M), ID, ['r'], 5 * M)).toBeNull();
+    expect(
+      recallReinforcements(reinforceControl(m, ID, ['r'], 40 * M), ID, ['r'], 5 * M),
+    ).toBeNull();
     expect(recallReinforcements(held(), ID, ['inconnu'], 5 * M)).toBeNull();
   });
   it('⇄ un transfert fait demi-tour vers son point d’origine, une seule fois', async () => {

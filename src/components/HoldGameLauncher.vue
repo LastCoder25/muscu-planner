@@ -29,7 +29,9 @@
       >
         <span class="hgl-emo">{{ g.emoji }}</span>
         <span class="hgl-txt">
-          <span class="hgl-name">{{ g.name }} <span class="hgl-skill">· {{ g.skill }}</span></span>
+          <span class="hgl-name"
+            >{{ g.name }} <span class="hgl-skill">· {{ g.skill }}</span></span
+          >
           <span class="hgl-rule">{{ g.rule }}</span>
         </span>
       </button>

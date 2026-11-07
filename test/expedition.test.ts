@@ -655,7 +655,10 @@ describe('📬 le rapport de groupe et la boîte', () => {
       const twice = depositMessages(out, [base('n', false)], 20, 0);
       expect(twice).toBe(out);
       // Plusieurs nouveaux : le dernier déposé passe devant, comme `[msg, ...box]` enchaînés.
-      expect(depositMessages([], [base('p'), base('q')], 20, 0).map((m) => m.id)).toEqual(['q', 'p']);
+      expect(depositMessages([], [base('p'), base('q')], 20, 0).map((m) => m.id)).toEqual([
+        'q',
+        'p',
+      ]);
     });
     it('la boîte reste taillée par keepMessages — jamais un butin à récupérer jeté', () => {
       const box = [base('lu1', true), base('lu2', true), base('attend', false)];

@@ -94,7 +94,9 @@
         </div>
         <div class="sl-sub">
           {{
-            lestOff ? 'Pas de lest quand l’élastique t’aide' : 'Vide = poids du corps · pas de 2,5 kg'
+            lestOff
+              ? 'Pas de lest quand l’élastique t’aide'
+              : 'Vide = poids du corps · pas de 2,5 kg'
           }}
         </div>
       </section>
@@ -128,7 +130,12 @@
             @click="band = b.id"
           >
             <span class="sb-bars" aria-hidden="true">
-              <i v-for="k in 4" :key="k" :class="{ lit: k <= i + 1 }" :style="{ height: 5 + k * 4 + 'px' }" />
+              <i
+                v-for="k in 4"
+                :key="k"
+                :class="{ lit: k <= i + 1 }"
+                :style="{ height: 5 + k * 4 + 'px' }"
+              />
             </span>
             <span class="sb-t">{{ b.label }}</span>
           </button>
@@ -147,13 +154,7 @@
              du parent : « la dernière » à l’ajout, « cette série » quand on en corrige une. -->
         <q-btn v-if="undoLabel" flat no-caps class="sl-undo" :label="undoLabel" @click="undo" />
         <q-btn flat no-caps label="Annuler" @click="emit('update:modelValue', false)" />
-        <q-btn
-          unelevated
-          no-caps
-          class="sl-ok"
-          :label="saveLabel || 'Valider'"
-          @click="save"
-        />
+        <q-btn unelevated no-caps class="sl-ok" :label="saveLabel || 'Valider'" @click="save" />
       </div>
     </q-card>
   </q-dialog>

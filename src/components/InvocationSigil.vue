@@ -616,7 +616,9 @@ function stepDustFrame(dt: number, t: number) {
 
 /** Recense les boules colorées une fois le cercle monté et ses calques animés. */
 function collectDustBalls(el: HTMLElement) {
-  dustBalls = [...el.querySelectorAll('[data-lit].ivs-tone-o, [data-lit].ivs-tone-i, [data-lit].ivs-tone-n')]
+  dustBalls = [
+    ...el.querySelectorAll('[data-lit].ivs-tone-o, [data-lit].ivs-tone-i, [data-lit].ivs-tone-n'),
+  ]
     .filter((e) => !e.classList.contains('ivs-halo'))
     .map((e) => {
       const shape = (

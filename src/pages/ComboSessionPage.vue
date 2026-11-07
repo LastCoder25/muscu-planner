@@ -817,10 +817,10 @@ function validate(i: number, j: number, reps: number) {
       ? lastEnteredSet(exerciseHistorySets(combo.list, leg.exercise_id))
       : null;
   const seed = prev ?? before ?? (hist ? { ...hist, assisted: !!hist.assisted } : null);
-  logReps.value =
-    seed?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
+  logReps.value = seed?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
   logWeight.value = seed
-    ? (seed.weight ?? (leg?.assistable ? null : (recallWeight(exo.exercise_id) ?? exo.weight_kg ?? null)))
+    ? (seed.weight ??
+      (leg?.assistable ? null : (recallWeight(exo.exercise_id) ?? exo.weight_kg ?? null)))
     : (exo.weight_kg ?? recallWeight(exo.exercise_id));
   logAssisted.value = seed?.assisted ?? false;
   logBand.value = seed ? (seed.band ?? null) : leg ? legLastBand(leg) : null;

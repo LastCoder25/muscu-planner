@@ -417,11 +417,7 @@ const {
 // 📜 Une fois les expéditions générées, l'écran défile : pastilles, « Tout lancer » puis les
 // propositions en haut (au lieu de laisser l'utilisateur sous les réglages).
 const sumEl = ref<HTMLElement | null>(null);
-useScrollWhenReady(
-  running,
-  () => props.section === 'plan' && !!rows.value?.length,
-  sumEl,
-);
+useScrollWhenReady(running, () => props.section === 'plan' && !!rows.value?.length, sumEl);
 
 const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: string }[] = [
   {

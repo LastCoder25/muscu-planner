@@ -18,13 +18,13 @@ lot ×10 remisé, doublons qui réveillent le champion.
 Il s'en **écarte sur cinq points**, et ce sont eux qui donnent l'impression que « quelque chose
 cloche » :
 
-| # | Écart | Effet ressenti | Gravité |
-|---|---|---|---|
-| 1 | **8 raretés** là où le genre en tire **3** | un lot de 10 ressemble à un nuancier (5 couleurs), aucune n'est « le jackpot » ni « le fond » | haute |
-| 2 | **Rareté ≠ rang**, et la rareté est **plafonnée par le niveau du joueur** | un Primordial tiré au niveau 5 « ne mène que du Bronze » : le jackpot ne se sent pas | haute |
-| 3 | **La garantie tous les 10 donne trop** (45 % des garantis dépassent l'épique) | le haut de la pyramide arrive trop souvent, puis la collection s'épuise | moyenne |
-| 4 | **Aucune bannière, aucun choix** | on ne vise rien : le gacha n'a ni direction ni événement | moyenne |
-| 5 | **La copie de trop rend du mana** (55 💠) | le gacha s'alimente lui-même, débit ×2 mesuré, saturation vers 6 mois | haute |
+| #   | Écart                                                                         | Effet ressenti                                                                                | Gravité |
+| --- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------- |
+| 1   | **8 raretés** là où le genre en tire **3**                                    | un lot de 10 ressemble à un nuancier (5 couleurs), aucune n'est « le jackpot » ni « le fond » | haute   |
+| 2   | **Rareté ≠ rang**, et la rareté est **plafonnée par le niveau du joueur**     | un Primordial tiré au niveau 5 « ne mène que du Bronze » : le jackpot ne se sent pas          | haute   |
+| 3   | **La garantie tous les 10 donne trop** (45 % des garantis dépassent l'épique) | le haut de la pyramide arrive trop souvent, puis la collection s'épuise                       | moyenne |
+| 4   | **Aucune bannière, aucun choix**                                              | on ne vise rien : le gacha n'a ni direction ni événement                                      | moyenne |
+| 5   | **La copie de trop rend du mana** (55 💠)                                     | le gacha s'alimente lui-même, débit ×2 mesuré, saturation vers 6 mois                         | haute   |
 
 Recommandation : **scénario B « refonte ciblée »** (§ 7) — 3 raretés de tirage, rang séparé,
 une bannière vedette permanente qui tourne, une liste de souhaits, et les doublons de trop
@@ -36,20 +36,20 @@ convertis en **éclats** qui achètent un champion choisi (étincelle) au lieu d
 
 Source : `src/lib/gacha.ts`, `src/data/champions.ts`, `src/lib/adventurers.ts`, CLAUDE.md.
 
-| Élément | Valeur actuelle |
-|---|---|
-| Monnaie | pierres de mana 💠 (failles + mines résiduelles + 110 💠/jour offerts à la connexion) |
-| Prix | 110 💠 le tirage · ×10 pour 990 💠 (1 offert) |
-| Débit mesuré | 63 · 91 · 157 · 240 💠/jour aux niveaux 12 · 30 · 60 · 100 (une faille/jour) |
-| Raretés | **8** : Commun 30 % · Inhabituel 25 · Magique 18 · Rare 12 · Épique 8 · Légendaire 4 · Mythique 2,4 · Primordial 0,6 |
-| Pity sommet | montée de 75 à 90, garanti au 90ᵉ, compteur conservé |
-| Pity plancher | tous les 10 : **Épique ou mieux**, re-tiré dans toute la tranche ≥ Épique → **45 %** de ces garantis sont Légendaire+ |
-| Bannières | **aucune** : un seul pool de 32 champions, tirage uniforme dans la rareté obtenue |
-| Roster | **32 champions**, 4 par rareté (un par rôle de convoi) |
-| Doublons | Éveil C0→C6 (+8 %/cran, + 1-2 crans qui montent une signature) ; au-delà, **55 💠 rendus** |
-| Rareté effective | plafonnée par le **rang du joueur** (un Primordial au niveau 5 porte du Bronze) |
+| Élément            | Valeur actuelle                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Monnaie            | pierres de mana 💠 (failles + mines résiduelles + 110 💠/jour offerts à la connexion)                                                                  |
+| Prix               | 110 💠 le tirage · ×10 pour 990 💠 (1 offert)                                                                                                          |
+| Débit mesuré       | 63 · 91 · 157 · 240 💠/jour aux niveaux 12 · 30 · 60 · 100 (une faille/jour)                                                                           |
+| Raretés            | **8** : Commun 30 % · Inhabituel 25 · Magique 18 · Rare 12 · Épique 8 · Légendaire 4 · Mythique 2,4 · Primordial 0,6                                   |
+| Pity sommet        | montée de 75 à 90, garanti au 90ᵉ, compteur conservé                                                                                                   |
+| Pity plancher      | tous les 10 : **Épique ou mieux**, re-tiré dans toute la tranche ≥ Épique → **45 %** de ces garantis sont Légendaire+                                  |
+| Bannières          | **aucune** : un seul pool de 32 champions, tirage uniforme dans la rareté obtenue                                                                      |
+| Roster             | **32 champions**, 4 par rareté (un par rôle de convoi)                                                                                                 |
+| Doublons           | Éveil C0→C6 (+8 %/cran, + 1-2 crans qui montent une signature) ; au-delà, **55 💠 rendus**                                                             |
+| Rareté effective   | plafonnée par le **rang du joueur** (un Primordial au niveau 5 porte du Bronze)                                                                        |
 | Armes / équipement | **pas de gacha** : pièces par lignée, via sièges (2 %), embuscades repoussées (25 %), Équipementier (fonte d'objets) — stock du compte réel **à zéro** |
-| Déploiement | `engageCap` (Panthéon) borne groupe, escorte et rempart ; failles plafonnées à 3 |
+| Déploiement        | `engageCap` (Panthéon) borne groupe, escorte et rempart ; failles plafonnées à 3                                                                       |
 
 Mesures déjà faites (v0.969) : **2 comptes sur 4 n'avaient jamais tiré** ; saturation (tirages
 qui ne font plus que rendre du mana) **0 % à 1 mois, 18 % à 3, 45 % à 6, 68 % à un an** ;
@@ -68,7 +68,7 @@ au niveau 60 pour une cible de 10-20).
 **Presque tous tirent 3 raretés** (★3/★4/★5, R/SR/SSR) :
 
 - **Le bas** (★3, ~94 %) est du **fourrage** : ce n'est souvent même pas un personnage mais une
-  arme ou un matériau. Il sert à rendre le haut rare *par contraste*.
+  arme ou un matériau. Il sert à rendre le haut rare _par contraste_.
 - **Le milieu** (★4, ~5 %) est **garanti tous les 10** : c'est le « petit gain » de chaque lot.
 - **Le sommet** (★5, ~0,6 %) est **l'événement** : animation dédiée, pity, et c'est lui qu'on
   vient chercher.
@@ -97,15 +97,15 @@ plafond de niveau apporterait déjà.
 
 ### 3.3 Pity
 
-| Jeu | Sommet | Pity sommet | Plancher | Particularités |
-|---|---|---|---|---|
-| Genshin / Honkai Star Rail | 0,6 % | montée vers 74, dur à 90 | ★4 tous les 10 | 50/50 sur bannière limitée, garanti ensuite ; compteur conservé entre bannières du même type |
-| Genshin — bannière d'armes | 0,7 % | dur à 80 | ★4 tous les 10 | « trajectoire » : on choisit l'arme visée |
-| Arknights | 2 % (★6) | +2 % par tirage après 50 | ★5 dans les 10 premiers seulement | étincelle à 300 sur bannières limitées |
-| Blue Archive / Uma Musume | 3 % | aucun pity progressif | ★2 garanti au 10ᵉ | **étincelle à 200** : on échange des points contre le personnage vedette |
-| Nikke | 4 % | aucun | — | kilométrage (étincelle) à 200 |
-| Fire Emblem Heroes | 3-6 % | +0,5 % tous les 5 tirages sans ★5 | — | étincelle à 40 sur certaines bannières |
-| Epic Seven | 1,25 % | mystique via médailles | — | bannière d'artefacts séparée |
+| Jeu                        | Sommet   | Pity sommet                       | Plancher                          | Particularités                                                                               |
+| -------------------------- | -------- | --------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
+| Genshin / Honkai Star Rail | 0,6 %    | montée vers 74, dur à 90          | ★4 tous les 10                    | 50/50 sur bannière limitée, garanti ensuite ; compteur conservé entre bannières du même type |
+| Genshin — bannière d'armes | 0,7 %    | dur à 80                          | ★4 tous les 10                    | « trajectoire » : on choisit l'arme visée                                                    |
+| Arknights                  | 2 % (★6) | +2 % par tirage après 50          | ★5 dans les 10 premiers seulement | étincelle à 300 sur bannières limitées                                                       |
+| Blue Archive / Uma Musume  | 3 %      | aucun pity progressif             | ★2 garanti au 10ᵉ                 | **étincelle à 200** : on échange des points contre le personnage vedette                     |
+| Nikke                      | 4 %      | aucun                             | —                                 | kilométrage (étincelle) à 200                                                                |
+| Fire Emblem Heroes         | 3-6 %    | +0,5 % tous les 5 tirages sans ★5 | —                                 | étincelle à 40 sur certaines bannières                                                       |
+| Epic Seven                 | 1,25 %   | mystique via médailles            | —                                 | bannière d'artefacts séparée                                                                 |
 
 Deux familles :
 
@@ -135,12 +135,12 @@ l'exclusivité.
 
 ### 3.5 Doublons et monnaie de repli
 
-| Jeu | Doublon | Au-delà du max |
-|---|---|---|
-| Genshin | constellation C1→C6 | **Starglitter** → boutique : acheter des ★4 choisis, des tirages |
-| HSR | eidolon E1→E6 | **Undying Embers/Starlight** → boutique |
-| Arknights | potentiel 1→6 | **jetons** → boutique de certificats (échanger contre un opérateur) |
-| Blue Archive | éléments d'amélioration | **eligma** → échanger contre les éléments du personnage voulu |
+| Jeu          | Doublon                 | Au-delà du max                                                      |
+| ------------ | ----------------------- | ------------------------------------------------------------------- |
+| Genshin      | constellation C1→C6     | **Starglitter** → boutique : acheter des ★4 choisis, des tirages    |
+| HSR          | eidolon E1→E6           | **Undying Embers/Starlight** → boutique                             |
+| Arknights    | potentiel 1→6           | **jetons** → boutique de certificats (échanger contre un opérateur) |
+| Blue Archive | éléments d'amélioration | **eligma** → échanger contre les éléments du personnage voulu       |
 
 **Personne ne rend la monnaie de tirage elle-même.** Le repli est une **seconde monnaie**, qui
 achète un **choix** (un personnage désigné, un matériau). C'est ce qui empêche la boucle
@@ -218,11 +218,11 @@ consomme un objet du héros. Résultat mesuré : **0 pièce** en stock pour 9 ch
 
 ### 5.1 Raretés : passer à **3 raretés de tirage**
 
-| Rareté de tirage | Taux | Rôle |
-|---|---|---|
-| ★3 **Recrue** | ~85 % | fourrage : Éveil des ★3, et **éclats** (§ 5.4) |
-| ★4 **Vétéran** | ~14 % · garanti tous les 10 | le petit gain de chaque lot |
-| ★5 **Légende** | 0,6 % · montée 75 → garanti 90 | l'événement |
+| Rareté de tirage | Taux                           | Rôle                                           |
+| ---------------- | ------------------------------ | ---------------------------------------------- |
+| ★3 **Recrue**    | ~85 %                          | fourrage : Éveil des ★3, et **éclats** (§ 5.4) |
+| ★4 **Vétéran**   | ~14 % · garanti tous les 10    | le petit gain de chaque lot                    |
+| ★5 **Légende**   | 0,6 % · montée 75 → garanti 90 | l'événement                                    |
 
 - Les 32 champions se répartissent sur les 3 raretés (par ex. **8 ★3 · 12 ★4 · 12 ★5**, pyramide
   **inversée** du genre : le haut est la collection, le bas l'entrée).

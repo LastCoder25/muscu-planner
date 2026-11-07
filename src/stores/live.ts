@@ -98,9 +98,7 @@ export const useLiveStore = defineStore('live', () => {
       exercises: session.exercises.map((ex) => {
         // Poids du corps si la cible le dit, ou si l'exo n'utilise pas de charge en kg
         // (poids du corps, élastique/assisté) → charge affichée « PdC », lest optionnel.
-        const bodyweight =
-          ex.target.load === 'bodyweight' ||
-          isUnloadedEquipment(ex.equipment);
+        const bodyweight = ex.target.load === 'bodyweight' || isUnloadedEquipment(ex.equipment);
         const base = bodyweight ? (ex.target.added_kg ?? 0) : (ex.target.load_kg ?? 0);
         const blank = (load: number, reps: number, rest?: number): LiveSet => {
           const set: LiveSet = {

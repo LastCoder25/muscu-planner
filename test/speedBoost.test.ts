@@ -39,8 +39,7 @@ const trip = (
 });
 
 describe('⚡ un boost fait SAUTER le pion (v1.295.0 : « le tracé de 1 h à 3 min, les équipes encore au tiers »)', () => {
-  const frac = (v: ReturnType<typeof trip>, now: number) =>
-    (now - v.sentAt) / (v.midAt - v.sentAt);
+  const frac = (v: ReturnType<typeof trip>, now: number) => (now - v.sentAt) / (v.midAt - v.sentAt);
   it('à l’aller, le départ avance du gain : la position saute, le trajet garde sa durée', () => {
     const v = trip(); // 60 min d'aller, parti à 0
     const now = 2 * M; // parti depuis 2 min seulement

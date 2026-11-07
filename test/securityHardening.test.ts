@@ -15,7 +15,9 @@ const all = fs
 
 describe('🔒 durcissement 0104', () => {
   it('les parties d’une amitié sont verrouillées par un trigger', () => {
-    expect(all).toMatch(/create trigger friendships_lock_parties before update on public\.friendships/);
+    expect(all).toMatch(
+      /create trigger friendships_lock_parties before update on public\.friendships/,
+    );
     // Aucune migration postérieure ne le retire.
     const after = all.slice(all.lastIndexOf('create trigger friendships_lock_parties'));
     expect(after).not.toMatch(/drop trigger[^;]*friendships_lock_parties/);

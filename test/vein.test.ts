@@ -82,7 +82,7 @@ describe('💎 le filon éphémère', () => {
     const offers = poiOffers(p, {
       heroAway: false,
       comptoirLevel: 0,
-      advsAvailable: 2,
+      advsAvailable: 2,
     });
     expect(offers.hero).toBe(false);
     expect(offers.party).toBe(true);

@@ -51,12 +51,12 @@ describe('🕘 dernière fois, à la même position de série', () => {
     const s = { set: 1, load_kg: 42.5, reps: 12, difficulty: 2 } as never;
     expect(formatLastTime(s, { time: false, bodyweight: false })).toBe('42,5 kg × 12');
     expect(formatLastTime(s, { time: false, bodyweight: true })).toBe('+42,5 kg × 12');
-    expect(formatLastTime({ ...(s as object), load_kg: 0 } as never, { time: false, bodyweight: true })).toBe(
-      '12 reps',
-    );
-    expect(formatLastTime({ ...(s as object), reps: 45 } as never, { time: true, bodyweight: true })).toBe(
-      '45 s',
-    );
+    expect(
+      formatLastTime({ ...(s as object), load_kg: 0 } as never, { time: false, bodyweight: true }),
+    ).toBe('12 reps');
+    expect(
+      formatLastTime({ ...(s as object), reps: 45 } as never, { time: true, bodyweight: true }),
+    ).toBe('45 s');
   });
 });
 

@@ -92,6 +92,12 @@ export function inclineFromElevation(
 // Vélo (route/appart) → défi vélo.
 const WALK: CardioActivity[] = ['marche', 'rando', 'marche_tapis'];
 const RUN: CardioActivity[] = ['course', 'trail', 'course_tapis'];
+/** 🚴 Les activités que montre un filtre d'historique sur `a` : le vélo de route englobe le vélo
+ *  d'appartement (même défi, même tuile « Vélo »), les autres ne montrent qu'elles-mêmes. */
+export function activitiesShownBy(a: CardioActivity): CardioActivity[] {
+  return a === 'velo' ? ['velo', 'velo_appart'] : [a];
+}
+
 export function challengeIdsForActivity(a: CardioActivity): string[] {
   if (WALK.includes(a)) return ['ex_ch_marche_course', 'ex_ch_marche'];
   if (RUN.includes(a)) return ['ex_ch_marche_course', 'ex_ch_course'];

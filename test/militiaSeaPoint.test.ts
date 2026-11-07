@@ -164,11 +164,15 @@ describe('⛵🏰 un lieu fixe vers un lieu fixe d’une autre île', () => {
     expect(shipPointBlocker(m, null, src, { island: 3, pointId: 'x' }, 1)).toBe('notVisited');
     expect(shipPointBlocker(m, null, src, { island: 2, pointId: 'i2_empty' }, 0)).toBe('empty');
     expect(shipPointBlocker(m, null, src, { island: 2, pointId: 'i2_empty' }, 4)).toBe('tooMany');
-    expect(shipPointBlocker(m, null, src, { island: 2, pointId: 'i2_enemy' }, 1)).toBe(
-      'noTarget',
-    );
+    expect(shipPointBlocker(m, null, src, { island: 2, pointId: 'i2_enemy' }, 1)).toBe('noTarget');
     expect(
-      shipPointBlocker(m, null, { island: 1, pointId: 'nope' }, { island: 2, pointId: 'i2_empty' }, 1),
+      shipPointBlocker(
+        m,
+        null,
+        { island: 1, pointId: 'nope' },
+        { island: 2, pointId: 'i2_empty' },
+        1,
+      ),
     ).toBe('noSource');
     expect(
       shipMilitiaToPoint(m, null, src, { island: 2, pointId: 'i2_enemy' }, 1, T0, 21),

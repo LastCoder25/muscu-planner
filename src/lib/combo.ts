@@ -1238,7 +1238,11 @@ export function comboDayQuota(
     if (owed <= 0) continue;
     const m = legMode(leg);
     const per =
-      m === 'sets' ? 1 : m === 'time' ? legTimePerSet(leg, objective) : Math.max(1, legLastReps(leg));
+      m === 'sets'
+        ? 1
+        : m === 'time'
+          ? legTimePerSet(leg, objective)
+          : Math.max(1, legLastReps(leg));
     let n = Math.min(owed, COMBO_QUOTA_MAX_SETS * per);
     // Une durée se règle par pas de 15 s : jamais au-delà du restant.
     if (m === 'time') n = Math.min(left, Math.ceil(n / COMBO_TIME_STEP) * COMBO_TIME_STEP);

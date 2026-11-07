@@ -9,7 +9,8 @@ const read = (f: string) => readFileSync(f, 'utf8');
 function trailColors(): string[] {
   const css = read('src/pages/ExpeditionMapPage.vue');
   const out: string[] = [];
-  for (const m of css.matchAll(/\.trail[^{]*\{[^}]*?stroke:\s*(#[0-9a-fA-F]{6})/g)) out.push(m[1]!.toLowerCase());
+  for (const m of css.matchAll(/\.trail[^{]*\{[^}]*?stroke:\s*(#[0-9a-fA-F]{6})/g))
+    out.push(m[1]!.toLowerCase());
   return out;
 }
 
@@ -22,7 +23,9 @@ describe('🏰 la couleur d’un lieu fixe tenu', () => {
     const trails = trailColors();
     expect(trails.length).toBeGreaterThan(2);
     expect(trails).not.toContain(HELD_COLOR.toLowerCase());
-    expect(CHARACTER_RANKS.map((r) => r.color.toLowerCase())).not.toContain(HELD_COLOR.toLowerCase());
+    expect(CHARACTER_RANKS.map((r) => r.color.toLowerCase())).not.toContain(
+      HELD_COLOR.toLowerCase(),
+    );
   });
   it('le fort et le drapeau d’un lieu tenu lisent le jeton, plus le violet des équipes', () => {
     const css = read('src/components/MapPoiLayer.vue');

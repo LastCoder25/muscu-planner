@@ -20,6 +20,8 @@ describe('📬 état d’un rapport', () => {
   it('⚠️ « à prendre » veut dire exactement ce que l’encaissement accepte', () => {
     for (const now of [0, 4999, 5000, 9000])
       for (const claimed of [false, true, undefined])
-        expect(claimState(msg({ claimed }), now) === 'claim').toBe(isClaimable(msg({ claimed }), now));
+        expect(claimState(msg({ claimed }), now) === 'claim').toBe(
+          isClaimable(msg({ claimed }), now),
+        );
   });
 });

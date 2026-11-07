@@ -36,7 +36,9 @@ const cls = computed(() =>
 );
 const tag = computed(
   () =>
-    ({ free: '＋ Libre', better: '↑ Meilleure', equal: '≈ Égale', worse: '↓ Moins bonne' })[props.cmp?.verdict ?? 'free'],
+    ({ free: '＋ Libre', better: '↑ Meilleure', equal: '≈ Égale', worse: '↓ Moins bonne' })[
+      props.cmp?.verdict ?? 'free'
+    ],
 );
 // ⚠️ Ce qui se passe vraiment : un doublon est VENDU d'office (v0.890), pas gardé.
 const what = computed(

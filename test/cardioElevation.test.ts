@@ -3,6 +3,8 @@ import {
   CARDIO_ACTIVITIES,
   activityHasElevation,
   activityHasIncline,
+  activitiesShownBy,
+  challengeIdsForActivity,
   climbKmPer100m,
   descentWeight,
   effortKm,
@@ -105,5 +107,17 @@ describe('⛰️ dénivelé : saisi et pris en compte pour toutes les sorties qu
     expect(effortKm(40, 500, 500, 'velo')).toBe(55); // 40 + 5 × 3 ; descente ignorée
     expect(effortKm(10, 200, 100, 'course')).toBe(13); // 10 + 3, inchangé
     expect(effortKm(10, 200, 100)).toBe(13); // sans activité : comme à pied
+  });
+});
+
+describe('🚴 le défi Vélo prend le vélo ET le vélo d’appartement', () => {
+  it('les deux nourrissent le même défi', () => {
+    expect(challengeIdsForActivity('velo')).toEqual(['ex_ch_velo']);
+    expect(challengeIdsForActivity('velo_appart')).toEqual(['ex_ch_velo']);
+  });
+  it('le filtre « Vélo » de l’historique montre aussi l’appartement, pas l’inverse', () => {
+    expect(activitiesShownBy('velo')).toEqual(['velo', 'velo_appart']);
+    expect(activitiesShownBy('velo_appart')).toEqual(['velo_appart']);
+    expect(activitiesShownBy('course')).toEqual(['course']);
   });
 });

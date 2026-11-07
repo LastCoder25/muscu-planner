@@ -30,8 +30,7 @@ const champ = (i: number, level = 30): Adventurer => ({
 });
 const road: EscortKit = { talents: [], advGear: refAdvGear(30, 3) };
 const team = (n: number) => Array.from({ length: n }, (_, i) => champ(i));
-const pct = (e: Adventurer[]) =>
-  Math.round((partyWinChance(poi(), e, road, null, 0) ?? 0) * 100);
+const pct = (e: Adventurer[]) => Math.round((partyWinChance(poi(), e, road, null, 0) ?? 0) * 100);
 
 describe('winGain — ce qu’un membre apporte à la réussite', () => {
   it('c’est la différence de deux 🎯 %, avec la même fonction que l’écran', () => {

@@ -39,7 +39,10 @@ describe('🕯️ l’île 3 : les objectifs battus s’éteignent', () => {
   /** `n` sorties arrivées, une par minute à partir de `from`. */
   const withDepartures = (m: ExpeditionMap, from: number, n: number): ExpeditionMap => ({
     ...m,
-    departures: [...(m.departures ?? []), ...Array.from({ length: n }, (_, i) => from + i * 60_000)],
+    departures: [
+      ...(m.departures ?? []),
+      ...Array.from({ length: n }, (_, i) => from + i * 60_000),
+    ],
   });
   const ember = (m: ExpeditionMap, id: string) => m.archipel!.embers?.[id];
 

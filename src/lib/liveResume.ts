@@ -37,7 +37,11 @@ interface RawRun {
 /** Résume UNE entrée sauvegardée, ou `null` si ce n'est pas une séance de programme
  *  reprenable : clé étrangère (`muscu:live:loadstep`…), JSON illisible, séance libre (elle a
  *  sa propre carte), trop vieille, ou sans aucune série. */
-export function savedRunSummary(key: string, raw: string | null, now: number): SavedRunSummary | null {
+export function savedRunSummary(
+  key: string,
+  raw: string | null,
+  now: number,
+): SavedRunSummary | null {
   if (!key.startsWith(PREFIX) || !raw) return null;
   let r: RawRun;
   try {

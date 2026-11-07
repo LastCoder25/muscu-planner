@@ -29,7 +29,9 @@ export function equipmentLabel(code: string | null | undefined): string {
  *  connaissait que « élastique » et traitait les trois exos « elastique »/« bands » comme
  *  des exercices chargés. */
 export function isUnloadedEquipment(code: string | null | undefined): boolean {
-  return code === 'poids_du_corps' || code === 'élastique' || code === 'elastique' || code === 'bands';
+  return (
+    code === 'poids_du_corps' || code === 'élastique' || code === 'elastique' || code === 'bands'
+  );
 }
 
 /** Les exercices du plus récemment fait au plus ancien, d'après les bilans (du plus récent

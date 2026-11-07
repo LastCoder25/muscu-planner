@@ -10,7 +10,13 @@ import {
   riftSlainOf,
   simulateIncursion,
 } from '@/lib/rift';
-import { EXPE, markRiftWounds, restoreUnvanquished, type Poi, type ExpeditionMap } from '@/lib/expedition';
+import {
+  EXPE,
+  markRiftWounds,
+  restoreUnvanquished,
+  type Poi,
+  type ExpeditionMap,
+} from '@/lib/expedition';
 import { refAdvGear, refChampionAdv, partyAllies, type EscortKit } from '@/lib/caravan';
 import { fuseUnits } from '@/lib/skirmish';
 import { buildRiftStage, riftStageInputOf } from '@/lib/riftStage';
@@ -45,7 +51,10 @@ const team = (n: number, level: number): Adventurer[] =>
       relic: `refGear${i}relic`,
     },
   }));
-const road = (level: number, n: number): EscortKit => ({ talents: [], advGear: refAdvGear(level, n) });
+const road = (level: number, n: number): EscortKit => ({
+  talents: [],
+  advGear: refAdvGear(level, n),
+});
 const mapOf = (p: Poi): ExpeditionMap => ({ pois: [p] }) as unknown as ExpeditionMap;
 
 function incursion(poi: Poi, n: number, seed: number, now: number) {
@@ -111,7 +120,12 @@ describe('⚔️ une faille entamée', () => {
     const p = rift({ riftSlain: 5 });
     expect(riftSlainOf(p, pop)).toBe(5);
     expect(incursionBodies(p, at(7)).length).toBe(pop - 5 + 1); // + le gardien
-    const run = simulateIncursion(fuseUnits(partyAllies(team(3, 26), road(26, 3), null), 'G'), p, at(7), 9);
+    const run = simulateIncursion(
+      fuseUnits(partyAllies(team(3, 26), road(26, 3), null), 'G'),
+      p,
+      at(7),
+      9,
+    );
     expect(run.start).toBe(5);
     expect(run.killed).toBeLessThanOrEqual(pop - 5);
     expect(run.foeTrail.length).toBeLessThanOrEqual(pop - 5);

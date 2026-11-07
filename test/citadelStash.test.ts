@@ -3,12 +3,7 @@
 // Défaut constaté sur le compte réel le 2026-10-02 : elles revenaient à neuf.
 import { describe, expect, it } from 'vitest';
 import { archipelOn } from '@/lib/archipelago';
-import {
-  captureControl,
-  citadelIdOf,
-  ensureControls,
-  razeCitadel,
-} from '@/lib/controlPoints';
+import { captureControl, citadelIdOf, ensureControls, razeCitadel } from '@/lib/controlPoints';
 import { createMap, citadelRestingUntil, type ExpeditionMap } from '@/lib/expedition';
 
 const H = 3600_000;

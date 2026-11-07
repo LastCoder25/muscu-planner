@@ -10,11 +10,7 @@ const run = (over: Record<string, unknown> = {}) =>
     exIndex: 0,
     exercises: [
       {
-        sets: [
-          { done: true, warmup: true },
-          { done: true },
-          { done: false },
-        ],
+        sets: [{ done: true, warmup: true }, { done: true }, { done: false }],
       },
       { sets: [{ done: false }] },
     ],
@@ -24,11 +20,19 @@ const run = (over: Record<string, unknown> = {}) =>
 describe('▶️ reprendre une séance de programme depuis l’accueil', () => {
   it('résume une séance interrompue, approches exclues', () => {
     const r = savedRunSummary('muscu:live:s1', run(), NOW);
-    expect(r).toEqual({ sessionId: 's1', name: 'Haut du corps', startedAt: NOW - 3600_000, done: 1, total: 3 });
+    expect(r).toEqual({
+      sessionId: 's1',
+      name: 'Haut du corps',
+      startedAt: NOW - 3600_000,
+      done: 1,
+      total: 3,
+    });
   });
 
   it('⚠️ la séance libre a sa propre carte : jamais deux fois', () => {
-    expect(savedRunSummary('muscu:live:free', run({ session_id: 'free', free: true }), NOW)).toBeNull();
+    expect(
+      savedRunSummary('muscu:live:free', run({ session_id: 'free', free: true }), NOW),
+    ).toBeNull();
   });
 
   it('⚠️ les autres clés du même préfixe ne sont pas des séances', () => {

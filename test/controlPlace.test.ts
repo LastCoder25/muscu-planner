@@ -25,7 +25,9 @@ describe('🛡️ un lieu fixe d’île retourne sur sa place', () => {
     const control = { ...oss.control!, owner: 'player' as const, garrison: ['a1', 'a2'] };
     const moved = {
       ...m,
-      pois: m.pois.map((p) => (p.id === oss.id ? { ...p, x: want.x - 10, y: want.y + 37, control } : p)),
+      pois: m.pois.map((p) =>
+        p.id === oss.id ? { ...p, x: want.x - 10, y: want.y + 37, control } : p,
+      ),
     };
     const out = ensureControls(moved, NOW, 30, ISLAND_OUTPOST_LEVEL);
     const back = out.pois.find((p) => p.id === oss.id)!;

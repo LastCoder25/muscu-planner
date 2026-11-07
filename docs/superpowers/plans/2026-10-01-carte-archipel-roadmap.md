@@ -389,70 +389,57 @@ par case ; `stonesPerDay`, `fullGoldPerDay` ; débits des sources actuelles). So
       **v1.28.1 — plus de tour de guet sur les îles** (décision de l’utilisateur : « enlève les
       tours de guet, les îles sont plus petites », sauf la Tour de guet de la base). Lieux fixes :
       île 1 mine, camp, jardin, scriptorium, source de mana (5) ; île 2 socle + archives (4) ;
-      île 3 socle + jardin + ossuaire ; île 4 socle + arsenal + cercle ; île 5 socle + scriptorium
-      + autel (5 chacune). Avant-postes : le camp et la MINE (ISLAND_OUTPOSTS), relais
+      île 3 socle + jardin + ossuaire ; île 4 socle + arsenal + cercle ; île 5 socle + scriptorium + autel (5 chacune). Avant-postes : le camp et la MINE (ISLAND_OUTPOSTS), relais
       inchangé. Une tour TENUE au moment de la bascule reste jusqu’au rappel ou à sa perte (sa
       garnison, miliciens compris, n’a nulle part où aller).
 - [x] **6 bis. Débarquer et s'étendre** (décisions de l'utilisateur, 2026-10-02) — sur une île,
       on n'arrive pas dans une base centrale mais dans un **village de pêcheurs au port**, et on
-      s'étend en prenant les lieux clés un par un.
-      - [x] **Les îles sont EN LIGNE, d'ouest en est** (miniature de l'archipel comprise). On
-        **débarque côté ouest** — au sud-ouest par défaut — au **port d'arrivée**, et la
-        **forteresse portuaire ennemie** (d'où part la traversée suivante) est à **l'opposé
-        exact**, côté est (nord-est par défaut). L'angle **varie d'une île à l'autre** sans
-        quitter son côté : la progression reste lisible (`PORT_ANGLE`, v1.29.0).
-      - [x] **Île 1 = la capitale** (base au centre). **Îles 2 à 5 : l'île est dessinée DEVANT
-        le village**, le port tombe sur le point de départ et l'île s'étend vers l'intérieur
-        (`islandCenter`, fenêtre de carte centrée sur l'île, îles non réduites, v1.29.0).
-      - [x] **Le port d'arrivée et les lieux fixes sont attaqués sur chaque île, comme
-        aujourd'hui** (décision de l'utilisateur, 2026-10-02 — remplace « village sans siège »).
-        Les armées viennent de l'**intérieur des terres**, jamais de la mer ; elles vont **tout
-        droit** (« les cartes d'îles sont assez simples »), et ne passent par le centre de
-        l'île que si la ligne droite coupe la baie (`islandVia`, v1.29.0).
-      - [x] **Les trajets se mesurent depuis le VRAI point de départ** (v1.52.3, remplace les relais
-        `withRelays` de la v1.29.0 : un héros parti du port payait le trajet depuis un lieu tenu
-        où personne n'était) : le village, ou le lieu tenu d'où l'on sort (`legFromSpot`). Plus de règle spéciale de forteresse (3 h / 2 h en
-        relais) ni d'avant-postes désignés : tout lieu tenu en est un. Les objectifs s'ouvrent
-        une fois **deux lieux fixes tenus**, n'importe lesquels (`OBJECTIVES_AFTER_HELD`).
-      - [x] **Le rang des LIEUX FIXES monte en s'éloignant du port d'arrivée** (bas de la
-        tranche de l'île près du port, haut vers l'intérieur et la forteresse) : la progression
-        se lit sur la carte (`islandControlLevel`, v1.30.0). ⚠️ **Les lieux fixes seulement**
-        (décision de l'utilisateur) : lieux tirés, objectifs, forteresse et assaillants gardent
-        leur règle. Un lieu repris garde le rang de ses assaillants. Jamais au-dessus du joueur.
-      - [x] **Le héros peut tenir garnison partout** (v1.30.0) : à l'envoi vers un lieu fixe,
-        « 🏰 le héros reste en garnison » ; seul, il reste d'office ; à la forteresse, toujours
-        (`heroStaysAt`). Il **défend** le lieu aux reprises avec son instantané de combat figé
-        au départ (`ControlState.heroUnit`), se rappelle depuis la fiche du lieu, et rentre à
-        pied s'il est délogé (jamais blessé hors d'un siège de la base). Il part de la base (ou de
-        son poste), et son trajet se mesure depuis là.
-      - [x] Un blessé rentre se soigner au village ; la milice y est produite et en part : sur
-        les îles 2 à 5, la base EST le village du port (l'île est dessinée devant lui), donc
-        l'infirmerie, la Caserne et les transferts y sont déjà (v1.29.0, rien à ajouter).
-      - [x] **Les objectifs (avant-postes secondaires) se TIENNENT une fois pris** (décision de
-        l'utilisateur, 2026-10-02, v1.31.0) : garnison de 3 champions, ils ne produisent rien,
-        comptent comme pris pour le verrou et la troupe de la forteresse (`takeObjective`).
-        **La forteresse vient les récupérer EN PRIORITÉ** : tant qu'on en tient un, une attaque
-        échue sur un autre lieu fixe se reporte sur l'objectif tenu le plus proche
-        (`redirectIslandAttacks`). Repris par l'ennemi, il recompte comme debout et la
-        forteresse se reverrouille (`regainIslandTarget`). Les objectifs encore ennemis
-        attaquent selon la même règle que la forteresse (`attackSlow`). Île 3 : un cimetière
-        tenu ne se relève pas, ses morts l'attaquent à l'heure où il se serait relevé.
-        ⚠️ Les sièges de la base ne sont pas reportés (leur propre règle). Pacifiée : plus
-        aucune attaque.
-      - [x] **La forteresse a le niveau MAX de la carte de l'île** (v1.31.0) ; sa troupe
-        descend toujours de 12 à 8 avec les objectifs pris.
-      - [x] **Milice** (v1.34.1, décision de l'utilisateur) : PAS plafonnée à 3 places sur 5 —
-        chaque lieu fixe d'une île ajoute ses 5 places au plafond de la Caserne
-        (`militiaCap(caserne, islandSeats)`), donc l'île qu'on quitte peut être tenue
-        entièrement par la milice.
-      - [x] **Récompense d'une nouvelle île** (v1.34.1, décision de l'utilisateur, qui lève la
-        règle 9 sur ce point) : le coffre du premier débarquement vaut 10 tickets de tirage,
-        une fois par île.
-      - [x] **4 lieux fixes par île** (v1.37.0, décision de l'utilisateur) : socle (mine, camp
-        d'entraînement, source de mana) + UNE spécialité. Retirés : jardin (île 3), cercle
-        d'invocation (île 4, la source donne déjà le mana), scriptorium (île 5, l'autel donne déjà
-        les runes). Un lieu retiré encore tenu est rappelé (récolte comprise) puis effacé
-        (`retiredHeld`).
+      s'étend en prenant les lieux clés un par un. - [x] **Les îles sont EN LIGNE, d'ouest en est** (miniature de l'archipel comprise). On
+      **débarque côté ouest** — au sud-ouest par défaut — au **port d'arrivée**, et la
+      **forteresse portuaire ennemie** (d'où part la traversée suivante) est à **l'opposé
+      exact**, côté est (nord-est par défaut). L'angle **varie d'une île à l'autre** sans
+      quitter son côté : la progression reste lisible (`PORT_ANGLE`, v1.29.0). - [x] **Île 1 = la capitale** (base au centre). **Îles 2 à 5 : l'île est dessinée DEVANT
+      le village**, le port tombe sur le point de départ et l'île s'étend vers l'intérieur
+      (`islandCenter`, fenêtre de carte centrée sur l'île, îles non réduites, v1.29.0). - [x] **Le port d'arrivée et les lieux fixes sont attaqués sur chaque île, comme
+      aujourd'hui** (décision de l'utilisateur, 2026-10-02 — remplace « village sans siège »).
+      Les armées viennent de l'**intérieur des terres**, jamais de la mer ; elles vont **tout
+      droit** (« les cartes d'îles sont assez simples »), et ne passent par le centre de
+      l'île que si la ligne droite coupe la baie (`islandVia`, v1.29.0). - [x] **Les trajets se mesurent depuis le VRAI point de départ** (v1.52.3, remplace les relais
+      `withRelays` de la v1.29.0 : un héros parti du port payait le trajet depuis un lieu tenu
+      où personne n'était) : le village, ou le lieu tenu d'où l'on sort (`legFromSpot`). Plus de règle spéciale de forteresse (3 h / 2 h en
+      relais) ni d'avant-postes désignés : tout lieu tenu en est un. Les objectifs s'ouvrent
+      une fois **deux lieux fixes tenus**, n'importe lesquels (`OBJECTIVES_AFTER_HELD`). - [x] **Le rang des LIEUX FIXES monte en s'éloignant du port d'arrivée** (bas de la
+      tranche de l'île près du port, haut vers l'intérieur et la forteresse) : la progression
+      se lit sur la carte (`islandControlLevel`, v1.30.0). ⚠️ **Les lieux fixes seulement**
+      (décision de l'utilisateur) : lieux tirés, objectifs, forteresse et assaillants gardent
+      leur règle. Un lieu repris garde le rang de ses assaillants. Jamais au-dessus du joueur. - [x] **Le héros peut tenir garnison partout** (v1.30.0) : à l'envoi vers un lieu fixe,
+      « 🏰 le héros reste en garnison » ; seul, il reste d'office ; à la forteresse, toujours
+      (`heroStaysAt`). Il **défend** le lieu aux reprises avec son instantané de combat figé
+      au départ (`ControlState.heroUnit`), se rappelle depuis la fiche du lieu, et rentre à
+      pied s'il est délogé (jamais blessé hors d'un siège de la base). Il part de la base (ou de
+      son poste), et son trajet se mesure depuis là. - [x] Un blessé rentre se soigner au village ; la milice y est produite et en part : sur
+      les îles 2 à 5, la base EST le village du port (l'île est dessinée devant lui), donc
+      l'infirmerie, la Caserne et les transferts y sont déjà (v1.29.0, rien à ajouter). - [x] **Les objectifs (avant-postes secondaires) se TIENNENT une fois pris** (décision de
+      l'utilisateur, 2026-10-02, v1.31.0) : garnison de 3 champions, ils ne produisent rien,
+      comptent comme pris pour le verrou et la troupe de la forteresse (`takeObjective`).
+      **La forteresse vient les récupérer EN PRIORITÉ** : tant qu'on en tient un, une attaque
+      échue sur un autre lieu fixe se reporte sur l'objectif tenu le plus proche
+      (`redirectIslandAttacks`). Repris par l'ennemi, il recompte comme debout et la
+      forteresse se reverrouille (`regainIslandTarget`). Les objectifs encore ennemis
+      attaquent selon la même règle que la forteresse (`attackSlow`). Île 3 : un cimetière
+      tenu ne se relève pas, ses morts l'attaquent à l'heure où il se serait relevé.
+      ⚠️ Les sièges de la base ne sont pas reportés (leur propre règle). Pacifiée : plus
+      aucune attaque. - [x] **La forteresse a le niveau MAX de la carte de l'île** (v1.31.0) ; sa troupe
+      descend toujours de 12 à 8 avec les objectifs pris. - [x] **Milice** (v1.34.1, décision de l'utilisateur) : PAS plafonnée à 3 places sur 5 —
+      chaque lieu fixe d'une île ajoute ses 5 places au plafond de la Caserne
+      (`militiaCap(caserne, islandSeats)`), donc l'île qu'on quitte peut être tenue
+      entièrement par la milice. - [x] **Récompense d'une nouvelle île** (v1.34.1, décision de l'utilisateur, qui lève la
+      règle 9 sur ce point) : le coffre du premier débarquement vaut 10 tickets de tirage,
+      une fois par île. - [x] **4 lieux fixes par île** (v1.37.0, décision de l'utilisateur) : socle (mine, camp
+      d'entraînement, source de mana) + UNE spécialité. Retirés : jardin (île 3), cercle
+      d'invocation (île 4, la source donne déjà le mana), scriptorium (île 5, l'autel donne déjà
+      les runes). Un lieu retiré encore tenu est rappelé (récolte comprise) puis effacé
+      (`retiredHeld`).
 - [x] **7. Bascule de tous les comptes** (v1.36.0, 2026-10-03) — départ de l'île 1, compensation.
       Décisions de l'utilisateur : **les lieux tenus qui existent sur l'île 1** (mine, source,
       jardin, scriptorium) **restent tenus** ; les autres (camp d'entraînement, tour de guet)

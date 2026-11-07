@@ -248,6 +248,7 @@ import {
   ACTIVITY_ICONS,
   ACTIVITY_EMOJI,
   activityHasElevation,
+  activitiesShownBy,
   activityHasIncline,
   climbKmPer100m,
   descentWeight,
@@ -398,7 +399,7 @@ const filteredLogs = computed(() => {
   // Pas les sorties « miroir » d'un défi (doublon : les défis ont leur écran dédié).
   const base = cardio.logs.filter((l) => !l.payload.challenge_id);
   return activityFilter.value
-    ? base.filter((l) => l.payload.activity === activityFilter.value)
+    ? base.filter((l) => activitiesShownBy(activityFilter.value!).includes(l.payload.activity))
     : base;
 });
 function clearActivityFilter() {

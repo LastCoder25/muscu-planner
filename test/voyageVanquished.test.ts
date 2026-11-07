@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  placeTaken,
-  voyageFailure,
-  voyageVanquished,
-  type PartyResult,
-} from '@/lib/expedition';
+import { placeTaken, voyageFailure, voyageVanquished, type PartyResult } from '@/lib/expedition';
 
 const v = (win: boolean, extra: { turnBack?: number; outTurn?: number } = {}) => ({
   midAt: 1000,
