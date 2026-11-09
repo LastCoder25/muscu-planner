@@ -246,6 +246,7 @@ function goFollowUp() {
       fmt: 'cumulative',
       total: String(followUp.value),
       days: '7',
+      frac: '1',
     },
   });
 }

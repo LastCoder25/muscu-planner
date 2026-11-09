@@ -211,14 +211,16 @@ describe('🔁 compteur du jour, regroupement et qui peut se fractionner', () =>
     expect(lines[1]).toMatchObject({ kind: 'set', index: 1 });
     expect(lines[2]).toMatchObject({ kind: 'mini', date: D(1), reps: 4, takes: 1 });
   });
-  it('seuls les challenges de REPS sur tractions, pompes et dips, en cours, se fractionnent', () => {
-    const c = open([], { format: 'fixed' });
+  it('seuls les challenges FRACTIONNÉS de REPS sur tractions, pompes et dips, en cours, offrent « +1 »', () => {
+    const c = open([], { format: 'fixed', config: { start: 10, fraction: true } });
     expect(fractionAllowed(c)).toBe(true);
     expect(fractionAllowed({ ...c, exercise_id: 'ex_pushup' })).toBe(true);
     expect(fractionAllowed({ ...c, exercise_id: 'ex_dips' })).toBe(true);
     expect(fractionAllowed({ ...c, exercise_id: 'ex_bw_squat' })).toBe(false);
     expect(fractionAllowed({ ...c, exercise_id: 'ex_lat_pulldown' })).toBe(false);
-    expect(fractionAllowed({ ...c, config: { start: 1, count_mode: 'sets' } })).toBe(false);
+    expect(
+      fractionAllowed({ ...c, config: { start: 1, fraction: true, count_mode: 'sets' } }),
+    ).toBe(false);
     expect(fractionAllowed({ ...c, unit: 'time' })).toBe(false);
     expect(fractionAllowed({ ...c, status: 'done' })).toBe(false);
   });

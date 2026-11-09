@@ -48,6 +48,10 @@ export interface ChallengeConfig {
   //   (saisie par série reps+poids+assisté façon Défi 360 ; tous les formats, échelle séries).
   bodyweight?: boolean; // exo au poids du corps → propose le toggle « assisté » à la saisie
   discipline?: 'tennis'; // exo d'entraînement TENNIS : voie de jetons et XP de la piste Tennis
+  /** 🔁 Mode FRACTIONNÉ : saisie par « +1 / +2 / +3 » (les prises), avec ou sans objectif. Réservé
+   *  aux exos qui se fractionnent. JSONB : aucune migration. Un défi Découverte (`format: 'open'`)
+   *  est fractionné par nature, avec ou sans ce drapeau. */
+  fraction?: boolean;
 }
 
 // Une série réalisée (mode 'sets', ou détail optionnel en mode 'reps') : reps +
@@ -1287,14 +1291,22 @@ export function challengeBonusDate(c: Challenge): string | null {
 // par série du 360 ni terme de durée) : 30 prises d'1 rep valent exactement 3 séries de 10.
 // Rien à corriger ici — le test le garde.
 
+/** Ce challenge est-il FRACTIONNÉ (choisi comme tel à la création) ? Un défi Découverte l'est
+ *  toujours ; les autres formats portent `config.fraction`. */
+export function isFractionChallenge(ch: Pick<Challenge, 'format' | 'config'>): boolean {
+  return ch.format === 'open' || ch.config?.fraction === true;
+}
 /** Ce challenge se saisit-il par prises ? Des reps (pas des séries, pas du temps) sur un exo
- *  qui se fractionne ; la saisie reste ouverte tant que le défi l'est. */
+ *  qui se fractionne, tant que le défi est en cours. ⚠️ « +1 » n'est offert QUE sur un défi
+ *  fractionné — et sur un défi de reps classique qui contient déjà des prises (créé avant le
+ *  choix du mode, v1.313.0) : on ne retire pas la saisie à qui l'utilisait. */
 export function fractionAllowed(ch: Challenge): boolean {
   return (
     ch.status === 'active' &&
     ch.unit === 'reps' &&
     ch.config.count_mode !== 'sets' &&
-    fractionableExercise(ch.exercise_id)
+    fractionableExercise(ch.exercise_id) &&
+    (isFractionChallenge(ch) || ch.progress.some((p) => (p.sets ?? []).some((s) => s.mini)))
   );
 }
 export const isOpenChallenge = (ch: Pick<Challenge, 'format'>): boolean => ch.format === 'open';

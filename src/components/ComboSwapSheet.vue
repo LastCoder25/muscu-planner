@@ -292,7 +292,7 @@ import { useQuasar } from 'quasar';
 import ExerciseAnim from './ExerciseAnim.vue';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import { comboSlot } from '@/data/combo';
-import { variantFamilyKey } from '@/data/combo';
+import { exoAvailability, occupantsOf } from '@/lib/exoExclusivity';
 import {
   comboTransferBlocker,
   comboTransferPlan,
@@ -420,16 +420,18 @@ const fresh = computed(() => {
   const cc = c.value;
   const l = leg.value;
   if (!cc || !l) return [];
-  const taken = new Set<string>();
-  for (const ch of challenges.list)
-    if (ch.status === 'active' && !isCardioChallengeRow(ch))
-      taken.add(variantFamilyKey(ch.exercise_id));
+  // Un exo pris par un challenge actif n'est pas proposé — sauf un exo qui se fractionne occupé
+  // par un challenge FRACTIONNÉ (exception de l'exclusivité, cf. `exoExclusivity`).
+  const occ = occupantsOf(
+    challenges.list.filter((ch) => !isCardioChallengeRow(ch)),
+    [],
+  );
   const fav = new Set(profile.profile?.favorite_exercises ?? []);
   const all = lib.value
     .filter(
       (e) =>
         !isTennisExercise(e) &&
-        !taken.has(variantFamilyKey(e.id)) &&
+        !exoAvailability(e.id, occ).classic &&
         comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }, effScope.value) ===
           null,
     )

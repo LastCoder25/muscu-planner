@@ -515,6 +515,7 @@ import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { COMBO_SLOTS, variantFamilyKey, type ComboSlot } from '@/data/combo';
+import { exoAvailability, occupantReason, occupantsOf } from '@/lib/exoExclusivity';
 import { useLogsStore } from '@/stores/logs';
 import { exerciseRepDays, proposeRepsTarget } from '@/lib/repsHabit';
 import { isTennisExercise } from '@/lib/tennisTraining';
@@ -754,15 +755,21 @@ function onBack() {
 const hasAnim = (id: string) => !!exerciseFrames(id);
 const exImg = (id: string) => exerciseImage(id);
 
-// Familles d'exos déjà prises par un défi MUSCU actif → exclues du 360 (EXCLUSIVITÉ
-// PAR EXERCICE : un exo est soit en challenge, soit en 360, jamais les deux — pour tous).
-const challengeFamilies = computed(() => {
-  const keys = new Set<string>();
-  for (const c of challenges.list)
-    if (c.status === 'active' && !isCardioChallengeRow(c))
-      keys.add(variantFamilyKey(c.exercise_id));
-  return keys;
-});
+// Places prises par les challenges MUSCU actifs. EXCLUSIVITÉ PAR EXERCICE : un exo est soit en
+// challenge, soit en 360, jamais les deux — SAUF un exo qui se fractionne (tractions, pompes,
+// dips) occupé par un challenge FRACTIONNÉ : le 360 peut le prendre en séries/reps (le fractionné
+// a ses propres prises, cf. `exoExclusivity`).
+const challengeOccupants = computed(() =>
+  occupantsOf(
+    challenges.list.filter((c) => !isCardioChallengeRow(c)),
+    [],
+  ),
+);
+/** Ce qui empêche le 360 de prendre cet exo (un challenge actif), ou null. */
+function takenByChallenge(exerciseId: string): string | null {
+  const b = exoAvailability(exerciseId, challengeOccupants.value).classic;
+  return b ? occupantReason(b) : null;
+}
 // Exos candidats d'un emplacement : reps, muscle_primary du slot, matériel possédé
 // (favoris en tête). Exclut les exos déjà pris par un défi muscu actif.
 function candidates(slot: ComboSlot): ExerciseRow[] {
@@ -775,7 +782,7 @@ function candidates(slot: ComboSlot): ExerciseRow[] {
         comboMuscleInZone(e.muscle_primary, zone.value) &&
         // Les exos d'entraînement tennis vivent dans leurs challenges, pas dans le 360.
         !isTennisExercise(e) &&
-        !challengeFamilies.value.has(variantFamilyKey(e.id)),
+        !takenByChallenge(e.id),
     )
     .sort(
       (a, b) =>
@@ -1001,11 +1008,10 @@ async function createCombo() {
   // EXCLUSIVITÉ PAR EXERCICE : aucun exo sélectionné ne peut être déjà dans un défi MUSCU
   // actif (le draft les masque déjà ; garde-fou au cas où). Un 360 et des challenges sur
   // d'AUTRES exos coexistent sans souci.
-  const selectedFams = new Set<string>();
+  const selectedIds: string[] = [];
   for (const slot of COMBO_SLOTS)
-    if (enabled[slot.key])
-      for (const id of picks[slot.key]?.exercise_ids ?? []) selectedFams.add(variantFamilyKey(id));
-  if ([...selectedFams].some((f) => challengeFamilies.value.has(f))) {
+    if (enabled[slot.key]) selectedIds.push(...(picks[slot.key]?.exercise_ids ?? []));
+  if (selectedIds.some((id) => takenByChallenge(id))) {
     $q.notify({
       type: 'warning',
       message:

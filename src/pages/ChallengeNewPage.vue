@@ -132,6 +132,9 @@
               </div>
               <div class="ex-meta">
                 {{ e.muscle_primary }} · {{ e.unit === 'time' ? 'temps' : 'reps' }}
+                <span v-if="fractionOnlyOf(e)" class="fonly"
+                  >· 🔁 fractionné seul ({{ occupantReason(availOf(e).classic!) }})</span
+                >
               </div>
             </div>
             <q-icon v-if="exercise?.id === e.id" name="check_circle" color="primary" size="20px" />
@@ -192,11 +195,47 @@
              n'apparaît que pour les exos rythmiques (corde, burpees…) ; le gainage (planche)
              est en durée d'office (aucun toggle) et le cardio a son km/durée au-dessus. -->
         <div v-else-if="isDual || unit === 'reps'" class="count-toggle">
-          <button :class="{ on: objMode === 'reps' }" @click="setObjMode('reps')">🔢 Reps</button>
-          <button :class="{ on: objMode === 'sets' }" @click="setObjMode('sets')">📚 Séries</button>
+          <button
+            :class="{ on: objMode === 'reps', blocked: !!classicBlock }"
+            :disabled="!!classicBlock"
+            @click="setObjMode('reps')"
+          >
+            🔢 Reps
+          </button>
+          <button
+            :class="{ on: objMode === 'sets', blocked: !!classicBlock }"
+            :disabled="!!classicBlock"
+            @click="setObjMode('sets')"
+          >
+            📚 Séries
+          </button>
+          <!-- Tractions, pompes, dips : la saisie par « +1 », avec ou sans objectif. -->
+          <button
+            v-if="canFraction"
+            :class="{ on: objMode === 'frac', blocked: !!fractionBlock }"
+            :disabled="!!fractionBlock"
+            @click="setObjMode('frac')"
+          >
+            🔁 Fractionné
+          </button>
           <button v-if="isDual" :class="{ on: objMode === 'time' }" @click="setObjMode('time')">
             ⏱️ Durée
           </button>
+        </div>
+        <!-- Un mode grisé DIT pourquoi (jamais un grisé muet). -->
+        <div v-if="canFraction && (classicBlock || fractionBlock)" class="count-note why">
+          <div v-if="classicBlock">
+            🔒 Séries et répétitions : {{ occupantReason(classicBlock) }}. Tu peux la prendre en
+            <b>fractionné</b> (une prise à la fois) : ce sont des reps à part.
+          </div>
+          <div v-if="fractionBlock">
+            🔒 Fractionné : {{ occupantReason(fractionBlock) }}. Un seul challenge fractionné par
+            exo : sinon, dans lequel noter une prise ?
+          </div>
+        </div>
+        <div v-else-if="objMode === 'frac'" class="count-note">
+          🔁 Tu notes tes reps <b>une prise à la fois</b> (« +1 », « +2 », « +3 »), toute la
+          période. Avec un objectif, ou sans (format <b>Découverte</b>).
         </div>
         <div v-if="objMode === 'sets'" class="count-note">
           Objectif en <b>séries</b> ; à la saisie tu renseignes reps + poids par série (comme le
@@ -555,7 +594,13 @@ import {
   CHALLENGE_SUGGESTIONS,
   formatOption,
 } from '@/data/challengeFormats';
-import { fractionableExercise } from '@/data/combo';
+import {
+  exoAvailability,
+  exoSelectable,
+  fractionOnly,
+  occupantReason,
+  occupantsOf,
+} from '@/lib/exoExclusivity';
 import {
   computeDailyTargets,
   suggestConfig,
@@ -578,7 +623,6 @@ import { challengeLane, exerciseLane, type ChallengeLane } from '@/lib/tennisTra
 import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
 import { isDualUnitExercise } from '@/data/exerciseUnits';
 import { useComboStore } from '@/stores/combo';
-import { variantFamilyKey } from '@/data/combo';
 import { useAuthStore } from '@/stores/auth';
 import {
   tokenCost,
@@ -631,15 +675,26 @@ const restDays = ref<number[]>([]);
 // accepte TOUS les formats (ticket 9c7316a7) : le nombre de SÉRIES suit la courbe du format
 // (progressif, pyramidal…), juste à une échelle de séries (cf. scaleForSeries).
 const countMode = ref<'reps' | 'sets'>('reps');
-// 🔁 « Découverte » (7 jours, sans objectif) : seulement pour un exo qui se fractionne
-// (tractions, pompes, dips), compté en reps.
-const openAllowed = computed(
-  () =>
-    !!exercise.value &&
-    fractionableExercise(exercise.value.id) &&
-    unit.value === 'reps' &&
-    countMode.value === 'reps',
-);
+// 🔁 Saisie FRACTIONNÉE (tractions, pompes, dips) : « +1 / +2 / +3 », sur TOUS les formats.
+const fractionMode = ref(false);
+// ── Qui occupe l'exo ? (exclusivité, et son exception pour le fractionné) ──
+const occupants = computed(() => occupantsOf(challenges.list, comboStore.list));
+const availOf = (e: ExerciseRow) => exoAvailability(e.id, occupants.value);
+const fractionOnlyOf = (e: ExerciseRow) => fractionOnly(availOf(e));
+const avail = computed(() => (exercise.value ? availOf(exercise.value) : null));
+/** Le choix « Fractionné » existe pour un exo qui se fractionne, compté en reps. */
+const canFraction = computed(() => !!avail.value?.fractionable && unit.value === 'reps');
+const classicBlock = computed(() => (canFraction.value ? avail.value!.classic : null));
+const fractionBlock = computed(() => (canFraction.value ? avail.value!.fraction : null));
+// 🔁 « Découverte » (7 jours, sans objectif) : le fractionné sans objectif.
+const openAllowed = computed(() => canFraction.value && fractionMode.value);
+// Un mode qui n'est plus permis (autre exo, bloqué) : on retombe sur un mode libre.
+watch([canFraction, classicBlock, fractionBlock], () => {
+  if (!canFraction.value) fractionMode.value = false;
+  else if (classicBlock.value && !fractionBlock.value) fractionMode.value = true;
+  else if (fractionBlock.value && !classicBlock.value) fractionMode.value = false;
+});
+
 const availableFormats = computed(() =>
   CHALLENGE_FORMATS.filter((f) => f.id !== 'open' || openAllowed.value),
 );
@@ -659,10 +714,21 @@ function setCountMode(m: 'reps' | 'sets') {
 // UN seul choix d'objectif (fusion unité + comptage, ticket fa27e9a8) : Reps / Séries /
 // Durée. « Durée » n'existe que pour les exos rythmiques dual-unit (corde, burpees…) ;
 // le cardio garde son propre choix km/durée. Les séries n'ont pas de sens en durée.
-const objMode = computed<'reps' | 'sets' | 'time'>(() =>
-  unit.value === 'time' ? 'time' : countMode.value === 'sets' ? 'sets' : 'reps',
+const objMode = computed<'reps' | 'sets' | 'time' | 'frac'>(() =>
+  unit.value === 'time'
+    ? 'time'
+    : fractionMode.value && canFraction.value
+      ? 'frac'
+      : countMode.value === 'sets'
+        ? 'sets'
+        : 'reps',
 );
-function setObjMode(m: 'reps' | 'sets' | 'time') {
+function setObjMode(m: 'reps' | 'sets' | 'time' | 'frac') {
+  fractionMode.value = m === 'frac';
+  if (m === 'frac') {
+    setCountMode('reps'); // les prises comptent des reps
+    return;
+  }
   if (m === 'time') {
     if (isDual.value) dualUnit.value = 'time';
     setCountMode('reps'); // pas de séries en durée
@@ -814,21 +880,8 @@ function exRank(id: string): number {
 // Marche/course séparées masquées : on ne propose plus que « Marche ou course »
 // (une seule piste → une sortie course compte aussi, pas de doublon).
 const HIDDEN_EX_IDS = new Set(['ex_ch_marche', 'ex_ch_course']);
-// FAMILLES d'exos déjà utilisées par un défi ACTIF (solo) OU par le Défi 360 actif
-// → on ne les propose pas. On dédup par FAMILLE DE VARIANTE (`variantFamilyKey`) :
-// prendre « dips » bloque aussi « dips assistés », « pompes » bloque « pompes sur
-// genoux », etc. (même mouvement, version assistée/élastique = doublon).
-const activeExoFamilies = computed(() => {
-  const keys = new Set<string>();
-  for (const c of challenges.list.filter((c) => c.status === 'active'))
-    keys.add(variantFamilyKey(c.exercise_id));
-  // EXCLUSIVITÉ PAR EXERCICE : un exo est soit dans le Défi 360, soit dans un challenge,
-  // jamais les deux → on masque aussi les familles du 360 actif (pour TOUS, admin inclus).
-  // Un 360 et des challenges peuvent coexister, tant qu'ils ne partagent PAS d'exercice.
-  for (const combo of comboStore.list.filter((c) => c.status === 'active'))
-    for (const leg of combo.legs ?? []) keys.add(variantFamilyKey(leg.exercise_id));
-  return keys;
-});
+// (Qui occupe un exo — défis actifs ET Défi 360 — se lit dans `lib/exoExclusivity` : la famille de
+// variantes reste la maille, avec l'exception du fractionné ; cf. `occupants` plus haut.)
 // Muscle ciblé depuis l'équilibre du corps (`?muscle=`) : on ne propose que les exos qui
 // le travaillent (en principal OU en secondaire), ceux où il est le principal en tête.
 const muscleFocus = ref(typeof route.query.muscle === 'string' ? route.query.muscle : '');
@@ -849,7 +902,7 @@ const filteredLib = computed(() => {
   const visible = lib.value.filter(
     (e) =>
       !HIDDEN_EX_IDS.has(e.id) &&
-      !activeExoFamilies.value.has(variantFamilyKey(e.id)) &&
+      exoSelectable(availOf(e)) &&
       !exFull(e) &&
       (!muscleFocus.value || focusRank(e) > 0) &&
       (exFilter.value === 'all' || exLane(e) === exFilter.value),
@@ -993,6 +1046,8 @@ function pickExercise(e: ExerciseRow) {
   }
   exercise.value = e;
   customOn.value = false;
+  // Pris par un défi classique : on ne le propose qu'en fractionné ; sinon mode classique.
+  fractionMode.value = fractionOnly(availOf(e));
   durationDays.value = defaultDurationFor(e);
   reset();
   // Amène le panneau de détail (choix reps/durée, exécution) dans le champ de vision.
@@ -1071,15 +1126,22 @@ async function createChallenge() {
   // en challenge (et inversement). On bloque uniquement le CHEVAUCHEMENT d'exercice (le
   // picker les masque déjà ; ceci couvre la pré-sélection par tuile/deep-link). Un 360 et
   // des challenges sur d'AUTRES exos coexistent sans souci.
-  const famKey = variantFamilyKey(exercise.value.id);
-  const inActiveCombo = comboStore.list
-    .filter((c) => c.status === 'active')
-    .some((c) => (c.legs ?? []).some((leg) => variantFamilyKey(leg.exercise_id) === famKey));
-  if (!isCardio.value && inActiveCombo) {
+  // Un exo qui se fractionne peut être à la fois dans un défi classique et dans UN challenge
+  // fractionné (exception de l'exclusivité, cf. `exoExclusivity`).
+  const fractioned = fractionMode.value && canFraction.value;
+  const blocker = isCardio.value
+    ? null
+    : fractioned && avail.value?.fractionable
+      ? avail.value.fraction
+      : (avail.value?.classic ?? null);
+  if (blocker) {
     $q.notify({
       type: 'warning',
-      message:
-        'Cet exercice est déjà dans ton Défi 360 : un exo est soit en 360, soit en challenge — pas les deux.',
+      message: `Cet exercice est ${occupantReason(blocker)} : ${
+        fractioned
+          ? 'un seul challenge fractionné par exo.'
+          : 'un exo est soit en 360, soit en challenge classique — sauf en fractionné.'
+      }`,
     });
     return;
   }
@@ -1092,7 +1154,9 @@ async function createChallenge() {
     if (showAssist.value && assistedMode.value) cfg.assisted = true;
     // Mode Séries (reps uniquement) : objectif en nombre de séries, saisie par
     // série (reps+poids+assisté). Le flag bodyweight active le toggle « assisté ».
-    if (unit.value === 'reps' && countMode.value === 'sets') cfg.count_mode = 'sets';
+    if (unit.value === 'reps' && countMode.value === 'sets' && !fractionMode.value)
+      cfg.count_mode = 'sets';
+    if (fractionMode.value && canFraction.value) cfg.fraction = true;
     if (isBodyweightExercise(exercise.value.equipment_required, exercise.value.name))
       cfg.bodyweight = true;
     // Voie Tennis : le challenge vit dans sa voie de jetons et verse son XP au Tennis.
@@ -1146,6 +1210,8 @@ onMounted(async () => {
         // proposé (+10 %), modifiable à l'étape Réglages — jamais créé d'office.
         const total = Number(route.query.total);
         if (exercise.value && route.query.fmt === 'cumulative' && total > 0) {
+          if (route.query.frac === '1' && canFraction.value && !fractionBlock.value)
+            fractionMode.value = true;
           format.value = 'cumulative';
           durationDays.value = 7;
           reset();
@@ -1535,6 +1601,7 @@ onMounted(async () => {
 .count-toggle {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 .count-toggle button {
@@ -1547,6 +1614,25 @@ onMounted(async () => {
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
+}
+.count-toggle button {
+  min-height: 44px;
+}
+.count-toggle button.blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.count-note.why {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.count-note.why > div + div {
+  margin-top: 4px;
+}
+.fonly {
+  text-transform: none;
+  color: var(--accent);
 }
 .count-toggle button.on {
   border-color: var(--accent);
