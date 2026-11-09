@@ -5416,7 +5416,7 @@ export const useCharacterStore = defineStore('character', () => {
         useGameFx().celebrate({
           kind: 'unlock',
           emoji: isl.objectiveEmoji,
-          // 🕯️ Île 3 : un objectif battu s'éteint, il se rallumera au fil des sorties.
+          // 🕯️ Îles 3 et 4 : un objectif battu s’éteint, il se rallumera au fil des sorties.
           title: EMBER.islands.has(isl.id)
             ? `${isl.objective} éteint !`
             : `${isl.objective} pris !`,

@@ -189,10 +189,13 @@ export function heldRazedObjectives(map: ExpeditionMap): Poi[] {
  * - tant que la CITADELLE (`Island.keystone`) est éteinte, les cimetières ne comptent plus
  *   rien et ne se rallument pas (gelés) ;
  * - la forteresse abattue PACIFIE l'île pour de bon : plus rien ne se rallume ;
- * - les objectifs tenus d'avant sont rappelés puis éteints, à compteur neuf.
+ * - les objectifs tenus d'avant sont rappelés puis éteints, à compteur neuf ;
+ * - ÎLE 4 (2026-10-16, même brique) : les camps de guerre sont des objectifs ORDINAIRES (6 à 10
+ *   sorties, pas de clé de voûte) ; un camp éteint n'envoie ni armée mobile ni convoi, et si
+ *   tous sont éteints plus rien ne sort (`warlordRaids`, `warlordConvoys`).
  */
 export const EMBER = {
-  islands: new Set([3]) as ReadonlySet<number>,
+  islands: new Set([3, 4]) as ReadonlySet<number>,
   cemetery: { min: 6, max: 10 },
   keystone: { min: 10, max: 15 },
   floorMs: 24 * 3600_000,
@@ -421,6 +424,40 @@ function withMissingEmbers(
   const { razedAt: _r, ...rest } = a;
   void _r;
   return { ...rest, embers };
+}
+
+/**
+ * 🕯️ UNE FORTERESSE DÉJÀ ABATTUE PACIFIE L'ÎLE (migration, île 4 : 2026-10-16). La règle « forteresse
+ * abattue = île pacifiée pour de bon » d'une île à braises n'était posée qu'au moment de la
+ * victoire ; une partie où la forteresse était tombée AVANT que l'île passe aux braises (deux camps
+ * pris, le troisième debout) n'a jamais été pacifiée : ses camps se rallumeraient pour rien.
+ * Rend la MÊME carte si l'île n'est pas concernée.
+ */
+function pacifyIfFortressDown(map: ExpeditionMap, now: number): ExpeditionMap {
+  const isl = activeIsland(map);
+  const a = map.archipel;
+  if (!isl || !a || !EMBER.islands.has(isl.id) || a.pacifiedAt !== undefined) return map;
+  if (!a.destroyed?.includes(FORTRESS_ID)) return map;
+  const { embers: _e, emberFrom: _f, ...arch } = a;
+  void _e;
+  void _f;
+  return {
+    ...map,
+    archipel: {
+      ...arch,
+      destroyed: [...new Set([...a.destroyed, ...objectiveIds(isl), FORTRESS_ID])],
+      pacifiedAt: now,
+    },
+    pois: map.pois
+      .filter((p) => !(p.control?.owner === 'enemy' && p.control.kind === 'objective'))
+      .map((p) => {
+        if (p.control?.attackAt === undefined && p.control?.raidAt === undefined) return p;
+        const { attackAt: _a, raidAt: _r, ...rest } = p.control;
+        void _a;
+        void _r;
+        return { ...p, control: rest };
+      }),
+  };
 }
 
 /** Les ids de TOUS les objectifs de l'île : ceux d'origine et les nids nés en route. */
@@ -920,7 +957,7 @@ export function ensureIslandConquest(
 ): ExpeditionMap {
   // 🪺 Les pontes des nids d'abord : un nid né se pose dans la foulée. 🕯️ De même les
   // objectifs éteints qui se rallument.
-  const map = relightObjectives(spawnNests(map0, now), now);
+  const map = relightObjectives(spawnNests(pacifyIfFortressDown(map0, now), now), now);
   const isl = activeIsland(map);
   const want = isl ? expectedTargets(map, isl, now) : [];
   const wantIds = new Set(want.map((p) => p.id));
@@ -1746,7 +1783,8 @@ export function islandTargetLabel(
           : '') +
         `${troopText(p.control)} · ` +
         (ember && !isKey
-          ? `battu, il s’ÉTEINT : personne n’y reste, il se rallume après ${EMBER.cemetery.min} à ${EMBER.cemetery.max} sorties sur la carte (gelé tant que la ${isl.keystone?.name ?? 'citadelle'} est éteinte)`
+          ? `battu, il s’ÉTEINT : personne n’y reste, il se rallume après ${EMBER.cemetery.min} à ${EMBER.cemetery.max} sorties sur la carte` +
+            (isl.keystone ? ` (gelé tant que la ${isl.keystone.name} est éteinte)` : '')
           : ember
             ? `battue, elle s’ÉTEINT : personne n’y reste, elle se rallume après ${EMBER.keystone.min} à ${EMBER.keystone.max} sorties ; éteinte, les cimetières ne se rallument plus` +
               (embers ? ` (${embers} éteint${embers > 1 ? 's' : ''} en ce moment)` : '')
@@ -1760,7 +1798,7 @@ export function islandTargetLabel(
             : CURSE.islands.has(isl.id)
               ? ` · tant qu’il tient, les failles de l’île naissent corrompues (un jour plus vieilles par sanctuaire debout : elles débordent plus tôt) et ses invasions combinées frappent TOUS tes lieux tenus à la fois (toutes les ${SORTIE_EVENTS.invasion.min} à ${SORTIE_EVENTS.invasion.max} sorties sur la carte avec trois sanctuaires debout, plus rarement avec moins)`
               : WARLORD.islands.has(isl.id)
-                ? ` · tant qu’il tient, son armée mobile marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties sur la carte avec trois camps debout, plus rarement avec moins) et ses convois de ravitaillement marchent sur la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties ; chacun arrivé la renforce : intercepte-les)`
+                ? ` · tant qu’il est allumé, son armée mobile marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties sur la carte avec trois camps allumés, plus rarement avec moins) et ses convois de ravitaillement marchent sur la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties ; chacun arrivé la renforce : intercepte-les) ; éteint, il n’envoie plus rien`
                 : ' · tant qu’il tient, il attaque tes lieux fixes') +
         (ember
           ? ` · ${Math.min(ISLAND_CONQUEST.unlockAfter, n)} éteints ouvrent la forteresse, tous l’affaiblissent au plus bas (rallumés, ils la reverrouillent).`
@@ -2324,17 +2362,19 @@ export function islandRules(isl: Island): IslandRule[] {
   if (EMBER.islands.has(isl.id))
     rules.push({
       emoji: '🕯️',
-      text: `Un objectif battu ne se prend pas : il s’éteint, personne n’y reste. Il se rallume au fil de tes sorties sur la carte (un ${isl.objective.toLowerCase()} après ${EMBER.cemetery.min} à ${EMBER.cemetery.max}, la ${isl.keystone?.name ?? 'citadelle'} après ${EMBER.keystone.min} à ${EMBER.keystone.max}), jamais avant ${Math.round(EMBER.floorMs / 3600_000)} h. Tant que la ${isl.keystone?.name ?? 'citadelle'} est éteinte, les ${isl.objective.toLowerCase()}s restent éteints.`,
+      text: isl.keystone
+        ? `Un objectif battu ne se prend pas : il s’éteint, personne n’y reste. Il se rallume au fil de tes sorties sur la carte (un ${isl.objective.toLowerCase()} après ${EMBER.cemetery.min} à ${EMBER.cemetery.max}, la ${isl.keystone.name} après ${EMBER.keystone.min} à ${EMBER.keystone.max}), jamais avant ${Math.round(EMBER.floorMs / 3600_000)} h. Tant que la ${isl.keystone.name} est éteinte, les ${isl.objective.toLowerCase()}s restent éteints.`
+        : `Un objectif battu ne se prend pas : il s’éteint, personne n’y reste. Il se rallume au fil de tes sorties sur la carte (${EMBER.cemetery.min} à ${EMBER.cemetery.max}), jamais avant ${Math.round(EMBER.floorMs / 3600_000)} h.`,
     });
   if (WARLORD.islands.has(isl.id))
     rules.push(
       {
         emoji: '🔁',
-        text: `Tant qu’un camp tient, son armée marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties avec trois camps debout, plus rarement avec moins).`,
+        text: `Tant qu’un camp est allumé, son armée marche sur ton lieu tenu le MOINS défendu (toutes les ${SORTIE_EVENTS.warlord.min} à ${SORTIE_EVENTS.warlord.max} sorties avec trois camps allumés, plus rarement avec moins). Un camp éteint n’envoie rien ; tous éteints, plus rien ne sort.`,
       },
       {
         emoji: '🐫',
-        text: `Ses convois partent renforcer la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties) : intercepte-les.`,
+        text: `Ses convois partent des camps allumés renforcer la forteresse (toutes les ${SORTIE_EVENTS.convoy.min} à ${SORTIE_EVENTS.convoy.max} sorties) : intercepte-les.`,
       },
     );
   if (CURSE.islands.has(isl.id))

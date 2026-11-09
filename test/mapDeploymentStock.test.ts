@@ -181,11 +181,19 @@ describe('🎯 deployTargetsOf — les objectifs ennemis, présents ou éteints'
   });
 
   it('un objectif tenu n’en est pas un ; hors archipel, aucun', () => {
-    // Île 4 : un objectif pris se tient.
-    const m0 = createMap(5, NOW, 70, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(4));
-    const m = ensureIslandConquest(ensureControls(m0, NOW, 70, ISLAND_OUTPOST_LEVEL), NOW, 70);
+    // Île 5 (la seule où un objectif pris se tient encore) : il n'est plus une cible.
+    const m0 = createMap(5, NOW, 90, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(5));
+    const m = ensureIslandConquest(ensureControls(m0, NOW, 90, ISLAND_OUTPOST_LEVEL), NOW, 90);
     const held = takeObjective(m, 'isl_obj_0', ['a'], NOW);
+    expect(held.pois.find((p) => p.id === 'isl_obj_0')!.control!.owner).toBe('player');
     expect(deployTargetsOf(held).map((t) => t.id)).not.toContain('isl_obj_0');
+    // Île 4 (camps éteints depuis la v1.311) : un camp battu est éteint, donc toujours une cible
+    // (il se rallumera à sa place), jamais un lieu tenu.
+    const f0 = createMap(5, NOW, 70, ISLAND_OUTPOST_LEVEL, undefined, archipelOn(4));
+    const f = ensureIslandConquest(ensureControls(f0, NOW, 70, ISLAND_OUTPOST_LEVEL), NOW, 70);
+    const out = takeObjective(f, 'isl_obj_0', ['a'], NOW);
+    expect(out.pois.some((p) => p.id === 'isl_obj_0')).toBe(false);
+    expect(deployTargetsOf(out).map((t) => t.id)).toContain('isl_obj_0');
     expect(deployTargetsOf(createMap(5, NOW, 30, 1))).toEqual([]);
   });
 });
