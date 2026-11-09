@@ -59,6 +59,13 @@ export const CHALLENGE_FORMATS: FormatOption[] = [
     icon: 'functions',
     fields: ['total'],
   },
+  {
+    id: 'open',
+    name: 'Découverte',
+    desc: '7 jours, aucun objectif : une rep à la fois, et un bilan à la fin.',
+    icon: 'explore',
+    fields: [],
+  },
 ];
 
 export function formatOption(id: string): FormatOption | undefined {

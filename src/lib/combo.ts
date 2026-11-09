@@ -11,14 +11,7 @@ import { daysBetweenIso } from './loginStreak';
 import { localDayIso } from './localDay';
 import { bodyweightLoad } from './bodyweightLoad';
 import { addDaysUtcIso } from './startDate';
-import {
-  COMBO_SLOTS,
-  comboSlot,
-  comboSlotRank,
-  fractionableExercise,
-  swapSlotsOf,
-  variantFamilyKey,
-} from '@/data/combo';
+import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -116,10 +109,11 @@ export interface ComboLeg {
   rep_min?: number;
   rep_max?: number;
   assistable?: boolean; // exo au poids du corps → propose l'option « assisté »
-  /** Mode FRACTIONNÉ (cf. `fractionableExercise`) : l'exo se SAISIT aussi par « +1 ». Une
-   *  façon de saisir, pas un second objectif : l'objectif reste UN total de reps
-   *  (`count_mode: 'reps'`) auquel mini-séries et vraies séries s'additionnent. Au-delà de
-   *  l'objectif la saisie n'est jamais refusée (cf. `OVER_TARGET_XP`). */
+  /** ⚠️ LEGACY — LU, JAMAIS ÉCRIT. Le mode fractionné du 360 (v1.312.0) a été retiré : il vit
+   *  désormais dans les challenges (format « Découverte »). Des 360 créés pendant cette
+   *  version portent encore ce drapeau et des mini-séries (`ComboSet.mini`) : on les lit
+   *  (affichage regroupé, XP déjà versée inchangée, dont la part dégressive au-delà de
+   *  l'objectif) mais plus aucun écran ne les crée ni ne saisit de « +1 ». */
   fractional?: boolean;
   sets?: ComboSet[]; // séries réalisées (modèle courant)
   progress?: ComboLegEntry[]; // legacy (migration)
@@ -1047,9 +1041,9 @@ export function comboXpByDay(c: ComboChallenge, bodyKg?: number | null): ComboDa
 }
 
 /**
- * 📉 AU-DELÀ DE L'OBJECTIF, L'XP EST DÉGRESSIVE (demandé par l'utilisateur ; exos
- * FRACTIONNÉS seulement). Ces exos ne se ferment pas à l'objectif : les reps en plus restent
- * notées (historique, volume) et rapportent encore, mais deux fois moins.
+ * 📉 LEGACY (360 de la v1.312.0, exos `fractional`) — AU-DELÀ DE L'OBJECTIF, L'XP ÉTAIT
+ * DÉGRESSIVE. Conservé UNIQUEMENT pour ne pas réécrire l'XP déjà versée à ceux qui l'ont
+ * utilisé : aucun écran ne produit plus de reps au-delà de l'objectif d'un 360.
  *
  * ⚠️ Elles étaient DÉJÀ moins payées : le terme de durée (3,5 min × 3 XP par série) est
  * plafonné à l'objectif (`legCountedWork`), donc une rep en trop ne touchait que sa part
@@ -1059,7 +1053,7 @@ export function comboXpByDay(c: ComboChallenge, bodyKg?: number | null): ComboDa
  * hors-objectif reste donc un bonus de volume, jamais un moyen de farmer. Non rétroactif :
  * réservé au mode fractionné.
  */
-export const OVER_TARGET_XP = 0.5;
+const OVER_TARGET_XP = 0.5;
 /** Facteur d'XP de CHAQUE série d'un exo (même ordre que `legSets`) : 1 en deçà de l'objectif,
  *  `OVER_TARGET_XP` pour la part de reps qui le dépasse (une série à cheval est pondérée). */
 function legOverFactors(l: ComboLeg): number[] {
@@ -1389,41 +1383,6 @@ export function groupSetLines(sets: readonly ComboSet[]): SetLine[] {
 /** « 7 reps · 6 prises » (singulier compris). */
 export function miniLineLabel(l: { reps: number; takes: number }): string {
   return `${l.reps} rep${l.reps > 1 ? 's' : ''} · ${l.takes} prise${l.takes > 1 ? 's' : ''}`;
-}
-
-/** Ce qu'un exo a fait UN jour : reps totales (mini-séries ET vraies séries : c'est le même
- *  total) et nombre de prises (mini-séries). Le compteur « 7 reps aujourd'hui ». */
-export function legDayCount(leg: ComboLeg, day: string): { reps: number; takes: number } {
-  let reps = 0;
-  let takes = 0;
-  for (const s of legSets(leg)) {
-    if (s.date !== day) continue;
-    reps += s.reps || 0;
-    if (s.mini) takes += 1;
-  }
-  return { reps, takes };
-}
-
-/** Index (dans `legSets`) de la dernière mini-série du jour : celle que « annuler » retire. */
-export function lastMiniIndex(leg: ComboLeg, day: string): number {
-  const sets = legSets(leg);
-  for (let i = sets.length - 1; i >= 0; i--) if (sets[i]!.mini && sets[i]!.date === day) return i;
-  return -1;
-}
-
-/** Charge, assistance et élastique d'une mini-série : ceux de la dernière série de l'exo
- *  (mini ou pleine, hors séries basculées), sinon sa charge mémorisée — on ne retape pas son
- *  élastique à chaque traction. */
-export function miniTemplate(leg: ComboLeg): {
-  weight: number | null;
-  assisted: boolean;
-  band: ElasticBand | null;
-} {
-  const last = legSets(leg)
-    .filter((s) => !s.origin)
-    .at(-1);
-  if (!last) return { weight: leg.weight_kg ?? null, assisted: false, band: null };
-  return { weight: last.weight ?? null, assisted: !!last.assisted, band: last.band ?? null };
 }
 
 // --- Dimensionnement FULL-BODY par volume + variété ------------------------
@@ -1922,12 +1881,6 @@ export interface ComboTransferPlan {
 }
 
 const midOf = (min: number, max: number) => Math.max(1, Math.round((min + max) / 2));
-/** Un exo neuf garde le mode fractionné de l'exo quitté, s'il s'y prête (tractions → tractions
- *  prise neutre : oui ; tractions → rowing : non, ses mini-séries restent notées mais la
- *  saisie « +1 » n'est plus proposée). */
-function keepsFraction(from: ComboLeg, toId: string): boolean {
-  return !!from.fractional && fractionableExercise(toId);
-}
 
 /** Les valeurs proposées à la bascule (cf. `ComboTransferPlan`). Lève si c'est bloqué. */
 export function comboTransferPlan(
@@ -2000,7 +1953,6 @@ function transferRest(
     count_mode: from.count_mode ?? 'sets',
     weight_kg: null,
     assistable: e.assistable,
-    ...(keepsFraction(from, e.exercise_id) ? { fractional: true } : {}),
     rep_min: e.rep_min,
     rep_max: e.rep_max,
     sets: [],
@@ -2078,7 +2030,6 @@ export function transferComboLeg(
     count_mode: from.count_mode ?? 'sets',
     weight_kg: null,
     assistable: e.assistable,
-    ...(keepsFraction(from, e.exercise_id) ? { fractional: true } : {}),
     rep_min: e.rep_min,
     rep_max: e.rep_max,
     sets: moved,

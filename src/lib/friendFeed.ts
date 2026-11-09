@@ -97,6 +97,11 @@ export function buildFriendFeed(
     for (const c of f.challenges) {
       if (c.status === 'abandoned') continue;
       const label = `« ${c.exercise_name} »`;
+      // 🔁 Découverte : pas d'objectif, donc ni « bouclé » ni pourcentage — seulement le lancement.
+      if (c.format === 'open') {
+        push(f, 'challenge', 'started', c.id, c.created_at, `a lancé ${label}`, null);
+        continue;
+      }
       if (c.status === 'done') {
         push(f, 'challenge', 'done', c.id, c.updated_at, `a bouclé ${label}`, 100);
         continue;

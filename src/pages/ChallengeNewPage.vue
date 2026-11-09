@@ -479,6 +479,9 @@
           <div class="recap-row">
             <span>Durée</span><b>{{ durationDays }} jours</b>
           </div>
+          <div v-if="isOpen" class="recap-row">
+            <span>Objectif</span><b>aucun · pas de prime</b>
+          </div>
           <div class="rc-line">
             <span>Départ</span><b>{{ startTxt }}</b>
           </div>
@@ -493,7 +496,13 @@
           </div>
         </div>
 
-        <div class="preview">
+        <div v-if="isOpen" class="preview">
+          <div class="prev-sub">
+            Tu notes une rep à la fois pendant 7 jours ; à la fin, un bilan (total, jours actifs,
+            meilleur jour, heures) et, si tu veux, un défi pour la suite.
+          </div>
+        </div>
+        <div v-else class="preview">
           <div class="prev-h">Aperçu ({{ unitLabel }})</div>
           <div class="prev-bars">
             <div
@@ -546,6 +555,7 @@ import {
   CHALLENGE_SUGGESTIONS,
   formatOption,
 } from '@/data/challengeFormats';
+import { fractionableExercise } from '@/data/combo';
 import {
   computeDailyTargets,
   suggestConfig,
@@ -621,7 +631,27 @@ const restDays = ref<number[]>([]);
 // accepte TOUS les formats (ticket 9c7316a7) : le nombre de SÉRIES suit la courbe du format
 // (progressif, pyramidal…), juste à une échelle de séries (cf. scaleForSeries).
 const countMode = ref<'reps' | 'sets'>('reps');
-const availableFormats = computed(() => CHALLENGE_FORMATS);
+// 🔁 « Découverte » (7 jours, sans objectif) : seulement pour un exo qui se fractionne
+// (tractions, pompes, dips), compté en reps.
+const openAllowed = computed(
+  () =>
+    !!exercise.value &&
+    fractionableExercise(exercise.value.id) &&
+    unit.value === 'reps' &&
+    countMode.value === 'reps',
+);
+const availableFormats = computed(() =>
+  CHALLENGE_FORMATS.filter((f) => f.id !== 'open' || openAllowed.value),
+);
+const isOpen = computed(() => format.value === 'open');
+// Un exo ou un comptage qui ne permet plus la Découverte : retour au format de départ.
+watch(openAllowed, (ok) => {
+  if (!ok && format.value === 'open') {
+    format.value = 'fixed';
+    durationDays.value = exercise.value ? defaultDurationFor(exercise.value) : 30;
+    reset();
+  }
+});
 function setCountMode(m: 'reps' | 'sets') {
   countMode.value = m;
   reset();
@@ -772,6 +802,7 @@ const demoUrl = computed(
 
 const canNext = computed(() => {
   if (step.value === 1) return !!exercise.value && !selectedFull.value;
+  if (step.value === 2 && isOpen.value) return candidateFits.value; // 7 jours : 1 jeton
   if (step.value === 3) return candidateFits.value; // étape Durée : le défi doit rentrer
   return true;
 });
@@ -839,10 +870,13 @@ const filteredLib = computed(() => {
 });
 
 function next() {
-  if (canNext.value && step.value < STEP_TITLES.length) step.value++;
+  if (!canNext.value || step.value >= STEP_TITLES.length) return;
+  // Découverte : ni durée ni réglages à choisir, on va droit au récap.
+  step.value = isOpen.value && step.value === 2 ? STEP_TITLES.length : step.value + 1;
 }
 function prev() {
-  if (step.value > 1) step.value--;
+  if (isOpen.value && step.value === STEP_TITLES.length) step.value = 2;
+  else if (step.value > 1) step.value--;
   else backOr(router, '/challenges');
 }
 
@@ -970,6 +1004,14 @@ watch(cardioUnit, () => {
 });
 function selectFormat(f: ChallengeFormat) {
   format.value = f;
+  // Découverte : 7 jours d'office, ni repos ni report ni difficulté auto.
+  if (f === 'open') {
+    customOn.value = false;
+    durationDays.value = 7;
+    carryOver.value = false;
+    adaptiveMode.value = false;
+    reminderOn.value = false;
+  }
   reset();
 }
 function setPresetDuration(d: number) {
@@ -1100,6 +1142,16 @@ onMounted(async () => {
       if (e && !exFull(e)) {
         pickExercise(e);
         if (exercise.value) step.value = 2;
+        // 🎯 « Relever un défi » depuis un bilan Découverte : un défi CUMULÉ de 7 jours, total
+        // proposé (+10 %), modifiable à l'étape Réglages — jamais créé d'office.
+        const total = Number(route.query.total);
+        if (exercise.value && route.query.fmt === 'cumulative' && total > 0) {
+          format.value = 'cumulative';
+          durationDays.value = 7;
+          reset();
+          config.value = { ...config.value, total: Math.round(total) };
+          step.value = 4;
+        }
       }
     }
   } catch (e) {

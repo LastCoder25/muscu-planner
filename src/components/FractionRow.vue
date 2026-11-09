@@ -1,9 +1,9 @@
 <template>
-  <!-- Saisie FRACTIONNÉE d'un exo du Défi 360 (« une traction toutes les 10-30 minutes ») :
+  <!-- Saisie FRACTIONNÉE d'un challenge de reps (« une traction toutes les 10-30 minutes ») :
        un gros « +1 », deux raccourcis, le compteur du jour et l'annulation de la dernière
        prise. Ni minuteur ni notification : on tape quand on a fait sa rep. Les prises
        s'ajoutent au même total de reps que les vraies séries. -->
-  <div class="cfr" :aria-label="`Saisie fractionnée : ${leg.exercise_name}`">
+  <div class="cfr" :aria-label="`Saisie fractionnée : ${name}`">
     <div class="cfr-btns">
       <button type="button" class="cfr-main" @click="emit('add', 1)">
         <span class="cfr-plus font-display">+1</span>
@@ -13,17 +13,14 @@
       <button type="button" class="cfr-alt" @click="emit('add', 3)">+3</button>
     </div>
     <div class="cfr-foot">
-      <span class="cfr-pill" :class="{ on: day.reps > 0 }">
-        <b class="font-display">{{ day.reps }}</b> rep{{ day.reps > 1 ? 's' : '' }} aujourd’hui
-        <template v-if="day.takes">· {{ day.takes }} prise{{ day.takes > 1 ? 's' : '' }}</template>
+      <span class="cfr-pill" :class="{ on: reps > 0 }">
+        <b class="font-display">{{ reps }}</b> rep{{ reps > 1 ? 's' : '' }} aujourd’hui
+        <template v-if="takes">· {{ takes }} prise{{ takes > 1 ? 's' : '' }}</template>
       </span>
-      <span v-if="over > 0" class="cfr-pill over" title="Au-delà de l’objectif : l’XP est réduite"
-        >+{{ over }} au-delà</span
-      >
       <button
         type="button"
         class="cfr-undo"
-        :disabled="!day.takes"
+        :disabled="!takes"
         aria-label="Retirer la dernière prise"
         @click="emit('undo')"
       >
@@ -34,14 +31,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { legDayCount, legDone, type ComboLeg } from '@/lib/combo';
-
-const props = defineProps<{ leg: ComboLeg; day: string }>();
+defineProps<{ name: string; reps: number; takes: number }>();
 const emit = defineEmits<{ add: [n: number]; undo: [] }>();
-
-const day = computed(() => legDayCount(props.leg, props.day));
-const over = computed(() => Math.max(0, legDone(props.leg) - props.leg.target));
 </script>
 
 <style scoped lang="scss">
@@ -110,10 +101,6 @@ const over = computed(() => Math.max(0, legDone(props.leg) - props.leg.target));
 .cfr-pill.on {
   color: var(--text);
   border-color: var(--accent);
-}
-.cfr-pill.over {
-  color: var(--d3, #ffb23f);
-  border-color: var(--d3, #ffb23f);
 }
 .cfr-undo {
   margin-left: auto;

@@ -1592,7 +1592,7 @@ describe('🚫 PLUS DE SÉRIE EN PLUS (v1.53)', () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('src/stores/combo.ts', 'utf8');
     const add = src.slice(src.indexOf('function addSet('), src.indexOf('function removeSet('));
-    // Seul le mode FRACTIONNÉ y échappe (test/comboFractionUi.test.ts le vérifie en comportement).
-    expect(add).toMatch(/if \(!leg \|\| \(legComplete\(leg\) && !leg\.fractional\)\) return;/);
+    // (Le mode fractionné de la v1.312.0 y échappait ; il est retiré : même règle pour tous.)
+    expect(add).toMatch(/if \(!leg \|\| legComplete\(leg\)\) return;/);
   });
 });

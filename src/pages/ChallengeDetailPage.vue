@@ -25,6 +25,11 @@
       <q-spinner color="primary" size="32px" />
     </div>
 
+    <!-- 🔁 Défi DÉCOUVERTE : sa propre fiche (aucun objectif, donc rien de ce qui suit). -->
+    <div v-else-if="ch && ch.format === 'open'" class="scroll">
+      <OpenChallengeView :ch="ch" />
+    </div>
+
     <template v-else-if="ch">
       <div ref="scrollBox" class="scroll">
         <!-- Stats -->
@@ -275,6 +280,16 @@
                   <span class="sa-src">(sur {{ setSuggestion.samples }} séries)</span>
                 </div>
 
+                <!-- 🔁 Exos qui se fractionnent (tractions, pompes, dips) : « +1 » à chaque prise. -->
+                <FractionRow
+                  v-if="fractionOn"
+                  :name="ch.exercise_name"
+                  :reps="todayFraction.reps"
+                  :takes="todayFraction.takes"
+                  @add="fractionAdd"
+                  @undo="fractionUndo"
+                />
+
                 <!-- Séries : un seul bouton ＋ 1 série → fenêtre reps + poids (harmonisé 360) -->
                 <button v-if="isSetsMode" class="add-set" @click="openAddSet(1)">
                   ＋ 1 série (reps + poids)
@@ -303,20 +318,31 @@
                   <div class="sets-log-h">
                     {{ isCumulative ? 'Séries saisies (total)' : 'Séries du jour' }}
                   </div>
-                  <div v-for="(s, i) in displayedSets" :key="i" class="set-item">
-                    <span class="si-n"
-                      >Série {{ i + 1
-                      }}<template v-if="s.date"> · {{ fmtSetDay(s.date) }}</template></span
-                    >
-                    <!-- ⚠️ Le champ s'appelle `reps` mais porte des SECONDES sur un défi
+                  <div v-for="(l, i) in displayedLines" :key="i" class="set-item">
+                    <!-- 🔁 Les prises d'un jour tiennent en UNE ligne. -->
+                    <template v-if="l.kind === 'mini'">
+                      <span class="si-n"
+                        >Prises<template v-if="l.date"> · {{ fmtSetDay(l.date) }}</template></span
+                      >
+                      <span class="si-v">{{ miniLineLabel(l) }}</span>
+                    </template>
+                    <template v-else>
+                      <span class="si-n"
+                        >Série {{ i + 1
+                        }}<template v-if="l.set.date">
+                          · {{ fmtSetDay(l.set.date) }}</template
+                        ></span
+                      >
+                      <!-- ⚠️ Le champ s'appelle `reps` mais porte des SECONDES sur un défi
                          au chrono (gainage, corde, burpees…). Écrire « 45 reps » là où le
                          joueur a tenu 45 secondes, c'est mentir sur son effort. `show`
                          formate déjà selon l'unité du défi (sec ou min:sec au choix). -->
-                    <span class="si-v"
-                      >{{ isGainageTime ? show(s.reps) : s.reps + ' reps'
-                      }}<template v-if="s.weight"> · {{ s.weight }} kg</template
-                      ><template v-if="s.assisted"> · assisté</template></span
-                    >
+                      <span class="si-v"
+                        >{{ isGainageTime ? show(l.set.reps) : l.set.reps + ' reps'
+                        }}<template v-if="l.set.weight"> · {{ l.set.weight }} kg</template
+                        ><template v-if="l.set.assisted"> · assisté</template></span
+                      >
+                    </template>
                   </div>
                   <button v-if="todaySets.length" class="corr-link danger" @click="undoLastSet">
                     ↩ Retirer la dernière{{ isCumulative ? ' (aujourd’hui)' : '' }}
@@ -502,6 +528,11 @@ import {
   addDaysIso,
   suggestSetFromHistory,
   challengeUnitLabel,
+  fractionAllowed,
+  fractionDay,
+  addFractionTake,
+  removeLastFractionTake,
+  groupChallengeSets,
   type Challenge,
   type DayProgress,
   type ChallengeSet,
@@ -514,6 +545,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useFriendsStore } from '@/stores/friends';
 import { mondayOffset, startLabel } from '@/lib/startDate';
 import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
+import OpenChallengeView from '@/components/OpenChallengeView.vue';
+import FractionRow from '@/components/FractionRow.vue';
+import { miniLineLabel } from '@/lib/combo';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
@@ -949,13 +983,20 @@ function fmtDur(sec: number): string {
 // Cumulatif (objectif en REPS TOTALES) : les séries sont réparties sur plusieurs
 // jours → on montre TOUTES les séries saisies (avec le jour), pas seulement celles
 // d'aujourd'hui. Sinon, la vue par jour suffit.
-type ShownSet = { reps: number; weight?: number | null; assisted?: boolean; date?: string };
+type ShownSet = {
+  reps: number;
+  weight?: number | null;
+  assisted?: boolean;
+  date?: string;
+  mini?: true;
+};
 const allSets = computed<ShownSet[]>(() =>
   (ch.value?.progress ?? []).flatMap((p) =>
     (p.sets ?? []).map((s) => ({
       reps: s.reps,
       weight: s.weight,
       assisted: s.assisted,
+      mini: s.mini,
       date: p.date,
     })),
   ),
@@ -963,8 +1004,42 @@ const allSets = computed<ShownSet[]>(() =>
 const displayedSets = computed<ShownSet[]>(() =>
   isCumulative.value
     ? allSets.value
-    : todaySets.value.map((s) => ({ reps: s.reps, weight: s.weight, assisted: s.assisted })),
+    : todaySets.value.map((s) => ({
+        reps: s.reps,
+        weight: s.weight,
+        assisted: s.assisted,
+        mini: s.mini,
+      })),
 );
+const displayedLines = computed(() => groupChallengeSets(displayedSets.value));
+// 🔁 « +1 » : exos qui se fractionnent, challenge en reps, jour actif.
+const fractionOn = computed(() => !!ch.value && inToday.value && fractionAllowed(ch.value));
+const todayFraction = computed(() => fractionDay(entryOf(dayIndex.value)));
+function fractionAdd(n: number) {
+  const c = ch.value;
+  if (!c || !fractionOn.value) return;
+  const last = todaySets.value.filter((s: ChallengeSet) => !s.sec).at(-1);
+  const was = entryOf(dayIndex.value)?.completed ?? false;
+  const next = addFractionTake(
+    c,
+    today,
+    n,
+    { weight: last?.weight ?? null, assisted: !!last?.assisted },
+    new Date().toISOString(),
+  );
+  if (!next) return;
+  c.progress = next;
+  const e = entryOf(dayIndex.value);
+  if (e?.completed && !was) $q.notify({ type: 'positive', message: 'Jour validé ✅' });
+  void afterChange();
+}
+function fractionUndo() {
+  const c = ch.value;
+  const next = c ? removeLastFractionTake(c, today) : null;
+  if (!c || !next) return;
+  c.progress = next;
+  void afterChange();
+}
 function fmtSetDay(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -984,7 +1059,7 @@ const setSuggestion = computed(() => {
   if (!c) return null;
   const hist = store.list
     .filter((x) => x.exercise_id === c.exercise_id)
-    .flatMap((x) => x.progress.flatMap((d) => d.sets ?? []));
+    .flatMap((x) => x.progress.flatMap((d) => (d.sets ?? []).filter((s) => !s.mini)));
   return suggestSetFromHistory(hist);
 });
 // Nombre de séries à ajouter d'un coup (mode Séries : boutons ＋1/＋2/… ; mode Reps : 1).

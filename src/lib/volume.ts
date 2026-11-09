@@ -12,6 +12,7 @@ import {
 import type { Challenge } from './challenges';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { localDayIso } from './localDay';
+import { repRangeForExercise } from './repScheme';
 import { normMuscle } from './muscles';
 import { comboSlot } from '@/data/combo';
 
@@ -206,12 +207,23 @@ export function challengeLogEntries(challenges: Challenge[]): LogEntry[] {
     for (const day of c.progress) {
       const sets = day.sets;
       if (!sets || !sets.length) continue;
-      const performed = sets.map((s, i) => ({
-        set: i + 1,
-        load_kg: s.weight ?? 0,
-        reps: s.reps ?? 0,
-        difficulty: 2 as const,
-      }));
+      // 🔁 Les prises (« +1 ») d'un jour sont rangées en séries ÉQUIVALENTES : 30 « séries » d'1
+      // rep gonfleraient le nombre de séries du volume (même règle que le 360).
+      const plain = sets.filter((s) => !s.mini);
+      const takes = sets.filter((s) => s.mini);
+      const takeReps = takes.reduce((a, s) => a + (s.reps ?? 0), 0);
+      const r = repRangeForExercise(undefined, { id: c.exercise_id, muscle_primary: muscle });
+      const performed = [
+        ...plain.map((s) => ({
+          load_kg: s.weight ?? 0,
+          reps: s.reps ?? 0,
+        })),
+        ...miniEquivalentSets(takeReps, (r.min + r.max) / 2).map((reps) => ({
+          load_kg: takes[takes.length - 1]?.weight ?? 0,
+          reps,
+        })),
+      ].map((s, i) => ({ set: i + 1, ...s, difficulty: 2 as const }));
+      if (!performed.length) continue;
       out.push({
         performedAt: day.date,
         log: {

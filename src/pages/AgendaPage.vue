@@ -281,7 +281,10 @@ const entries = computed<Entry[]>(() => {
       const ts = new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime();
       const xp = challengeDayXp(c, p);
       // Détail par série si saisi (ex. « 10/9/11 reps ») ; sinon le total du jour.
-      const setReps = (p.sets ?? []).map((s) => s.reps).filter((r) => r > 0);
+      // 🔁 Des prises (« +1 ») : le total du jour, jamais « 1/1/2/1/1… ».
+      const setReps = (p.sets ?? []).some((s) => s.mini)
+        ? []
+        : (p.sets ?? []).map((s) => s.reps).filter((r) => r > 0);
       const meta =
         c.unit === 'reps' && setReps.length > 1
           ? `${numList(setReps)} ${uLabel}`

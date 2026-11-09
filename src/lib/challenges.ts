@@ -10,6 +10,7 @@ import {
   REF_SPEED_KMH,
 } from '@/data/cardio';
 import type { CardioActivity, CardioLog } from './types';
+import { fractionableExercise } from '@/data/combo';
 
 export type ChallengeFormat =
   | 'fixed'
@@ -18,7 +19,11 @@ export type ChallengeFormat =
   | 'pyramid'
   | 'pyramid_progressive'
   | 'wave'
-  | 'cumulative';
+  | 'cumulative'
+  // 🔁 « Découverte » : 7 jours, SANS objectif de reps. Réservé aux exos qui se fractionnent
+  // (`fractionableExercise`). `daily_targets` = des zéros, donc tout le code qui lit un
+  // objectif y voit des jours de repos : ni retard, ni « raté », ni division par zéro.
+  | 'open';
 export type ChallengeStatus = 'active' | 'done' | 'abandoned';
 
 export interface ChallengeConfig {
@@ -52,6 +57,11 @@ export interface ChallengeSet {
   weight?: number | null; // charge (kg) — poids du corps = vide
   assisted?: boolean; // poids du corps assisté (élastique/machine) → XP ×0,6
   sec?: number; // exo au TEMPS (chrono) : durée de cette « série » (secondes). reps = 0.
+  /** 🔁 Prise du mode FRACTIONNÉ (« +1 », « +2 », « +3 ») : une mini-série, regroupée à
+   *  l'affichage (« 7 reps · 6 prises »). Marquée SUR la série, comme `ComboSet.mini`. */
+  mini?: true;
+  /** Heure de la prise (ISO) : le bilan d'un défi Découverte en tire la répartition par heure. */
+  at?: string;
 }
 
 /** Conseil de série dérivé de l'HISTORIQUE d'un exo (poids médian + fourchette de reps)
@@ -240,6 +250,7 @@ export function computeDailyTargets(
         t = waveTarget(d, cfg);
         break;
       case 'cumulative':
+      case 'open':
         t = 0;
         break;
       default:
@@ -296,6 +307,8 @@ export function suggestConfig(
   durationDays: number,
   exerciseId: string,
 ): ChallengeConfig {
+  // 🔁 Découverte : aucun objectif à régler.
+  if (format === 'open') return { start: 0 };
   let max: number;
   if (unit === 'time')
     // TEMPS : seules les VRAIES SORTIES cardio (marche/course/vélo) sont en MINUTES ; le
@@ -392,6 +405,9 @@ function challengeBalance(ch: Challenge, todayIso = logicalToday()): number {
 // dépasser l'objectif du jour fait grimper l'avance tout de suite. Pour le cumulé,
 // challengeBalance inclut déjà tout le réalisé → on le renvoie tel quel.
 export function challengeLiveBalance(ch: Challenge, todayIso = logicalToday()): number {
+  // 🔁 Découverte : pas d'objectif, donc ni avance ni retard (sans ce garde, les reps du jour
+  // se lisaient comme un « surplus » sur un objectif de 0).
+  if (ch.format === 'open') return 0;
   const base = challengeBalance(ch, todayIso);
   if (ch.format === 'cumulative') return base;
   const dayIndex = diffDays(ch.start_date, todayIso);
@@ -772,8 +788,12 @@ const ALL_FORMATS: ChallengeFormat[] = [
 
 export function evaluateAchievements(challenges: Challenge[]): string[] {
   const codes = new Set<string>();
-  const done = challenges.filter((c) => c.status === 'done');
-  const abandoned = challenges.filter((c) => c.status === 'abandoned');
+  // Un défi Découverte n'a pas d'objectif : ni réussite ni échec, il ne débloque aucun succès
+  // de complétion (sinon on en lancerait un par semaine pour les badges). Ses reps comptent
+  // quand même dans les paliers de reps ci-dessous.
+  const scored = challenges.filter((c) => c.format !== 'open');
+  const done = scored.filter((c) => c.status === 'done');
+  const abandoned = scored.filter((c) => c.status === 'abandoned');
   // Seuls les défis en REPS comptent pour les paliers de reps : le temps (gainage)
   // ne doit pas gonfler les compteurs (anti-triche « laisser traîner le chrono »).
   const totalReps = challenges.reduce(
@@ -1030,6 +1050,9 @@ function doneShare(ch: Challenge): number {
  *  décomposition affichée — recopiés à l’identique. Deux copies d’une formule d’XP finissent
  *  par diverger, et c’est l’écran qui ment en dernier. */
 function completionBonusOf(ch: Challenge): number {
+  // 🔁 Découverte : pas d'objectif à réussir, donc PAS de prime (sinon on en lancerait un par
+  // semaine pour la prime). Les reps rapportent leur XP normale (`effortXpRaw`).
+  if (ch.format === 'open') return 0;
   const total = plannedEffort(ch);
   if (total <= 0 || !(isChallengeComplete(ch) || ch.status === 'done')) return 0;
   // Prime adaptée au format. Le poids de rep pondère la magnitude (pas la complétion).
@@ -1253,4 +1276,146 @@ export function challengeBonusDate(c: Challenge): string | null {
   }
   const dates = worked.map((p) => p.date).sort();
   return dates.length ? dates[dates.length - 1]! : null;
+}
+
+// ── 🔁 FRACTIONNÉ : « +1 » PAR PRISE, ET LE DÉFI « DÉCOUVERTE » ────────────────────────
+// « Un challenge de tractions, et toute la semaine on rentre une traction à la fois. » Une
+// prise ajoute ses reps au jour (comme n'importe quelle contribution : `done` est un total de
+// reps) ET garde son détail (`sets` + `mini` + `at`).
+//
+// ⚠️ L'XP d'un challenge est LINÉAIRE en reps (`done × REP_XP × poids de rep`, sans la racine
+// par série du 360 ni terme de durée) : 30 prises d'1 rep valent exactement 3 séries de 10.
+// Rien à corriger ici — le test le garde.
+
+/** Ce challenge se saisit-il par prises ? Des reps (pas des séries, pas du temps) sur un exo
+ *  qui se fractionne ; la saisie reste ouverte tant que le défi l'est. */
+export function fractionAllowed(ch: Challenge): boolean {
+  return (
+    ch.status === 'active' &&
+    ch.unit === 'reps' &&
+    ch.config.count_mode !== 'sets' &&
+    fractionableExercise(ch.exercise_id)
+  );
+}
+export const isOpenChallenge = (ch: Pick<Challenge, 'format'>): boolean => ch.format === 'open';
+
+/** Ajoute une prise de `n` reps au jour `dateIso` : progression mise à jour, ou null (hors
+ *  plage, n ≤ 0, ou défi qui ne se fractionne pas). `tpl` = charge/assistance de la dernière
+ *  série ; `at` = l'heure (ISO). Pur : ne modifie pas `ch`. */
+export function addFractionTake(
+  ch: Challenge,
+  dateIso: string,
+  n: number,
+  tpl: { weight: number | null; assisted: boolean },
+  at: string,
+): DayProgress[] | null {
+  if (ch.unit !== 'reps' || ch.config.count_mode === 'sets') return null;
+  const next = addContribution(ch, dateIso, n);
+  if (!next) return null;
+  const e = next.find((p) => p.day === diffDays(ch.start_date, dateIso))!;
+  e.sets = [
+    ...(e.sets ?? []),
+    { reps: n, weight: tpl.weight, assisted: tpl.assisted, mini: true, at },
+  ];
+  return next;
+}
+
+/** Retire la DERNIÈRE prise du jour (jamais une vraie série) et ses reps du total ; null s'il
+ *  n'y en a pas. Pur. */
+export function removeLastFractionTake(ch: Challenge, dateIso: string): DayProgress[] | null {
+  const day = diffDays(ch.start_date, dateIso);
+  if (day < 0 || day >= ch.duration_days) return null;
+  const progress = ch.progress.map((p) => ({ ...p }));
+  const e = progress.find((p) => p.day === day);
+  const sets = e?.sets ?? [];
+  let i = sets.length - 1;
+  while (i >= 0 && !sets[i]!.mini) i--;
+  if (!e || i < 0) return null;
+  const removed = sets[i]!;
+  e.sets = sets.filter((_, k) => k !== i);
+  e.done = Math.max(0, Math.round((e.done - (removed.reps || 0)) * 100) / 100);
+  if (ch.format !== 'cumulative' && (ch.daily_targets[day] ?? 0) > 0)
+    e.completed = e.done >= e.target;
+  return progress;
+}
+
+/** Le compteur du jour : toutes les reps (prises ET vraies séries : c'est le même total) et le
+ *  nombre de prises. */
+export function fractionDay(p: DayProgress | undefined): { reps: number; takes: number } {
+  return {
+    reps: p?.done || 0,
+    takes: (p?.sets ?? []).filter((s) => s.mini).length,
+  };
+}
+
+/** Une ligne d'historique : une série pleine, ou toutes les prises d'un jour (ou d'un lot). */
+export type ChallengeSetLine<T> =
+  | { kind: 'set'; set: T; index: number }
+  | { kind: 'mini'; date: string; reps: number; takes: number };
+/** Regroupe les prises d'un même jour en UNE ligne ; les séries pleines restent seules. */
+export function groupChallengeSets<T extends { reps: number; mini?: true; date?: string }>(
+  sets: readonly T[],
+): ChallengeSetLine<T>[] {
+  const out: ChallengeSetLine<T>[] = [];
+  sets.forEach((s, index) => {
+    if (!s.mini) return void out.push({ kind: 'set', set: s, index });
+    const date = s.date ?? '';
+    const g = out.find((l) => l.kind === 'mini' && l.date === date);
+    if (g && g.kind === 'mini') {
+      g.reps += s.reps || 0;
+      g.takes += 1;
+    } else out.push({ kind: 'mini', date, reps: s.reps || 0, takes: 1 });
+  });
+  return out;
+}
+
+/** Dernier jour (inclus) d'un défi. */
+export function challengeEndDate(ch: Pick<Challenge, 'start_date' | 'duration_days'>): string {
+  return addDaysIso(ch.start_date, Math.max(1, ch.duration_days) - 1);
+}
+/** Un défi Découverte dont les 7 jours sont écoulés : il se CLÔT (statut « terminé », jamais
+ *  « abandonné » : il n'y a pas de notion d'échec). */
+export function openChallengeExpired(ch: Challenge, todayIso: string): boolean {
+  return ch.format === 'open' && ch.status === 'active' && todayIso > challengeEndDate(ch);
+}
+
+/** Le bilan d'un défi Découverte. */
+export interface OpenReport {
+  total: number;
+  /** Jours où l'on a fait au moins une rep, sur `days`. */
+  activeDays: number;
+  days: number;
+  /** Meilleur jour (le plus récent à égalité) ; null si rien. */
+  bestDay: { date: string; reps: number } | null;
+  /** Reps par jour ACTIF (arrondi à 0,1). */
+  avgPerActiveDay: number;
+  takes: number;
+  /** Reps par heure de la journée (24 cases, heure locale), d'après l'heure des prises ;
+   *  null quand aucune prise n'en porte (défis saisis sans heure). */
+  byHour: number[] | null;
+}
+export function openChallengeReport(ch: Challenge): OpenReport {
+  const days = ch.progress.filter((p) => (p.done || 0) > 0);
+  const total = Math.round(days.reduce((a, p) => a + p.done, 0) * 100) / 100;
+  let best: OpenReport['bestDay'] = null;
+  for (const p of [...days].sort((a, b) => (a.date < b.date ? -1 : 1)))
+    if (!best || p.done >= best.reps) best = { date: p.date, reps: p.done };
+  const stamped = days.flatMap((p) => (p.sets ?? []).filter((s) => s.at && s.reps > 0));
+  let byHour: number[] | null = null;
+  if (stamped.length) {
+    byHour = Array.from({ length: 24 }, () => 0);
+    for (const s of stamped) {
+      const h = new Date(s.at!).getHours();
+      if (Number.isFinite(h)) byHour[h] = byHour[h]! + s.reps;
+    }
+  }
+  return {
+    total,
+    activeDays: days.length,
+    days: ch.duration_days,
+    bestDay: best,
+    avgPerActiveDay: days.length ? Math.round((total / days.length) * 10) / 10 : 0,
+    takes: days.reduce((a, p) => a + (p.sets ?? []).filter((s) => s.mini).length, 0),
+    byHour,
+  };
 }

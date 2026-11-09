@@ -139,10 +139,11 @@
                 <span class="ct-cost" :class="{ accessoire: cardCostLabel(c) === 'accessoire' }">{{
                   cardCostLabel(c)
                 }}</span>
-                <span class="cc-today" :class="st(c).isDoneToday ? 'done' : 'todo'">{{
+                <span v-if="isOpen(c)" class="cc-today open">🔁 Découverte</span>
+                <span v-else class="cc-today" :class="st(c).isDoneToday ? 'done' : 'todo'">{{
                   st(c).isDoneToday ? '✓ À jour' : '● À faire'
                 }}</span>
-                <div class="seg-line" :style="{ '--n': challengeSegs(c).n }">
+                <div v-if="!isOpen(c)" class="seg-line" :style="{ '--n': challengeSegs(c).n }">
                   <span
                     v-for="i in challengeSegs(c).n"
                     :key="i"
@@ -153,7 +154,12 @@
                     }"
                   />
                 </div>
-                <div class="ct-sub">
+                <div v-if="isOpen(c)" class="ct-sub">
+                  <b>{{ st(c).totalDone }}</b> reps · j{{
+                    Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days)
+                  }}/{{ c.duration_days }}
+                </div>
+                <div v-else class="ct-sub">
                   {{ st(c).completionPct }}% · j{{
                     Math.min(Math.max(1, st(c).dayIndex + 1), c.duration_days)
                   }}/{{ c.duration_days
@@ -202,7 +208,7 @@
               >🤸</span
             >
           </div>
-          <div class="seg-line" :style="{ '--n': challengeSegs(c).n }">
+          <div v-if="!isOpen(c)" class="seg-line" :style="{ '--n': challengeSegs(c).n }">
             <span
               v-for="i in challengeSegs(c).n"
               :key="i"
@@ -213,7 +219,10 @@
               }"
             />
           </div>
-          <div class="cc-sub">
+          <div v-if="isOpen(c)" class="cc-sub">
+            {{ st(c).totalDone }} reps en {{ c.duration_days }} j
+          </div>
+          <div v-else class="cc-sub">
             {{ st(c).completionPct }}% · {{ st(c).totalDone }}
             {{ isSetsMode(c) ? 'séries' : unitOf(c)
             }}<template v-if="isSetsMode(c)"> · {{ totalRepsOf(c) }} {{ repUnitOf(c) }}</template>
@@ -417,7 +426,7 @@
             v-for="leg in shownComboLegs"
             :key="leg.exercise_id"
             class="combo-leg"
-            :class="{ done: legComplete(leg) && !leg.fractional }"
+            :class="{ done: legComplete(leg) }"
           >
             <!-- Même en-tête que la fiche du 360 : c’est souvent ICI qu’on consulte son
                  défi en cours, pas sur /combo/:id. -->
@@ -479,7 +488,7 @@
               <div
                 v-else
                 class="reps-bar"
-                :class="{ tap: legMode(leg) === 'reps' && (!legComplete(leg) || leg.fractional) }"
+                :class="{ tap: legMode(leg) === 'reps' && !legComplete(leg) }"
                 @click="legMode(leg) === 'reps' && addFromBar(leg)"
               >
                 <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
@@ -490,7 +499,7 @@
                 <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
               </div>
               <button
-                v-if="legMode(leg) === 'reps' && (!legComplete(leg) || leg.fractional)"
+                v-if="legMode(leg) === 'reps' && !legComplete(leg)"
                 class="cl-add"
                 :aria-label="`Ajouter une série : ${leg.exercise_name}`"
                 @click="openSet(leg, 1)"
@@ -528,14 +537,6 @@
                 </button>
               </div>
             </div>
-            <!-- Mode FRACTIONNÉ : « +1 » à chaque prise, compteur du jour, annulation. -->
-            <ComboFractionRow
-              v-if="leg.fractional && legMode(leg) === 'reps'"
-              :leg="leg"
-              :day="logicalToday()"
-              @add="(n) => fractionAdd(leg, n)"
-              @undo="fractionUndo(leg)"
-            />
           </div>
         </template>
       </template>
@@ -594,7 +595,6 @@ import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
-import ComboFractionRow from '@/components/ComboFractionRow.vue';
 import { useComboFatigue } from '@/composables/useComboFatigue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
@@ -605,6 +605,7 @@ import {
   effortPaidByOutings,
   challengeLiveBalance,
   challengeTotalReps,
+  isOpenChallenge as isOpen,
   evaluateAchievements,
   isNoEquipmentExercise,
   challengeValueUnit,
@@ -648,8 +649,6 @@ import {
   setCellLabel,
   type ElasticBand,
   legSets,
-  lastMiniIndex,
-  miniTemplate,
   setOriginLabel,
   legRepRange,
   comboStopPlan,
@@ -872,39 +871,7 @@ const undoLabel = computed(() => {
 /** Toucher la barre ajoute une série — sauf objectif atteint : le 360 n'accepte plus de
  *  série en plus (v1.53), qui veut en faire davantage lance un challenge à part. */
 function addFromBar(leg: ComboLeg) {
-  // Un exo FRACTIONNÉ n'est jamais fermé par son objectif (l'XP en trop est dégressive).
-  if (!legComplete(leg) || leg.fractional) openSet(leg, 1);
-}
-/** 🔁 « +N » d'un exo fractionné : une mini-série horodatée, avec la charge/assistance de la
- *  dernière série. Pas de fenêtre, pas de confirmation : un tap = une prise. */
-function fractionAdd(leg: ComboLeg, n: number) {
-  const co = activeCombo.value;
-  if (!co) return;
-  const before = comboCompleteInTime(co);
-  const t = miniTemplate(leg);
-  comboStore.addSet(
-    co.id,
-    leg.exercise_id,
-    logicalToday(),
-    n,
-    t.weight,
-    t.assisted,
-    t.band,
-    undefined,
-    true,
-  );
-  if (!before && comboCompleteInTime(co)) celebrateCombo(co);
-}
-/** ↩ Retire la dernière prise du jour. Sans dialogue (une erreur de tap doit coûter un tap),
- *  sauf si l'énergie qu'elle a rapportée est déjà dépensée : c'est alors `undoSet` qui
- *  prévient du déficit. */
-function fractionUndo(leg: ComboLeg) {
-  const co = activeCombo.value;
-  const i = lastMiniIndex(leg, logicalToday());
-  if (!co || i < 0) return;
-  if (energyOfSet(co, leg, i) > 0 && availableEnergy.value - energyOfSet(co, leg, i) < 0)
-    return undoSet(leg, i);
-  comboStore.removeSet(co.id, leg.exercise_id, i);
+  if (!legComplete(leg)) openSet(leg, 1);
 }
 /** Énergie que rapporte UNE série (= son XP, ENERGY_PER_XP=1) : la différence du total du
  *  défi avec et sans elle — durée, reps, poids du corps, prime : la règle de la lib. */
@@ -1967,6 +1934,10 @@ onMounted(async () => {
 .cc-today.done {
   color: var(--d1);
   background: color-mix(in srgb, var(--d1) 18%, transparent);
+}
+.cc-today.open {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .cc-today.todo {
   color: var(--d3);

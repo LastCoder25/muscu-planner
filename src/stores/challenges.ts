@@ -8,6 +8,8 @@ import {
   removeContribution,
   isChallengeComplete,
   evaluateAchievements,
+  logicalToday,
+  openChallengeExpired,
   type Challenge,
   type ChallengeStatus,
   type DayProgress,
@@ -83,6 +85,20 @@ export const useChallengesStore = defineStore('challenges', () => {
     if (error) throw error;
     list.value = data ?? [];
     loaded.value = true;
+    // 🔁 Un défi Découverte n'a ni objectif ni échec : à la fin de ses 7 jours il se CLÔT en
+    // « terminé » (jamais « abandonné »). Personne d'autre ne le ferait (aucune série n'arrive).
+    const today = logicalToday();
+    for (const c of list.value) {
+      if (!openChallengeExpired(c, today)) continue;
+      c.status = 'done';
+      void supabase
+        .from('challenges')
+        .update({ status: 'done' })
+        .eq('id', c.id)
+        .then(({ error }) => {
+          if (error) console.error('clôture Découverte', error);
+        });
+    }
     return list.value;
   }
 

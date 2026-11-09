@@ -11,13 +11,9 @@ import {
   legLastReps,
   legLoadAdvice,
   groupSetLines,
-  legDayCount,
-  lastMiniIndex,
   miniEquivalentSets,
   miniLineLabel,
-  miniTemplate,
   legDone,
-  OVER_TARGET_XP,
   COMBO_SET_MIN,
   type ComboChallenge,
   type ComboLeg,
@@ -212,7 +208,6 @@ describe('🔁 XP : 30 mini-séries valent 30 reps, pas 95', () => {
 
 describe('📉 au-delà de l’objectif : jamais bloqué, XP dégressive', () => {
   it('la part de reps qui dépasse l’objectif vaut OVER_TARGET_XP, la durée reste plafonnée', () => {
-    expect(OVER_TARGET_XP).toBe(0.5);
     const at = combo([
       legOf(
         repeat(20, () => mini(1)),
@@ -315,34 +310,10 @@ describe('🔁 affichage : les mini-séries d’un jour tiennent en une ligne', 
     expect(miniLineLabel({ reps: 7, takes: 6 })).toBe('7 reps · 6 prises');
     expect(miniLineLabel({ reps: 1, takes: 1 })).toBe('1 rep · 1 prise');
   });
-  it('le compteur du jour additionne prises ET vraies séries ; les prises se comptent à part', () => {
-    expect(legDayCount(legOf(sets), D1)).toEqual({ reps: 15, takes: 7 });
-    expect(legDayCount(legOf(sets), '2099-01-09')).toEqual({ reps: 0, takes: 0 });
-  });
   it('le texte exporté ne liste pas 30 prises', () => {
     const t = comboExportText(combo([legOf(repeat(30, () => mini(1)))]), D1);
     expect(t).toContain('30 reps · 30 prises');
     expect(t).not.toContain('1, 1, 1');
-  });
-});
-
-describe('🔁 annuler la dernière prise', () => {
-  it('retire la dernière mini-série DU JOUR, jamais une vraie série ni celle d’hier', () => {
-    const l = legOf([mini(1, D1), full(8, D2), mini(1, D2), full(5, D2)]);
-    expect(lastMiniIndex(l, D2)).toBe(2);
-    expect(lastMiniIndex(l, D1)).toBe(0);
-    expect(lastMiniIndex(legOf([full(8, D2)]), D2)).toBe(-1);
-    expect(lastMiniIndex(legOf([mini(1, D1)]), D2)).toBe(-1);
-  });
-  it('une prise reprend la charge / l’assistance de la dernière série', () => {
-    const l = legOf([{ ...full(5), weight: 10, assisted: true }, mini(1)], { weight_kg: 2 });
-    expect(miniTemplate(l)).toEqual({ weight: null, assisted: false, band: null });
-    expect(miniTemplate(legOf([{ ...full(5), weight: 10, assisted: true }]))).toEqual({
-      weight: 10,
-      assisted: true,
-      band: null,
-    });
-    expect(miniTemplate(legOf([], { weight_kg: 5 })).weight).toBe(5);
   });
 });
 
@@ -369,7 +340,7 @@ describe('🔁 changer d’exo : les mini-séries ne deviennent pas des séries 
     const plan = comboTransferPlan(c, 'ex_pullup', { leg: 'ex_pullup_neutral' });
     expect(plan.sets.every((s) => s.reps === 2)).toBe(true);
   });
-  it('un exo neuf garde le mode fractionné s’il s’y prête, le perd sinon', () => {
+  it('un exo neuf ne reçoit plus le drapeau fractionné (retiré du 360 en v1.313.0)', () => {
     const base = {
       exercise_name: 'x',
       rep_weight: 1,
@@ -382,7 +353,7 @@ describe('🔁 changer d’exo : les mini-séries ne deviennent pas des séries 
     const chin = transferComboLeg(c, 'ex_pullup', {
       exercise: { ...base, exercise_id: 'ex_chinup', muscle_primary: 'dos' },
     });
-    expect(chin[0]!.fractional).toBe(true);
+    expect(chin[0]!.fractional).toBeUndefined();
     const row = transferComboLeg(c, 'ex_pullup', {
       exercise: { ...base, exercise_id: 'ex_row_barbell', muscle_primary: 'dos' },
     });

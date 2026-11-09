@@ -127,3 +127,10 @@ export function proposeRepsTarget(input: {
     habit: Math.round(habit),
   };
 }
+
+/** 🎯 Le défi d'APRÈS un défi Découverte : le total réalisé +10 % (la même règle que
+ *  l'habitude), arrondi proprement, et toujours au moins une rep de plus. */
+export function followUpTarget(total: number): number {
+  if (!(total > 0)) return 10;
+  return Math.max(roundTarget(total * HABIT_UPLIFT), Math.floor(total) + 1);
+}

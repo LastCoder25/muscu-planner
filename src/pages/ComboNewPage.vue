@@ -433,21 +433,7 @@
                 >
                   Répétitions
                 </button>
-                <!-- Tractions, pompes, dips seulement : une prise à la fois, toute la journée. -->
-                <button
-                  v-if="canFraction(key)"
-                  type="button"
-                  :class="{ on: slotMode(key) === 'frac' }"
-                  :aria-pressed="slotMode(key) === 'frac'"
-                  @click="setMode(key, 'frac')"
-                >
-                  🔁 Fractionné
-                </button>
               </div>
-            </div>
-            <div v-if="slotMode(key) === 'frac'" class="cfg-habit">
-              🔁 Un gros « +1 » à chaque prise (une traction toutes les 10-30 min) : les prises et
-              tes vraies séries s’additionnent dans le même total de reps.
             </div>
             <div class="cfg-row">
               <span class="cfg-lbl"
@@ -528,7 +514,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
-import { COMBO_SLOTS, fractionableExercise, variantFamilyKey, type ComboSlot } from '@/data/combo';
+import { COMBO_SLOTS, variantFamilyKey, type ComboSlot } from '@/data/combo';
 import { useLogsStore } from '@/stores/logs';
 import { exerciseRepDays, proposeRepsTarget } from '@/lib/repsHabit';
 import { isTennisExercise } from '@/lib/tennisTraining';
@@ -718,8 +704,6 @@ const picks = reactive<
       setsTarget: number;
       weight_kg: number | null;
       count_mode: ComboCountMode;
-      /** Mode fractionné : reps comptées, saisies par « +1 » (exos qui s'y prêtent seulement). */
-      fractional: boolean;
     }
   >
 >({});
@@ -895,17 +879,11 @@ function bumpTarget(key: string, d: number) {
   p.target = Math.max(targetMin(p.count_mode), p.target + d * step);
   if (p.count_mode === 'sets') p.setsTarget = p.target;
 }
-// ── Mode de comptage d'un emplacement : séries · répétitions · fractionné ──
-// UN SEUL objectif par exo, jamais une ligne parallèle : en reps il est un total de reps de
-// la semaine ; « fractionné » n'est qu'une façon de les SAISIR (« +1 »).
-type SlotMode = 'sets' | 'reps' | 'frac';
+// ── Mode de comptage d'un emplacement : séries · répétitions ──
+// (Le « fractionné », ajouté en v1.312.0, a été retiré du 360 : il vit dans les challenges.)
+type SlotMode = 'sets' | 'reps';
 function slotMode(key: string): SlotMode {
-  const p = picks[key];
-  return p?.count_mode !== 'reps' ? 'sets' : p.fractional ? 'frac' : 'reps';
-}
-/** Le fractionné n'est proposé que si l'emplacement porte un exo qui s'y prête. */
-function canFraction(key: string): boolean {
-  return selectedExos(key).some((e) => fractionableExercise(e.id));
+  return picks[key]?.count_mode !== 'reps' ? 'sets' : 'reps';
 }
 // Jours de reps de la bibliothèque + séances + 360 + challenges, lus pour l'habitude.
 const logEntries = computed(() =>
@@ -954,14 +932,12 @@ function setMode(key: string, mode: SlotMode) {
   if (!p) return;
   if (mode === 'sets') {
     p.count_mode = 'sets';
-    p.fractional = false;
     p.target = Math.max(targetMin('sets'), p.setsTarget);
     return;
   }
   const fromSets = p.count_mode !== 'reps';
   if (fromSets) p.setsTarget = p.target;
   p.count_mode = 'reps';
-  p.fractional = mode === 'frac';
   // Depuis les séries : l'objectif part de l'habitude (ou du repli séries × fourchette).
   if (fromSets) p.target = slotProposal(key).target;
 }
@@ -1013,7 +989,6 @@ function applyPlan() {
       setsTarget: p?.weeklySets ? comboProrata(p.weeklySets, duration.value) : 0,
       weight_kg: null,
       count_mode: 'sets',
-      fractional: false,
     };
   }
 }
@@ -1066,11 +1041,6 @@ async function createCombo() {
         count_mode: isTime ? 'time' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
-        // Fractionné : seulement les exos qui s'y prêtent (les autres de l'emplacement
-        // restent en reps classiques).
-        ...(p.fractional && p.count_mode === 'reps' && fractionableExercise(e.id)
-          ? { fractional: true }
-          : {}),
         rep_min: range.min,
         rep_max: range.max,
         sets: [],
