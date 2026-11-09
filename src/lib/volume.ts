@@ -1,7 +1,14 @@
 // volume.ts — répartition des séries par groupe musculaire (pur).
 // Pour une séance planifiée (prévu) et pour un bilan (prévu vs réalisé).
 import type { Session, SessionLog, LoggedExercise } from './types';
-import { legSets, setOrigin, setWork, type ComboChallenge } from './combo';
+import {
+  legMidReps,
+  legSets,
+  miniEquivalentSets,
+  setOrigin,
+  setWork,
+  type ComboChallenge,
+} from './combo';
 import type { Challenge } from './challenges';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { localDayIso } from './localDay';
@@ -120,10 +127,13 @@ export function comboLogEntries(combos: ComboChallenge[]): LogEntry[] {
     // Regroupe les séries par jour → une séance synthétique par jour actif.
     const byDay = new Map<string, Map<string, LoggedExercise>>();
     for (const leg of c.legs) {
-      for (const s of legSets(leg)) {
-        // Une série basculée d'un autre exo reste une série de SON exo d'origine.
-        const o = setOrigin(leg, s);
-        const day = s.date.slice(0, 10);
+      // 🔁 Mini-séries (« +1 ») : regroupées par jour et par exo, puis rangées en séries
+      // ÉQUIVALENTES — 30 « séries » d'1 rep gonfleraient le nombre de séries du volume.
+      const minis = new Map<
+        string,
+        { o: ReturnType<typeof setOrigin>; reps: number; load: number }
+      >();
+      const entryOf = (o: ReturnType<typeof setOrigin>, day: string): LoggedExercise => {
         let exos = byDay.get(day);
         if (!exos) byDay.set(day, (exos = new Map()));
         let ex = exos.get(o.exercise_id);
@@ -137,14 +147,34 @@ export function comboLogEntries(combos: ComboChallenge[]): LogEntry[] {
           };
           exos.set(o.exercise_id, ex);
         }
+        return ex;
+      };
+      for (const s of legSets(leg)) {
+        // Une série basculée d'un autre exo reste une série de SON exo d'origine.
+        const o = setOrigin(leg, s);
+        const day = s.date.slice(0, 10);
         // Ce qui a VRAIMENT été fait (une série convertie à la bascule garde ses valeurs).
         const w = setWork(leg, s);
+        if (s.mini) {
+          const k = day + '|' + o.exercise_id;
+          const g = minis.get(k) ?? { o, reps: 0, load: w.weight ?? 0 };
+          g.reps += w.reps ?? 0;
+          g.load = w.weight ?? 0;
+          minis.set(k, g);
+          continue;
+        }
+        const ex = entryOf(o, day);
         ex.performed.push({
           set: ex.performed.length + 1,
           load_kg: w.weight ?? 0,
           reps: w.reps ?? 0,
           difficulty: 2,
         });
+      }
+      for (const [k, g] of minis) {
+        const ex = entryOf(g.o, k.split('|')[0]!);
+        for (const reps of miniEquivalentSets(g.reps, legMidReps(leg)))
+          ex.performed.push({ set: ex.performed.length + 1, load_kg: g.load, reps, difficulty: 2 });
       }
     }
     for (const [day, exos] of byDay) {

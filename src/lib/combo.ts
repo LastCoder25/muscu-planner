@@ -11,7 +11,14 @@ import { daysBetweenIso } from './loginStreak';
 import { localDayIso } from './localDay';
 import { bodyweightLoad } from './bodyweightLoad';
 import { addDaysUtcIso } from './startDate';
-import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
+import {
+  COMBO_SLOTS,
+  comboSlot,
+  comboSlotRank,
+  fractionableExercise,
+  swapSlotsOf,
+  variantFamilyKey,
+} from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -47,6 +54,11 @@ export interface ComboSet {
   /** Heure de saisie (ISO) : distingue les séries enchaînées des séries étalées pour le
    *  conseil de charge. Absente des séries saisies avant la v0.1159. */
   at?: string;
+  /** 🔁 MINI-SÉRIE du mode FRACTIONNÉ (« grease the groove » : une traction toutes les 10-30
+   *  min), posée par les boutons « +1 / +2 / +3 », jamais par la fenêtre de saisie. Le
+   *  marqueur est sur la SÉRIE et non sur l'exo : l'XP et les conseils lisent la série, donc
+   *  régler un exo en fractionné ne réécrit jamais l'XP déjà versée. */
+  mini?: true;
   /** Série FAITE SUR UN AUTRE EXO puis basculée ici par un changement d'exo en cours de
    *  défi (`transferComboLeg`). Elle compte pour l'avancement et les paliers de l'exo qui
    *  la porte, mais son XP, son tonnage et ses muscles restent ceux de l'exo d'origine :
@@ -104,6 +116,11 @@ export interface ComboLeg {
   rep_min?: number;
   rep_max?: number;
   assistable?: boolean; // exo au poids du corps → propose l'option « assisté »
+  /** Mode FRACTIONNÉ (cf. `fractionableExercise`) : l'exo se SAISIT aussi par « +1 ». Une
+   *  façon de saisir, pas un second objectif : l'objectif reste UN total de reps
+   *  (`count_mode: 'reps'`) auquel mini-séries et vraies séries s'additionnent. Au-delà de
+   *  l'objectif la saisie n'est jamais refusée (cf. `OVER_TARGET_XP`). */
+  fractional?: boolean;
   sets?: ComboSet[]; // séries réalisées (modèle courant)
   progress?: ComboLegEntry[]; // legacy (migration)
 }
@@ -237,8 +254,13 @@ export function repsEquivalent(reps: number): number {
 const REPS_EQUIVALENT_FROM = '2026-10-11';
 /** Reps d'une série telles que l'XP les compte : compressées (séries récentes), sauf au
  *  temps. */
-function setRepUnits(leg: ComboLeg, reps: number, date?: string | null): number {
+function setRepUnits(leg: ComboLeg, reps: number, date?: string | null, mini = false): number {
   if (legMode(leg) === 'time') return Math.max(0, reps);
+  // 🔁 Mini-série : la racine par série n'a aucun sens sur 1 rep (30 mini-séries d'1 rep
+  // valaient 30 × 3,16 = 95 contre 30 pour 3 × 10, mesuré). Les reps comptent comme celles
+  // de séries pleines de la fourchette de l'exo : reps × √(10 ÷ milieu), c'est-à-dire ce
+  // que ces mêmes reps vaudraient rangées en séries de milieu de fourchette.
+  if (mini) return Math.max(0, reps) * Math.sqrt(COMBO_PLAN_REPS / legMidReps(leg));
   if (!date || date < REPS_EQUIVALENT_FROM) return Math.max(0, reps);
   return repsEquivalent(reps);
 }
@@ -247,7 +269,7 @@ function setRepUnits(leg: ComboLeg, reps: number, date?: string | null): number 
 function setRepXp(leg: ComboLeg, s: ComboSet): number {
   const w = setWork(leg, s);
   return (
-    setRepUnits(leg, w.reps || 0, s.date) *
+    setRepUnits(leg, w.reps || 0, s.date, !!s.mini) *
     REP_XP *
     setOrigin(leg, s).rep_weight *
     assistMult(w.assisted)
@@ -281,7 +303,10 @@ export function setOriginLabel(leg: ComboLeg, s: ComboSet): string | null {
  *  préremplissent la série suivante et nourrissent le conseil de charge — 40 kg de
  *  développé couché ne disent rien de la charge des dips. */
 export function ownSets(leg: ComboLeg): ComboSet[] {
-  return legSets(leg).filter((s) => !s.origin);
+  // ⚠️ Sans les mini-séries (« +1 ») : une série d'1 rep ne dit rien de ce qu'on fait à
+  // fond. Préremplir une série avec 1 rep, ou conseiller « allège » parce que tous les
+  // « blocs » valent 1, serait faux — c'est cette liste qui nourrit les deux.
+  return legSets(leg).filter((s) => !s.origin && !s.mini);
 }
 /** Nombre de séries faites. */
 export function legSetsDone(leg: ComboLeg): number {
@@ -860,7 +885,7 @@ function legPlannedEffort(l: ComboLeg): number {
       // Une série convertie compte dans l'unité de la cible, mais son effort est celui qu'elle
       // a vraiment coûté (12 dips posés comme 5 reps valent 12 dips).
       // ⚠️ Compressé comme l'XP des séries (`setRepUnits`) : la prime suit le même barème.
-      effort += setRepUnits(l, take * workRatio(l, s), s.date) * w(s);
+      effort += setRepUnits(l, take * workRatio(l, s), s.date, !!s.mini) * w(s);
       left -= take;
     }
     return effort;
@@ -1021,15 +1046,44 @@ export function comboXpByDay(c: ComboChallenge, bodyKg?: number | null): ComboDa
   return out;
 }
 
+/**
+ * 📉 AU-DELÀ DE L'OBJECTIF, L'XP EST DÉGRESSIVE (demandé par l'utilisateur ; exos
+ * FRACTIONNÉS seulement). Ces exos ne se ferment pas à l'objectif : les reps en plus restent
+ * notées (historique, volume) et rapportent encore, mais deux fois moins.
+ *
+ * ⚠️ Elles étaient DÉJÀ moins payées : le terme de durée (3,5 min × 3 XP par série) est
+ * plafonné à l'objectif (`legCountedWork`), donc une rep en trop ne touchait que sa part
+ * « reps ». MESURÉ (pompes/tractions, rep_weight 1, fourchette 8-12, objectif 20 reps) : les
+ * 20 premières reps rapportent 50 XP (durée comprise), les 20 suivantes 8 sans cette règle
+ * (déjà 16 %), 4 avec ce ×0,5. 4 fois l'objectif = 50 + 3 × 4 = 62 XP au lieu de 74. Le
+ * hors-objectif reste donc un bonus de volume, jamais un moyen de farmer. Non rétroactif :
+ * réservé au mode fractionné.
+ */
+export const OVER_TARGET_XP = 0.5;
+/** Facteur d'XP de CHAQUE série d'un exo (même ordre que `legSets`) : 1 en deçà de l'objectif,
+ *  `OVER_TARGET_XP` pour la part de reps qui le dépasse (une série à cheval est pondérée). */
+function legOverFactors(l: ComboLeg): number[] {
+  const sets = legSets(l);
+  if (!l.fractional || !(l.target > 0)) return sets.map(() => 1);
+  let cum = 0;
+  return sets.map((s) => {
+    const r = Math.max(0, s.reps || 0);
+    const over = Math.min(r, Math.max(0, cum + r - l.target));
+    cum += r;
+    return r > 0 ? 1 - (over / r) * (1 - OVER_TARGET_XP) : 1;
+  });
+}
+
 /** Points BRUTS (pré-XP_MULT) des séries d'un défi : reps (équivalent-reps) et tonnage. */
 function comboWorkPoints(c: ComboChallenge, bodyKg?: number | null): number {
   let reps = 0;
   let tonnage = 0;
   for (const l of c.legs) {
-    for (const s of legSets(l)) {
-      reps += setRepXp(l, s);
-      tonnage += setTonnage(l, s, bodyKg);
-    }
+    const f = legOverFactors(l);
+    legSets(l).forEach((s, i) => {
+      reps += setRepXp(l, s) * f[i]!;
+      tonnage += setTonnage(l, s, bodyKg) * f[i]!;
+    });
   }
   return reps + tonnage / 500;
 }
@@ -1091,6 +1145,7 @@ export function comboXpByExoDay(c: ComboChallenge, bodyKg?: number | null): Comb
   const groups = new Map<string, ComboExoDayXp & { raw: number }>();
   for (const l of c.legs) {
     const shares = legSetDurationShares(l);
+    const over = legOverFactors(l);
     legSets(l).forEach((s, i) => {
       if (!s.date) return;
       const o = setOrigin(l, s);
@@ -1110,8 +1165,7 @@ export function comboXpByExoDay(c: ComboChallenge, bodyKg?: number | null): Comb
       }
       g.sets.push({ ...s, ...setWork(l, s) });
       g.raw +=
-        setRepXp(l, s) +
-        setTonnage(l, s, bodyKg) / 500 +
+        (setRepXp(l, s) + setTonnage(l, s, bodyKg) / 500) * over[i]! +
         (shares[i] ?? 0) * COMBO_SET_MIN * MUSCU_MIN_XP;
     });
   }
@@ -1238,7 +1292,11 @@ export function comboDayQuota(
     if (owed <= 0) continue;
     const m = legMode(leg);
     const per =
-      m === 'sets' ? 1 : m === 'time' ? legTimePerSet(leg, objective) : Math.max(1, legLastReps(leg));
+      m === 'sets'
+        ? 1
+        : m === 'time'
+          ? legTimePerSet(leg, objective)
+          : Math.max(1, legLastReps(leg));
     let n = Math.min(owed, COMBO_QUOTA_MAX_SETS * per);
     // Une durée se règle par pas de 15 s : jamais au-delà du restant.
     if (m === 'time') n = Math.min(left, Math.ceil(n / COMBO_TIME_STEP) * COMBO_TIME_STEP);
@@ -1286,27 +1344,86 @@ export function comboStepMs(restSec: number): number {
   return (COMBO_EXEC_SEC + restOrTransition(restSec)) * 1000;
 }
 
-/** Suggère un objectif pour un exo à partir de l'HISTORIQUE : reprend le `target`
- *  du dernier Défi 360 contenant cet exo (converti si le mode diffère : séries↔reps
- *  via ~COMBO_PLAN_REPS reps/série). `null` si aucun historique. Pur/testable. */
-export function suggestComboTargetFromHistory(
-  exerciseId: string,
-  mode: ComboCountMode,
-  history: ComboChallenge[],
-): number | null {
-  // Le plus récent d'abord (start_date décroissant).
-  const sorted = [...history].sort((a, b) => (a.start_date < b.start_date ? 1 : -1));
-  for (const c of sorted) {
-    const leg = c.legs.find((l) => l.exercise_id === exerciseId && l.target > 0);
-    if (!leg) continue;
-    const pastMode = legMode(leg);
-    if (pastMode === mode) return leg.target;
-    // Conversion approx entre unités (séries ↔ reps/secondes, ~COMBO_PLAN_REPS/série).
-    return mode !== 'sets'
-      ? leg.target * COMBO_PLAN_REPS
-      : Math.max(1, Math.round(leg.target / COMBO_PLAN_REPS));
+// ── 🔁 MODE FRACTIONNÉ : saisie par mini-séries (« +1 ») ─────────────────────────────
+// « Une traction toutes les 10-30 minutes » (grease the groove) : du volume sans jamais
+// faire de série. Pas de minuteur ni de notification — un gros « +1 » et un compteur du jour.
+// L'objectif est UN total de reps ; mini-séries et vraies séries s'additionnent dedans.
+
+/** Milieu de la fourchette de reps de l'exo : ce que vaut UNE série quand on convertit des
+ *  reps en séries (même règle que l'équilibre du corps). */
+export function legMidReps(leg: ComboLeg): number {
+  const r = legRepRange(leg);
+  return Math.max(1, (r.min + r.max) / 2);
+}
+
+/** Les mini-séries d'UN jour regroupées en nombre de séries équivalentes (≥ 1 si des reps),
+ *  reps réparties au plus juste : 30 reps sur une fourchette de 10 → [10, 10, 10]. Sert aux
+ *  statistiques de volume, où 30 « séries » d'1 rep gonfleraient le nombre de séries. */
+export function miniEquivalentSets(totalReps: number, mid: number): number[] {
+  if (!(totalReps > 0)) return [];
+  const n = Math.max(1, Math.round(totalReps / Math.max(1, mid)));
+  const base = Math.floor(totalReps / n);
+  const extra = totalReps - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i >= n - extra ? 1 : 0));
+}
+
+/** Une ligne d'historique : une série pleine, ou toutes les mini-séries d'un jour. */
+export type SetLine =
+  | { kind: 'set'; set: ComboSet; index: number }
+  | { kind: 'mini'; date: string; reps: number; takes: number };
+
+/** Regroupe les mini-séries d'un même jour en UNE ligne (« 7 reps · 6 prises »), dans l'ordre
+ *  où elles sont apparues ; les séries pleines restent une ligne chacune. */
+export function groupSetLines(sets: readonly ComboSet[]): SetLine[] {
+  const out: SetLine[] = [];
+  sets.forEach((s, index) => {
+    if (!s.mini) return void out.push({ kind: 'set', set: s, index });
+    const g = out.find((l) => l.kind === 'mini' && l.date === s.date);
+    if (g && g.kind === 'mini') {
+      g.reps += s.reps || 0;
+      g.takes += 1;
+    } else out.push({ kind: 'mini', date: s.date, reps: s.reps || 0, takes: 1 });
+  });
+  return out;
+}
+/** « 7 reps · 6 prises » (singulier compris). */
+export function miniLineLabel(l: { reps: number; takes: number }): string {
+  return `${l.reps} rep${l.reps > 1 ? 's' : ''} · ${l.takes} prise${l.takes > 1 ? 's' : ''}`;
+}
+
+/** Ce qu'un exo a fait UN jour : reps totales (mini-séries ET vraies séries : c'est le même
+ *  total) et nombre de prises (mini-séries). Le compteur « 7 reps aujourd'hui ». */
+export function legDayCount(leg: ComboLeg, day: string): { reps: number; takes: number } {
+  let reps = 0;
+  let takes = 0;
+  for (const s of legSets(leg)) {
+    if (s.date !== day) continue;
+    reps += s.reps || 0;
+    if (s.mini) takes += 1;
   }
-  return null;
+  return { reps, takes };
+}
+
+/** Index (dans `legSets`) de la dernière mini-série du jour : celle que « annuler » retire. */
+export function lastMiniIndex(leg: ComboLeg, day: string): number {
+  const sets = legSets(leg);
+  for (let i = sets.length - 1; i >= 0; i--) if (sets[i]!.mini && sets[i]!.date === day) return i;
+  return -1;
+}
+
+/** Charge, assistance et élastique d'une mini-série : ceux de la dernière série de l'exo
+ *  (mini ou pleine, hors séries basculées), sinon sa charge mémorisée — on ne retape pas son
+ *  élastique à chaque traction. */
+export function miniTemplate(leg: ComboLeg): {
+  weight: number | null;
+  assisted: boolean;
+  band: ElasticBand | null;
+} {
+  const last = legSets(leg)
+    .filter((s) => !s.origin)
+    .at(-1);
+  if (!last) return { weight: leg.weight_kg ?? null, assisted: false, band: null };
+  return { weight: last.weight ?? null, assisted: !!last.assisted, band: last.band ?? null };
 }
 
 // --- Dimensionnement FULL-BODY par volume + variété ------------------------
@@ -1544,8 +1661,11 @@ export function comboExportText(c: ComboChallenge, today: string): string {
                 return o ? `${s.reps}s (↪ ${o})` : `${s.reps}s`;
               })
               .join(', ')
-          : sets
-              .map((s) => {
+          : groupSetLines(sets)
+              .map((l) => {
+                // Mini-séries d'un jour : une mention, pas une par prise.
+                if (l.kind === 'mini') return miniLineLabel(l);
+                const s = l.set;
                 const b = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
                 const a = s.assisted ? `${b}·a` : b;
                 const o = setOriginLabel(leg, s);
@@ -1802,6 +1922,12 @@ export interface ComboTransferPlan {
 }
 
 const midOf = (min: number, max: number) => Math.max(1, Math.round((min + max) / 2));
+/** Un exo neuf garde le mode fractionné de l'exo quitté, s'il s'y prête (tractions → tractions
+ *  prise neutre : oui ; tractions → rowing : non, ses mini-séries restent notées mais la
+ *  saisie « +1 » n'est plus proposée). */
+function keepsFraction(from: ComboLeg, toId: string): boolean {
+  return !!from.fractional && fractionableExercise(toId);
+}
 
 /** Les valeurs proposées à la bascule (cf. `ComboTransferPlan`). Lève si c'est bloqué. */
 export function comboTransferPlan(
@@ -1829,6 +1955,14 @@ export function comboTransferPlan(
   } else {
     base = { reps: midOf(to.exercise.rep_min, to.exercise.rep_max), weight: null, assisted: false };
   }
+  // 🔁 Une mini-série (1 rep) ne devient pas une série pleine : 30 « +1 » ne font pas 30 séries
+  // de 10 reps sur la cible. Ses reps sont mises à l'échelle de la fourchette de l'exo cible
+  // (1 rep sur une fourchette de 10 vaut 1 sur une cible de 10), au moins 1.
+  const fromMid = legMidReps(from);
+  const setPlan = (s: ComboSet): ComboSetWork =>
+    s.mini
+      ? { ...base, reps: Math.max(1, Math.round(((s.reps || 0) * base.reps) / fromMid)) }
+      : { ...base };
   // Tout : l'objectif entier part ; le reste : seulement ce qui manquait.
   const moving = scope === 'rest' ? legRemaining(from) : from.target;
   let target = moving;
@@ -1837,7 +1971,7 @@ export function comboTransferPlan(
     target = Math.max(1, Math.round((moving / midOf(r.min, r.max)) * base.reps));
   }
   if (scope === 'rest') return { sets: [], target, scope };
-  return { sets: legSets(from).map(() => ({ ...base })), target };
+  return { sets: legSets(from).map(setPlan), target };
 }
 
 /** Bascule du RESTE : l'exo quitté garde ses séries et son objectif descend à ce qui est
@@ -1866,6 +2000,7 @@ function transferRest(
     count_mode: from.count_mode ?? 'sets',
     weight_kg: null,
     assistable: e.assistable,
+    ...(keepsFraction(from, e.exercise_id) ? { fractional: true } : {}),
     rep_min: e.rep_min,
     rep_max: e.rep_max,
     sets: [],
@@ -1943,6 +2078,7 @@ export function transferComboLeg(
     count_mode: from.count_mode ?? 'sets',
     weight_kg: null,
     assistable: e.assistable,
+    ...(keepsFraction(from, e.exercise_id) ? { fractional: true } : {}),
     rep_min: e.rep_min,
     rep_max: e.rep_max,
     sets: moved,

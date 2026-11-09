@@ -5,22 +5,29 @@
   <q-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
     <q-card class="hist-card">
       <div class="hist-title font-display">{{ leg?.exercise_name }}</div>
-      <div class="hist-desc">{{ sets.length }} série{{ sets.length > 1 ? 's' : '' }}</div>
-      <div v-if="!sets.length" class="hist-empty">Aucune série enregistrée.</div>
+      <div class="hist-desc">
+        {{ plainCount }} série{{ plainCount > 1 ? 's' : '' }}
+        <template v-if="miniReps"> · {{ miniReps }} reps en mini-séries</template>
+      </div>
+      <div v-if="!lines.length" class="hist-empty">Aucune série enregistrée.</div>
       <div v-else class="hist-list">
-        <div v-for="(s, i) in sets" :key="i" class="hist-row">
-          <span class="hist-n">{{ sets.length - i }}</span>
-          <span class="hist-main">
-            {{ s.reps }} {{ unit }}
-            <span v-if="s.weight" class="hist-pill hist-kg">{{ s.weight }} kg</span>
-            <span v-if="s.assisted" class="hist-pill hist-asst">🟧 assisté</span>
-            <span v-else-if="s.band" class="hist-pill hist-band"
-              >🟦 élastique {{ elasticBandLabel(s.band).toLowerCase() }}</span
+        <div v-for="(l, i) in lines" :key="i" class="hist-row">
+          <span class="hist-n">{{ lines.length - i }}</span>
+          <!-- Mini-séries (« +1 ») d'un jour : UNE ligne, pas une par prise. -->
+          <span v-if="l.kind === 'mini'" class="hist-main"
+            >{{ miniLineLabel(l) }} <span class="hist-pill hist-mini">🔁 fractionné</span></span
+          >
+          <span v-else class="hist-main">
+            {{ l.set.reps }} {{ unit }}
+            <span v-if="l.set.weight" class="hist-pill hist-kg">{{ l.set.weight }} kg</span>
+            <span v-if="l.set.assisted" class="hist-pill hist-asst">🟧 assisté</span>
+            <span v-else-if="l.set.band" class="hist-pill hist-band"
+              >🟦 élastique {{ elasticBandLabel(l.set.band).toLowerCase() }}</span
             >
             <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
-            <span v-if="s.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, s) }}</span>
+            <span v-if="l.set.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, l.set) }}</span>
           </span>
-          <span class="hist-date">{{ fmtDay(s.date) }}</span>
+          <span class="hist-date">{{ fmtDay(l.kind === 'mini' ? l.date : l.set.date) }}</span>
         </div>
       </div>
       <div class="hist-actions">
@@ -32,13 +39,26 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { legMode, legSets, setOriginLabel, elasticBandLabel, type ComboLeg } from '@/lib/combo';
+import {
+  groupSetLines,
+  legMode,
+  legSets,
+  miniLineLabel,
+  setOriginLabel,
+  elasticBandLabel,
+  type ComboLeg,
+} from '@/lib/combo';
 
 const props = defineProps<{ modelValue: boolean; leg: ComboLeg | null }>();
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>();
 
 // Les plus récentes en tête : c'est la dernière série qu'on vient vérifier.
-const sets = computed(() => (props.leg ? [...legSets(props.leg)].reverse() : []));
+// Mini-séries du fractionné regroupées par jour : une ligne « 7 reps · 6 prises ».
+const lines = computed(() => (props.leg ? groupSetLines(legSets(props.leg)).reverse() : []));
+const plainCount = computed(() => lines.value.filter((l) => l.kind === 'set').length);
+const miniReps = computed(() =>
+  lines.value.reduce((a, l) => a + (l.kind === 'mini' ? l.reps : 0), 0),
+);
 // Un exo au TEMPS (gainage) compte des secondes, pas des reps.
 const unit = computed(() => (props.leg && legMode(props.leg) === 'time' ? 's' : 'reps'));
 
@@ -114,6 +134,10 @@ function fmtDay(iso: string): string {
   color: var(--text);
 }
 .hist-band {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.hist-mini {
   color: var(--accent);
   border-color: var(--accent);
 }

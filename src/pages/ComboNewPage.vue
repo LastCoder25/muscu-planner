@@ -414,24 +414,40 @@
             <span v-for="e in selectedExos(key)" :key="e.id" class="ex-chip on">{{ e.name }}</span>
           </div>
           <div class="leg-cfg">
-            <div class="cfg-row">
+            <div class="cfg-row cfg-mode">
               <span class="cfg-lbl">Compter en</span>
-              <div class="mode-toggle">
+              <div class="mode-toggle tri" role="group" aria-label="Mode de comptage">
                 <button
                   type="button"
-                  :class="{ on: picks[key]?.count_mode !== 'reps' }"
-                  @click="picks[key]?.count_mode === 'reps' && toggleMode(key)"
+                  :class="{ on: slotMode(key) === 'sets' }"
+                  :aria-pressed="slotMode(key) === 'sets'"
+                  @click="setMode(key, 'sets')"
                 >
                   Séries
                 </button>
                 <button
                   type="button"
-                  :class="{ on: picks[key]?.count_mode === 'reps' }"
-                  @click="picks[key]?.count_mode !== 'reps' && toggleMode(key)"
+                  :class="{ on: slotMode(key) === 'reps' }"
+                  :aria-pressed="slotMode(key) === 'reps'"
+                  @click="setMode(key, 'reps')"
                 >
-                  Reps
+                  Répétitions
+                </button>
+                <!-- Tractions, pompes, dips seulement : une prise à la fois, toute la journée. -->
+                <button
+                  v-if="canFraction(key)"
+                  type="button"
+                  :class="{ on: slotMode(key) === 'frac' }"
+                  :aria-pressed="slotMode(key) === 'frac'"
+                  @click="setMode(key, 'frac')"
+                >
+                  🔁 Fractionné
                 </button>
               </div>
+            </div>
+            <div v-if="slotMode(key) === 'frac'" class="cfg-habit">
+              🔁 Un gros « +1 » à chaque prise (une traction toutes les 10-30 min) : les prises et
+              tes vraies séries s’additionnent dans le même total de reps.
             </div>
             <div class="cfg-row">
               <span class="cfg-lbl"
@@ -443,6 +459,21 @@
                 <span class="stp-v font-display">{{ picks[key]?.target ?? 0 }}</span>
                 <button type="button" @click="bumpTarget(key, 1)">+</button>
               </div>
+            </div>
+            <div v-if="picks[key]?.count_mode === 'reps'" class="cfg-habit">
+              <template v-for="h in slotProposal(key).lines" :key="h.name">
+                <div v-if="h.habit !== null">
+                  Tu fais d’habitude ~<b>{{ h.habit }} reps</b> par semaine ({{ h.name }}).
+                </div>
+              </template>
+              <button
+                v-if="slotProposal(key).target !== picks[key]?.target"
+                type="button"
+                class="cfg-apply"
+                @click="applyProposal(key)"
+              >
+                ↺ Proposé : {{ slotProposal(key).target }} reps
+              </button>
             </div>
             <div class="cfg-range">🎯 {{ slotRangeLabel(key) }} par série</div>
             <div v-if="pickCount(key) > 1" class="cfg-split">
@@ -497,7 +528,9 @@ import { useProfileStore } from '@/stores/profile';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
-import { COMBO_SLOTS, variantFamilyKey, type ComboSlot } from '@/data/combo';
+import { COMBO_SLOTS, fractionableExercise, variantFamilyKey, type ComboSlot } from '@/data/combo';
+import { useLogsStore } from '@/stores/logs';
+import { exerciseRepDays, proposeRepsTarget } from '@/lib/repsHabit';
 import { isTennisExercise } from '@/lib/tennisTraining';
 import {
   suggestFullBodyPlan,
@@ -505,8 +538,6 @@ import {
   comboMuscleInZone,
   comboEmphasis,
   objectiveToGoal,
-  suggestComboTargetFromHistory,
-  COMBO_PLAN_REPS,
   COMBO_MIN_DAYS,
   COMBO_MAX_DAYS,
   comboDayShare,
@@ -543,6 +574,7 @@ const COMBO_GAINAGE_SEC = 40;
 const library = useLibraryStore();
 const combo = useComboStore();
 const challenges = useChallengesStore();
+const logs = useLogsStore();
 
 const lib = ref<ExerciseRow[]>([]);
 const loading = ref(true);
@@ -600,6 +632,7 @@ function pickDuration(d: number) {
   for (const p of Object.values(picks)) {
     if (!p.target) continue;
     p.target = Math.max(targetMin(p.count_mode), Math.round((p.target * to) / from));
+    p.setsTarget = Math.max(targetMin('sets'), Math.round((p.setsTarget * to) / from));
   }
 }
 // Plancher d'un objectif : 10 reps, ou 3 séries d'une semaine ramenées à la durée.
@@ -677,7 +710,17 @@ const enabled = reactive<Record<string, boolean>>({}); // emplacement inclus dan
 const picks = reactive<
   Record<
     string,
-    { exercise_ids: string[]; target: number; weight_kg: number | null; count_mode: ComboCountMode }
+    {
+      exercise_ids: string[];
+      target: number;
+      /** Objectif en SÉRIES, gardé quand on passe en reps : sert de repli à la proposition
+       *  (séries × milieu de fourchette) et rend le retour en « Séries » sans perte. */
+      setsTarget: number;
+      weight_kg: number | null;
+      count_mode: ComboCountMode;
+      /** Mode fractionné : reps comptées, saisies par « +1 » (exos qui s'y prêtent seulement). */
+      fractional: boolean;
+    }
   >
 >({});
 const planN = reactive<Record<string, number>>({}); // nb d'exos suggéré par le plan
@@ -850,23 +893,77 @@ function bumpTarget(key: string, d: number) {
   // Pas de 10 reps en mode 'reps', 1 série en mode 'sets'.
   const step = p.count_mode === 'reps' ? 10 : 1;
   p.target = Math.max(targetMin(p.count_mode), p.target + d * step);
+  if (p.count_mode === 'sets') p.setsTarget = p.target;
 }
-// Bascule séries ↔ reps pour un emplacement. Cherche un défaut dans l'HISTORIQUE
-// (dernier Défi 360 avec cet exo), sinon convertit l'objectif courant (~10 reps/série).
-function toggleMode(key: string) {
+// ── Mode de comptage d'un emplacement : séries · répétitions · fractionné ──
+// UN SEUL objectif par exo, jamais une ligne parallèle : en reps il est un total de reps de
+// la semaine ; « fractionné » n'est qu'une façon de les SAISIR (« +1 »).
+type SlotMode = 'sets' | 'reps' | 'frac';
+function slotMode(key: string): SlotMode {
+  const p = picks[key];
+  return p?.count_mode !== 'reps' ? 'sets' : p.fractional ? 'frac' : 'reps';
+}
+/** Le fractionné n'est proposé que si l'emplacement porte un exo qui s'y prête. */
+function canFraction(key: string): boolean {
+  return selectedExos(key).some((e) => fractionableExercise(e.id));
+}
+// Jours de reps de la bibliothèque + séances + 360 + challenges, lus pour l'habitude.
+const logEntries = computed(() =>
+  logs.all.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
+);
+/** Proposition d'objectif d'un emplacement : somme de celles de ses exos. Chacun part de
+ *  ce qu'il fait d'habitude (médiane des 4 dernières semaines actives, +10 %), sinon de ses
+ *  séries × le milieu de sa fourchette de reps. */
+function slotProposal(key: string): {
+  target: number;
+  lines: { name: string; habit: number | null }[];
+} {
+  const p = picks[key];
+  const exos = selectedExos(key);
+  if (!p || !exos.length) return { target: 0, lines: [] };
+  const setsPerExo = Math.max(1, p.setsTarget / exos.length);
+  let target = 0;
+  const lines = exos.map((e) => {
+    const r = repRangeForExercise(objective.value, {
+      time: false,
+      muscle_primary: e.muscle_primary,
+      id: e.id,
+    });
+    const prop = proposeRepsTarget({
+      days: exerciseRepDays(e.id, {
+        logs: logEntries.value,
+        combos: combo.list,
+        challenges: challenges.list,
+      }),
+      today,
+      durationDays: duration.value,
+      fallbackSets: setsPerExo,
+      mid: (r.min + r.max) / 2,
+    });
+    target += prop.target;
+    return { name: e.name, habit: prop.habit };
+  });
+  return { target, lines };
+}
+function applyProposal(key: string) {
+  const p = picks[key];
+  if (p) p.target = slotProposal(key).target;
+}
+function setMode(key: string, mode: SlotMode) {
   const p = picks[key];
   if (!p) return;
-  const nextMode: ComboCountMode = p.count_mode === 'reps' ? 'sets' : 'reps';
-  const firstEx = p.exercise_ids[0];
-  const hist = firstEx ? suggestComboTargetFromHistory(firstEx, nextMode, combo.list) : null;
-  const n = Math.max(1, p.exercise_ids.length);
-  // Objectif total = suggestion d'historique (×nb d'exos) sinon conversion directe.
-  p.target = hist
-    ? hist * n
-    : nextMode === 'reps'
-      ? p.target * COMBO_PLAN_REPS
-      : Math.max(targetMin('sets'), Math.round(p.target / COMBO_PLAN_REPS));
-  p.count_mode = nextMode;
+  if (mode === 'sets') {
+    p.count_mode = 'sets';
+    p.fractional = false;
+    p.target = Math.max(targetMin('sets'), p.setsTarget);
+    return;
+  }
+  const fromSets = p.count_mode !== 'reps';
+  if (fromSets) p.setsTarget = p.target;
+  p.count_mode = 'reps';
+  p.fractional = mode === 'frac';
+  // Depuis les séries : l'objectif part de l'habitude (ou du repli séries × fourchette).
+  if (fromSets) p.target = slotProposal(key).target;
 }
 const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
 // Nb d'exos qu'on choisira (somme des suggestions des emplacements actifs).
@@ -913,8 +1010,10 @@ function applyPlan() {
     picks[slot.key] = {
       exercise_ids: active ? cands.slice(0, Math.max(1, nExos)).map((e) => e.id) : [],
       target: p?.weeklySets ? comboProrata(p.weeklySets, duration.value) : 0,
+      setsTarget: p?.weeklySets ? comboProrata(p.weeklySets, duration.value) : 0,
       weight_kg: null,
       count_mode: 'sets',
+      fractional: false,
     };
   }
 }
@@ -967,6 +1066,11 @@ async function createCombo() {
         count_mode: isTime ? 'time' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
+        // Fractionné : seulement les exos qui s'y prêtent (les autres de l'emplacement
+        // restent en reps classiques).
+        ...(p.fractional && p.count_mode === 'reps' && fractionableExercise(e.id)
+          ? { fractional: true }
+          : {}),
         rep_min: range.min,
         rep_max: range.max,
         sets: [],
@@ -997,6 +1101,8 @@ onMounted(async () => {
     if (uid && !profileStore.profile) await profileStore.fetch(uid);
     if (challenges.list.length === 0) await challenges.fetchMine();
     if (combo.list.length === 0) await combo.fetchMine();
+    // L'habitude (objectif proposé en reps) lit tes séances : sans elles on se rabat sur la fourchette.
+    await logs.fetchAll().catch(() => undefined);
     lib.value = await library.fetchAll();
     level.value = profileStore.profile?.experience?.level ?? 'intermediaire';
     objective.value = profileStore.profile?.objective ?? DEFAULT_OBJECTIVE;
@@ -1598,6 +1704,41 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 700;
   padding: 6px 14px;
+  cursor: pointer;
+}
+/* Trois choix : toute la largeur, cibles de 44 px. */
+.cfg-mode {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mode-toggle.tri {
+  display: flex;
+  width: 100%;
+}
+.mode-toggle.tri button {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding: 6px 4px;
+}
+.cfg-habit {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+.cfg-habit b {
+  color: var(--text);
+}
+.cfg-apply {
+  margin-top: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
   cursor: pointer;
 }
 .mode-toggle button.on {

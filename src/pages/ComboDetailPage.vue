@@ -61,7 +61,7 @@
         v-for="leg in shownLegs"
         :key="leg.exercise_id"
         class="leg"
-        :class="{ done: legComplete(leg) }"
+        :class="{ done: legComplete(leg) && !leg.fractional }"
       >
         <!-- Même en-tête que l'onglet 🎯 Défi 360. La vignette d'exécution remplace l'emoji
              du groupe quand l'exo a une illustration. -->
@@ -118,10 +118,14 @@
         <div
           v-else-if="legMode(leg) === 'reps'"
           class="bar-tap"
-          :class="{ tap: !legComplete(leg) }"
-          :role="legComplete(leg) ? undefined : 'button'"
-          :tabindex="legComplete(leg) ? undefined : 0"
-          :aria-label="legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`"
+          :class="{ tap: !legComplete(leg) || leg.fractional }"
+          :role="legComplete(leg) && !leg.fractional ? undefined : 'button'"
+          :tabindex="legComplete(leg) && !leg.fractional ? undefined : 0"
+          :aria-label="
+            legComplete(leg) && !leg.fractional
+              ? undefined
+              : `Ajouter une série : ${leg.exercise_name}`
+          "
           @click="addFromBar(leg)"
           @keydown.enter="addFromBar(leg)"
         >
@@ -133,7 +137,9 @@
             />
             <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
           </div>
-          <span v-if="!legComplete(leg)" class="bar-plus" aria-hidden="true">＋</span>
+          <span v-if="!legComplete(leg) || leg.fractional" class="bar-plus" aria-hidden="true"
+            >＋</span
+          >
         </div>
         <div v-else class="reps-bar">
           <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
@@ -143,6 +149,14 @@
           />
           <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
         </div>
+        <!-- Mode FRACTIONNÉ : « +1 » à chaque prise, compteur du jour, annulation. -->
+        <ComboFractionRow
+          v-if="leg.fractional && legMode(leg) === 'reps' && c.status === 'active'"
+          :leg="leg"
+          :day="logicalToday()"
+          @add="(n) => fractionAdd(leg, n)"
+          @undo="fractionUndo(leg)"
+        />
         <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
         <div v-if="legMode(leg) === 'time'" class="leg-actions">
           <template v-if="!legComplete(leg)">
@@ -180,12 +194,13 @@
         <!-- Détail des séries faites (secondes en durée / reps en mode reps). En mode
              séries, le détail est DANS les cellules jaunes → on ne le répète pas ici. -->
         <div v-if="legSets(leg).length && legMode(leg) !== 'sets'" class="leg-sets">
-          <span v-for="(s, i) in legSets(leg)" :key="i" class="leg-set-chip">
-            <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
+          <span v-for="(l, i) in groupSetLines(legSets(leg))" :key="i" class="leg-set-chip">
+            <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
+            <template v-else-if="legMode(leg) === 'time'">{{ l.set.reps }} s</template>
             <template v-else
-              >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }} kg</template
-              ><template v-if="s.assisted"> 🟧</template
-              ><template v-else-if="s.band"> 🟦</template></template
+              >{{ l.set.reps }}<template v-if="l.set.weight">×{{ l.set.weight }} kg</template
+              ><template v-if="l.set.assisted"> 🟧</template
+              ><template v-else-if="l.set.band"> 🟦</template></template
             >
           </span>
         </div>
@@ -265,6 +280,10 @@ import {
   type ComboLegFilter,
   legMode,
   legSets,
+  groupSetLines,
+  miniLineLabel,
+  lastMiniIndex,
+  miniTemplate,
   setOriginLabel,
   ownSets,
   legLastReps,
@@ -286,6 +305,7 @@ import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import ComboFractionRow from '@/components/ComboFractionRow.vue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import {
   logicalToday,
@@ -553,7 +573,32 @@ function onSeg(leg: ComboLeg, n: number) {
 /** Toucher la barre ajoute une série — sauf objectif atteint : le 360 n'accepte plus de
  *  série en plus (v1.53), qui veut en faire davantage lance un challenge à part. */
 function addFromBar(leg: ComboLeg) {
-  if (!legComplete(leg)) openSet(leg, 1);
+  // Un exo FRACTIONNÉ n'est jamais fermé par son objectif (l'XP en trop est dégressive).
+  if (!legComplete(leg) || leg.fractional) openSet(leg, 1);
+}
+/** 🔁 « +N » d'un exo fractionné : une mini-série horodatée, avec la charge/assistance de la
+ *  dernière série. Pas de fenêtre, pas de confirmation : un tap = une prise. */
+function fractionAdd(leg: ComboLeg, n: number) {
+  if (!auth.user?.id || !c.value) return;
+  const before = comboCompleteInTime(c.value);
+  const t = miniTemplate(leg);
+  combo.addSet(
+    id,
+    leg.exercise_id,
+    logicalToday(),
+    n,
+    t.weight,
+    t.assisted,
+    t.band,
+    undefined,
+    true,
+  );
+  if (!before && comboCompleteInTime(c.value)) celebrateObjective(c.value);
+}
+/** ↩ Retire la dernière prise du jour, sans dialogue (une erreur de tap doit coûter un tap). */
+function fractionUndo(leg: ComboLeg) {
+  const i = lastMiniIndex(leg, logicalToday());
+  if (i >= 0) combo.removeSet(id, leg.exercise_id, i);
 }
 
 // Exporte : partage natif (mobile) si dispo, sinon copie dans le presse-papier.

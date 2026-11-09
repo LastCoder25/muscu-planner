@@ -126,6 +126,10 @@ export function comboFatigueHits(legs: readonly ComboLeg[], profileOf: ProfileOf
   const out: FatigueHit[] = [];
   for (const leg of legs) {
     for (const s of legSets(leg)) {
+      // 🔁 Une mini-série (« +1 », une traction toutes les 20 min) ne fatigue pas un groupe
+      // comme une série : 30 frappes pleines mettraient le groupe « épuisé » toute la journée
+      // et fausseraient l'ordre de la séance.
+      if (s.mini) continue;
       // Sans heure (ou heure illisible) : NaN, donc ignorée.
       const at = Date.parse(s.at ?? '');
       if (!Number.isFinite(at)) continue;

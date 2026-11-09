@@ -212,3 +212,16 @@ const VARIANT_FAMILY_OF: Record<string, string> = Object.fromEntries(
 export function variantFamilyKey(exerciseId: string): string {
   return VARIANT_FAMILY_OF[exerciseId] ?? exerciseId;
 }
+
+// ── 🔁 EXOS QUI SE FRACTIONNENT (demandé par l'utilisateur : « une traction toutes les
+// 10/20/30 minutes ») ─────────────────────────────────────────────────────────────────
+// Seulement tractions, pompes et dips — et leurs variantes au poids du corps du même
+// mouvement : une rep y est un geste court, sans matériel à régler, qu'on enchaîne en passant
+// devant la barre. Ni les exos chargés (une série lourde ne se fractionne pas) ni le
+// gainage à la durée. Les familles de variantes font foi ; le tirage vertical à la machine,
+// rangé avec les tractions, est chargé : exclu.
+const FRACTION_FAMILIES = new Set(['ex_pushup', 'ex_dips', 'ex_pullup']);
+const NOT_FRACTIONABLE = new Set(['ex_lat_pulldown']);
+export function fractionableExercise(exerciseId: string): boolean {
+  return FRACTION_FAMILIES.has(variantFamilyKey(exerciseId)) && !NOT_FRACTIONABLE.has(exerciseId);
+}

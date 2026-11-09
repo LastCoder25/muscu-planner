@@ -37,10 +37,12 @@
             </div>
             <!-- Détail des séries : visible entre amis (choix assumé). -->
             <div v-if="legSets(leg).length" class="fp-sets">
-              <span v-for="(s, i) in legSets(leg)" :key="i" class="fp-set">
-                <template v-if="legMode(leg) === 'time'">{{ s.reps }} s</template>
+              <span v-for="(l, i) in groupSetLines(legSets(leg))" :key="i" class="fp-set">
+                <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
+                <template v-else-if="legMode(leg) === 'time'">{{ l.set.reps }} s</template>
                 <template v-else
-                  >{{ s.reps }}<template v-if="s.weight">×{{ s.weight }}kg</template></template
+                  >{{ l.set.reps
+                  }}<template v-if="l.set.weight">×{{ l.set.weight }}kg</template></template
                 >
               </span>
             </div>
@@ -147,10 +149,12 @@ import {
   comboNextStatus,
   comboProgressPct,
   fmtPct,
+  groupSetLines,
   legDone,
   legComplete,
   legMode,
   legSets,
+  miniLineLabel,
   legUnitLabel,
   type ComboChallenge,
 } from '@/lib/combo';

@@ -171,11 +171,15 @@ export const useComboStore = defineStore('combo', () => {
      *  elle, toutes ses séries porteraient l'heure de l'enregistrement, et la fatigue des
      *  groupes (lue sur cette heure) croirait qu'elles ont été faites d'un coup. */
     at?: number,
+    /** Mini-série du mode fractionné (« +1 »). */
+    mini = false,
   ) {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps <= 0) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
-    if (!leg || legComplete(leg)) return;
+    // Un exo FRACTIONNÉ n'est jamais fermé par son objectif : les reps en plus restent notées
+    // (leur XP est dégressive, `OVER_TARGET_XP`).
+    if (!leg || (legComplete(leg) && !leg.fractional)) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
     const stamp = new Date(at ?? Date.now()).toISOString();
     leg.sets.push({
@@ -185,6 +189,7 @@ export const useComboStore = defineStore('combo', () => {
       assisted,
       ...(band && !assisted ? { band } : {}),
       at: stamp,
+      ...(mini ? { mini: true as const } : {}),
     });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
     // ⚠️ On SIGNALE la transition vers « terminé ». Le coffre de fin de 360 doit tomber à

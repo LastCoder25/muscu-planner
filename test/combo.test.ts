@@ -29,7 +29,6 @@ import {
   comboTieredBonus,
   comboBonusXp,
   comboXpByDay,
-  suggestComboTargetFromHistory,
   suggestFullBodyPlan,
   comboMuscleInZone,
   comboEmphasis,
@@ -157,16 +156,8 @@ describe('mode séries vs reps par exo (173b322a)', () => {
     }); // 100 %
     expect(comboProgressPct(combo([a, b]))).toBe(75); // (0.5 + 1)/2
   });
-  it('suggestComboTargetFromHistory : reprend le target du dernier défi (converti si mode diffère)', () => {
-    const past = combo([leg({ exercise_id: 'a', target: 8 })], {
-      status: 'done',
-      start_date: '2026-01-01',
-    });
-    expect(suggestComboTargetFromHistory('a', 'sets', [past])).toBe(8);
-    // Conversion séries→reps (~10 reps/série).
-    expect(suggestComboTargetFromHistory('a', 'reps', [past])).toBe(80);
-    expect(suggestComboTargetFromHistory('zzz', 'sets', [past])).toBeNull();
-  });
+  // (suggestComboTargetFromHistory retirée : l'objectif en reps part désormais de l'habitude,
+  // cf. test/repsHabit.test.ts.)
 });
 
 describe('comboComplete / progression', () => {
@@ -1601,6 +1592,7 @@ describe('🚫 PLUS DE SÉRIE EN PLUS (v1.53)', () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('src/stores/combo.ts', 'utf8');
     const add = src.slice(src.indexOf('function addSet('), src.indexOf('function removeSet('));
-    expect(add).toMatch(/if \(!leg \|\| legComplete\(leg\)\) return;/);
+    // Seul le mode FRACTIONNÉ y échappe (test/comboFractionUi.test.ts le vérifie en comportement).
+    expect(add).toMatch(/if \(!leg \|\| \(legComplete\(leg\) && !leg\.fractional\)\) return;/);
   });
 });
