@@ -192,6 +192,10 @@
         >
           🎁 Ta part est faite : ouvre ton coffre
         </button>
+        <!-- Seul sur son boss : on peut le retirer (même règle que `fboss_cancel`). -->
+        <button v-if="!cancelBlock" class="fb-btn ghost wide" :disabled="busy" @click="askCancel">
+          ✖ Annuler ce boss
+        </button>
 
         <!-- ⚠️ UN TABLEAU PARTICIPANTS × 7 JOURS (demande de l'utilisateur) : la liste des
              frappes disait QUAND on avait frappé, jamais qui porte le groupe ni qui décroche.
@@ -494,6 +498,8 @@ import {
   bossErrorMessage,
   bossJoinBlocker,
   bossLaunchBlocker,
+  bossCancelBlocker,
+  bossCancelRefund,
   nextDeclareAt,
   bossTokenCost,
   bossShareUnits,
@@ -1008,6 +1014,47 @@ function rewardLine(b: FriendBoss): string {
 }
 const chestTitle = (share: number) =>
   share >= 1 ? 'Ton coffre' : share >= 0.5 ? 'Ton demi-coffre' : 'Lot de consolation';
+
+// ── Annuler (lanceur seul sur son boss, migr. 0114) ──
+const cancelBlock = computed(() =>
+  current.value
+    ? bossCancelBlocker(current.value, bossMembers.value, uid.value, now.value)
+    : 'not_owner',
+);
+function askCancel() {
+  const b = current.value;
+  if (!b || cancelBlock.value || busy.value) return;
+  const hasHits = store.hits.some((h) => h.bossId === b.id);
+  const refund = bossCancelRefund(b.tier, hasHits, tokens.value);
+  $q.dialog({
+    title: `Annuler ${bossTitle(b)} ?`,
+    message: hasHits
+      ? 'Le boss disparaît avec tes saisies ; les jetons ne sont pas rendus, car tu as déjà frappé.'
+      : refund > 0
+        ? `Le boss disparaît et ${refund} jeton${refund > 1 ? 's' : ''} 🎫 te sont rendus.`
+        : 'Le boss disparaît (ta réserve de jetons est déjà pleine : rien à rendre).',
+    cancel: { label: 'Garder le boss', flat: true },
+    ok: { label: 'Annuler le boss', color: 'negative' },
+  }).onOk(() => {
+    void doCancel(b);
+  });
+}
+async function doCancel(b: FriendBoss) {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    const refund = await store.cancel(b.id);
+    selectedId.value = null;
+    $q.notify({
+      type: 'info',
+      message: refund > 0 ? `Boss annulé · ${refund} 🎫 rendu${refund > 1 ? 's' : ''}.` : 'Boss annulé.',
+    });
+  } catch (e) {
+    notifyError(e);
+  } finally {
+    busy.value = false;
+  }
+}
 
 function notifyError(e: unknown) {
   $q.notify({

@@ -149,6 +149,17 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     await loadMine();
   }
 
+  /** Annule MON boss (seul dessus) : le serveur le supprime et rend la mise si personne n'a
+   *  frappé. Rend le nombre de jetons rendus. */
+  async function cancel(bossId: string): Promise<number> {
+    const res = await rpc<{ ok: boolean; refund?: number }>('fboss_cancel', { p_boss: bossId });
+    const refund = res.refund ?? 0;
+    // Le serveur a crédité les jetons : on le reflète avant qu'un gain ne réécrive l'ancienne réserve.
+    if (refund > 0) (await loadCharacterStore()).spentBossTokens(-refund);
+    await loadMine();
+    return refund;
+  }
+
   /** Frappe : le serveur retient ce qui passe les plafonds et rend ce qu'il a accepté. */
   async function hit(
     bossId: string,
@@ -219,6 +230,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     fetchMine,
     declare,
     respond,
+    cancel,
     hit,
     claim,
     claimBonus,

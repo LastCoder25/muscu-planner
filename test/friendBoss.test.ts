@@ -28,6 +28,8 @@ import {
   bossTokenCost,
   bossJoinBlocker,
   bossLaunchBlocker,
+  bossCancelBlocker,
+  bossCancelRefund,
   nextDeclareAt,
   type BossTokenState,
   splitHit,
@@ -1141,5 +1143,63 @@ describe('bossTitle', () => {
     );
     expect(bossTitle({ name: null, exerciseName: 'Pompes' })).toBe('Pompes');
     expect(bossTitle({ name: '  ', exerciseName: 'Pompes' })).toBe('Pompes');
+  });
+});
+
+describe('✖ annuler son boss quand on est seul dessus (migr. 0114)', () => {
+  const H = 3_600_000;
+  const now = 1_000 * H;
+  const boss = { ownerId: 'moi', createdAt: now - 2 * H, startAt: null, defeatedAt: null };
+  const me = { userId: 'moi', status: 'accepted' as const };
+
+  it('seul (ou avec des invités sans réponse / des refus) : on peut annuler', () => {
+    expect(bossCancelBlocker(boss, [me], 'moi', now)).toBeNull();
+    expect(
+      bossCancelBlocker(
+        boss,
+        [me, { userId: 'a', status: 'invited' }, { userId: 'b', status: 'declined' }],
+        'moi',
+        now,
+      ),
+    ).toBeNull();
+  });
+
+  it('un ami a accepté : on ne peut plus', () => {
+    expect(bossCancelBlocker(boss, [me, { userId: 'a', status: 'accepted' }], 'moi', now)).toBe(
+      'not_alone',
+    );
+  });
+
+  it('seul le lanceur annule, et pas un boss fini', () => {
+    expect(bossCancelBlocker(boss, [me], 'a', now)).toBe('not_owner');
+    expect(bossCancelBlocker(boss, [me], null, now)).toBe('not_owner');
+    expect(bossCancelBlocker({ ...boss, defeatedAt: now - H }, [me], 'moi', now)).toBe(
+      'not_in_progress',
+    );
+    expect(bossCancelBlocker({ ...boss, createdAt: now - 9 * 24 * H }, [me], 'moi', now)).toBe(
+      'not_in_progress',
+    );
+  });
+
+  it('🎫 la mise est rendue seulement sans saisie, dans la limite de la réserve', () => {
+    expect(bossCancelRefund('costaud', false, 1)).toBe(bossTokenCost('costaud'));
+    expect(bossCancelRefund('costaud', true, 1)).toBe(0);
+    expect(bossCancelRefund('inhumain', false, BOSS_TOKENS.stockMax - 1)).toBe(1);
+    expect(bossCancelRefund('inhumain', false, BOSS_TOKENS.stockMax)).toBe(0);
+  });
+
+  it('la base applique la même règle, et n’accepte que le lanceur connecté', () => {
+    const files = fs.readdirSync('supabase/migrations').sort();
+    const sql = fs.readFileSync(
+      `supabase/migrations/${files.filter((f) => f.includes('fboss_cancel')).pop()!}`,
+      'utf8',
+    );
+    expect(sql).toContain("raise exception 'not_owner'");
+    expect(sql).toContain("raise exception 'not_alone'");
+    expect(sql).toContain("raise exception 'defeated'");
+    expect(sql).toContain("user_id <> v_uid and status = 'accepted'");
+    expect(sql).toContain('not exists (select 1 from public.friend_boss_hits');
+    expect(sql).toContain('least(6,');
+    expect(BOSS_TOKENS.stockMax).toBe(6);
   });
 });

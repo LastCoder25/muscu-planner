@@ -382,6 +382,10 @@ export function bossErrorMessage(code: string): string {
     no_altar: 'Construis l’Autel des boss dans ta base pour lancer un boss.',
     bad_exercise: 'Cet exercice ne peut pas servir de boss.',
     bad_tier: 'Cette difficulté n’existe pas — recharge la page.',
+    not_owner: 'Seul le lanceur peut annuler ce boss.',
+    not_alone: 'Un ami a rejoint ton boss : il ne peut plus être annulé.',
+    defeated: 'Le boss est déjà tombé.',
+    not_found: 'Ce boss n’existe plus.',
     not_defeated: 'Le boss n’est pas encore tombé.',
     nothing: 'Ton coffre a déjà été ouvert.',
     not_ended: 'Ton coffre s’ouvre quand ta part est faite, ou à la fin du combat.',
@@ -759,6 +763,32 @@ export function bossLaunchBlocker(
   if (next != null && now < next) return 'cooldown';
   if (opts.tokens < bossTokenCost(opts.tier)) return 'no_tokens';
   return null;
+}
+
+/** Pourquoi on ne peut pas ANNULER ce boss (null = on peut). Même règle que `fboss_cancel`
+ *  (migr. 0114) : c'est le lanceur, le boss n'est pas fini, et aucun autre membre n'a accepté
+ *  (des invitations sans réponse ou refusées ne comptent pas). */
+export function bossCancelBlocker(
+  b: Pick<FriendBoss, 'ownerId' | 'createdAt' | 'startAt' | 'defeatedAt'>,
+  members: readonly Pick<FriendBossMember, 'userId' | 'status'>[],
+  me: string | null,
+  now: number,
+): 'not_owner' | 'not_in_progress' | 'not_alone' | null {
+  if (!me || b.ownerId !== me) return 'not_owner';
+  if (!bossInProgress(b, now)) return 'not_in_progress';
+  if (members.some((m) => m.userId !== me && m.status === 'accepted')) return 'not_alone';
+  return null;
+}
+
+/** Jetons rendus à l'annulation : la mise, SEULEMENT si personne n'a encore frappé (sinon on
+ *  garderait l'XP et récupérerait la mise), et dans la limite de la réserve. */
+export function bossCancelRefund(
+  tier: string | null | undefined,
+  hasHits: boolean,
+  tokens: number,
+): number {
+  if (hasHits) return 0;
+  return Math.max(0, Math.min(BOSS_TOKENS.stockMax, tokens + bossTokenCost(tier)) - tokens);
 }
 
 /** Reps d'une demi-part (le minimum pour le coffre), arrondies au-dessus : c'est le plus

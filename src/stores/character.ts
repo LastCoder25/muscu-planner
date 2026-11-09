@@ -1803,7 +1803,9 @@ export const useCharacterStore = defineStore('character', () => {
    *  suite, sans quoi un gain de jetons écrirait la réserve d'AVANT la dépense. */
   function spentBossTokens(n: number) {
     const cur = row.value;
-    if (cur) row.value = { ...cur, boss_tokens: Math.max(0, cur.boss_tokens - n) };
+    // n < 0 = jetons rendus (annulation d'un boss), dans la limite de la réserve.
+    if (cur)
+      row.value = { ...cur, boss_tokens: Math.min(6, Math.max(0, cur.boss_tokens - n)) };
   }
 
   async function claimLevelUps(userId: string, currentLevel: number) {
