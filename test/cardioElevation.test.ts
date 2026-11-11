@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ALL_CARDIO_ID,
   CARDIO_ACTIVITIES,
   activityHasElevation,
   activityHasIncline,
@@ -10,8 +11,11 @@ import {
   effortKm,
   elevationFromIncline,
   inclineFromElevation,
+  isCardioChallengeExercise,
+  isTimeOnlyCardioChallenge,
 } from '@/data/cardio';
 import { cardioSessionXp } from '@/lib/athlete';
+import { challengeValueUnit } from '@/lib/challenges';
 import type { CardioActivity, CardioLog } from '@/lib/types';
 
 const log = (activity: CardioActivity, extra: Partial<CardioLog> = {}): CardioLog =>
@@ -112,12 +116,25 @@ describe('⛰️ dénivelé : saisi et pris en compte pour toutes les sorties qu
 
 describe('🚴 le défi Vélo prend le vélo ET le vélo d’appartement', () => {
   it('les deux nourrissent le même défi', () => {
-    expect(challengeIdsForActivity('velo')).toEqual(['ex_ch_velo']);
-    expect(challengeIdsForActivity('velo_appart')).toEqual(['ex_ch_velo']);
+    expect(challengeIdsForActivity('velo')).toEqual(['ex_ch_velo', 'ex_ch_cardio']);
+    expect(challengeIdsForActivity('velo_appart')).toEqual(['ex_ch_velo', 'ex_ch_cardio']);
   });
   it('le filtre « Vélo » de l’historique montre aussi l’appartement, pas l’inverse', () => {
     expect(activitiesShownBy('velo')).toEqual(['velo', 'velo_appart']);
     expect(activitiesShownBy('velo_appart')).toEqual(['velo_appart']);
     expect(activitiesShownBy('course')).toEqual(['course']);
+  });
+});
+
+describe('🫀 le défi solo « Cardio » prend TOUTES les sorties, en minutes seulement', () => {
+  it('chacune des activités cardio le nourrit', () => {
+    for (const a of CARDIO_ACTIVITIES)
+      expect(challengeIdsForActivity(a.id), a.id).toContain(ALL_CARDIO_ID);
+  });
+  it('c’est une vraie sortie cardio, comptée en minutes, sans choix de km', () => {
+    expect(isCardioChallengeExercise(ALL_CARDIO_ID)).toBe(true);
+    expect(isTimeOnlyCardioChallenge(ALL_CARDIO_ID)).toBe(true);
+    expect(isTimeOnlyCardioChallenge('ex_ch_velo')).toBe(false);
+    expect(challengeValueUnit('time', ALL_CARDIO_ID)).toBe('min');
   });
 });

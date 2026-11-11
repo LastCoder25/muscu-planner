@@ -90,6 +90,14 @@ export function inclineFromElevation(
 // = « à pied », course/trail/tapis = « courue » → les deux nourrissent le défi
 // combiné « Marche ou course » (+ l'ancien défi séparé s'il existe encore).
 // Vélo (route/appart) → défi vélo.
+/** 🫀 Défi solo « Cardio » : TOUTES les sorties (les 8 activités) l'alimentent, en MINUTES
+ *  uniquement — le km n'est pas comparable d'une activité à l'autre (10 km de vélo ≈ 30 min,
+ *  10 km de marche ≈ 2 h : le vélo écraserait tout). */
+export const ALL_CARDIO_ID = 'ex_ch_cardio';
+/** Ce défi n'existe qu'en durée : pas de choix km/durée à la création. */
+export function isTimeOnlyCardioChallenge(id?: string | null): boolean {
+  return id === ALL_CARDIO_ID;
+}
 const WALK: CardioActivity[] = ['marche', 'rando', 'marche_tapis'];
 const RUN: CardioActivity[] = ['course', 'trail', 'course_tapis'];
 /** 🚴 Les activités que montre un filtre d'historique sur `a` : le vélo de route englobe le vélo
@@ -99,9 +107,9 @@ export function activitiesShownBy(a: CardioActivity): CardioActivity[] {
 }
 
 export function challengeIdsForActivity(a: CardioActivity): string[] {
-  if (WALK.includes(a)) return ['ex_ch_marche_course', 'ex_ch_marche'];
-  if (RUN.includes(a)) return ['ex_ch_marche_course', 'ex_ch_course'];
-  return ['ex_ch_velo']; // velo, velo_appart
+  if (WALK.includes(a)) return ['ex_ch_marche_course', 'ex_ch_marche', ALL_CARDIO_ID];
+  if (RUN.includes(a)) return ['ex_ch_marche_course', 'ex_ch_course', ALL_CARDIO_ID];
+  return ['ex_ch_velo', ALL_CARDIO_ID]; // velo, velo_appart
 }
 
 // Exercices « défi » qui sont du cardio (⇄ discipline Cardio, miroir de sortie).
@@ -110,6 +118,7 @@ const CARDIO_CHALLENGE_IDS = new Set([
   'ex_ch_course',
   'ex_ch_marche_course',
   'ex_ch_velo',
+  ALL_CARDIO_ID,
 ]);
 export function isCardioChallengeExercise(id: string): boolean {
   return CARDIO_CHALLENGE_IDS.has(id);

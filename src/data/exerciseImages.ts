@@ -79,6 +79,7 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_ch_velo: '/exercises/ex_ch_velo.jpg',
   ex_jumping_jacks: '/exercises/ex_jumping_jacks.jpg',
   ex_high_knees: '/exercises/ex_high_knees.jpg',
+  ex_ch_cardio: '/exercises/ex_ch_marche_course.jpg', // même piste (photos course/marche)
   ex_ch_course: '/exercises/ex_ch_marche_course.jpg', // même piste (photos course/marche en extérieur)
   ex_ch_marche: '/exercises/ex_ch_marche_course.jpg',
   // Exos tennis solo (v0.844, free-exercise-db). Variantes proches documentées dans le script.

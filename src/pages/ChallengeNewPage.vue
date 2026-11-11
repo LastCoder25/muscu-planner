@@ -183,7 +183,7 @@
       <template v-else-if="step === 2">
         <!-- Choix d'UNITÉ de l'objectif, regroupé avec le comptage (déplacé depuis l'étape
              Exercice). Cardio : km / durée. Exo rythmique (corde, burpees…) : reps / durée. -->
-        <div v-if="isCardio" class="count-toggle">
+        <div v-if="isCardio && !timeOnlyCardio" class="count-toggle">
           <button :class="{ on: cardioUnit === 'distance' }" @click="cardioUnit = 'distance'">
             📏 km
           </button>
@@ -620,7 +620,7 @@ import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useProfileStore } from '@/stores/profile';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeLane, exerciseLane, type ChallengeLane } from '@/lib/tennisTraining';
-import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
+import { CONDITIONING_CHALLENGE_IDS, isTimeOnlyCardioChallenge } from '@/data/cardio';
 import { isDualUnitExercise } from '@/data/exerciseUnits';
 import { useComboStore } from '@/stores/combo';
 import { useAuthStore } from '@/stores/auth';
@@ -785,11 +785,13 @@ function exFull(e: ExerciseRow): boolean {
 }
 const selectedFull = computed(() => (exercise.value ? exFull(exercise.value) : false));
 const cardioUnit = ref<'distance' | 'time'>('distance');
+// Défi « Cardio » (toutes activités) : durée seule, pas de toggle km.
+const timeOnlyCardio = computed(() => isTimeOnlyCardioChallenge(exercise.value?.id));
 // Exos « rythmiques » de conditionnement (corde à sauter…) : reps OU durée, au choix.
 const isDual = computed(() => isDualUnitExercise(exercise.value?.id));
 const dualUnit = ref<'reps' | 'time'>('reps');
 const unit = computed<'reps' | 'time' | 'distance'>(() => {
-  if (isCardio.value) return cardioUnit.value;
+  if (isCardio.value) return timeOnlyCardio.value ? 'time' : cardioUnit.value;
   if (isDual.value) return dualUnit.value; // choix utilisateur pour les exos dual
   return exercise.value?.unit === 'time' ? 'time' : 'reps';
 });
