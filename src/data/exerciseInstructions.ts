@@ -702,6 +702,14 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Plus accessible que la traction en pronation : le biceps aide davantage.',
   },
+  ex_chinup_biceps: {
+    steps: [
+      'Suspendu à la barre, paumes vers toi, mains un peu plus serrées que les épaules.',
+      'Tire en pensant « plier les coudes », jusqu’à passer le menton au-dessus de la barre.',
+      'Redescends en 3 à 4 secondes jusqu’aux bras tendus, sans élan.',
+    ],
+    tip: 'La descente lente fait l’essentiel du travail des biceps ; si ton dos prend le relais, ralentis ou passe sur l’élastique.',
+  },
   ex_pullup_neutral: {
     steps: [
       'Suspendu à des poignées parallèles, paumes face à face.',

@@ -61,7 +61,7 @@ export const COMBO_SLOTS: ComboSlot[] = [
     emoji: '💪',
     muscles: ['biceps'],
     essential: false,
-    hint: 'Isolation biceps — curls, curl marteau.',
+    hint: 'Isolation biceps — curls, curl marteau, tractions en supination.',
   },
   {
     key: 'triceps',
@@ -143,6 +143,7 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_pullup_assisted',
     'ex_lat_pulldown',
     'ex_chinup',
+    'ex_chinup_biceps',
     'ex_pullup_neutral',
     'ex_pullup_wide',
   ],

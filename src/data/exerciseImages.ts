@@ -124,6 +124,7 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_bicycle_crunch: '/exercises/ex_bicycle_crunch.jpg',
   ex_leg_raise_floor: '/exercises/ex_leg_raise_floor.jpg',
   ex_chinup: '/exercises/ex_chinup.jpg',
+  ex_chinup_biceps: '/exercises/ex_chinup.jpg', // même mouvement, mêmes deux poses
   ex_pullup_neutral: '/exercises/ex_pullup_neutral.jpg',
   ex_pullup_wide: '/exercises/ex_pullup_wide.jpg',
 };
