@@ -298,7 +298,7 @@ import {
   addRuneCount,
   addForgedSkills,
   ascensionRuneCount,
-  fuseAllSkills,
+  fuseAllRising,
   fuseBlocker,
   fuseSkills,
   giveBlocker,
@@ -310,6 +310,7 @@ import {
   rollPlaceRunes,
   runeCount,
   type FuseGroup,
+  type RiseLine,
   type FuseOnly,
   type GiveKind,
   type StockSkill,
@@ -1054,17 +1055,20 @@ export const useCharacterStore = defineStore('character', () => {
     return { ok: true, group: out.group };
   }
 
-  /** 🪬 FUSIONNE d'un geste tous les exemplaires d'une compétence (`only`), ou de toutes. */
+  /** 🪬 FUSIONNE d'un geste tous les exemplaires d'une compétence (`only`), ou de toutes, puis
+   *  ÉLÈVE les Nv 5 (non dorés) et enchaîne (`fuseAllRising`) — tout dans UNE écriture. */
   async function fuseAllRuneSkills(
     userId: string,
     only: FuseOnly = null,
-  ): Promise<{ ok: false; reason: string } | { ok: true; groups: FuseGroup[] }> {
+  ): Promise<
+    { ok: false; reason: string } | { ok: true; groups: FuseGroup[]; rises: RiseLine[] }
+  > {
     const cur = row.value;
     if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
-    const out = fuseAllSkills(cur.runes, only);
-    if (!out.groups.length) return { ok: false, reason: FUSE_ALL_NONE };
+    const out = fuseAllRising(cur.runes, only);
+    if (!out.groups.length && !out.rises.length) return { ok: false, reason: FUSE_ALL_NONE };
     await persist(userId, { runes: out.bank });
-    return { ok: true, groups: out.groups };
+    return { ok: true, groups: out.groups, rises: out.rises };
   }
 
   /** 🌈 ÉLÈVE un exemplaire du stock au niveau 5 : couleur au-dessus, niveau 1. */

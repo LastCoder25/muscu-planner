@@ -67,8 +67,8 @@
         <span class="rf-done-t font-display">🔗 Fusion terminée</span>
         <div class="rf-list">
           <div
-            v-for="g in list"
-            :key="g.id"
+            v-for="(g, gi) in list"
+            :key="gi + g.id"
             class="rf-row"
             :style="{ '--c': RUNE_COLOR[skillTier(g)] }"
           >
@@ -78,6 +78,20 @@
               <span class="rf-row-sub">{{ fuseGroupText(g) }}</span>
             </span>
             <span class="rf-pill">⬆️ Nv {{ g.after[0] }}</span>
+          </div>
+          <!-- 🌈 Les Nv 5 que la fusion a élevés d'elle-même (rien à faire à la main). -->
+          <div
+            v-for="r in rises"
+            :key="'r' + r.id + ':' + r.up"
+            class="rf-row"
+            :style="{ '--c': RUNE_COLOR[skillTier({ id: r.id, up: r.up + 1 })] }"
+          >
+            <span class="rf-row-emo">{{ SKILLS[r.id].emoji }}</span>
+            <span class="rf-row-main">
+              <span class="rf-row-name">{{ SKILLS[r.id].name }}</span>
+              <span class="rf-row-sub">{{ riseLineText(r) }}</span>
+            </span>
+            <span class="rf-pill">🌈 Nv 1</span>
           </div>
         </div>
         <button type="button" class="rf-ok font-display" @click="close">Continuer</button>
@@ -90,11 +104,11 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import RuneIcon from '@/components/RuneIcon.vue';
 import { useInvokeSfx } from '@/composables/useInvokeSfx';
-import { fuseGroupText, type FuseGroup } from '@/lib/runeBank';
+import { fuseGroupText, riseLineText, type FuseGroup, type RiseLine } from '@/lib/runeBank';
 import { tierRank } from '@/lib/runeReveal';
 import { RUNE_COLOR, SKILLS, skillEffectText, skillTier } from '@/lib/skillRunes';
 
-const props = defineProps<{ groups: FuseGroup[] | null }>();
+const props = defineProps<{ groups: FuseGroup[] | null; rises?: RiseLine[] }>();
 const emit = defineEmits<{ close: [] }>();
 
 const sfx = useInvokeSfx();

@@ -4170,6 +4170,48 @@ describe('🪬 RuneBankSheet', () => {
     expect(out).toContain('rien à fusionner');
   }, 30_000);
 
+  it('« Tout fusionner » compte aussi un Nv 5 à élever, mais pas un doré (le sommet)', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const { maxRise } = await import('@/lib/skillRunes');
+    let out = '';
+    const row = (skills: { uid: string; id: string; level: number; up?: number }[]) => ({
+      ...ROW,
+      runes: { runes: 0, skills, opened: skills.length, comp: 2 },
+    });
+    // Un Nv 5 vert seul : rien à fusionner, mais il s'élève d'un geste.
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row([
+          { uid: 'a', id: 'speed', level: 5 },
+          { uid: 'b', id: 'crit', level: 2 },
+        ]),
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Tout fusionner');
+    expect(out).toContain('1 compétence');
+    expect(out).not.toContain('rien à fusionner');
+    // Le même Nv 5, mais DORÉ (au sommet) : plus rien à faire.
+    expect(
+      await mountIt(
+        RuneBankSheet,
+        { open: true },
+        row([
+          { uid: 'a', id: 'speed', level: 5, up: maxRise('speed') },
+          { uid: 'b', id: 'crit', level: 2 },
+        ]),
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('rien à fusionner');
+  }, 30_000);
+
   it('fiche d’une compétence : on choisit combien d’exemplaires fusionner, par niveau', async () => {
     const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
     const skills = [1, 1, 1, 2].map((level, i) => ({ uid: 'sk' + i, id: 'speed', level }));

@@ -15,6 +15,7 @@
 
 import { mulberry32, seedOf } from './combat';
 import {
+  RUNE_INFO,
   RUNE_TIERS,
   autoRise,
   SKILLS,
@@ -430,10 +431,21 @@ export function fuseAllSkills(
   bank: RuneBank,
   only: FuseOnly = null,
 ): { bank: RuneBank; groups: FuseGroup[] } {
+  return fuseWhere(
+    bank,
+    (s) => !only || (typeof only === 'string' ? s.id === only : sameSkill(s, only)),
+  );
+}
+
+/** Le cœur de la fusion groupée : fusionne les exemplaires que `keep` retient. */
+function fuseWhere(
+  bank: RuneBank,
+  keep: (s: StockSkill) => boolean,
+): { bank: RuneBank; groups: FuseGroup[] } {
   // 🌈 Une compétence et une COULEUR par groupe : un bleu ne se verse pas dans un vert.
   const byId = new Map<string, StockSkill[]>();
   for (const s of bank.skills) {
-    if (only && (typeof only === 'string' ? s.id !== only : !sameSkill(s, only))) continue;
+    if (!keep(s)) continue;
     const key = `${s.id}:${riseOf(s)}`;
     const copies = byId.get(key);
     if (copies) copies.push(s);
@@ -472,6 +484,74 @@ export function fuseAllSkills(
     },
     groups,
   };
+}
+
+/** 🌈 Ce que l'élévation automatique a fait : `count` exemplaires Nv 5 de la compétence `id`,
+ *  de couleur `up` (crans d'élévation de départ), sont passés à la couleur au-dessus, Nv 1. */
+export interface RiseLine {
+  id: SkillId;
+  up: number;
+  count: number;
+}
+
+/** « 2 × Nv 5 : 🟢 → 🔵 Nv 1 » : ce que l'élévation automatique a fait, en une ligne. */
+export function riseLineText(l: RiseLine): string {
+  const from = skillTier({ id: l.id, up: l.up });
+  const to = skillTier({ id: l.id, up: l.up + 1 });
+  const n = l.count > 1 ? `${l.count} × ` : '';
+  return `🌈 ${n}Nv ${SKILL_MAX_LEVEL} : ${RUNE_INFO[from].emoji} → ${RUNE_INFO[to].emoji} Nv 1`;
+}
+
+/** Garde-fou de la boucle (chaque tour fusionne ou élève : elle s'arrête bien avant). */
+const RISING_MAX_ROUNDS = 32;
+
+/**
+ * 🌈🔗 « TOUT FUSIONNER » QUI ÉLÈVE ET ENCHAÎNE (v1.317.0 ; demandé par l'utilisateur : « il faut
+ * que ça fusionne aussi les packs de runes par 5 automatiquement, je dois le faire à la main
+ * après coup »). Comme `fuseAllSkills`, puis chaque exemplaire au niveau 5 qui peut s'élever
+ * (pas doré) passe à la couleur au-dessus, niveau 1 — et s'il y a déjà des exemplaires de cette
+ * compétence dans cette couleur, ils se fusionnent à leur tour, jusqu'à ce que plus rien ne
+ * bouge. Un doré reste au Nv 5 (le sommet). ⚠️ Un Nv 5 déjà au stock, sans rien à fusionner avec,
+ * s'élève aussi : c'est un « pack de 5 ». Chaque exemplaire gardé garde son `uid` et sa place.
+ * `only` borne la compétence (et, pour `{ id, up }`, la couleur de départ : le périmètre ne
+ * grandit que vers les couleurs où les exemplaires s'élèvent). La fusion AU CHOIX
+ * (`fuseSkills`) n'élève jamais : on y obtient exactement ce qu'on a demandé.
+ * Rend le stock, les fusions (`groups`) et les élévations (`rises`) ; les deux vides = rien à faire.
+ */
+export function fuseAllRising(
+  bank: RuneBank,
+  only: FuseOnly = null,
+): { bank: RuneBank; groups: FuseGroup[]; rises: RiseLine[] } {
+  // Les couleurs (crans d'élévation) du périmètre ; `null` = toutes.
+  const reach: Set<number> | null =
+    only && typeof only !== 'string' ? new Set([riseOf(only)]) : null;
+  const onlyId = only === null ? null : typeof only === 'string' ? only : only.id;
+  const keep = (s: StockSkill) =>
+    (onlyId === null || s.id === onlyId) && (!reach || reach.has(riseOf(s)));
+  let cur = bank;
+  const groups: FuseGroup[] = [];
+  const lines = new Map<string, RiseLine>();
+  for (let round = 0; round < RISING_MAX_ROUNDS; round++) {
+    const f = fuseWhere(cur, keep);
+    cur = f.bank;
+    groups.push(...f.groups);
+    let rose = false;
+    const skills = cur.skills.map((s) => {
+      if (!keep(s) || Math.floor(s.level) !== SKILL_MAX_LEVEL) return s;
+      const next = riseSkill(s);
+      if (!next) return s;
+      const k = `${s.id}:${riseOf(s)}`;
+      const line = lines.get(k);
+      if (line) line.count++;
+      else lines.set(k, { id: s.id, up: riseOf(s), count: 1 });
+      reach?.add(riseOf(next)); // la couleur d'arrivée entre dans le périmètre
+      rose = true;
+      return next;
+    });
+    if (rose) cur = { ...cur, skills };
+    if (!f.groups.length && !rose) break;
+  }
+  return { bank: cur, groups, rises: [...lines.values()] };
 }
 
 // ── 🎁 DONNER À UN CHAMPION ─────────────────────────────────────────────────────────────

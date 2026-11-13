@@ -242,15 +242,13 @@
             v-if="bank.skills.length >= 2"
             type="button"
             class="rb-tile fuse"
-            :disabled="busy || !fusePreview.length"
+            :disabled="busy || !fuseCount"
             @click="askFuseAll(null)"
           >
             <span class="rb-t-ico">🔗</span>
             <span class="rb-t-x font-display">Tout fusionner</span>
             <span class="rb-t-sub">{{
-              fusePreview.length
-                ? `${fusePreview.length} compétence${fusePreview.length > 1 ? 's' : ''}`
-                : FUSE_ALL_NONE
+              fuseCount ? `${fuseCount} compétence${fuseCount > 1 ? 's' : ''}` : FUSE_ALL_NONE
             }}</span>
           </button>
         </div>
@@ -297,7 +295,7 @@
     @close="revealing = null"
     @again="doOpen(lastCount)"
   />
-  <RuneFuseFx :groups="fusing" @close="fusing = null" />
+  <RuneFuseFx :groups="fusing" :rises="fuseRises" @close="onFuseClose" />
 </template>
 
 <script setup lang="ts">
@@ -334,9 +332,10 @@ import {
   OPEN_BLOCK_LABEL,
   RUNE_LOT,
   emptyBank,
-  fuseAllSkills,
+  fuseAllRising,
   fuseBlocker,
   fuseGroupText,
+  riseLineText,
   bestFusePick,
   fusePick,
   giveBlocker,
@@ -345,6 +344,7 @@ import {
   stackSkills,
   type FuseGroup,
   type FuseTake,
+  type RiseLine,
   type GiveBlock,
   type GiveKind,
   type StockSkill,
@@ -370,6 +370,8 @@ const revealing = ref<StockSkill[] | null>(null);
 const lastCount = ref(1);
 /** Ce que l'écran de fusion met en scène (null = fermé). */
 const fusing = ref<FuseGroup[] | null>(null);
+/** 🌈 Les Nv 5 que la fusion a élevés d'elle-même (lus par l'écran de fusion). */
+const fuseRises = ref<RiseLine[]>([]);
 /** Combien d'exemplaires de chaque niveau on ajoute à celui qui est choisi. */
 const take = ref<FuseTake>({});
 
@@ -491,8 +493,16 @@ function pickBest() {
   take.value = { ...best.value.take };
 }
 
-/** Ce que « Tout fusionner » ferait, compétence par compétence (vide = rien à fusionner). */
-const fusePreview = computed(() => fuseAllSkills(bank.value).groups);
+/** Ce que « Tout fusionner » ferait : fusions ET élévations des Nv 5, enchaînées. */
+const fusePlan = computed(() => fuseAllRising(bank.value));
+/** Ses fusions, compétence par compétence (vide = rien à fusionner). */
+const fusePreview = computed(() => fusePlan.value.groups);
+/** Combien de compétences il touche (fusionnées ou élevées) ; 0 = rien à faire. */
+const fuseCount = computed(
+  () =>
+    new Set([...fusePlan.value.groups.map((g) => g.id), ...fusePlan.value.rises.map((r) => r.id)])
+      .size,
+);
 /** Ce que la fusion de tous les exemplaires de la compétence choisie ferait. */
 const selGroup = computed(
   () => fusePreview.value.find((g) => sel.value && sameSkill(g, sel.value)) ?? null,
@@ -501,16 +511,17 @@ const selGroup = computed(
 /** ⚠️ Une fusion ne se défait pas : on dit ce qui sera fusionné avant de le faire. `only` :
  *  une compétence DANS SA COULEUR (les autres couleurs n'y sont pas versées). */
 function askFuseAll(only: SkillRef | null) {
-  const groups = fusePreview.value.filter((g) => !only || sameSkill(g, only));
-  if (!groups.length) return;
+  const plan = only ? fuseAllRising(bank.value, { id: only.id, up: riseOf(only) }) : fusePlan.value;
+  if (!plan.groups.length && !plan.rises.length) return;
   $q.dialog({
     title: only ? 'Fusionner tous les exemplaires ?' : 'Tout fusionner ?',
-    message: groups
-      .map(
+    message: [
+      ...plan.groups.map(
         (g) =>
           `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} ${RUNE_INFO[skillTier(g)].emoji} : ${fuseGroupText(g)}`,
-      )
-      .join('\n'),
+      ),
+      ...plan.rises.map((r) => `${SKILLS[r.id].emoji} ${SKILLS[r.id].name} : ${riseLineText(r)}`),
+    ].join('\n'),
     style: 'white-space: pre-line',
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Fusionner', color: 'positive' },
@@ -519,7 +530,7 @@ function askFuseAll(only: SkillRef | null) {
       const r = await char.fuseAllRuneSkills(uid, only && { id: only.id, up: riseOf(only) });
       if (!r.ok) throw new Error(r.reason);
       back();
-      showFuse(r.groups);
+      showFuse(r.groups, r.rises);
     });
   });
 }
@@ -566,20 +577,32 @@ function doOpen(count: number) {
   });
 }
 
-/** L'écran de fusion, ou — animation coupée — une simple ligne qui dit le résultat. */
-function showFuse(groups: FuseGroup[]) {
+/** L'écran de fusion, ou — animation coupée — une simple ligne qui dit le résultat. Les
+ *  élévations (`rises`) se lisent dans le résumé de l'écran de fusion ; sans fusion à montrer
+ *  (des Nv 5 déjà au stock), chacune a sa propre mise en scène. */
+function showFuse(groups: FuseGroup[], rises: RiseLine[] = []) {
   if (anim.on.runes) {
-    fusing.value = groups;
+    fuseRises.value = rises;
+    if (groups.length) {
+      fusing.value = groups;
+      return;
+    }
+    for (const r of rises) gameFx.celebrateRune('rise', r.id, '', 1, r.up + 1);
     return;
   }
   $q.notify({
     type: 'positive',
     multiLine: true,
-    message: groups
-      .map((g) => `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} : ${fuseGroupText(g)}`)
-      .join('<br>'),
+    message: [
+      ...groups.map((g) => `${SKILLS[g.id].emoji} ${SKILLS[g.id].name} : ${fuseGroupText(g)}`),
+      ...rises.map((r) => `${SKILLS[r.id].emoji} ${SKILLS[r.id].name} : ${riseLineText(r)}`),
+    ].join('<br>'),
     html: true,
   });
+}
+function onFuseClose() {
+  fusing.value = null;
+  fuseRises.value = [];
 }
 
 /** Fusionne les exemplaires choisis : le store fusionne, l'écran de fusion le montre. */
