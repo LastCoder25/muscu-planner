@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import type { Challenge, ChallengeConfig, ChallengeFormat } from '@/lib/challenges';
 import type { ComboChallenge } from '@/lib/combo';
 import type { QuestSnapshot } from '@/lib/questSnapshot';
+import type { DirectoryUser } from '@/lib/friendDirectory';
 import { FEED_RECENT_DAYS, type FriendTraining, type RowStamps } from '@/lib/friendFeed';
 
 type FriendStatus = 'pending' | 'accepted' | 'declined';
@@ -192,6 +193,13 @@ export const useFriendsStore = defineStore('friends', () => {
     const row = ((data ?? []) as { user_id: string; pseudo: string }[])[0];
     if (!row) throw new PseudoNotFoundError();
     return row;
+  }
+
+  /** Tous les inscrits — ADMIN seulement (migr. 0117) : la base renvoie une liste vide aux autres. */
+  async function listAllUsers(): Promise<DirectoryUser[]> {
+    const { data, error } = await supabase.rpc('admin_list_users');
+    if (error) throw error;
+    return (data ?? []) as DirectoryUser[];
   }
 
   /** Envoie une demande. 23505 = relation déjà existante (dans un sens ou l'autre). */
@@ -382,6 +390,7 @@ export const useFriendsStore = defineStore('friends', () => {
     markAcceptedSeen,
     fetchMine,
     findByPseudo,
+    listAllUsers,
     request,
     respond,
     remove,

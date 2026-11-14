@@ -8,14 +8,14 @@
       </p>
     </header>
 
-    <!-- Sans pseudo, on n'est pas trouvable : c'est le handle de recherche. -->
+    <!-- Sans pseudo, on n'est pas trouvable par pseudo (mais on peut être ajouté, et ajouter). -->
     <div v-if="!myPseudo" class="fr-nopseudo">
       🪪 Choisis un <b>pseudo d'aventurier</b> pour être trouvable par tes amis.
       <button class="fr-cta" @click="goAventure">Choisir mon pseudo</button>
     </div>
 
-    <template v-else>
-      <div class="fr-me">
+    <template v-if="auth.user">
+      <div v-if="myPseudo" class="fr-me">
         Ton pseudo : <b>{{ myPseudo }}</b>
         <span class="fr-me-h">— c'est ce que tes amis doivent saisir</span>
       </div>
@@ -40,6 +40,36 @@
         <span class="fr-name">{{ found.pseudo }}</span>
         <button class="fr-btn" :disabled="sending" @click="doRequest">Ajouter</button>
       </div>
+
+      <!-- ADMIN : tous les inscrits, même sans perso de jeu (migr. 0117). La base ne renvoie
+           rien aux autres comptes ; ce garde-fou d'affichage n'est que du confort. -->
+      <section v-if="auth.isAdmin && dirRows.length" class="fr-sec fr-dir">
+        <button class="fr-dir-head" :aria-expanded="dirOpen" @click="dirOpen = !dirOpen">
+          <span class="fr-sec-t">Tous les inscrits ({{ dirRows.length }})</span>
+          <span class="fr-chip">{{ dirAddable }} à ajouter</span>
+          <span class="fr-go">{{ dirOpen ? '▴' : '▾' }}</span>
+        </button>
+        <template v-if="dirOpen">
+          <div v-for="r in dirRows" :key="r.userId" class="fr-row">
+            <span class="fr-av">{{ r.hasCharacter ? '🧑' : '👤' }}</span>
+            <span class="fr-who">
+              <span class="fr-name">{{ r.label }}</span>
+              <span v-if="!r.hasCharacter" class="fr-chip dim">sans perso</span>
+            </span>
+            <span v-if="r.state === 'friend'" class="fr-chip ok">ami</span>
+            <span v-else-if="r.state === 'sent'" class="fr-chip">⏳ envoyée</span>
+            <span v-else-if="r.state === 'received'" class="fr-chip">t'a demandé</span>
+            <button
+              v-else
+              class="fr-btn"
+              :disabled="dirBusy === r.userId"
+              @click="addFromDirectory(r)"
+            >
+              Ajouter
+            </button>
+          </div>
+        </template>
+      </section>
 
       <div v-if="friends.loading && !friends.loaded" class="fr-empty">
         <q-spinner color="primary" size="24px" />
@@ -179,6 +209,7 @@ import { logicalToday, computeDailyTargets } from '@/lib/challenges';
 import { useChallengesStore } from '@/stores/challenges';
 import type { SharedChallenge } from '@/stores/friends';
 import { useFriendBossEntry } from '@/composables/useFriendBossEntry';
+import { buildDirectory, type DirectoryRow, type DirectoryUser } from '@/lib/friendDirectory';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -209,6 +240,28 @@ const found = ref<{ user_id: string; pseudo: string } | null>(null);
 const feed = ref<FeedItem[]>([]);
 const now = ref(new Date().toISOString());
 const busyShared = ref(false);
+// Annuaire admin : tous les inscrits (chargé seulement pour l'admin).
+const directory = ref<DirectoryUser[]>([]);
+const dirOpen = ref(false);
+const dirBusy = ref('');
+const dirRows = computed(() => buildDirectory(directory.value, friends.views));
+const dirAddable = computed(() => dirRows.value.filter((r) => r.state === 'none').length);
+async function addFromDirectory(row: DirectoryRow) {
+  const uid = auth.user?.id;
+  if (!uid) return;
+  dirBusy.value = row.userId;
+  try {
+    await friends.request(uid, row.userId);
+    $q.notify({ type: 'positive', message: `Demande envoyée à ${row.label}.` });
+  } catch (e) {
+    $q.notify({
+      type: 'negative',
+      message: e instanceof AlreadyLinkedError ? e.message : "Impossible d'envoyer la demande.",
+    });
+  } finally {
+    dirBusy.value = '';
+  }
+}
 const pseudoOf = (id: string) => friends.accepted.find((v) => v.userId === id)?.pseudo ?? 'Un ami';
 /** État d'une proposition que J'AI envoyée, dit du point de vue de l'ami : « en attente »
  *  n'apprend rien, « relevé »/« refusé » répond à la question qu'on se pose. */
@@ -229,6 +282,13 @@ onMounted(async () => {
     await refreshBoss();
   } catch {
     /* silencieux : la page reste utilisable, l'action réessaiera */
+  }
+  if (auth.isAdmin) {
+    try {
+      directory.value = await friends.listAllUsers();
+    } catch {
+      /* l'annuaire est un bonus admin : la recherche par pseudo reste là */
+    }
   }
   try {
     const data = await friends.fetchFeed();
@@ -645,6 +705,55 @@ async function goAventure() {
   font-size: 12px;
   color: var(--accent);
   flex: none;
+}
+.fr-chip {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.fr-chip.ok {
+  border-color: var(--d1);
+  color: var(--d1);
+}
+.fr-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.fr-who .fr-name {
+  flex: none;
+  max-width: 100%;
+}
+.fr-chip.dim {
+  color: var(--dim-2);
+}
+.fr-dir-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.fr-dir-head .fr-sec-t {
+  flex: 1;
+  margin: 0;
+}
+.fr-row .fr-btn {
+  min-height: 44px;
 }
 .fr-empty {
   padding: 14px 0;

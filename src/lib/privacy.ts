@@ -80,7 +80,7 @@ export const DATA_ITEMS: readonly DataItem[] = [
   },
   {
     what: 'Amis, défis partagés, boss entre amis, classement (pseudo et niveaux)',
-    why: 'Les fonctions sociales — visibles par tes amis, ou par tous pour le classement',
+    why: 'Les fonctions sociales — visibles par tes amis (sous ton prénom tant que tu n’as pas de pseudo de jeu), ou par tous pour le classement',
     basis: 'Consentement (tu choisis tes amis ; le classement publie ton pseudo et tes niveaux)',
   },
   {
