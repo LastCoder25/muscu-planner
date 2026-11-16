@@ -147,36 +147,62 @@
                     role="status"
                     >×{{ fmtMult(holdT.mult.value) }} Bonus !</span
                   >
-                  <span v-else class="fb-hint"
-                    >Bonus dans {{ Math.ceil(holdT.ring.value.left) }} s</span
-                  >
+                  <span class="fb-next">
+                    <template v-if="holdT.next.value"
+                      >×{{ fmtMult(holdT.next.value.mult) }} dans
+                      {{ Math.ceil(holdT.next.value.left) }} s</template
+                    >
+                    <template v-else>Maximum !</template>
+                  </span>
                   <div class="fb-hold-dmg">
-                    <b class="font-display">{{ holdT.effective.value }}</b> s équivalentes ·
-                    <b>{{ fmtBossPv(bossDamage(holdT.effective.value)) }}</b> dégâts
+                    <div class="fb-dmg-l">
+                      <span :key="Math.floor(holdT.seconds.value)" class="fb-dmg font-display">{{
+                        fmtBossPv(bossDamage(holdT.effective.value))
+                      }}</span>
+                      <span class="fb-dmg-u">dégâts</span>
+                    </div>
+                    <small class="fb-dmg-s">{{ holdT.effective.value }} s comptées</small>
                   </div>
                 </div>
               </div>
-              <button class="fb-btn big wide" @click="endHold">✔ Terminer</button>
+              <button class="fb-btn big wide fb-hold-go" @click="endHold">
+                {{ holdT.seconds.value < HOLD_MIN_S ? '✖ Annuler' : '✔ Terminer' }}
+              </button>
             </template>
           </div>
-          <div v-if="!holdT.running.value" class="fb-hit-row">
+          <div v-if="!holdT.running.value" ref="hitRow" class="fb-hit-row">
             <button class="fb-step" aria-label="Moins" @click="step(-1)">−</button>
-            <input
-              v-model.number="amount"
-              class="fb-input font-display"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              :aria-label="'Nombre de ' + bossUnitLabel(current.family)"
-            />
+            <span class="fb-in">
+              <input
+                v-model.number="amount"
+                class="fb-input font-display"
+                :class="{ unit: bossUnitLabel(current.family) === 's' }"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                :aria-label="'Nombre de ' + bossUnitLabel(current.family)"
+              />
+              <span v-if="bossUnitLabel(current.family) === 's'" class="fb-in-u" aria-hidden="true"
+                >s</span
+              >
+            </span>
             <button class="fb-step" aria-label="Plus" @click="step(1)">＋</button>
-            <button class="fb-btn big" :disabled="busy || split.accepted <= 0" @click="doHit">
-              Frapper
+            <button
+              class="fb-btn big"
+              :class="{ glow }"
+              :disabled="busy || split.accepted <= 0"
+              @click="doHit"
+            >
+              Frapper<template v-if="heldNote">
+                · {{ fmtBossPv(bossDamage(split.damage)) }} dégâts</template
+              >
             </button>
           </div>
-          <div v-if="heldNote && !holdT.running.value" class="fb-hint fb-held">
-            ⏱️ Tenue de <b>{{ heldNote.raw }} s</b> → <b>{{ heldNote.eq }}</b> s équivalentes
-            (modifiable).
+          <div v-if="heldNote && !holdT.running.value" class="fb-held">
+            <span class="fb-held-pill"
+              >⏱️ {{ heldNote.raw }} s tenues → <b>{{ heldNote.eq }} s</b> comptées</span
+            >
+            <span class="fb-hint">modifiable avant de frapper</span>
           </div>
           <div v-if="!holdT.running.value" class="fb-hint">
             <template v-if="split.accepted < amount">
@@ -833,15 +859,40 @@ function startHold() {
   heldNote.value = null;
   holdT.start();
 }
+/** Une tenue plus courte ne se saisit pas : « Terminer » l'annule (un toucher raté). */
+const HOLD_MIN_S = 3;
+/** Un « Terminer » arrivé juste après « Démarrer » est un double toucher : on l'ignore. */
+const HOLD_TAP_GUARD_MS = 600;
+const hitRow = ref<HTMLElement | null>(null);
+const glow = ref(false);
 function endHold() {
+  if (Date.now() - holdT.startedAt.value < HOLD_TAP_GUARD_MS) return;
   const s = holdT.stop();
+  if (s < HOLD_MIN_S) {
+    heldNote.value = null;
+    $q.notify({ type: 'info', message: 'Tenue trop courte : chrono annulé, rien n’est saisi.' });
+    return;
+  }
   const eq = holdEffectiveSeconds(s);
   amount.value = Math.max(1, eq);
   heldNote.value = { raw: Math.round(s), eq };
+  // On amène la saisie sous les yeux et on allume « Frapper » une fois : c'est lui qui envoie.
+  void nextTick(() => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    hitRow.value?.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+    glow.value = true;
+    setTimeout(() => (glow.value = false), 1800);
+  });
 }
 // Un chrono ne survit pas à un changement de boss ni à la fin du combat.
 watch([() => current.value?.id, phase], () => {
-  holdT.stop();
+  if (holdT.running.value) {
+    holdT.stop();
+    $q.notify({
+      type: 'warning',
+      message: 'Chrono arrêté : ce boss n’est plus en cours. Rien n’a été envoyé.',
+    });
+  }
   heldNote.value = null;
 });
 async function doHit() {
@@ -1309,8 +1360,12 @@ function notifyError(e: unknown) {
 }
 .fb-hit-row {
   display: flex;
+  flex-wrap: wrap; /* dernier recours : « Frapper · N dégâts » passe sur sa ligne */
   align-items: center;
   gap: 6px;
+}
+.fb-hit-row > .fb-btn {
+  flex: 1 0 auto;
 }
 .fb-step {
   width: 44px;
@@ -1324,9 +1379,11 @@ function notifyError(e: unknown) {
   cursor: pointer;
 }
 .fb-input {
-  width: 0;
-  flex: 1;
-  min-width: 60px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  appearance: textfield;
+  -moz-appearance: textfield;
   height: 44px;
   text-align: center;
   font-size: 20px;
@@ -1354,6 +1411,15 @@ function notifyError(e: unknown) {
   width: 104px;
   height: 104px;
 }
+@media (max-width: 420px) {
+  .fb-ring {
+    width: 128px;
+    height: 128px;
+  }
+  .fb-ring-t {
+    font-size: 40px;
+  }
+}
 .fb-ring svg {
   width: 100%;
   height: 100%;
@@ -1369,7 +1435,8 @@ function notifyError(e: unknown) {
 .fb-ring-fg {
   stroke: var(--accent);
   stroke-linecap: round;
-  transition: stroke-dasharray 0.2s linear;
+  /* Pas de transition : au changement de palier l'anneau repart de zéro d'un coup, il ne se
+     rembobine pas en glissant. */
 }
 .fb-ring-fg.bonus {
   stroke: var(--d3);
@@ -1395,19 +1462,53 @@ function notifyError(e: unknown) {
   align-items: flex-start;
   gap: 6px;
 }
-.fb-hold-dmg {
+.fb-next {
   font-size: 12.5px;
   color: var(--dim);
+  white-space: nowrap;
 }
-.fb-hold-dmg b {
-  color: var(--text);
+.fb-hold-dmg {
+  min-width: 0;
+}
+.fb-dmg-l {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.fb-dmg {
+  display: inline-block;
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--accent);
+  animation: fb-tick 0.4s ease-out;
+}
+.fb-dmg-u {
+  font-size: 12px;
+  color: var(--dim);
+}
+.fb-dmg-s {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+}
+@keyframes fb-tick {
+  0% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .fb-bonus {
   --k: 0;
   display: inline-block;
   padding: 6px 12px;
   border-radius: 999px;
-  font-size: calc(16px + var(--k) * 1.2px);
+  font-size: min(24px, calc(16px + var(--k) * 1.2px));
+  max-width: 100%;
+  white-space: nowrap;
+  padding: 6px 10px;
   color: var(--accent-ink);
   background: color-mix(in srgb, var(--d2) calc(100% - var(--k) * 10%), var(--d4));
   box-shadow: 0 0 calc(var(--k) * 3px) color-mix(in srgb, var(--d3) 80%, transparent);
@@ -1466,15 +1567,59 @@ function notifyError(e: unknown) {
 }
 @media (prefers-reduced-motion: reduce) {
   .fb-bonus,
-  .fb-bonus.t10 {
+  .fb-bonus.t10,
+  .fb-dmg,
+  .fb-btn.glow {
     animation: none;
-  }
-  .fb-ring-fg {
-    transition: none;
   }
 }
 .fb-held {
-  color: var(--d3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+}
+.fb-held .fb-hint {
+  margin: 0;
+}
+.fb-held-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--text);
+  border: 1px solid var(--d3);
+  background: color-mix(in srgb, var(--d3) 14%, transparent);
+}
+.fb-btn.glow {
+  animation: fb-glow 0.9s ease-in-out 2;
+}
+@keyframes fb-glow {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+.fb-in {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.fb-input.unit {
+  padding-right: 26px;
+}
+.fb-input::-webkit-inner-spin-button,
+.fb-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.fb-in-u {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--dim);
+  pointer-events: none;
 }
 .fb-hint {
   margin: 6px 0 0;

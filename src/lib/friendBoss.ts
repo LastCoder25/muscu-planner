@@ -621,7 +621,10 @@ export function strikesToReplay(
 
 /** PV lisibles : « 120 000 ». */
 export function fmtBossPv(n: number): string {
-  return Math.max(0, Math.round(n)).toLocaleString('fr-FR');
+  // Espace INSÉCABLE (U+00A0) quelle que soit la version d'ICU : « 21 000 » ne se coupe jamais.
+  return Math.max(0, Math.round(n))
+    .toLocaleString('fr-FR')
+    .replace(/[\s\u202f]/g, '\u00a0');
 }
 
 // ── 🎫 Jetons de boss (v0.1066) ─────────────────────────────────────────────────────

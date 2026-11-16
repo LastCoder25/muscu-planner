@@ -7,6 +7,7 @@ import {
   holdEffectiveSeconds,
   holdRing,
   isHoldBoss,
+  fmtBossPv,
   splitHit,
 } from '@/lib/friendBoss';
 
@@ -84,5 +85,11 @@ describe('⏱️ bonus de temps du boss de gainage', () => {
     const eq = holdEffectiveSeconds(900);
     expect(eq).toBeGreaterThan(perHit);
     expect(splitHit('core', eq, 1e9, 0).accepted).toBe(perHit);
+  });
+
+  it('les nombres de dégâts ont une espace insécable (« 21 000 » ne se coupe jamais)', () => {
+    expect(fmtBossPv(21000)).toBe('21 000');
+    expect(fmtBossPv(1234567)).toBe('1 234 567');
+    expect(fmtBossPv(999)).toBe('999');
   });
 });

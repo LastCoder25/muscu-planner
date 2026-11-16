@@ -1331,7 +1331,7 @@ defineExpose({ play, die });
 
 /* ⏱️ Tenue en cours : le boss encaisse sans arrêt ; `--ch` (0 → 10) accélère et grossit tout. */
 .fbs.channeling .fbs-boss {
-  animation: fbs-channel calc(0.5s - var(--ch, 0) * 0.03s) linear infinite;
+  animation: fbs-channel calc(0.5s - min(var(--ch, 0), 6) * 0.03s) linear infinite;
   box-shadow:
     0 0 calc(22px + var(--ch, 0) * 6px) color-mix(in srgb, var(--d4) 55%, transparent),
     0 0 calc(var(--ch, 0) * 9px) color-mix(in srgb, #ffd23f 60%, transparent);
@@ -1354,10 +1354,10 @@ defineExpose({ play, die });
     transform: translate(0, 0);
   }
   25% {
-    transform: translate(calc(-2px - var(--ch, 0) * 0.5px), 1px) rotate(-1.5deg);
+    transform: translate(calc(-2px - min(var(--ch, 0), 6) * 0.3px), 1px) rotate(-1.5deg);
   }
   75% {
-    transform: translate(calc(2px + var(--ch, 0) * 0.5px), -1px) rotate(1.5deg);
+    transform: translate(calc(2px + min(var(--ch, 0), 6) * 0.3px), -1px) rotate(1.5deg);
   }
 }
 @keyframes fbs-chan {

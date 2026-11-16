@@ -13,6 +13,7 @@ export function useBossHold() {
   const nowMs = ref(0);
   let timer: ReturnType<typeof setInterval> | null = null;
   let lock: WakeLockSentinelLike | null = null;
+  let requesting = false;
 
   /** Secondes tenues (décimales). */
   const seconds = computed(() =>
@@ -22,16 +23,29 @@ export function useBossHold() {
   const mult = computed(() => holdBonusMult(seconds.value));
   const effective = computed(() => holdEffectiveSeconds(seconds.value));
   const ring = computed(() => holdRing(seconds.value));
+  /** Palier suivant (null au plafond) : son multiplicateur et les secondes avant de l'atteindre. */
+  const next = computed(() => {
+    const m = holdBonusMult(seconds.value + ring.value.left + 0.001);
+    return m > mult.value ? { mult: m, left: ring.value.left } : null;
+  });
 
   async function acquireLock() {
+    if (requesting || lock) return; // une demande est déjà en vol (ou le verrou est tenu)
+    requesting = true;
     try {
       const nav = navigator as Navigator & {
         wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinelLike> };
       };
-      if (nav.wakeLock && document.visibilityState === 'visible')
-        lock = await nav.wakeLock.request('screen');
+      if (nav.wakeLock && document.visibilityState === 'visible') {
+        const got = await nav.wakeLock.request('screen');
+        // Le chrono a pu s'arrêter pendant la demande : on relâche aussitôt, sans fuite.
+        if (running.value) lock = got;
+        else got.release().catch(() => undefined);
+      }
     } catch {
       /* refusé ou indisponible : le chrono marche quand même */
+    } finally {
+      requesting = false;
     }
   }
   function releaseLock() {
@@ -42,7 +56,7 @@ export function useBossHold() {
   // Le navigateur retire le verrou quand l'onglet passe en arrière-plan : on le reprend au retour.
   function onVisible() {
     nowMs.value = Date.now();
-    if (running.value && !lock) void acquireLock();
+    if (running.value) void acquireLock();
   }
 
   function start() {
@@ -72,5 +86,6 @@ export function useBossHold() {
   }
   onUnmounted(cleanup);
 
-  return { running, seconds, tier, mult, effective, ring, start, stop };
+  /** Heure de départ (ms) : la page ignore un « Terminer » arrivé juste après (double toucher). */
+  return { running, startedAt, seconds, tier, mult, effective, ring, next, start, stop };
 }
