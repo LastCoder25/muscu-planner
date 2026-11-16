@@ -2,10 +2,21 @@
   <!-- Scène du boss entre amis : le boss en haut, le groupe en ligne dessous. Chaque frappe
        fait bondir son auteur, part vers le boss et retire des PV à l'impact. Rien n'est décidé
        ici : les dégâts viennent du serveur, la scène ne fait que les montrer. -->
-  <div ref="root" class="fbs" :class="{ quake }">
+  <div
+    ref="root"
+    class="fbs"
+    :class="{ quake, channeling: channel != null && !dying }"
+    :style="channel != null ? { '--ch': Math.min(channel, 10) } : undefined"
+  >
     <div class="fbs-boss-zone">
       <div ref="bossEl" class="fbs-boss" :class="{ shake, dying, dead: fallen && !dying }">
         <span class="fbs-aura" aria-hidden="true" />
+        <!-- ⏱️ Tenue en cours : des ondes qui reviennent sans fin, de plus en plus vite. Décor
+             pur : le palier (`channel`) vient de la page, rien n'est calculé ici. -->
+        <template v-if="channel != null">
+          <span class="fbs-chan fbs-chan-a" aria-hidden="true" />
+          <span class="fbs-chan fbs-chan-b" aria-hidden="true" />
+        </template>
         <img
           v-if="art"
           :src="art"
@@ -199,6 +210,9 @@ const props = defineProps<{
   hpLeft: number;
   /** Une frappe est en cours d'envoi : la barre attend l'animation au lieu de sauter. */
   hold?: boolean;
+  /** ⏱️ Palier de bonus d'une tenue en cours (0 = tenue sans bonus encore) : le boss est attaqué
+   *  en continu et la scène s'intensifie avec le palier. `null`/absent : pas de tenue. */
+  channel?: number | null;
   allies: StageAlly[];
 }>();
 
@@ -317,10 +331,7 @@ const FLIGHT_MS = 420;
 
 /** Point de départ d'une attaque : le BORD du médaillon de l'auteur, côté boss — pas son
  *  centre (le projectile semblait sortir du visage). Repli sur le centre de la tuile. */
-function launchFrom(
-  userId: string,
-  to: { x: number; y: number },
-): { x: number; y: number } | null {
+function launchFrom(userId: string, to: { x: number; y: number }): { x: number; y: number } | null {
   const tile = allyEls.get(userId);
   const av = tile?.querySelector<HTMLElement>('.fbs-ally-av') ?? tile;
   const c = centerOf(av);
@@ -1318,10 +1329,58 @@ defineExpose({ play, die });
   }
 }
 
+/* ⏱️ Tenue en cours : le boss encaisse sans arrêt ; `--ch` (0 → 10) accélère et grossit tout. */
+.fbs.channeling .fbs-boss {
+  animation: fbs-channel calc(0.5s - var(--ch, 0) * 0.03s) linear infinite;
+  box-shadow:
+    0 0 calc(22px + var(--ch, 0) * 6px) color-mix(in srgb, var(--d4) 55%, transparent),
+    0 0 calc(var(--ch, 0) * 9px) color-mix(in srgb, #ffd23f 60%, transparent);
+}
+.fbs-chan {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #ffd23f;
+  pointer-events: none;
+  opacity: 0;
+  animation: fbs-chan calc(1.1s - var(--ch, 0) * 0.07s) ease-out infinite;
+}
+.fbs-chan-b {
+  animation-delay: calc((1.1s - var(--ch, 0) * 0.07s) / 2);
+}
+@keyframes fbs-channel {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(calc(-2px - var(--ch, 0) * 0.5px), 1px) rotate(-1.5deg);
+  }
+  75% {
+    transform: translate(calc(2px + var(--ch, 0) * 0.5px), -1px) rotate(1.5deg);
+  }
+}
+@keyframes fbs-chan {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(calc(1.5 + var(--ch, 0) * 0.08));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fbs-boss,
-  .fbs-aura {
+  .fbs-aura,
+  .fbs.channeling .fbs-boss {
     animation: none;
+  }
+  .fbs-chan {
+    animation: none;
+    opacity: 0.5;
+    transform: scale(1.25);
   }
 }
 </style>

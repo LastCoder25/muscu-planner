@@ -96,12 +96,70 @@
           :hp-total="current.hpTotal"
           :hp-left="hpLeft"
           :hold="busy"
+          :channel="holdT.running.value ? holdT.tier.value : null"
           :allies="allies"
         />
 
         <!-- Frapper : ce que le serveur acceptera est annoncé AVANT l'envoi. -->
         <div v-if="phase === 'active' && isMember" class="fb-hit">
-          <div class="fb-hit-row">
+          <!-- ⏱️ CHRONO (exo en secondes) : on tient, la scène encaisse en continu ; au-delà de 30 s
+               chaque tranche de 15 s est majorée. « Terminer » ne fait que PRÉ-REMPLIR la saisie :
+               c'est le flux habituel (« Frapper ») qui envoie. -->
+          <div v-if="holdMode" class="fb-hold" :class="{ on: holdT.running.value }">
+            <template v-if="!holdT.running.value">
+              <button class="fb-btn big wide fb-hold-go" :disabled="busy" @click="startHold">
+                ⏱️ Démarrer le chrono
+              </button>
+              <p class="fb-hint">
+                Tiens ta position : bonus dès {{ HOLD_BONUS.baseS }} s (×1,1), puis +0,1 toutes les
+                {{ HOLD_BONUS.stepS }} s, jusqu’à ×{{ HOLD_BONUS.capMult }}. Ou saisis à la main.
+              </p>
+            </template>
+            <template v-else>
+              <div class="fb-hold-top">
+                <div
+                  class="fb-ring"
+                  role="timer"
+                  :aria-label="Math.floor(holdT.seconds.value) + ' secondes'"
+                >
+                  <svg viewBox="0 0 100 100" aria-hidden="true">
+                    <circle class="fb-ring-bg" cx="50" cy="50" r="44" />
+                    <circle
+                      class="fb-ring-fg"
+                      :class="{ bonus: holdT.tier.value > 0 }"
+                      cx="50"
+                      cy="50"
+                      r="44"
+                      pathLength="100"
+                      :stroke-dasharray="Math.round(holdT.ring.value.fraction * 100) + ' 100'"
+                    />
+                  </svg>
+                  <span class="fb-ring-t font-display"
+                    >{{ Math.floor(holdT.seconds.value) }}<small>s</small></span
+                  >
+                </div>
+                <div class="fb-hold-side">
+                  <span
+                    v-if="holdT.tier.value > 0"
+                    :key="holdT.tier.value"
+                    class="fb-bonus font-display"
+                    :class="'t' + Math.min(holdT.tier.value, 10)"
+                    role="status"
+                    >×{{ fmtMult(holdT.mult.value) }} Bonus !</span
+                  >
+                  <span v-else class="fb-hint"
+                    >Bonus dans {{ Math.ceil(holdT.ring.value.left) }} s</span
+                  >
+                  <div class="fb-hold-dmg">
+                    <b class="font-display">{{ holdT.effective.value }}</b> s équivalentes ·
+                    <b>{{ fmtBossPv(bossDamage(holdT.effective.value)) }}</b> dégâts
+                  </div>
+                </div>
+              </div>
+              <button class="fb-btn big wide" @click="endHold">✔ Terminer</button>
+            </template>
+          </div>
+          <div v-if="!holdT.running.value" class="fb-hit-row">
             <button class="fb-step" aria-label="Moins" @click="step(-1)">−</button>
             <input
               v-model.number="amount"
@@ -116,7 +174,11 @@
               Frapper
             </button>
           </div>
-          <div class="fb-hint">
+          <div v-if="heldNote && !holdT.running.value" class="fb-hint fb-held">
+            ⏱️ Tenue de <b>{{ heldNote.raw }} s</b> → <b>{{ heldNote.eq }}</b> s équivalentes
+            (modifiable).
+          </div>
+          <div v-if="!holdT.running.value" class="fb-hint">
             <template v-if="split.accepted < amount">
               Seulement <b>{{ split.accepted }}</b> compteront (≤ {{ perHit }} par saisie).
             </template>
@@ -486,11 +548,15 @@ import { fxRarity, gradeLabel } from '@/lib/items';
 import { bossAltarBuilt } from '@/lib/buildings';
 import { computeCharacter } from '@/lib/character';
 import { heroLook, type HeroLook } from '@/lib/heroLook';
+import { useBossHold } from '@/composables/useBossHold';
 import FriendBossStage, { type StageAlly } from '@/components/FriendBossStage.vue';
 import { useGameFx } from '@/composables/useGameFx';
 import { repWeightFromExercise } from '@/lib/challenges';
 import {
   FRIEND_BOSS,
+  HOLD_BONUS,
+  holdEffectiveSeconds,
+  isHoldBoss,
   BOSS_FAMILY_LABEL,
   BOSS_TIERS,
   BOSS_TIER_DEFAULT,
@@ -751,8 +817,33 @@ const pct = (x: number) => `${Math.round(x * 100)} %`;
 const fmtParts = (x: number) =>
   `${x.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} part${x >= 2 ? 's' : ''}`;
 function step(d: number) {
+  heldNote.value = null;
   amount.value = Math.max(1, Math.floor((amount.value || 0) + d));
 }
+
+// ── ⏱️ Chrono d'une tenue (exo en secondes uniquement ; les reps restent à la main) ──
+const holdT = useBossHold();
+const holdMode = computed(() => {
+  const b = current.value;
+  return !!b && isHoldBoss(b.family, exos.value.find((e) => e.id === b.exerciseId)?.unit);
+});
+const heldNote = ref<{ raw: number; eq: number } | null>(null);
+const fmtMult = (m: number) => m.toLocaleString('fr-FR', { minimumFractionDigits: 1 });
+function startHold() {
+  heldNote.value = null;
+  holdT.start();
+}
+function endHold() {
+  const s = holdT.stop();
+  const eq = holdEffectiveSeconds(s);
+  amount.value = Math.max(1, eq);
+  heldNote.value = { raw: Math.round(s), eq };
+}
+// Un chrono ne survit pas à un changement de boss ni à la fin du combat.
+watch([() => current.value?.id, phase], () => {
+  holdT.stop();
+  heldNote.value = null;
+});
 async function doHit() {
   const b = current.value;
   if (!b || busy.value) return;
@@ -762,6 +853,7 @@ async function doHit() {
   let res: { accepted: number; damage: number; surplus: number; defeated: boolean };
   try {
     res = await store.hit(b.id, amount.value);
+    heldNote.value = null;
   } catch (e) {
     busy.value = false;
     pinnedId.value = null;
@@ -1047,7 +1139,8 @@ async function doCancel(b: FriendBoss) {
     selectedId.value = null;
     $q.notify({
       type: 'info',
-      message: refund > 0 ? `Boss annulé · ${refund} 🎫 rendu${refund > 1 ? 's' : ''}.` : 'Boss annulé.',
+      message:
+        refund > 0 ? `Boss annulé · ${refund} 🎫 rendu${refund > 1 ? 's' : ''}.` : 'Boss annulé.',
     });
   } catch (e) {
     notifyError(e);
@@ -1241,6 +1334,147 @@ function notifyError(e: unknown) {
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
+}
+// ⏱️ Chrono : anneau de 30 s, pastille de bonus qui s'intensifie à chaque tranche.
+.fb-hold {
+  margin-bottom: 10px;
+}
+.fb-hold-go {
+  min-height: 52px;
+}
+.fb-hold-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.fb-ring {
+  position: relative;
+  flex: none;
+  width: 104px;
+  height: 104px;
+}
+.fb-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.fb-ring circle {
+  fill: none;
+  stroke-width: 8;
+}
+.fb-ring-bg {
+  stroke: var(--line);
+}
+.fb-ring-fg {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.2s linear;
+}
+.fb-ring-fg.bonus {
+  stroke: var(--d3);
+}
+.fb-ring-t {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: var(--text);
+}
+.fb-ring-t small {
+  font-size: 14px;
+  color: var(--dim);
+  margin-left: 2px;
+}
+.fb-hold-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.fb-hold-dmg {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.fb-hold-dmg b {
+  color: var(--text);
+}
+.fb-bonus {
+  --k: 0;
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: calc(16px + var(--k) * 1.2px);
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--d2) calc(100% - var(--k) * 10%), var(--d4));
+  box-shadow: 0 0 calc(var(--k) * 3px) color-mix(in srgb, var(--d3) 80%, transparent);
+  animation: fb-bonus-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.fb-bonus.t1 {
+  --k: 1;
+}
+.fb-bonus.t2 {
+  --k: 2;
+}
+.fb-bonus.t3 {
+  --k: 3;
+}
+.fb-bonus.t4 {
+  --k: 4;
+}
+.fb-bonus.t5 {
+  --k: 5;
+}
+.fb-bonus.t6 {
+  --k: 6;
+}
+.fb-bonus.t7 {
+  --k: 7;
+}
+.fb-bonus.t8 {
+  --k: 8;
+}
+.fb-bonus.t9 {
+  --k: 9;
+}
+.fb-bonus.t10 {
+  --k: 10;
+  animation:
+    fb-bonus-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1),
+    fb-bonus-glow 1.2s ease-in-out 0.5s infinite;
+}
+@keyframes fb-bonus-pop {
+  0% {
+    transform: scale(0.4) rotate(-6deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+@keyframes fb-bonus-glow {
+  50% {
+    box-shadow: 0 0 24px var(--d3);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-bonus,
+  .fb-bonus.t10 {
+    animation: none;
+  }
+  .fb-ring-fg {
+    transition: none;
+  }
+}
+.fb-held {
+  color: var(--d3);
 }
 .fb-hint {
   margin: 6px 0 0;

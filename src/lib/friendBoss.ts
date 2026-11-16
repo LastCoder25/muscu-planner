@@ -797,6 +797,61 @@ export function minShareUnits(family: BossFamily, tier?: string | null): number 
   return Math.ceil(bossShareUnits(family, tier) * FRIEND_BOSS.minShare);
 }
 
+/** ⏱️ CHRONO ET BONUS DE TEMPS (v1.319.0). Les PV du boss sont calés sur des séries de 30 s :
+ *  `HOLD_BONUS.baseS`. Au-delà, chaque tranche de 15 s est MAJORÉE de +0,1 de plus que la
+ *  précédente (×1,1 de 30 à 45 s, ×1,2 de 45 à 60 s…), plafonnée à ×2 : seules les secondes
+ *  au-delà de 30 sont majorées. */
+export const HOLD_BONUS = { baseS: 30, stepS: 15, perTier: 0.1, capMult: 2 } as const;
+
+const holdSecs = (seconds: number): number => (Number.isFinite(seconds) ? Math.max(0, seconds) : 0);
+const holdTenths = (tier: number): number =>
+  Math.min(Math.round(HOLD_BONUS.capMult * 10), 10 + Math.round(HOLD_BONUS.perTier * 10) * tier);
+
+/** Un exo chronométré ? Seul un boss de gainage ET un exo en secondes (`unit === 'time'`) ouvre
+ *  le chrono et le bonus : un exo de gainage compté en reps garde la saisie manuelle. */
+export function isHoldBoss(family: BossFamily, exerciseUnit?: string | null): boolean {
+  return family === 'core' && exerciseUnit === 'time';
+}
+
+/** Palier de bonus atteint après `seconds` de tenue : 0 avant 30 s, puis +1 toutes les 15 s
+ *  (30 s → 1 = ×1,1, 45 s → 2 = ×1,2…). Non borné : le plafond ne vaut que pour le multiplicateur. */
+export function holdBonusTier(seconds: number): number {
+  const s = holdSecs(seconds);
+  return s < HOLD_BONUS.baseS ? 0 : Math.floor((s - HOLD_BONUS.baseS) / HOLD_BONUS.stepS) + 1;
+}
+
+/** Multiplicateur de la tranche en cours (1 avant 30 s, 2 au plafond). */
+export function holdBonusMult(seconds: number): number {
+  return holdTenths(holdBonusTier(seconds)) / 10;
+}
+
+/** « Secondes équivalentes » d'une tenue : les 30 premières telles quelles, puis chaque tranche
+ *  de 15 s au multiplicateur de son palier (plafonné à ×2). Arrondi à l'entier : le serveur
+ *  stocke des entiers (`fboss_hit(p_units integer)`). Calcul en dixièmes, sans erreur de flottant.
+ *  Valeurs de contrôle : 30 → 30 · 45 → 46,5 → 47 · 60 → 64,5 → 65 · 90 → 105 · 120 → 151,5 → 152
+ *  · 180 → 262,5 → 263. */
+export function holdEffectiveSeconds(seconds: number): number {
+  const s = holdSecs(seconds);
+  if (s <= HOLD_BONUS.baseS) return Math.round(s);
+  let tenths = HOLD_BONUS.baseS * 10;
+  let from: number = HOLD_BONUS.baseS;
+  for (let tier = 1; from < s; tier++) {
+    const to = Math.min(s, from + HOLD_BONUS.stepS);
+    tenths += (to - from) * holdTenths(tier);
+    from = to;
+  }
+  return Math.round(tenths / 10);
+}
+
+/** Avancement de l'anneau du chrono (0 → 1) : 30 s pour le premier tour, puis chaque tranche de
+ *  15 s qui mène au palier suivant ; `left` = secondes avant ce palier. */
+export function holdRing(seconds: number): { fraction: number; left: number } {
+  const s = holdSecs(seconds);
+  const span = s < HOLD_BONUS.baseS ? HOLD_BONUS.baseS : HOLD_BONUS.stepS;
+  const into = s < HOLD_BONUS.baseS ? s : (s - HOLD_BONUS.baseS) % HOLD_BONUS.stepS;
+  return { fraction: into / span, left: span - into };
+}
+
 /** 🤝 Reps GARDÉES pour les autres : la demi-part qui manque encore à chaque ami accepté.
  *  Zéro le dernier jour (`reserveReleaseMs`). La règle exacte de `fboss_hit` (migr. 0092). */
 export function bossReservedUnits(
