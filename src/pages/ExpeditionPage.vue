@@ -763,6 +763,7 @@ import {
   descend,
   isVisible,
   animationsSkipped,
+  lootFxSkipped,
   pulseRoomOf,
   ROOM_EMOJI,
   type Floor,
@@ -1014,6 +1015,8 @@ function toggleSkipAnim() {
   }
 }
 const fastFx = computed(() => animationsSkipped(skipAnim.value, autoMode.value, !!series.value));
+// Coffres et butin : sautés d'office en série (seul le récap final s'affiche).
+const lootFxOff = computed(() => lootFxSkipped(skipAnim.value, autoMode.value, !!series.value));
 
 // Perso réel (stats de fond + équipement + talents) → combattant.
 const character = computed(() =>
@@ -1143,7 +1146,7 @@ let pulseTimer: ReturnType<typeof setTimeout> | undefined;
 // Durée de l'effet, raccourcie avec la vitesse de l'auto (jamais sous 250 ms : on doit le voir).
 const pulseMs = computed(() => Math.max(250, Math.round(1100 / speed.value)));
 function pulse(id: number, kind: 'chest' | 'trap' | 'vault', text: string) {
-  if (fastFx.value) return;
+  if (lootFxOff.value) return;
   roomPulse.value = { id, floor: run.value.floor, kind, text, n: ++pulseSeq };
   if (pulseTimer) clearTimeout(pulseTimer);
   pulseTimer = setTimeout(() => (roomPulse.value = null), pulseMs.value);
@@ -1151,6 +1154,7 @@ function pulse(id: number, kind: 'chest' | 'trap' | 'vault', text: string) {
 // Le 🎒 bondit quand un objet y entre.
 const lootBump = ref(false);
 function bumpLoot() {
+  if (lootFxOff.value) return;
   lootBump.value = false;
   requestAnimationFrame(() => (lootBump.value = true));
 }
@@ -1491,7 +1495,7 @@ function openVault(id: number) {
     kind: 'good',
     text: `💎 Salle secrète ! ${item ? item.name + ' · ' : ''}+${gGold}🪙`,
   };
-  if (!fastFx.value)
+  if (!lootFxOff.value)
     gameFx.celebrate({
       kind: 'drop',
       emoji: '💎',
@@ -1920,15 +1924,13 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         ...(selectedLaby.value ? { rankCap: RARITY_RANK[selectedLaby.value.rank] } : {}),
       });
       loot.value.push({ ...fam, id: crypto.randomUUID() });
-      if (!fastFx.value)
+      if (!lootFxOff.value)
         gameFx.celebrate({
           kind: 'familiar',
           emoji: fam.emoji,
           title: 'Familier trouvé !',
           subtitle: `${fam.name} · rang ${rarityRank(fam.rarity).name}`,
           rarity: fxRarity(fam.rarity),
-          // En série, un éclat plein écran par run bloquerait l'enchaînement : bandeau discret.
-          ...(series.value ? { quiet: true } : {}),
         });
     }
     // MORT : on garde une FRACTION des gains liée à la profondeur du palier non terminé

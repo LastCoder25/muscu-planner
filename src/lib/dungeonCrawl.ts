@@ -284,6 +284,15 @@ export function pulseRoomOf(
 export function animationsSkipped(skip: boolean, auto: boolean, inSeries: boolean): boolean {
   return skip && (auto || inSeries);
 }
+/**
+ * 🎁 Les animations de COFFRES ET BUTIN d'un run (anneau du coffre, éclat « salle secrète » /
+ * « familier trouvé », rebond du 🎒) sont-elles sautées ? **Toujours en série** (⚡ Auto ×N :
+ * seul le récapitulatif final compte, aucun réglage à poser) ; sinon comme `animationsSkipped`.
+ * Les DONNÉES (or, butin, trésor, familier) ne passent jamais par ici : seule l'animation saute.
+ */
+export function lootFxSkipped(skip: boolean, auto: boolean, inSeries: boolean): boolean {
+  return inSeries || animationsSkipped(skip, auto, inSeries);
+}
 /** « Frontière » du brouillard : salles adjacentes à une salle visitée, non visitées. */
 export function frontier(floor: Floor, state: RunState): number[] {
   const out = new Set<number>();

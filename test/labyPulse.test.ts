@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { animationsSkipped, generateDungeon, pulseRoomOf } from '@/lib/dungeonCrawl';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { animationsSkipped, generateDungeon, lootFxSkipped, pulseRoomOf } from '@/lib/dungeonCrawl';
 
 describe('🫧 pulseRoomOf — l’effet d’une salle ne survit pas à son étage', () => {
   const dungeon = generateDungeon(7, 3);
@@ -33,5 +35,37 @@ describe('⏭️ animationsSkipped', () => {
   it('ne saute jamais à la main, ni si le joueur ne l’a pas demandé', () => {
     expect(animationsSkipped(true, false, false)).toBe(false);
     expect(animationsSkipped(false, true, true)).toBe(false);
+  });
+});
+
+describe('🎁 lootFxSkipped — en série, plus d’animation de coffre ni de butin', () => {
+  it('saute TOUJOURS en série, réglage « sauter » posé ou non', () => {
+    expect(lootFxSkipped(false, false, true)).toBe(true);
+    expect(lootFxSkipped(false, true, true)).toBe(true);
+    expect(lootFxSkipped(true, true, true)).toBe(true);
+  });
+  it('hors série : comme animationsSkipped (jamais à la main, auto seulement si demandé)', () => {
+    expect(lootFxSkipped(false, false, false)).toBe(false);
+    expect(lootFxSkipped(true, false, false)).toBe(false);
+    expect(lootFxSkipped(false, true, false)).toBe(false);
+    expect(lootFxSkipped(true, true, false)).toBe(true);
+  });
+});
+
+describe('🎁 ExpeditionPage — chaque animation de coffre/butin passe par lootFxSkipped', () => {
+  const src = readFileSync(resolve(__dirname, '../src/pages/ExpeditionPage.vue'), 'utf8');
+  it('pulse (coffre/piège/salle secrète), rebond du 🎒 et éclats « drop »/« familier »', () => {
+    const body = (name: string) => {
+      const i = src.indexOf(name);
+      expect(i).toBeGreaterThan(-1);
+      return src.slice(i, i + 400);
+    };
+    expect(body('function pulse(')).toContain('lootFxOff.value');
+    expect(body('function bumpLoot(')).toContain('lootFxOff.value');
+    expect(body("kind: 'drop'")).toBeTruthy();
+    // chaque celebrate() du Labyrinthe est précédé d'un garde lootFxOff
+    const calls = [...src.matchAll(/gameFx\.celebrate\(/g)].map((m) => m.index!);
+    expect(calls.length).toBe(2);
+    for (const c of calls) expect(src.slice(c - 60, c)).toContain('!lootFxOff.value');
   });
 });
