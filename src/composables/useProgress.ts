@@ -196,7 +196,7 @@ export function useProgress() {
   // Boss entre amis : ses reps (et la prime de complétion) nourrissent la muscu, ou le
   // cardio pour un boss de conditionnement — comme les challenges du même exo.
   const bossXp = computed(() =>
-    friendBossXp(friendBoss.bosses, friendBoss.members, auth.user?.id ?? ''),
+    friendBossXp(friendBoss.bosses, friendBoss.members, auth.user?.id ?? '', friendBoss.hits),
   );
   const muscuTotal = computed(
     () => muscuXp.value + muscuChallengeXp.value + comboXp.value + bossXp.value.muscu,

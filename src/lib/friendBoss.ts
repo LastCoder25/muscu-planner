@@ -112,6 +112,15 @@ export const FRIEND_BOSS = {
    *  l'utilisateur) : un ami qui ne joue pas du tout ne peut pas empêcher la mort du boss.
    *  Doit rester égal à `fboss_hit` (migr. 0092 : `interval '6 days'`). */
   reserveReleaseMs: 1 * DAY,
+  /** 🎯 BOSS À PLUSIEURS EXERCICES (v1.320.0). Les parts de famille ramenées à la POUSSÉE : une
+   *  rep de tirage (part 30) vaut 2 reps de poussée (60), une rep de jambes (80) 0,75, une seconde
+   *  de gainage (300) 0,2. Le serveur compte en « points » = 1/20 de rep de poussée, pour rester en
+   *  ENTIERS sans jamais arrondir une frappe (0,75 et 0,2 ne le sont pas, et un arrondi par frappe
+   *  se farme). Doit rester égal à `fboss_mixed_scale` (migr. 0118). */
+  mixedScale: 20,
+  /** Nombre d'exercices d'un boss à choix : de 2 à 5 (un boss d'un exo reste un boss d'un exo). */
+  minExercises: 2,
+  maxExercises: 5,
 } as const;
 
 /** 🎚️ LES CRANS DE DIFFICULTÉ (v0.904 ; demandés par l'utilisateur : « des crans avec des
@@ -239,13 +248,29 @@ export function isBossExercise(ex: {
   return (ex.equipment_required ?? []).every((e) => e === 'pullup_bar');
 }
 
+/** 🎯 Un exercice d'un boss, figé à la déclaration (liste de 2 à 5 pour un boss à choix). */
+export interface BossExercise {
+  id: string;
+  name: string;
+  /** Famille RÉELLE de l'exo : elle fixe son poids en équivalent poussée et sa piste d'XP. */
+  family: BossFamily;
+  /** Poids de rep de l'exo : il ne touche que l'XP. */
+  repWeight: number;
+}
+
 /** Un boss tel qu'on le lit en base (dates en ms). */
 export interface FriendBoss {
   id: string;
   ownerId: string;
+  /** Famille qui fixe la PART de PV. ⚠️ Pour un boss à plusieurs exercices c'est toujours
+   *  'push' (la monnaie du boss : l'équivalent poussée) ; la vraie famille de chaque exo est
+   *  dans `exercises`. */
   family: BossFamily;
   exerciseId: string;
   exerciseName: string;
+  /** 🎯 Les exercices du boss (2 à 5), choisis à chaque frappe. ABSENT = boss d'un seul exo
+   *  (`exerciseId` / `family`), comportement d'avant. Cf. `bossExercises`. */
+  exercises?: BossExercise[] | null;
   /** 🐉 Son NOM (« Gorgath l’Insatiable »), tiré par la base à la création (migr. 0108) :
    *  tout le groupe et les notifications lisent le même. Absent sur une ligne d’avant :
    *  `bossTitle` retombe sur l’exercice. */
@@ -271,6 +296,8 @@ export interface FriendBossMember {
   userId: string;
   pseudo: string;
   status: BossMemberStatus;
+  /** Reps apportées. ⚠️ Boss à plusieurs exercices : l'ÉQUIVALENT POUSSÉE exact (points ÷ 20,
+   *  par exemple 12,75) — la monnaie commune de la part, de la réserve et du coffre. */
   units: number;
   /** Coffre perso pris (côté serveur). */
   claimed: boolean;
@@ -288,11 +315,16 @@ export interface FriendBossHit {
   id: string;
   bossId: string;
   userId: string;
-  /** Toutes les reps de la saisie — elles paient toutes leur XP. */
+  /** Toutes les reps de la saisie — elles paient toutes leur XP. ⚠️ Boss à plusieurs exercices :
+   *  en ÉQUIVALENT POUSSÉE exact (points ÷ 20) ; la quantité brute est dans `qty`. */
   units: number;
   /** 🤝 Celles qui n'ont PAS fait de dégâts (parts réservées aux amis, ou au-delà de la mort
-   *  du boss). Absent sur les frappes d'avant la v0.1206 : 0. */
+   *  du boss), dans la même monnaie que `units`. Absent sur les frappes d'avant la v0.1206 : 0. */
   surplus?: number;
+  /** 🎯 L'exercice CHOISI pour cette frappe, et la quantité brute saisie (reps, ou secondes —
+   *  bonus de temps compris). Absents sur un boss d'un exo : c'est celui du boss, et `units`. */
+  exerciseId?: string | null;
+  qty?: number | null;
   createdAt: number;
 }
 
@@ -302,6 +334,88 @@ export const hitDamageUnits = (h: Pick<FriendBossHit, 'units' | 'surplus'>): num
 
 const ms = (iso: string | null | undefined): number | null =>
   iso ? Date.parse(iso) || null : null;
+
+// ── 🎯 Boss à plusieurs exercices ────────────────────────────────────────────────────
+//
+// Un boss a de 2 à 5 exercices ; à CHAQUE frappe on choisit librement lequel. Tout se convertit
+// en ÉQUIVALENT POUSSÉE grâce aux parts de famille déjà en place : une rep de tirage (part 30)
+// = 2 reps de poussée (60), une rep de jambes (80) = 0,75, une seconde de gainage (300) = 0,2.
+// Les PV valent donc ceux d'un boss de poussée du même cran, et « l'unité » du boss (part,
+// plafond, réserve, coffre, XP de prime) est la rep de poussée — qui peut être fractionnaire
+// (12,75). Un boss d'UN exo n'est pas concerné : rien ne change pour lui.
+//
+// ⚠️ Le serveur compte en POINTS entiers (1/20 de rep de poussée, `mixedScale`) : aucun arrondi
+// par frappe, donc rien à farmer en découpant ses séries. Le client les lit divisés par 20.
+
+/** Points (1/20 de rep de poussée) d'UNE unité (rep, ou seconde de gainage) d'une famille :
+ *  1200 ÷ sa part — poussée 20 · jambes 15 · tirage 40 · gainage 4 · conditionnement 20. Entier
+ *  pour les cinq familles (un test l'exige). Doit rester égal à `fboss_mixed_weight`. */
+export function mixedWeight(family: BossFamily): number {
+  return (FRIEND_BOSS.mixedScale * FRIEND_BOSS.shareUnits.push) / FRIEND_BOSS.shareUnits[family];
+}
+
+/** Équivalent poussée d'UNE unité d'un exo de cette famille (1 · 2 · 0,75 · 0,2 · 1) — pour
+ *  l'AFFICHAGE : le calcul reste en points entiers. */
+export const eqPerUnit = (family: BossFamily): number =>
+  mixedWeight(family) / FRIEND_BOSS.mixedScale;
+
+/** Les exercices d'un boss : sa liste (2 à 5), sinon son unique exo. */
+export function bossExercises(
+  b: Pick<FriendBoss, 'exerciseId' | 'exerciseName' | 'family' | 'repWeight' | 'exercises'>,
+): BossExercise[] {
+  if (b.exercises && b.exercises.length >= FRIEND_BOSS.minExercises) return b.exercises;
+  return [{ id: b.exerciseId, name: b.exerciseName, family: b.family, repWeight: b.repWeight }];
+}
+
+/** Le boss a-t-il plusieurs exercices au choix ? */
+export const isMixedBoss = (b: Pick<FriendBoss, 'exercises'>): boolean =>
+  (b.exercises?.length ?? 0) >= FRIEND_BOSS.minExercises;
+
+/** Les ids d'exercice qu'un boss OCCUPE (règle « un seul boss en cours par exercice »). */
+export const bossExerciseIds = (
+  b: Pick<FriendBoss, 'exerciseId' | 'exercises'>,
+): readonly string[] => (isMixedBoss(b) ? b.exercises!.map((e) => e.id) : [b.exerciseId]);
+
+/** L'exercice d'une frappe : celui qu'elle porte, sinon le premier du boss (frappe d'avant, ou
+ *  d'un ancien client). */
+export function hitExercise(
+  b: Pick<FriendBoss, 'exerciseId' | 'exerciseName' | 'family' | 'repWeight' | 'exercises'>,
+  h: Pick<FriendBossHit, 'exerciseId'>,
+): BossExercise {
+  const list = bossExercises(b);
+  return list.find((e) => e.id === h.exerciseId) ?? list[0]!;
+}
+
+/** Reps d'une ligne de base : les POINTS d'un boss à plusieurs exercices (1/20 de rep de poussée)
+ *  ramenés en équivalent poussée, sinon la valeur d'avant — boss d'un exo, ligne d'avant, base pas
+ *  encore migrée. ⚠️ `units` n'est, sur un boss à choix, que l'arrondi lu par les anciens clients :
+ *  le compte EXACT est `points`. */
+export const unitsFromRow = (points: number | null | undefined, units: number): number =>
+  points == null ? units : points / FRIEND_BOSS.mixedScale;
+
+/** Quantité BRUTE d'une frappe (reps, ou secondes — bonus de temps compris). */
+export const hitQty = (h: Pick<FriendBossHit, 'units' | 'qty'>): number => h.qty ?? h.units;
+
+/** Relit défensivement la liste `friend_bosses.exercises` (JSON écrit par le serveur) : null si
+ *  ce n'est pas une liste d'au moins 2 exercices valides. */
+export function parseBossExercises(raw: unknown): BossExercise[] | null {
+  if (!Array.isArray(raw)) return null;
+  const families = Object.keys(FRIEND_BOSS.shareUnits);
+  const out: BossExercise[] = [];
+  for (const e of raw) {
+    if (!e || typeof e !== 'object') continue;
+    const r = e as Record<string, unknown>;
+    if (typeof r.id !== 'string' || typeof r.family !== 'string' || !families.includes(r.family))
+      continue;
+    out.push({
+      id: r.id,
+      name: typeof r.name === 'string' ? r.name : r.id,
+      family: r.family as BossFamily,
+      repWeight: Number(r.rep_weight ?? 1) || 1,
+    });
+  }
+  return out.length >= FRIEND_BOSS.minExercises ? out : null;
+}
 
 /** Ligne `friend_bosses` → boss (dates en ms). Un poids de rep absent vaut 1. */
 export function bossFromRow(r: {
@@ -318,13 +432,16 @@ export function bossFromRow(r: {
   defeated_at: string | null;
   hp_total: number;
   damage: number;
+  exercises?: unknown;
 }): FriendBoss {
+  const exercises = parseBossExercises(r.exercises);
   return {
     id: r.id,
     ownerId: r.owner_id,
     family: r.family as BossFamily,
     exerciseId: r.exercise_id,
     exerciseName: r.exercise_name,
+    ...(exercises ? { exercises } : {}),
     name: r.name ?? null,
     repWeight: Number(r.rep_weight ?? 1) || 1,
     tier: r.tier ?? null,
@@ -349,6 +466,9 @@ export function friendBossXp(
   bosses: readonly FriendBoss[],
   members: readonly FriendBossMember[],
   userId: string,
+  /** ⚠️ REQUIS : un boss à plusieurs exercices se paie frappe par frappe (la famille, le poids et
+   *  la piste d'XP sont ceux de l'exo choisi) — sans les frappes il rendrait 0 XP en silence. */
+  hits: readonly FriendBossHit[],
 ): { muscu: number; cardio: number } {
   const out = { muscu: 0, cardio: 0 };
   const byId = new Map(bosses.map((b) => [b.id, b]));
@@ -356,11 +476,40 @@ export function friendBossXp(
     if (m.userId !== userId || m.status !== 'accepted' || m.units <= 0) continue;
     const b = byId.get(m.bossId);
     if (!b) continue;
+    if (isMixedBoss(b)) {
+      mixedBossXp(b, m, hits, out);
+      continue;
+    }
     out[bossXpTrack(b.family)] +=
       bossRepsXp(b.family, m.units, b.repWeight) +
       bossCompletionXp(b.family, m.units, b.repWeight, b.defeatedAt != null, b.tier);
   }
   return out;
+}
+
+/** 🎯 XP d'un membre sur un boss à plusieurs exercices, ajoutée à `out`. Ses reps : celles de
+ *  CHAQUE frappe, à la famille, au poids et à la piste de l'exo choisi (un burpee nourrit le cardio,
+ *  des pompes la muscu). La prime de complétion suit la règle d'un boss d'un exo (boss mort ET
+ *  part minimale), plafonnée à 2 parts d'équivalent poussée : elle s'applique à la part des reps
+ *  qui tient dans ce plafond, sur chaque piste. */
+function mixedBossXp(
+  b: FriendBoss,
+  m: FriendBossMember,
+  hits: readonly FriendBossHit[],
+  out: { muscu: number; cardio: number },
+) {
+  const raw = { muscu: 0, cardio: 0 };
+  for (const h of hits) {
+    if (h.bossId !== b.id || h.userId !== m.userId) continue;
+    const ex = hitExercise(b, h);
+    raw[bossXpTrack(ex.family)] += repsXpRaw(ex.family, hitQty(h), ex.repWeight);
+  }
+  const done = b.defeatedAt != null && metMinShare(b.family, m.units, b.tier);
+  const kept = done
+    ? Math.min(1, (bossShareUnits(b.family, b.tier) * FRIEND_BOSS.bonusCapShares) / m.units)
+    : 0;
+  for (const t of ['muscu', 'cardio'] as const)
+    out[t] += Math.round(raw[t] * XP_MULT * (1 + kept * FRIEND_BOSS.bonusPct));
 }
 
 /** Libellé français d'un refus du serveur (codes levés par la migration 0067). */
@@ -380,6 +529,8 @@ export function bossErrorMessage(code: string): string {
     capped: 'Plafond atteint : reviens plus tard pour frapper encore.',
     no_character: 'Crée d’abord ton aventurier dans l’Aventure.',
     no_altar: 'Construis l’Autel des boss dans ta base pour lancer un boss.',
+    // ⚠️ `bad_exercises` AVANT `bad_exercise` : la recherche se fait par sous-chaîne, le premier gagne.
+    bad_exercises: 'Un boss à choix a de 2 à 5 exercices, tous différents.',
     bad_exercise: 'Cet exercice ne peut pas servir de boss.',
     bad_tier: 'Cette difficulté n’existe pas — recharge la page.',
     not_owner: 'Seul le lanceur peut annuler ce boss.',
@@ -442,14 +593,23 @@ export function bossHpTotal(
   return bossDamage(bossShareUnits(family, tier) * Math.max(1, Math.floor(participants)));
 }
 
-/** Dégâts infligés par des reps (ou des secondes de gainage). */
+/** Dégâts infligés par des reps (ou des secondes de gainage). ⚠️ Un boss à plusieurs exercices
+ *  compte en équivalent poussée FRACTIONNAIRE (12,75 → 12 750) : arrondi, jamais tronqué. Pour
+ *  des reps entières, c'est exactement ce que c'était. */
 export function bossDamage(units: number): number {
-  return Math.max(0, Math.floor(units)) * FRIEND_BOSS.damagePerUnit;
+  return Math.round(Math.max(0, units) * FRIEND_BOSS.damagePerUnit);
 }
 
 /** Reps qu'il reste à faire pour abattre le boss (arrondi au-dessus, comme `fboss_hit`). */
 export function bossUnitsLeft(b: Pick<FriendBoss, 'hpTotal' | 'damage'>): number {
   return Math.ceil(Math.max(0, b.hpTotal - b.damage) / FRIEND_BOSS.damagePerUnit);
+}
+
+/** 🎯 Même chose pour un boss à plusieurs exercices : l'équivalent poussée restant, au point
+ *  (1/20) près — comme `fboss_hit_exo`, qui compte en points de 50 dégâts. */
+export function bossUnitsLeftExact(b: Pick<FriendBoss, 'hpTotal' | 'damage'>): number {
+  const pointDamage = FRIEND_BOSS.damagePerUnit / FRIEND_BOSS.mixedScale;
+  return Math.ceil(Math.max(0, b.hpTotal - b.damage) / pointDamage) / FRIEND_BOSS.mixedScale;
 }
 
 // ── Scène de combat ───────────────────────────────────────────────────────────────
@@ -726,19 +886,28 @@ export function bossTokenCost(tier: string | null | undefined): number {
 }
 
 type BossTimes = Pick<FriendBoss, 'createdAt' | 'startAt' | 'defeatedAt'>;
-type MyBoss = Pick<FriendBoss, 'exerciseId' | 'createdAt' | 'startAt' | 'defeatedAt'>;
+type MyBoss = Pick<FriendBoss, 'exerciseId' | 'createdAt' | 'startAt' | 'defeatedAt'> &
+  Partial<Pick<FriendBoss, 'exercises'>>;
 
-const sameExerciseBusy = (mine: readonly MyBoss[], exerciseId: string, now: number) =>
-  mine.some((b) => bossInProgress(b, now) && b.exerciseId === exerciseId);
+/** Exercice(s) du boss qu'on veut lancer ou rejoindre : `exerciseIds` (boss à choix) ou
+ *  `exerciseId` (un seul exo, comme avant). */
+type WantedExercises = { exerciseId: string } | { exerciseIds: readonly string[] };
+const wantedIds = (o: WantedExercises): readonly string[] =>
+  'exerciseIds' in o ? o.exerciseIds : [o.exerciseId];
+
+/** 🎯 Un boss EN COURS occupe TOUS ses exercices : tout chevauchement avec ceux qu'on veut
+ *  engager le bloque (même règle que `fboss_ids_busy`, migr. 0118). Boss d'un exo : inchangé. */
+const sameExerciseBusy = (mine: readonly MyBoss[], ids: readonly string[], now: number) =>
+  mine.some((b) => bossInProgress(b, now) && bossExerciseIds(b).some((id) => ids.includes(id)));
 
 /** Pourquoi on ne peut pas REJOINDRE ce boss (null = on peut). Même règle que
  *  `fboss_respond` : gratuit, mais un seul boss en cours par exercice (sinon une même série
  *  frapperait deux boss). */
 export function bossJoinBlocker(
-  opts: { exerciseId: string; mine: readonly MyBoss[] },
+  opts: { mine: readonly MyBoss[] } & WantedExercises,
   now: number,
 ): 'same_exercise' | null {
-  return sameExerciseBusy(opts.mine, opts.exerciseId, now) ? 'same_exercise' : null;
+  return sameExerciseBusy(opts.mine, wantedIds(opts), now) ? 'same_exercise' : null;
 }
 
 /** Instant où le LANCEUR pourra déclarer à nouveau (null = tout de suite) : 48 h après la
@@ -754,14 +923,13 @@ export function bossLaunchBlocker(
   opts: {
     tokens: number;
     tier: string | null | undefined;
-    exerciseId: string;
     mine: readonly MyBoss[];
     /** Les boss que j'ai lancés (pour le délai). */
     owned: readonly BossTimes[];
-  },
+  } & WantedExercises,
   now: number,
 ): 'same_exercise' | 'cooldown' | 'no_tokens' | null {
-  if (sameExerciseBusy(opts.mine, opts.exerciseId, now)) return 'same_exercise';
+  if (sameExerciseBusy(opts.mine, wantedIds(opts), now)) return 'same_exercise';
   const next = nextDeclareAt(opts.owned);
   if (next != null && now < next) return 'cooldown';
   if (opts.tokens < bossTokenCost(opts.tier)) return 'no_tokens';
@@ -889,6 +1057,37 @@ export function splitHit(
   return { accepted, damage, surplus: accepted - damage };
 }
 
+/** 🎯 La même règle pour UN exo d'un boss à plusieurs exercices — la règle exacte de
+ *  `fboss_hit_exo`. Tout se calcule en POINTS entiers (1/20 de rep de poussée) :
+ *   · plafond d'une saisie : 2,5 parts en points, ramené en quantité de l'exo choisi
+ *     (au cran Sérieux : pompes 150, tractions 75, jambes 200, gainage 750 s) ;
+ *   · `unitsLeft` et `reserved` sont en équivalent poussée (la monnaie du boss), lus au point près ;
+ *   · le reste devient du surplus, comme `splitHit`.
+ *  Rend `accepted` = la quantité retenue de l'exo ; `damage`, `surplus` et `units` en équivalent
+ *  poussée (points ÷ 20). */
+export function splitHitMixed(
+  exFamily: BossFamily,
+  asked: number,
+  unitsLeft: number,
+  reserved: number,
+  tier?: string | null,
+): { accepted: number; damage: number; surplus: number; units: number } {
+  const scale = FRIEND_BOSS.mixedScale;
+  const w = mixedWeight(exFamily);
+  const sharePts = bossShareUnits('push', tier) * scale;
+  const capQty = Math.floor(Math.floor(sharePts * FRIEND_BOSS.hitMaxShare) / w);
+  const accepted = Math.max(0, Math.min(Math.floor(asked), capQty));
+  const pts = accepted * w;
+  const freePts = Math.max(0, Math.round(unitsLeft * scale) - Math.round(reserved * scale));
+  const dmgPts = Math.min(pts, freePts);
+  return {
+    accepted,
+    damage: dmgPts / scale,
+    surplus: (pts - dmgPts) / scale,
+    units: pts / scale,
+  };
+}
+
 /** 🎁 Parts apportées AU-DELÀ de la sienne (0 si on n'a pas dépassé sa part). */
 export function surplusShares(family: BossFamily, units: number, tier?: string | null): number {
   const share = bossShareUnits(family, tier);
@@ -903,10 +1102,15 @@ export function metMinShare(family: BossFamily, units: number, tier?: string | n
 /** XP de ses reps sur un boss — même barème que les challenges (`challenges.effortXpRaw`) :
  *  une rep × REP_XP × poids de rep, une seconde de gainage vaut ¼ de rep. */
 export function bossRepsXp(family: BossFamily, units: number, repWeight: number): number {
-  const u = Math.max(0, units);
-  const raw = family === 'core' ? (u / 4) * REP_XP : u * REP_XP * repWeight;
-  return Math.round(raw * XP_MULT);
+  return Math.round(repsXpRaw(family, units, repWeight) * XP_MULT);
 }
+
+/** XP des reps AVANT multiplicateur ni arrondi : un boss à plusieurs exercices additionne celles
+ *  de toutes ses frappes puis arrondit UNE fois (une seconde de gainage seule arrondirait à 0). */
+const repsXpRaw = (family: BossFamily, units: number, repWeight: number): number => {
+  const u = Math.max(0, units);
+  return family === 'core' ? (u / 4) * REP_XP : u * REP_XP * repWeight;
+};
 
 /** Le tableau des frappes d'un boss : une ligne par participant, une colonne par JOUR DU
  *  COMBAT (J1 → J7), et dans chaque case ses reps (ou secondes) de ce jour.
@@ -1028,26 +1232,31 @@ export function bossAgendaEntries(
   );
   for (const b of bosses) {
     if (!accepted.has(b.id)) continue;
-    const byDay = new Map<string, number[]>();
+    // 🎯 Une ligne par (jour, EXERCICE de la frappe) : sur un boss à plusieurs exercices, la
+    // famille, l'unité et le muscle sont ceux de l'exo CHOISI, pas ceux du boss. Boss d'un exo :
+    // un seul exo, donc exactement une ligne par jour comme avant.
+    const byDay = new Map<string, { ex: BossExercise; units: number[] }>();
     for (const h of hits) {
       if (h.bossId !== b.id || h.userId !== userId || h.units <= 0) continue;
-      const day = dayKey(h.createdAt);
-      const list = byDay.get(day);
-      if (list) list.push(h.units);
-      else byDay.set(day, [h.units]);
+      const ex = hitExercise(b, h);
+      const key = `${dayKey(h.createdAt)}\u0000${ex.id}`;
+      const qty = hitQty(h);
+      const entry = byDay.get(key);
+      if (entry) entry.units.push(qty);
+      else byDay.set(key, { ex, units: [qty] });
     }
-    for (const [day, units] of byDay) {
+    for (const [key, { ex, units }] of byDay) {
       const total = units.reduce((a, u) => a + u, 0);
       out.push({
         bossId: b.id,
-        exerciseId: b.exerciseId,
-        family: b.family,
-        day,
-        title: b.exerciseName,
+        exerciseId: ex.id,
+        family: ex.family,
+        day: key.slice(0, key.indexOf('\u0000')),
+        title: ex.name,
         units,
         total,
-        xp: bossRepsXp(b.family, total, b.repWeight),
-        unit: bossUnitLabel(b.family),
+        xp: bossRepsXp(ex.family, total, ex.repWeight),
+        unit: bossUnitLabel(ex.family),
       });
     }
   }

@@ -22,14 +22,20 @@
       <section v-for="b in invitations" :key="'inv-' + b.id" class="fb-card invite">
         <div class="fb-inv-t">
           <b>{{ ownerPseudo(b) }}</b> t’invite à abattre <b>{{ bossTitle(b) }}</b>
-          <span class="fb-dim">· {{ b.exerciseName }}</span>
+          <span v-if="!isMixedBoss(b)" class="fb-dim">· {{ b.exerciseName }}</span>
         </div>
         <div class="fb-inv-s">
-          {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
-          {{ BOSS_FAMILY_LABEL[b.family].emoji }} ta part :
+          {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} · {{ famEmoji(b) }} ta part :
           {{ bossShareUnits(b.family, b.tier) }}
-          {{ bossUnitLabel(b.family) }} sur 7 jours · réponds dans
+          {{ unitLabelOf(b) }} sur 7 jours · réponds dans
           {{ fmtBossSpan(bossStartAt(b) - now) }}
+        </div>
+        <!-- 🎯 Un boss à choix : les exercices en pastilles, et ce que vaut chacun. -->
+        <div v-if="isMixedBoss(b)" class="fb-chips" aria-label="Exercices du boss">
+          <span v-for="e in bossExercises(b)" :key="e.id" class="fb-chip">
+            {{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}
+            <small>{{ eqLabel(e.family) }}</small>
+          </span>
         </div>
         <div class="fb-inv-s">
           🎁 Coffre ×{{ tierRewardMult(bossTier(b.tier)).toFixed(1) }} + trophée<template
@@ -84,14 +90,23 @@
             {{ unitSingular }} = {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts</span
           >
         </div>
+        <div
+          v-if="isMixed && !(phase === 'active' && isMember)"
+          class="fb-chips"
+          aria-label="Exercices du boss"
+        >
+          <span v-for="e in hitExoList" :key="e.id" class="fb-chip">
+            {{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}
+          </span>
+        </div>
 
         <FriendBossStage
           ref="stage"
           :boss-name="bossTitle(current)"
           :boss-emoji="bossEmoji(current.id)"
           :boss-art="friendBossArt(current.id)"
-          :family-emoji="BOSS_FAMILY_LABEL[current.family].emoji"
-          :family-name="BOSS_FAMILY_LABEL[current.family].name"
+          :family-emoji="famEmoji(current)"
+          :family-name="isMixed ? 'Mixte' : BOSS_FAMILY_LABEL[current.family].name"
           :family="current.family"
           :hp-total="current.hpTotal"
           :hp-left="hpLeft"
@@ -102,6 +117,28 @@
 
         <!-- Frapper : ce que le serveur acceptera est annoncé AVANT l'envoi. -->
         <div v-if="phase === 'active' && isMember" class="fb-hit">
+          <!-- 🎯 BOSS À CHOIX : à CHAQUE frappe on choisit librement l'exercice. Le champ, l'unité,
+               le plafond et le chrono suivent celui qui est touché. Verrouillé pendant un chrono. -->
+          <div
+            v-if="isMixed"
+            class="fb-pickex"
+            role="radiogroup"
+            aria-label="Exercice de la frappe"
+          >
+            <button
+              v-for="e in hitExoList"
+              :key="e.id"
+              class="fb-pickex-b"
+              :class="{ on: hitExo?.id === e.id }"
+              role="radio"
+              :aria-checked="hitExo?.id === e.id"
+              :disabled="busy || holdT.running.value"
+              @click="chooseHitExo(e.id)"
+            >
+              <span class="fb-pickex-n">{{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}</span>
+              <span class="fb-pickex-v">{{ eqLabel(e.family) }}</span>
+            </button>
+          </div>
           <!-- ⏱️ CHRONO (exo en secondes) : on tient, la scène encaisse en continu ; au-delà de 30 s
                chaque tranche de 15 s est majorée. « Terminer » ne fait que PRÉ-REMPLIR la saisie :
                c'est le flux habituel (« Frapper ») qui envoie. -->
@@ -157,7 +194,7 @@
                   <div class="fb-hold-dmg">
                     <div class="fb-dmg-l">
                       <span :key="Math.floor(holdT.seconds.value)" class="fb-dmg font-display">{{
-                        fmtBossPv(bossDamage(holdT.effective.value))
+                        fmtBossPv(dmgOfQty(holdT.effective.value))
                       }}</span>
                       <span class="fb-dmg-u">dégâts</span>
                     </div>
@@ -176,15 +213,13 @@
               <input
                 v-model.number="amount"
                 class="fb-input font-display"
-                :class="{ unit: bossUnitLabel(current.family) === 's' }"
+                :class="{ unit: hitUnit === 's' }"
                 type="number"
                 inputmode="numeric"
                 min="1"
-                :aria-label="'Nombre de ' + bossUnitLabel(current.family)"
+                :aria-label="'Nombre de ' + hitUnit"
               />
-              <span v-if="bossUnitLabel(current.family) === 's'" class="fb-in-u" aria-hidden="true"
-                >s</span
-              >
+              <span v-if="hitUnit === 's'" class="fb-in-u" aria-hidden="true">s</span>
             </span>
             <button class="fb-step" aria-label="Plus" @click="step(1)">＋</button>
             <button
@@ -209,14 +244,17 @@
               Seulement <b>{{ split.accepted }}</b> compteront (≤ {{ perHit }} par saisie).
             </template>
             <template v-else>
-              ≤ {{ perHit }} {{ bossUnitLabel(current.family) }} par saisie · pas de plafond par
-              jour
+              ≤ {{ perHit }} {{ hitUnit }} par saisie · pas de plafond par jour
+            </template>
+            <template v-if="isMixed && split.accepted > 0">
+              · {{ split.accepted }} {{ hitUnit }} = <b>{{ fmtEq(split.units) }} éq. pompes</b>
             </template>
           </div>
           <!-- 🤝 LA PART RÉSERVÉE, dite AVANT la frappe : sinon des reps qui n'entament pas le
                boss se liraient comme un bug. Et on dit ce qu'elles rapportent quand même. -->
           <div v-if="split.surplus > 0" class="fb-hint fb-surplus">
-            🤝 <b>{{ split.surplus }}</b> {{ bossUnitLabel(current.family) }} en <b>surplus</b> :
+            🤝 <b>{{ fmtEq(split.surplus) }}</b> {{ isMixed ? 'éq. pompes' : hitUnit }} en
+            <b>surplus</b> :
             <template v-if="reserved > 0"
               >les derniers PV sont gardés pour {{ waitingNames }}, qui n’{{
                 waitingCount > 1 ? 'ont' : 'a'
@@ -244,7 +282,7 @@
             <span
               class="fb-m-u"
               :class="{ ok: metMinShare(current.family, m.units, current.tier) }"
-              >{{ m.units }}</span
+              >{{ fmtEq(m.units) }}</span
             >
           </template>
           <span v-else class="fb-m-st">{{ m.status === 'invited' ? 'invité' : 'a refusé' }}</span>
@@ -266,11 +304,12 @@
           </div>
         </div>
         <p class="fb-hint">
-          Ton coffre suit <b>tes</b> {{ bossUnitLabel(current.family) }}, que le boss tombe ou non :
-          il s’ouvre dès que ta part est faite, sinon à la fin du combat. S’il tombe, chacun de ceux
-          qui ont fait leur demi-part reçoit en plus un <b>bonus de groupe</b> — plus gros s’il
-          tombe tôt, et plus gros encore pour qui a fait plus que sa part et couvert un ami (jusqu’à
-          +{{ pct(FRIEND_BOSS_CHEST.helpMax) }} d’un coffre).
+          Ton coffre suit <b>tes</b> {{ isMixed ? 'éq. pompes' : unitLabelOf(current) }}, que le
+          boss tombe ou non : il s’ouvre dès que ta part est faite, sinon à la fin du combat. S’il
+          tombe, chacun de ceux qui ont fait leur demi-part reçoit en plus un
+          <b>bonus de groupe</b> — plus gros s’il tombe tôt, et plus gros encore pour qui a fait
+          plus que sa part et couvert un ami (jusqu’à +{{ pct(FRIEND_BOSS_CHEST.helpMax) }} d’un
+          coffre).
         </p>
         <button
           v-if="chestOf(current) !== 'none'"
@@ -292,7 +331,7 @@
              peu de couleur, le moins de place possible. -->
         <div v-if="hitGrid && hitGrid.rows.length" class="fb-grid-box">
           <div class="fb-grid-t">
-            📅 Frappes <span class="fb-dim">· {{ bossUnitLabel(current.family) }} par jour</span>
+            📅 Frappes <span class="fb-dim">· {{ unitLabelOf(current) }} par jour</span>
           </div>
           <table class="fb-grid">
             <thead>
@@ -323,22 +362,39 @@
                   ]"
                   :title="r.surplus[d.index] ? 'Une partie en surplus 🤝' : undefined"
                 >
-                  {{ r.cells[d.index] || (d.state === 'future' ? '' : '·') }}
+                  {{ cellText(r.cells[d.index] ?? 0, d.state) }}
                 </td>
-                <td class="fb-g-tot">{{ r.total }}</td>
+                <td class="fb-g-tot">{{ fmtEq(r.total) }}</td>
               </tr>
             </tbody>
             <tfoot v-if="hitGrid.rows.length > 1">
               <tr>
                 <!-- Plus de total par jour (demandé) : seul le total du groupe reste, sous Σ. -->
                 <th class="fb-g-name" scope="row" :colspan="hitGrid.days.length + 1">Groupe</th>
-                <td class="fb-g-tot">{{ hitGrid.total }}</td>
+                <td class="fb-g-tot">{{ fmtEq(hitGrid.total) }}</td>
               </tr>
             </tfoot>
           </table>
           <p v-if="hitGrid.rows.some((r) => r.surplus.some(Boolean))" class="fb-grid-note">
             Souligné : une partie des reps est partie en surplus 🤝 (elles comptent quand même).
           </p>
+        </div>
+
+        <!-- 🎯 L'historique d'un boss à choix : qui a frappé avec QUEL exercice (la grille ne dit
+             que des totaux par jour). -->
+        <div v-if="isMixed && lastHits.length" class="fb-grid-box">
+          <div class="fb-grid-t">⚔️ Dernières frappes</div>
+          <ul class="fb-hist">
+            <li v-for="h in lastHits" :key="h.id">
+              <b>{{ h.pseudo }}</b> · {{ h.exName }} · {{ h.qty }} {{ h.unit }}
+              <span class="fb-dim"
+                >= {{ fmtEq(h.eq) }} éq.<template v-if="h.surplus > 0">
+                  · 🤝 {{ fmtEq(h.surplus) }} en surplus</template
+                >
+                · il y a {{ h.ago }}</span
+              >
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -372,10 +428,27 @@
         </template>
         <template v-else>
           <p class="fb-hint">
-            Choisis un exercice au poids du corps et invite jusqu’à {{ FRIEND_BOSS.maxInvites }}
-            amis. Chaque participant ajoute sa part de PV ; une rep =
+            Choisis un exercice au poids du corps — ou <b>de 2 à {{ FRIEND_BOSS.maxExercises }}</b>
+            pour un boss à choix : à chaque frappe, chacun prend celui qu’il veut (une rep de tirage
+            vaut 2 pompes, une rep de jambes 0,75, une seconde de gainage 0,2). Invite jusqu’à
+            {{ FRIEND_BOSS.maxInvites }} amis. Chaque participant ajoute sa part de PV ; une pompe =
             {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts. 7 jours pour l’abattre.
           </p>
+          <!-- 🎯 Les exercices choisis, en pastilles (toucher pour retirer). -->
+          <div v-if="pickedList.length" class="fb-chips" aria-label="Exercices choisis">
+            <button
+              v-for="e in pickedList"
+              :key="e.id"
+              class="fb-chip rm"
+              :aria-label="'Retirer ' + e.name"
+              @click="toggleExo(e)"
+            >
+              {{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }} <span aria-hidden="true">✕</span>
+            </button>
+            <span class="fb-dim fb-chip-n"
+              >{{ pickedList.length }}/{{ FRIEND_BOSS.maxExercises }}</span
+            >
+          </div>
           <input
             v-model="exoQuery"
             class="fb-search"
@@ -388,15 +461,21 @@
               v-for="e in exoChoices"
               :key="e.id"
               class="fb-exo"
-              :class="{ on: pickedExo?.id === e.id }"
-              :disabled="takenExo.has(e.id)"
-              @click="pickedExo = e"
+              :class="{ on: isPicked(e.id) }"
+              :aria-pressed="isPicked(e.id)"
+              :disabled="
+                takenExo.has(e.id) ||
+                (!isPicked(e.id) && pickedList.length >= FRIEND_BOSS.maxExercises)
+              "
+              @click="toggleExo(e)"
             >
               <span>{{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}</span>
               <span class="fb-dim">{{
                 takenExo.has(e.id)
                   ? 'déjà un boss en cours'
-                  : `${bossShareUnits(e.family, pickedTier)} ${bossUnitLabel(e.family)}/pers.`
+                  : pickedList.length > 1 || (pickedList.length === 1 && !isPicked(e.id))
+                    ? eqLabel(e.family)
+                    : `${bossShareUnits(e.family, pickedTier)} ${bossUnitLabel(e.family)}/pers.`
               }}</span>
             </button>
           </div>
@@ -416,9 +495,7 @@
               <span class="fb-tier-e">{{ t.emoji }}</span>
               <span class="fb-tier-n">{{ t.label }}</span>
               <span class="fb-tier-v">{{
-                pickedExo
-                  ? `${bossShareUnits(pickedExo.family, t.id)} ${bossUnitLabel(pickedExo.family)}`
-                  : `×${t.mult}`
+                launchFamily ? `${bossShareUnits(launchFamily, t.id)} ${launchUnit}` : `×${t.mult}`
               }}</span>
               <span class="fb-tier-r">🎁 ×{{ tierRewardMult(t).toFixed(1) }}</span>
               <span class="fb-tier-r">{{ t.tickets ? `🎟️ ${t.tickets}` : '🎟️ —' }}</span>
@@ -429,10 +506,10 @@
           </div>
           <p class="fb-hint">
             La difficulté fixe le nombre de
-            {{ pickedExo ? bossUnitLabel(pickedExo.family) : 'reps' }} <b>par personne</b>. La
-            récompense monte <b>plus vite</b> que l’effort : un boss dur paie mieux que plusieurs
-            faciles, en or, en pierres et en chances sur le trophée. Chaque cran au-dessus de
-            l’Échauffement donne aussi des <b>🎟️ tickets d’invocation</b>.
+            {{ pickedExo ? launchUnit : 'reps' }} <b>par personne</b>. La récompense monte
+            <b>plus vite</b> que l’effort : un boss dur paie mieux que plusieurs faciles, en or, en
+            pierres et en chances sur le trophée. Chaque cran au-dessus de l’Échauffement donne
+            aussi des <b>🎟️ tickets d’invocation</b>.
           </p>
 
           <div class="fb-sec-t">Inviter ({{ invitees.size }}/{{ FRIEND_BOSS.maxInvites }})</div>
@@ -457,12 +534,12 @@
             :disabled="!pickedExo || busy || !!declareBlock"
             @click="doDeclare"
           >
-            <template v-if="pickedExo">
+            <template v-if="pickedExo && launchFamily">
               Lancer · {{ bossTokenCost(pickedTier) }} 🎫 ·
-              {{ fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier)) }} PV
+              {{ fmtBossPv(bossHpTotal(launchFamily, 1, pickedTier)) }} PV
               {{
                 invitees.size
-                  ? `(+${fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier))} par ami qui rejoint)`
+                  ? `(+${fmtBossPv(bossHpTotal(launchFamily, 1, pickedTier))} par ami qui rejoint)`
                   : ''
               }}
             </template>
@@ -485,8 +562,8 @@
             {{ bossTier(victory.tier).label }}
           </div>
           <div class="fb-v-line">
-            Tu as apporté <b>{{ store.myMembership(victory.id)?.units ?? 0 }}</b>
-            {{ bossUnitLabel(victory.family) }}
+            Tu as apporté <b>{{ fmtEq(store.myMembership(victory.id)?.units ?? 0) }}</b>
+            {{ unitLabelOf(victory) }}
           </div>
           <div v-if="victoryLoot" class="fb-v-loot">
             <div class="fb-v-loot-t">Ton butin</div>
@@ -540,7 +617,7 @@
             <span class="fb-dim">
               {{ b.exerciseName }} · {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
               {{ b.defeatedAt ? 'abattu' : 'a survécu' }} · tu as apporté
-              {{ store.myMembership(b.id)?.units ?? 0 }} {{ bossUnitLabel(b.family) }}
+              {{ fmtEq(store.myMembership(b.id)?.units ?? 0) }} {{ unitLabelOf(b) }}
             </span>
           </span>
           <button
@@ -598,6 +675,14 @@ import {
   bossTier,
   type BossTier,
   splitHit,
+  splitHitMixed,
+  bossUnitsLeftExact,
+  isMixedBoss,
+  bossExercises,
+  bossExerciseIds,
+  hitExercise,
+  hitQty,
+  eqPerUnit,
   bossReservedUnits,
   hitDamageUnits,
   minShareUnits,
@@ -687,12 +772,13 @@ const current = computed(
 const tokens = computed(() => char.row?.boss_tokens ?? 0);
 /** Même règle que `fboss_respond` : gratuit, un seul boss par exercice. */
 const inviteBlock = (b: FriendBoss) =>
-  bossJoinBlocker({ exerciseId: b.exerciseId, mine: running.value }, now.value);
+  bossJoinBlocker({ exerciseIds: bossExerciseIds(b), mine: running.value }, now.value);
 /** Le délai de 48 h du lanceur (migr. 0087) : il vaut avant même d'avoir choisi un exo. */
 const owned = computed(() => store.bosses.filter((b) => b.ownerId === uid.value));
 const nextAt = computed(() => nextDeclareAt(owned.value));
 const launchWait = computed(() => (nextAt.value && nextAt.value > now.value ? nextAt.value : null));
-const takenExo = computed(() => new Set(running.value.map((b) => b.exerciseId)));
+/** Un boss en cours occupe TOUS ses exercices (même règle que `fboss_ids_busy`, migr. 0118). */
+const takenExo = computed(() => new Set(running.value.flatMap((b) => bossExerciseIds(b))));
 const launchOpen = ref(false);
 const invitations = computed(() => store.invitations(now.value));
 const phase = computed(() => (current.value ? bossPhase(current.value, now.value) : null));
@@ -730,7 +816,7 @@ const allies = computed<StageAlly[]>(() =>
       pseudo: m.pseudo,
       // Mon héros : tel qu'il est maintenant (sans attendre l'aller-retour serveur).
       look: m.userId === uid.value ? (myLook.value ?? m.look ?? null) : (m.look ?? null),
-      units: m.units,
+      units: Math.round(m.units),
       me: m.userId === uid.value,
     })),
 );
@@ -776,7 +862,69 @@ watch(
   },
   { immediate: true },
 );
-const unitSingular = computed(() => (current.value?.family === 'core' ? 'seconde' : 'rep'));
+const unitSingular = computed(() => {
+  if (isMixed.value) return 'éq. pompe';
+  return current.value?.family === 'core' ? 'seconde' : 'rep';
+});
+
+// ── 🎯 Boss à plusieurs exercices : l'exercice de CHAQUE frappe ──
+const isMixed = computed(() => !!current.value && isMixedBoss(current.value));
+const hitExoList = computed(() => (current.value ? bossExercises(current.value) : []));
+/** L'exercice choisi pour la prochaine frappe (le premier tant qu'on n'en a pas touché un). */
+const hitExoId = ref<string | null>(null);
+const hitExo = computed(
+  () => hitExoList.value.find((e) => e.id === hitExoId.value) ?? hitExoList.value[0] ?? null,
+);
+watch(
+  () => current.value?.id,
+  () => (hitExoId.value = null),
+);
+/** Famille RÉELLE de l'exo qu'on va frapper : l'unité, le chrono et le plafond la suivent. */
+const hitFamily = computed<BossFamily>(
+  () => hitExo.value?.family ?? current.value?.family ?? 'push',
+);
+const hitUnit = computed(() => bossUnitLabel(hitFamily.value));
+function chooseHitExo(id: string) {
+  if (hitExoId.value === id || holdT.running.value) return;
+  hitExoId.value = id;
+  heldNote.value = null;
+  const fam = hitExoList.value.find((e) => e.id === id)?.family;
+  amount.value = fam === 'core' ? 30 : 20;
+}
+const famEmoji = (b: FriendBoss) => (isMixedBoss(b) ? '🎯' : BOSS_FAMILY_LABEL[b.family].emoji);
+/** Unité de la part d'un boss : l'équivalent poussée pour un boss à choix. */
+const unitLabelOf = (b: FriendBoss) => (isMixedBoss(b) ? 'éq. pompes' : bossUnitLabel(b.family));
+/** Ce que vaut une unité d'un exo en équivalent poussée : « 1 rep = 2 éq. ». */
+const eqLabel = (family: BossFamily) =>
+  `1 ${family === 'core' ? 's' : 'rep'} = ${fmtEq(eqPerUnit(family))} éq.`;
+/** Un nombre d'éq. pompes (fractionnaire sur un boss à choix) : 12,75 → « 12,75 », 0,75 → « 0,75 ». */
+const fmtEq = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+const cellText = (n: number, state: string) => (n ? fmtEq(n) : state === 'future' ? '' : '·');
+/** Dégâts d'une quantité de l'exo choisi (le chrono les annonce avant l'envoi). */
+const dmgOfQty = (qty: number) =>
+  bossDamage(isMixed.value ? qty * eqPerUnit(hitFamily.value) : qty);
+/** Les dernières frappes du boss à choix, avec l'exercice de chacune. */
+const lastHits = computed(() => {
+  const b = current.value;
+  if (!b || !isMixedBoss(b)) return [];
+  return store.hits
+    .filter((h) => h.bossId === b.id)
+    .sort((x, y) => y.createdAt - x.createdAt)
+    .slice(0, 8)
+    .map((h) => {
+      const ex = hitExercise(b, h);
+      return {
+        id: h.id,
+        pseudo: pseudoOf(h.userId),
+        exName: ex.name,
+        qty: hitQty(h),
+        unit: bossUnitLabel(ex.family),
+        eq: h.units,
+        surplus: h.surplus ?? 0,
+        ago: fmtBossSpan(now.value - h.createdAt),
+      };
+    });
+});
 /** Le tableau participants × jours du combat (une seule règle : `bossHitGrid`). */
 const hitGrid = computed(() =>
   current.value ? bossHitGrid(current.value, store.members, store.hits, now.value) : null,
@@ -806,11 +954,14 @@ const sharePct = (units: number) =>
 
 // ── Frapper ──
 const amount = ref(20);
-const perHit = computed(() =>
-  current.value
-    ? Math.floor(bossShareUnits(current.value.family, current.value.tier) * FRIEND_BOSS.hitMaxShare)
-    : 0,
-);
+const perHit = computed(() => {
+  const b = current.value;
+  if (!b) return 0;
+  // 🎯 Boss à choix : le plafond d'une saisie (2,5 parts d'équivalent poussée) ramené à
+  // l'exercice choisi — pompes 150, tractions 75, jambes 200, gainage 750 s au cran Sérieux.
+  if (isMixed.value) return splitHitMixed(hitFamily.value, Infinity, 0, 0, b.tier).accepted;
+  return Math.floor(bossShareUnits(b.family, b.tier) * FRIEND_BOSS.hitMaxShare);
+});
 /** 🤝 Les reps gardées pour les amis qui n'ont pas encore fait leur demi-part — la règle
  *  exacte de `fboss_hit` (`bossReservedUnits`). */
 const reserved = computed(() =>
@@ -828,17 +979,22 @@ const waiting = computed(() => {
 const waitingCount = computed(() => waiting.value.length);
 const waitingNames = computed(() => waiting.value.map((m) => m.pseudo).join(', '));
 /** Ce que le serveur retiendra, et ce qui en fera des dégâts : la même règle que `fboss_hit`. */
-const split = computed(() =>
-  current.value
-    ? splitHit(
-        current.value.family,
-        amount.value || 0,
-        bossUnitsLeft(current.value),
-        reserved.value,
-        current.value.tier,
-      )
-    : { accepted: 0, damage: 0, surplus: 0 },
-);
+const split = computed(() => {
+  const b = current.value;
+  if (!b) return { accepted: 0, damage: 0, surplus: 0, units: 0 };
+  // 🎯 Boss à choix : la règle de `fboss_hit_exo`, en points entiers (l'exo choisi pèse 20 · 15 ·
+  // 40 · 4 points l'unité).
+  if (isMixed.value)
+    return splitHitMixed(
+      hitFamily.value,
+      amount.value || 0,
+      bossUnitsLeftExact(b),
+      reserved.value,
+      b.tier,
+    );
+  const s = splitHit(b.family, amount.value || 0, bossUnitsLeft(b), reserved.value, b.tier);
+  return { ...s, units: s.accepted };
+});
 const pct = (x: number) => `${Math.round(x * 100)} %`;
 const fmtParts = (x: number) =>
   `${x.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} part${x >= 2 ? 's' : ''}`;
@@ -851,7 +1007,9 @@ function step(d: number) {
 const holdT = useBossHold();
 const holdMode = computed(() => {
   const b = current.value;
-  return !!b && isHoldBoss(b.family, exos.value.find((e) => e.id === b.exerciseId)?.unit);
+  // 🎯 Le chrono suit l'exercice CHOISI (un boss à choix peut mêler gainage et reps).
+  const exId = hitExo.value?.id ?? b?.exerciseId;
+  return !!b && isHoldBoss(hitFamily.value, exos.value.find((e) => e.id === exId)?.unit);
 });
 const heldNote = ref<{ raw: number; eq: number } | null>(null);
 const fmtMult = (m: number) => m.toLocaleString('fr-FR', { minimumFractionDigits: 1 });
@@ -903,7 +1061,7 @@ async function doHit() {
   pinnedId.value = b.id;
   let res: { accepted: number; damage: number; surplus: number; defeated: boolean };
   try {
-    res = await store.hit(b.id, amount.value);
+    res = await store.hit(b.id, amount.value, isMixed.value ? hitExo.value?.id : null);
     heldNote.value = null;
   } catch (e) {
     busy.value = false;
@@ -919,7 +1077,7 @@ async function doHit() {
   if (res.surplus > 0)
     $q.notify({
       type: 'info',
-      message: `🤝 ${res.surplus} en surplus — ils comptent pour ton XP et ton coffre.`,
+      message: `🤝 ${fmtEq(res.surplus)} en surplus — ils comptent pour ton XP et ton coffre.`,
     });
   try {
     localStorage.setItem(SEEN_KEY(b.id), String(Date.now()));
@@ -995,16 +1153,35 @@ const exoChoices = computed(() => {
   const list = q ? exoList.value.filter((e) => e.name.toLowerCase().includes(q)) : exoList.value;
   return list.slice(0, 40);
 });
-const pickedExo = ref<BossExo | null>(null);
+/** 🎯 Les exercices choisis : 1 (boss d'un exo, comme avant) ou 2 à 5 (boss à choix). */
+const pickedList = ref<BossExo[]>([]);
+/** Le premier choisi : sert de repère tant qu'on n'a pas fini de composer la liste. */
+const pickedExo = computed(() => pickedList.value[0] ?? null);
+const isPicked = (id: string) => pickedList.value.some((e) => e.id === id);
+function toggleExo(e: BossExo) {
+  if (isPicked(e.id)) pickedList.value = pickedList.value.filter((x) => x.id !== e.id);
+  else if (pickedList.value.length < FRIEND_BOSS.maxExercises)
+    pickedList.value = [...pickedList.value, e];
+}
+/** Famille qui fixe la part de PV : celle de l'exo seul, ou la poussée (monnaie) d'un boss à choix. */
+const launchFamily = computed<BossFamily | null>(() => {
+  if (pickedList.value.length >= FRIEND_BOSS.minExercises) return 'push';
+  return pickedExo.value?.family ?? null;
+});
+const launchUnit = computed(() =>
+  pickedList.value.length >= FRIEND_BOSS.minExercises
+    ? 'éq. pompes'
+    : bossUnitLabel(pickedExo.value?.family ?? 'push'),
+);
 const pickedTier = ref<string>(BOSS_TIER_DEFAULT);
-/** Même règle que `fboss_declare`. */
+/** Même règle que `fboss_declare` / `fboss_declare_multi` : un boss occupe TOUS ses exercices. */
 const declareBlock = computed(() =>
   pickedExo.value
     ? bossLaunchBlocker(
         {
           tokens: tokens.value,
           tier: pickedTier.value,
-          exerciseId: pickedExo.value.id,
+          exerciseIds: pickedList.value.map((e) => e.id),
           mine: running.value,
           owned: owned.value,
         },
@@ -1023,11 +1200,13 @@ function toggleInvite(id: string) {
   invitees.value = s;
 }
 async function doDeclare() {
-  const ex = pickedExo.value;
-  if (!ex || busy.value) return;
+  const list = pickedList.value;
+  if (!list.length || busy.value) return;
   busy.value = true;
   try {
-    await store.declare(ex, [...invitees.value], pickedTier.value);
+    // Un seul exo : la fonction d'avant, inchangée. Deux à cinq : le boss à choix.
+    if (list.length === 1) await store.declare(list[0]!, [...invitees.value], pickedTier.value);
+    else await store.declareMulti(list, [...invitees.value], pickedTier.value);
     syncLook();
     $q.notify({
       type: 'positive',
@@ -1035,7 +1214,7 @@ async function doDeclare() {
         ? `Boss lancé ! Tes amis ont 24 h pour te rejoindre.`
         : 'Boss lancé : le combat commence maintenant.',
     });
-    pickedExo.value = null;
+    pickedList.value = [];
     invitees.value = new Set();
     launchOpen.value = false;
     selectedId.value = null; // le plus récent, donc celui qu'on vient de lancer
@@ -1601,8 +1780,10 @@ function notifyError(e: unknown) {
 }
 .fb-in {
   position: relative;
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 76px;
+  /* ⚠️ Plancher : sans lui « Frapper » (flex: 1 0 auto) prenait tout et le champ en secondes
+     tombait à ~40 px (« 30 » rognée à 344 px). Si la rangée ne tient pas, elle passe à la ligne. */
+  min-width: 72px;
 }
 .fb-input.unit {
   padding-right: 26px;
@@ -1854,6 +2035,90 @@ function notifyError(e: unknown) {
 .fb-exo.on {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
+}
+/* 🎯 Boss à choix : pastilles des exercices, et tuiles de choix à chaque frappe. */
+.fb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+.fb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+.fb-chip small {
+  color: var(--dim);
+  font-size: 11px;
+}
+button.fb-chip.rm {
+  min-height: 44px;
+  padding: 6px 12px;
+  border-color: var(--accent);
+  cursor: pointer;
+}
+.fb-chip-n {
+  font-size: 12px;
+}
+.fb-pickex {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.fb-pickex-b {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fb-pickex-b.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.fb-pickex-b:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.fb-pickex-n {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.fb-pickex-v {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.fb-hist {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 /* ⚠️ `minmax(0, 1fr)` et non `1fr` : sinon une piste refuse de passer sous la taille de son
    contenu et la grille déborde à 344 px (Z Fold plié). */

@@ -622,8 +622,10 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
   it('même part minimale (dernière définition), même nombre d’invités', () => {
     // 🎁 v1.200.0 : la demi-part garde le BONUS DE GROUPE ; le coffre perso, lui, s'ouvre à
     // la part entière, sinon à la fin du combat (`personalChestReady`).
+    // 🎯 v1.320.0 (migr. 0118) : la part se compte dans la monnaie du boss — `fboss_unit_scale(b)`
+    // vaut 1 pour un boss d'un exo (la règle d'avant, intacte) et 20 (points) pour un boss à choix.
     expect(lastDef('fboss_claim_bonus')).toContain(
-      `public.fboss_share_tier(b.family, b.tier) * ${FRIEND_BOSS.minShare}`,
+      `public.fboss_share_tier(b.family, b.tier) * public.fboss_unit_scale(b) * ${FRIEND_BOSS.minShare}`,
     );
     const claim = lastDef('fboss_claim');
     expect(claim).toContain('v_units < public.fboss_share_tier(b.family, b.tier)');

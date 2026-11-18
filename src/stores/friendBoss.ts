@@ -12,6 +12,8 @@ import {
   bossPhase,
   bossErrorMessage,
   bossTokenCost,
+  FRIEND_BOSS,
+  unitsFromRow,
   type BossFamily,
   type FriendBoss,
   type FriendBossHit,
@@ -74,7 +76,9 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       userId: r.user_id,
       pseudo: r.pseudo,
       status: r.status,
-      units: r.units,
+      // 🎯 Boss à plusieurs exercices (migr. 0118) : le compte EXACT est en points (1/20 de rep de
+      // poussée) ; `units` n'en est que l'arrondi, pour les anciens clients. NULL = boss d'un exo.
+      units: unitsFromRow(r.points, r.units),
       claimed: r.claimed,
       bonusClaimed: !!r.bonus_claimed,
       legacyChest: !!r.legacy_chest,
@@ -84,9 +88,12 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       id: r.id,
       bossId: r.boss_id,
       userId: r.user_id,
-      units: r.units,
+      units: unitsFromRow(r.points, r.units),
       // 🤝 Reps sans dégâts (migr. 0092) ; absent sur une base pas encore migrée → 0.
-      surplus: r.surplus ?? 0,
+      surplus: unitsFromRow(r.surplus_points, r.surplus ?? 0),
+      // 🎯 L'exercice choisi et la quantité brute (migr. 0118) ; absents sur un boss d'un exo.
+      exerciseId: r.exercise_id ?? null,
+      qty: r.qty ?? null,
       createdAt: Date.parse(r.created_at) || 0,
     }));
     loaded.value = true;
@@ -144,6 +151,27 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     await loadMine();
   }
 
+  /** 🎯 Lance un boss à PLUSIEURS exercices (2 à 5), au choix à chaque frappe. Un seul exo passe
+   *  par `declare` (la fonction d'avant, inchangée). */
+  async function declareMulti(
+    exs: { id: string; name: string; family: BossFamily; repWeight: number }[],
+    invitees: string[],
+    tier: string,
+  ) {
+    await rpc<string>('fboss_declare_multi', {
+      p_exercises: exs.map((e) => ({
+        id: e.id,
+        name: e.name,
+        family: e.family,
+        rep_weight: e.repWeight,
+      })),
+      p_invitees: invitees,
+      p_tier: tier,
+    });
+    (await loadCharacterStore()).spentBossTokens(bossTokenCost(tier));
+    await loadMine();
+  }
+
   async function respond(bossId: string, accept: boolean) {
     await rpc('fboss_respond', { p_boss: bossId, p_accept: accept });
     await loadMine();
@@ -160,22 +188,43 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     return refund;
   }
 
-  /** Frappe : le serveur retient ce qui passe les plafonds et rend ce qu'il a accepté. */
+  /** Frappe : le serveur retient ce qui passe les plafonds et rend ce qu'il a accepté.
+   *  🎯 `exerciseId` = l'exercice CHOISI d'un boss à plusieurs exercices (`fboss_hit_exo`) ; sans
+   *  lui (boss d'un exo) c'est `fboss_hit`, exactement comme avant. `accepted` est la quantité
+   *  retenue de l'exo ; `damage` et `surplus` sont dans la monnaie du boss (équivalent poussée
+   *  pour un boss à choix). */
   async function hit(
     bossId: string,
     units: number,
+    exerciseId?: string | null,
   ): Promise<{ accepted: number; damage: number; surplus: number; defeated: boolean }> {
     const res = await rpc<{
       ok: boolean;
       accepted?: number;
       damage?: number;
       surplus?: number;
+      damage_points?: number;
+      surplus_points?: number;
       defeated?: boolean;
       reason?: string;
-    }>('fboss_hit', { p_boss: bossId, p_units: Math.floor(units) });
+    }>(
+      exerciseId ? 'fboss_hit_exo' : 'fboss_hit',
+      exerciseId
+        ? { p_boss: bossId, p_units: Math.floor(units), p_exercise_id: exerciseId }
+        : { p_boss: bossId, p_units: Math.floor(units) },
+    );
     if (!res.ok) throw new FriendBossError(res.reason ?? '');
     await loadMine();
     const accepted = res.accepted ?? 0;
+    if (res.damage_points != null) {
+      const scale = FRIEND_BOSS.mixedScale;
+      return {
+        accepted,
+        damage: res.damage_points / scale,
+        surplus: (res.surplus_points ?? 0) / scale,
+        defeated: !!res.defeated,
+      };
+    }
     // ⚠️ Un serveur d'avant la 0092 ne renvoie pas `damage` : tout y faisait des dégâts.
     const damage = res.damage ?? accepted;
     return { accepted, damage, surplus: res.surplus ?? 0, defeated: !!res.defeated };
@@ -229,6 +278,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     invitations,
     fetchMine,
     declare,
+    declareMulti,
     respond,
     cancel,
     hit,
