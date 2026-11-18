@@ -65,6 +65,7 @@ export function useAutoUpEngine() {
     running = true;
     try {
       let steps = 0;
+      let champUps = 0;
       if (s.champions) {
         while (steps < MAX_STEPS) {
           const cur = char.row;
@@ -77,6 +78,7 @@ export function useAutoUpEngine() {
           if (!a) break;
           if (await char.ascendChampion(uid, a.id)) break; // refusé : on s'arrête, sans boucler
           steps++;
+          champUps++;
         }
       }
       let gearUps = 0;
@@ -96,7 +98,8 @@ export function useAutoUpEngine() {
         }
         // 🗡️ Monter une pièce change ce que chaque champion devrait porter : on relance
         // l'équipement au mieux (le même geste que « Équiper » de la Guilde).
-        if (gearUps) await char.autoAssignGear(uid);
+        // Un champion qui vient de monter peut porter des pièces plus rares : même relance.
+        if (gearUps || champUps) await char.autoAssignGear(uid);
       }
       // ✨ La fusion équipe d'abord au mieux, puis fond (`equipThenMerge`) : le rééquipement
       // fait partie du geste. Aucune écriture quand il n'y a rien à fondre.
