@@ -203,7 +203,10 @@ export function exerciseProgression(input: {
   // l'atteignent AU lest prévu, il monte et la durée repart au bas (côté écran : `reps_min`).
   // ⚠️ Pas de plateau ni de note d'effort ici : « une série a échoué » = on garde le lest.
   if (input.loadedHold) {
-    const hit = last.performed.every((s) => s.reps >= t.reps_max && s.load_kg >= from - 0.01);
+    // ⚠️ Au moins AUTANT de séries que prévu : une seule série à 60 s sur 3 ne fait pas monter le lest.
+    const hit =
+      last.performed.length >= t.sets &&
+      last.performed.every((s) => s.reps >= t.reps_max && s.load_kg >= from - 0.01);
     return hit && from > 0 ? mk('up', from + HOLD_LEST_INC) : mk('hold');
   }
   if (scheme === 'fixed') return mk('none');

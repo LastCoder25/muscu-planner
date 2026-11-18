@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
 import {
+  holdGainLabel,
   holdLoadable,
   isTimeExercise,
   workTonnage,
@@ -159,11 +161,30 @@ describe('🏋️ l’indicateur propre au lest : record = lest max tenu ≥ pla
   });
 });
 
+describe('📊 tonnage des trophées (useProgress)', () => {
+  it('useProgress passe par logTonnage : une planche lestée ne compte pas de secondes', () => {
+    const src = fs.readFileSync('src/composables/useProgress.ts', 'utf8');
+    expect(src).toContain('logTonnage(r.payload)');
+    expect(src).not.toMatch(/load_kg \|\| 0\) \* \(s\.reps/);
+    expect(
+      logTonnage(
+        holdLog('a', [
+          [20, 60],
+          [20, 60],
+          [20, 60],
+        ]),
+      ),
+    ).toBe(0);
+  });
+});
+
 describe('🏷️ affichage « +X kg · N s »', () => {
   it('holdSetLabel et formatLastTime', () => {
     expect(holdSetLabel(0, 45)).toBe('45 s');
     expect(holdSetLabel(10, 45)).toBe('+10 kg · 45 s');
     expect(holdSetLabel(2.5, 45)).toBe('+2,5 kg · 45 s');
+    expect(holdGainLabel(2.5)).toBe('+2,5 kg');
+    expect(holdGainLabel(10.3 - 10.1)).toBe('+0,2 kg');
     expect(formatLastTime(perf(0, 45), { time: true, bodyweight: true })).toBe('45 s');
     expect(formatLastTime(perf(10, 45), { time: true, bodyweight: true })).toBe('+10 kg · 45 s');
   });
@@ -201,6 +222,13 @@ describe('🧱 double progression en secondes (séance suivante)', () => {
     expect(verdicts[0]!.verdict.kind).toBe('hold');
   });
 
+  it('durci : moins de séries réalisées que prévu → le lest ne monte pas', () => {
+    const last = holdLog('l1', [[10, 60]]); // 1 série sur 3 prévues
+    const { session, verdicts } = planNextSession(holdPlan('ex_plank', 10), last, cfg, []);
+    expect(ex0(session).target.added_kg).toBe(10);
+    expect(verdicts[0]!.verdict.kind).toBe('hold');
+  });
+
   it('une série faite à un lest plus léger que prévu ne compte pas comme atteinte', () => {
     const last = holdLog('l1', [
       [10, 60],
@@ -218,7 +246,15 @@ describe('🧱 double progression en secondes (séance suivante)', () => {
   });
 
   it('la chaise suit la même règle', () => {
-    const last = holdLog('l1', [[5, 60]], 'ex_wall_sit');
+    const last = holdLog(
+      'l1',
+      [
+        [5, 60],
+        [5, 60],
+        [5, 60],
+      ],
+      'ex_wall_sit',
+    );
     const { session } = planNextSession(holdPlan('ex_wall_sit', 5), last, cfg, []);
     expect(ex0(session).target.added_kg).toBe(7.5);
   });

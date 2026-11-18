@@ -71,7 +71,8 @@
           <div v-for="p in holdPrs" :key="p.id" class="pr-row">
             <span class="pr-name">{{ p.name }}</span>
             <span class="pr-val font-display"
-              >{{ holdSetLabel(p.load, p.secs) }} <small>+{{ p.load - p.prevLoad }} kg</small></span
+              >{{ holdSetLabel(p.load, p.secs) }}
+              <small>{{ holdGainLabel(p.load - p.prevLoad) }}</small></span
             >
           </div>
         </div>
@@ -227,7 +228,13 @@ import {
 type Delta = ReturnType<typeof deltaLabel>;
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
-import { detectHoldPRs, holdSetLabel, isTimeExercise, type HoldPR } from '@/lib/loadedHold';
+import {
+  detectHoldPRs,
+  holdGainLabel,
+  holdSetLabel,
+  isTimeExercise,
+  type HoldPR,
+} from '@/lib/loadedHold';
 import { setsByMuscleFromLog, muscleColor, isMuscuLog } from '@/lib/volume';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';

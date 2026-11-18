@@ -101,6 +101,11 @@ export function detectHoldPRs(current: SessionLog, priors: SessionLog[]): HoldPR
 
 const fr = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
 
+/** « +2,5 kg » — le gain de lest d'un record, arrondi comme `holdSetLabel` (pas d'artefact flottant). */
+export function holdGainLabel(gainKg: number): string {
+  return `+${fr(gainKg)} kg`;
+}
+
 /** « 45 s » · « +10 kg · 45 s » (lest) — une série de tenue, pour tous les écrans. */
 export function holdSetLabel(loadKg: number, secs: number): string {
   return loadKg > 0 ? `+${fr(loadKg)} kg · ${secs} s` : `${secs} s`;

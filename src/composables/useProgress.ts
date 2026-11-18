@@ -46,6 +46,7 @@ import {
   sportBenefit,
 } from '@/lib/statSignature';
 import type { SportEntry } from '@/lib/sportAchievements';
+import { logTonnage } from '@/lib/loadedHold';
 import type { CardioActivity } from '@/lib/types';
 
 // Part de l'XP de fond convertie en énergie d'aventure (réglable).
@@ -520,11 +521,8 @@ export function useProgress() {
       const d = r.payload.discipline ?? 'musculation';
       const sport =
         d === 'autre_sport' ? r.payload.name || 'Autre' : (DISC_TILE[d]?.label ?? 'Muscu');
-      const tonnage = (r.payload.exercises ?? []).reduce(
-        (a, ex) =>
-          a + (ex.performed ?? []).reduce((b, s) => b + (s.load_kg || 0) * (s.reps || 0), 0),
-        0,
-      );
+      // ⚠️ `logTonnage`, pas un `load_kg × reps` : une planche lestée compterait des SECONDES.
+      const tonnage = logTonnage(r.payload);
       out.push({
         sport,
         category: CAT[d] ?? 'autre',
