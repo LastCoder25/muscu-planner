@@ -711,6 +711,32 @@
       </div>
     </div>
 
+    <!-- ⚙️ Montées automatiques : par appareil, comme les animations. Le moteur vit dans
+         MainLayout (`useAutoUpEngine`) ; ici on ne fait qu'allumer et éteindre. -->
+    <div class="panel push-panel">
+      <div class="p-title font-display">⚙️ Automatisation</div>
+      <div class="p-sub">
+        Dépense l’or et les sceaux dès que c’est possible, sur cet appareil. Chaque montée suit les
+        mêmes règles que le bouton.
+      </div>
+      <div class="push-chips anim-chips">
+        <button
+          v-for="o in AUTO_UP_OPTIONS"
+          :key="o.id"
+          type="button"
+          class="push-chip"
+          :class="{ off: !autoUp[o.id] }"
+          :aria-pressed="autoUp[o.id]"
+          :title="o.hint"
+          @click="setAutoUp(o.id, !autoUp[o.id])"
+        >
+          <span class="push-chip-emo" aria-hidden="true">{{ o.emoji }}</span>
+          {{ o.label }}
+          <span class="push-chip-state">{{ autoUp[o.id] ? 'actif' : 'coupé' }}</span>
+        </button>
+      </div>
+    </div>
+
     <!-- ── Héros à l'infirmerie ── -->
     <div v-if="wounded" class="panel warn">
       <div class="p-title">🤕 Ton héros est à l’infirmerie</div>
@@ -1083,6 +1109,8 @@ import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
+import { useAutoUpSettings } from '@/composables/useAutoUp';
+import type { AutoUpSettings } from '@/lib/autoUp';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { useChampionFocus } from '@/composables/useChampionFocus';
 import VillagePlots from '@/components/VillagePlots.vue';
@@ -1646,6 +1674,30 @@ const yard = computed<YardCell[]>(() => {
   });
   return cells;
 });
+
+// ── ⚙️ Montées automatiques (réglées ici, jouées par MainLayout) ──
+const { settings: autoUp, setAutoUp } = useAutoUpSettings();
+const AUTO_UP_OPTIONS: { id: keyof AutoUpSettings; emoji: string; label: string; hint: string }[] =
+  [
+    {
+      id: 'champions',
+      emoji: '🧙',
+      label: 'Ascension des champions',
+      hint: 'Un champion ★5 monte de rang dès que les sceaux, l’or et le Panthéon suivent.',
+    },
+    {
+      id: 'gear',
+      emoji: '🗡️',
+      label: 'Ascension des pièces',
+      hint: 'Même chose pour les pièces d’équipement — puis l’équipement est relancé au mieux.',
+    },
+    {
+      id: 'merge',
+      emoji: '✨',
+      label: 'Éveil des pièces',
+      hint: 'Les doublons sont fondus dans la pièce la plus avancée, après équipement au mieux.',
+    },
+  ];
 
 // ── Feuilles ouvertes depuis le dessin ──
 const plotSlot = ref<number | null>(null);

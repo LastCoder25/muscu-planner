@@ -214,11 +214,14 @@ import { useFriendBossStore } from '@/stores/friendBoss';
 import { bossTitle } from '@/lib/friendBoss';
 import { useInstallPrompt } from '@/composables/useInstallPrompt';
 import { useGamePanel } from '@/composables/useGamePanel';
+import { useAutoUpEngine } from '@/composables/useAutoUp';
 
 const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+// ⚙️ Montées automatiques (réglées sur la Base) : le moteur tourne partout sous ce layout.
+useAutoUpEngine();
 const friends = useFriendsStore();
 const friendBoss = useFriendBossStore();
 // Recalculé à chaque rechargement du store (ouverture, cloche) : une invitation a 24 h de vie.
