@@ -7,7 +7,8 @@
         <div class="top-sub">
           {{ clock
           }}<template v-if="run">
-            · {{ run.exercises.length }} exo{{ run.exercises.length > 1 ? 's' : '' }} · vol {{ totalVolume }} kg</template
+            · {{ run.exercises.length }} exo{{ run.exercises.length > 1 ? 's' : '' }} · vol
+            {{ totalVolume }} kg</template
           >
         </div>
       </div>
@@ -129,10 +130,10 @@
             v-for="(s, i) in ex.sets"
             :key="s.uid ?? i"
             class="set"
-            :class="{ done: s.done, cur: i === curSetIndex }"
+            :class="{ done: s.done, cur: i === curSetIndex, noload: !showLoad }"
           >
             <div class="set-idx font-display">{{ i + 1 }}</div>
-            <div>
+            <div v-if="showLoad">
               <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
               <div class="val-line">
                 <button
@@ -384,7 +385,8 @@
               ><q-icon :name="exIcon(e)" size="26px"
             /></span>
             <div class="tile-name">
-              <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span>{{ e.name }}
+              <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span
+              >{{ e.name }}
             </div>
             <div v-if="e.muscle_primary" class="tile-mus" :style="{ color: exColor(e) }">
               {{ e.muscle_primary }}
@@ -401,23 +403,18 @@
         </div>
 
         <template v-else>
-          <button
-            v-for="{ ex: e, tag } in filteredLib"
-            :key="e.id"
-            class="alt"
-            @click="pick(e)"
-          >
+          <button v-for="{ ex: e, tag } in filteredLib" :key="e.id" class="alt" @click="pick(e)">
             <span class="alt-badge" :style="{ background: exColor(e) + '22', color: exColor(e) }"
               ><q-icon :name="exIcon(e)" size="20px"
             /></span>
             <div class="alt-main">
               <div class="alt-name">
-                <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span>{{ e.name }}
+                <span v-if="tag" class="pk-tag">{{ tag === 'fav' ? '★' : '🕘' }}</span
+                >{{ e.name }}
               </div>
               <div class="alt-meta">
-                {{ e.muscle_primary }}<template v-if="e.equipment">
-                  · {{ equipmentLabel(e.equipment) }}</template
-                >
+                {{ e.muscle_primary
+                }}<template v-if="e.equipment"> · {{ equipmentLabel(e.equipment) }}</template>
               </div>
             </div>
             <q-icon
@@ -506,10 +503,16 @@ import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { setAdvice, instancesOf, verdictLabel, type SetAdvice } from '@/lib/progression';
+import { holdLoadable, isTimeExercise, workTonnage } from '@/lib/loadedHold';
 import { repRangeForExercise, repRangeLabel } from '@/lib/repScheme';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
-import { equipmentLabel, isUnloadedEquipment, pickerOrder, recentExerciseIds } from '@/lib/freePicker';
+import {
+  equipmentLabel,
+  isUnloadedEquipment,
+  pickerOrder,
+  recentExerciseIds,
+} from '@/lib/freePicker';
 
 const router = useRouter();
 const $q = useQuasar();
@@ -540,12 +543,22 @@ const lastDone = computed(() => {
 // Bloc « ressenti » visible quand une série vient d'être validée (repos) ou quand tout est fait.
 const rateTarget = computed(() => (resting.value || !curSet.value ? lastDone.value : null));
 const volume = computed(() =>
-  ex.value ? ex.value.sets.filter((s) => s.done).reduce((a, s) => a + s.load_kg * s.reps, 0) : 0,
+  ex.value
+    ? workTonnage(
+        ex.value.sets.filter((s) => s.done),
+        isTimeEx.value,
+      )
+    : 0,
 );
 const totalVolume = computed(() =>
   run.value
     ? run.value.exercises.reduce(
-        (a, e) => a + e.sets.filter((s) => s.done).reduce((b, s) => b + s.load_kg * s.reps, 0),
+        (a, e) =>
+          a +
+          workTonnage(
+            e.sets.filter((s) => s.done),
+            isTimeExercise(e),
+          ),
         0,
       )
     : 0,
@@ -561,10 +574,12 @@ const advice = computed(() => (ex.value ? advices.value[ex.value.id] : undefined
  *  à juger. C'est `window === 0` — donc aucune instance — qui le distingue. */
 const adviceText = computed(() => {
   const a = advice.value;
-  return a && a.verdict.window > 0 ? verdictLabel(a.verdict) : null;
+  return a && a.verdict.window > 0 ? verdictLabel(a.verdict, isTimeEx.value) : null;
 });
 const adviceIsNew = computed(() => !!advice.value && advice.value.verdict.window === 0);
 const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
+/** Le stepper de charge/lest : un exo au temps n'en a que s'il accepte un lest. */
+const showLoad = computed(() => !isTimeEx.value || holdLoadable(ex.value?.id));
 const canFinish = computed(
   () => !!run.value && run.value.exercises.some((e) => e.sets.some((s) => s.done)),
 );
@@ -740,6 +755,7 @@ function adviceFor(e: ExerciseRow): SetAdvice {
     scheme: profileStore.levelConfig?.default_progression ?? 'double',
     musclePrimary: e.muscle_primary,
     bodyweight: isUnloadedEquipment(e.equipment),
+    holdLoadable: holdLoadable(e.id),
   });
 }
 function pick(e: ExerciseRow) {
@@ -1175,6 +1191,9 @@ onBeforeUnmount(() => {
   color: var(--accent);
 }
 
+.set.noload {
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+}
 .set {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 36px;

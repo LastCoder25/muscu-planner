@@ -109,6 +109,7 @@ import { useQuasar } from 'quasar';
 import { useLibraryStore, type ExerciseFull, type ExerciseRow } from '@/stores/library';
 import { useLogsStore } from '@/stores/logs';
 import { bestE1RM } from '@/lib/estimates';
+import { isTimeExercise } from '@/lib/loadedHold';
 import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
 import { exerciseFrames, exerciseImage, exerciseImageCredit } from '@/data/exerciseImages';
@@ -183,7 +184,7 @@ async function load(id: string) {
     for (const row of recent) {
       const le = row.payload.exercises.find((x) => x.id === id || x.swapped_from === id);
       if (!le) continue;
-      const v = bestE1RM(le.performed);
+      const v = bestE1RM(le.performed, isTimeExercise(le));
       if (v > 0) pts.push({ date: row.performed_at, val: v });
     }
     pts.sort((a, b) => a.date.localeCompare(b.date));

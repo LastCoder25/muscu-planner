@@ -46,6 +46,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
+import { logTonnage } from '@/lib/loadedHold';
 
 const router = useRouter();
 const $q = useQuasar();
@@ -55,10 +56,7 @@ const loading = ref(true);
 const rows = ref<LogRow[]>([]);
 
 function volume(r: LogRow): number {
-  return r.payload.exercises.reduce(
-    (a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0),
-    0,
-  );
+  return logTonnage(r.payload);
 }
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {

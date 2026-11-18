@@ -10,9 +10,11 @@ import type {
   Progression,
   ExerciseTarget,
 } from './types';
+import { holdLoadable } from './loadedHold';
 
 const COMPOUND_INC = 2.5; // kg, exos polyarticulaires
 const ISOLATION_INC = 1.25; // kg, exos d'isolation
+const HOLD_LEST_INC = 2.5; // kg, lest d'une tenue (planche, chaise)
 const ISOLATION_HINTS = ['biceps', 'triceps', 'épaule', 'deltoïde', 'mollet', 'avant-bras'];
 
 /** Le pas de charge d'un exercice — 2,5 kg polyarticulaire, 1,25 kg isolation.
@@ -74,6 +76,22 @@ function recentInstances(
 const DELOAD_LOAD_MULT = 0.9; // −10 % de charge en semaine de décharge
 const DELOAD_MARK = ' · Décharge';
 
+/**
+ * 🧱 Une tenue (planche, chaise) est-elle LESTÉE ? Si oui, reporte le dernier lest réel dans
+ * sa cible (`added_kg`) et rend `true`. Sans lest (ni à la dernière séance ni au plan) : `false`,
+ * et l'exo reste EXACTEMENT ce qu'il était (progression `fixed`, aucun conseil).
+ * ⚠️ Seulement si la dernière séance est bien CET exo : un exo échangé (`swapped_from`) ne
+ * lègue pas son lest à la planche.
+ */
+function carryHoldLest(ex: PlannedExercise, lastLog: SessionLog, history: SessionLog[]): boolean {
+  if (!holdLoadable(ex.id) || ex.target.unit !== 'time') return false;
+  const last = recentInstances(ex, lastLog, history)[0];
+  const lest = last && last.id === ex.id ? topLoad(last) : 0;
+  if (lest <= 0 && !((ex.target.added_kg ?? 0) > 0)) return false;
+  if (lest > 0) ex.target.added_kg = lest;
+  return true;
+}
+
 /** Ce que le moteur a DÉCIDÉ pour un exercice, et pourquoi. */
 export type ProgressionKind =
   | 'up' // objectif tenu → on monte la charge
@@ -106,7 +124,7 @@ export interface ExerciseVerdict {
  * Même refus motivé que les trois copies d'`offensePerRound` : elles se ressemblent, elles
  * ne font pas la même chose.
  */
-export function verdictLabel(v: ExerciseVerdict): { text: string; tone: string } {
+export function verdictLabel(v: ExerciseVerdict, time = false): { text: string; tone: string } {
   const d = Math.round((v.loadTo - v.loadFrom) * 100) / 100;
   const kg = `${d > 0 ? '+' : ''}${d} kg`;
   switch (v.kind) {
@@ -119,7 +137,10 @@ export function verdictLabel(v: ExerciseVerdict): { text: string; tone: string }
     case 'deload_planned':
       return { text: `${kg} · décharge programmée`, tone: 'down' };
     case 'hold':
-      return { text: 'maintenu · progresse en répétitions', tone: 'same' };
+      return {
+        text: `maintenu · progresse en ${time ? 'secondes' : 'répétitions'}`,
+        tone: 'same',
+      };
     default:
       return { text: 'maintenu', tone: 'same' };
   }
@@ -156,6 +177,8 @@ export function exerciseProgression(input: {
   scheme: Progression;
   increment: number;
   instances: LoggedExercise[];
+  /** Tenue LESTÉE (planche, chaise avec du lest) : double progression en SECONDES, voir plus bas. */
+  loadedHold?: boolean;
 }): ExerciseVerdict {
   const { target: t, scheme, increment: inc, instances } = input;
   const from = loadOf(t);
@@ -175,6 +198,14 @@ export function exerciseProgression(input: {
 
   const last = instances[0];
   if (!last || last.performed.length === 0) return mk('none');
+  // 🧱 TENUE LESTÉE — double progression en secondes. La cible est une fourchette de durée
+  // (30–60 s) : tant qu'une série n'atteint pas le HAUT, le lest ne bouge pas ; quand TOUTES
+  // l'atteignent AU lest prévu, il monte et la durée repart au bas (côté écran : `reps_min`).
+  // ⚠️ Pas de plateau ni de note d'effort ici : « une série a échoué » = on garde le lest.
+  if (input.loadedHold) {
+    const hit = last.performed.every((s) => s.reps >= t.reps_max && s.load_kg >= from - 0.01);
+    return hit && from > 0 ? mk('up', from + HOLD_LEST_INC) : mk('hold');
+  }
   if (scheme === 'fixed') return mk('none');
 
   const sets = last.performed;
@@ -266,6 +297,8 @@ export function setAdvice(input: {
   musclePrimary?: string | null;
   /** Exercice au poids du corps : la charge n'est un levier que s'il y a du lest. */
   bodyweight?: boolean;
+  /** Tenue qui accepte un lest (planche, chaise) : voir `holdLoadable`. */
+  holdLoadable?: boolean;
 }): SetAdvice {
   const { instances, range, scheme, musclePrimary, bodyweight } = input;
   const last = instances[0];
@@ -286,11 +319,14 @@ export function setAdvice(input: {
     reps_max: range.max,
     ...(bodyweight && from === 0 ? { added_kg: 0 } : { load_kg: from }),
   };
+  // Tenue lestée (déjà un lest à la dernière séance) : double progression en secondes.
+  const loadedHold = !!input.holdLoadable && from > 0;
   let verdict = exerciseProgression({
     target,
     scheme,
     increment: incrementFor(musclePrimary),
     instances,
+    ...(loadedHold ? { loadedHold } : {}),
   });
   // Au poids du corps sans lest : « monte la charge » n'a pas de sens, on monte les reps.
   if (bodyweight && from === 0 && verdict.kind === 'up') {
@@ -300,10 +336,12 @@ export function setAdvice(input: {
   // La charge monte → on repart en BAS de fourchette (c'est la double progression, et
   // c'est exactement ce que `up` veut dire). Elle baisse ou ne bouge pas → on vise une
   // répétition de plus que la dernière fois, sans dépasser le haut de la fourchette.
+  // Tenue lestée : +5 s (le pas du compteur « Sec »), pas +1 s.
+  const step = loadedHold ? 5 : 1;
   const reps =
     verdict.kind === 'up' || verdict.loadTo !== verdict.loadFrom
       ? range.min
-      : Math.max(range.min, Math.min(range.max, topReps(last) + 1));
+      : Math.max(range.min, Math.min(range.max, topReps(last) + step));
 
   return { verdict, load: verdict.loadTo, reps, range };
 }
@@ -337,6 +375,8 @@ export interface NamedVerdict {
   id: string;
   name: string;
   verdict: ExerciseVerdict;
+  /** Exo au temps (secondes) : `verdictLabel` dit « progresse en secondes ». */
+  time?: boolean;
 }
 
 /** La séance suivante, ET le POURQUOI de chaque charge. */
@@ -374,7 +414,9 @@ export function planNextSession(
     (opts.muscuSessionCount + 1) % every === 0;
   if (isDeload) {
     for (const ex of next.exercises) {
-      const figee = (ex.progression || cfg.default_progression) === 'fixed';
+      // Une tenue lestée n'est pas « figée » : son lest baisse comme la charge des autres exos.
+      const lestee = carryHoldLest(ex, lastLog, history);
+      const figee = (ex.progression || cfg.default_progression) === 'fixed' && !lestee;
       const from = ex.target.load_kg ?? ex.target.added_kg ?? 0;
       if (!figee) {
         applyLoad(ex.target, (l) => round(l * DELOAD_LOAD_MULT));
@@ -383,6 +425,7 @@ export function planNextSession(
       verdicts.push({
         id: ex.id,
         name: ex.name,
+        ...(ex.target.unit === 'time' ? { time: true } : {}),
         verdict: {
           kind: figee ? 'none' : 'deload_planned',
           loadFrom: from,
@@ -398,13 +441,20 @@ export function planNextSession(
   for (const ex of next.exercises) {
     // ⚠️ La décision vit dans `exerciseProgression` — ici on ne fait que l'APPLIQUER.
     // La dupliquer rendrait deux verdicts possibles sur la même série.
+    const lestee = carryHoldLest(ex, lastLog, history);
     const v = exerciseProgression({
       target: ex.target,
       scheme: ex.progression || cfg.default_progression,
       increment: incrementFor(ex.muscle_primary),
       instances: recentInstances(ex, lastLog, history),
+      ...(lestee ? { loadedHold: true } : {}),
     });
-    verdicts.push({ id: ex.id, name: ex.name, verdict: v });
+    verdicts.push({
+      id: ex.id,
+      name: ex.name,
+      ...(ex.target.unit === 'time' ? { time: true } : {}),
+      verdict: v,
+    });
     if (v.loadTo !== v.loadFrom) applyLoad(ex.target, () => v.loadTo);
   }
 

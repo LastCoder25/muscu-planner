@@ -12,6 +12,7 @@ import {
 import type { Challenge } from './challenges';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { localDayIso } from './localDay';
+import { isTimeExercise, workTonnage } from './loadedHold';
 import { repRangeForExercise } from './repScheme';
 import { normMuscle } from './muscles';
 import { comboSlot } from '@/data/combo';
@@ -311,7 +312,7 @@ export function weeklyVolumeSeries(
     for (const ex of e.log.exercises ?? [])
       for (const s of ex.performed ?? []) {
         out[i]!.sets += 1;
-        out[i]!.tonnage += (s.load_kg || 0) * (s.reps || 0);
+        out[i]!.tonnage += workTonnage([s], isTimeExercise(ex));
         hasSet = true;
       }
     if (hasSet) out[i]!.sessions += 1;

@@ -11,6 +11,7 @@
 //  - au niveau de l'EXERCICE, on compare à la dernière fois qu'on l'a fait, quelle que
 //    soit la séance — c'est toujours pertinent, et c'est ce qui parle le plus.
 import { bestSetE1RM } from './estimates';
+import { isTimeExercise, workTonnage } from './loadedHold';
 import { daysBetweenUtcIso } from './startDate';
 import type { SessionLog } from './types';
 import type { LogEntry } from './volume';
@@ -58,7 +59,7 @@ export function sessionTotals(log: SessionLog): SessionTotals {
   let sets = 0;
   for (const ex of log.exercises ?? []) {
     for (const s of ex.performed ?? []) {
-      volume += (s.load_kg || 0) * (s.reps || 0);
+      volume += workTonnage([s], isTimeExercise(ex));
       sets++;
     }
   }
@@ -107,13 +108,13 @@ export function compareSession(current: LogEntry, priors: LogEntry[]): SessionCo
   }
 
   for (const ex of current.log.exercises ?? []) {
-    const top = bestSetE1RM(ex.performed ?? []);
+    const top = bestSetE1RM(ex.performed ?? [], isTimeExercise(ex));
     if (!top) continue;
     // La dernière fois qu'on a fait CET exercice, quelle que soit la séance.
     let found: { d: LogEntry; top: NonNullable<ReturnType<typeof bestSetE1RM>> } | null = null;
     for (const p of avant) {
       const le = (p.log.exercises ?? []).find((e) => e.id === ex.id);
-      const t = le ? bestSetE1RM(le.performed ?? []) : null;
+      const t = le ? bestSetE1RM(le.performed ?? [], isTimeExercise(le)) : null;
       if (t) {
         found = { d: p, top: t };
         break;

@@ -209,6 +209,7 @@ import { useLibraryStore } from '@/stores/library';
 import { useAuthStore } from '@/stores/auth';
 import { buildBeginnerSession } from '@/lib/programBuilder';
 import { sessionXp, otherSportXp } from '@/lib/athlete';
+import { logTonnage } from '@/lib/loadedHold';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 const router = useRouter();
@@ -369,10 +370,7 @@ function showHistory() {
 }
 
 function volume(r: LogRow): number {
-  return r.payload.exercises.reduce(
-    (a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0),
-    0,
-  );
+  return logTonnage(r.payload);
 }
 const sessXp = (r: LogRow) =>
   r.payload.discipline === 'autre_sport'

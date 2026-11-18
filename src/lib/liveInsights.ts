@@ -5,6 +5,7 @@
 // `instancesOf` sur les bilans de `logs.fetchAll` (du plus récent au plus ancien). Pas de
 // seconde requête, pas de second calcul de « la dernière séance de cet exercice ».
 import { bestE1RM, estimate1RM } from './estimates';
+import { holdSetLabel, isTimeExercise } from './loadedHold';
 import { instancesOf } from './progression';
 import type { PerformedSet, SessionLog } from './types';
 
@@ -28,7 +29,7 @@ export function lastTimeAt(last: PerformedSet[], position: number): PerformedSet
 /** « 42,5 kg × 12 » · « 12 reps » (poids du corps) · « 45 s » (exo en temps) · « +10 kg × 8 » (lest). */
 export function formatLastTime(set: PerformedSet, opts: { time: boolean; bodyweight: boolean }) {
   const fr = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
-  if (opts.time) return `${fr(set.reps)} s`;
+  if (opts.time) return holdSetLabel(set.load_kg, set.reps);
   if (!(set.load_kg > 0)) return `${set.reps} reps`;
   return `${opts.bodyweight ? '+' : ''}${fr(set.load_kg)} kg × ${set.reps}`;
 }
@@ -36,7 +37,8 @@ export function formatLastTime(set: PerformedSet, opts: { time: boolean; bodywei
 /** Le meilleur 1RM estimé (Epley) de toutes les séances passées de cet exercice ; 0 = jamais. */
 export function historicalBestE1RM(exerciseId: string, logs: SessionLog[]): number {
   let best = 0;
-  for (const ex of instancesOf(exerciseId, logs)) best = Math.max(best, bestE1RM(ex.performed));
+  for (const ex of instancesOf(exerciseId, logs))
+    best = Math.max(best, bestE1RM(ex.performed, isTimeExercise(ex)));
   return best;
 }
 

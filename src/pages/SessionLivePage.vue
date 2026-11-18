@@ -69,7 +69,11 @@
           <button
             v-if="notifState !== 'unsupported'"
             class="pill alert-pill"
-            :title="notifState === 'blocked' ? 'Notifications bloquées par le navigateur' : 'Alerte de fin de repos (notification)'"
+            :title="
+              notifState === 'blocked'
+                ? 'Notifications bloquées par le navigateur'
+                : 'Alerte de fin de repos (notification)'
+            "
             :class="{ on: notifState === 'on' }"
             :disabled="notifState === 'blocked'"
             data-test="rest-alert"
@@ -146,8 +150,9 @@
           <div v-if="lastTimeText" class="pills">
             <span class="pill last" data-test="last-time">dernière fois : {{ lastTimeText }}</span>
           </div>
-          <div class="editor-row">
-            <div class="ed-cell">
+          <div class="editor-row" :class="{ solo: !showLoad }">
+            <!-- Exo au temps : pas de lest, sauf planche et chaise (cf. loadedHold.ts). -->
+            <div v-if="showLoad" class="ed-cell">
               <div class="cell-lbl">{{ ex.bodyweight ? 'Lest' : 'Charge' }}</div>
               <div class="val-line">
                 <button class="stepper" @click="adj(activeSet, 'load_kg', -loadStep)">−</button>
@@ -183,7 +188,7 @@
               </div>
             </div>
           </div>
-          <div class="load-step">
+          <div v-if="showLoad" class="load-step">
             <span class="ls-lbl">Pas charge</span>
             <div class="ls-chips">
               <button
@@ -348,6 +353,7 @@ import {
   lastTimeSets,
 } from '@/lib/liveInsights';
 import { estimate1RM } from '@/lib/estimates';
+import { holdLoadable, workTonnage } from '@/lib/loadedHold';
 import {
   REST_NOTIFY_KEY,
   restNotice,
@@ -409,13 +415,16 @@ const rateTarget = computed(() => (resting.value || !curSet.value ? lastDone.val
 // ne confirmerait jamais — deux chiffres pour la même chose.
 const volume = computed(() =>
   ex.value
-    ? ex.value.sets
-        .filter((s) => s.done && isWorkSet(s))
-        .reduce((a, s) => a + s.load_kg * s.reps, 0)
+    ? workTonnage(
+        ex.value.sets.filter((s) => s.done && isWorkSet(s)),
+        isTimeEx.value,
+      )
     : 0,
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
 const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
+/** Le stepper de charge/lest : un exo au temps n'en a que s'il accepte un lest. */
+const showLoad = computed(() => !isTimeEx.value || holdLoadable(ex.value?.id));
 function exDone(e: LiveExercise): boolean {
   // Un exercice est fait quand son TRAVAIL est fait : sauter l'échauffement ne doit pas
   // le laisser éternellement « en cours » dans la frise des exos.
@@ -511,7 +520,8 @@ function endRest() {
   } catch {
     /* pas de vibration : tant pis */
   }
-  if (document.visibilityState === 'hidden' && restWhat && restAlertOn()) void showRestNotice(restWhat);
+  if (document.visibilityState === 'hidden' && restWhat && restAlertOn())
+    void showRestNotice(restWhat);
   skipRest();
 }
 
@@ -1341,6 +1351,9 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 12px;
+}
+.editor-row.solo {
+  grid-template-columns: minmax(0, 1fr);
 }
 .editor-row {
   display: grid;

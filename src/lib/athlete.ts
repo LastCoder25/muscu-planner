@@ -4,6 +4,7 @@
 import type { SessionLog, Session, DrillLog, CardioLog } from './types';
 import { activityIntensity, sportIntensity } from './statSignature';
 import { descentWeight } from '@/data/cardio';
+import { isTimeExercise, workTonnage } from './loadedHold';
 
 // Le poids d'une activité cardio n'est PLUS un facteur arbitraire : il dérive de
 // son INTENSITÉ (somme du vecteur de bénéfices, adossée au MET), normalisée par
@@ -34,7 +35,8 @@ export function sessionXp(log: SessionLog): number {
   for (const ex of log.exercises ?? []) {
     for (const s of ex.performed ?? []) {
       reps += s.reps || 0;
-      tonnage += (s.load_kg || 0) * (s.reps || 0);
+      // Un exo au temps (planche lestée) ne rapporte aucune XP de charge.
+      tonnage += workTonnage([s], isTimeExercise(ex));
     }
   }
   const dur = log.duration_min ?? 0;

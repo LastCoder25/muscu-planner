@@ -2,6 +2,7 @@
 // Pur (aucune dépendance Vue/Supabase). Consommé par le Bilan (Étape 4.1)
 // et l'affichage de tendances. Formule d'Epley.
 import { localDayIso } from './localDay';
+import { isTimeExercise } from './loadedHold';
 import type { PerformedSet, Session, SessionLog } from './types';
 import { warmupSeconds } from './warmup';
 
@@ -22,7 +23,13 @@ export function estimate1RM(loadKg: number, reps: number): number {
  * et le mur de records s'en sert pour montrer la série RÉELLE (« 100 kg × 5 »), qui
  * parle bien plus qu'un 1RM estimé qu'on n'a jamais soulevé.
  */
-export function bestSetE1RM(performed: PerformedSet[]): { set: PerformedSet; e1rm: number } | null {
+export function bestSetE1RM(
+  performed: PerformedSet[],
+  timed = false,
+): { set: PerformedSet; e1rm: number } | null {
+  // Exo au temps : reps = SECONDES, Epley donnerait un 1RM absurde (10 kg x 60 s -> 30 kg).
+  // Le lest d une tenue a son propre indicateur (loadedHold.ts).
+  if (timed) return null;
   let best: { set: PerformedSet; e1rm: number } | null = null;
   for (const s of performed) {
     const e = estimate1RM(s.load_kg, s.reps);
@@ -32,8 +39,8 @@ export function bestSetE1RM(performed: PerformedSet[]): { set: PerformedSet; e1r
 }
 
 /** Meilleur 1RM estimé parmi les séries réalisées (ignore les séries sans charge). */
-export function bestE1RM(performed: PerformedSet[]): number {
-  return bestSetE1RM(performed)?.e1rm ?? 0;
+export function bestE1RM(performed: PerformedSet[], timed = false): number {
+  return bestSetE1RM(performed, timed)?.e1rm ?? 0;
 }
 
 /** Un record de force battu sur un exercice. */
@@ -56,7 +63,7 @@ export function detectLiftPRs(current: SessionLog, priors: SessionLog[]): LiftPR
   const prevBest = new Map<string, number>();
   for (const log of priors) {
     for (const ex of log.exercises ?? []) {
-      const e = bestE1RM(ex.performed ?? []);
+      const e = bestE1RM(ex.performed ?? [], isTimeExercise(ex));
       if (e > (prevBest.get(ex.id) ?? 0)) prevBest.set(ex.id, e);
     }
   }
@@ -64,7 +71,7 @@ export function detectLiftPRs(current: SessionLog, priors: SessionLog[]): LiftPR
   const seen = new Set<string>();
   for (const ex of current.exercises ?? []) {
     if (seen.has(ex.id)) continue;
-    const e = bestE1RM(ex.performed ?? []);
+    const e = bestE1RM(ex.performed ?? [], isTimeExercise(ex));
     if (e <= 0) continue;
     const prev = prevBest.get(ex.id) ?? 0;
     if (prev > 0 && e > prev) {
@@ -115,7 +122,7 @@ export function personalRecords(
     // une autre forme, et le projet s'est déjà fait décaler d'un jour par là.
     const day = localDayIso(new Date(performedAt));
     for (const ex of log.exercises ?? []) {
-      const top = bestSetE1RM(ex.performed ?? []);
+      const top = bestSetE1RM(ex.performed ?? [], isTimeExercise(ex));
       if (!top) continue;
       const prev = best.get(ex.id);
       // ⚠️ On n'alloue QUE sur un vrai record. L'écriture d'avant construisait `rec` à

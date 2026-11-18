@@ -65,6 +65,17 @@
           </div>
         </div>
 
+        <!-- Records de lest (tenues : planche, chaise) -->
+        <div v-if="holdPrs.length" class="pr-banner" data-test="hold-prs">
+          <div class="pr-title font-display">🏋️ Record de lest</div>
+          <div v-for="p in holdPrs" :key="p.id" class="pr-row">
+            <span class="pr-name">{{ p.name }}</span>
+            <span class="pr-val font-display"
+              >{{ holdSetLabel(p.load, p.secs) }} <small>+{{ p.load - p.prevLoad }} kg</small></span
+            >
+          </div>
+        </div>
+
         <!-- Séries par groupe musculaire (prévu / réalisé) -->
         <template v-if="muscleVolume.length">
           <div class="sec-h">Séries par groupe</div>
@@ -94,12 +105,14 @@
           <div class="ex-planned">Prévu : {{ plannedLabel(ex.planned) }}</div>
           <div class="sets">
             <span v-for="(s, j) in ex.performed" :key="j" class="setpill">
-              <template v-if="ex.planned.unit === 'time'">{{ s.reps }} s</template>
+              <template v-if="ex.planned.unit === 'time'">{{
+                holdSetLabel(s.load_kg, s.reps)
+              }}</template>
               <template v-else>{{ s.load_kg }}×{{ s.reps }}</template>
               <span class="dot" :class="'d' + s.difficulty" />
             </span>
           </div>
-          <div v-if="ex.performed.length" class="ex-e1rm">
+          <div v-if="ex.performed.length && !isTimeExercise(ex)" class="ex-e1rm">
             Max estimé : <b>{{ bestE1RM(ex.performed) }} kg</b>
           </div>
           <!-- Ce que cet exercice valait la dernière fois. ⚠️ Distinct des records : passer
@@ -214,6 +227,7 @@ import {
 type Delta = ReturnType<typeof deltaLabel>;
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
+import { detectHoldPRs, holdSetLabel, isTimeExercise, type HoldPR } from '@/lib/loadedHold';
 import { setsByMuscleFromLog, muscleColor, isMuscuLog } from '@/lib/volume';
 import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
@@ -278,6 +292,8 @@ function prevOf(id: string) {
 }
 const history = ref<SessionLog[]>([]);
 const prs = ref<LiftPR[]>([]);
+/** Records de LEST sur une tenue (planche, chaise) : leur propre indicateur, pas un 1RM. */
+const holdPrs = ref<HoldPR[]>([]);
 const applying = ref(false);
 
 const iaOpen = ref(false);
@@ -295,7 +311,7 @@ const totalVolume = computed(() => (log.value ? sessionTotals(log.value).volume 
 
 function plannedLabel(t: Partial<ExerciseTarget>): string {
   const range = `${t.sets ?? '?'} × ${t.reps_min ?? '?'}–${t.reps_max ?? '?'}`;
-  if (t.unit === 'time') return `${range} s`;
+  if (t.unit === 'time') return t.added_kg ? `${range} s · +${t.added_kg} kg` : `${range} s`;
   if (t.load === 'bodyweight')
     return `${range} · ${t.added_kg ? '+' + t.added_kg + ' kg' : 'poids du corps'}`;
   return t.load_kg ? `${range} · ${t.load_kg} kg` : range;
@@ -306,7 +322,7 @@ function plannedLabel(t: Partial<ExerciseTarget>): string {
 // apparaître les plateaux, jusqu'ici calculés pour baisser la charge puis jetés.
 const deltas = computed(() =>
   verdicts.value.map((v) => {
-    const l = verdictLabel(v.verdict);
+    const l = verdictLabel(v.verdict, v.time);
     return { id: v.id, name: v.name, label: l.text, cls: l.tone };
   }),
 );
@@ -443,6 +459,7 @@ onMounted(async () => {
     if (!readOnly.value && log.value) {
       const priors = allRows.filter((r) => r.payload?.id !== log.value!.id).map((r) => r.payload);
       prs.value = detectLiftPRs(log.value, priors);
+      holdPrs.value = detectHoldPRs(log.value, priors);
       if (prs.value.length) {
         const top = prs.value[0]!;
         // Célébration centrale (gros moment de motivation) + le bandeau reste en détail.

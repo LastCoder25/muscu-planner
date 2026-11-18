@@ -10,6 +10,7 @@
 // faite garde ses valeurs. On ne réécrit jamais une décision du joueur ni du moteur.
 import type { SessionLog } from './types';
 import { instancesOf } from './progression';
+import { holdLoadable } from './loadedHold';
 
 interface PrefillSet {
   load_kg: number;
@@ -51,7 +52,9 @@ export function lastWorkLoad(exerciseId: string, logs: SessionLog[]): number | n
 export function prefillLoads(exercises: PrefillExercise[], logs: SessionLog[]): number {
   let changed = 0;
   for (const ex of exercises) {
-    if (ex.bodyweight || ex.prescribed) continue;
+    // Poids du corps : pas de charge à reporter — sauf une tenue qui accepte un lest (planche,
+    // chaise), dont le dernier lest se reprend comme une charge.
+    if ((ex.bodyweight && !holdLoadable(ex.id)) || ex.prescribed) continue;
     const work = ex.sets.filter((s) => !s.warmup);
     if (!work.length || work.some((s) => s.done || s.load_kg > 0)) continue;
     const load = lastWorkLoad(ex.id, logs);
