@@ -132,13 +132,18 @@
               :class="{ on: hitExo?.id === e.id }"
               role="radio"
               :aria-checked="hitExo?.id === e.id"
-              :disabled="busy || holdT.running.value"
+              :disabled="busy"
+              :aria-disabled="holdT.running.value || undefined"
+              :aria-describedby="holdT.running.value ? 'fb-lock-note' : undefined"
               @click="chooseHitExo(e.id)"
             >
               <span class="fb-pickex-n">{{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}</span>
               <span class="fb-pickex-v">{{ eqLabel(e.family) }}</span>
             </button>
           </div>
+          <p v-if="isMixed && holdT.running.value" id="fb-lock-note" class="fb-hint">
+            🔒 Exercice verrouillé pendant le chrono.
+          </p>
           <!-- ⏱️ CHRONO (exo en secondes) : on tient, la scène encaisse en continu ; au-delà de 30 s
                chaque tranche de 15 s est majorée. « Terminer » ne fait que PRÉ-REMPLIR la saisie :
                c'est le flux habituel (« Frapper ») qui envoie. -->
@@ -247,13 +252,17 @@
               ≤ {{ perHit }} {{ hitUnit }} par saisie · pas de plafond par jour
             </template>
             <template v-if="isMixed && split.accepted > 0">
-              · {{ split.accepted }} {{ hitUnit }} = <b>{{ fmtEq(split.units) }} éq. pompes</b>
+              ·
+              <span class="fb-conv"
+                >{{ split.accepted }} {{ hitUnit }} →
+                <b>{{ fmtEq(split.units) }} pompes équivalentes</b></span
+              >
             </template>
           </div>
           <!-- 🤝 LA PART RÉSERVÉE, dite AVANT la frappe : sinon des reps qui n'entament pas le
                boss se liraient comme un bug. Et on dit ce qu'elles rapportent quand même. -->
           <div v-if="split.surplus > 0" class="fb-hint fb-surplus">
-            🤝 <b>{{ fmtEq(split.surplus) }}</b> {{ isMixed ? 'éq. pompes' : hitUnit }} en
+            🤝 <b>{{ fmtEq(split.surplus) }}</b> {{ isMixed ? 'pompes équiv.' : hitUnit }} en
             <b>surplus</b> :
             <template v-if="reserved > 0"
               >les derniers PV sont gardés pour {{ waitingNames }}, qui n’{{
@@ -304,7 +313,7 @@
           </div>
         </div>
         <p class="fb-hint">
-          Ton coffre suit <b>tes</b> {{ isMixed ? 'éq. pompes' : unitLabelOf(current) }}, que le
+          Ton coffre suit <b>tes</b> {{ isMixed ? 'pompes équiv.' : unitLabelOf(current) }}, que le
           boss tombe ou non : il s’ouvre dès que ta part est faite, sinon à la fin du combat. S’il
           tombe, chacun de ceux qui ont fait leur demi-part reçoit en plus un
           <b>bonus de groupe</b> — plus gros s’il tombe tôt, et plus gros encore pour qui a fait
@@ -351,7 +360,7 @@
             </thead>
             <tbody>
               <tr v-for="r in hitGrid.rows" :key="r.userId" :class="{ me: r.userId === uid }">
-                <th class="fb-g-name" scope="row" :title="r.pseudo">{{ r.pseudo }}</th>
+                <th class="fb-g-name" scope="row" :title="r.pseudo">{{ shortName(r.pseudo) }}</th>
                 <td
                   v-for="d in hitGrid.days"
                   :key="d.index"
@@ -388,10 +397,9 @@
             <li v-for="h in lastHits" :key="h.id">
               <b>{{ h.pseudo }}</b> · {{ h.exName }} · {{ h.qty }} {{ h.unit }}
               <span class="fb-dim"
-                >= {{ fmtEq(h.eq) }} éq.<template v-if="h.surplus > 0">
-                  · 🤝 {{ fmtEq(h.surplus) }} en surplus</template
-                >
-                · il y a {{ h.ago }}</span
+                >= <b class="fb-eq">{{ fmtEq(h.eq) }} éq.</b
+                ><template v-if="h.surplus > 0"> · 🤝 {{ fmtEq(h.surplus) }} en surplus</template> ·
+                {{ h.ago }}</span
               >
             </li>
           </ul>
@@ -446,7 +454,10 @@
               {{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }} <span aria-hidden="true">✕</span>
             </button>
             <span class="fb-dim fb-chip-n"
-              >{{ pickedList.length }}/{{ FRIEND_BOSS.maxExercises }}</span
+              >{{ pickedList.length }}/{{ FRIEND_BOSS.maxExercises }} ·
+              {{ FRIEND_BOSS.minExercises }} minimum<template v-if="pickedList.length === 1">
+                (1 seul = boss simple)</template
+              ></span
             >
           </div>
           <input
@@ -469,8 +480,12 @@
               "
               @click="toggleExo(e)"
             >
-              <span>{{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}</span>
-              <span class="fb-dim">{{
+              <span class="fb-exo-n">
+                <span v-if="isPicked(e.id)" class="fb-exo-ck" aria-hidden="true">✓</span>
+                <span v-else-if="takenExo.has(e.id)" aria-hidden="true">🔒</span>
+                {{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}
+              </span>
+              <span class="fb-exo-m">{{
                 takenExo.has(e.id)
                   ? 'déjà un boss en cours'
                   : pickedList.length > 1 || (pickedList.length === 1 && !isPicked(e.id))
@@ -479,6 +494,12 @@
               }}</span>
             </button>
           </div>
+          <!-- Pourquoi « pompes équivalentes » : un seul boss, des exercices qui ne se valent pas. -->
+          <p class="fb-hint">
+            Chaque exercice est converti en <b>pompes équivalentes</b> pour que tout le monde frappe
+            le même boss. Un seul exercice = boss simple ; de {{ FRIEND_BOSS.minExercises }} à
+            {{ FRIEND_BOSS.maxExercises }} = boss à choix.
+          </p>
 
           <!-- Le cran fixe le VOLUME par personne, et la récompense monte plus vite que lui :
                chaque tuile annonce donc les deux, pour que le choix se fasse en connaissance
@@ -893,12 +914,17 @@ function chooseHitExo(id: string) {
 }
 const famEmoji = (b: FriendBoss) => (isMixedBoss(b) ? '🎯' : BOSS_FAMILY_LABEL[b.family].emoji);
 /** Unité de la part d'un boss : l'équivalent poussée pour un boss à choix. */
-const unitLabelOf = (b: FriendBoss) => (isMixedBoss(b) ? 'éq. pompes' : bossUnitLabel(b.family));
+const unitLabelOf = (b: FriendBoss) => (isMixedBoss(b) ? 'pompes équiv.' : bossUnitLabel(b.family));
 /** Ce que vaut une unité d'un exo en équivalent poussée : « 1 rep = 2 éq. ». */
 const eqLabel = (family: BossFamily) =>
-  `1 ${family === 'core' ? 's' : 'rep'} = ${fmtEq(eqPerUnit(family))} éq.`;
+  `1 ${family === 'core' ? 's' : 'rep'} = ${fmtEq(eqPerUnit(family))} pompe${eqPerUnit(family) >= 2 ? 's' : ''}`;
 /** Un nombre d'éq. pompes (fractionnaire sur un boss à choix) : 12,75 → « 12,75 », 0,75 → « 0,75 ». */
 const fmtEq = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+/** « à l'instant » / « il y a 3 h » (jamais « il y a 0 min »). */
+const agoText = (msAgo: number) =>
+  msAgo < 60_000 ? 'à l’instant' : `il y a ${fmtBossSpan(msAgo)}`;
+/** Pseudo abrégé du tableau par jour : au plus 8 signes, jamais coupé au hasard. */
+const shortName = (p: string) => (p.length > 8 ? `${p.slice(0, 7)}…` : p);
 const cellText = (n: number, state: string) => (n ? fmtEq(n) : state === 'future' ? '' : '·');
 /** Dégâts d'une quantité de l'exo choisi (le chrono les annonce avant l'envoi). */
 const dmgOfQty = (qty: number) =>
@@ -921,7 +947,7 @@ const lastHits = computed(() => {
         unit: bossUnitLabel(ex.family),
         eq: h.units,
         surplus: h.surplus ?? 0,
-        ago: fmtBossSpan(now.value - h.createdAt),
+        ago: agoText(now.value - h.createdAt),
       };
     });
 });
@@ -1170,7 +1196,7 @@ const launchFamily = computed<BossFamily | null>(() => {
 });
 const launchUnit = computed(() =>
   pickedList.value.length >= FRIEND_BOSS.minExercises
-    ? 'éq. pompes'
+    ? 'pompes équiv.'
     : bossUnitLabel(pickedExo.value?.family ?? 'push'),
 );
 const pickedTier = ref<string>(BOSS_TIER_DEFAULT);
@@ -1427,6 +1453,10 @@ function notifyError(e: unknown) {
 }
 .fb-card.invite {
   border-color: var(--accent);
+  /* Opaque : le filigrane « MUSCU » du fond ne passe pas sous les pastilles. */
+  background: var(--surface);
+  position: relative;
+  z-index: 1;
 }
 .fb-inv-t {
   font-size: 14px;
@@ -1459,8 +1489,17 @@ function notifyError(e: unknown) {
 .fb-tier-r.short {
   color: var(--d4);
 }
+/* ⚠️ Occupé : on atténue la TUILE (fond, cadre en tirets), jamais le motif, qui doit rester lisible. */
 .fb-exo:disabled {
-  opacity: 0.45;
+  border-style: dashed;
+  background: transparent;
+  cursor: default;
+}
+.fb-exo:disabled .fb-exo-n {
+  color: var(--dim);
+}
+.fb-exo:disabled .fb-exo-m {
+  color: var(--text);
 }
 /* Plusieurs boss en cours : on choisit celui qu'on regarde */
 .fb-pick {
@@ -1944,12 +1983,12 @@ function notifyError(e: unknown) {
   border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
 .fb-grid thead th {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--dim);
 }
 .fb-g-name {
-  width: 19%;
+  width: 25%;
   padding-right: 4px !important;
   text-align: left !important;
   font-weight: 600;
@@ -2011,17 +2050,19 @@ function notifyError(e: unknown) {
 }
 .fb-exos {
   display: grid;
+  /* Tuiles sur 2 colonnes, comme le choix de l'exercice à la frappe. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  max-height: 260px;
+  max-height: 340px;
   margin-top: 8px;
   overflow-y: auto;
 }
 .fb-exo {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  min-width: 0;
+  min-height: 52px;
   padding: 6px 12px;
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -2061,7 +2102,25 @@ function notifyError(e: unknown) {
 }
 .fb-chip small {
   color: var(--dim);
-  font-size: 11px;
+  font-size: 12px;
+}
+.fb-conv {
+  color: var(--text);
+}
+.fb-eq {
+  color: var(--accent);
+}
+.fb-exo-n {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fb-exo-ck {
+  color: var(--accent);
+  font-weight: 800;
+}
+.fb-exo-m {
+  font-size: 12px;
+  color: var(--dim);
 }
 button.fb-chip.rm {
   min-height: 44px;
@@ -2108,7 +2167,7 @@ button.fb-chip.rm {
 }
 .fb-pickex-v {
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .fb-hist {
   display: grid;

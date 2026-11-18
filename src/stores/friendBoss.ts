@@ -6,11 +6,13 @@ import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 import { singleFlight } from '@/lib/singleFlight';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 import { loadCharacterStore } from '@/composables/useLazyCharacter';
 import {
   bossFromRow,
   bossPhase,
   bossErrorMessage,
+  bossHitCall,
   bossTokenCost,
   FRIEND_BOSS,
   unitsFromRow,
@@ -31,6 +33,20 @@ export class FriendBossError extends Error {
 
 const errCode = (e: unknown): string =>
   e && typeof e === 'object' && 'message' in e ? String(e.message) : '';
+
+/** Une ligne de `friend_boss_hits` (colonnes d'avant et de la migr. 0118). */
+interface HitRow {
+  id: string;
+  boss_id: string;
+  user_id: string;
+  units: number;
+  surplus?: number | null;
+  points?: number | null;
+  surplus_points?: number | null;
+  exercise_id?: string | null;
+  qty?: number | null;
+  created_at: string;
+}
 
 export const useFriendBossStore = defineStore('friendBoss', () => {
   const bosses = ref<FriendBoss[]>([]);
@@ -62,14 +78,23 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       loaded.value = true;
       return;
     }
-    const [b, m, h] = await Promise.all([
+    // ⚠️ Les frappes sont PAGINÉES (1 000 lignes par réponse au plus) : l'XP d'un boss à choix
+    // s'additionne frappe par frappe, une lecture tronquée la sous-compterait en silence.
+    const [b, m, hRows] = await Promise.all([
       supabase.from('friend_bosses').select('*').in('id', ids),
       supabase.from('friend_boss_members').select('*').in('boss_id', ids),
-      supabase.from('friend_boss_hits').select('*').in('boss_id', ids),
+      fetchAllRows<HitRow>((from, to) =>
+        supabase
+          .from('friend_boss_hits')
+          .select('*')
+          .in('boss_id', ids)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
     ]);
     if (b.error) throw b.error;
     if (m.error) throw m.error;
-    if (h.error) throw h.error;
     bosses.value = (b.data ?? []).map(bossFromRow).sort((x, y) => y.createdAt - x.createdAt);
     members.value = (m.data ?? []).map((r) => ({
       bossId: r.boss_id,
@@ -84,7 +109,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       legacyChest: !!r.legacy_chest,
       look: parseHeroLook(r.look),
     }));
-    hits.value = (h.data ?? []).map((r) => ({
+    hits.value = hRows.map((r) => ({
       id: r.id,
       bossId: r.boss_id,
       userId: r.user_id,
@@ -198,6 +223,13 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     units: number,
     exerciseId?: string | null,
   ): Promise<{ accepted: number; damage: number; surplus: number; defeated: boolean }> {
+    // 🎯 Jamais `fboss_hit` sur un boss à choix (le serveur le refuse : `update_required`).
+    const call = bossHitCall(
+      bosses.value.find((x) => x.id === bossId),
+      bossId,
+      units,
+      exerciseId,
+    );
     const res = await rpc<{
       ok: boolean;
       accepted?: number;
@@ -207,12 +239,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       surplus_points?: number;
       defeated?: boolean;
       reason?: string;
-    }>(
-      exerciseId ? 'fboss_hit_exo' : 'fboss_hit',
-      exerciseId
-        ? { p_boss: bossId, p_units: Math.floor(units), p_exercise_id: exerciseId }
-        : { p_boss: bossId, p_units: Math.floor(units) },
-    );
+    }>(call.fn, call.args);
     if (!res.ok) throw new FriendBossError(res.reason ?? '');
     await loadMine();
     const accepted = res.accepted ?? 0;

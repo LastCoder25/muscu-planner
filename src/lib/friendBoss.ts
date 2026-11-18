@@ -393,6 +393,24 @@ export function hitExercise(
 export const unitsFromRow = (points: number | null | undefined, units: number): number =>
   points == null ? units : points / FRIEND_BOSS.mixedScale;
 
+/** 🎯 L'appel serveur d'une frappe. ⚠️ Un boss à choix passe TOUJOURS par `fboss_hit_exo` (l'exo
+ *  choisi, à défaut le premier) : l'ancien `fboss_hit` y lève `update_required`. Un boss d'un exo
+ *  garde `fboss_hit`, exactement comme avant. */
+export function bossHitCall(
+  b: Pick<FriendBoss, 'exerciseId' | 'exercises'> | undefined,
+  bossId: string,
+  units: number,
+  exerciseId?: string | null,
+): { fn: 'fboss_hit' | 'fboss_hit_exo'; args: Record<string, unknown> } {
+  const p_units = Math.floor(units);
+  if (b && isMixedBoss(b))
+    return {
+      fn: 'fboss_hit_exo',
+      args: { p_boss: bossId, p_units, p_exercise_id: exerciseId ?? b.exerciseId },
+    };
+  return { fn: 'fboss_hit', args: { p_boss: bossId, p_units } };
+}
+
 /** Quantité BRUTE d'une frappe (reps, ou secondes — bonus de temps compris). */
 export const hitQty = (h: Pick<FriendBossHit, 'units' | 'qty'>): number => h.qty ?? h.units;
 
@@ -529,6 +547,9 @@ export function bossErrorMessage(code: string): string {
     capped: 'Plafond atteint : reviens plus tard pour frapper encore.',
     no_character: 'Crée d’abord ton aventurier dans l’Aventure.',
     no_altar: 'Construis l’Autel des boss dans ta base pour lancer un boss.',
+    // Un ancien client (ou un onglet périmé) frappe un boss à choix : le serveur refuse net.
+    update_required:
+      'Ce boss a plusieurs exercices : mets l’appli à jour (recharge la page) pour le frapper.',
     // ⚠️ `bad_exercises` AVANT `bad_exercise` : la recherche se fait par sous-chaîne, le premier gagne.
     bad_exercises: 'Un boss à choix a de 2 à 5 exercices, tous différents.',
     bad_exercise: 'Cet exercice ne peut pas servir de boss.',

@@ -3,12 +3,29 @@
 -- l'exercice de la liste » ; une rép de tirage vaut 2 réps de poussée, une rép de jambes 0,75,
 -- une seconde de gainage 0,2 — les parts de famille DÉJÀ en place, ramenées à la poussée).
 --
+-- ⚠️ ORDRE DE DÉPLOIEMENT : appliquer cette migration AVANT de pousser le client (sinon
+-- `fboss_declare_multi` / `fboss_hit_exo` répondent 404). L'inverse est sans risque.
+--
+-- ⚠️ PLAN DE RETOUR ARRIÈRE (dans cet ordre) :
+--   (a) côté client d'abord : masquer `declareMulti` (plus de nouveau boss à choix) ;
+--   (b) RESTAURER, avant toute suppression de colonne, les anciens corps : `fboss_push_hit` et
+--       `fboss_push_invite` (0108), `fboss_hit` (0092), `fboss_respond` (0087), `fboss_claim` et
+--       `fboss_claim_bonus` (0103), `fboss_same_exercise` (0086). Le trigger `fboss_push_hit` lit
+--       `new.points` : plpgsql lie tard, supprimer la colonne avant ferait échouer CHAQUE frappe ;
+--   (c) supprimer ensuite `fboss_hit_exo`, `fboss_declare_multi`, `fboss_ids_busy`, `fboss_unit_scale`,
+--       `fboss_boss_ids`, `fboss_is_multi`, `fboss_mixed_weight`, `fboss_mixed_scale` ;
+--   (d) GARDER les colonnes (additives, nullables : le store retombe proprement dessus).
+--   Avec des boss multi existants le retour ne perd rien mais dégrade (ils se lisent comme des boss de
+--   poussée, et les anciens corps n'y comptent plus que `units`).
+-- ⚠️ Hérité d'avant cette migration : aucune clé d'idempotence sur la frappe (un retry réseau après
+--   timeout double une frappe).
+--
 -- ⚠️ MIGRATION ADDITIVE ET RÉTRO-COMPATIBLE. Rien n'est supprimé ni renommé.
 --  · `fboss_declare` (6 arguments) n'est PAS touchée : un boss d'UN exercice se crée et se joue
 --    exactement comme avant. Le multi passe par une NOUVELLE fonction, `fboss_declare_multi`.
---  · `fboss_hit(p_boss, p_units)` garde sa signature. Sur un boss multi, elle frappe l'exo de la
---    colonne `exercise_id` (le premier de la liste) avec son vrai poids : c'est ce que fait un
---    ancien client, qui ne connaît pas la liste. Les nouveaux clients appellent `fboss_hit_exo`.
+--  · `fboss_hit(p_boss, p_units)` garde sa signature et son corps pour un boss d'UN exo. Sur un boss
+--    multi elle lève `update_required` (un ancien client ne sait pas quel exo il frappe). Les
+--    nouveaux clients appellent `fboss_hit_exo`.
 --  · Aucune donnée existante n'est modifiée : `exercises` est NULL sur tous les boss déjà là,
 --    ce qui veut dire « boss d'un seul exo » (colonnes `exercise_*` + `family`).
 --
@@ -160,6 +177,10 @@ begin
     if not exists (select 1 from public.exercises where id = v_exid) then
       raise exception 'bad_exercise';
     end if;
+    -- Poids de rep : un nombre, ou absent (1) — jamais une erreur de cast brute (22P02).
+    if coalesce(jsonb_typeof(v_e -> 'rep_weight'), 'null') not in ('number', 'null') then
+      raise exception 'bad_exercise';
+    end if;
     if v_exid = any (v_ids) then raise exception 'bad_exercises'; end if;
     v_ids := v_ids || v_exid;
     v_names := v_names || left(coalesce(v_e ->> 'name', v_exid), 80);
@@ -256,8 +277,8 @@ end;
 $$;
 
 -- ── Frapper : l'ancienne signature (boss d'un exo, ou 1er exo d'un multi) ────────
--- Reprise de `fboss_hit` (0092), texte inchangé sauf l'aiguillage : sur un boss MULTI, la frappe
--- est confiée à `fboss_hit_exo`, qui compte en points avec l'exo de la colonne `exercise_id`.
+-- Reprise de `fboss_hit` (0092), texte inchangé sauf un refus : sur un boss MULTI, l'ancienne
+-- signature lève `update_required` (la voie des nouveaux clients est `fboss_hit_exo`).
 create or replace function public.fboss_hit(p_boss uuid, p_units integer)
 returns json
 language plpgsql
@@ -281,10 +302,10 @@ begin
     select 1 from public.friend_boss_members
     where boss_id = p_boss and user_id = v_uid and status = 'accepted'
   ) then raise exception 'not_member'; end if;
-  -- 🎯 Boss à plusieurs exercices : un ancien client frappe le premier (colonne exercise_id).
-  if public.fboss_is_multi(b) then
-    return public.fboss_hit_exo(p_boss, p_units, null);
-  end if;
+  -- 🎯 Boss à plusieurs exercices : un ANCIEN client ne sait pas quel exo il frappe, et son
+  -- écran compterait des points comme des reps. On le refuse net (`update_required`) : le
+  -- nouveau client passe par `fboss_hit_exo`.
+  if public.fboss_is_multi(b) then raise exception 'update_required'; end if;
   if b.defeated_at is not null or now() < public.fboss_start(b)
      or now() >= public.fboss_start(b) + interval '7 days' then
     return json_build_object('ok', false, 'reason', 'not_active');
@@ -397,18 +418,18 @@ begin
   end if;
   v_dmg := least(v_pts, greatest(0, v_left - v_reserved));
   v_sur := v_pts - v_dmg;
-  -- Ce que lit un ancien client : l'équivalent poussée ARRONDI (au moins 1 : `units > 0`).
-  v_units := greatest(1, round(v_pts / public.fboss_mixed_scale()::numeric)::integer);
+  -- Ce que lit un ancien client : l'équivalent poussée ARRONDI EN DESSOUS (au moins 1 : `units > 0`).
+  v_units := greatest(1, floor(v_pts / public.fboss_mixed_scale()::numeric)::integer);
 
   insert into public.friend_boss_hits (boss_id, user_id, units, surplus, exercise_id, qty,
                                        points, surplus_points)
     values (p_boss, v_uid, v_units,
-            least(v_units, round(v_sur / public.fboss_mixed_scale()::numeric)::integer),
+            least(v_units, floor(v_sur / public.fboss_mixed_scale()::numeric)::integer),
             v_ex ->> 'id', v_qty, v_pts, v_sur);
   -- `units` est DÉRIVÉ du total de points (pas d'une somme d'arrondis).
   update public.friend_boss_members
     set points = coalesce(points, 0) + v_pts,
-        units = round((coalesce(points, 0) + v_pts) / public.fboss_mixed_scale()::numeric)::integer
+        units = floor((coalesce(points, 0) + v_pts) / public.fboss_mixed_scale()::numeric)::integer
     where boss_id = p_boss and user_id = v_uid;
   update public.friend_bosses
     set damage = damage + v_dmg * v_dpp,
@@ -571,4 +592,13 @@ revoke all on function public.fboss_hit_exo(uuid, integer, text) from public, an
 grant execute on function public.fboss_declare_multi(jsonb, uuid[], text) to authenticated;
 grant execute on function public.fboss_hit_exo(uuid, integer, text) to authenticated;
 -- Aide interne : jamais appelée par un client (les fonctions ci-dessus sont SECURITY DEFINER).
+-- Aides internes : jamais appelées par un client (les fonctions ci-dessus sont SECURITY DEFINER).
+-- ⚠️ `fboss_ids_busy` et `fboss_same_exercise` prennent un `p_uid` ARBITRAIRE : ouvertes, elles
+-- diraient à n'importe qui sur quels exos un autre joueur a un boss en cours.
 revoke all on function public.fboss_ids_busy(uuid, text[]) from public, anon, authenticated;
+revoke all on function public.fboss_same_exercise(uuid, text) from public, anon, authenticated;
+revoke all on function public.fboss_mixed_scale() from public, anon;
+revoke all on function public.fboss_mixed_weight(text) from public, anon;
+revoke all on function public.fboss_is_multi(public.friend_bosses) from public, anon;
+revoke all on function public.fboss_unit_scale(public.friend_bosses) from public, anon;
+revoke all on function public.fboss_boss_ids(public.friend_bosses) from public, anon;

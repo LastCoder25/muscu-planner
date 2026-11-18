@@ -39,6 +39,7 @@ import {
   bossJoinBlocker,
   bossLaunchBlocker,
   bossErrorMessage,
+  bossHitCall,
   type BossFamily,
   type BossExercise,
   type FriendBoss,
@@ -170,6 +171,11 @@ describe('🎯 conversion par famille : les valeurs exactes de la décision', ()
     expect(bossDamage(0.2 * 263)).toBe(52_600);
     expect(bossDamage(25)).toBe(25_000);
     expect(bossDamage(-3)).toBe(0);
+    // ⚠️ Des reps n/20 dont le produit par 1000 tombe SOUS l'entier (16,15 × 1000 = 16149,99…) : un
+    // `floor` perdrait un point de dégât.
+    expect(bossDamage(16.15)).toBe(16_150);
+    expect(bossDamage(32.05)).toBe(32_050);
+    expect(bossDamage(32.3)).toBe(32_300);
   });
 
   it('l’équivalent poussée restant se lit au point près (1/20), pas à la rep entière', () => {
@@ -433,6 +439,27 @@ describe('🎯 XP et agenda : par frappe, jamais par boss', () => {
   });
 });
 
+describe('🎯 l’appel serveur d’une frappe', () => {
+  it('⚠️ un boss à choix passe TOUJOURS par fboss_hit_exo (l’exo choisi, sinon le premier)', () => {
+    const b = mixed();
+    expect(bossHitCall(b, 'b1', 20.9, 'pullup')).toEqual({
+      fn: 'fboss_hit_exo',
+      args: { p_boss: 'b1', p_units: 20, p_exercise_id: 'pullup' },
+    });
+    expect(bossHitCall(b, 'b1', 5).args.p_exercise_id).toBe('pushup');
+  });
+  it('un boss d’un exo (ou inconnu du store) garde fboss_hit, sans exercice', () => {
+    expect(bossHitCall(single(), 'b1', 30)).toEqual({
+      fn: 'fboss_hit',
+      args: { p_boss: 'b1', p_units: 30 },
+    });
+    expect(bossHitCall(undefined, 'b1', 30).fn).toBe('fboss_hit');
+  });
+  it('« mets l’appli à jour » est traduit', () => {
+    expect(bossErrorMessage('update_required')).toContain('mets l’appli à jour');
+  });
+});
+
 // ── 5. Un boss occupe tous ses exercices ─────────────────────────────────────────────────
 describe('🎯 « un seul boss en cours par exercice », étendu à la liste', () => {
   const enCours = mixed({ exercises: [ex('pushup'), ex('pullup'), ex('plank')] });
@@ -613,8 +640,12 @@ describe('🎯 la lib et la migration 0118 disent la même chose', () => {
     // `fboss_hit(p_boss, p_units)` garde sa signature et aiguille un boss à choix vers l'exo 1.
     const h = def('fboss_hit');
     expect(h).toContain('fboss_hit(p_boss uuid, p_units integer)');
-    expect(h).toContain('if public.fboss_is_multi(b) then');
-    expect(h).toContain('return public.fboss_hit_exo(p_boss, p_units, null);');
+    // ⚠️ Un ANCIEN client sur un boss à choix est REFUSÉ (il ne sait pas quel exo il frappe) — il
+    // ne frappe plus « le premier exo ». Le nouveau client passe par `fboss_hit_exo`.
+    expect(h).toContain(
+      "if public.fboss_is_multi(b) then raise exception 'update_required'; end if;",
+    );
+    expect(h).not.toContain('return public.fboss_hit_exo');
     // …et un boss d'un exo garde SON corps d'avant (plafond, réserve, surplus, dégâts).
     expect(h).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
     expect(h).toContain('v_dmg := least(v_acc, greatest(0, v_left - v_reserved));');
@@ -673,10 +704,10 @@ describe('🎯 la lib et la migration 0118 disent la même chose', () => {
     expect(h).toContain("v_ex ->> 'id', v_qty, v_pts, v_sur");
     expect(h).toContain('points = coalesce(points, 0) + v_pts');
     expect(h).toContain(
-      'units = round((coalesce(points, 0) + v_pts) / public.fboss_mixed_scale()::numeric)::integer',
+      'units = floor((coalesce(points, 0) + v_pts) / public.fboss_mixed_scale()::numeric)::integer',
     );
     // `check (units > 0)` : au moins 1.
-    expect(h).toContain('greatest(1, round(v_pts / public.fboss_mixed_scale()::numeric)::integer)');
+    expect(h).toContain('greatest(1, floor(v_pts / public.fboss_mixed_scale()::numeric)::integer)');
   });
 
   it('fboss_declare_multi : 2 à 5 exercices distincts, `family` = push, mêmes garde-fous que fboss_declare', () => {
@@ -741,6 +772,41 @@ describe('🎯 la lib et la migration 0118 disent la même chose', () => {
     expect(p).toContain('if v_after >= b.hp_total then return new; end if;');
     expect(p).toContain('m.user_id <> new.user_id');
     expect(p).toContain('on conflict (user_id, dedupe) do nothing');
+  });
+
+  it('⚠️ les aides prenant un p_uid arbitraire sont fermées à tous (fuite d’information)', () => {
+    expect(sql).toContain(
+      'revoke all on function public.fboss_ids_busy(uuid, text[]) from public, anon, authenticated;',
+    );
+    expect(sql).toContain(
+      'revoke all on function public.fboss_same_exercise(uuid, text) from public, anon, authenticated;',
+    );
+    for (const f of [
+      'fboss_mixed_scale()',
+      'fboss_mixed_weight(text)',
+      'fboss_is_multi(public.friend_bosses)',
+      'fboss_unit_scale(public.friend_bosses)',
+      'fboss_boss_ids(public.friend_bosses)',
+    ])
+      expect(sql).toContain(`revoke all on function public.${f} from public, anon;`);
+  });
+
+  it('un poids de rep qui n’est pas un nombre est refusé proprement (bad_exercise, jamais 22P02)', () => {
+    const d = def('fboss_declare_multi');
+    expect(d).toContain(
+      "coalesce(jsonb_typeof(v_e -> 'rep_weight'), 'null') not in ('number', 'null')",
+    );
+    expect(d.indexOf("jsonb_typeof(v_e -> 'rep_weight')")).toBeLessThan(
+      d.indexOf("(v_e ->> 'rep_weight')::numeric"),
+    );
+  });
+
+  it('le plan de retour arrière et l’ordre de déploiement sont écrits en tête de la migration', () => {
+    const head = sql.slice(0, sql.indexOf('create or replace function'));
+    expect(head).toContain('AVANT de pousser le client');
+    expect(head).toContain('PLAN DE RETOUR ARRIÈRE');
+    expect(head).toContain('plpgsql lie tard');
+    expect(head).toContain('update_required');
   });
 
   it('droits : les deux nouvelles fonctions sont fermées à public et anon, ouvertes aux connectés', () => {
