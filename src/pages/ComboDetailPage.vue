@@ -143,6 +143,8 @@
           />
           <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
         </div>
+        <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
+        <HoldLestStepper v-if="legHoldLoadable(leg) && !legComplete(leg)" :combo-id="id" :leg="leg" />
         <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
         <div v-if="legMode(leg) === 'time'" class="leg-actions">
           <template v-if="!legComplete(leg)">
@@ -182,7 +184,11 @@
         <div v-if="legSets(leg).length && legMode(leg) !== 'sets'" class="leg-sets">
           <span v-for="(l, i) in groupSetLines(legSets(leg))" :key="i" class="leg-set-chip">
             <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
-            <template v-else-if="legMode(leg) === 'time'">{{ l.set.reps }} s</template>
+            <template v-else-if="legMode(leg) === 'time'"
+              >{{ l.set.reps }} s<template v-if="l.set.lest">
+                · {{ holdLestLabel(l.set) }}</template
+              ></template
+            >
             <template v-else
               >{{ l.set.reps }}<template v-if="l.set.weight">×{{ l.set.weight }} kg</template
               ><template v-if="l.set.assisted"> 🟧</template
@@ -277,6 +283,9 @@ import {
   lastEnteredSet,
   repQuickPicks,
   setCellLabel,
+  holdLestLabel,
+  legHoldLoadable,
+  legHoldLest,
   type ElasticBand,
   legRepRange,
   comboExportText,
@@ -298,6 +307,7 @@ import {
 } from '@/lib/challenges';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
+import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useLibraryStore } from '@/stores/library';
 import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
@@ -532,7 +542,17 @@ function fmtDurShort(sec: number): string {
 function doAddSeconds(leg: ComboLeg, sec: number) {
   if (!auth.user?.id || !c.value) return;
   const before = comboCompleteInTime(c.value);
-  combo.addSet(id, leg.exercise_id, logicalToday(), sec, null, false);
+  combo.addSet(
+    id,
+    leg.exercise_id,
+    logicalToday(),
+    sec,
+    null,
+    false,
+    null,
+    undefined,
+    legHoldLest(leg),
+  );
   if (!before && comboCompleteInTime(c.value)) celebrateObjective(c.value);
 }
 /** Retire UNE série (par défaut la dernière) — celle dont on a touché la case.

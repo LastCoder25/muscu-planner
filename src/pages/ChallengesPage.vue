@@ -446,6 +446,12 @@
                  porte le « ＋ » ; le retrait vit dans la fenêtre de saisie. Seul le chrono du
                  mode durée garde ses boutons (il n'a pas de fenêtre de saisie).
                  Objectif atteint : plus d'ajout (v1.53) — on peut encore corriger une série. -->
+            <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
+            <HoldLestStepper
+              v-if="activeCombo && legHoldLoadable(leg) && !legComplete(leg)"
+              :combo-id="activeCombo.id"
+              :leg="leg"
+            />
             <div class="cl-bottom">
               <div
                 v-if="legMode(leg) === 'sets'"
@@ -591,6 +597,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
+import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
@@ -647,6 +654,8 @@ import {
   ownSets,
   repQuickPicks,
   setCellLabel,
+  legHoldLoadable,
+  legHoldLest,
   type ElasticBand,
   legSets,
   setOriginLabel,
@@ -953,7 +962,17 @@ function doAddSeconds(leg: ComboLeg, sec: number) {
   const co = activeCombo.value;
   if (!co) return;
   const before = comboCompleteInTime(co);
-  comboStore.addSet(co.id, leg.exercise_id, logicalToday(), sec, null, false);
+  comboStore.addSet(
+    co.id,
+    leg.exercise_id,
+    logicalToday(),
+    sec,
+    null,
+    false,
+    null,
+    undefined,
+    legHoldLest(leg),
+  );
   if (!before && comboCompleteInTime(co)) celebrateCombo(co);
 }
 // ── Chrono des exos de DURÉE (comme les challenges) : Démarrer → décompte ; Pause →

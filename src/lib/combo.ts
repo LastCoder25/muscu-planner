@@ -10,6 +10,7 @@ import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
 import { localDayIso } from './localDay';
 import { bodyweightLoad } from './bodyweightLoad';
+import { holdLoadable } from './loadedHold';
 import { addDaysUtcIso } from './startDate';
 import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
@@ -47,6 +48,10 @@ export interface ComboSet {
   /** Heure de saisie (ISO) : distingue les séries enchaînées des séries étalées pour le
    *  conseil de charge. Absente des séries saisies avant la v0.1159. */
   at?: string;
+  /** 🧱 LEST (kg) d'une tenue lestable (planche, chaise : `legHoldLoadable`). Champ À PART de
+   *  `weight` : des kg × secondes ne sont pas des kg soulevés, donc ni tonnage, ni 1RM, ni XP
+   *  ne le lisent (décision v1.320.0 : aucune XP pour le lest). Pur affichage et mémoire. */
+  lest?: number;
   /** 🔁 MINI-SÉRIE du mode FRACTIONNÉ (« grease the groove » : une traction toutes les 10-30
    *  min), posée par les boutons « +1 / +2 / +3 », jamais par la fenêtre de saisie. Le
    *  marqueur est sur la SÉRIE et non sur l'exo : l'XP et les conseils lisent la série, donc
@@ -100,6 +105,8 @@ export interface ComboLeg {
   target: number; // objectif : SÉRIES (mode 'sets') OU total REPS (mode 'reps') sur la sem
   count_mode?: ComboCountMode; // défaut 'sets' (rétro-compat)
   weight_kg?: number | null; // dernier poids utilisé → préremplissage de la prochaine série
+  /** 🧱 Dernier lest choisi sur une tenue lestable : préremplit la série suivante. */
+  lest_kg?: number | null;
   // Fourchette de reps CONSEILLÉE pour cet exo, FIGÉE à la création depuis l’objectif
   // d’entraînement (force / hypertrophie / endurance…) et corrigée par la nature de
   // l’exo (gainage → secondes, isolation → plancher relevé). Figée, et non relue du
@@ -1403,6 +1410,28 @@ const VARIETY_CAP: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
 const ALWAYS_ON = new Set(['biceps', 'triceps']);
 const SETS_PER_EXO = 5;
 
+/** 🧱 Pas du lest d'une tenue (kg) — le même que les autres steppers de charge. */
+export const HOLD_LEST_STEP = 2.5;
+/** Plafond du lest saisissable (kg) : au-delà, c'est une faute de frappe. */
+export const HOLD_LEST_MAX = 100;
+/** Un exo du défi accepte-t-il un lest ? Une TENUE (mode durée) de la table `LOADABLE_HOLD_IDS`
+ *  (planche, chaise) — jamais le gainage latéral ni un exo en reps (qui a son poids). */
+export function legHoldLoadable(leg: ComboLeg): boolean {
+  return legMode(leg) === 'time' && holdLoadable(leg.exercise_id);
+}
+/** Le lest proposé pour la prochaine série : celui de la dernière série lestée, sinon le
+ *  dernier choisi sur l'exo, sinon 0. 0 si l'exo n'accepte pas de lest. */
+export function legHoldLest(leg: ComboLeg): number {
+  if (!legHoldLoadable(leg)) return 0;
+  const own = legSets(leg).filter((s) => !s.origin);
+  const last = own.at(-1);
+  return Math.max(0, last ? (last.lest ?? 0) : (leg.lest_kg ?? 0));
+}
+/** « +10 kg » : le lest d'une série, vide sans lest. Source unique des puces d'historique. */
+export function holdLestLabel(s: Pick<ComboSet, 'lest'> | undefined): string {
+  return s?.lest && s.lest > 0 ? `+${String(Math.round(s.lest * 10) / 10).replace('.', ',')} kg` : '';
+}
+
 /** 🎚️ Nombre d'exos CHOISI par groupe (v1.327.0 ; demandé : « pouvoir sélectionner le nombre
  *  d'exercices différents pour un groupe musculaire, pas seulement un ou deux »). Plancher de
  *  séries par exo : sans lui, un petit volume réparti sur 6 exos ferait 1 série chacun. */
@@ -1827,13 +1856,17 @@ export function comboTransferBlocker(
   fromId: string,
   to: ComboTransferTarget,
   scope: ComboTransferScope = 'all',
+  /** 🔀 Seulement une PART du reste (v1.328.0) : en unités de l'exo quitté. Une part stricte
+   *  laisse un objectif > 0 à l'exo, donc il n'a pas besoin d'être entamé. */
+  amount?: number,
 ): ComboTransferBlock | null {
   if (c.status !== 'active') return 'notActive';
   const from = c.legs.find((l) => l.exercise_id === fromId);
   if (!from) return 'noLeg';
   if (scope === 'rest') {
+    const part = amount !== undefined && amount < legRemaining(from);
     // Sans rien de fait, l'exo resterait avec un objectif nul ; sans reste, rien à basculer.
-    if (legDone(from) <= 0) return 'nothingDone';
+    if (!part && legDone(from) <= 0) return 'nothingDone';
     if (legRemaining(from) <= 0) return 'nothingLeft';
   }
   if ('leg' in to) {
@@ -1891,6 +1924,10 @@ export interface ComboTransferPlan {
   target: number;
   /** Tout basculer (défaut) ou seulement le reste (`sets` est alors vide). */
   scope?: ComboTransferScope;
+  /** 🔀 Portée `rest` : combien (en unités de l'exo quitté) passent sur la cible. Absent =
+   *  tout le reste. Le reste du reste demeure sur l'exo quitté (on peut le répartir ensuite
+   *  sur un second exo : « 7 séries de dips restantes → 4 ici, 3 là »). */
+  moved?: number;
 }
 
 const midOf = (min: number, max: number) => Math.max(1, Math.round((min + max) / 2));
@@ -1902,8 +1939,10 @@ export function comboTransferPlan(
   to: ComboTransferTarget,
   objective?: Objective | null,
   scope: ComboTransferScope = 'all',
+  /** 🔀 Portée `rest` : la part du reste qui bascule (par défaut tout le reste). */
+  amount?: number,
 ): ComboTransferPlan {
-  const block = comboTransferBlocker(c, fromId, to, scope);
+  const block = comboTransferBlocker(c, fromId, to, scope, amount);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
   let base: ComboSetWork;
@@ -1930,13 +1969,15 @@ export function comboTransferPlan(
       ? { ...base, reps: Math.max(1, Math.round(((s.reps || 0) * base.reps) / fromMid)) }
       : { ...base };
   // Tout : l'objectif entier part ; le reste : seulement ce qui manquait.
-  const moving = scope === 'rest' ? legRemaining(from) : from.target;
+  const rem = legRemaining(from);
+  const part = scope === 'rest' ? Math.min(rem, Math.max(1, Math.round(amount ?? rem))) : 0;
+  const moving = scope === 'rest' ? part : from.target;
   let target = moving;
   if (legMode(from) !== 'sets' && moving > 0) {
     const r = legRepRange(from, objective);
     target = Math.max(1, Math.round((moving / midOf(r.min, r.max)) * base.reps));
   }
-  if (scope === 'rest') return { sets: [], target, scope };
+  if (scope === 'rest') return { sets: [], target, scope, moved: part };
   return { sets: legSets(from).map(setPlan), target };
 }
 
@@ -1949,7 +1990,11 @@ function transferRest(
   plan: ComboTransferPlan,
 ): ComboLeg[] {
   const addTarget = Math.max(1, Math.round(plan.target));
-  const kept: ComboLeg = { ...from, target: legDone(from) };
+  // 🔀 Une part du reste : l'exo quitté garde le surplus (objectif − part) ; tout le reste :
+  // il redescend à ce qui est fait.
+  const rem = legRemaining(from);
+  const part = Math.min(rem, Math.max(1, Math.round(plan.moved ?? rem)));
+  const kept: ComboLeg = { ...from, target: part >= rem ? legDone(from) : from.target - part };
   if ('leg' in to) {
     return c.legs.map((l) =>
       l === from ? kept : l.exercise_id === to.leg ? { ...l, target: l.target + addTarget } : l,
@@ -1983,7 +2028,7 @@ export function transferComboLeg(
   plan: ComboTransferPlan = comboTransferPlan(c, fromId, to),
 ): ComboLeg[] {
   const scope = plan.scope ?? 'all';
-  const block = comboTransferBlocker(c, fromId, to, scope);
+  const block = comboTransferBlocker(c, fromId, to, scope, plan.moved);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
   if (scope === 'rest') return transferRest(c, from, to, plan);

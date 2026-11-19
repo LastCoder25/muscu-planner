@@ -20,6 +20,7 @@
           <span v-else class="hist-main">
             {{ l.set.reps }} {{ unit }}
             <span v-if="l.set.weight" class="hist-pill hist-kg">{{ l.set.weight }} kg</span>
+            <span v-if="l.set.lest" class="hist-pill hist-kg">🧱 {{ holdLestLabel(l.set) }}</span>
             <span v-if="l.set.assisted" class="hist-pill hist-asst">🟧 assisté</span>
             <span v-else-if="l.set.band" class="hist-pill hist-band"
               >🟦 élastique {{ elasticBandLabel(l.set.band).toLowerCase() }}</span
@@ -41,6 +42,7 @@
 import { computed } from 'vue';
 import {
   groupSetLines,
+  holdLestLabel,
   legMode,
   legSets,
   miniLineLabel,

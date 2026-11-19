@@ -13,10 +13,17 @@
            (dernière série, sinon milieu de sa fourchette), corrigeables une par une. -->
       <template v-if="pending && plan && plan.scope === 'rest'">
         <p class="sw-note">
-          <b>{{ restCount }} {{ unitWord }}</b> de {{ leg.exercise_name }} passent sur
+          <b>{{ plan.moved ?? restCount }} {{ unitWord }}</b> de {{ leg.exercise_name }} passent sur
           <b>{{ pending.name }}</b
-          >. {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }}
-          déjà faites (objectif atteint).
+          >.
+          <template v-if="(plan.moved ?? restCount) < restCount">
+            {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }}
+            déjà faites et {{ restCount - (plan.moved ?? restCount) }} encore à faire.
+          </template>
+          <template v-else>
+            {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }}
+            déjà faites (objectif atteint).
+          </template>
         </p>
         <div v-if="!isSets" class="sw-row sw-target">
           <div class="sw-row-from">À faire sur {{ pending.name }}</div>
@@ -193,9 +200,53 @@
             <span>{{ leg.exercise_name }} quitte le défi</span>
           </button>
         </div>
+        <!-- 🔀 Combien du reste basculer : tout, ou une part (le surplus reste sur l'exo, et se
+             répartit ensuite sur un second exo). -->
+        <div v-if="effScope === 'rest'" class="sw-amount" data-test="sw-amount">
+          <div class="sw-amount-lbl">Combien basculer ?</div>
+          <div class="sw-step">
+            <q-btn
+              flat
+              round
+              dense
+              icon="remove"
+              aria-label="Moins"
+              :disable="amountEff <= 1"
+              @click="stepAmount(-1)"
+            />
+            <span class="sw-val"
+              ><b data-test="sw-amount-val">{{ amountEff }}</b
+              ><small>{{ unitWord }}</small></span
+            >
+            <q-btn
+              flat
+              round
+              dense
+              icon="add"
+              aria-label="Plus"
+              :disable="amountEff >= amountMax"
+              @click="stepAmount(1)"
+            />
+          </div>
+          <button
+            v-if="amountEff < amountMax"
+            type="button"
+            class="sw-all-chip"
+            @click="amount = amountMax"
+          >
+            Tout ({{ amountMax }})
+          </button>
+        </div>
         <p v-if="scope === 'rest'" class="sw-note">
-          Les {{ restCount }} {{ unitWord }} qui te manquent passent sur l'exo choisi.
-          {{ leg.exercise_name }} garde ses {{ doneCount }} {{ unitWord }} déjà faites.
+          <template v-if="amountEff < restCount">
+            {{ amountEff }} {{ unitWord }} sur {{ restCount }} passent sur l'exo choisi ;
+            {{ leg.exercise_name }} garde les {{ restCount - amountEff }} autres, à répartir sur un
+            second exo si tu veux.
+          </template>
+          <template v-else>
+            Les {{ restCount }} {{ unitWord }} qui te manquent passent sur l'exo choisi.
+            {{ leg.exercise_name }} garde ses {{ doneCount }} {{ unitWord }} déjà faites.
+          </template>
         </p>
         <p v-else class="sw-note">
           <template v-if="doneCount">
@@ -237,7 +288,7 @@
             <div class="sw-sub">
               <template v-if="scope === 'rest'"
                 >{{ legDone(l) }}/{{ l.target }} → {{ legDone(l) }}/{{
-                  l.target + restCount
+                  l.target + amountEff
                 }}</template
               >
               <template v-else
@@ -345,19 +396,44 @@ const leg = computed<ComboLeg | null>(
 );
 const doneCount = computed(() => (leg.value ? legDone(leg.value) : 0));
 const restCount = computed(() => (leg.value ? legRemaining(leg.value) : 0));
-/** Ne basculer que le reste n'a de sens que s'il y a du fait ET du restant. */
-const canRest = computed(() => doneCount.value > 0 && restCount.value > 0);
-/** Portée choisie : le reste par défaut dès qu'il a un sens (le cas courant : finir ses
+/** Basculer le reste : il faut du restant, et soit du fait (l'exo garde son objectif atteint),
+ *  soit au moins 2 restants (une PART du reste laisse un objectif > 0 à l'exo). */
+const canRest = computed(() =>
+  doneCount.value > 0 ? restCount.value > 0 : restCount.value > 1,
+);
+/** 🔀 Combien du reste on peut basculer : tout si l'exo est entamé, sinon tout sauf 1 (l'exo
+ *  ne peut pas rester avec un objectif nul). */
+const amountMax = computed(() =>
+  doneCount.value > 0 ? restCount.value : Math.max(1, restCount.value - 1),
+);
+/** La part choisie (par défaut tout), toujours dans [1, amountMax]. */
+const amount = ref(0);
+const amountEff = computed(() => Math.min(amountMax.value, Math.max(1, amount.value || amountMax.value)));
+const amountStep = computed(() => {
+  const m = leg.value ? legMode(leg.value) : 'sets';
+  return m === 'sets' ? 1 : m === 'time' ? 10 : 5;
+});
+function stepAmount(d: number) {
+  amount.value = Math.min(
+    amountMax.value,
+    Math.max(1, amountEff.value + d * amountStep.value),
+  );
+}
+/** Portée choisie : le reste par défaut dès que l'exo est entamé (le cas courant : finir ses
  *  séries manquantes sur un autre exo), sinon tout. Remise à chaque ouverture. */
 const scope = ref<ComboTransferScope>('all');
 watch(
   () => [props.modelValue, props.exerciseId] as const,
   ([open]) => {
-    if (open) scope.value = canRest.value ? 'rest' : 'all';
+    if (!open) return;
+    scope.value = canRest.value && doneCount.value > 0 ? 'rest' : 'all';
+    amount.value = 0;
   },
   { immediate: true },
 );
 const effScope = computed<ComboTransferScope>(() => (canRest.value ? scope.value : 'all'));
+/** La part à passer au blocage / au plan : seulement en portée `rest`. */
+const moveAmount = computed(() => (effScope.value === 'rest' ? amountEff.value : undefined));
 const unitWord = computed(() => {
   const m = leg.value ? legMode(leg.value) : 'sets';
   return m === 'sets' ? 'séries' : m === 'time' ? 'secondes' : 'reps';
@@ -409,7 +485,8 @@ const inCombo = computed(() => {
   return cc.legs.filter(
     (x) =>
       x !== l &&
-      comboTransferBlocker(cc, l.exercise_id, { leg: x.exercise_id }, effScope.value) === null,
+      comboTransferBlocker(cc, l.exercise_id, { leg: x.exercise_id }, effScope.value, moveAmount.value) ===
+        null,
   );
 });
 
@@ -432,7 +509,13 @@ const fresh = computed(() => {
       (e) =>
         !isTennisExercise(e) &&
         !exoAvailability(e.id, occ).classic &&
-        comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }, effScope.value) ===
+        comboTransferBlocker(
+          cc,
+          l.exercise_id,
+          { exercise: newExercise(e) },
+          effScope.value,
+          moveAmount.value,
+        ) ===
           null,
     )
     .sort(
@@ -469,7 +552,7 @@ function pick(to: ComboTransferTarget, name: string) {
   const cc = c.value;
   const l = leg.value;
   if (!cc || !l) return;
-  const block = comboTransferBlocker(cc, l.exercise_id, to, effScope.value);
+  const block = comboTransferBlocker(cc, l.exercise_id, to, effScope.value, moveAmount.value);
   if (block) {
     $q.notify({ type: 'warning', message: COMBO_TRANSFER_BLOCK_LABEL[block] });
     return;
@@ -489,6 +572,7 @@ function pick(to: ComboTransferTarget, name: string) {
     to,
     profile.profile?.objective ?? null,
     effScope.value,
+    moveAmount.value,
   );
   pending.value = { to, name, warn };
 }
@@ -563,7 +647,13 @@ async function apply(
   try {
     await combo.transferLeg(id, fromId, to, chosen);
     emit('done', name);
-    close();
+    // 🔀 Une PART du reste est passée : il en reste sur l'exo, la feuille reste ouverte pour la
+    // répartir sur un second exo d'un seul geste. Sinon elle se ferme.
+    if (chosen.scope === 'rest' && leg.value && restCount.value > 0) {
+      cancelPending();
+      amount.value = 0;
+      scope.value = 'rest';
+    } else close();
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   } finally {
@@ -597,6 +687,33 @@ async function apply(
   font-size: 11.5px;
   color: var(--dim);
   overflow-wrap: anywhere;
+}
+.sw-amount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.sw-amount-lbl {
+  flex: 1 1 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dim);
+}
+.sw-all-chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
 }
 .sw-scope-b.on {
   border-color: var(--accent);

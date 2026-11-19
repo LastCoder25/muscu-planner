@@ -10,6 +10,8 @@ import {
   removeSetAt,
   updateSetAt,
   transferComboLeg,
+  legHoldLoadable,
+  HOLD_LEST_MAX,
   type ComboTransferPlan,
   type ComboTransferTarget,
   type ComboChallenge,
@@ -171,6 +173,8 @@ export const useComboStore = defineStore('combo', () => {
      *  elle, toutes ses séries porteraient l'heure de l'enregistrement, et la fatigue des
      *  groupes (lue sur cette heure) croirait qu'elles ont été faites d'un coup. */
     at?: number,
+    /** 🧱 Lest (kg) d'une tenue lestable (planche, chaise) : champ à part, jamais du poids. */
+    lest?: number,
   ) {
     const c = list.value.find((x) => x.id === id);
     if (!c || reps <= 0) return;
@@ -178,15 +182,19 @@ export const useComboStore = defineStore('combo', () => {
     if (!leg || legComplete(leg)) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
     const stamp = new Date(at ?? Date.now()).toISOString();
+    // Un lest n'est retenu que sur une tenue lestable : ailleurs, il est ignoré.
+    const lestKg = lest && lest > 0 && legHoldLoadable(leg) ? lest : 0;
     leg.sets.push({
       date,
       reps,
       weight: weight ?? null,
       assisted,
       ...(band && !assisted ? { band } : {}),
+      ...(lestKg ? { lest: lestKg } : {}),
       at: stamp,
     });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
+    if (lestKg) leg.lest_kg = lestKg;
     // ⚠️ On SIGNALE la transition vers « terminé ». Le coffre de fin de 360 doit tomber à
     // l'instant même où le défi se boucle — or le store ne connaît ni le niveau du joueur
     // ni la boîte à messages. Plutôt que de brancher le versement sur les quatre écrans
@@ -229,6 +237,16 @@ export const useComboStore = defineStore('combo', () => {
     // La DERNIÈRE série porte le poids qui préremplit la suivante.
     if (index === leg.sets.length - 1) leg.weight_kg = weight ?? null;
     refreshStatus(c);
+    legsWriter.schedule(id);
+  }
+
+  /** 🧱 Mémorise le lest choisi sur une tenue lestable (planche, chaise) : il préremplit la
+   *  prochaine série. Sans effet ailleurs. OPTIMISTE, écriture différée comme les séries. */
+  function setHoldLest(id: string, exerciseId: string, kg: number) {
+    const c = list.value.find((x) => x.id === id);
+    const leg = c?.legs.find((l) => l.exercise_id === exerciseId);
+    if (!c || !leg || !legHoldLoadable(leg)) return;
+    leg.lest_kg = Math.min(HOLD_LEST_MAX, Math.max(0, Math.round(kg * 10) / 10));
     legsWriter.schedule(id);
   }
 
@@ -295,6 +313,7 @@ export const useComboStore = defineStore('combo', () => {
     removeSet,
     updateSet,
     transferLeg,
+    setHoldLest,
     setWeight,
     setStatus,
     remove,
