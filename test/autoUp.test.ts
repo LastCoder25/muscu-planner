@@ -32,7 +32,13 @@ const riche = () => {
 
 describe('parseAutoUp — relecture défensive', () => {
   it('absent, vide ou illisible : tout éteint (jamais de dépense sur un JSON douteux)', () => {
-    const off: AutoUpSettings = { champions: false, gear: false, merge: false };
+    const off: AutoUpSettings = {
+      champions: false,
+      gear: false,
+      merge: false,
+      skipChampionsAnim: false,
+      skipGearAnim: true,
+    };
     expect(parseAutoUp(null)).toEqual(off);
     expect(parseAutoUp('')).toEqual(off);
     expect(parseAutoUp('{pas du json')).toEqual(off);
@@ -43,7 +49,17 @@ describe('parseAutoUp — relecture défensive', () => {
       champions: true,
       gear: false,
       merge: true,
+      skipChampionsAnim: false,
+      skipGearAnim: true,
     });
+  });
+  it('« passer l’animation » : défauts champions jouée / pièces passée, un booléen les change', () => {
+    const p = parseAutoUp('{"skipChampionsAnim":true,"skipGearAnim":false}');
+    expect(p.skipChampionsAnim).toBe(true);
+    expect(p.skipGearAnim).toBe(false);
+    const q = parseAutoUp('{"skipChampionsAnim":"oui","skipGearAnim":1}');
+    expect(q.skipChampionsAnim).toBe(false);
+    expect(q.skipGearAnim).toBe(true);
   });
   it('anyAutoUp dit si quelque chose tourne', () => {
     expect(anyAutoUp(parseAutoUp(null))).toBe(false);
@@ -79,9 +95,10 @@ describe('🔕 animations en mode automatique', () => {
   const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
   it("l'ascension de pièce de l'automatisation est silencieuse, celle des champions garde son éclat", () => {
     const engine = read('src/composables/useAutoUp.ts');
-    expect(engine).toMatch(/char\.ascendGear\(uid, g\.id, undefined, true\)/);
-    expect(engine).toMatch(/char\.ascendChampion\(uid, a\.id\)/);
+    expect(engine).toMatch(/char\.ascendGear\(uid, g\.id, undefined, s\.skipGearAnim\)/);
+    expect(engine).toMatch(/char\.ascendChampion\(uid, a\.id, s\.skipChampionsAnim\)/);
     const store = read('src/stores/character.ts');
+    expect(store).toMatch(/if \(!silent\)\s+useGameFx\(\)\.celebrate\(\{\s+kind: 'rankup',\s+\/\/ Repli/);
     expect(store).toMatch(/if \(!silent\)\s+useGameFx\(\)\.celebrate\(\{\s+kind: 'rankup',\s+emoji: g\.emoji/);
   });
 });

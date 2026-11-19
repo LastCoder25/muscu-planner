@@ -3857,7 +3857,12 @@ export const useCharacterStore = defineStore('character', () => {
     return { merged: out.merged, worn: out.worn, locked: out.locked };
   }
 
-  async function ascendChampion(userId: string, advId: string): Promise<string | null> {
+  async function ascendChampion(
+    userId: string,
+    advId: string,
+    /** 🔕 L'automatisation peut monter les champions sans éclat (réglage de la Base). */
+    silent = false,
+  ): Promise<string | null> {
     const cur = row.value;
     if (!cur) return 'Personnage introuvable.';
     const advs = cur.adventurers ?? [];
@@ -3883,15 +3888,16 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: advs.map((a) => (a.id === advId ? up : a)),
     });
     // Annoncée APRÈS l'écriture : une animation n'annonce jamais un gain qui n'a pas eu lieu.
-    useGameFx().celebrate({
-      kind: 'rankup',
-      // Repli si le champion n'a pas d'illustration : le visage de sa classe.
-      emoji: advTitle(adv)?.emoji ?? CHARACTER_RANKS[next]!.emoji,
-      ranks: { from: next - 1, to: next },
-      championId: adv.championId ?? null,
-      title: adv.name,
-      count: mana,
-    });
+    if (!silent)
+      useGameFx().celebrate({
+        kind: 'rankup',
+        // Repli si le champion n'a pas d'illustration : le visage de sa classe.
+        emoji: advTitle(adv)?.emoji ?? CHARACTER_RANKS[next]!.emoji,
+        ranks: { from: next - 1, to: next },
+        championId: adv.championId ?? null,
+        title: adv.name,
+        count: mana,
+      });
     return null;
   }
 

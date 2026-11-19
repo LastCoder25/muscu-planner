@@ -13,9 +13,19 @@ export interface AutoUpSettings {
   gear: boolean;
   /** ✨ Éveil par fusion des doublons de pièces — équipe d'abord au mieux, fond ensuite. */
   merge: boolean;
+  /** 🎬 Sans l'éclat de montée de rang des champions montés automatiquement (joué par défaut). */
+  skipChampionsAnim: boolean;
+  /** 🎬 Sans l'éclat des pièces montées automatiquement (passé par défaut). */
+  skipGearAnim: boolean;
 }
 
-export const AUTO_UP_DEFAULT: AutoUpSettings = { champions: false, gear: false, merge: false };
+export const AUTO_UP_DEFAULT: AutoUpSettings = {
+  champions: false,
+  gear: false,
+  merge: false,
+  skipChampionsAnim: false,
+  skipGearAnim: true,
+};
 export const AUTO_UP_KEY = 'muscu:autoup';
 
 /** Relecture défensive : une valeur absente ou malformée = interrupteur éteint (on ne dépense
@@ -27,6 +37,13 @@ export function parseAutoUp(raw: string | null | undefined): AutoUpSettings {
       champions: o.champions === true,
       gear: o.gear === true,
       merge: o.merge === true,
+      // Les deux « passer l'animation » ont une valeur par défaut : seul un booléen la change.
+      skipChampionsAnim:
+        typeof o.skipChampionsAnim === 'boolean'
+          ? o.skipChampionsAnim
+          : AUTO_UP_DEFAULT.skipChampionsAnim,
+      skipGearAnim:
+        typeof o.skipGearAnim === 'boolean' ? o.skipGearAnim : AUTO_UP_DEFAULT.skipGearAnim,
     };
   } catch {
     return { ...AUTO_UP_DEFAULT };

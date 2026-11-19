@@ -76,7 +76,7 @@ export function useAutoUpEngine() {
             gold: cur.gold,
           });
           if (!a) break;
-          if (await char.ascendChampion(uid, a.id)) break; // refusé : on s'arrête, sans boucler
+          if (await char.ascendChampion(uid, a.id, s.skipChampionsAnim)) break; // refusé : on s'arrête, sans boucler
           steps++;
           champUps++;
         }
@@ -92,7 +92,7 @@ export function useAutoUpEngine() {
             gold: cur.gold,
           });
           if (!g) break;
-          if (await char.ascendGear(uid, g.id, undefined, true)) break;
+          if (await char.ascendGear(uid, g.id, undefined, s.skipGearAnim)) break;
           steps++;
           gearUps++;
         }

@@ -735,6 +735,25 @@
           <span class="push-chip-state">{{ autoUp[o.id] ? 'actif' : 'coupé' }}</span>
         </button>
       </div>
+      <!-- 🎬 Sous-réglage : l'éclat de chaque montée automatique (champions, pièces). -->
+      <div v-if="autoUp.champions || autoUp.gear" class="push-chips anim-chips auto-skip">
+        <template v-for="o in AUTO_SKIP_OPTIONS" :key="o.id">
+          <button
+            v-if="autoUp[o.parent]"
+            type="button"
+            class="push-chip"
+            :class="{ off: autoUp[o.id] }"
+            :aria-pressed="!autoUp[o.id]"
+            :title="o.hint"
+            :data-test="'skip-' + o.id"
+            @click="setAutoUp(o.id, !autoUp[o.id])"
+          >
+            <span class="push-chip-emo" aria-hidden="true">🎬</span>
+            {{ o.label }}
+            <span class="push-chip-state">{{ autoUp[o.id] ? 'passée' : 'jouée' }}</span>
+          </button>
+        </template>
+      </div>
     </div>
 
     <!-- ── Héros à l'infirmerie ── -->
@@ -1698,6 +1717,28 @@ const AUTO_UP_OPTIONS: { id: keyof AutoUpSettings; emoji: string; label: string;
       hint: 'Les doublons sont fondus dans la pièce la plus avancée, après équipement au mieux.',
     },
   ];
+
+/** 🎬 « Passer l'animation » de chaque montée automatique : n'apparaît que si la montée est
+ *  allumée. */
+const AUTO_SKIP_OPTIONS: {
+  id: 'skipChampionsAnim' | 'skipGearAnim';
+  parent: 'champions' | 'gear';
+  label: string;
+  hint: string;
+}[] = [
+  {
+    id: 'skipChampionsAnim',
+    parent: 'champions',
+    label: 'Animation des champions',
+    hint: 'Passée : un champion monte de rang sans éclat. Jouée : l’éclat s’affiche comme à la main.',
+  },
+  {
+    id: 'skipGearAnim',
+    parent: 'gear',
+    label: 'Animation des pièces',
+    hint: 'Passée : une pièce monte de rang sans éclat. Jouée : l’éclat s’affiche comme à la main.',
+  },
+];
 
 // ── Feuilles ouvertes depuis le dessin ──
 const plotSlot = ref<number | null>(null);

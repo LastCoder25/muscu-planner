@@ -111,6 +111,15 @@ const ECRANS = [
         attendu: '.inbox-list',
         ferme: '.shop-x[aria-label="Fermer"]',
       },
+      // ⚙️ Allumer la montée automatique des champions fait apparaître son sous-réglage
+      // « Animation » (v1.326.0). ⚠️ Refermé aussitôt (`ferme` reclique la même pastille) :
+      // laissée allumée, l'automatisation dépenserait l'or du compte de test aux écrans suivants.
+      {
+        nom: 'auto-animation',
+        clic: '.push-chip:has-text("Ascension des champions")',
+        attendu: '.auto-skip',
+        ferme: '.push-chip:has-text("Ascension des champions")',
+      },
       // 📖 Le guide (4 cartes) se rouvre par le ❔ du bandeau.
       {
         nom: 'guide',
