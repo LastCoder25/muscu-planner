@@ -1882,6 +1882,7 @@ import {
 import { pantheonLights } from '@/lib/pantheonLights';
 import { normalizeRuneBank } from '@/lib/runeBank';
 import { useExpeditionPlanner, type PlannerRow } from '@/composables/useExpeditionPlanner';
+import { plannableControl } from '@/lib/expeditionPlanner';
 import { tripFrame } from '@/lib/tripFrame';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
@@ -6423,9 +6424,10 @@ const fortressOddsKey = computed(() =>
     .join('|'),
 );
 /** 🪄 Les lieux que le planificateur peut proposer : ceux où une ÉQUIPE peut aller (mêmes règles
- *  que le grisage, `dimmed`), sans voyage déjà en route vers eux. ⚠️ Ni les lieux fixes ennemis
- *  (les prendre poste des champions : un choix lieu par lieu) ni les armées en marche (rendez-vous
- *  calculé à l'envoi) : `placePois` exclut déjà les secondes. */
+ *  que le grisage, `dimmed`), sans voyage déjà en route vers eux. ⚠️ Les lieux fixes ennemis (hors
+ *  forteresse, `plannableControl`) y figurent, mais le planificateur ne les PROPOSE que si sa
+ *  pastille « 🏰 Points ennemis » est allumée (les prendre poste des champions : un choix du
+ *  joueur). Jamais les armées en marche (rendez-vous calculé à l'envoi) : `placePois` les exclut. */
 const plannerTargets = computed(() => {
   const busy = new Set(travelersOnMap.value.map((v) => v.poi.id));
   // 🧝 Le héros parti SEUL n'est pas dans `travelersOnMap` (il se dessine à part) : son lieu
@@ -6434,7 +6436,11 @@ const plannerTargets = computed(() => {
   const a = active.value;
   if (a && coarseNow.value < a.returnAt) busy.add(a.poi.id);
   return placePois.value.filter(
-    (p) => PARTY_TARGETS.has(p.type) && p.type !== 'control' && !busy.has(p.id) && !dimmed(p),
+    (p) =>
+      PARTY_TARGETS.has(p.type) &&
+      (p.type !== 'control' || plannableControl(p)) &&
+      !busy.has(p.id) &&
+      !dimmed(p),
   );
 });
 const planner = useExpeditionPlanner({

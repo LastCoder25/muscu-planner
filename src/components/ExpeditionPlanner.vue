@@ -63,6 +63,28 @@
         </button>
       </div>
     </div>
+    <!-- 🏰 Les points de contrôle ENNEMIS (hors forteresse) : éteint par défaut, car en prendre un
+         poste des champions en garnison. -->
+    <div v-if="section === 'plan'" class="pl-row">
+      <span class="pl-lab">Lieux fixes</span>
+      <div class="pl-chips">
+        <button
+          type="button"
+          class="pl-chip"
+          :class="{ on: withControls }"
+          :aria-pressed="withControls"
+          data-test="with-controls"
+          title="Proposer aussi les points de contrôle ennemis, forteresse exceptée"
+          @click="withControls = !withControls"
+        >
+          🏰 Points ennemis
+        </button>
+      </div>
+      <p v-if="withControls" class="pl-note" data-test="with-controls-note">
+        Les champions qui prennent un point y restent en garnison (les places du point, au plus) ;
+        le héros rentre toujours.
+      </p>
+    </div>
     <!-- 🚀 Départ automatique : au calcul terminé, tout part sans relecture. Éteint par défaut. -->
     <div v-if="section === 'plan'" class="pl-row">
       <span class="pl-lab">Lancement</span>
@@ -392,6 +414,7 @@ const {
   withGarrisons,
   autoLaunch,
   withHero,
+  withControls,
   supplyStock,
   toggleSupply,
   heroFree,

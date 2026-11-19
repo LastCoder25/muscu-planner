@@ -38,6 +38,29 @@
 
 export type PlanMode = 'events' | 'xp' | 'rifts';
 
+/** ⏱️ La durée d'un voyage PLANIFIÉ : l'aller-retour du groupe le plus lent PLUS le temps passé
+ *  sur place (`dwellMsFor` : la fouille d'une heure aux ruines d'un héros tombé, l'extraction
+ *  d'un filon). ⚠️ Sans la fouille, le plan annonçait 1 h de moins que le vrai départ
+ *  (`startParty` : `returnAt = 2 × trajet + fouille`) et classait ces lieux trop haut. */
+export function plannedTripMin(roundTripsMin: readonly number[], dwellMs: number): number {
+  return Math.max(0, ...roundTripsMin) + Math.max(0, dwellMs) / 60_000;
+}
+
+/** 🏰 Un point de contrôle ENNEMI que le planificateur peut proposer (2026-11-19, demandé :
+ *  « un moyen d'attaquer les points fixes ennemis hors forteresse »). Jamais la forteresse (son
+ *  assaut est un choix à part), jamais un point déjà tenu ni déjà attaqué ; les verrous (objectif
+ *  verrouillé, citadelle cachée ou en trêve) restent ceux de `partySendBlocker`, que le
+ *  planificateur interroge à chaque équipe. */
+export function plannableControl(poi: {
+  type: string;
+  control?: { owner: 'enemy' | 'player'; kind: string; assault?: boolean };
+}): boolean {
+  const c = poi.control;
+  return (
+    poi.type === 'control' && !!c && c.owner === 'enemy' && c.kind !== 'fortress' && !c.assault
+  );
+}
+
 /** Un membre possible : un champion ou le héros, et l'endroit d'où il part. */
 export interface PlanUnit {
   id: string;

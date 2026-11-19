@@ -13,12 +13,13 @@ import {
 } from '@/lib/caravan';
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
 import { deployAnchors, legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import { type Poi } from '@/lib/expedition';
+import { dwellMsFor, type Poi } from '@/lib/expedition';
 import { mapOutpostLevel } from '@/lib/archipelago';
 import { buildDeploymentAsync } from '@/lib/deployPlan';
 import {
   parseModes,
   planInPasses,
+  plannedTripMin,
   toggleMode as toggleModeIn,
   withoutEngaged,
   type PlanMode,
@@ -68,6 +69,7 @@ const THRESHOLD_KEY = 'muscu:planner:threshold';
 const MODE_KEY = 'muscu:planner:mode';
 const SUPPLY_KEY = 'muscu:planner:supplies';
 const AUTO_KEY = 'muscu:planner:autolaunch';
+const CONTROLS_KEY = 'muscu:planner:controls';
 
 /** 🕳️ Mode « Failles » : seulement les failles, la plus urgente d'abord ; sinon tous les lieux. */
 const planTargets = (pois: Poi[], mode: PlanMode): Poi[] =>
@@ -163,6 +165,15 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
    *  des refs fixes que le calcul et l'écran lisent. */
   const withGarrisons = ref(true);
   const withHero = ref(true);
+  /** 🏰 Proposer aussi les points de contrôle ENNEMIS (hors forteresse). Éteint par défaut : prendre
+   *  un point POSTE des champions en garnison — un choix qu'on ne fait pas à la place du joueur, et
+   *  qu'un départ automatique ne doit pas faire sans qu'il l'ait voulu. */
+  const withControls = ref(readStr(CONTROLS_KEY) === '1');
+  watch(withControls, (v) => save(CONTROLS_KEY, v ? '1' : '0'));
+  /** Les cibles du calcul : celles de la page, moins les points ennemis tant que c'est éteint. */
+  const targets = computed(() =>
+    ctx.targets.value.filter((p) => withControls.value || p.type !== 'control'),
+  );
   watch(threshold, (v) => save(THRESHOLD_KEY, String(v)));
   watch(modes, (v) => save(MODE_KEY, v.join(',')));
   function toggleMode(id: PlanMode) {
@@ -292,7 +303,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         for (const u of us) by.set(u.origin, [...(by.get(u.origin) ?? []), u]);
         return [...by];
       };
-      const targetsOf = (m: PlanMode) => planTargets(ctx.targets.value, m);
+      const targetsOf = (m: PlanMode) => planTargets(targets.value, m);
       // La barre couvre l'ensemble des passes : jamais de retour à 0 entre deux.
       const total = Math.max(
         1,
@@ -352,8 +363,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
           // ⚔️ Plusieurs points de départ (attaque combinée) : chaque groupe à son pas, depuis
           // chez lui ; tout le monde arrive ensemble, donc l'aller-retour du plus lent.
           tripMin: (t, us, kit) =>
-            Math.max(
-              ...groupsOf(us).map(([origin, g]) => {
+            plannedTripMin(
+              groupsOf(us).map(([origin, g]) => {
                 const advs = advsOf(g);
                 const legOf = (p: Poi) =>
                   partyLegMin(p, advs, {
@@ -365,6 +376,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
                 const from = points.get(origin);
                 return 2 * (from ? legFromSpot(t, from, legOf) : legOf(t));
               }),
+              dwellMsFor(t, advsOf(us).length),
             ),
           // 🧑‍✈️ Seule l'XP que chacun peut ENCORE prendre (`advXpRoom`) : un champion qui a
           // rattrapé le héros n'apprend plus rien, le mode « XP » ne doit pas le compter.
@@ -602,13 +614,13 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     rows.value = null;
     unreachable.value = [];
   }
-  watch([threshold, modes, withGarrisons, withHero, allowedSupplies], reset);
+  watch([threshold, modes, withGarrisons, withHero, withControls, allowedSupplies], reset);
   // ⚔️ Un lieu attaqué depuis le calcul (envoi manuel, héros seul) quitte les cibles : sa
   // proposition s'efface, le reste du plan tient (`withoutEngaged`).
   watch(
-    () => ctx.targets.value.map((p) => p.id).join('|'),
+    () => targets.value.map((p) => p.id).join('|'),
     () => {
-      if (rows.value) rows.value = withoutEngaged(rows.value, ctx.targets.value);
+      if (rows.value) rows.value = withoutEngaged(rows.value, targets.value);
     },
   );
 
@@ -693,10 +705,10 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   }
 
   /** 🕳️ Combien de failles le mode « Failles » peut viser (l'écran le dit s'il n'y en a aucune). */
-  const riftCount = computed(() => planTargets(ctx.targets.value, 'rifts').length);
+  const riftCount = computed(() => planTargets(targets.value, 'rifts').length);
   /** Rien à proposer du tout : aucune cible pour AUCUNE des priorités choisies. */
   const nothingToPlan = computed(() =>
-    modes.value.every((m) => planTargets(ctx.targets.value, m).length === 0),
+    modes.value.every((m) => planTargets(targets.value, m).length === 0),
   );
 
   return {
@@ -708,6 +720,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     withGarrisons,
     autoLaunch,
     withHero,
+    withControls,
     supplyStock,
     toggleSupply,
     heroFree,
