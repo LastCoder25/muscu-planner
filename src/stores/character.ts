@@ -304,6 +304,7 @@ import {
   giveBlocker,
   giveKind,
   giveSkill,
+  autoEquipRunes,
   takeBackSkill,
   openBlocker,
   openRunes,
@@ -1149,6 +1150,27 @@ export const useCharacterStore = defineStore('character', () => {
       ? SKILL_MAX_LEVEL
       : (out.skills.find((s) => s.id === sk.id)?.level ?? sk.level);
     return { ok: true, kind, level, rose: out.rose, back: out.back };
+  }
+
+  /** ⚙️ AUTO-ÉQUIPER : le stock de runes améliore celles que les champions portent
+   *  (`autoEquipRunes`). ⚠️ Stock et champions dans la MÊME écriture. Rien à faire = aucune écriture. */
+  async function autoEquipRuneSkills(userId: string) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return { ok: false as const, reason: 'ton personnage n’est pas chargé' };
+    const advs = cur.adventurers ?? [];
+    const out = autoEquipRunes(
+      cur.runes,
+      advs.map((a) => ({ id: a.id, slots: advChampionSlots(a) })),
+    );
+    if (!out.upgrades.length) return { ok: false as const, reason: 'rien à améliorer' };
+    await persist(userId, {
+      runes: out.bank,
+      adventurers: advs.map((a) =>
+        out.skills.has(a.id) ? { ...a, skills: out.skills.get(a.id)! } : a,
+      ),
+    });
+    return { ok: true as const, upgrades: out.upgrades };
   }
 
   /** ↩️ RÉCUPÈRE une compétence d'un champion : elle revient au stock, niveaux et couleur
@@ -7205,6 +7227,7 @@ export const useCharacterStore = defineStore('character', () => {
     riseRuneSkill,
     riseChampionSkill,
     giveRuneSkill,
+    autoEquipRuneSkills,
     takeBackRuneSkill,
     learnVocation,
     forgetVocation,

@@ -972,6 +972,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { showAwakenInfo } from '@/composables/useAwakenInfo';
+import { useAutoUpSettings } from '@/composables/useAutoUp';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
@@ -1080,6 +1081,9 @@ const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
+// ⚙️ Montées automatiques allumées (Base › Réglages › Automatisation) : leurs boutons manuels
+// disparaissent d'ici — le jeu les fait tout seul.
+const { settings: autoUp } = useAutoUpSettings();
 /** 🏅 L'échelle d'affichage des champions (`champDisplay.ts`) — AFFICHAGE SEUL. */
 const showK = computed(() => champShowK(props.playerLevel ?? 1));
 
@@ -1629,6 +1633,7 @@ const statTiles = computed(() => {
 /** ⬆️ L'ascension d'une PIÈCE — même patron que celle d'un champion. `null` tant qu'elle
  *  n'est pas à ★5 : un bouton qui promettrait une échéance lointaine encombrerait la tuile. */
 function gearAscent(g: AdvGear) {
+  if (autoUp.value.gear) return null;
   const o = gearAscentOffer(g, {
     advs: char.advList,
     stock: char.advGearStock,
@@ -1651,6 +1656,7 @@ function gearAscent(g: AdvGear) {
 /** ✨ Le plan d'éveil — affiché seulement sur la pièce GARDÉE, sinon chaque exemplaire du
  *  modèle porterait le même bouton et on ne saurait pas lequel monte. */
 function awakenOf(g: AdvGear) {
+  if (autoUp.value.merge) return null;
   const plan = advGearAwakenPlan(g, char.advGearStock, char.advList);
   return plan && plan.keep.id === g.id ? plan : null;
 }

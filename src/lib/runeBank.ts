@@ -860,3 +860,74 @@ export function migrateLegacyRunes(
     refunded,
   };
 }
+
+// ── ⚙️ AUTO-ÉQUIPER : AMÉLIORER LES RUNES POSÉES AVEC LE STOCK ───────────────────────────
+
+/** Une amélioration faite par `autoEquipRunes` : le champion, la compétence (dans la couleur
+ *  qu'elle avait avant), son niveau avant et après, et combien d'exemplaires du stock y sont passés. */
+export interface EquipUpgrade {
+  advId: string;
+  id: SkillId;
+  from: number;
+  to: number;
+  copies: number;
+  /** Elle a atteint le niveau 5 et s'est élevée à la couleur au-dessus (`autoRise`). */
+  rose: boolean;
+}
+
+/**
+ * ⚙️ AUTO-ÉQUIPER (2026-11-19, demandé : « un bouton auto equip qui upgrade les runes équipées
+ * avec celles en stock »). Pour chaque champion, chaque compétence qu'il PORTE reçoit les
+ * exemplaires du stock de la MÊME compétence dans la MÊME couleur (`giveKind` = `stack`), tant que
+ * la somme tient en 5 : le plus gros exemplaire qui rentre d'abord, puis le suivant. Rien n'est
+ * donné à une place libre ni échangé contre une autre couleur : seules les runes posées montent.
+ * ⚠️ La règle est celle du don à la main (`giveBlocker` / `giveSkill`) — aucune règle recopiée. PUR :
+ * rend le stock et les compétences de chaque champion modifié, sans rien écrire.
+ */
+export function autoEquipRunes(
+  bank: RuneBank,
+  champs: readonly { id: string; slots: ChampionSlots }[],
+): { bank: RuneBank; skills: Map<string, ChampSkill[]>; upgrades: EquipUpgrade[] } {
+  let cur = bank;
+  const skills = new Map<string, ChampSkill[]>();
+  const upgrades: EquipUpgrade[] = [];
+  for (const ch of champs) {
+    if (ch.slots.slots <= 0) continue;
+    let mine = ch.slots.skills.map((s) => ({ ...s }));
+    for (const worn of ch.slots.skills) {
+      // La compétence telle qu'elle est maintenant chez lui (elle a pu s'élever en route).
+      let now = mine.find((s) => s.id === worn.id);
+      const from = now?.level ?? worn.level;
+      let copies = 0;
+      let rose = false;
+      while (now) {
+        const slots = { skills: mine, slots: ch.slots.slots };
+        const fits = cur.skills
+          .filter((s) => sameSkill(s, now!) && !giveBlocker(cur, s.uid, slots))
+          .sort((a, b) => b.level - a.level);
+        const next = fits[0];
+        if (!next) break;
+        const out = giveSkill(cur, next.uid, slots)!;
+        cur = out.bank;
+        mine = out.skills;
+        copies++;
+        if (out.rose.length) rose = true;
+        now = mine.find((s) => s.id === worn.id);
+        if (rose) break; // niveau 5 : elle s'est élevée, une autre couleur — hors périmètre
+      }
+      if (copies) {
+        skills.set(ch.id, mine);
+        const after = mine.find((s) => s.id === worn.id);
+        upgrades.push({
+          advId: ch.id,
+          id: worn.id,
+          from,
+          to: rose ? SKILL_MAX_LEVEL : (after?.level ?? from),
+          copies,
+          rose,
+        });
+      }
+    }
+  }
+  return { bank: cur, skills, upgrades };
+}

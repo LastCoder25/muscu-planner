@@ -251,21 +251,24 @@
               fuseCount ? `${fuseCount} compétence${fuseCount > 1 ? 's' : ''}` : FUSE_ALL_NONE
             }}</span>
           </button>
+          <button
+            v-if="char.advList.some((a) => advChampionSlots(a).skills.length)"
+            type="button"
+            class="rb-tile fuse"
+            data-test="auto-equip"
+            :disabled="busy || !equipPlan.upgrades.length"
+            @click="doAutoEquip"
+          >
+            <span class="rb-t-ico">⚙️</span>
+            <span class="rb-t-x font-display">Auto-équiper</span>
+            <span class="rb-t-sub">{{ equipSub }}</span>
+          </button>
         </div>
         <p class="rb-note">
           Une rune révèle une compétence : 🟢&nbsp;70&nbsp;% · 🔵&nbsp;22&nbsp;% · 🟣&nbsp;7&nbsp;%
           · 🟠&nbsp;1&nbsp;%. Elles tombent des lieux de la carte, des ascensions, de l’Éveil et du
           Scriptorium.
         </p>
-
-        <template v-if="lastOpened.length">
-          <div class="rb-sec">Ouvertes à l’instant</div>
-          <div class="rb-chips">
-            <span v-for="s in lastOpened" :key="s.uid" class="rb-chip" :class="'t-' + skillTier(s)"
-              >{{ SKILLS[s.id].emoji }} {{ SKILLS[s.id].name }}</span
-            >
-          </div>
-        </template>
 
         <div class="rb-sec">Compétences au stock · {{ bank.skills.length }}</div>
         <p v-if="!bank.skills.length" class="rb-note">
@@ -337,6 +340,7 @@ import {
   fuseGroupText,
   riseLineText,
   bestFusePick,
+  autoEquipRunes,
   fusePick,
   giveBlocker,
   giveKind,
@@ -364,7 +368,6 @@ const bank = computed(() => char.row?.runes ?? emptyBank());
 const busy = ref(false);
 const selUid = ref<string | null>(null);
 const replaceFor = ref<Adventurer | null>(null);
-const lastOpened = ref<StockSkill[]>([]);
 /** Ce que l'écran d'ouverture met en scène (null = fermé), et la taille du dernier tirage. */
 const revealing = ref<StockSkill[] | null>(null);
 const lastCount = ref(1);
@@ -493,6 +496,39 @@ function pickBest() {
   take.value = { ...best.value.take };
 }
 
+/** ⚙️ Ce que « Auto-équiper » ferait : la MÊME fonction que le geste (`autoEquipRunes`), sur le même
+ *  vivier — l'aperçu ne peut pas promettre autre chose que ce que le bouton fait. */
+const equipPlan = computed(() =>
+  autoEquipRunes(
+    bank.value,
+    char.advList.map((a) => ({ id: a.id, slots: advChampionSlots(a) })),
+  ),
+);
+const equipSub = computed(() => {
+  const u = equipPlan.value.upgrades;
+  if (!u.length) return 'rien à améliorer';
+  const copies = u.reduce((s, x) => s + x.copies, 0);
+  return `${u.length} rune${u.length > 1 ? 's' : ''} posée${u.length > 1 ? 's' : ''} · ${copies} du stock`;
+});
+function doAutoEquip() {
+  void run(async (uid) => {
+    const r = await char.autoEquipRuneSkills(uid);
+    if (!r.ok) throw new Error(r.reason);
+    const names = new Map(char.advList.map((a) => [a.id, a.name]));
+    $q.notify({
+      type: 'positive',
+      multiLine: true,
+      message: r.upgrades
+        .map(
+          (x) =>
+            `${SKILLS[x.id].emoji} ${SKILLS[x.id].name} · ${names.get(x.advId) ?? 'champion'} : Nv ${x.from} → ${x.to}${x.rose ? ' 🌈' : ''}`,
+        )
+        .join('<br>'),
+      html: true,
+    });
+  });
+}
+
 /** Ce que « Tout fusionner » ferait : fusions ET élévations des Nv 5, enchaînées. */
 const fusePlan = computed(() => fuseAllRising(bank.value));
 /** Ses fusions, compétence par compétence (vide = rien à fusionner). */
@@ -563,7 +599,6 @@ function doOpen(count: number) {
   void run(async (uid) => {
     const r = await char.openRuneBatch(uid, count);
     if (!r.ok) throw new Error(r.reason);
-    lastOpened.value = r.opened;
     lastCount.value = count;
     // 🎬 Coupée dans la Base : les runes sont créditées et restent listées ci-dessous.
     if (anim.on.runes) revealing.value = r.opened;

@@ -123,6 +123,7 @@ import ChampionPortrait from './ChampionPortrait.vue';
 import AdvGearArt from './AdvGearArt.vue';
 import AscendOfferButton from './AscendOfferButton.vue';
 import { championAscentOffer, emptySeals, gearAscentOffer } from '@/lib/ascension';
+import { useAutoUpSettings } from '@/composables/useAutoUp';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
@@ -239,6 +240,8 @@ function play(b: number, k: number) {
 /** ⬆️ État des boutons d’ascension — déclaré AVANT le `watch` immédiat qui le remet à zéro
  *  (sinon zone morte temporelle au montage, le défaut de la v0.910). */
 const char = useCharacterStore();
+// ⚙️ L'ascension automatique des pièces est allumée : plus d'offre manuelle ici.
+const { settings: autoUp } = useAutoUpSettings();
 const auth = useAuthStore();
 const ascended = ref(new Set<string>());
 const errs = ref<Record<string, string>>({});
@@ -306,6 +309,7 @@ function champOffer(id: string) {
   return a ? championAscentOffer(a, { ...ctxOf(), pantheonLevel: char.pantheonLevel }) : null;
 }
 function gearOffer(id: string) {
+  if (autoUp.value.gear) return null;
   const g = char.advGearStock.find((x) => x.id === id);
   return g
     ? gearAscentOffer(g, { ...ctxOf(), advs: char.advList, stock: char.advGearStock })
