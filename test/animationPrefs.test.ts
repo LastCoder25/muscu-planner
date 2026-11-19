@@ -38,6 +38,7 @@ describe('animationPrefs', () => {
     champxp: ['src/composables/useAdvXpFx.ts'],
     runes: ['src/composables/useGameFx.ts', 'src/components/RuneBankSheet.vue'],
     summon: ['src/components/SummonPanel.vue'],
+    gains: ['src/components/ResourceGains.vue'],
   };
   it.each(ANIMATION_OPTIONS.map((o) => o.id))('« %s » est lu par son lanceur', (kind) => {
     for (const file of READERS[kind]) expect(src(file)).toContain(`anim.on.${kind}`);

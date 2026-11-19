@@ -93,3 +93,23 @@ describe('ResourceGains — les « +N » sous le plateau', () => {
     expect(live.map((c) => c.textContent ?? '').join(' ')).toContain('🪙');
   });
 });
+
+describe('✨ interrupteur « Gains sous les ressources »', () => {
+  it('coupé : aucun bandeau ; rallumé : seuls les gains suivants s’affichent', async () => {
+    const { useAnimationPrefs } = await import('@/composables/useAnimationPrefs');
+    const prefs = useAnimationPrefs();
+    const { char, props, host } = await setup();
+    props.ready = true;
+    await nextTick();
+    prefs.set('gains', false);
+    char.row = { ...char.row, keys: 5 };
+    await nextTick();
+    await nextTick();
+    expect(host.querySelector('.rg')).toBeNull();
+    prefs.set('gains', true);
+    char.row = { ...char.row, keys: 6 };
+    await nextTick();
+    await nextTick();
+    expect(host.querySelectorAll('.rg-chip').length).toBe(1);
+  });
+});

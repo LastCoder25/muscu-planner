@@ -13,7 +13,8 @@ export type AnimationKind =
   | 'fboss'
   | 'champxp'
   | 'runes'
-  | 'summon';
+  | 'summon'
+  | 'gains';
 
 export interface AnimationOption {
   id: AnimationKind;
@@ -64,6 +65,12 @@ export const ANIMATION_OPTIONS: readonly AnimationOption[] = [
     emoji: '🎰',
     label: 'Tirages',
     hint: 'l’invocation des champions (×1 et ×10)',
+  },
+  {
+    id: 'gains',
+    emoji: '✨',
+    label: 'Gains sous les ressources',
+    hint: 'les « +N » qui flottent sur Aventure / Carte quand une ressource monte',
   },
 ];
 

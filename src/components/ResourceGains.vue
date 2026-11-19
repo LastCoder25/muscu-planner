@@ -31,6 +31,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import RuneIcon from '@/components/RuneIcon.vue';
 import { useCharacterStore } from '@/stores/character';
+import { useAnimationPrefs } from '@/composables/useAnimationPrefs';
 import { compactNumber } from '@/lib/compactNumber';
 import { emptySeals, sealsSummary } from '@/lib/ascension';
 import {
@@ -67,6 +68,9 @@ const ICONS: Record<string, string> = {
 };
 
 const char = useCharacterStore();
+// ✨ Interrupteur (Base › Réglages › Animations). Coupé, le bandeau ne s'affiche pas MAIS la
+// référence et la retenue de l'or continuent d'avancer : le rallumer ne rejoue pas le passé.
+const anim = useAnimationPrefs();
 const snapshot = computed<ResourceSnapshot | null>(() => {
   const row = char.row;
   if (!row) return null;
@@ -133,7 +137,7 @@ watch(
       gates[id] = gated.gate;
       add = gated.show;
     }
-    if (!add.length) return;
+    if (!add.length || !anim.on.gains) return;
     gains.value = mergeGains(gains.value, add);
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {

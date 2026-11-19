@@ -19,6 +19,7 @@ const state = reactive<Record<AnimationKind, boolean>>({
   champxp: read('champxp'),
   runes: read('runes'),
   summon: read('summon'),
+  gains: read('gains'),
 });
 
 export function useAnimationPrefs() {
