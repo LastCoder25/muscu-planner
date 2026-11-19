@@ -14,7 +14,8 @@
     <div class="lh-body">
       <div class="lh-name" :title="leg.exercise_name">
         {{ leg.exercise_name
-        }}<span v-if="bodyweight" class="lh-bw" title="Poids du corps (aucun matériel)">🤸</span>
+        }}<span v-if="bodyweight" class="lh-bw" title="Poids du corps (aucun matériel)">🤸</span
+        ><HoldMuscleChip :muscle="leg.muscle_primary" :time="legMode(leg) === 'time'" />
       </div>
       <!-- Toute la ligne ouvre les séries faites : une cible large, pas une pastille de 20 px. -->
       <button
@@ -57,6 +58,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ExerciseDemo from './ExerciseDemo.vue';
+import HoldMuscleChip from './HoldMuscleChip.vue';
 import {
   legComplete,
   legDone,

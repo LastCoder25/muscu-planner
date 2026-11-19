@@ -104,6 +104,7 @@
             <span class="exo-name" :class="{ struck: !included[leg.exercise_id] }">{{
               leg.exercise_name
             }}</span>
+            <HoldMuscleChip :muscle="leg.muscle_primary" :time="legMode(leg) === 'time'" />
             <span class="exo-rem"
               >reste {{ legRemaining(leg) }} {{ legUnitLabel(leg)
               }}<template v-if="legMode(leg) === 'time' && included[leg.exercise_id]">
@@ -218,6 +219,7 @@
           <ExerciseDemo :exercise-id="exo.exercise_id" :name="exo.exercise_name" :size="56" />
           <div class="se-head">
             <span class="se-name">{{ exo.exercise_name }}</span>
+            <HoldMuscleChip :muscle="legOf(exo)?.muscle_primary" :time="!!exo.time" />
             <!-- Fourchette conseillée : c’est ICI qu’elle compte — le seul moment du 360 où
                on lit une consigne AVANT de faire la série. -->
             <span class="se-range">🎯 {{ exoRangeLabel(exo) }}</span>
@@ -375,6 +377,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useLibraryStore } from '@/stores/library';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
+import HoldMuscleChip from '@/components/HoldMuscleChip.vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useComboFatigue } from '@/composables/useComboFatigue';

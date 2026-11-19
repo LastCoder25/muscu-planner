@@ -76,3 +76,11 @@ export function muscleRole(
   if (normMuscle(exo.muscle_primary) === m) return 'primary';
   return (exo.muscle_secondary ?? []).some((s) => normMuscle(s) === m) ? 'secondary' : null;
 }
+
+/** 🎯 Le muscle visé par un exo au TEMPS, pour la pastille « Abdos / Quadriceps / Fessiers… »
+ *  (gainage, planche, chaise). Vide sans muscle ni pour le cardio (« cardio » n'est pas un muscle). */
+export function holdMuscleLabel(m: string | null | undefined): string {
+  const k = normMuscle(m);
+  if (!k || k === 'cardio') return '';
+  return muscleLabel(m);
+}

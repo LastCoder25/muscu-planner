@@ -283,7 +283,10 @@
               />
               <q-icon v-else name="fitness_center" size="24px" />
             </div>
-            <div class="sw-name">{{ l.exercise_name }}</div>
+            <div class="sw-name">
+              {{ l.exercise_name }}
+              <HoldMuscleChip :muscle="l.muscle_primary" :time="legMode(l) === 'time'" />
+            </div>
             <div v-if="groupOf(l.slot)" class="sw-grp-tag">{{ groupOf(l.slot) }}</div>
             <div class="sw-sub">
               <template v-if="scope === 'rest'"
@@ -328,7 +331,10 @@
                 >🤸</span
               >
             </div>
-            <div class="sw-name">{{ e.name }}</div>
+            <div class="sw-name">
+              {{ e.name }}
+              <HoldMuscleChip :muscle="e.muscle_primary" :time="e.unit === 'time'" />
+            </div>
             <div v-if="groupOf(slotOf(e))" class="sw-grp-tag">{{ groupOf(slotOf(e)) }}</div>
           </button>
         </div>
@@ -341,6 +347,7 @@
 import { computed, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import ExerciseAnim from './ExerciseAnim.vue';
+import HoldMuscleChip from './HoldMuscleChip.vue';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import { comboSlot } from '@/data/combo';
 import { exoAvailability, occupantsOf } from '@/lib/exoExclusivity';
