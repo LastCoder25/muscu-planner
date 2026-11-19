@@ -123,27 +123,37 @@
 
           <div class="set-hint">Séries par groupe musculaire et par semaine.</div>
 
-          <template v-if="!isBeginner">
-            <div class="set-sub">Variété d'exercices</div>
-            <div class="opt-list">
-              <button
-                v-for="o in VARIETY_OPTS"
-                :key="o.id"
-                type="button"
-                class="obj-tile"
-                :class="{ on: variety === o.id }"
-                @click="variety = o.id"
-              >
-                <span class="obj-emo ot-dots" aria-hidden="true">
-                  <i v-for="n in 3" :key="n" :class="{ lit: n <= o.n }" />
-                </span>
-                <span class="obj-txt">
-                  <span class="ot-lbl">{{ o.label }}</span>
-                  <span class="ot-sub">{{ o.sub }}</span>
-                </span>
-              </button>
+          <!-- 🎚️ Le nombre d'exos de CHAQUE groupe se choisit ici (pastilles). Le plafond d'un
+               groupe = son volume (≥ 2 séries / exo) et les exos encore libres. -->
+          <div class="set-sub">Exercices par groupe</div>
+          <div class="exo-rows">
+            <div v-for="s in exoRows" :key="s.key" class="exo-row" :data-test="'exo-row-' + s.key">
+              <div class="er-head">
+                <span class="er-lbl">{{ s.emoji }} {{ s.label }}</span>
+                <span class="er-sub"
+                  >~{{ setsPerExo(s.key) }} série{{ setsPerExo(s.key) > 1 ? 's' : '' }} / exo</span
+                >
+              </div>
+              <div class="er-chips" role="group" :aria-label="'Exercices : ' + s.label">
+                <button
+                  v-for="n in exoMax[s.key] ?? 1"
+                  :key="n"
+                  type="button"
+                  class="er-chip"
+                  :class="{ on: suggestN(s.key) === n }"
+                  :aria-pressed="suggestN(s.key) === n"
+                  :data-test="'exo-n-' + s.key + '-' + n"
+                  @click="setExoCount(s.key, n)"
+                >
+                  {{ n }}
+                </button>
+              </div>
             </div>
-          </template>
+          </div>
+          <div class="set-hint">
+            Choisis combien d'exercices différents pour chaque groupe : le volume du groupe est
+            réparti entre eux (2 séries par exo au minimum).
+          </div>
         </section>
 
         <!-- Départ : caler le 360 sur un lundi, ou attendre la fin du précédent.
@@ -530,7 +540,7 @@ import {
   comboDayShare,
   comboProrata,
   type ComboVolume,
-  type ComboVariety,
+  comboExoMax,
   type ComboZone,
   type ComboLeg,
   type ComboCountMode,
@@ -627,10 +637,10 @@ function targetMin(mode: ComboCountMode): number {
   return mode === 'reps' ? 10 : comboProrata(3, duration.value);
 }
 
-// Réglages : zone (full/haut/bas) + volume (séries/groupe) + variété (exos/groupe).
+// Réglages : zone (full/haut/bas) + volume (séries/groupe). Le nombre d'exos de chaque groupe
+// se choisit par pastilles (`exoWanted`), préremplies par la suggestion du plan.
 const zone = ref<ComboZone>('full');
 const volume = ref<ComboVolume>('moderate');
-const variety = ref<ComboVariety>('med');
 // Objectif du défi : pré-réglé depuis le profil (modifiable ici). Il pilote DEUX
 // choses — le volume par groupe (via objectiveToGoal : sculpter = haut/bras, perf =
 // chaîne postérieure) ET la FOURCHETTE DE REPS conseillée par exo.
@@ -673,20 +683,11 @@ const ZONE_OPTS: { id: ComboZone; emoji: string; label: string; sub: string }[] 
   { id: 'haut', emoji: '⬆️', label: 'Haut', sub: 'buste & bras' },
   { id: 'bas', emoji: '⬇️', label: 'Bas', sub: 'jambes & fessiers' },
 ];
-const isBeginner = computed(() => level.value === 'debutant');
-// Débutant : variété masquée mais plafond à 2 exos/groupe (le nb réel suit le
-// volume) → simple sans tomber dans « 13 séries d'un seul exo ».
-const effVariety = computed<ComboVariety>(() => (isBeginner.value ? 'med' : variety.value));
 
 const VOLUME_OPTS: { id: ComboVolume; emoji: string; label: string }[] = [
   { id: 'light', emoji: '🌱', label: 'Léger' },
   { id: 'moderate', emoji: '💪', label: 'Modéré' },
   { id: 'intense', emoji: '🔥', label: 'Intense' },
-];
-const VARIETY_OPTS: { id: ComboVariety; n: number; label: string; sub: string }[] = [
-  { id: 'low', n: 1, label: 'Peu', sub: '1 exo / groupe' },
-  { id: 'med', n: 2, label: 'Moyen', sub: "jusqu'à 2" },
-  { id: 'high', n: 3, label: 'Beaucoup', sub: "jusqu'à 3" },
 ];
 // Séries/sem d'un groupe essentiel selon le volume choisi (affiché sur les tuiles).
 function volSets(v: ComboVolume): number {
@@ -708,7 +709,20 @@ const picks = reactive<
     }
   >
 >({});
-const planN = reactive<Record<string, number>>({}); // nb d'exos suggéré par le plan
+const planN = reactive<Record<string, number>>({}); // nb d'exos retenu (plan ou choix)
+// 🎚️ Choix de l'utilisateur par groupe (absent = la suggestion du plan), le plafond de chaque
+// groupe (volume + exos libres) et son volume hebdo (pour « ~N séries / exo »).
+const exoWanted = reactive<Record<string, number>>({});
+const exoMax = reactive<Record<string, number>>({});
+const slotWeekly = reactive<Record<string, number>>({});
+const exoRows = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]));
+function setsPerExo(key: string): number {
+  return Math.max(1, Math.round((slotWeekly[key] ?? 0) / suggestN(key)));
+}
+function setExoCount(key: string, n: number) {
+  exoWanted[key] = n;
+  applyPlan();
+}
 
 // ── Draft (choix séquentiel) ──
 const draftKeys = ref<string[]>([]);
@@ -966,7 +980,7 @@ function applyPlan() {
   const plan = suggestFullBodyPlan(
     level.value,
     volume.value,
-    effVariety.value,
+    'med', // suggestion de départ (jusqu'à 2 exos) ; le choix par groupe la remplace
     COMBO_SLOTS,
     emphasis.value,
   );
@@ -985,7 +999,13 @@ function applyPlan() {
       return true;
     });
     const active = !!p?.active && cands.length > 0;
-    const nExos = Math.min(p?.nExos ?? 1, cands.length || 1);
+    // 🎚️ Le choix de l'utilisateur prime sur la suggestion, borné par le plafond du groupe
+    // (le volume ou les exos libres ont pu changer depuis).
+    const max = comboExoMax(p?.weeklySets ?? 0, cands.length);
+    const chosen = exoWanted[slot.key];
+    const nExos = Math.min(chosen ?? p?.nExos ?? 1, max, cands.length || 1);
+    exoMax[slot.key] = max;
+    slotWeekly[slot.key] = p?.weeklySets ?? 0;
     planN[slot.key] = Math.max(1, nExos);
     enabled[slot.key] = active;
     // Pré-sélection des favoris/premiers exos pour les emplacements actifs ;
@@ -1000,7 +1020,7 @@ function applyPlan() {
   }
 }
 
-watch([level, zone, volume, variety, objective], applyPlan);
+watch([level, zone, volume, objective], applyPlan);
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -1287,12 +1307,6 @@ onMounted(async () => {
   border-color: var(--accent);
   color: var(--accent);
 }
-.ot-dots {
-  display: flex;
-  gap: 3px;
-  width: 26px;
-  justify-content: center;
-}
 .obj-val {
   flex: 0 0 auto;
   font-size: 11.5px;
@@ -1307,17 +1321,58 @@ onMounted(async () => {
 .obj-tile.on .obj-val b {
   color: var(--accent);
 }
-.obj-tile.on .ot-dots i.lit {
+/* 🎚️ Exercices par groupe : une rangée par groupe, ses pastilles dessous (44 px, retour à
+   la ligne, jamais de débordement à 344 px). */
+.exo-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.exo-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 8px 10px 10px;
+}
+.er-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 8px;
+}
+.er-lbl {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.er-sub {
+  font-size: 11px;
+  color: var(--dim);
+}
+.er-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.er-chip {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: 'Oswald', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.er-chip.on {
+  border-color: var(--accent);
   background: var(--accent);
-}
-.ot-dots i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--line);
-}
-.ot-dots i.lit {
-  background: var(--text);
+  color: #15120e;
 }
 .sum-chips {
   display: flex;

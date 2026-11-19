@@ -89,6 +89,19 @@ const ECRANS = [
     // ⚖️ L'équilibre du corps a son propre onglet (v1.128.0).
     gestes: [{ nom: 'equilibre', clic: '.seg2-b:has-text("Équilibre")', attendu: '.bb' }],
   },
+  // 🎚️ Création d'un Défi 360 (v1.327.0) : une pastille « nombre d'exos » d'un groupe se touche
+  // et s'allume. Rien n'est créé : le défi ne part qu'au bouton final.
+  {
+    route: '/combo/new',
+    nom: 'defi360-creation',
+    gestes: [
+      {
+        nom: 'nb-exos',
+        clic: '.er-chip:not(.on) >> nth=0',
+        attendu: '.er-chip.on',
+      },
+    ],
+  },
   { route: '/muscu', nom: 'muscu' },
   { route: '/cardio', nom: 'cardio' },
   { route: '/tennis', nom: 'tennis' },

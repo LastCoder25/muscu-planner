@@ -1403,6 +1403,19 @@ const VARIETY_CAP: Record<ComboVariety, number> = { low: 1, med: 2, high: 3 };
 const ALWAYS_ON = new Set(['biceps', 'triceps']);
 const SETS_PER_EXO = 5;
 
+/** 🎚️ Nombre d'exos CHOISI par groupe (v1.327.0 ; demandé : « pouvoir sélectionner le nombre
+ *  d'exercices différents pour un groupe musculaire, pas seulement un ou deux »). Plancher de
+ *  séries par exo : sans lui, un petit volume réparti sur 6 exos ferait 1 série chacun. */
+export const COMBO_MIN_SETS_PER_EXO = 2;
+/** Plafond absolu d'exos pour un groupe (au-delà, le défi devient ingérable à l'écran). */
+export const COMBO_MAX_EXOS = 6;
+/** Combien d'exos un groupe peut recevoir : borné par son volume hebdo (≥ 2 séries/exo) ET par
+ *  les exos réellement disponibles (matériel, exclusivité). Toujours ≥ 1. Pur. */
+export function comboExoMax(weeklySets: number, available: number): number {
+  const byVolume = Math.floor(Math.max(0, weeklySets) / COMBO_MIN_SETS_PER_EXO);
+  return Math.max(1, Math.min(COMBO_MAX_EXOS, byVolume, Math.max(1, available)));
+}
+
 /** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
 function comboBaseWeekly(level: Level): number {
   return level === 'debutant' ? 9 : level === 'avance' ? 15 : 12;
