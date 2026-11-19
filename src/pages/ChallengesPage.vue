@@ -586,7 +586,20 @@
     />
 
     <!-- Historique des séries d'un exo -->
-    <ComboSetHistory v-model="histOpen" :leg="histLeg" />
+    <ComboSetHistory
+      v-model="histOpen"
+      :leg="histLeg"
+      :editable="activeCombo?.status === 'active'"
+      @edit="onHistoryEdit"
+    />
+    <!-- ✏️ Corriger une série de tenue (secondes + lest), depuis l'historique. -->
+    <HoldSetEditor
+      v-if="activeCombo"
+      v-model="holdEditOpen"
+      :combo-id="activeCombo.id"
+      :leg="holdEditLeg"
+      :index="holdEditIndex"
+    />
   </component>
 </template>
 
@@ -601,6 +614,7 @@ import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
+import HoldSetEditor from '@/components/HoldSetEditor.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
 import { useComboFatigue } from '@/composables/useComboFatigue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
@@ -1064,6 +1078,18 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
 // Historique des séries d'un exo.
 const histOpen = ref(false);
 const histLeg = ref<ComboLeg | null>(null);
+// ✏️ Correction d'une série de tenue (depuis une ligne de l'historique).
+const holdEditOpen = ref(false);
+const holdEditLeg = ref<ComboLeg | null>(null);
+const holdEditIndex = ref<number | null>(null);
+function onHistoryEdit(index: number) {
+  const leg = histLeg.value;
+  if (!leg) return;
+  histOpen.value = false;
+  holdEditLeg.value = leg;
+  holdEditIndex.value = index;
+  holdEditOpen.value = true;
+}
 function openHistory(leg: ComboLeg) {
   histLeg.value = leg;
   histOpen.value = true;

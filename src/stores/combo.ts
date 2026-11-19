@@ -11,6 +11,7 @@ import {
   updateSetAt,
   transferComboLeg,
   legHoldLoadable,
+  updateHoldSetAt,
   HOLD_LEST_MAX,
   type ComboTransferPlan,
   type ComboTransferTarget,
@@ -240,6 +241,21 @@ export const useComboStore = defineStore('combo', () => {
     legsWriter.schedule(id);
   }
 
+  /** ✏️ Corrige UNE série de tenue (secondes + lest). Le lest n'est retenu que sur une tenue
+   *  lestable ; le statut se recalcule (des secondes en plus peuvent boucler l'exo). OPTIMISTE. */
+  function updateHoldSet(id: string, exerciseId: string, index: number, sec: number, lest: number) {
+    const c = list.value.find((x) => x.id === id);
+    if (!c || !(sec > 0)) return;
+    const leg = c.legs.find((l) => l.exercise_id === exerciseId);
+    if (!leg?.sets?.length || index < 0 || index >= leg.sets.length) return;
+    const lestKg = legHoldLoadable(leg) ? Math.min(HOLD_LEST_MAX, Math.max(0, lest)) : 0;
+    leg.sets = updateHoldSetAt(leg.sets, index, { sec: Math.round(sec), lest: lestKg });
+    // La DERNIÈRE série porte le lest qui préremplit la suivante.
+    if (index === leg.sets.length - 1 && legHoldLoadable(leg)) leg.lest_kg = lestKg;
+    refreshStatus(c);
+    legsWriter.schedule(id);
+  }
+
   /** 🧱 Mémorise le lest choisi sur une tenue lestable (planche, chaise) : il préremplit la
    *  prochaine série. Sans effet ailleurs. OPTIMISTE, écriture différée comme les séries. */
   function setHoldLest(id: string, exerciseId: string, kg: number) {
@@ -314,6 +330,7 @@ export const useComboStore = defineStore('combo', () => {
     updateSet,
     transferLeg,
     setHoldLest,
+    updateHoldSet,
     setWeight,
     setStatus,
     remove,

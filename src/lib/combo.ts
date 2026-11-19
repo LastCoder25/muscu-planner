@@ -1414,6 +1414,24 @@ const SETS_PER_EXO = 5;
 export const HOLD_LEST_STEP = 2.5;
 /** Plafond du lest saisissable (kg) : au-delà, c'est une faute de frappe. */
 export const HOLD_LEST_MAX = 100;
+/** ✏️ Pas des secondes d'une tenue corrigée (le pas du chrono et des ajouts rapides). */
+export const HOLD_SEC_STEP = 5;
+/** ✏️ Corrige UNE série de tenue : ses secondes (dans `reps`) et son lest. Un lest nul ou absent
+ *  RETIRE le champ (poids du corps) ; `weight`, `assisted`, `band`, l'heure et l'origine de la série
+ *  ne bougent pas. Pur : renvoie un nouveau tableau. */
+export function updateHoldSetAt(
+  sets: readonly ComboSet[],
+  index: number,
+  patch: { sec: number; lest: number },
+): ComboSet[] {
+  return sets.map((s, i) => {
+    if (i !== index) return s;
+    const next: ComboSet = { ...s, reps: patch.sec };
+    delete next.lest;
+    if (patch.lest > 0) next.lest = patch.lest;
+    return next;
+  });
+}
 /** Un exo du défi accepte-t-il un lest ? Une TENUE (mode durée) de la table `LOADABLE_HOLD_IDS`
  *  (planche, chaise) — jamais le gainage latéral ni un exo en reps (qui a son poids). */
 export function legHoldLoadable(leg: ComboLeg): boolean {

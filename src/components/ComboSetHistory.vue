@@ -11,7 +11,17 @@
       </div>
       <div v-if="!lines.length" class="hist-empty">Aucune série enregistrée.</div>
       <div v-else class="hist-list">
-        <div v-for="(l, i) in lines" :key="i" class="hist-row">
+        <div
+          v-for="(l, i) in lines"
+          :key="i"
+          class="hist-row"
+          :class="{ tap: isHold && l.kind === 'set' }"
+          :role="isHold && l.kind === 'set' ? 'button' : undefined"
+          :tabindex="isHold && l.kind === 'set' ? 0 : undefined"
+          :data-test="isHold && l.kind === 'set' ? 'hist-hold-row' : undefined"
+          @click="isHold && l.kind === 'set' && emit('edit', l.index)"
+          @keydown.enter="isHold && l.kind === 'set' && emit('edit', l.index)"
+        >
           <span class="hist-n">{{ lines.length - i }}</span>
           <!-- Mini-séries (« +1 ») d'un jour : UNE ligne, pas une par prise. -->
           <span v-if="l.kind === 'mini'" class="hist-main"
@@ -28,6 +38,7 @@
             <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
             <span v-if="l.set.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, l.set) }}</span>
           </span>
+          <span v-if="isHold && l.kind === 'set'" class="hist-edit" aria-hidden="true">✏️</span>
           <span class="hist-date">{{ fmtDay(l.kind === 'mini' ? l.date : l.set.date) }}</span>
         </div>
       </div>
@@ -51,8 +62,14 @@ import {
   type ComboLeg,
 } from '@/lib/combo';
 
-const props = defineProps<{ modelValue: boolean; leg: ComboLeg | null }>();
-const emit = defineEmits<{ 'update:modelValue': [boolean] }>();
+const props = defineProps<{
+  modelValue: boolean;
+  leg: ComboLeg | null;
+  /** Défi en cours : une série de TENUE se corrige en touchant sa ligne (événement `edit`). */
+  editable?: boolean;
+}>();
+const emit = defineEmits<{ 'update:modelValue': [boolean]; edit: [index: number] }>();
+const isHold = computed(() => !!props.editable && !!props.leg && legMode(props.leg) === 'time');
 
 // Les plus récentes en tête : c'est la dernière série qu'on vient vérifier.
 // Mini-séries du fractionné regroupées par jour : une ligne « 7 reps · 6 prises ».
@@ -109,6 +126,14 @@ function fmtDay(iso: string): string {
   padding: 7px 9px;
   border-radius: 8px;
   background: var(--surface-2);
+}
+.hist-row.tap {
+  min-height: 44px;
+  cursor: pointer;
+}
+.hist-edit {
+  font-size: 13px;
+  opacity: 0.7;
 }
 .hist-n {
   min-width: 20px;

@@ -182,7 +182,22 @@
         <!-- Détail des séries faites (secondes en durée / reps en mode reps). En mode
              séries, le détail est DANS les cellules jaunes → on ne le répète pas ici. -->
         <div v-if="legSets(leg).length && legMode(leg) !== 'sets'" class="leg-sets">
-          <span v-for="(l, i) in groupSetLines(legSets(leg))" :key="i" class="leg-set-chip">
+          <span
+            v-for="(l, i) in groupSetLines(legSets(leg))"
+            :key="i"
+            class="leg-set-chip"
+            :class="{ tap: legMode(leg) === 'time' && l.kind === 'set' }"
+            :role="legMode(leg) === 'time' && l.kind === 'set' ? 'button' : undefined"
+            :tabindex="legMode(leg) === 'time' && l.kind === 'set' ? 0 : undefined"
+            :aria-label="
+              legMode(leg) === 'time' && l.kind === 'set'
+                ? `Corriger la série ${l.index + 1} : ${leg.exercise_name}`
+                : undefined
+            "
+            :data-test="legMode(leg) === 'time' && l.kind === 'set' ? 'hold-set-chip' : undefined"
+            @click="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
+            @keydown.enter="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
+          >
             <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
             <template v-else-if="legMode(leg) === 'time'"
               >{{ l.set.reps }} s<template v-if="l.set.lest">
@@ -212,7 +227,14 @@
       </button>
     </template>
 
-    <ComboSetHistory v-model="histOpen" :leg="histLeg" />
+    <ComboSetHistory
+      v-model="histOpen"
+      :leg="histLeg"
+      :editable="c?.status === 'active'"
+      @edit="onHistoryEdit"
+    />
+    <!-- ✏️ Corriger une série de tenue (secondes + lest) : puce de la série ou ligne d'historique. -->
+    <HoldSetEditor v-model="holdEditOpen" :combo-id="id" :leg="holdEditLeg" :index="holdEditIndex" />
     <ComboSwapSheet
       v-model="swapOpen"
       :combo-id="c?.id ?? null"
@@ -297,6 +319,7 @@ import { comboSlot } from '@/data/combo';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
+import HoldSetEditor from '@/components/HoldSetEditor.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import {
@@ -325,6 +348,22 @@ const gameFx = useGameFx();
 // Séries faites d'un exo (toucher l'avancement « 2/12 séries »).
 const histOpen = ref(false);
 const histLeg = ref<ComboLeg | null>(null);
+// ✏️ Correction d'une série de tenue.
+const holdEditOpen = ref(false);
+const holdEditLeg = ref<ComboLeg | null>(null);
+const holdEditIndex = ref<number | null>(null);
+function openHoldEdit(leg: ComboLeg, index: number) {
+  holdEditLeg.value = leg;
+  holdEditIndex.value = index;
+  holdEditOpen.value = true;
+}
+/** Une ligne d'historique d'une tenue touchée : l'historique se ferme, l'éditeur s'ouvre. */
+function onHistoryEdit(index: number) {
+  const leg = histLeg.value;
+  if (!leg) return;
+  histOpen.value = false;
+  openHoldEdit(leg, index);
+}
 function openHistory(leg: ComboLeg) {
   histLeg.value = leg;
   histOpen.value = true;
@@ -1016,6 +1055,18 @@ onMounted(async () => {
   border-radius: 6px;
   padding: 1px 6px;
   font-variant-numeric: tabular-nums;
+}
+/* ✏️ Puce de tenue : touchable pour corriger (cible ≥ 44 px, marge pour ne pas s'empiler). */
+.leg-set-chip.tap {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
 }
 .add {
   flex: 1;
