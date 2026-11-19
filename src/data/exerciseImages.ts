@@ -120,6 +120,8 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_upright_row: '/exercises/ex_upright_row.jpg',
   ex_pullover_db: '/exercises/ex_pullover_db.jpg',
   ex_plank_side: '/exercises/ex_plank_side.jpg',
+  ex_glute_bridge_hold: '/exercises/ex_glute_bridge.jpg', // même mouvement que le pont fessier, tenu en haut
+  ex_superman_hold: '/exercises/ex_superman.jpg', // même mouvement que le superman en reps, tenu
   ex_dead_bug: '/exercises/ex_dead_bug.jpg',
   ex_bicycle_crunch: '/exercises/ex_bicycle_crunch.jpg',
   ex_leg_raise_floor: '/exercises/ex_leg_raise_floor.jpg',

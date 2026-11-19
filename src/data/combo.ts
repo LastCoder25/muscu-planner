@@ -158,8 +158,10 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
   ],
   // Fentes : avant, arrière, marchées, bulgare (pied arrière surélevé).
   ['ex_bw_lunge', 'ex_lunge_reverse', 'ex_lunge_walking', 'ex_squat_bulgarian'],
-  // Pont fessier : deux jambes, une jambe, hip thrust.
-  ['ex_glute_bridge', 'ex_glute_bridge_single', 'ex_hip_thrust'],
+  // Pont fessier : deux jambes, une jambe, hip thrust, tenue statique.
+  ['ex_glute_bridge', 'ex_glute_bridge_single', 'ex_hip_thrust', 'ex_glute_bridge_hold'],
+  // Superman : en reps (lombaires) / tenu (gainage dorsal).
+  ['ex_superman', 'ex_superman_hold'],
   // Soulevé de terre roumain : deux jambes / une jambe.
   ['ex_romanian_deadlift', 'ex_rdl_single'],
   // Rowing / tirage horizontal (barre, haltère, kettlebell, élastique, machine).

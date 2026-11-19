@@ -662,6 +662,22 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Garde les coudes légèrement fléchis et fixes : seul l’épaule bouge.',
   },
+  ex_glute_bridge_hold: {
+    steps: [
+      'Allongé sur le dos, pieds au sol, genoux pliés à environ 90°.',
+      'Pousse dans les talons pour monter le bassin jusqu’à l’alignement épaules-hanches-genoux.',
+      'Serre les fessiers et tiens la position, sans creuser le bas du dos.',
+    ],
+    tip: 'Si le dos se cambre, redescends un peu : la tenue se fait avec les fessiers, pas avec les lombaires.',
+  },
+  ex_superman_hold: {
+    steps: [
+      'Allongé sur le ventre, bras tendus devant toi, jambes tendues.',
+      'Décolle en même temps les bras et les jambes de quelques centimètres.',
+      'Serre les fessiers et le bas du dos, regarde le sol, et tiens la position en respirant.',
+    ],
+    tip: 'Garde la nuque dans le prolongement du dos. Mieux vaut un petit décollage tenu qu’un grand cambré.',
+  },
   ex_plank_side: {
     steps: [
       'Sur le côté, appui sur l’avant-bras, jambes tendues et empilées.',
