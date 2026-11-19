@@ -75,9 +75,12 @@ function holdLog(id: string, sets: [number, number][], exId = 'ex_plank', day = 
 const ex0 = (s: Session) => s.exercises[0]!;
 
 describe('🧱 périmètre du lest', () => {
-  it('planche et chaise acceptent un lest, pas le gainage latéral ni le reste', () => {
+  it('planche, chaise et pont fessier tenu acceptent un lest, pas le gainage latéral ni le reste', () => {
     expect(holdLoadable('ex_plank')).toBe(true);
     expect(holdLoadable('ex_wall_sit')).toBe(true);
+    expect(holdLoadable('ex_glute_bridge_hold')).toBe(true);
+    // Le Superman tenu n'a pas de lest : rien à poser sur le dos.
+    expect(holdLoadable('ex_superman_hold')).toBe(false);
     expect(holdLoadable('ex_plank_side')).toBe(false);
     expect(holdLoadable('ex_tn_plank')).toBe(false);
     expect(holdLoadable('squat')).toBe(false);

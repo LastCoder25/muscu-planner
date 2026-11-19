@@ -16,6 +16,7 @@ import type { PerformedSet, SessionLog } from './types';
 const LOADABLE_HOLD_IDS: readonly string[] = [
   'ex_plank', // Gainage (planche)
   'ex_wall_sit', // Chaise
+  'ex_glute_bridge_hold', // Pont fessier (tenue) — un disque sur les hanches
 ];
 
 export function holdLoadable(exerciseId: string | null | undefined): boolean {

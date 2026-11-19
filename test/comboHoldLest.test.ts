@@ -45,6 +45,8 @@ describe('🧱 qui accepte un lest', () => {
   it('la planche et la chaise en mode durée — pas le gainage latéral, pas un exo en reps', () => {
     expect(legHoldLoadable(hold('ex_plank'))).toBe(true);
     expect(legHoldLoadable(hold('ex_wall_sit'))).toBe(true);
+    expect(legHoldLoadable(hold('ex_glute_bridge_hold'))).toBe(true);
+    expect(legHoldLoadable(hold('ex_superman_hold'))).toBe(false);
     expect(legHoldLoadable(hold('ex_side_plank'))).toBe(false);
     expect(legHoldLoadable(hold('ex_plank', { count_mode: 'sets' }))).toBe(false);
   });
