@@ -185,6 +185,8 @@ import {
   turnBackComingHero,
   heroPostOf,
   heroBackToPost,
+  heroWalkVoyage,
+  boostHeroWalk,
   recallPostedHero,
   unpostHero,
   boardFromFortress,
@@ -3778,6 +3780,9 @@ export const useCharacterStore = defineStore('character', () => {
     gearId: string,
     /** Ce que l'éclat dit sous la pièce (la Guilde y met le gain de puissance). */
     note?: string,
+    /** 🔕 L'automatisation (Base › Réglages) monte les pièces sans éclat : seul celui des
+     *  champions reste (décision de l'utilisateur). */
+    silent = false,
   ): Promise<string | null> {
     const cur = row.value;
     if (!cur) return 'Personnage introuvable.';
@@ -3803,14 +3808,15 @@ export const useCharacterStore = defineStore('character', () => {
     });
     // Annoncée APRÈS l'écriture, ICI et non dans un écran : l'ascension se lance depuis la
     // Guilde ET depuis le rapport de mission, et le rapport n'en jouait aucune.
-    useGameFx().celebrate({
-      kind: 'rankup',
-      emoji: g.emoji,
-      title: g.name,
-      ranks: { from: next - 1, to: next },
-      gear: { model: advGearModelOf(g) },
-      subtitle: note ?? 'Ses stats montent d’un rang.',
-    });
+    if (!silent)
+      useGameFx().celebrate({
+        kind: 'rankup',
+        emoji: g.emoji,
+        title: g.name,
+        ranks: { from: next - 1, to: next },
+        gear: { model: advGearModelOf(g) },
+        subtitle: note ?? 'Ses stats montent d’un rang.',
+      });
     return null;
   }
 
@@ -6880,7 +6886,8 @@ export const useCharacterStore = defineStore('character', () => {
       | { kind: 'hero' }
       | { kind: 'party'; id: string }
       | { kind: 'attack'; id: string }
-      | { kind: 'reinf' | 'return'; pointId: string; members: readonly string[]; at: number },
+      | { kind: 'reinf' | 'return'; pointId: string; members: readonly string[]; at: number }
+      | { kind: 'hwalk'; at: number; back: boolean },
     boostId: BoostId,
     now: number,
   ): Promise<string | null> {
@@ -6890,6 +6897,25 @@ export const useCharacterStore = defineStore('character', () => {
     const stock = takeSupplies(cur.supplies, [boostId]);
     if (!stock) return 'tu n’as plus ce boost';
     const min = BOOST_MIN[boostId];
+    if (target.kind === 'hwalk') {
+      // 🧝 La marche du héros (vers son poste ou vers la base) : l'échéance vit sur la carte.
+      const map = cur.expedition_map;
+      const walk = heroWalkVoyage(map, now);
+      if (!map || !walk) return 'ce voyage est déjà terminé';
+      const plan = voyageBoostPlan(
+        walk.back
+          ? { poi: walk.poi, midAt: walk.sentAt, returnAt: walk.returnAt }
+          : { poi: walk.poi, midAt: walk.midAt, returnAt: walk.midAt },
+        min,
+        now,
+      );
+      if (typeof plan === 'string') return BOOST_BLOCK_LABEL[plan];
+      await persist(userId, {
+        supplies: stock,
+        expedition_map: boostHeroWalk(map, plan.gainMs, now),
+      });
+      return null;
+    }
     if ('pointId' in target) {
       // 🛡️🏠 Renfort en route / retour d'un point fixe : l'échéance vit sur la carte.
       const map = cur.expedition_map;

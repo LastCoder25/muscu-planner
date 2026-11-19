@@ -92,7 +92,7 @@ export function useAutoUpEngine() {
             gold: cur.gold,
           });
           if (!g) break;
-          if (await char.ascendGear(uid, g.id)) break;
+          if (await char.ascendGear(uid, g.id, undefined, true)) break;
           steps++;
           gearUps++;
         }

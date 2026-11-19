@@ -5301,7 +5301,24 @@ function boostTarget(key: string):
       at: number;
       v: Pick<ActiveExpedition, 'poi' | 'midAt' | 'returnAt'>;
     }
+  | {
+      kind: 'hwalk';
+      at: number;
+      back: boolean;
+      v: Pick<ActiveExpedition, 'poi' | 'midAt' | 'returnAt'>;
+    }
   | null {
+  // 🧝 La marche du héros (vers son poste, ou vers la base) : un aller ou un retour simple.
+  const hw = heroWalkOnMap.value;
+  if (hw && key === hw.id)
+    return {
+      kind: 'hwalk',
+      at: hw.arriveAt,
+      back: hw.back,
+      v: hw.back
+        ? { poi: hw.poi, midAt: hw.sentAt, returnAt: hw.arriveAt }
+        : { poi: hw.poi, midAt: hw.arriveAt, returnAt: hw.arriveAt },
+    };
   // 🛡️ Un renfort en route (`r…`) : aller simple, il arrive à `arriveAt`.
   const r = reinforcementsOnMap.value.find((x) => x.id === key);
   if (r)
@@ -5383,7 +5400,9 @@ function boostTrip(key: string, id: BoostId) {
         uid,
         t.kind === 'hero'
           ? { kind: 'hero' }
-          : 'pointId' in t
+          : t.kind === 'hwalk'
+            ? { kind: 'hwalk', at: t.at, back: t.back }
+            : 'pointId' in t
             ? { kind: t.kind, pointId: t.pointId, members: t.members, at: t.at }
             : { kind: t.kind, id: t.id },
         id,

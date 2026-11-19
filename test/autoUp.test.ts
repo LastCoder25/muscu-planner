@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   anyAutoUp,
@@ -71,5 +72,16 @@ describe('nextChampionToAscend', () => {
 describe('nextGearToAscend', () => {
   it('rien sur un stock vide', () => {
     expect(nextGearToAscend([], { advs: [], seals: emptySeals(), gold: 1e9 })).toBeNull();
+  });
+});
+
+describe('🔕 animations en mode automatique', () => {
+  const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+  it("l'ascension de pièce de l'automatisation est silencieuse, celle des champions garde son éclat", () => {
+    const engine = read('src/composables/useAutoUp.ts');
+    expect(engine).toMatch(/char\.ascendGear\(uid, g\.id, undefined, true\)/);
+    expect(engine).toMatch(/char\.ascendChampion\(uid, a\.id\)/);
+    const store = read('src/stores/character.ts');
+    expect(store).toMatch(/if \(!silent\)\s+useGameFx\(\)\.celebrate\(\{\s+kind: 'rankup',\s+emoji: g\.emoji/);
   });
 });

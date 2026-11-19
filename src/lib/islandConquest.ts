@@ -1509,6 +1509,26 @@ export function heroWalkVoyage(
   return { poi: spot, sentAt: from.at, midAt: from.at, returnAt: at, back: true };
 }
 
+/** ⚡ Un boost de vitesse sur la MARCHE du héros (`heroWalkVoyage`) : l'arrivée et le départ
+ *  avancent de `gainMs` (la durée du trajet ne change pas, c'est le pion qui saute). Rend la
+ *  même carte s'il ne marche pas ou si le gain est nul. */
+export function boostHeroWalk(map: ExpeditionMap, gainMs: number, now: number): ExpeditionMap {
+  if (gainMs <= 0) return map;
+  const p = map.pois.find((q) => q.control?.owner === 'player' && !!q.control.heroComing);
+  const c = p?.control?.heroComing;
+  if (p && c && c.at > now) {
+    const coming = { ...c, at: c.at - gainMs, from: c.from - gainMs };
+    return {
+      ...map,
+      pois: map.pois.map((q) => (q === p ? { ...q, control: { ...q.control!, heroComing: coming } } : q)),
+    };
+  }
+  const at = map.heroReturnAt;
+  const from = map.heroReturnFrom;
+  if (at === undefined || at <= now || !from) return map;
+  return { ...map, heroReturnAt: at - gainMs, heroReturnFrom: { ...from, at: from.at - gainMs } };
+}
+
 /** 🧝 LE HÉROS RENTRE D'UN VOYAGE PARTI DE SON POSTE (signalé : « il part de la base » alors
  *  qu'il était à l'Ossuaire). Il reprend sa place si le lieu est toujours à nous et a encore
  *  ses 2 places ; sinon il rentre à pied à la base depuis le lieu (`legMin` minutes). Rend la
