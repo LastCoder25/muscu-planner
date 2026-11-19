@@ -234,6 +234,13 @@
             >
           </div>
         </div>
+        <!-- 🧱 Lest d'une tenue (planche, chaise, pont fessier) : choisi ici, il part avec la
+             prochaine série chronométrée. -->
+        <HoldLestStepper
+          v-if="exo.time && legOf(exo) && legHoldLoadable(legOf(exo)!)"
+          :combo-id="id"
+          :leg="legOf(exo)!"
+        />
         <!-- Exo de DURÉE (gainage) : chrono (chaque pause valide une série) au lieu de reps. -->
         <div v-if="exo.time" class="se-sets">
           <button
@@ -353,6 +360,8 @@ import {
   legsByGroup,
   legUnitLabel,
   legMode,
+  legHoldLoadable,
+  legHoldLest,
   legLastReps,
   comboStepMs,
   comboTimeSets,
@@ -378,6 +387,7 @@ import { useLibraryStore } from '@/stores/library';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import HoldMuscleChip from '@/components/HoldMuscleChip.vue';
+import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useComboFatigue } from '@/composables/useComboFatigue';
@@ -529,6 +539,8 @@ interface LoggedSet {
   weight: number | null;
   assisted: boolean;
   band?: ElasticBand | null;
+  /** 🧱 Lest (kg) d'une tenue lestable : champ à part, jamais du poids (ni XP ni tonnage). */
+  lest?: number;
   at: number;
 }
 const logged = ref<Record<string, LoggedSet>>({});
@@ -878,9 +890,17 @@ function validateTimeSet(i: number, sec: number) {
     exo.sets.push(sec); // toutes faites → série bonus
     j = exo.sets.length - 1;
   }
+  // 🧱 Le lest choisi (planche, chaise, pont fessier tenu) part avec la série.
+  const lest = legHoldLest(legOf(exo) ?? ({} as ComboLeg));
   logged.value = {
     ...logged.value,
-    [`${i}-${j}`]: { reps: sec, weight: null, assisted: false, at: Date.now() },
+    [`${i}-${j}`]: {
+      reps: sec,
+      weight: null,
+      assisted: false,
+      ...(lest > 0 ? { lest } : {}),
+      at: Date.now(),
+    },
   };
   restLeft.value = restSec.value;
   if (validatedCount.value >= totalSets.value)
@@ -927,7 +947,17 @@ function commitLogged() {
     const i = Number(key.split('-')[0]);
     const exo = session.value[i];
     if (exo) {
-      combo.addSet(id, exo.exercise_id, today, v.reps, v.weight, v.assisted, v.band ?? null, v.at);
+      combo.addSet(
+        id,
+        exo.exercise_id,
+        today,
+        v.reps,
+        v.weight,
+        v.assisted,
+        v.band ?? null,
+        v.at,
+        v.lest,
+      );
       rememberWeight(exo.exercise_id, v.weight); // la fiche du 360 le faisait déjà, pas la séance
     }
   }
