@@ -101,15 +101,19 @@ describe('✨ interrupteur « Gains sous les ressources »', () => {
     const { char, props, host } = await setup();
     props.ready = true;
     await nextTick();
-    prefs.set('gains', false);
-    char.row = { ...char.row, keys: 5 };
-    await nextTick();
-    await nextTick();
-    expect(host.querySelector('.rg')).toBeNull();
-    prefs.set('gains', true);
-    char.row = { ...char.row, keys: 6 };
-    await nextTick();
-    await nextTick();
-    expect(host.querySelectorAll('.rg-chip').length).toBe(1);
+    try {
+      prefs.set('gains', false);
+      char.row = { ...char.row, keys: 5 };
+      await nextTick();
+      await nextTick();
+      expect(host.querySelector('.rg')).toBeNull();
+      prefs.set('gains', true);
+      char.row = { ...char.row, keys: 6 };
+      await nextTick();
+      await nextTick();
+      expect(host.querySelectorAll('.rg-chip').length).toBe(1);
+    } finally {
+      prefs.set('gains', true); // jamais laissé coupé, même si une assertion échoue
+    }
   });
 });
