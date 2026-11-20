@@ -3852,6 +3852,28 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
   }, 30_000);
 });
 
+describe('🧱 Barre d’un exo en durée, découpée en séries (ComboTimeBar)', () => {
+  it('se monte : un morceau par série, la durée écrite dedans', async () => {
+    const { default: ComboTimeBar } = await import('@/components/ComboTimeBar.vue');
+    const leg = {
+      slot: 'core',
+      exercise_id: 'ex_plank',
+      exercise_name: 'Planche',
+      rep_weight: 1,
+      target: 120,
+      count_mode: 'time',
+      sets: [30, 45, 15].map((reps) => ({ date: '2026-01-05', reps })),
+    };
+    let out = '';
+    expect(
+      await mountIt(ComboTimeBar, { leg }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect((out.match(/ctb-seg/g) ?? []).length).toBe(3);
+    for (const t of ['30 s', '45 s', '15 s']) expect(out).toContain(t);
+    expect(out).toContain('3 séries');
+  }, 30_000);
+});
+
 describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () => {
   const cast = [{ kind: 'champion' as const, name: 'Aurore', emoji: '⚔️', championId: null }];
   it('🐺 DenStage : la bête et les deux barres', async () => {

@@ -25,6 +25,7 @@ import {
   legTierMarks,
   legSegZone,
   legBarGeometry,
+  legTimeSegments,
   legTierShare,
   comboTieredBonus,
   comboBonusXp,
@@ -778,6 +779,45 @@ describe('legBarGeometry (barre continue : reps et durée)', () => {
       expect(g.objPct).toBeGreaterThanOrEqual(0);
       expect(g.objPct).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+describe('legTimeSegments (barre de durée découpée en séries)', () => {
+  const leg = (secs: number[], target = 120) =>
+    ({
+      slot: 'core',
+      exercise_id: 'ex_plank',
+      rep_weight: 1,
+      target,
+      count_mode: 'time',
+      sets: secs.map((reps) => ({ date: '2026-09-01', reps })),
+      progress: [],
+    }) as unknown as Parameters<typeof legTimeSegments>[0];
+
+  it('un morceau par série, dans l’ordre, large de sa durée (échelle = objectif)', () => {
+    const s = legTimeSegments(leg([30, 45, 15]));
+    expect(s.map((x) => x.sec)).toEqual([30, 45, 15]);
+    expect(s[0]!.pct).toBeCloseTo(25, 5);
+    expect(s[1]!.pct).toBeCloseTo(37.5, 5);
+    expect(s.every((x) => !x.over)).toBe(true);
+  });
+
+  it('la somme des morceaux = la part faite de la géométrie', () => {
+    const l = leg([30, 45, 15]);
+    const g = legBarGeometry(l);
+    const sum = legTimeSegments(l).reduce((a, x) => a + x.pct, 0);
+    expect(sum).toBeCloseTo(g.fillPct + g.overPct, 5);
+  });
+
+  it('une série à 0 s ne dessine rien ; aucune série = aucun morceau', () => {
+    expect(legTimeSegments(leg([0, 40])).map((x) => x.sec)).toEqual([40]);
+    expect(legTimeSegments(leg([]))).toEqual([]);
+  });
+
+  it('un 360 d’avant la v1.53 : la série qui commence après l’objectif est « over »', () => {
+    const s = legTimeSegments(leg([120, 12]));
+    expect(s.map((x) => x.over)).toEqual([false, true]);
+    expect(s.reduce((a, x) => a + x.pct, 0)).toBeLessThanOrEqual(100.0001);
   });
 });
 

@@ -135,14 +135,8 @@
           </div>
           <span v-if="!legComplete(leg)" class="bar-plus" aria-hidden="true">＋</span>
         </div>
-        <div v-else class="reps-bar">
-          <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
-          <span
-            class="reps-over"
-            :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
-          />
-          <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
-        </div>
+        <!-- Mode DURÉE : la barre est découpée en séries, la durée écrite dans chacune. -->
+        <ComboTimeBar v-else :leg="leg" />
         <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
         <HoldLestStepper v-if="legHoldLoadable(leg) && !legComplete(leg)" :combo-id="id" :leg="leg" />
         <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
@@ -317,6 +311,7 @@ import {
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
+import ComboTimeBar from '@/components/ComboTimeBar.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import HoldSetEditor from '@/components/HoldSetEditor.vue';

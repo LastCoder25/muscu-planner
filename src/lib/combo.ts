@@ -867,6 +867,25 @@ export function legBarGeometry(l: ComboLeg): {
   return { objPct, fillPct: Math.min(donePct, objPct), overPct: Math.max(0, donePct - objPct) };
 }
 
+/** 🧱 La barre d'un exo en DURÉE découpée EN SÉRIES (demandé : « une seule barre pour le gainage,
+ *  on ne voit pas combien de séries de combien de secondes on a faites »). Même échelle que
+ *  `legBarGeometry` (l'objectif = `objPct`), mais un morceau par série faite, large de sa durée :
+ *  `sec` s'écrit dans le morceau, `over` = il commence au-delà de l'objectif (360 d'avant la
+ *  v1.53). Les séries à 0 s ne dessinent rien. La somme des `pct` = `fillPct + overPct`. */
+export function legTimeSegments(l: ComboLeg): { sec: number; pct: number; over: boolean }[] {
+  const scale = Math.max(l.target, legDone(l), 1);
+  const obj = Math.max(0, l.target);
+  let cum = 0;
+  const out: { sec: number; pct: number; over: boolean }[] = [];
+  for (const s of legSets(l)) {
+    const sec = Math.max(0, s.reps || 0);
+    if (sec <= 0) continue;
+    out.push({ sec, pct: Math.min(100, (sec / scale) * 100), over: cum >= obj });
+    cum += sec;
+  }
+  return out;
+}
+
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
  *  des séries comptées × poids-de-rep, plan figé (COMBO_PLAN_REPS) pour les séries
  *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */

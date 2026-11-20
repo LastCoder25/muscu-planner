@@ -491,6 +491,8 @@
                   <template v-else-if="n === legDone(leg) + 1">＋</template>
                 </span>
               </div>
+              <!-- Mode DURÉE : la barre est découpée en séries, la durée écrite dans chacune. -->
+              <ComboTimeBar v-else-if="legMode(leg) === 'time'" :leg="leg" />
               <div
                 v-else
                 class="reps-bar"
@@ -609,6 +611,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
+import ComboTimeBar from '@/components/ComboTimeBar.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
