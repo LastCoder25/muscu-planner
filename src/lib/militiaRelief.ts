@@ -13,8 +13,9 @@
  * n'est recouvert avant d'avoir été lu.
  *
  * ⚠️ Seules les places PERDUES au combat sont reprises : un point qu'on a vidé exprès ne
- * rappelle personne. Une place reprise à la main entre-temps n'est plus due ; un point perdu
- * efface sa dette (`loseControl` repart d'un état neuf).
+ * rappelle personne. Une place reprise à la main entre-temps n'est plus due. Un point PERDU ne
+ * doit rien tant qu'il est ennemi (les miliciens refaits restent à la base) ; repris, il rappelle
+ * ceux tombés dans sa chute (le rapport de la défense perdue reste gardé sur le lieu).
  *
  * ⚠️ PUR : rend un nouvel état, le store écrit.
  */
@@ -24,12 +25,18 @@ import type { ControlState, Crossing, ExpeditionMap, Poi } from './expedition';
 import { takeMilitia, type MilitiaState } from './militia';
 import { militiaSailingToPoint } from './militiaSea';
 
-/** Les miliciens tombés dans la dernière défense TENUE du point, pas encore comptés. Un
- *  rapport d'avant la prise du lieu (`since`) n'est pas le nôtre. */
+/** Les miliciens tombés dans la dernière défense du point, pas encore comptés.
+ *  - défense TENUE : c'est une défense de NOTRE tenure (`resolvedAt` ≥ `since`) ;
+ *  - défense PERDUE (2026-11-20, signalé : « ils ne rejoignent pas le lieu où ils sont morts ») :
+ *    c'est la chute qui a précédé NOTRE reprise (`resolvedAt` < `since`). Tant que le lieu est
+ *    ennemi, rien n'est dû (l'appelant ne lit que les points à nous : les miliciens refaits
+ *    restent à la base) ; une fois repris, la relève part vers lui. */
 function freshLosses(c: ControlState): { n: number; id: string } | null {
   const r = c.lastAttack;
-  if (!r || r.id === c.reliefSeen || !r.win || !r.party?.defense) return null;
-  if ((r.resolvedAt ?? 0) < (c.since ?? 0)) return null;
+  if (!r || r.id === c.reliefSeen || !r.party?.defense) return null;
+  const at = r.resolvedAt ?? 0;
+  const since = c.since ?? 0;
+  if (r.win ? at < since : at >= since) return null;
   const n = r.party.militiaLost?.length ?? 0;
   return n > 0 ? { n, id: r.id } : null;
 }

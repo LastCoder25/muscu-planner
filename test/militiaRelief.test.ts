@@ -80,7 +80,34 @@ describe('🛡️ la dette de relève vient du dernier rapport de défense gard�
       { id: 'x', n: 2 },
     ]);
   });
-  it('une attaque PERDUE ne crée aucune dette', () => {
+  // 2026-11-20, signalé : l'Autel des runes repris par l'ennemi (5 miliciens morts) puis
+  // reconquis restait sans un milicien — « un point perdu efface sa dette » ne devait pas
+  // effacer ceux tombés dans la chute. Le rapport de la défense PERDUE reste gardé sur le lieu.
+  it('un lieu repris après une chute rappelle les miliciens tombés dans cette chute', () => {
+    const m = mapOf(
+      point('a', {
+        since: 900,
+        lastAttack: report('r1', ['mil:2', 'mil:3'], { win: false, resolvedAt: 500 }),
+      }),
+    );
+    const r = relief(m, home(3));
+    expect(r!.sent).toEqual([{ id: 'a', n: 2 }]);
+    expect(ctl(r!.map, 'a').reliefSeen).toBe('r1');
+    // Une seule fois par rapport.
+    expect(relief(r!.map, home(3))).toBeNull();
+  });
+  it('tant que le lieu est ennemi, rien n’est dû : les miliciens refaits restent à la base', () => {
+    const m = mapOf(
+      point('a', {
+        owner: 'enemy',
+        since: 900,
+        lastAttack: report('r1', ['mil:2'], { win: false, resolvedAt: 500 }),
+      }),
+    );
+    expect(relief(m, home(3))).toBeNull();
+    expect(militiaOwedOn(m)).toBe(0);
+  });
+  it('une défense perdue DEPUIS notre prise (cas impossible) ne crée aucune dette', () => {
     const m = mapOf(point('a', { lastAttack: report('r1', ['mil:2'], { win: false }) }));
     expect(relief(m, home(3))).toBeNull();
   });
