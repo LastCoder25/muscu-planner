@@ -43,8 +43,13 @@ describe('le store applique les règles du héros posté', () => {
   it('en sortie de son poste, sa place lui est gardée (et seulement là où il revient)', () => {
     expect(body('expeSend')).toMatch(/unpostHero\([\s\S]*?, now, true\)/);
     expect(body('sendParty')).toMatch(/unpostHero\(map1, now, !!origin\)/);
-    expect(src).toMatch(/syncHeroAway\(\s*syncAway\(/);
+    // 🧝🩹 Et il n'est jamais posté pendant son voyage (`healHeroOut`, 2026-11-20), puis la
+    // place gardée ne reste que là où il revient : les DEUX lisent le même poste.
+    expect(src).toMatch(/syncHeroAway\(\s*healHeroOut\(\s*syncAway\(/);
+    expect(src).toMatch(/heroPost,\s*Date\.now\(\),\s*\),\s*heroPost,\s*\)/);
     // ⚔️ Son voyage OU le groupe d'attaque combinée avec lequel il est parti (2026-10-08).
-    expect(src).toMatch(/heroKeepPostId\(\s*cur\.expedition,\s*attackList\.value\.flatMap/);
+    expect(src).toMatch(
+      /const heroPost = heroKeepPostId\(\s*cur\.expedition,\s*attackList\.value\.flatMap/,
+    );
   });
 });

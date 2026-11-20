@@ -1633,6 +1633,26 @@ function withoutHeroAway(p: Poi | undefined): Poi | undefined {
  * disparu ou lieu perdu la libèrent. Pendant de `pruneAway` pour un champion ; ne fait que
  * RETIRER. Rend la MÊME carte si rien ne change (le store n'écrit pas à vide).
  */
+/**
+ * 🧝🩹 LE HÉROS EN VOYAGE N'EST PAS POSTÉ (2026-11-20, signalé, « récurrent » : « sous le lieu
+ * fixe, le héros apparaît disponible avec ses deux boules bleues, mais il est en expédition »).
+ * Cas réel : expédition parvenue à son retour dans 30 min, `homeId` = Cartographe, et le
+ * Cartographe portait encore `hero: true` sans place gardée. Quelle que soit l'écriture qui a
+ * remis le héros au poste (une carte relue avant son départ…), la règle est unique : tant que
+ * son voyage (`keepId`, le poste d'où il est parti) est en cours, le poste ne le garde que
+ * comme « en sortie » (`heroAway`, boules orange) — jamais comme posté. Rend la MÊME carte si
+ * rien ne change (le tick bat chaque seconde, le store n'écrit pas à vide).
+ */
+export function healHeroOut(
+  map: ExpeditionMap,
+  keepId: string | null,
+  at: number,
+): ExpeditionMap {
+  if (!keepId) return map;
+  const post = heroPostOf(map);
+  return post && post.id === keepId ? unpostHero(map, at, true) : map;
+}
+
 export function syncHeroAway(map: ExpeditionMap, keepId: string | null): ExpeditionMap {
   if (!map.pois.some((p) => p.control?.heroAway)) return map;
   let changed = false;

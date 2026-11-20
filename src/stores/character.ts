@@ -180,6 +180,7 @@ import {
   heroComing,
   heroAwayOnMapAt,
   syncHeroAway,
+  healHeroOut,
   heroKeepPostId,
   heroWalksHomeFrom,
   turnBackComingHero,
@@ -5229,17 +5230,24 @@ export const useCharacterStore = defineStore('character', () => {
     advs: readonly Adventurer[],
   ): ExpeditionMap {
     // 🧝 La place gardée au héros en sortie suit la même règle : seulement là où il revient.
+    const heroPost = heroKeepPostId(
+      cur.expedition,
+      attackList.value.flatMap((a) => a.wings),
+    );
+    // 🧝🩹 Et il n'est jamais POSTÉ pendant son voyage (`healHeroOut`) : une écriture qui l'y
+    // remettrait est corrigée au tick suivant.
     return syncHeroAway(
-      syncAway(
-        map,
-        [...parties, ...(cur.expedition ? [cur.expedition] : [])],
-        attackList.value.flatMap((a) => a.wings),
-        advs,
+      healHeroOut(
+        syncAway(
+          map,
+          [...parties, ...(cur.expedition ? [cur.expedition] : [])],
+          attackList.value.flatMap((a) => a.wings),
+          advs,
+        ),
+        heroPost,
+        Date.now(),
       ),
-      heroKeepPostId(
-        cur.expedition,
-        attackList.value.flatMap((a) => a.wings),
-      ),
+      heroPost,
     );
   }
   /** ⚔️🏰 `syncAwayOf` sur la carte courante, écrite seulement si elle change (ce tick bat
