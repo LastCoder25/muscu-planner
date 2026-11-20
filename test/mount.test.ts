@@ -3869,8 +3869,31 @@ describe('🧱 Barre d’un exo en durée, découpée en séries (ComboTimeBar)'
       await mountIt(ComboTimeBar, { leg }, undefined, undefined, '/', (h) => (out = h)),
     ).toBeNull();
     expect((out.match(/ctb-seg/g) ?? []).length).toBe(3);
-    for (const t of ['30 s', '45 s', '15 s']) expect(out).toContain(t);
+    // Secondes nues dans les morceaux ; l'unité vit dans le titre de la barre.
+    for (const t of ['>30<', '>45<', '>15<']) expect(out).toContain(t);
     expect(out).toContain('3 séries');
+    expect(out).toContain('30 s · 45 s · 15 s');
+  }, 30_000);
+
+  it('la série de 30 s d’un objectif de 360 s (8 % de la barre) garde son étiquette', async () => {
+    // Le cas réel signalé : chaise 90·60·30·60·60·60 — le morceau de 30 s restait VIDE.
+    const { default: ComboTimeBar } = await import('@/components/ComboTimeBar.vue');
+    const leg = {
+      slot: 'legs',
+      exercise_id: 'ex_wall_sit',
+      exercise_name: 'Chaise',
+      rep_weight: 1,
+      target: 360,
+      count_mode: 'time',
+      sets: [90, 60, 30, 60, 60, 60].map((reps) => ({ date: '2026-01-05', reps })),
+    };
+    let out = '';
+    expect(
+      await mountIt(ComboTimeBar, { leg }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    const empty = (out.match(/class="ctb-seg"[^>]*><\/span>/g) ?? []).length;
+    expect(empty).toBe(0);
+    expect(out).toContain('>30<');
   }, 30_000);
 });
 

@@ -16,7 +16,7 @@
       :class="{ over: s.over }"
       :style="{ width: s.pct + '%' }"
     >
-      <template v-if="s.pct >= MIN_LABEL_PCT">{{ fmt(s.sec) }}</template>
+      <template v-if="s.pct >= minPct(s.sec)">{{ s.sec }}</template>
     </span>
     <span v-if="geo.objPct < 100" class="ctb-mark" :style="{ left: geo.objPct + '%' }" />
   </div>
@@ -28,19 +28,20 @@ import { legBarGeometry, legTimeSegments, type ComboLeg } from '@/lib/combo';
 
 const props = defineProps<{ leg: ComboLeg }>();
 
-/** Sous cette largeur (en % de la barre) un morceau est trop étroit pour son texte : le titre
- *  de la barre (survol / lecteur d'écran) dit alors toutes les séries. */
-const MIN_LABEL_PCT = 11;
+/** Les durées s'écrivent TOUJOURS en secondes, sans unité (« 30 », « 90 », « 120 ») : plus court,
+ *  homogène, et la plupart des séries de gainage font 30 s — elles doivent s'afficher (une
+ *  série de 30 s sur un objectif de 360 s ne pèse que 8 % de la barre, ~21 px à 344 px).
+ *  Un morceau montre son nombre dès que ses chiffres tiennent (3 % de la barre par chiffre) ;
+ *  plus étroit, le titre de la barre (survol / lecteur d'écran) dit toutes les séries. */
+const PCT_PER_DIGIT = 3;
+function minPct(sec: number): number {
+  return String(sec).length * PCT_PER_DIGIT;
+}
 
 const segs = computed(() => legTimeSegments(props.leg));
 const geo = computed(() => legBarGeometry(props.leg));
 
-/** 45 → « 45 s », 90 → « 1:30 ». */
-function fmt(sec: number): string {
-  if (sec < 60) return `${sec} s`;
-  const r = sec % 60;
-  return `${Math.floor(sec / 60)}:${String(r).padStart(2, '0')}`;
-}
+const fmt = (sec: number): string => `${sec} s`;
 
 const label = computed(() =>
   segs.value.length
