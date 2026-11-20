@@ -5878,6 +5878,18 @@ const poiFacts = computed<PoiFact[]>(() => {
             : {}),
         },
       );
+    else if (band)
+      // ⚔️ Une interception se joue à l'ALLER : « arrive-t-on avant elle ? ». Le retour ne
+      // compte pas (2026-11-20, signalé : « on compare le temps de l'armée à l'aller-retour »).
+      // `partyLeg` est l'aller jusqu'au point où on la croise ; en orange s'il est trop tard
+      // (`partyLate`, la règle de l'envoi), à côté de « ⏳ Arrive dans ».
+      out.push({
+        icon: '🚶',
+        label: 'Rencontre dans',
+        go: true,
+        ...leg(partyLeg.value, 'Temps pour croiser l’armée — le retour ne compte pas'),
+        ...(partySize.value && partyLate.value ? { cls: 'warn' } : {}),
+      });
     else
       out.push({
         icon: '⏱️',
