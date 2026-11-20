@@ -867,23 +867,52 @@ export function legBarGeometry(l: ComboLeg): {
   return { objPct, fillPct: Math.min(donePct, objPct), overPct: Math.max(0, donePct - objPct) };
 }
 
-/** 🧱 La barre d'un exo en DURÉE découpée EN SÉRIES (demandé : « une seule barre pour le gainage,
- *  on ne voit pas combien de séries de combien de secondes on a faites »). Même échelle que
- *  `legBarGeometry` (l'objectif = `objPct`), mais un morceau par série faite, large de sa durée :
- *  `sec` s'écrit dans le morceau, `over` = il commence au-delà de l'objectif (360 d'avant la
- *  v1.53). Les séries à 0 s ne dessinent rien. La somme des `pct` = `fillPct + overPct`. */
-export function legTimeSegments(l: ComboLeg): { sec: number; pct: number; over: boolean }[] {
-  const scale = Math.max(l.target, legDone(l), 1);
-  const obj = Math.max(0, l.target);
-  let cum = 0;
-  const out: { sec: number; pct: number; over: boolean }[] = [];
-  for (const s of legSets(l)) {
-    const sec = Math.max(0, s.reps || 0);
-    if (sec <= 0) continue;
-    out.push({ sec, pct: Math.min(100, (sec / scale) * 100), over: cum >= obj });
-    cum += sec;
+/** 🫧 Durée d'une BULLE d'un exo en durée (gainage…) : une « série » de 30 s (demandé : « la
+ *  majorité des gens font des séries de gainage de 30 secondes »). Source unique : le plan d'un
+ *  nouveau 360 (`ComboNewPage`) vise N séries × cette durée, donc N bulles. */
+export const COMBO_HOLD_SEC = 30;
+
+/** Une bulle d'un exo en durée : `cap` = ses secondes à tenir (30, sauf la dernière quand
+ *  l'objectif n'est pas un multiple de 30), `held` = ce qui y est déjà tenu, `fill` = `held / cap`
+ *  (0..1). `zone` = la même couleur de palier que les cases des exos en séries. */
+export interface TimeBubble {
+  n: number;
+  cap: number;
+  held: number;
+  fill: number;
+  zone: SegZone;
+}
+
+/** 🫧 Les BULLES d'un exo en DURÉE, comme les cases des exos en séries (demandé : « le même
+ *  système de séries, une bulle = 30 s ; quand on arrête le chrono on remplit ce qui a été
+ *  fait : 45 s = la première bulle pleine et la seconde à moitié »). Le temps tenu est CUMULÉ
+ *  (`legDone`, en secondes) et rempli bulle après bulle : une série de 90 s remplit trois bulles,
+ *  les séries elles-mêmes restent listées en pastilles sous la barre. Objectif non multiple de
+ *  30 (anciens 360 à 40 s/série) : la dernière bulle est plus courte et se remplit sur SA durée.
+ *  Au-delà de l'objectif (360 d'avant la v1.53) : des bulles `beyond`. Palier d'une bulle : la
+ *  règle des cases d'un exo de N séries appliquée à N bulles (80 % secondaires, le reste
+ *  principal). Sous un filtre de zone, seules les bulles de la zone. */
+export function legTimeBubbles(l: ComboLeg, f: ComboLegFilter = 'all'): TimeBubble[] {
+  const target = Math.max(0, l.target);
+  const done = Math.max(0, legDone(l));
+  const total = Math.max(target, done);
+  // Paliers comptés EN BULLES, exactement comme un exo de n séries (`legTierMarks`/`legSegZone`) :
+  // la même couleur que les cases des autres exos, quel que soit l'exo.
+  const count = Math.ceil(target / COMBO_HOLD_SEC);
+  const secBubbles = Math.max(1, Math.ceil(count * COMBO_TIER_SECONDARY));
+  const out: TimeBubble[] = [];
+  for (let start = 0, n = 1; start < total; start += COMBO_HOLD_SEC, n++) {
+    const inTarget = start < target;
+    const cap = inTarget ? Math.min(COMBO_HOLD_SEC, target - start) : COMBO_HOLD_SEC;
+    const held = Math.min(cap, Math.max(0, done - start));
+    let zone: SegZone = 'principal';
+    if (!inTarget) zone = 'beyond';
+    else if (secBubbles !== count && n <= secBubbles) zone = 'secondary';
+    out.push({ n, cap, held, fill: cap > 0 ? held / cap : 0, zone });
   }
-  return out;
+  if (f === 'all') return out;
+  const want: SegZone = f === 'sec' ? 'secondary' : 'principal';
+  return out.filter((b) => b.zone === want);
 }
 
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles

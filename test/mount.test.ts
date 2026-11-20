@@ -3852,48 +3852,47 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
   }, 30_000);
 });
 
-describe('🧱 Barre d’un exo en durée, découpée en séries (ComboTimeBar)', () => {
-  it('se monte : un morceau par série, la durée écrite dedans', async () => {
-    const { default: ComboTimeBar } = await import('@/components/ComboTimeBar.vue');
-    const leg = {
-      slot: 'core',
-      exercise_id: 'ex_plank',
-      exercise_name: 'Planche',
-      rep_weight: 1,
-      target: 120,
-      count_mode: 'time',
-      sets: [30, 45, 15].map((reps) => ({ date: '2026-01-05', reps })),
-    };
+describe('🫧 Exo en durée : les mêmes bulles que les séries (ComboTimeBubbles)', () => {
+  const leg = (secs: number[], target: number) => ({
+    slot: 'legs',
+    exercise_id: 'ex_wall_sit',
+    exercise_name: 'Chaise',
+    rep_weight: 1,
+    target,
+    count_mode: 'time',
+    sets: secs.map((reps) => ({ date: '2026-01-05', reps })),
+  });
+  const mount = async (props: Record<string, unknown>) => {
+    const { default: ComboTimeBubbles } = await import('@/components/ComboTimeBubbles.vue');
     let out = '';
-    expect(
-      await mountIt(ComboTimeBar, { leg }, undefined, undefined, '/', (h) => (out = h)),
-    ).toBeNull();
-    expect((out.match(/ctb-seg/g) ?? []).length).toBe(3);
-    // Secondes nues dans les morceaux ; l'unité vit dans le titre de la barre.
-    for (const t of ['>30<', '>45<', '>15<']) expect(out).toContain(t);
-    expect(out).toContain('3 séries');
-    expect(out).toContain('30 s · 45 s · 15 s');
+    const err = await mountIt(ComboTimeBubbles, props, undefined, undefined, '/', (h) => (out = h));
+    return { err, out };
+  };
+
+  it('se monte : une bulle par 30 s, 45 s = une pleine + une à moitié', async () => {
+    const { err, out } = await mount({ leg: leg([45], 120) });
+    expect(err).toBeNull();
+    expect((out.match(/class="tb /g) ?? []).length).toBe(4);
+    expect((out.match(/class="tb-fill"/g) ?? []).length).toBe(2);
+    expect(out).toContain('width: 100%');
+    expect(out).toContain('width: 50%');
+    expect(out).toContain('>30<');
+    expect(out).toContain('>15<');
+    expect(out).toContain('45 s tenues sur 120 s');
   }, 30_000);
 
-  it('la série de 30 s d’un objectif de 360 s (8 % de la barre) garde son étiquette', async () => {
-    // Le cas réel signalé : chaise 90·60·30·60·60·60 — le morceau de 30 s restait VIDE.
-    const { default: ComboTimeBar } = await import('@/components/ComboTimeBar.vue');
-    const leg = {
-      slot: 'legs',
-      exercise_id: 'ex_wall_sit',
-      exercise_name: 'Chaise',
-      rep_weight: 1,
-      target: 360,
-      count_mode: 'time',
-      sets: [90, 60, 30, 60, 60, 60].map((reps) => ({ date: '2026-01-05', reps })),
-    };
-    let out = '';
-    expect(
-      await mountIt(ComboTimeBar, { leg }, undefined, undefined, '/', (h) => (out = h)),
-    ).toBeNull();
-    const empty = (out.match(/class="ctb-seg"[^>]*><\/span>/g) ?? []).length;
-    expect(empty).toBe(0);
-    expect(out).toContain('>30<');
+  it('la chaise réelle (90·60·30·60·60·60 sur 360 s) : 12 bulles toutes pleines', async () => {
+    const { err, out } = await mount({ leg: leg([90, 60, 30, 60, 60, 60], 360) });
+    expect(err).toBeNull();
+    expect((out.match(/class="tb /g) ?? []).length).toBe(12);
+    expect((out.match(/class="tb-fill"/g) ?? []).length).toBe(12);
+    expect(out).not.toContain('width: 50%');
+  }, 30_000);
+
+  it('sous un filtre de zone, seules les bulles de la zone', async () => {
+    const { err, out } = await mount({ leg: leg([], 360), filter: 'obj' });
+    expect(err).toBeNull();
+    expect((out.match(/class="tb /g) ?? []).length).toBe(2);
   }, 30_000);
 });
 

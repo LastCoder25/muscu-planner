@@ -534,6 +534,7 @@ import {
   comboWeeklySets,
   comboMuscleInZone,
   comboEmphasis,
+  COMBO_HOLD_SEC,
   objectiveToGoal,
   COMBO_MIN_DAYS,
   COMBO_MAX_DAYS,
@@ -566,8 +567,6 @@ const router = useRouter();
 const $q = useQuasar();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
-// Secondes de gainage visées par « série » d'objectif (mode durée du 360).
-const COMBO_GAINAGE_SEC = 40;
 const library = useLibraryStore();
 const combo = useComboStore();
 const challenges = useChallengesStore();
@@ -1048,7 +1047,7 @@ async function createCombo() {
     for (const exId of p.exercise_ids) {
       const e = lib.value.find((x) => x.id === exId);
       if (!e) continue;
-      // Exo au TEMPS (gainage) → mode DURÉE : objectif en SECONDES (~40 s / série visée).
+      // Exo au TEMPS (gainage) → mode DURÉE : objectif en SECONDES (30 s / série visée = une bulle).
       const isTime = e.unit === 'time';
       // Fourchette FIGÉE ici : l’objectif choisi, corrigé par la nature de l’exo
       // (gainage → secondes, isolation → plancher relevé).
@@ -1063,7 +1062,7 @@ async function createCombo() {
         exercise_name: e.name,
         muscle_primary: e.muscle_primary,
         rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required, e.name),
-        target: isTime ? perExoTarget * COMBO_GAINAGE_SEC : perExoTarget,
+        target: isTime ? perExoTarget * COMBO_HOLD_SEC : perExoTarget,
         count_mode: isTime ? 'time' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),

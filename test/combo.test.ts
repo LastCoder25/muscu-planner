@@ -25,7 +25,8 @@ import {
   legTierMarks,
   legSegZone,
   legBarGeometry,
-  legTimeSegments,
+  legTimeBubbles,
+  COMBO_HOLD_SEC,
   legTierShare,
   comboTieredBonus,
   comboBonusXp,
@@ -782,7 +783,7 @@ describe('legBarGeometry (barre continue : reps et durée)', () => {
   });
 });
 
-describe('legTimeSegments (barre de durée découpée en séries)', () => {
+describe('legTimeBubbles (exo en durée : les mêmes bulles que les séries, 1 bulle = 30 s)', () => {
   const leg = (secs: number[], target = 120) =>
     ({
       slot: 'core',
@@ -792,32 +793,76 @@ describe('legTimeSegments (barre de durée découpée en séries)', () => {
       count_mode: 'time',
       sets: secs.map((reps) => ({ date: '2026-09-01', reps })),
       progress: [],
-    }) as unknown as Parameters<typeof legTimeSegments>[0];
+    }) as unknown as Parameters<typeof legTimeBubbles>[0];
 
-  it('un morceau par série, dans l’ordre, large de sa durée (échelle = objectif)', () => {
-    const s = legTimeSegments(leg([30, 45, 15]));
-    expect(s.map((x) => x.sec)).toEqual([30, 45, 15]);
-    expect(s[0]!.pct).toBeCloseTo(25, 5);
-    expect(s[1]!.pct).toBeCloseTo(37.5, 5);
-    expect(s.every((x) => !x.over)).toBe(true);
+  it('une bulle par tranche de 30 s de l’objectif', () => {
+    expect(COMBO_HOLD_SEC).toBe(30);
+    const b = legTimeBubbles(leg([], 360));
+    expect(b).toHaveLength(12);
+    expect(b.every((x) => x.cap === 30 && x.fill === 0)).toBe(true);
   });
 
-  it('la somme des morceaux = la part faite de la géométrie', () => {
-    const l = leg([30, 45, 15]);
-    const g = legBarGeometry(l);
-    const sum = legTimeSegments(l).reduce((a, x) => a + x.pct, 0);
-    expect(sum).toBeCloseTo(g.fillPct + g.overPct, 5);
+  it('45 s : la 1re bulle pleine, la 2e à moitié (le cas demandé)', () => {
+    const b = legTimeBubbles(leg([45], 120));
+    expect(b.map((x) => x.fill)).toEqual([1, 0.5, 0, 0]);
+    expect(b.map((x) => x.held)).toEqual([30, 15, 0, 0]);
   });
 
-  it('une série à 0 s ne dessine rien ; aucune série = aucun morceau', () => {
-    expect(legTimeSegments(leg([0, 40])).map((x) => x.sec)).toEqual([40]);
-    expect(legTimeSegments(leg([]))).toEqual([]);
+  it('le temps est CUMULÉ sur les séries : 30 + 45 + 15 = 90 s = trois bulles pleines', () => {
+    const b = legTimeBubbles(leg([30, 45, 15], 120));
+    expect(b.map((x) => x.fill)).toEqual([1, 1, 1, 0]);
+    // Une seule série de 90 s remplit pareil.
+    expect(legTimeBubbles(leg([90], 120)).map((x) => x.fill)).toEqual([1, 1, 1, 0]);
   });
 
-  it('un 360 d’avant la v1.53 : la série qui commence après l’objectif est « over »', () => {
-    const s = legTimeSegments(leg([120, 12]));
-    expect(s.map((x) => x.over)).toEqual([false, true]);
-    expect(s.reduce((a, x) => a + x.pct, 0)).toBeLessThanOrEqual(100.0001);
+  it('le cas réel signalé : chaise 90·60·30·60·60·60 sur 360 s = 12 bulles pleines', () => {
+    const b = legTimeBubbles(leg([90, 60, 30, 60, 60, 60], 360));
+    expect(b).toHaveLength(12);
+    expect(b.every((x) => x.fill === 1)).toBe(true);
+  });
+
+  it('objectif non multiple de 30 (anciens 360 à 40 s/série) : la dernière bulle est plus courte', () => {
+    const b = legTimeBubbles(leg([100], 100));
+    expect(b.map((x) => x.cap)).toEqual([30, 30, 30, 10]);
+    expect(b.every((x) => x.fill === 1)).toBe(true);
+    // 95 s sur 100 : la dernière bulle (10 s) est remplie à 5/10, sur SA durée.
+    expect(legTimeBubbles(leg([95], 100)).map((x) => x.fill)).toEqual([1, 1, 1, 0.5]);
+  });
+
+  it('même palier que les cases d’un exo de N séries : la règle des cases sur N bulles', () => {
+    // C'est LA promesse d'homogénéité : une bulle a la couleur de la case de même rang.
+    for (const t of [30, 60, 90, 100, 120, 270, 360, 600]) {
+      const n = Math.ceil(t / COMBO_HOLD_SEC);
+      const setsLeg = { slot: 'core', target: n, count_mode: 'sets' } as unknown as Parameters<
+        typeof legSegZone
+      >[0];
+      const zones = legTimeBubbles(leg([], t)).map((x) => x.zone);
+      expect(zones).toEqual(Array.from({ length: n }, (_, i) => legSegZone(setsLeg, i + 1)));
+    }
+    // 360 s = 12 bulles : 10 secondaires puis 2 principales (comme 12 séries).
+    const z = legTimeBubbles(leg([], 360)).map((x) => x.zone);
+    expect(z.filter((x) => x === 'secondary')).toHaveLength(10);
+    expect(z.slice(10)).toEqual(['principal', 'principal']);
+    // Une seule bulle : une seule zone, la principale.
+    expect(legTimeBubbles(leg([], 30)).map((x) => x.zone)).toEqual(['principal']);
+  });
+
+  it('sous un filtre de zone, seules les bulles de la zone (numéros gardés)', () => {
+    const sec = legTimeBubbles(leg([], 360), 'sec');
+    expect(sec).toHaveLength(10);
+    const obj = legTimeBubbles(leg([], 360), 'obj');
+    expect(obj.map((x) => x.n)).toEqual([11, 12]);
+  });
+
+  it('un 360 d’avant la v1.53 qui a dépassé : des bulles « beyond »', () => {
+    const b = legTimeBubbles(leg([120, 20], 120));
+    expect(b).toHaveLength(5);
+    expect(b[4]!.zone).toBe('beyond');
+    expect(b[4]!.fill).toBeCloseTo(20 / 30, 5);
+  });
+
+  it('aucune série, aucun objectif : aucune bulle', () => {
+    expect(legTimeBubbles(leg([], 0))).toEqual([]);
   });
 });
 

@@ -135,8 +135,8 @@
           </div>
           <span v-if="!legComplete(leg)" class="bar-plus" aria-hidden="true">＋</span>
         </div>
-        <!-- Mode DURÉE : la barre est découpée en séries, la durée écrite dans chacune. -->
-        <ComboTimeBar v-else :leg="leg" />
+        <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
+        <ComboTimeBubbles v-else :leg="leg" :filter="legFilter" />
         <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
         <HoldLestStepper v-if="legHoldLoadable(leg) && !legComplete(leg)" :combo-id="id" :leg="leg" />
         <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
@@ -311,7 +311,7 @@ import {
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
-import ComboTimeBar from '@/components/ComboTimeBar.vue';
+import ComboTimeBubbles from '@/components/ComboTimeBubbles.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import HoldSetEditor from '@/components/HoldSetEditor.vue';
