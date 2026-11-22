@@ -1,7 +1,8 @@
 <template>
-  <!-- 🎨 Avancement du Défi 360 en DEUX BARRES SÉPARÉES : séries de base (argent, jusqu'à
-       80 %) et objectif (jaune, 80 → 100 %). Chaque barre se remplit
-       de ce que les exos ont fait dans SA zone, sommé sur tous les exos ; le rose est le
+  <!-- 🎨 Avancement du Défi 360 en DEUX BARRES SÉPARÉES : séries de base (argent) et objectif
+       (jaune). Chaque barre a pour longueur la part de CASES grises / jaunes du défi (environ
+       80 · 20 ; un exo à objectif ≤ 4 n'a que du jaune) et se remplit de ce que les exos ont
+       fait dans SA zone, sommé sur tous les exos ; le rose est le
        RETARD réel, réparti dans le vide de l'argent puis du jaune (`comboBarSegments`).
        🔎 Et ELLES FILTRENT (demandé, à la place d'une rangée de filtres) : toucher une barre
        ne garde que les exos qui travaillent dans sa zone, la retoucher réaffiche tout. Le

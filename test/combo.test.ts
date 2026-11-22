@@ -1507,6 +1507,72 @@ describe('🎨 LA BARRE PAR ZONE : 0 → 100 %, argent / jaune', () => {
     expect(segs[0]!.len).toBeCloseTo(80, 6);
     expect(segs[1]!.len).toBeCloseTo(20, 6);
   });
+
+  // ── Les barres suivent les VRAIES cases (signalé : « la grise n'est pas complète alors qu'il
+  // ne me reste que des séries d'objectif »). Cause : les exos à objectif ≤ 4 n'ont aucune case
+  // grise (le repère secondaire EST l'objectif) mais la barre leur comptait 80 % de gris.
+  const tl = (name: string, target: number, secs: number[]): ComboLeg =>
+    ({
+      slot: 'core',
+      exercise_id: name,
+      exercise_name: name,
+      rep_weight: 1,
+      target,
+      count_mode: 'time',
+      sets: secs.map((reps) => ({ date: '2026-01-05', reps })),
+    }) as unknown as ComboLeg;
+
+  it('le cas signalé : les petits exos (objectif 4, sans case grise) ne retiennent plus la grise', () => {
+    // A : ses 8 grises faites (10 séries) · B 0/4 et C 2/4 : tout jaune, rien de gris à faire.
+    const segs = comboBarSegments(combo([ex('A', 10, 8), ex('B', 4, 0), ex('C', 4, 2)]), NO_PACE);
+    expect(segs[0]!.fill).toBeCloseTo(100, 6); // avant : 54 %
+    // Et il reste du jaune à faire : la barre jaune n'est pas pleine.
+    expect(segs[1]!.fill).toBeLessThan(100);
+  });
+
+  it('un exo de 9 séries dont les 8 grises sont faites : le jaune reste vide', () => {
+    const p = comboBarParts(combo([ex('A', 9, 8)]));
+    expect(p.sec).toBeCloseTo(p.secLen, 6);
+    expect(p.obj).toBe(0); // avant : 8,9 → 80 d'argent + 8,9 de jaune alors que sa case jaune est vide
+  });
+
+  it('les longueurs sont la part de cases grises / jaunes (aucune grise : tout jaune)', () => {
+    const p = comboBarParts(combo([ex('A', 4, 3)]));
+    expect(p.secLen).toBe(0);
+    expect(p.objLen).toBe(100);
+    expect(p.obj).toBeCloseTo(75, 6);
+    const segs = comboBarSegments(combo([ex('A', 4, 3)]), NO_PACE);
+    expect(segs[0]!.fill).toBe(100); // zone sans case : rien à faire = complète
+    expect(segs[1]!.fill).toBeCloseTo(75, 6);
+    expect(Number.isFinite(segs[0]!.late)).toBe(true);
+  });
+
+  it('aucune avance fictive : les deux remplissages font la progression réelle', () => {
+    const c = combo([ex('A', 4, 2), ex('B', 10, 3), ex('C', 9, 8), ex('D', 1, 0)]);
+    const p = comboBarParts(c);
+    const real = ((2 / 4 + 3 / 10 + 8 / 9 + 0) / 4) * 100;
+    expect(p.sec + p.obj).toBeCloseTo(real, 6);
+    expect(p.secLen + p.objLen).toBeCloseTo(100, 6);
+  });
+
+  it('exo en durée : le repère est la fin de sa dernière bulle grise, comme ses bulles', () => {
+    // 360 s = 12 bulles, 10 grises → repère à 300 s (et non 288).
+    expect(legTierMarks(tl('Chaise', 360, [])).sec).toBe(300);
+    expect(legTimeBubbles(tl('Chaise', 360, [])).filter((b) => b.zone === 'secondary')).toHaveLength(
+      10,
+    );
+    // Étape : grise jusqu'à la fin de la 10e bulle, jaune ensuite, terminée à 360.
+    expect(legStage(tl('Chaise', 360, [290]))).toBe('secondary');
+    expect(legStage(tl('Chaise', 360, [300]))).toBe('principal');
+    expect(legStage(tl('Chaise', 360, [360]))).toBe('done');
+    // La barre : grise pleine ⇔ les 10 bulles grises faites.
+    const grey = comboBarParts(combo([tl('Chaise', 360, [])])).secLen;
+    expect(grey).toBeCloseTo((300 / 360) * 100, 6);
+    expect(comboBarSegments(combo([tl('Chaise', 360, [300])]), NO_PACE)[0]!.fill).toBeCloseTo(100, 6);
+    // Petit exo en durée (90 s = 3 bulles, une seule zone) : tout jaune, comme ses bulles.
+    expect(legTierMarks(tl('Gainage', 90, [])).sec).toBe(90);
+    expect(comboBarParts(combo([tl('Gainage', 90, [])])).secLen).toBe(0);
+  });
 });
 
 describe('🌸 LE ROSE = LE RETARD RÉEL, réparti dans l’argent puis le jaune', () => {

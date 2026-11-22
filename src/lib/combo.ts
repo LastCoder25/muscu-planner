@@ -660,11 +660,13 @@ export function legTierShare(l: ComboLeg): number {
  *  secondaire, l'exo commence directement en `principal`. */
 export type LegStage = 'secondary' | 'principal' | 'done';
 export function legStage(l: ComboLeg): LegStage {
-  const t = legTier(l);
-  if (t === 'principal') return 'done';
-  if (t === 'secondary') return 'principal';
+  if (l.target <= 0) return 'secondary';
+  if (legComplete(l)) return 'done';
+  // ⚠️ Lu sur le REPÈRE AFFICHÉ (`legTierMarks`), pas sur la fraction : un exo en durée a son
+  // repère aligné sur ses bulles (le palier de récompense, lui, reste à 80 % — `legTier`).
   const m = legTierMarks(l);
-  return m.sec === m.principal ? 'principal' : 'secondary';
+  if (m.sec === m.principal) return 'principal';
+  return legDone(l) >= m.sec ? 'principal' : 'secondary';
 }
 
 /** Repères AFFICHÉS des paliers d'un exo (nombre de séries/reps à atteindre).
@@ -673,7 +675,20 @@ export function legStage(l: ComboLeg): LegStage {
  *  palier. Avec `round`, un objectif de 9 affichait « Sec. 7 » alors que 7/9 = 78 % < 80 %. */
 export function legTierMarks(l: ComboLeg): { sec: number; principal: number } {
   const t = Math.max(0, l.target);
+  // Exo en DURÉE : le repère tombe à la fin de sa dernière bulle grise (en secondes), comme les
+  // cases d'un exo de N séries — sinon la barre et les bulles ne diraient pas la même chose.
+  if (legMode(l) === 'time') {
+    const { count, secBubbles } = timeBubbleSplit(t);
+    return { sec: secBubbles >= count ? t : Math.min(t, secBubbles * COMBO_HOLD_SEC), principal: t };
+  }
   return { sec: Math.max(1, Math.ceil(t * COMBO_TIER_SECONDARY)), principal: t };
+}
+
+/** Bulles d'un exo en durée : leur nombre et combien sont grises (même règle qu'un exo de
+ *  `count` séries : 80 % arrondis au-dessus ; une seule zone sur un tout petit objectif). */
+function timeBubbleSplit(target: number): { count: number; secBubbles: number } {
+  const count = Math.ceil(Math.max(0, target) / COMBO_HOLD_SEC);
+  return { count, secBubbles: Math.max(1, Math.ceil(count * COMBO_TIER_SECONDARY)) };
 }
 
 /** Palier qu'une CASE de la barre de séries fait avancer (la n-ième série, n ≥ 1).
@@ -761,19 +776,37 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
  *  Valeurs en % de la LARGEUR de la barre. ⚠️ Ce n'est PAS tout à fait le % affiché en gros
  *  (`comboProgressPct`, au dixième, qui ne ment pas aux bornes) : la barre montre OÙ en est
  *  chaque zone, le chiffre dit si l'objectif est bouclé. */
-export function comboBarParts(c: ComboChallenge): { sec: number; obj: number } {
+export function comboBarParts(c: ComboChallenge): {
+  sec: number;
+  obj: number;
+  secLen: number;
+  objLen: number;
+} {
   const n = c.legs.length;
-  if (!n) return { sec: 0, obj: 0 };
+  if (!n) return { sec: 0, obj: 0, secLen: 0, objLen: 100 };
+  // ⚠️ LES BARRES SUIVENT LES VRAIES CASES (signalé : « la barre grise n'est pas complète alors
+  // qu'il ne me reste que des séries d'objectif »). Chaque exo apporte 1/n ; sa part GRISE est
+  // celle de ses cases grises (`legTierMarks.sec` sur son objectif), le reste est jaune. Un exo
+  // sans case grise (objectif ≤ 4 : le repère secondaire EST l'objectif) est tout jaune. Avant :
+  // 80 % / 20 % fixes pour tous — ces exos retenaient la barre grise, et un exo de 9 séries
+  // dont les 8 grises sont faites entamait déjà le jaune. Sans avance fictive : la somme des
+  // deux remplissages reste la progression réelle (Σ fait / objectif).
   let sec = 0,
-    obj = 0;
+    obj = 0,
+    grey = 0;
   for (const l of c.legs) {
-    if (l.target <= 0) continue;
-    const f = Math.min(1, legDone(l) / l.target);
-    sec += Math.min(f, COMBO_TIER_SECONDARY);
-    obj += Math.max(0, f - COMBO_TIER_SECONDARY);
+    const t = l.target;
+    if (t <= 0) continue;
+    const m = legTierMarks(l).sec;
+    const g = m < t ? m : 0; // cases grises, dans l'unité de l'exo
+    const d = Math.min(Math.max(0, legDone(l)), t);
+    grey += g / t;
+    sec += Math.min(d, g) / t;
+    obj += (d - Math.min(d, g)) / t;
   }
   const w = (x: number) => (x / n) * 100;
-  return { sec: w(sec), obj: w(obj) };
+  const secLen = w(grey);
+  return { sec: w(sec), obj: w(obj), secLen, objLen: 100 - secLen };
 }
 
 /** 🎨 LES DEUX BARRES DU 360 (secondaire · objectif), chacune en % de SA longueur.
@@ -786,7 +819,7 @@ export function comboBarParts(c: ComboChallenge): { sec: number; obj: number } {
  *  devrait être), sinon à l'avancement attendu (`onTimePct`) sur l'échelle argent → jaune. */
 export interface ComboBarSegment {
   id: 'sec' | 'obj';
-  /** Longueur relative (80 · 20). */
+  /** Longueur relative = la part de cases grises / jaunes du défi (environ 80 · 20). */
   len: number;
   fill: number;
   late: number;
@@ -827,8 +860,7 @@ export function legSegNumbers(l: ComboLeg, count: number, f: ComboLegFilter): nu
 
 export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {
   const done = comboBarParts(c);
-  const secLen = COMBO_TIER_SECONDARY * 100;
-  const objLen = (1 - COMBO_TIER_SECONDARY) * 100;
+  const { secLen, objLen } = done;
   let reste = Math.max(0, pace.latePct);
   const lateSec = Math.min(reste, Math.max(0, secLen - done.sec));
   reste -= lateSec;
@@ -846,8 +878,9 @@ export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSe
   const seg = (id: 'sec' | 'obj', len: number, d: number, late: number) => ({
     id,
     len,
-    fill: Math.min(100, (d / len) * 100),
-    late: (late / len) * 100,
+    // Zone sans aucune case (tous les exos sont tout jaunes) : rien à faire = complète.
+    fill: len > 0 ? Math.min(100, (d / len) * 100) : 100,
+    late: len > 0 ? (late / len) * 100 : 0,
     mark: mark && mark.id === id && mark.at > 0 && mark.at < len ? (mark.at / len) * 100 : null,
   });
   return [seg('sec', secLen, done.sec, lateSec), seg('obj', objLen, done.obj, lateObj)];
@@ -898,8 +931,7 @@ export function legTimeBubbles(l: ComboLeg, f: ComboLegFilter = 'all'): TimeBubb
   const total = Math.max(target, done);
   // Paliers comptés EN BULLES, exactement comme un exo de n séries (`legTierMarks`/`legSegZone`) :
   // la même couleur que les cases des autres exos, quel que soit l'exo.
-  const count = Math.ceil(target / COMBO_HOLD_SEC);
-  const secBubbles = Math.max(1, Math.ceil(count * COMBO_TIER_SECONDARY));
+  const { count, secBubbles } = timeBubbleSplit(target);
   const out: TimeBubble[] = [];
   for (let start = 0, n = 1; start < total; start += COMBO_HOLD_SEC, n++) {
     const inTarget = start < target;
