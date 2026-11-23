@@ -125,7 +125,6 @@
             Séries par groupe musculaire et par semaine. Tu choisiras tes exercices à l’étape
             suivante, autant que tu veux par groupe : le volume du groupe est réparti entre eux.
           </div>
-
         </section>
 
         <!-- Départ : caler le 360 sur un lundi, ou attendre la fin du précédent.
@@ -424,8 +423,47 @@
               </button>
             </div>
             <div class="cfg-range">🎯 {{ slotRangeLabel(key) }} par série</div>
-            <div v-if="pickCount(key) > 1" class="cfg-split">
-              ≈ {{ perExo(key) }} {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} / exo
+            <!-- 🍰 Répartition entre les exos : parts égales par défaut, ajustables une à une. -->
+            <div v-if="pickCount(key) > 1" class="cfg-split" :data-test="'split-' + key">
+              <div class="cs-head">
+                <span>
+                  Répartition
+                  {{ picks[key]?.alloc ? 'choisie' : 'proposée' }}
+                </span>
+                <button
+                  v-if="picks[key]?.alloc"
+                  type="button"
+                  class="cfg-apply"
+                  @click="resetShares(key)"
+                >
+                  ↺ À parts égales
+                </button>
+              </div>
+              <div v-for="e in selectedExos(key)" :key="e.id" class="cs-row">
+                <span class="cs-name">{{ e.name }}</span>
+                <div class="stepper cs-step">
+                  <button
+                    type="button"
+                    :aria-label="'Moins pour ' + e.name"
+                    @click="nudgeShare(key, e.id, -1)"
+                  >
+                    −
+                  </button>
+                  <span class="stp-v font-display" :data-test="'share-' + e.id">{{
+                    shares(key)[e.id] ?? 0
+                  }}</span>
+                  <button
+                    type="button"
+                    :aria-label="'Plus pour ' + e.name"
+                    @click="nudgeShare(key, e.id, 1)"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div class="cs-unit">
+                {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} par exo
+              </div>
             </div>
             <div class="cfg-row">
               <span class="cfg-lbl">Charge départ (kg, option)</span>
@@ -484,6 +522,8 @@ import { isTennisExercise } from '@/lib/tennisTraining';
 import {
   suggestFullBodyPlan,
   comboTogglePick,
+  comboNudgeShare,
+  comboSplit,
   comboWeeklySets,
   comboMuscleInZone,
   comboEmphasis,
@@ -657,6 +697,8 @@ const picks = reactive<
       setsTarget: number;
       weight_kg: number | null;
       count_mode: ComboCountMode;
+      /** Répartition choisie entre les exos (absente = parts égales). */
+      alloc?: Record<string, number>;
     }
   >
 >({});
@@ -781,10 +823,19 @@ function isSelected(key: string, exId: string): boolean {
 function pickCount(key: string): number {
   return picks[key]?.exercise_ids.length ?? 0;
 }
-function perExo(key: string): number {
+// Part de chaque exo d'un groupe (la répartition par défaut est à parts égales).
+function shares(key: string): Record<string, number> {
   const p = picks[key];
-  const n = p?.exercise_ids.length ?? 0;
-  return n > 0 ? Math.max(1, Math.round((p!.target ?? 0) / n)) : 0;
+  return p ? comboSplit(p.target, p.exercise_ids, p.alloc, 1) : {};
+}
+function nudgeShare(key: string, exId: string, d: number) {
+  const p = picks[key];
+  if (!p) return;
+  Object.assign(p, comboNudgeShare(p, exId, d, p.count_mode === 'reps' ? 10 : 1));
+}
+function resetShares(key: string) {
+  const p = picks[key];
+  if (p) p.alloc = undefined;
 }
 // Sélection par emplacement : on ajoute ou on retire, sans plafond. Les VARIANTES d'un même
 // mouvement (pompes / pompes sur genoux, rowing barre / haltère) sont des exos à part entière :
@@ -803,6 +854,7 @@ function bumpTarget(key: string, d: number) {
   const step = p.count_mode === 'reps' ? 10 : 1;
   p.target = Math.max(targetMin(p.count_mode), p.target + d * step);
   if (p.count_mode === 'sets') p.setsTarget = p.target;
+  if (p.alloc) p.alloc = comboSplit(p.target, p.exercise_ids, p.alloc, 1);
 }
 // ── Mode de comptage d'un emplacement : séries · répétitions ──
 // (Le « fractionné », ajouté en v1.312.0, a été retiré du 360 : il vit dans les challenges.)
@@ -850,17 +902,22 @@ function slotProposal(key: string): {
 }
 function applyProposal(key: string) {
   const p = picks[key];
-  if (p) p.target = slotProposal(key).target;
+  if (p) {
+    p.target = slotProposal(key).target;
+    p.alloc = undefined;
+  }
 }
 function setMode(key: string, mode: SlotMode) {
   const p = picks[key];
   if (!p) return;
   if (mode === 'sets') {
+    p.alloc = undefined;
     p.count_mode = 'sets';
     p.target = Math.max(targetMin('sets'), p.setsTarget);
     return;
   }
   const fromSets = p.count_mode !== 'reps';
+  p.alloc = undefined;
   if (fromSets) p.setsTarget = p.target;
   p.count_mode = 'reps';
   // Depuis les séries : l'objectif part de l'habitude (ou du repli séries × fourchette).
@@ -938,7 +995,7 @@ async function createCombo() {
     if (!enabled[slot.key]) continue;
     const p = picks[slot.key];
     if (!p?.exercise_ids.length) continue;
-    const perExoTarget = perExo(slot.key);
+    const split = shares(slot.key);
     for (const exId of p.exercise_ids) {
       const e = lib.value.find((x) => x.id === exId);
       if (!e) continue;
@@ -957,7 +1014,7 @@ async function createCombo() {
         exercise_name: e.name,
         muscle_primary: e.muscle_primary,
         rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required, e.name),
-        target: isTime ? perExoTarget * COMBO_HOLD_SEC : perExoTarget,
+        target: isTime ? (split[exId] ?? 1) * COMBO_HOLD_SEC : (split[exId] ?? 1),
         count_mode: isTime ? 'time' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
@@ -1544,9 +1601,53 @@ onMounted(async () => {
   font-size: 12.5px;
   color: var(--dim);
 }
+/* 🍰 Répartition entre les exos : une rangée par exo (nom qui passe à la ligne, pas de
+   débordement à 344 px), boutons de 44 px. */
 .cfg-split {
   font-size: 11px;
   color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 8px 10px;
+}
+.cs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.cs-name {
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.cs-step {
+  flex: none;
+  gap: 4px;
+}
+.cs-step button {
+  width: 44px;
+  height: 44px;
+}
+.cs-step .stp-v {
+  min-width: 34px;
+}
+.cs-unit {
+  margin-top: 2px;
   text-align: right;
 }
 /* Fourchette conseillée : consigne d’exécution → accent, pas la grisaille des notes. */

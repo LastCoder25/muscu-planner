@@ -98,6 +98,15 @@ const ECRANS = [
     gestes: [
       { nom: 'choisir-exos', clic: 'button:has-text("Choisir mes exercices")', attendu: '.dtile' },
       { nom: 'ajouter-exo', clic: '.dtile:not(.on) >> nth=0', attendu: '.dtile.on' },
+      // 🍰 Jusqu'au récap (un « Suivant » par groupe) : la répartition entre exos s'affiche.
+      { nom: 'suivant-1', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-2', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-3', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-4', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-5', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-6', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-7', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-8', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
     ],
   },
   { route: '/muscu', nom: 'muscu' },

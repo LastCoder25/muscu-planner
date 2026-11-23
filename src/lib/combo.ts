@@ -679,7 +679,10 @@ export function legTierMarks(l: ComboLeg): { sec: number; principal: number } {
   // cases d'un exo de N séries — sinon la barre et les bulles ne diraient pas la même chose.
   if (legMode(l) === 'time') {
     const { count, secBubbles } = timeBubbleSplit(t);
-    return { sec: secBubbles >= count ? t : Math.min(t, secBubbles * COMBO_HOLD_SEC), principal: t };
+    return {
+      sec: secBubbles >= count ? t : Math.min(t, secBubbles * COMBO_HOLD_SEC),
+      principal: t,
+    };
   }
   return { sec: Math.max(1, Math.ceil(t * COMBO_TIER_SECONDARY)), principal: t };
 }
@@ -1527,36 +1530,104 @@ export function legHoldLest(leg: ComboLeg): number {
 }
 /** « +10 kg » : le lest d'une série, vide sans lest. Source unique des puces d'historique. */
 export function holdLestLabel(s: Pick<ComboSet, 'lest'> | undefined): string {
-  return s?.lest && s.lest > 0 ? `+${String(Math.round(s.lest * 10) / 10).replace('.', ',')} kg` : '';
+  return s?.lest && s.lest > 0
+    ? `+${String(Math.round(s.lest * 10) / 10).replace('.', ',')} kg`
+    : '';
 }
 
 /** Un emplacement du Défi 360 en cours de choix (la part de l'écran de création qui compte). */
 export interface ComboPick {
   exercise_ids: string[];
-  /** Objectif du groupe (séries, ou reps selon `count_mode`). */
+  /** Objectif du groupe (séries, ou reps selon `count_mode`) = somme des parts de ses exos. */
   target: number;
   /** Objectif en séries, gardé quand on passe en reps. */
   setsTarget: number;
   count_mode: ComboCountMode;
+  /** Répartition CHOISIE par l'utilisateur (exo → part, dans l'unité du groupe). Absente = la
+   *  répartition par défaut, à parts égales. */
+  alloc?: Record<string, number>;
+}
+
+/** 🍰 Répartit un objectif entre des exos : à parts égales par défaut, ou au prorata de `weights`
+ *  (un exo sans poids prend la moyenne des autres). Chaque exo reçoit au moins `min`, et la
+ *  somme est EXACTEMENT le total (le plus grand reste d'abord, puis l'ordre des exos). Pur. */
+export function comboSplit(
+  total: number,
+  ids: string[],
+  weights: Record<string, number> = {},
+  min = 1,
+): Record<string, number> {
+  const n = ids.length;
+  const out: Record<string, number> = {};
+  if (!n) return out;
+  const T = Math.max(Math.round(total), n * min);
+  const known = ids.map((id) => weights[id] ?? 0).filter((w) => w > 0);
+  const mean = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+  const w = ids.map((id) => ((weights[id] ?? 0) > 0 ? (weights[id] as number) : mean));
+  const sw = w.reduce((a, b) => a + b, 0);
+  const q = w.map((x) => (T * x) / sw);
+  const v = q.map((x) => Math.max(min, Math.floor(x)));
+  let diff = T - v.reduce((a, b) => a + b, 0);
+  const order = ids
+    .map((_, k) => k)
+    .sort((a, b) => q[b]! - Math.floor(q[b]!) - (q[a]! - Math.floor(q[a]!)) || a - b);
+  while (diff > 0) {
+    for (const k of order) {
+      if (diff <= 0) break;
+      v[k]!++;
+      diff--;
+    }
+  }
+  while (diff < 0) {
+    let k = -1;
+    for (let m = 0; m < n; m++) if (v[m]! > min && (k < 0 || v[m]! > v[k]!)) k = m;
+    if (k < 0) break;
+    v[k]!--;
+    diff++;
+  }
+  ids.forEach((id, k) => (out[id] = v[k]!));
+  return out;
 }
 
 /** ➕➖ Ajoute ou retire un exo d'un groupe, SANS PLAFOND (v1.340.0 ; demandé : « je ne sais pas
  *  combien d'exos je veux, et je veux pouvoir prendre des variantes — rowing barre ET haltères,
  *  pompes ET pompes sur genoux »). Deux variantes d'un même mouvement sont deux exos à part
  *  entière. Le volume du groupe reste le même et se répartit entre tous les exos choisis ; en
- *  séries, il ne descend jamais sous 1 série par exo. Pur : rend le nouvel état. */
+ *  séries, il ne descend jamais sous 1 série par exo. Une répartition choisie (`alloc`) est
+ *  gardée : l'exo retiré rend sa part aux autres, l'exo ajouté prend une part moyenne. Pur :
+ *  rend le nouvel état. */
 export function comboTogglePick(
   p: ComboPick,
   exerciseId: string,
-): Pick<ComboPick, 'exercise_ids' | 'target' | 'setsTarget'> {
+): Pick<ComboPick, 'exercise_ids' | 'target' | 'setsTarget' | 'alloc'> {
   const ids = p.exercise_ids.includes(exerciseId)
     ? p.exercise_ids.filter((id) => id !== exerciseId)
     : [...p.exercise_ids, exerciseId];
-  if (p.count_mode !== 'sets') return { exercise_ids: ids, target: p.target, setsTarget: p.setsTarget };
+  const sets = p.count_mode === 'sets';
+  const target = sets ? Math.max(p.target, ids.length) : p.target;
   return {
     exercise_ids: ids,
-    target: Math.max(p.target, ids.length),
-    setsTarget: Math.max(p.setsTarget, ids.length),
+    target,
+    setsTarget: sets ? Math.max(p.setsTarget, ids.length) : p.setsTarget,
+    alloc: p.alloc && ids.length ? comboSplit(target, ids, p.alloc) : undefined,
+  };
+}
+
+/** ✏️ Change la part d'UN exo (`delta` pas de `step`, jamais sous `step`) : l'objectif du groupe
+ *  devient la somme des parts. Part de départ = la répartition en cours. Pur. */
+export function comboNudgeShare(
+  p: ComboPick,
+  exerciseId: string,
+  delta: number,
+  step: number,
+): Pick<ComboPick, 'target' | 'setsTarget' | 'alloc'> {
+  const cur = comboSplit(p.target, p.exercise_ids, p.alloc, 1);
+  cur[exerciseId] = Math.max(step, (cur[exerciseId] ?? step) + delta * step);
+  const target = Object.values(cur).reduce((a, b) => a + b, 0);
+  return {
+    target,
+    setsTarget: p.count_mode === 'sets' ? target : p.setsTarget,
+    alloc: cur,
   };
 }
 
