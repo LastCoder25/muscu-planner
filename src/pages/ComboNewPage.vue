@@ -121,39 +121,11 @@
             </button>
           </div>
 
-          <div class="set-hint">Séries par groupe musculaire et par semaine.</div>
-
-          <!-- 🎚️ Le nombre d'exos de CHAQUE groupe se choisit ici (pastilles). Le plafond d'un
-               groupe = son volume (≥ 2 séries / exo) et les exos encore libres. -->
-          <div class="set-sub">Exercices par groupe</div>
-          <div class="exo-rows">
-            <div v-for="s in exoRows" :key="s.key" class="exo-row" :data-test="'exo-row-' + s.key">
-              <div class="er-head">
-                <span class="er-lbl">{{ s.emoji }} {{ s.label }}</span>
-                <span class="er-sub"
-                  >~{{ setsPerExo(s.key) }} série{{ setsPerExo(s.key) > 1 ? 's' : '' }} / exo</span
-                >
-              </div>
-              <div class="er-chips" role="group" :aria-label="'Exercices : ' + s.label">
-                <button
-                  v-for="n in exoMax[s.key] ?? 1"
-                  :key="n"
-                  type="button"
-                  class="er-chip"
-                  :class="{ on: suggestN(s.key) === n }"
-                  :aria-pressed="suggestN(s.key) === n"
-                  :data-test="'exo-n-' + s.key + '-' + n"
-                  @click="setExoCount(s.key, n)"
-                >
-                  {{ n }}
-                </button>
-              </div>
-            </div>
-          </div>
           <div class="set-hint">
-            Choisis combien d'exercices différents pour chaque groupe : le volume du groupe est
-            réparti entre eux (2 séries par exo au minimum).
+            Séries par groupe musculaire et par semaine. Tu choisiras tes exercices à l’étape
+            suivante, autant que tu veux par groupe : le volume du groupe est réparti entre eux.
           </div>
+
         </section>
 
         <!-- Départ : caler le 360 sur un lundi, ou attendre la fin du précédent.
@@ -217,9 +189,6 @@
                 ><b>{{ activeCount }}</b> groupes</span
               >
               <span class="sum-chip"
-                ><b>~{{ suggestedTotalExos }}</b> exos</span
-              >
-              <span class="sum-chip"
                 ><b>{{ totalSets }}</b> séries / {{ periodShort }}</span
               >
             </div>
@@ -269,14 +238,9 @@
           </div>
         </div>
         <div class="draft-instr">
-          <span>
-            Choisis
-            {{
-              suggestN(curKey) > 1 ? 'jusqu’à ' + suggestN(curKey) + ' exercices' : 'ton exercice'
-            }}
-          </span>
-          <span class="di-note" :class="{ full: atCap(curKey) }">
-            {{ pickCount(curKey) }}/{{ suggestN(curKey) }}
+          <span>Choisis autant d’exercices que tu veux, variantes comprises</span>
+          <span class="di-note" :class="{ full: pickCount(curKey) > 0 }">
+            {{ pickCount(curKey) }} choisi{{ pickCount(curKey) > 1 ? 's' : '' }}
           </span>
         </div>
 
@@ -291,9 +255,6 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
-                muted:
-                  variantBlocked(curKey, e.id) ||
-                  (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
               }"
               @click="toggleExo(curKey, e.id)"
             >
@@ -318,10 +279,7 @@
                 </div>
               </div>
               <div class="dtile-name">{{ e.name }}</div>
-              <div v-if="variantBlocked(curKey, e.id)" class="dtile-mus variant">
-                ≈ variante déjà choisie
-              </div>
-              <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div class="dtile-mus">{{ e.muscle_primary }}</div>
             </button>
           </div>
         </template>
@@ -348,9 +306,6 @@
               class="dtile"
               :class="{
                 on: isSelected(curKey, e.id),
-                muted:
-                  variantBlocked(curKey, e.id) ||
-                  (atCap(curKey) && !isSelected(curKey, e.id) && suggestN(curKey) > 1),
               }"
               @click="toggleExo(curKey, e.id)"
             >
@@ -375,10 +330,7 @@
                 </div>
               </div>
               <div class="dtile-name">{{ e.name }}</div>
-              <div v-if="variantBlocked(curKey, e.id)" class="dtile-mus variant">
-                ≈ variante déjà choisie
-              </div>
-              <div v-else class="dtile-mus">{{ e.muscle_primary }}</div>
+              <div class="dtile-mus">{{ e.muscle_primary }}</div>
             </button>
           </div>
         </template>
@@ -531,6 +483,7 @@ import { exerciseRepDays, proposeRepsTarget } from '@/lib/repsHabit';
 import { isTennisExercise } from '@/lib/tennisTraining';
 import {
   suggestFullBodyPlan,
+  comboTogglePick,
   comboWeeklySets,
   comboMuscleInZone,
   comboEmphasis,
@@ -541,7 +494,6 @@ import {
   comboDayShare,
   comboProrata,
   type ComboVolume,
-  comboExoMax,
   type ComboZone,
   type ComboLeg,
   type ComboCountMode,
@@ -637,7 +589,7 @@ function targetMin(mode: ComboCountMode): number {
 }
 
 // Réglages : zone (full/haut/bas) + volume (séries/groupe). Le nombre d'exos de chaque groupe
-// se choisit par pastilles (`exoWanted`), préremplies par la suggestion du plan.
+// n'est PAS demandé ici : on le découvre en choisissant (aucun plafond, variantes comprises).
 const zone = ref<ComboZone>('full');
 const volume = ref<ComboVolume>('moderate');
 // Objectif du défi : pré-réglé depuis le profil (modifiable ici). Il pilote DEUX
@@ -708,21 +660,6 @@ const picks = reactive<
     }
   >
 >({});
-const planN = reactive<Record<string, number>>({}); // nb d'exos retenu (plan ou choix)
-// 🎚️ Choix de l'utilisateur par groupe (absent = la suggestion du plan), le plafond de chaque
-// groupe (volume + exos libres) et son volume hebdo (pour « ~N séries / exo »).
-const exoWanted = reactive<Record<string, number>>({});
-const exoMax = reactive<Record<string, number>>({});
-const slotWeekly = reactive<Record<string, number>>({});
-const exoRows = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]));
-function setsPerExo(key: string): number {
-  return Math.max(1, Math.round((slotWeekly[key] ?? 0) / suggestN(key)));
-}
-function setExoCount(key: string, n: number) {
-  exoWanted[key] = n;
-  applyPlan();
-}
-
 // ── Draft (choix séquentiel) ──
 const draftKeys = ref<string[]>([]);
 const draftIndex = ref(0);
@@ -731,9 +668,6 @@ const curSlot = computed(() => COMBO_SLOTS.find((s) => s.key === curKey.value) ?
 const isLastDraft = computed(() => draftIndex.value === draftKeys.value.length - 1);
 function slotOf(key: string) {
   return COMBO_SLOTS.find((s) => s.key === key) ?? null;
-}
-function suggestN(key: string): number {
-  return Math.max(1, planN[key] ?? 1);
 }
 
 function startDraft() {
@@ -852,44 +786,15 @@ function perExo(key: string): number {
   const n = p?.exercise_ids.length ?? 0;
   return n > 0 ? Math.max(1, Math.round((p!.target ?? 0) / n)) : 0;
 }
-// Sélection par emplacement, plafonnée au nombre suggéré (`suggestN`) :
-//  - déjà choisi → on retire ;
-//  - au plafond avec N=1 → l'exo choisi REMPLACE le précédent (façon radio) ;
-//  - au plafond avec N>1 → on bloque (il faut déselectionner pour changer).
+// Sélection par emplacement : on ajoute ou on retire, sans plafond. Les VARIANTES d'un même
+// mouvement (pompes / pompes sur genoux, rowing barre / haltère) sont des exos à part entière :
+// on peut les prendre ensemble. Le volume du groupe se répartit entre tous les exos choisis ;
+// il ne descend jamais sous 1 série par exo.
 function toggleExo(key: string, exId: string) {
   const p = picks[key];
   if (!p) return;
-  const i = p.exercise_ids.indexOf(exId);
-  if (i >= 0) {
-    p.exercise_ids.splice(i, 1);
-  } else {
-    // Variante : si une version du MÊME mouvement (ex. pompes / pompes sur genoux)
-    // est déjà choisie, on la REMPLACE (redondant → jamais les deux ensemble).
-    const fam = variantFamilyKey(exId);
-    const sibling = p.exercise_ids.findIndex((id) => variantFamilyKey(id) === fam);
-    if (sibling >= 0) {
-      p.exercise_ids.splice(sibling, 1, exId);
-      return;
-    }
-    const cap = suggestN(key);
-    if (p.exercise_ids.length >= cap) {
-      if (cap === 1) p.exercise_ids.splice(0, p.exercise_ids.length);
-      else return; // plein : on garde la sélection actuelle
-    }
-    p.exercise_ids.push(exId);
-  }
+  Object.assign(p, comboTogglePick(p, exId));
   enabled[key] = p.exercise_ids.length > 0;
-}
-// Un exo est-il bloqué car une VARIANTE du même mouvement est déjà sélectionnée ?
-// (le clic swap quand même, mais on le grise pour signaler la redondance)
-function variantBlocked(key: string, exId: string): boolean {
-  const ids = picks[key]?.exercise_ids ?? [];
-  if (ids.includes(exId)) return false;
-  const fam = variantFamilyKey(exId);
-  return ids.some((id) => variantFamilyKey(id) === fam);
-}
-function atCap(key: string): boolean {
-  return pickCount(key) >= suggestN(key);
 }
 function bumpTarget(key: string, d: number) {
   const p = picks[key];
@@ -962,10 +867,6 @@ function setMode(key: string, mode: SlotMode) {
   if (fromSets) p.target = slotProposal(key).target;
 }
 const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).length);
-// Nb d'exos qu'on choisira (somme des suggestions des emplacements actifs).
-const suggestedTotalExos = computed(() =>
-  COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? suggestN(s.key) : 0), 0),
-);
 const totalSets = computed(() =>
   COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? (picks[s.key]?.target ?? 0) : 0), 0),
 );
@@ -998,14 +899,8 @@ function applyPlan() {
       return true;
     });
     const active = !!p?.active && cands.length > 0;
-    // 🎚️ Le choix de l'utilisateur prime sur la suggestion, borné par le plafond du groupe
-    // (le volume ou les exos libres ont pu changer depuis).
-    const max = comboExoMax(p?.weeklySets ?? 0, cands.length);
-    const chosen = exoWanted[slot.key];
-    const nExos = Math.min(chosen ?? p?.nExos ?? 1, max, cands.length || 1);
-    exoMax[slot.key] = max;
-    slotWeekly[slot.key] = p?.weeklySets ?? 0;
-    planN[slot.key] = Math.max(1, nExos);
+    // Simple présélection (la suggestion du plan) : l'utilisateur ajoute ou retire à sa guise.
+    const nExos = Math.min(p?.nExos ?? 1, cands.length || 1);
     enabled[slot.key] = active;
     // Pré-sélection des favoris/premiers exos pour les emplacements actifs ;
     // vide pour les autres (le draft laisse choisir).
@@ -1320,59 +1215,6 @@ onMounted(async () => {
 .obj-tile.on .obj-val b {
   color: var(--accent);
 }
-/* 🎚️ Exercices par groupe : une rangée par groupe, ses pastilles dessous (44 px, retour à
-   la ligne, jamais de débordement à 344 px). */
-.exo-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 8px;
-}
-.exo-row {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-2);
-  padding: 8px 10px 10px;
-}
-.er-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 8px;
-}
-.er-lbl {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.er-sub {
-  font-size: 11px;
-  color: var(--dim);
-}
-.er-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.er-chip {
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font-family: 'Oswald', sans-serif;
-  font-size: 17px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.er-chip.on {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #15120e;
-}
 .sum-chips {
   display: flex;
   justify-content: center;
@@ -1475,9 +1317,6 @@ onMounted(async () => {
   background: var(--accent);
   border-color: var(--accent);
 }
-.dtile.muted {
-  opacity: 0.45;
-}
 .grp-label {
   font-size: 12.5px;
   font-weight: 700;
@@ -1575,10 +1414,6 @@ onMounted(async () => {
 .dtile-mus {
   font-size: 11px;
   color: var(--dim);
-}
-.dtile-mus.variant {
-  color: var(--d3);
-  font-weight: 600;
 }
 /* Icône « poids du corps » (aucun matériel) — pastille ronde cyan, coin de la tuile. */
 .dtile-media .bw-ic {

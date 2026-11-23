@@ -1530,17 +1530,34 @@ export function holdLestLabel(s: Pick<ComboSet, 'lest'> | undefined): string {
   return s?.lest && s.lest > 0 ? `+${String(Math.round(s.lest * 10) / 10).replace('.', ',')} kg` : '';
 }
 
-/** 🎚️ Nombre d'exos CHOISI par groupe (v1.327.0 ; demandé : « pouvoir sélectionner le nombre
- *  d'exercices différents pour un groupe musculaire, pas seulement un ou deux »). Plancher de
- *  séries par exo : sans lui, un petit volume réparti sur 6 exos ferait 1 série chacun. */
-export const COMBO_MIN_SETS_PER_EXO = 2;
-/** Plafond absolu d'exos pour un groupe (au-delà, le défi devient ingérable à l'écran). */
-export const COMBO_MAX_EXOS = 6;
-/** Combien d'exos un groupe peut recevoir : borné par son volume hebdo (≥ 2 séries/exo) ET par
- *  les exos réellement disponibles (matériel, exclusivité). Toujours ≥ 1. Pur. */
-export function comboExoMax(weeklySets: number, available: number): number {
-  const byVolume = Math.floor(Math.max(0, weeklySets) / COMBO_MIN_SETS_PER_EXO);
-  return Math.max(1, Math.min(COMBO_MAX_EXOS, byVolume, Math.max(1, available)));
+/** Un emplacement du Défi 360 en cours de choix (la part de l'écran de création qui compte). */
+export interface ComboPick {
+  exercise_ids: string[];
+  /** Objectif du groupe (séries, ou reps selon `count_mode`). */
+  target: number;
+  /** Objectif en séries, gardé quand on passe en reps. */
+  setsTarget: number;
+  count_mode: ComboCountMode;
+}
+
+/** ➕➖ Ajoute ou retire un exo d'un groupe, SANS PLAFOND (v1.340.0 ; demandé : « je ne sais pas
+ *  combien d'exos je veux, et je veux pouvoir prendre des variantes — rowing barre ET haltères,
+ *  pompes ET pompes sur genoux »). Deux variantes d'un même mouvement sont deux exos à part
+ *  entière. Le volume du groupe reste le même et se répartit entre tous les exos choisis ; en
+ *  séries, il ne descend jamais sous 1 série par exo. Pur : rend le nouvel état. */
+export function comboTogglePick(
+  p: ComboPick,
+  exerciseId: string,
+): Pick<ComboPick, 'exercise_ids' | 'target' | 'setsTarget'> {
+  const ids = p.exercise_ids.includes(exerciseId)
+    ? p.exercise_ids.filter((id) => id !== exerciseId)
+    : [...p.exercise_ids, exerciseId];
+  if (p.count_mode !== 'sets') return { exercise_ids: ids, target: p.target, setsTarget: p.setsTarget };
+  return {
+    exercise_ids: ids,
+    target: Math.max(p.target, ids.length),
+    setsTarget: Math.max(p.setsTarget, ids.length),
+  };
 }
 
 /** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
