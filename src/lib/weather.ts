@@ -80,7 +80,7 @@ export interface WeatherHour {
   code: number;
   emoji: string;
 }
-interface WeatherDay {
+export interface WeatherDay {
   date: string; // YYYY-MM-DD
   maxC: number;
   minC: number;
@@ -213,6 +213,56 @@ export function rangeLabel(from: number, to: number): string {
 /** Heures d'un jour donné (pour l'onglet « heure par heure »). */
 export function hoursOfDay(hours: WeatherHour[], date: string): WeatherHour[] {
   return hours.filter((h) => h.date === date);
+}
+
+// ── Résumé d'un jour : ce qu'il fait PENDANT la plage, pas le pire instant ──
+//
+// ⚠️ Le code « journalier » d'Open-Meteo est la condition la PLUS SÉVÈRE de la journée, et sa
+// probabilité de pluie est le MAXIMUM sur 24 h : une averse de 21 h à 23 h rend donc tout le
+// lendemain « pluvieux ». C'est juste pour « pleuvra-t-il quelque part ? », faux pour « quel
+// temps fera-t-il quand je sors ? ». On recalcule depuis les heures, sur la plage choisie.
+const isWetCode = (c: number) => (c >= 51 && c <= 67) || (c >= 71 && c <= 77) || (c >= 80 && c <= 86) || c >= 95;
+const isHeavyCode = (c: number) => c === 65 || c === 67 || c === 75 || c === 82 || c === 86 || c >= 95;
+/** Sévérité d'un code mouillé : l'ordre des codes WMO suffit, sauf la bruine (51-57) sous la pluie. */
+const wetRank = (c: number) => (c >= 95 ? 100 + c : c >= 80 ? 60 + c : c);
+/** Une pluie de moins de WET_MIN_HOURS heures ne fait pas « un jour de pluie » (sauf forte). */
+export const WET_MIN_HOURS = 3;
+
+export interface DayDigest {
+  emoji: string;
+  label: string;
+  code: number;
+  rainPct: number;
+  /** Pluie brève écartée de l'icône (« 21h–23h ») ; vide sinon. */
+  briefWet: string;
+}
+
+export function digestDay(day: WeatherDay, hours: WeatherHour[], from: number, to: number): DayDigest {
+  const own: DayDigest = { emoji: day.emoji, label: day.label, code: day.code, rainPct: day.rainPct, briefWet: '' };
+  const inRange = filterHours(hoursOfDay(hours, day.date), from, to);
+  if (!inRange.length) return own;
+  const rainPct = Math.max(...inRange.map((h) => h.rainPct));
+  const wet = inRange.filter((h) => isWetCode(h.code));
+  const heavy = wet.some((h) => isHeavyCode(h.code));
+  let code: number;
+  let briefWet = '';
+  if (wet.length >= WET_MIN_HOURS || heavy) {
+    code = wet.reduce((a, h) => (wetRank(h.code) > wetRank(a) ? h.code : a), wet[0]!.code);
+  } else {
+    // Temps dominant parmi les heures sèches (le plus fréquent ; à égalité, le plus couvert).
+    const dry = inRange.filter((h) => !isWetCode(h.code));
+    const count = new Map<number, number>();
+    for (const h of dry) count.set(h.code, (count.get(h.code) ?? 0) + 1);
+    code = [...count.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]![0];
+    if (wet.length) {
+      const p = (h: number) => String(h).padStart(2, '0');
+      const a = wet[0]!.h24;
+      const b = wet[wet.length - 1]!.h24 + 1;
+      briefWet = a + 1 === b ? `${p(a)}h` : `${p(a)}h–${p(b)}h`;
+    }
+  }
+  const ic = weatherIcon(code);
+  return { emoji: ic.emoji, label: ic.label, code, rainPct, briefWet };
 }
 
 /** Libellé d'un jour relatif à aujourd'hui : « Aujourd'hui » / « Demain » / « jeu. 4 sept. ». */

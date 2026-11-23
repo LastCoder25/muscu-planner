@@ -154,7 +154,7 @@
                   @click="selDay = d.date"
                 >
                   <span class="wx-dchip-l">{{ dayLabel(d.date, todayIso) }}</span>
-                  <span class="wx-dchip-ic">{{ d.emoji }}</span>
+                  <span class="wx-dchip-ic">{{ dig(d).emoji }}</span>
                   <span class="wx-dchip-t">{{ d.maxC }}°</span>
                 </button>
               </div>
@@ -235,12 +235,15 @@
                 @click="openDay(d.date)"
               >
                 <span class="wx-row-h">{{ dayLabel(d.date, todayIso) }}</span>
-                <span class="wx-row-ic">{{ d.emoji }}</span>
+                <span class="wx-row-ic">{{ dig(d).emoji }}</span>
                 <span class="wx-row-t font-display"
                   >{{ d.maxC }}° <small>/ {{ d.minC }}°</small></span
                 >
-                <span class="wx-row-r" :class="{ wet: d.rainPct >= 40 }">💧 {{ d.rainPct }}%</span>
+                <span class="wx-row-r" :class="{ wet: dig(d).rainPct >= 40 }">💧 {{ dig(d).rainPct }}%</span>
                 <span class="wx-row-w">💨 {{ d.windKmh }}</span>
+                <span v-if="dig(d).briefWet" class="wx-row-brief"
+                  >🌧️ brève pluie {{ dig(d).briefWet }}</span
+                >
               </button>
             </div>
 
@@ -819,11 +822,14 @@ import {
   dayLabel,
   hoursOfDay,
   outdoorRating,
+  digestDay,
   filterHours,
   presetIdFor,
   rangeLabel,
   HOUR_PRESETS,
   FULL_DAY,
+  type DayDigest,
+  type WeatherDay,
   type WeatherPlace,
 } from '@/lib/weather';
 import { useWeatherReliability } from '@/composables/useWeatherReliability';
@@ -930,6 +936,10 @@ watch([hourFrom, hourTo], ([from, to]) => {
     /* idem */
   }
 });
+// Résumé d'un jour sur la plage choisie (et non le pire instant des 24 h).
+function dig(d: WeatherDay): DayDigest {
+  return digestDay(d, weather.value?.hours ?? [], hourFrom.value, hourTo.value);
+}
 const HOURS_24 = Array.from({ length: 24 }, (_, i) => i);
 const activePreset = computed(() => presetIdFor(hourFrom.value, hourTo.value));
 const hourRangeLabel = computed(() => rangeLabel(hourFrom.value, hourTo.value));
@@ -1767,6 +1777,11 @@ async function saveAutre() {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: right;
+}
+.wx-row-brief {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: #8fd0ff;
 }
 .wx-row-r.wet {
   color: #8fd0ff;
