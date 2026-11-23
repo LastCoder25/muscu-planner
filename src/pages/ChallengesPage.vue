@@ -452,7 +452,9 @@
               :combo-id="activeCombo.id"
               :leg="leg"
             />
-            <div class="cl-bottom">
+            <!-- Exo en DURÉE : les bulles sur leur propre ligne, le chrono dessous (sinon les bulles
+                 se serrent à côté des boutons et passent sur beaucoup de lignes). -->
+            <div class="cl-bottom" :class="{ stacked: legMode(leg) === 'time' }">
               <div
                 v-if="legMode(leg) === 'sets'"
                 class="seg-bar"
@@ -1645,6 +1647,19 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   margin-top: 5px;
+}
+/* Exo en durée : bulles pleine largeur, chrono sur sa ligne dessous. */
+.cl-bottom.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.cl-bottom.stacked > :deep(.tb-bar) {
+  flex: none;
+}
+.cl-bottom.stacked .cl-actions {
+  flex-wrap: wrap;
+  align-items: center;
 }
 /* Barre segmentée : une case par série (cible + supplémentaires, sur plusieurs lignes) */
 /* Grille de cellules UNIFORMES (mêmes dimensions faites/à faire) réparties
