@@ -65,9 +65,9 @@ async function mountReal(act: (host: HTMLElement) => Promise<void>, onHtml: (h: 
   if (err) throw err;
 }
 
-/** Les badges lus sur les trois tuiles, dans l'ordre events / xp / rifts. */
+/** Les badges lus sur les quatre tuiles, dans l'ordre events / xp / rifts / harvest. */
 const badges = (host: HTMLElement) =>
-  ['events', 'xp', 'rifts'].map(
+  ['events', 'xp', 'rifts', 'harvest'].map(
     (m) => host.querySelector(`[data-test="mode-${m}"] .pm-rank`)?.textContent?.trim() ?? '',
   );
 const tap = async (host: HTMLElement, m: string) => {
@@ -95,11 +95,11 @@ describe('priorités : le vrai composant, tuile par tuile', { timeout: 60000 }, 
       },
       () => undefined,
     );
-    expect(seen[0]).toEqual(['①', '', '']);
-    expect(seen[1]).toEqual(['', '', '①']);
-    expect(seen[2]).toEqual(['②', '③', '①']);
-    expect(seen[3]).toEqual(['①', '②', '']);
-    expect(seen[4]).toEqual(['', '①', '']); // xp resté : on ne retire pas la dernière
+    expect(seen[0]).toEqual(['①', '', '', '']);
+    expect(seen[1]).toEqual(['', '', '①', '']);
+    expect(seen[2]).toEqual(['②', '③', '①', '']);
+    expect(seen[3]).toEqual(['①', '②', '', '']);
+    expect(seen[4]).toEqual(['', '①', '', '']); // xp resté : on ne retire pas la dernière
   });
 
   it('un seul mode sans consommable : tuile « Lieux », pas de pastille ; la préférence est écrite en liste', async () => {
@@ -116,5 +116,24 @@ describe('priorités : le vrai composant, tuile par tuile', { timeout: 60000 }, 
     expect(html).toContain('Lieux');
     expect(html).not.toContain('Événements');
     expect(saved).toBe('events,rifts');
+  });
+
+  it('💰 la tuile « Récoltes » existe, se prend en 2e et la 4e pastille (④) existe, et se range dans la préférence', async () => {
+    let seen: string[] = [];
+    let saved: string | null = null;
+    let html = '';
+    await mountReal(
+      async (host) => {
+        await tap(host, 'harvest');
+        saved = localStorage.getItem('muscu:planner:mode');
+        await tap(host, 'xp');
+        await tap(host, 'rifts'); // les quatre tuiles prises : ①②③④
+        seen = badges(host);
+      },
+      (h) => (html = h),
+    );
+    expect(seen).toEqual(['①', '③', '④', '②']); // events, xp, rifts, harvest : cliqués 1er, 4e, 3e, 2e
+    expect(saved).toBe('events,harvest');
+    expect(html).toContain('Récoltes');
   });
 });

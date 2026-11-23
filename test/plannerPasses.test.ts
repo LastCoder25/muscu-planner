@@ -50,12 +50,17 @@ describe('priorités : la préférence sauvegardée', () => {
     expect(parseModes('rifts,events')).toEqual(['rifts', 'events']);
     expect(parseModes('xp,rifts,events')).toEqual(['xp', 'rifts', 'events']);
   });
-  it('défaut = lieux ; inconnues et doublons écartés ; 3 au plus', () => {
+  it('la priorité « Récoltes » est lue, et gardée dans l’ordre cliqué', () => {
+    expect(parseModes('harvest')).toEqual(['harvest']);
+    expect(parseModes('harvest,events')).toEqual(['harvest', 'events']);
+    expect(parseModes('events,xp,rifts,harvest')).toEqual(['events', 'xp', 'rifts', 'harvest']);
+  });
+  it('défaut = lieux ; inconnues et doublons écartés ; 4 au plus', () => {
     expect(parseModes(null)).toEqual(['events']);
     expect(parseModes('')).toEqual(['events']);
     expect(parseModes('n’importe quoi')).toEqual(['events']);
     expect(parseModes('rifts,zzz,rifts,xp')).toEqual(['rifts', 'xp']);
-    expect(parseModes('rifts,xp,events,rifts,xp').length).toBeLessThanOrEqual(3);
+    expect(parseModes('rifts,xp,events,harvest,rifts,xp').length).toBeLessThanOrEqual(4);
   });
 });
 
@@ -67,6 +72,10 @@ describe('priorités : toucher une tuile', () => {
   it('retire une tuile choisie, les suivantes remontent', () => {
     expect(toggleMode(['rifts', 'events', 'xp'], 'rifts')).toEqual(['events', 'xp']);
     expect(toggleMode(['rifts', 'events', 'xp'], 'events')).toEqual(['rifts', 'xp']);
+  });
+  it('une 4e priorité (Récoltes) s’ajoute ; au-delà de 4, refusé', () => {
+    expect(toggleMode(['events', 'xp', 'rifts'], 'harvest')).toEqual(['events', 'xp', 'rifts', 'harvest']);
+    expect(toggleMode(['harvest', 'events', 'xp', 'rifts'], 'harvest')).toEqual(['events', 'xp', 'rifts']);
   });
   it('garde toujours au moins une priorité : retirer la dernière est refusé', () => {
     expect(toggleMode(['xp'], 'xp')).toEqual(['xp']);
@@ -215,5 +224,54 @@ describe('priorités : le calcul par passes', () => {
       cancelled: () => true,
     });
     expect(res).toBeNull();
+  });
+});
+
+describe('💰 priorité « Récoltes » : un lieu de récolte demande une équipe de plus, il n’est plus laissé de côté', () => {
+  // Une récolte sans le héros compte la route : à seuil égal elle demande plus de monde qu'un camp.
+  const camp: T = { id: 'camp', need: 4, min: 20 }; // 2 champions de 2
+  const mine: T = { id: 'mine', need: 6, min: 30 }; // 3 champions de 2
+  const pool = [u('A', 2), u('B', 2), u('C', 2)];
+  const all = [camp, mine];
+  const harvestOf = (m: PlanMode): T[] => (m === 'harvest' ? [mine] : all);
+  it('sans elle, « Lieux » sert le camp (2 champions) et la mine reste inatteignable', async () => {
+    const r = (await planInPasses(pool, { ...base, modes: ['events'], targetsOf: harvestOf }))!;
+    expect(ids(r.trips.map((t) => t.target))).toEqual(['camp']);
+    expect(ids(r.unreachable)).toEqual(['mine']);
+  });
+  it('avec elle en 1re, la mine part d’abord ; « Lieux » prend ce qui reste', async () => {
+    const r = (await planInPasses(pool, {
+      ...base,
+      modes: ['harvest', 'events'],
+      targetsOf: harvestOf,
+    }))!;
+    expect(ids(r.trips.map((t) => t.target))).toEqual(['mine']);
+    expect(r.tripModes).toEqual(['harvest']);
+    expect(ids(r.unreachable)).toEqual(['camp']);
+  });
+  it('seule, elle classe par durée de voyage (le plus court d’abord)', async () => {
+    const lointaine: T = { id: 'lointaine', need: 2, min: 90 };
+    const proche: T = { id: 'proche', need: 2, min: 25 };
+    const r = (await planExpeditions([lointaine, proche], [u('A', 2)], {
+      ...base,
+      mode: 'harvest',
+    }))!;
+    expect(ids(r.trips.map((t) => t.target))).toEqual(['proche']);
+  });
+  it('elle essaie d’accélérer le voyage : un guide rapide remplace ou rejoint l’équipe', async () => {
+    const mineL: T = { id: 'mineL', need: 2, min: 40 };
+    const guide = u('F', 1);
+    const r = (await planExpeditions([mineL], [u('A', 2), guide], {
+      ...base,
+      mode: 'harvest',
+      // Avec le guide, le groupe va deux fois plus vite.
+      deps: { ...deps, tripMin: (t, us) => (us.some((x) => x.id === 'F') ? t.min / 4 : t.min) },
+    }))!;
+    expect(r.trips[0]!.tripMin).toBe(10);
+    expect(r.trips[0]!.units.map((x) => x.id)).toContain('F');
+  });
+  it('le composable ne vise que les lieux de RÉCOLTE pour cette priorité (lecture de la source)', () => {
+    const src = readFileSync('src/composables/useExpeditionPlanner.ts', 'utf8').replace(/\s+/g, '');
+    expect(src).toContain("mode==='harvest'?pois.filter((p)=>HARVEST_TYPES.has(p.type))");
   });
 });

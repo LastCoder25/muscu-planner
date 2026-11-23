@@ -17,7 +17,7 @@
       :states="daily"
       :reward="dailyReward ?? undefined"
     />
-    <!-- 🪄 PRIORITÉS DANS L'ORDRE CLIQUÉ (demandé, 1 à 3) : la 1re est servie d'abord, la suivante
+    <!-- 🪄 PRIORITÉS DANS L'ORDRE CLIQUÉ (demandé, 1 à 4) : la 1re est servie d'abord, la suivante
          avec ce qui reste (effectifs, lieux, consommables). -->
     <div v-if="section === 'plan'" class="pl-row">
       <div class="pl-modes" role="group" aria-label="Optimiser, dans l’ordre de priorité">
@@ -215,7 +215,10 @@
     </div>
 
     <template v-if="section === 'plan' && rows && !running">
-      <p v-if="!rows.length && modes.includes('rifts') && nothingToPlan" class="pl-empty">
+      <p v-if="!rows.length && modes.length === 1 && modes[0] === 'harvest' && nothingToPlan" class="pl-empty">
+        Aucun lieu de récolte à visiter sur la carte.
+      </p>
+      <p v-else-if="!rows.length && modes.includes('rifts') && nothingToPlan" class="pl-empty">
         Aucune faille ouverte à attaquer sur la carte.
       </p>
       <p v-else-if="!rows.length" class="pl-empty">
@@ -462,8 +465,16 @@ const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: str
     short: 'Failles',
     sub: 'les plus proches, la plus urgente d’abord',
   },
+  // 💰 Les lieux de récolte (demandé) : sans cette priorité, « Lieux » les laissait toujours de côté.
+  {
+    id: 'harvest',
+    emo: '💰',
+    title: 'Récoltes',
+    short: 'Récoltes',
+    sub: 'mines, sources, filons, ruines',
+  },
 ];
-const RANKS = ['①', '②', '③'];
+const RANKS = ['①', '②', '③', '④'];
 /** 🎒 Replié au démarrage : le réglage se lit sur l'en-tête sans l'ouvrir. */
 const suppliesOpen = ref(false);
 const engagedLabel = computed(() => {
@@ -523,7 +534,7 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
 }
 .pl-modes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .pl-mode {

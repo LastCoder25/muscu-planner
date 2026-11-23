@@ -36,7 +36,11 @@
  * laissent au-dessus du seuil — les forts restent disponibles pour les lieux difficiles.
  */
 
-export type PlanMode = 'events' | 'xp' | 'rifts';
+/** 💰 `harvest` (2026-11-23, demandé : « les lieux de récolte ne sont jamais pris en compte ») : la
+ *  page ne propose que les lieux de RÉCOLTE (mine, source, sanctuaire, filon, ruines…). Une récolte
+ *  sans le héros compte la route (`partyWinChance`) : à seuil égal elle demande une équipe de plus
+ *  qu'un camp, donc le mode « Lieux » (le plus de voyages possible) la laissait toujours de côté. */
+export type PlanMode = 'events' | 'xp' | 'rifts' | 'harvest';
 
 /** ⏱️ La durée d'un voyage PLANIFIÉ : l'aller-retour du groupe le plus lent PLUS le temps passé
  *  sur place (`dwellMsFor` : la fouille d'une heure aux ruines d'un héros tombé, l'extraction
@@ -269,7 +273,7 @@ export async function planExpeditions<T extends { id: string }>(
             }
           }
         }
-        if (mode === 'events') {
+        if (mode === 'events' || mode === 'harvest') {
           const q = await quicken(t, picked, w, order, kitFor);
           if (!q) return null;
           picked = q.team;
@@ -619,14 +623,14 @@ export async function planExpeditions<T extends { id: string }>(
 // ── 🪄 PRIORITÉS MULTIPLES (2026-10-30, demandé : « sélectionner plusieurs options prises dans
 // l'ordre cliqué, par exemple les failles en priorité puis les lieux en second ; de 1 à 3 ») ──
 
-/** Les trois optimisations, dans l'ordre d'affichage des tuiles. */
-const PLAN_MODES: readonly PlanMode[] = ['events', 'xp', 'rifts'];
+/** Les quatre optimisations, dans l'ordre d'affichage des tuiles. */
+const PLAN_MODES: readonly PlanMode[] = ['events', 'xp', 'rifts', 'harvest'];
 /** Combien de priorités au plus (une par optimisation). */
 const MAX_MODES = PLAN_MODES.length;
 
 /**
  * Lit la préférence sauvegardée. Rétro-compatible : l'ancienne forme est UNE valeur (`rifts`),
- * la nouvelle une liste « rifts,events ». Valeurs inconnues et doublons écartés, 3 au plus ;
+ * la nouvelle une liste « rifts,events ». Valeurs inconnues et doublons écartés, 4 au plus ;
  * rien d'utilisable = `['events']` (le défaut d'avant).
  */
 export function parseModes(raw: string | null | undefined): PlanMode[] {

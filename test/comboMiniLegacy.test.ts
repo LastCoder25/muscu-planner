@@ -126,6 +126,12 @@ describe('🔁 quels exos se fractionnent', () => {
     expect(concerned.length).toBeGreaterThanOrEqual(10);
     for (const [id, name] of concerned) {
       if (id === 'ex_lat_pulldown') continue;
+      // 🧱 Une TENUE (migr. 0120 : pompes tenues en bas, tenue de traction) est au temps : 30 s de
+      // tenue n'est pas un geste court qu'on enchaîne en passant devant la barre.
+      if (id.endsWith('_hold')) {
+        expect(fractionableExercise(id), `${id} (${name})`).toBe(false);
+        continue;
+      }
       expect(fractionableExercise(id), `${id} (${name})`).toBe(true);
     }
   });

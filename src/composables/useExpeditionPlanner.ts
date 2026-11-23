@@ -13,7 +13,7 @@ import {
 } from '@/lib/caravan';
 import { combatPowerRaw, type Combatant } from '@/lib/combat';
 import { deployAnchors, legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
-import { dwellMsFor, type Poi } from '@/lib/expedition';
+import { dwellMsFor, HARVEST_TYPES, type Poi } from '@/lib/expedition';
 import { mapOutpostLevel } from '@/lib/archipelago';
 import { buildDeploymentAsync } from '@/lib/deployPlan';
 import {
@@ -71,9 +71,14 @@ const SUPPLY_KEY = 'muscu:planner:supplies';
 const AUTO_KEY = 'muscu:planner:autolaunch';
 const CONTROLS_KEY = 'muscu:planner:controls';
 
-/** 🕳️ Mode « Failles » : seulement les failles, la plus urgente d'abord ; sinon tous les lieux. */
+/** 🕳️ Mode « Failles » : seulement les failles, la plus urgente d'abord ; 💰 mode « Récoltes » :
+ *  seulement les lieux de récolte ; sinon tous les lieux. */
 const planTargets = (pois: Poi[], mode: PlanMode): Poi[] =>
-  mode === 'rifts' ? riftsByUrgency(pois) : pois;
+  mode === 'rifts'
+    ? riftsByUrgency(pois)
+    : mode === 'harvest'
+      ? pois.filter((p) => HARVEST_TYPES.has(p.type))
+      : pois;
 
 function readNum(key: string, def: number): number {
   try {
