@@ -186,6 +186,13 @@
                 />
                 <button class="stepper" @click="adj(activeSet, 'reps', isTimeEx ? 5 : 1)">+</button>
               </div>
+              <!-- ⏱ Une tenue : chrono ou minuteur (départ différé) qui remplit les secondes. -->
+              <HoldTimerButton
+                v-if="isTimeEx"
+                variant="chip"
+                :label="ex.name"
+                @finish="(sec: number) => activeSet && setHeld(activeSet, sec)"
+              />
             </div>
           </div>
           <div v-if="showLoad" class="load-step">
@@ -336,6 +343,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
+import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
@@ -646,6 +654,11 @@ function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
   s[key] = Math.max(0, Math.round((s[key] + d) * 10) / 10);
   if (key === 'load_kg' && s === curSet.value && curSetIndex.value === firstWorkIdx.value)
     propagateLoad();
+  live.persist();
+}
+/** ⏱ La tenue chronométrée remplit les secondes de la série ; on la valide ensuite comme les autres. */
+function setHeld(s: LiveSet, sec: number) {
+  s.reps = Math.max(0, Math.round(sec));
   live.persist();
 }
 // Reporte la charge de la 1re série DE TRAVAIL sur les séries de travail suivantes non

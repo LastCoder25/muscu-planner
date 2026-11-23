@@ -241,17 +241,15 @@
           :combo-id="id"
           :leg="legOf(exo)!"
         />
-        <!-- Exo de DURÉE (gainage) : chrono (chaque pause valide une série) au lieu de reps. -->
+        <!-- Exo de DURÉE (gainage) : chrono ou minuteur (chaque tenue valide une série) au lieu de reps. -->
         <div v-if="exo.time" class="se-sets">
-          <button
-            class="exo-chrono"
-            :class="{ running: timerExo === i }"
-            @click="toggleExoTimer(i)"
-          >
-            <q-icon :name="timerExo === i ? 'pause' : 'play_arrow'" size="18px" />
-            {{ timerExo === i ? 'Pause' : 'Démarrer' }}
-            <span class="ec-time">{{ timerLabel(i) }}</span>
-          </button>
+          <HoldTimerButton
+            :ref="(el) => setTimerRef(i, el)"
+            variant="inline"
+            :label="exo.exercise_name"
+            :suggested="nextTimeTarget(i)"
+            @finish="(sec: number) => validateTimeSet(i, sec)"
+          />
           <span class="ec-prog"
             >{{ doneCount(i) }}/{{ exo.sets.length }} séries<template v-if="nextTimeTarget(i)">
               · vise {{ nextTimeTarget(i) }} s</template
@@ -388,6 +386,7 @@ import SetLogDialog from '@/components/SetLogDialog.vue';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import HoldMuscleChip from '@/components/HoldMuscleChip.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
+import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useComboFatigue } from '@/composables/useComboFatigue';
@@ -740,11 +739,17 @@ const previewOrder = computed(() =>
     (i) => previewSession.value[i]?.exercise_name ?? '',
   ),
 );
+/** Les boutons de tenue par exo : « Prochaine série » ouvre celui de l'exo visé. */
+const timerRefs = new Map<number, { openPanel: () => void }>();
+function setTimerRef(i: number, el: unknown) {
+  if (el) timerRefs.set(i, el as { openPanel: () => void });
+  else timerRefs.delete(i);
+}
 function goNext() {
   const st = nextStep.value;
   const exo = st ? session.value[st.exo] : undefined;
   if (!st || !exo) return;
-  if (exo.time) toggleExoTimer(st.exo);
+  if (exo.time) timerRefs.get(st.exo)?.openPanel();
   else validate(st.exo, st.set, exo.sets[st.set] ?? 0);
 }
 function canRemoveSlot(i: number) {
@@ -863,10 +868,7 @@ function onLogSave(v: {
   }
 }
 
-// ── Chrono des exos de DURÉE (gainage) : chaque pause valide une série (secondes) ──
-const timerExo = ref<number | null>(null);
-const timerSec = ref(0);
-let timerTick: ReturnType<typeof setInterval> | undefined;
+// ── Exos de DURÉE (gainage) : chaque tenue (chrono ou minuteur) valide une série (secondes) ──
 function doneCount(i: number): number {
   const exo = session.value[i];
   if (!exo) return 0;
@@ -876,10 +878,6 @@ function doneCount(i: number): number {
 function nextTimeTarget(i: number): number | null {
   const j = firstOpenSet(i);
   return j >= 0 ? (session.value[i]?.sets[j] ?? null) : null;
-}
-function timerLabel(i: number): string {
-  const s = timerExo.value === i ? timerSec.value : 0;
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 // Valide la prochaine série NON faite de l'exo `i` avec `sec` secondes (reps = secondes).
 function validateTimeSet(i: number, sec: number) {
@@ -906,22 +904,6 @@ function validateTimeSet(i: number, sec: number) {
   if (validatedCount.value >= totalSets.value)
     $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });
 }
-function toggleExoTimer(i: number) {
-  if (timerExo.value === i) {
-    validateTimeSet(i, timerSec.value); // Pause → enregistre la série
-    clearInterval(timerTick);
-    timerTick = undefined;
-    timerExo.value = null;
-    timerSec.value = 0;
-    return;
-  }
-  if (timerExo.value != null && timerSec.value > 0) validateTimeSet(timerExo.value, timerSec.value);
-  clearInterval(timerTick);
-  timerExo.value = i;
-  timerSec.value = 0;
-  timerTick = setInterval(() => (timerSec.value += 1), 1000);
-}
-
 // Enregistre au défi toutes les séries validées localement (à la fin / au choix).
 // Enregistre les séries PUIS joue les anneaux d'XP (Muscu + Global), comme une séance
 // live : le Défi 360 remplit la piste Muscu, sa fin de séance doit le montrer. addSet est
@@ -999,7 +981,6 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   clearInterval(tick);
-  clearInterval(timerTick);
 });
 </script>
 
@@ -1399,29 +1380,6 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-}
-/* Chrono d'un exo de durée (gainage) dans le runner. */
-.exo-chrono {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 46px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 15px;
-  cursor: pointer;
-}
-.exo-chrono.running {
-  background: var(--accent);
-  color: var(--bg);
-}
-.ec-time {
-  font-variant-numeric: tabular-nums;
 }
 .ec-prog {
   font-size: 12.5px;

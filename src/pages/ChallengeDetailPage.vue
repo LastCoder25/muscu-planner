@@ -204,6 +204,14 @@
               <div v-if="todayCompleted" class="done-badge">
                 <q-icon name="check_circle" color="positive" size="18px" /> Objectif atteint ✅
               </div>
+              <!-- ⏱ Minuteur / chrono avec DÉPART DIFFÉRÉ (le temps de poser le téléphone) : la
+                   tenue enregistrée devient une série, comme une pause du chrono ci-dessous. -->
+              <HoldTimerButton
+                v-if="!running"
+                :label="ch.exercise_name"
+                :suggested="holdTargetSec"
+                @finish="(sec: number) => addDuration(sec)"
+              />
               <button class="chrono-cta" :class="{ running }" @click="toggleChrono">
                 <q-icon :name="running ? 'pause' : 'play_arrow'" size="20px" />
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
@@ -552,6 +560,7 @@ import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
+import HoldTimerButton from '@/components/HoldTimerButton.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -1132,9 +1141,13 @@ function toggleChrono() {
   if (running.value) {
     segStart.value = ensureToday().elapsed_sec; // début du segment courant
     clearInterval(tick);
+    // ⚠️ Le temps vient de l'HORLOGE (départ + secondes écoulées), pas de « +1 par intervalle » :
+    // écran éteint, le navigateur ralentit les intervalles et la tenue enregistrée était trop courte.
+    const t0 = Date.now();
+    const base = segStart.value;
     tick = setInterval(() => {
       const e = ensureToday();
-      e.elapsed_sec++;
+      e.elapsed_sec = base + Math.floor((Date.now() - t0) / 1000);
       if (isGainageTime.value) {
         e.done = e.elapsed_sec;
         syncComplete(e);

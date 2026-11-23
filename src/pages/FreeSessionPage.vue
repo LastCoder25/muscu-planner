@@ -193,6 +193,13 @@
                   +
                 </button>
               </div>
+              <!-- ⏱ Une tenue : chrono ou minuteur (départ différé) qui remplit les secondes. -->
+              <HoldTimerButton
+                v-if="isTimeEx && (i === curSetIndex || i === editIdx)"
+                variant="chip"
+                :label="ex.name"
+                @finish="(sec: number) => setHeld(s, sec)"
+              />
             </div>
             <div>
               <button
@@ -507,6 +514,7 @@ import { holdLoadable, isTimeExercise, workTonnage } from '@/lib/loadedHold';
 import { repRangeForExercise, repRangeLabel } from '@/lib/repScheme';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
+import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import {
   equipmentLabel,
   isUnloadedEquipment,
@@ -636,6 +644,11 @@ function skipRest() {
 // ── Séries ──────────────────────────────────────────────
 function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
   s[key] = Math.max(0, Math.round((s[key] + d) * 10) / 10);
+  live.persist();
+}
+/** ⏱ La tenue chronométrée remplit les secondes de la série ; on la valide ensuite comme les autres. */
+function setHeld(s: LiveSet, sec: number) {
+  s.reps = Math.max(0, Math.round(sec));
   live.persist();
 }
 function validateSet() {

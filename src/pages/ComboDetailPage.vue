@@ -141,26 +141,18 @@
           :combo-id="id"
           :leg="leg"
         />
-        <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
+        <!-- Mode DURÉE (gainage) : chrono / minuteur avec départ différé, OU ajout manuel d'une durée. -->
         <div v-if="legMode(leg) === 'time'" class="leg-actions">
           <template v-if="!legComplete(leg)">
-            <button
-              class="chrono-cta"
-              :class="{ running: isChronoOn(leg) }"
-              @click="toggleChrono(leg)"
-            >
-              <q-icon :name="isChronoOn(leg) ? 'pause' : 'play_arrow'" size="18px" />
-              {{ isChronoOn(leg) ? 'Pause' : 'Démarrer' }}
-              <span class="cc-time">{{ chronoDisplay(leg) }}</span>
-            </button>
+            <HoldTimerButton
+              :label="leg.exercise_name"
+              @finish="(sec: number) => doAddSeconds(leg, sec)"
+            />
           </template>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
-        <!-- Ajout manuel d'une durée sans chrono — caché pendant que ce chrono tourne. -->
-        <div
-          v-if="legMode(leg) === 'time' && !isChronoOn(leg) && !legComplete(leg)"
-          class="dur-adds"
-        >
+        <!-- Ajout manuel d'une durée sans chrono. -->
+        <div v-if="legMode(leg) === 'time' && !legComplete(leg)" class="dur-adds">
           <span class="da-lbl">Ajouter :</span>
           <button v-for="s in DUR_QUICK_ADDS" :key="s" class="da-btn" @click="doAddSeconds(leg, s)">
             +{{ fmtDurShort(s) }}
@@ -263,7 +255,7 @@
 
 <script setup lang="ts">
 import { startLabel } from '@/lib/startDate';
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
@@ -322,6 +314,7 @@ import {
 } from '@/lib/challenges';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
+import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useLibraryStore } from '@/stores/library';
 import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
@@ -629,45 +622,6 @@ async function exportCombo() {
   }
 }
 
-// ── Chrono des exos de DURÉE (gainage) — comme dans les challenges ──
-// Démarrer → décompte (mm:ss) ; Pause → enregistre une SÉRIE de N secondes et remet à 0.
-// Un seul chrono actif à la fois (démarrer un autre exo enregistre d'abord le décompte courant).
-const chronoLegKey = ref<string | null>(null);
-const chronoSec = ref(0);
-const chronoRunning = ref(false);
-let chronoTick: ReturnType<typeof setInterval> | undefined;
-function isChronoOn(leg: ComboLeg): boolean {
-  return chronoRunning.value && chronoLegKey.value === leg.exercise_id;
-}
-function chronoDisplay(leg: ComboLeg): string {
-  const s = chronoLegKey.value === leg.exercise_id ? chronoSec.value : 0;
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-function logChrono(legKey: string) {
-  clearInterval(chronoTick);
-  chronoTick = undefined;
-  chronoRunning.value = false;
-  const leg = c.value?.legs.find((l) => l.exercise_id === legKey);
-  if (leg && chronoSec.value > 0) doAddSeconds(leg, chronoSec.value);
-  chronoSec.value = 0;
-  chronoLegKey.value = null;
-}
-function toggleChrono(leg: ComboLeg) {
-  if (isChronoOn(leg)) {
-    logChrono(leg.exercise_id); // Pause → enregistre la série
-    return;
-  }
-  // Démarrer : enregistre d'abord un décompte laissé en cours sur un AUTRE exo.
-  if (chronoLegKey.value && chronoLegKey.value !== leg.exercise_id) logChrono(chronoLegKey.value);
-  chronoLegKey.value = leg.exercise_id;
-  chronoSec.value = 0;
-  chronoRunning.value = true;
-  chronoTick = setInterval(() => (chronoSec.value += 1), 1000);
-}
-onBeforeUnmount(() => {
-  if (chronoLegKey.value) logChrono(chronoLegKey.value);
-  else clearInterval(chronoTick);
-});
 /** Ce qu’arrêter ce 360 fera — la règle ET ses mots viennent de la lib, pour que les
  *  deux contrôles de cette page et l’onglet 🎯 Défi 360 ne puissent pas se contredire. */
 const stopPlan = computed(() =>
@@ -992,33 +946,6 @@ onMounted(async () => {
 .da-btn:active {
   background: var(--accent);
   color: var(--accent-ink);
-}
-/* Chrono des exos de durée (gainage) — cohérent avec le chrono des challenges. */
-.chrono-cta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  margin-bottom: 6px;
-  padding: 11px 0;
-  border-radius: 10px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 15px;
-  cursor: pointer;
-}
-.chrono-cta.running {
-  background: var(--accent);
-  color: var(--bg);
-}
-.chrono-cta .cc-time {
-  font-variant-numeric: tabular-nums;
-  margin-left: 2px;
-  opacity: 0.9;
 }
 /* Détail des séries faites : petites puces reps×poids sous les boutons. */
 .leg-sets {

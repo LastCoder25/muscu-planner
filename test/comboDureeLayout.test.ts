@@ -22,10 +22,11 @@ describe('🎮 plus de jeu sur les exos en durée du Défi 360', () => {
       expect(src(p), p).not.toContain('holdTargetSec');
     }
   });
-  it('le chrono, lui, reste', () => {
+  it('le chrono, lui, reste — désormais le minuteur partagé (v1.346.0), avec son chrono', () => {
     for (const p of ['../src/pages/ChallengesPage.vue', '../src/pages/ComboDetailPage.vue']) {
-      expect(src(p), p).toContain('toggleChrono(leg)');
+      expect(src(p), p).toContain('<HoldTimerButton');
     }
+    expect(src('../src/components/HoldTimerButton.vue')).toContain('data-test="hold-mode-chrono"');
   });
   it('les défis classiques gardent leur jeu (hors périmètre)', () => {
     expect(src('../src/pages/ChallengeDetailPage.vue')).toContain('HoldGameLauncher');

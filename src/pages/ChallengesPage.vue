@@ -516,15 +516,12 @@
               </button>
               <div v-else-if="legMode(leg) === 'time'" class="cl-actions">
                 <template v-if="!legComplete(leg)">
-                  <!-- Mode DURÉE : chrono (Démarrer/Pause → série de la durée réelle). -->
-                  <button
-                    class="cl-chrono"
-                    :class="{ running: isChronoOn(leg) }"
-                    title="Chrono : Démarrer puis Pause pour enregistrer la durée"
-                    @click="toggleChrono(leg)"
-                  >
-                    {{ isChronoOn(leg) ? '⏸' : '▶' }} {{ chronoDisplay(leg) }}
-                  </button>
+                  <!-- Mode DURÉE : chrono ou minuteur avec départ différé (série de la durée tenue). -->
+                  <HoldTimerButton
+                    variant="chip"
+                    :label="leg.exercise_name"
+                    @finish="(sec: number) => doAddSeconds(leg, sec)"
+                  />
                 </template>
                 <button
                   class="cl-corr"
@@ -598,12 +595,13 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboTimeBubbles from '@/components/ComboTimeBubbles.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
+import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
@@ -978,43 +976,6 @@ function doAddSeconds(leg: ComboLeg, sec: number) {
   );
   if (!before && comboCompleteInTime(co)) celebrateCombo(co);
 }
-// ── Chrono des exos de DURÉE (comme les challenges) : Démarrer → décompte ; Pause →
-// enregistre une série de la durée RÉELLE écoulée. Un seul chrono actif à la fois. ──
-const chronoLegKey = ref<string | null>(null);
-const chronoSec = ref(0);
-const chronoRunning = ref(false);
-let chronoTick: ReturnType<typeof setInterval> | undefined;
-function isChronoOn(leg: ComboLeg): boolean {
-  return chronoRunning.value && chronoLegKey.value === leg.exercise_id;
-}
-function chronoDisplay(leg: ComboLeg): string {
-  const s = chronoLegKey.value === leg.exercise_id ? chronoSec.value : 0;
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-function logChrono(legKey: string) {
-  clearInterval(chronoTick);
-  chronoTick = undefined;
-  chronoRunning.value = false;
-  const leg = activeCombo.value?.legs.find((l: ComboLeg) => l.exercise_id === legKey);
-  if (leg && chronoSec.value > 0) doAddSeconds(leg, chronoSec.value);
-  chronoSec.value = 0;
-  chronoLegKey.value = null;
-}
-function toggleChrono(leg: ComboLeg) {
-  if (isChronoOn(leg)) {
-    logChrono(leg.exercise_id);
-    return;
-  }
-  if (chronoLegKey.value && chronoLegKey.value !== leg.exercise_id) logChrono(chronoLegKey.value);
-  chronoLegKey.value = leg.exercise_id;
-  chronoSec.value = 0;
-  chronoRunning.value = true;
-  chronoTick = setInterval(() => (chronoSec.value += 1), 1000);
-}
-onBeforeUnmount(() => {
-  if (chronoLegKey.value) logChrono(chronoLegKey.value);
-  else clearInterval(chronoTick);
-});
 // Exporte le Défi 360 complet détaillé : partage natif (mobile) sinon presse-papier.
 async function exportCombo() {
   if (!activeCombo.value) return;
@@ -1766,23 +1727,6 @@ onMounted(async () => {
 .cl-add.neg {
   border-color: var(--d4);
   color: var(--d4);
-}
-/* Chrono d'un exo de durée (Défi 360, liste). */
-.cl-chrono {
-  padding: 6px 14px;
-  border-radius: 9px;
-  border: 1px solid var(--accent);
-  background: transparent;
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-.cl-chrono.running {
-  background: var(--accent);
-  color: var(--bg);
 }
 .cl-corr {
   flex: none;
