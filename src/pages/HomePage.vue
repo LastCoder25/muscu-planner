@@ -156,6 +156,9 @@
                   <span class="wx-dchip-l">{{ dayLabel(d.date, todayIso) }}</span>
                   <span class="wx-dchip-ic">{{ dig(d).emoji }}</span>
                   <span class="wx-dchip-t">{{ d.maxC }}°</span>
+                  <span class="wx-conf" :class="conf(d.date).level" :title="conf(d.date).label"
+                    >±{{ conf(d.date).tempC }}°</span
+                  >
                 </button>
               </div>
               <!-- Plage horaire : presets + bornes perso (préférence persistée). -->
@@ -241,9 +244,14 @@
                 >
                 <span class="wx-row-r" :class="{ wet: dig(d).rainPct >= 40 }">💧 {{ dig(d).rainPct }}%</span>
                 <span class="wx-row-w">💨 {{ d.windKmh }}</span>
-                <span v-if="dig(d).briefWet" class="wx-row-brief"
-                  >🌧️ brève pluie {{ dig(d).briefWet }}</span
-                >
+                <span class="wx-row-brief">
+                  <span class="wx-conf" :class="conf(d.date).level"
+                    >{{ conf(d.date).label }} · ±{{ conf(d.date).tempC }}°</span
+                  >
+                  <span v-if="dig(d).briefWet" class="wx-brief-rain"
+                    >🌧️ brève pluie {{ dig(d).briefWet }}</span
+                  >
+                </span>
               </button>
             </div>
 
@@ -823,6 +831,7 @@ import {
   hoursOfDay,
   outdoorRating,
   digestDay,
+  forecastConfidence,
   filterHours,
   presetIdFor,
   rangeLabel,
@@ -936,6 +945,9 @@ watch([hourFrom, hourTo], ([from, to]) => {
     /* idem */
   }
 });
+function conf(date: string) {
+  return forecastConfidence(date, todayIso);
+}
 // Résumé d'un jour sur la plage choisie (et non le pire instant des 24 h).
 function dig(d: WeatherDay): DayDigest {
   return digestDay(d, weather.value?.hours ?? [], hourFrom.value, hourTo.value);
@@ -1780,8 +1792,35 @@ async function saveAutre() {
 }
 .wx-row-brief {
   grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   font-size: 11.5px;
+}
+.wx-brief-rain {
   color: #8fd0ff;
+}
+/* Pastille de confiance : vert = fiable, ambre = correcte, rouge = incertaine. */
+.wx-conf {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid currentColor;
+}
+.wx-conf.sure {
+  color: #7bc86c;
+}
+.wx-conf.fair {
+  color: #ffb23f;
+}
+.wx-conf.low {
+  color: #ff6a45;
 }
 .wx-row-r.wet {
   color: #8fd0ff;

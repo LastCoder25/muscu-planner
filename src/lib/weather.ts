@@ -265,6 +265,40 @@ export function digestDay(day: WeatherDay, hours: WeatherHour[], from: number, t
   return { emoji: ic.emoji, label: ic.label, code, rainPct, briefWet };
 }
 
+// ── Confiance d'une prévision : elle se dégrade avec l'éloignement ──
+//
+// ⚠️ Open-Meteo ne donne AUCUNE marge d'erreur (une seule valeur par heure). Ce qu'on sait, c'est
+// que l'erreur d'une prévision croît avec le nombre de jours d'avance. Table des écarts TYPIQUES
+// de la température (en °C, ~80 % des cas), arrondie : un ordre de grandeur de la littérature de
+// vérification, PAS une mesure de ce lieu. Les écarts mesurés (J+1/3/7, par modèle) sont dans
+// l'onglet « Fiabilité ».
+type ConfidenceLevel = 'sure' | 'fair' | 'low';
+export interface Confidence {
+  level: ConfidenceLevel;
+  /** Jours d'avance (0 = aujourd'hui). */
+  days: number;
+  /** Écart typique de la température, en °C. */
+  tempC: number;
+  label: string;
+}
+const TYPICAL_T_ERR = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6];
+const CONF_LABEL: Record<ConfidenceLevel, string> = {
+  sure: 'Fiable',
+  fair: 'Correcte',
+  low: 'Incertaine',
+};
+export function forecastConfidence(date: string, todayIso: string): Confidence {
+  const ms = new Date(`${date}T12:00:00`).getTime() - new Date(`${todayIso}T12:00:00`).getTime();
+  const days = Math.max(0, Math.round(ms / 86_400_000));
+  const level: ConfidenceLevel = days <= 2 ? 'sure' : days <= 5 ? 'fair' : 'low';
+  return {
+    level,
+    days,
+    tempC: TYPICAL_T_ERR[Math.min(days, TYPICAL_T_ERR.length - 1)]!,
+    label: CONF_LABEL[level],
+  };
+}
+
 /** Libellé d'un jour relatif à aujourd'hui : « Aujourd'hui » / « Demain » / « jeu. 4 sept. ». */
 export function dayLabel(date: string, todayIso: string): string {
   if (date === todayIso) return "Aujourd'hui";
