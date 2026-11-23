@@ -1,6 +1,6 @@
 <template>
   <!-- 🫧 Exo en DURÉE (gainage…) : les MÊMES bulles que les exos en séries. Une bulle = 30 s ;
-       quand on arrête le chrono, les bulles faites se remplissent de la couleur de leur palier,
+       quand on arrête le chrono, les bulles faites se remplissent,
        la dernière à la hauteur de ce qui a été tenu (45 s = une bulle pleine + une à moitié).
        Ne calcule rien : tout vient de `legTimeBubbles` (lib, testée). -->
   <div class="tb-bar" role="img" :aria-label="label" :title="label">
@@ -8,7 +8,7 @@
       v-for="b in bubbles"
       :key="b.n"
       class="tb"
-      :class="['tier-' + b.zone, { on: b.fill >= 1, part: b.fill > 0 && b.fill < 1 }]"
+      :class="{ on: b.fill >= 1, part: b.fill > 0 && b.fill < 1, beyond: b.beyond }"
     >
       <i v-if="b.fill > 0" class="tb-fill" :style="{ width: b.fill * 100 + '%' }" />
       <span v-if="b.held > 0" class="tb-txt">{{ Math.round(b.held) }}</span>
@@ -18,13 +18,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { legDone, legTimeBubbles, type ComboLeg, type ComboLegFilter } from '@/lib/combo';
+import { legDone, legTimeBubbles, type ComboLeg } from '@/lib/combo';
 
-const props = withDefaults(defineProps<{ leg: ComboLeg; filter?: ComboLegFilter }>(), {
-  filter: 'all',
-});
+const props = defineProps<{ leg: ComboLeg }>();
 
-const bubbles = computed(() => legTimeBubbles(props.leg, props.filter));
+const bubbles = computed(() => legTimeBubbles(props.leg));
 
 // L'unité vit dans le titre (survol / lecteur d'écran) : les bulles ne portent que le nombre.
 const label = computed(
@@ -59,13 +57,7 @@ const label = computed(
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   color: var(--text);
 }
-.tb.tier-secondary {
-  border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
-}
-.tb.tier-principal {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
-}
-/* Le remplissage : de la couleur du palier, sur la part tenue de la bulle. */
+/* Le remplissage, sur la part tenue de la bulle. */
 .tb-fill {
   position: absolute;
   top: 0;
@@ -73,10 +65,7 @@ const label = computed(
   left: 0;
   background: var(--accent);
 }
-.tb.tier-secondary .tb-fill {
-  background: var(--tier-sec);
-}
-.tb.tier-beyond .tb-fill {
+.tb.beyond .tb-fill {
   background: var(--d1);
 }
 .tb-txt {
@@ -90,16 +79,12 @@ const label = computed(
     0 0 3px rgba(0, 0, 0, 0.95),
     0 0 2px rgba(0, 0, 0, 0.95);
 }
-/* Bulle pleine : bordure de la couleur du palier, texte sombre lisible sur la couleur. */
+/* Bulle pleine : bordure de la couleur, texte sombre lisible dessus. */
 .tb.on {
   border-color: var(--accent);
   color: var(--accent-ink);
 }
-.tb.on.tier-secondary {
-  border-color: var(--tier-sec);
-  color: var(--tier-sec-ink);
-}
-.tb.on.tier-beyond {
+.tb.on.beyond {
   border-color: var(--d1);
   color: #10231a;
 }

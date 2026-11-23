@@ -400,7 +400,7 @@
               <button class="c3-stop" :title="comboStop.ok" @click="confirmStopCombo">🗑</button>
             </div>
             <!-- Barre de 0 à 100 % en deux zones (secondaire / objectif). -->
-            <ComboProgressBar v-model="legFilter" :combo="activeCombo" :pace="pace" thin />
+            <ComboProgressBar :pace="pace" thin />
           </div>
           <div class="c3-cta-row q-mb-sm">
             <q-btn
@@ -466,17 +466,15 @@
                 @keydown.enter="addFromBar(leg)"
               >
                 <span
-                  v-for="n in legSegNumbers(leg, segCount(leg), legFilter)"
+                  v-for="n in segCount(leg)"
                   :key="n"
                   class="seg"
-                  :class="[
-                    'tier-' + legSegZone(leg, n),
-                    {
-                      on: n <= legDone(leg),
-                      next: n === legDone(leg) + 1,
-                      moved: !!legSets(leg)[n - 1]?.origin,
-                    },
-                  ]"
+                  :class="{
+                    on: n <= legDone(leg),
+                    next: n === legDone(leg) + 1,
+                    beyond: n > leg.target,
+                    moved: !!legSets(leg)[n - 1]?.origin,
+                  }"
                   :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
                   :title="
                     legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
@@ -492,7 +490,7 @@
                 </span>
               </div>
               <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
-              <ComboTimeBubbles v-else-if="legMode(leg) === 'time'" :leg="leg" :filter="legFilter" />
+              <ComboTimeBubbles v-else-if="legMode(leg) === 'time'" :leg="leg" />
               <div
                 v-else
                 class="reps-bar"
@@ -656,10 +654,7 @@ import {
   legDone,
   legComplete,
   legsByGroup,
-  filterLegsByZone,
-  type ComboLegFilter,
-  legSegZone,
-  legSegNumbers,
+  legsDoneLast,
   legBarGeometry,
   legMode,
   legLastReps,
@@ -821,8 +816,7 @@ function segCount(l: ComboLeg): number {
 // isoler ce qui reste (v0.1390, remplace le renvoi en bas de liste de la v0.921).
 const activeComboLegs = computed(() => legsByGroup(activeCombo.value?.legs ?? []));
 // 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
-const legFilter = ref<ComboLegFilter>('all');
-const shownComboLegs = computed(() => filterLegsByZone(activeComboLegs.value, legFilter.value));
+const shownComboLegs = computed(() => legsDoneLast(activeComboLegs.value));
 // Fatigue des groupes : un conseil sur ce qu'on peut enchaîner (même règle que la fiche).
 const comboFatigue = useComboFatigue(computed(() => activeCombo.value?.legs ?? []));
 function legFatigue(leg: ComboLeg) {
@@ -1726,23 +1720,16 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   color: var(--dim);
 }
-/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboProgressBar) :
-   la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
-.seg.tier-secondary {
-  border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
-}
-.seg.tier-principal {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
-}
-.seg.on.tier-secondary {
-  background: var(--tier-sec);
-  border-color: var(--tier-sec);
-  color: var(--tier-sec-ink);
-}
-.seg.on.tier-principal {
+/* Une série faite est pleine ; au-delà de l'objectif (360 d'avant la v1.53) elle est verte. */
+.seg.on {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
+}
+.seg.on.beyond {
+  background: var(--d1);
+  border-color: var(--d1);
+  color: #10231a;
 }
 /* Série basculée d'un autre exo (changement d'exo en cours de défi) : fines hachures,
    lisibles sur toutes les couleurs de palier. Son détail dit sur quel exo elle a été faite. */

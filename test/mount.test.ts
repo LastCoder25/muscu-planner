@@ -3814,41 +3814,44 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
   }, 30_000);
 });
 
-describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
-  it('se monte et peint les deux zones', async () => {
+describe('🎨 Barre du Défi 360 : une seule barre (ComboProgressBar)', () => {
+  const mount = async (pace: Record<string, unknown>) => {
     const { default: ComboProgressBar } = await import('@/components/ComboProgressBar.vue');
     const { NO_PACE } = await import('@/lib/combo');
-    const leg = (name: string, faites: number) => ({
-      slot: 'push',
-      exercise_id: name,
-      exercise_name: name,
-      rep_weight: 1,
-      target: 10,
-      sets: Array.from({ length: faites }, () => ({ date: '2026-01-05', reps: 10 })),
-    });
-    const combo = { id: 'c', legs: [leg('A', 12), leg('B', 3), leg('C', 9)], status: 'active' };
     let out = '';
-    expect(
-      await mountIt(
-        ComboProgressBar,
-        { combo, pace: NO_PACE },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      ),
-    ).toBeNull();
-    // Les barres sont des boutons (elles filtrent), avec leur compte d’exos (A terminé
-    // n’est dans aucune zone, B au secondaire, C dans le jaune : aucune zone vide).
-    expect((out.match(/<button/g) ?? []).length).toBe(2);
-    expect(out).not.toContain('disabled');
-    // Deux barres SÉPARÉES, chacune avec son remplissage — plus de zone bonus (v1.53).
-    for (const c of ['cpb-sec', 'cpb-obj']) expect(out).toContain(c);
-    expect(out).not.toContain('cpb-bonus');
-    expect((out.match(/cpb-fill/g) ?? []).length).toBe(2);
-    // 🔎 Et elles DISENT qu'elles filtrent — sans cette ligne, rien ne l'indiquait.
-    expect(out).toContain('cpb-hint');
-    expect(out).toContain('Touche une barre');
+    const err = await mountIt(
+      ComboProgressBar,
+      { pace: { ...NO_PACE, ...pace } },
+      undefined,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
+    return { err, out };
+  };
+  it('se monte : une barre, son remplissage, son rose et son repère', async () => {
+    const { err, out } = await mount({
+      onTimePct: 60,
+      donePct: 40,
+      latePct: 20,
+      showMark: true,
+    });
+    expect(err).toBeNull();
+    expect((out.match(/cpb-fill/g) ?? []).length).toBe(1);
+    expect(out).toContain('width: 40%');
+    expect(out).toContain('cpb-late');
+    expect(out).toContain('width: 20%');
+    expect(out).toContain('left: 60%');
+    // Plus de zones, plus de filtre : aucun bouton.
+    expect(out).not.toContain('<button');
+    expect(out).not.toContain('cpb-sec');
+    expect(out).not.toContain('cpb-obj');
+    expect(out).toContain('Prime d’un exo');
+  }, 30_000);
+  it('dans les temps : pas de rose', async () => {
+    const { err, out } = await mount({ onTimePct: 30, donePct: 50, latePct: 0, showMark: true });
+    expect(err).toBeNull();
+    expect(out).not.toContain('cpb-late');
   }, 30_000);
 });
 
@@ -3872,7 +3875,7 @@ describe('🫧 Exo en durée : les mêmes bulles que les séries (ComboTimeBubbl
   it('se monte : une bulle par 30 s, 45 s = une pleine + une à moitié', async () => {
     const { err, out } = await mount({ leg: leg([45], 120) });
     expect(err).toBeNull();
-    expect((out.match(/class="tb /g) ?? []).length).toBe(4);
+    expect((out.match(/class="tb[ "]/g) ?? []).length).toBe(4);
     expect((out.match(/class="tb-fill"/g) ?? []).length).toBe(2);
     expect(out).toContain('width: 100%');
     expect(out).toContain('width: 50%');
@@ -3884,15 +3887,15 @@ describe('🫧 Exo en durée : les mêmes bulles que les séries (ComboTimeBubbl
   it('la chaise réelle (90·60·30·60·60·60 sur 360 s) : 12 bulles toutes pleines', async () => {
     const { err, out } = await mount({ leg: leg([90, 60, 30, 60, 60, 60], 360) });
     expect(err).toBeNull();
-    expect((out.match(/class="tb /g) ?? []).length).toBe(12);
+    expect((out.match(/class="tb[ "]/g) ?? []).length).toBe(12);
     expect((out.match(/class="tb-fill"/g) ?? []).length).toBe(12);
     expect(out).not.toContain('width: 50%');
   }, 30_000);
 
-  it('sous un filtre de zone, seules les bulles de la zone', async () => {
-    const { err, out } = await mount({ leg: leg([], 360), filter: 'obj' });
+  it('aucune couleur de palier : plus de classe « tier- »', async () => {
+    const { err, out } = await mount({ leg: leg([60], 360) });
     expect(err).toBeNull();
-    expect((out.match(/class="tb /g) ?? []).length).toBe(2);
+    expect(out).not.toContain('tier-');
   }, 30_000);
 });
 

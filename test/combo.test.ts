@@ -23,7 +23,8 @@ import {
   COMBO_SET_MIN,
   legTier,
   legTierMarks,
-  legSegZone,
+  comboBar,
+  legsDoneLast,
   legBarGeometry,
   legTimeBubbles,
   COMBO_HOLD_SEC,
@@ -47,6 +48,7 @@ import {
   legRepRange,
   type ComboChallenge,
   type ComboLeg,
+  type ComboPace,
   type ComboSet,
   comboEnded,
   activeCombo,
@@ -56,12 +58,6 @@ import {
   comboCompleteInTime,
   comboEndDate,
   legsByGroup,
-  legStage,
-  comboBarParts,
-  comboBarSegments,
-  filterLegsByZone,
-  legSegNumbers,
-  legBarZone,
   NO_PACE,
   comboWeeklySets,
   transferSlotFor,
@@ -705,45 +701,6 @@ describe('legTierMarks', () => {
   });
 });
 
-describe('🎨 LA COULEUR D’UNE CASE DIT LE PALIER (remplace les pastilles)', () => {
-  const leg = (target: number, done: number) =>
-    ({
-      slot: 'push',
-      exercise_id: 'ex',
-      rep_weight: 1,
-      target,
-      count_mode: 'sets',
-      sets: Array.from({ length: done }, () => ({ date: '2026-09-01', reps: 10 })),
-      progress: [],
-    }) as unknown as Parameters<typeof legTier>[0];
-
-  it('faire la DERNIÈRE case d’une couleur débloque exactement ce palier (toutes les cibles)', () => {
-    // Sinon la couleur mentirait : une case « objectif » faite sans objectif atteint.
-    for (let t = 1; t <= 80; t++) {
-      for (let n = 1; n <= t; n++) {
-        const zone = legSegZone(leg(t, 0), n);
-        const lastOfZone = legSegZone(leg(t, 0), n + 1) !== zone;
-        if (lastOfZone) expect(legTier(leg(t, n)), `cible ${t}, case ${n}`).toBe(zone);
-        else expect(legTier(leg(t, n)), `cible ${t}, case ${n}`).not.toBe(zone);
-      }
-    }
-  });
-
-  it('les couleurs se suivent dans l’ordre ; au-delà de l’objectif (360 d’avant), « beyond »', () => {
-    const ORDER = ['secondary', 'principal', 'beyond'];
-    for (let t = 1; t <= 80; t++) {
-      let prev = 0;
-      for (let n = 1; n <= t + 3; n++) {
-        const k = ORDER.indexOf(legSegZone(leg(t, 0), n));
-        expect(k).toBeGreaterThanOrEqual(prev);
-        prev = k;
-      }
-      expect(legSegZone(leg(t, 0), t)).toBe('principal');
-      expect(legSegZone(leg(t, 0), t + 1)).toBe('beyond');
-    }
-  });
-});
-
 describe('legBarGeometry (barre continue : reps et durée)', () => {
   // Exo de DURÉE (gainage) : objectif 120 s.
   const timeLeg = (done: number) =>
@@ -829,35 +786,11 @@ describe('legTimeBubbles (exo en durée : les mêmes bulles que les séries, 1 b
     expect(legTimeBubbles(leg([95], 100)).map((x) => x.fill)).toEqual([1, 1, 1, 0.5]);
   });
 
-  it('même palier que les cases d’un exo de N séries : la règle des cases sur N bulles', () => {
-    // C'est LA promesse d'homogénéité : une bulle a la couleur de la case de même rang.
-    for (const t of [30, 60, 90, 100, 120, 270, 360, 600]) {
-      const n = Math.ceil(t / COMBO_HOLD_SEC);
-      const setsLeg = { slot: 'core', target: n, count_mode: 'sets' } as unknown as Parameters<
-        typeof legSegZone
-      >[0];
-      const zones = legTimeBubbles(leg([], t)).map((x) => x.zone);
-      expect(zones).toEqual(Array.from({ length: n }, (_, i) => legSegZone(setsLeg, i + 1)));
-    }
-    // 360 s = 12 bulles : 10 secondaires puis 2 principales (comme 12 séries).
-    const z = legTimeBubbles(leg([], 360)).map((x) => x.zone);
-    expect(z.filter((x) => x === 'secondary')).toHaveLength(10);
-    expect(z.slice(10)).toEqual(['principal', 'principal']);
-    // Une seule bulle : une seule zone, la principale.
-    expect(legTimeBubbles(leg([], 30)).map((x) => x.zone)).toEqual(['principal']);
-  });
-
-  it('sous un filtre de zone, seules les bulles de la zone (numéros gardés)', () => {
-    const sec = legTimeBubbles(leg([], 360), 'sec');
-    expect(sec).toHaveLength(10);
-    const obj = legTimeBubbles(leg([], 360), 'obj');
-    expect(obj.map((x) => x.n)).toEqual([11, 12]);
-  });
-
   it('un 360 d’avant la v1.53 qui a dépassé : des bulles « beyond »', () => {
     const b = legTimeBubbles(leg([120, 20], 120));
     expect(b).toHaveLength(5);
-    expect(b[4]!.zone).toBe('beyond');
+    expect(b.slice(0, 4).every((x) => !x.beyond)).toBe(true);
+    expect(b[4]!.beyond).toBe(true);
     expect(b[4]!.fill).toBeCloseTo(20 / 30, 5);
   });
 
@@ -1482,155 +1415,54 @@ describe('📊 LE % SUIT L’OBJECTIF, et ne le dépasse jamais (v1.53)', () => 
   });
 });
 
-describe('🎨 LA BARRE PAR ZONE : 0 → 100 %, argent / jaune', () => {
-  const ex = (name: string, target: number, faites: number): ComboLeg => ({
-    slot: 'push',
-    exercise_id: name,
-    exercise_name: name,
-    rep_weight: 1,
-    target,
-    sets: Array.from({ length: faites }, () => set(10)),
-  });
-  it('un exo seul remplit les zones dans l’ordre', () => {
-    const p = comboBarParts(combo([ex('A', 10, 9)])); // 90 % : 80 d'argent + 10 de jaune
-    expect(p.sec).toBeCloseTo(80, 6);
-    expect(p.obj).toBeCloseTo(10, 6);
-  });
-  it('un exo qui a dépassé n’apporte rien de plus : la barre est pleine', () => {
-    const p = comboBarParts(combo([ex('A', 10, 30)]));
-    expect(p.sec + p.obj).toBeCloseTo(100, 6);
-    expect(p).not.toHaveProperty('bonus');
-  });
-  it('deux barres seulement : argent (80) et jaune (20)', () => {
-    const segs = comboBarSegments(combo([ex('A', 10, 0)]), NO_PACE);
-    expect(segs.map((z) => z.id)).toEqual(['sec', 'obj']);
-    expect(segs[0]!.len).toBeCloseTo(80, 6);
-    expect(segs[1]!.len).toBeCloseTo(20, 6);
-  });
-
-  // ── Les barres suivent les VRAIES cases (signalé : « la grise n'est pas complète alors qu'il
-  // ne me reste que des séries d'objectif »). Cause : les exos à objectif ≤ 4 n'ont aucune case
-  // grise (le repère secondaire EST l'objectif) mais la barre leur comptait 80 % de gris.
-  const tl = (name: string, target: number, secs: number[]): ComboLeg =>
-    ({
-      slot: 'core',
-      exercise_id: name,
-      exercise_name: name,
-      rep_weight: 1,
-      target,
-      count_mode: 'time',
-      sets: secs.map((reps) => ({ date: '2026-01-05', reps })),
-    }) as unknown as ComboLeg;
-
-  it('le cas signalé : les petits exos (objectif 4, sans case grise) ne retiennent plus la grise', () => {
-    // A : ses 8 grises faites (10 séries) · B 0/4 et C 2/4 : tout jaune, rien de gris à faire.
-    const segs = comboBarSegments(combo([ex('A', 10, 8), ex('B', 4, 0), ex('C', 4, 2)]), NO_PACE);
-    expect(segs[0]!.fill).toBeCloseTo(100, 6); // avant : 54 %
-    // Et il reste du jaune à faire : la barre jaune n'est pas pleine.
-    expect(segs[1]!.fill).toBeLessThan(100);
-  });
-
-  it('un exo de 9 séries dont les 8 grises sont faites : le jaune reste vide', () => {
-    const p = comboBarParts(combo([ex('A', 9, 8)]));
-    expect(p.sec).toBeCloseTo(p.secLen, 6);
-    expect(p.obj).toBe(0); // avant : 8,9 → 80 d'argent + 8,9 de jaune alors que sa case jaune est vide
-  });
-
-  it('les longueurs sont la part de cases grises / jaunes (aucune grise : tout jaune)', () => {
-    const p = comboBarParts(combo([ex('A', 4, 3)]));
-    expect(p.secLen).toBe(0);
-    expect(p.objLen).toBe(100);
-    expect(p.obj).toBeCloseTo(75, 6);
-    const segs = comboBarSegments(combo([ex('A', 4, 3)]), NO_PACE);
-    expect(segs[0]!.fill).toBe(100); // zone sans case : rien à faire = complète
-    expect(segs[1]!.fill).toBeCloseTo(75, 6);
-    expect(Number.isFinite(segs[0]!.late)).toBe(true);
-  });
-
-  it('aucune avance fictive : les deux remplissages font la progression réelle', () => {
-    const c = combo([ex('A', 4, 2), ex('B', 10, 3), ex('C', 9, 8), ex('D', 1, 0)]);
-    const p = comboBarParts(c);
-    const real = ((2 / 4 + 3 / 10 + 8 / 9 + 0) / 4) * 100;
-    expect(p.sec + p.obj).toBeCloseTo(real, 6);
-    expect(p.secLen + p.objLen).toBeCloseTo(100, 6);
-  });
-
-  it('exo en durée : le repère est la fin de sa dernière bulle grise, comme ses bulles', () => {
-    // 360 s = 12 bulles, 10 grises → repère à 300 s (et non 288).
-    expect(legTierMarks(tl('Chaise', 360, [])).sec).toBe(300);
-    expect(legTimeBubbles(tl('Chaise', 360, [])).filter((b) => b.zone === 'secondary')).toHaveLength(
-      10,
-    );
-    // Étape : grise jusqu'à la fin de la 10e bulle, jaune ensuite, terminée à 360.
-    expect(legStage(tl('Chaise', 360, [290]))).toBe('secondary');
-    expect(legStage(tl('Chaise', 360, [300]))).toBe('principal');
-    expect(legStage(tl('Chaise', 360, [360]))).toBe('done');
-    // La barre : grise pleine ⇔ les 10 bulles grises faites.
-    const grey = comboBarParts(combo([tl('Chaise', 360, [])])).secLen;
-    expect(grey).toBeCloseTo((300 / 360) * 100, 6);
-    expect(comboBarSegments(combo([tl('Chaise', 360, [300])]), NO_PACE)[0]!.fill).toBeCloseTo(100, 6);
-    // Petit exo en durée (90 s = 3 bulles, une seule zone) : tout jaune, comme ses bulles.
-    expect(legTierMarks(tl('Gainage', 90, [])).sec).toBe(90);
-    expect(comboBarParts(combo([tl('Gainage', 90, [])])).secLen).toBe(0);
-  });
-});
-
-describe('🌸 LE ROSE = LE RETARD RÉEL, réparti dans l’argent puis le jaune', () => {
-  const ex = (name: string, target: number, faites: number): ComboLeg => ({
-    slot: 'push',
-    exercise_id: name,
-    exercise_name: name,
-    rep_weight: 1,
-    target,
-    sets: Array.from({ length: faites }, () => set(10)),
-  });
-  const pace = (onTimePct: number, donePct: number) => ({
+describe('🎨 LA BARRE DU 360 : une seule barre (avancement, retard, repère)', () => {
+  const pace = (onTimePct: number, donePct: number, over: Partial<ComboPace> = {}): ComboPace => ({
     ...NO_PACE,
     onTimePct,
     donePct,
     latePct: Math.max(0, onTimePct - donePct),
     showMark: onTimePct > 0 && onTimePct < 100,
+    ...over,
   });
-  // Points de retard peints (la barre argent fait 80 points, la jaune 20).
-  const latePts = (segs: ReturnType<typeof comboBarSegments>) =>
-    segs.reduce((a, z) => a + (z.late * z.len) / 100, 0);
-
-  it('le cas signalé : l’avance d’un exo dans le jaune réduit le rose de l’argent', () => {
-    // A 11/10, B 5/10 → fait 75 % de l’objectif ; attendu 86 % → 11 points de retard.
-    // Avant : tout le vide de l’argent (15 points) était rose.
-    const c = combo([ex('A', 10, 11), ex('B', 10, 5)]);
-    const segs = comboBarSegments(c, pace(86, comboProgressPct(c)));
-    expect(latePts(segs)).toBeCloseTo(11, 6);
-    expect(segs[0]!.late).toBeCloseTo((11 / 80) * 100, 6);
-    expect(segs[1]!.late).toBe(0);
-    // Le trait au bout du rose (dans l’argent), pas à 86 % dans le jaune.
-    expect(segs[0]!.mark).toBeCloseTo(((65 + 11) / 80) * 100, 6);
-    expect(segs[1]!.mark).toBeNull();
+  it('remplissage = avancement, rose = retard juste après, trait = l’attendu', () => {
+    const b = comboBar(pace(60, 40));
+    expect(b.fill).toBe(40);
+    expect(b.late).toBe(20);
+    expect(b.mark).toBe(60);
+    // Le rose finit pile sur le trait quand on est en retard.
+    expect(b.fill + b.late).toBe(b.mark);
   });
-  it('le retard remplit l’argent puis passe dans le jaune', () => {
-    // 0/10 partout, attendu 95 % : 80 points dans l’argent, 15 dans le jaune.
-    const c = combo([ex('A', 10, 0)]);
-    const segs = comboBarSegments(c, pace(95, 0));
-    expect(segs).toHaveLength(2);
-    expect(segs[0]!.late).toBeCloseTo(100, 6);
-    expect(segs[1]!.late).toBeCloseTo(75, 6);
-    expect(segs[1]!.mark).toBeCloseTo(75, 6); // le trait à 95 %, dans le jaune
+  it('dans les temps : aucun rose, le trait à l’attendu', () => {
+    const b = comboBar(pace(50, 70));
+    expect(b.late).toBe(0);
+    expect(b.fill).toBe(70);
+    expect(b.mark).toBe(50);
   });
-  it('dans les temps : aucun rose, le trait à l’avancement attendu', () => {
-    const c = combo([ex('A', 10, 9)]);
-    const segs = comboBarSegments(c, pace(50, comboProgressPct(c)));
-    expect(latePts(segs)).toBe(0);
-    expect(segs[0]!.mark).toBeCloseTo((50 / 80) * 100, 6);
+  it('le dernier jour, tout ce qui reste est du rose (attendu = 100, pas de trait)', () => {
+    const b = comboBar(pace(100, 63));
+    expect(b.fill).toBe(63);
+    expect(b.late).toBe(37);
+    expect(b.mark).toBeNull();
   });
-  it('en retard : le trait se pose au bout du rose', () => {
-    const c = combo([ex('A', 10, 4)]); // 40 %, attendu 60 %
-    const segs = comboBarSegments(c, pace(60, comboProgressPct(c)));
-    expect(segs[0]!.mark).toBeCloseTo((60 / 80) * 100, 6);
-    expect(segs[0]!.fill + segs[0]!.late).toBeCloseTo(segs[0]!.mark!, 6);
+  it('le premier jour, personne n’est en retard', () => {
+    expect(comboBar(pace(14, 0, { latePct: 0 })).late).toBe(0);
+  });
+  it('ne déborde jamais de la barre, même avec des valeurs aberrantes', () => {
+    for (const [on, done, late] of [
+      [100, 0, 100],
+      [100, 120, 0],
+      [50, -5, 60],
+      [100, 90, 50],
+    ] as const) {
+      const b = comboBar(pace(on, done, { latePct: late }));
+      expect(b.fill).toBeGreaterThanOrEqual(0);
+      expect(b.late).toBeGreaterThanOrEqual(0);
+      expect(b.fill + b.late).toBeLessThanOrEqual(100);
+    }
   });
 });
 
-describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
+describe('⬇️ LES EXOS TERMINÉS PASSENT EN BAS DE LA LISTE', () => {
   const ex = (name: string, faites: number): ComboLeg => ({
     slot: 'push',
     exercise_id: name,
@@ -1639,64 +1471,14 @@ describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
     target: 10,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  it('argent avant les séries de base, jaune ensuite, aucune zone une fois terminé', () => {
-    expect(legBarZone(ex('A', 7))).toBe('sec');
-    expect(legBarZone(ex('A', 8))).toBe('obj');
-    expect(legBarZone(ex('A', 9))).toBe('obj');
-    expect(legBarZone(ex('A', 10))).toBeNull();
-    expect(legBarZone(ex('A', 12))).toBeNull();
-  });
-  it('filtre sans réordonner, « Objectif » sans les terminés ; « all » garde tout', () => {
-    const legs = [ex('A', 12), ex('B', 2), ex('C', 9), ex('E', 8), ex('D', 10)];
-    expect(filterLegsByZone(legs, 'obj').map((l) => l.exercise_name)).toEqual(['C', 'E']);
-    expect(filterLegsByZone(legs, 'sec').map((l) => l.exercise_name)).toEqual(['B']);
-    expect(filterLegsByZone(legs, 'all')).toHaveLength(5);
-  });
-  it('sous un filtre, seules les cases de sa zone restent, numérotées comme les séries', () => {
-    const l = ex('A', 3); // objectif 10 : secondaire 1-8, objectif 9-10
-    expect(legSegNumbers(l, 10, 'all')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(legSegNumbers(l, 10, 'sec')).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(legSegNumbers(l, 10, 'obj')).toEqual([9, 10]);
-    // Petit objectif : le repère secondaire EST l'objectif, pas de case secondaire.
-    const petit = { ...ex('P', 0), target: 1 };
-    expect(legSegNumbers(petit, 1, 'sec')).toEqual([]);
-    expect(legSegNumbers(petit, 1, 'obj')).toEqual([1]);
-  });
-  it('sans filtre, les exos terminés passent en bas, chacun dans son ordre', () => {
+  it('ce qui reste à faire en tête, les terminés ensuite, chacun dans son ordre', () => {
     const legs = [ex('A', 12), ex('B', 2), ex('C', 10), ex('D', 9)];
-    expect(filterLegsByZone(legs, 'all').map((l) => l.exercise_name)).toEqual(['B', 'D', 'A', 'C']);
-    expect(legs.map((l) => l.exercise_name)).toEqual(['A', 'B', 'C', 'D']);
+    expect(legsDoneLast(legs).map((l) => l.exercise_name)).toEqual(['B', 'D', 'A', 'C']);
   });
-});
-
-describe('🔎 L’ÉTAPE EN COURS d’un exo (filtres du 360)', () => {
-  const ex = (target: number, faites: number): ComboLeg => ({
-    slot: 'push',
-    exercise_id: 'a',
-    exercise_name: 'A',
-    rep_weight: 1,
-    target,
-    sets: Array.from({ length: faites }, () => set(10)),
-  });
-  it('secondaire → objectif → terminé, aux repères des cases', () => {
-    // Objectif 10 : secondaire 8.
-    expect(legStage(ex(10, 0))).toBe('secondary');
-    expect(legStage(ex(10, 7))).toBe('secondary');
-    expect(legStage(ex(10, 8))).toBe('principal');
-    expect(legStage(ex(10, 9))).toBe('principal');
-    expect(legStage(ex(10, 10))).toBe('done');
-    expect(legStage(ex(10, 12))).toBe('done');
-  });
-  it('petit objectif : pas de zone secondaire, on commence en « objectif »', () => {
-    expect(legStage(ex(3, 0))).toBe('principal');
-  });
-  it('chaque étape correspond à la couleur de la PROCHAINE case à faire', () => {
-    for (let t = 1; t <= 30; t++)
-      for (let n = 0; n <= t + 1; n++) {
-        const st = legStage(ex(t, n));
-        if (st === 'done') expect(legComplete(ex(t, n))).toBe(true);
-        else expect(legSegZone(ex(t, n), n + 1)).toBe(st);
-      }
+  it('rend une copie, sans toucher à la liste d’origine', () => {
+    const legs = [ex('A', 12), ex('B', 2)];
+    legsDoneLast(legs);
+    expect(legs.map((l) => l.exercise_name)).toEqual(['A', 'B']);
   });
 });
 

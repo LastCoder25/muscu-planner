@@ -15,8 +15,8 @@
           <span class="hc-days">{{ daysLeftLabel }}</span>
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
-        <!-- Barre de 0 à 100 % en deux zones (secondaire / objectif). -->
-        <ComboProgressBar v-model="legFilter" :combo="c" :pace="pace" />
+        <!-- Barre de 0 à 100 % : avancement, retard (rose) et repère « dans les temps ». -->
+        <ComboProgressBar :pace="pace" />
         <div v-if="notStarted" class="not-started">
           <span>📅</span>
           <span
@@ -92,17 +92,15 @@
           @keydown.enter="addFromBar(leg)"
         >
           <span
-            v-for="n in legSegNumbers(leg, segCount(leg), legFilter)"
+            v-for="n in segCount(leg)"
             :key="n"
             class="seg"
-            :class="[
-              'tier-' + legSegZone(leg, n),
-              {
-                on: n <= legDone(leg),
-                next: n === legDone(leg) + 1,
-                moved: !!legSets(leg)[n - 1]?.origin,
-              },
-            ]"
+            :class="{
+              on: n <= legDone(leg),
+              next: n === legDone(leg) + 1,
+              beyond: n > leg.target,
+              moved: !!legSets(leg)[n - 1]?.origin,
+            }"
             :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
             :title="
               legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
@@ -136,9 +134,13 @@
           <span v-if="!legComplete(leg)" class="bar-plus" aria-hidden="true">＋</span>
         </div>
         <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
-        <ComboTimeBubbles v-else :leg="leg" :filter="legFilter" />
+        <ComboTimeBubbles v-else :leg="leg" />
         <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
-        <HoldLestStepper v-if="legHoldLoadable(leg) && !legComplete(leg)" :combo-id="id" :leg="leg" />
+        <HoldLestStepper
+          v-if="legHoldLoadable(leg) && !legComplete(leg)"
+          :combo-id="id"
+          :leg="leg"
+        />
         <!-- Mode DURÉE (gainage) : chrono OU ajout manuel d'une durée (ticket 9ecad885). -->
         <div v-if="legMode(leg) === 'time'" class="leg-actions">
           <template v-if="!legComplete(leg)">
@@ -190,7 +192,9 @@
             "
             :data-test="legMode(leg) === 'time' && l.kind === 'set' ? 'hold-set-chip' : undefined"
             @click="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
-            @keydown.enter="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
+            @keydown.enter="
+              legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)
+            "
           >
             <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
             <template v-else-if="legMode(leg) === 'time'"
@@ -228,7 +232,12 @@
       @edit="onHistoryEdit"
     />
     <!-- ✏️ Corriger une série de tenue (secondes + lest) : puce de la série ou ligne d'historique. -->
-    <HoldSetEditor v-model="holdEditOpen" :combo-id="id" :leg="holdEditLeg" :index="holdEditIndex" />
+    <HoldSetEditor
+      v-model="holdEditOpen"
+      :combo-id="id"
+      :leg="holdEditLeg"
+      :index="holdEditIndex"
+    />
     <ComboSwapSheet
       v-model="swapOpen"
       :combo-id="c?.id ?? null"
@@ -273,8 +282,6 @@ import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
   fmtPct,
-  legSegZone,
-  legSegNumbers,
   legBarGeometry,
   legSetsDone,
   comboStopPlan,
@@ -284,8 +291,7 @@ import {
   legDone,
   legComplete,
   legsByGroup,
-  filterLegsByZone,
-  type ComboLegFilter,
+  legsDoneLast,
   legMode,
   legSets,
   groupSetLines,
@@ -393,8 +399,7 @@ function segCount(l: ComboLeg): number {
 // isoler ce qui reste (v0.1390, remplace le renvoi en bas de liste de la v0.921).
 const orderedLegs = computed(() => legsByGroup(c.value?.legs ?? []));
 // 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
-const legFilter = ref<ComboLegFilter>('all');
-const shownLegs = computed(() => filterLegsByZone(orderedLegs.value, legFilter.value));
+const shownLegs = computed(() => legsDoneLast(orderedLegs.value));
 // Fatigue des groupes : un conseil sur ce qu'on peut enchaîner (défi en cours seulement).
 const fatigue = useComboFatigue(computed(() => c.value?.legs ?? []));
 function legFatigue(leg: ComboLeg) {
@@ -946,23 +951,16 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
 }
-/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboProgressBar) :
-   la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
-.seg.tier-secondary {
-  border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
-}
-.seg.tier-principal {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
-}
-.seg.on.tier-secondary {
-  background: var(--tier-sec);
-  border-color: var(--tier-sec);
-  color: var(--tier-sec-ink);
-}
-.seg.on.tier-principal {
+/* Une série faite est pleine ; au-delà de l'objectif (360 d'avant la v1.53) elle est verte. */
+.seg.on {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
+}
+.seg.on.beyond {
+  background: var(--d1);
+  border-color: var(--d1);
+  color: #10231a;
 }
 /* Série basculée d'un autre exo (changement d'exo en cours de défi) : fines hachures,
    lisibles sur toutes les couleurs de palier. Son détail dit sur quel exo elle a été faite. */

@@ -650,61 +650,13 @@ export function legTier(l: ComboLeg): ComboTier {
 export function legTierShare(l: ComboLeg): number {
   return COMBO_TIER_SHARE[legTier(l)];
 }
-
-/** 🔎 L'ÉTAPE EN COURS d'un exo — ce que les filtres du 360 regroupent. Étapes DISJOINTES,
- *  dans l'ordre des couleurs des cases :
- *  - `secondary` : les séries de base (argent) ne sont pas toutes faites ;
- *  - `principal` : il reste des séries JAUNES (objectif pas atteint) ;
- *  - `done`      : objectif atteint (`legComplete`), plus rien à saisir.
- *  Sur un petit objectif, le repère secondaire EST l'objectif : il n'y a pas de zone
- *  secondaire, l'exo commence directement en `principal`. */
-export type LegStage = 'secondary' | 'principal' | 'done';
-export function legStage(l: ComboLeg): LegStage {
-  if (l.target <= 0) return 'secondary';
-  if (legComplete(l)) return 'done';
-  // ⚠️ Lu sur le REPÈRE AFFICHÉ (`legTierMarks`), pas sur la fraction : un exo en durée a son
-  // repère aligné sur ses bulles (le palier de récompense, lui, reste à 80 % — `legTier`).
-  const m = legTierMarks(l);
-  if (m.sec === m.principal) return 'principal';
-  return legDone(l) >= m.sec ? 'principal' : 'secondary';
-}
-
-/** Repères AFFICHÉS des paliers d'un exo (nombre de séries/reps à atteindre).
- *
- *  `ceil` et NON `round` : atteindre le nombre affiché doit RÉELLEMENT décrocher le
- *  palier. Avec `round`, un objectif de 9 affichait « Sec. 7 » alors que 7/9 = 78 % < 80 %. */
+/** Repères des paliers d'un exo (nombre de séries/reps/secondes à atteindre). `ceil` et NON
+ *  `round` : atteindre le nombre affiché doit RÉELLEMENT décrocher le palier (9 → « sec. 8 »,
+ *  pas 7 : 7/9 = 78 % < 80 %). Plus aucune couleur de palier à l'écran (v1.343.0) : ne sert
+ *  qu'à l'export texte du défi. */
 export function legTierMarks(l: ComboLeg): { sec: number; principal: number } {
   const t = Math.max(0, l.target);
-  // Exo en DURÉE : le repère tombe à la fin de sa dernière bulle grise (en secondes), comme les
-  // cases d'un exo de N séries — sinon la barre et les bulles ne diraient pas la même chose.
-  if (legMode(l) === 'time') {
-    const { count, secBubbles } = timeBubbleSplit(t);
-    return {
-      sec: secBubbles >= count ? t : Math.min(t, secBubbles * COMBO_HOLD_SEC),
-      principal: t,
-    };
-  }
   return { sec: Math.max(1, Math.ceil(t * COMBO_TIER_SECONDARY)), principal: t };
-}
-
-/** Bulles d'un exo en durée : leur nombre et combien sont grises (même règle qu'un exo de
- *  `count` séries : 80 % arrondis au-dessus ; une seule zone sur un tout petit objectif). */
-function timeBubbleSplit(target: number): { count: number; secBubbles: number } {
-  const count = Math.ceil(Math.max(0, target) / COMBO_HOLD_SEC);
-  return { count, secBubbles: Math.max(1, Math.ceil(count * COMBO_TIER_SECONDARY)) };
-}
-
-/** Palier qu'une CASE de la barre de séries fait avancer (la n-ième série, n ≥ 1).
- *  C'est la COULEUR des cases qui dit le palier : la case « secondaire » est exactement celle
- *  qui débloque le palier secondaire (même source que `legTier`). `beyond` = une série au-delà
- *  de l'objectif, possible seulement sur un 360 d'avant la v1.53 (plus aucune ne s'ajoute). */
-export type SegZone = 'secondary' | 'principal' | 'beyond';
-export function legSegZone(l: ComboLeg, n: number): SegZone {
-  const m = legTierMarks(l);
-  if (n > m.principal) return 'beyond';
-  // Sur un tout petit objectif le repère secondaire EST l'objectif : pas de zone secondaire.
-  if (n > m.sec || m.sec === m.principal) return 'principal';
-  return 'secondary';
 }
 
 /**
@@ -772,121 +724,27 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
   };
 }
 
-/** 🎨 LA BARRE DU 360 PAR ZONE : de 0 à 100 %, la part des séries de base (argent, jusqu'à
- *  80 %) et de l'objectif (jaune, 80 → 100 %), SOMMÉES sur tous les exos. Chaque exo apporte
- *  ce qu'il a fait dans chaque zone, borné à son objectif.
- *
- *  Valeurs en % de la LARGEUR de la barre. ⚠️ Ce n'est PAS tout à fait le % affiché en gros
- *  (`comboProgressPct`, au dixième, qui ne ment pas aux bornes) : la barre montre OÙ en est
- *  chaque zone, le chiffre dit si l'objectif est bouclé. */
-export function comboBarParts(c: ComboChallenge): {
-  sec: number;
-  obj: number;
-  secLen: number;
-  objLen: number;
-} {
-  const n = c.legs.length;
-  if (!n) return { sec: 0, obj: 0, secLen: 0, objLen: 100 };
-  // ⚠️ LES BARRES SUIVENT LES VRAIES CASES (signalé : « la barre grise n'est pas complète alors
-  // qu'il ne me reste que des séries d'objectif »). Chaque exo apporte 1/n ; sa part GRISE est
-  // celle de ses cases grises (`legTierMarks.sec` sur son objectif), le reste est jaune. Un exo
-  // sans case grise (objectif ≤ 4 : le repère secondaire EST l'objectif) est tout jaune. Avant :
-  // 80 % / 20 % fixes pour tous — ces exos retenaient la barre grise, et un exo de 9 séries
-  // dont les 8 grises sont faites entamait déjà le jaune. Sans avance fictive : la somme des
-  // deux remplissages reste la progression réelle (Σ fait / objectif).
-  let sec = 0,
-    obj = 0,
-    grey = 0;
-  for (const l of c.legs) {
-    const t = l.target;
-    if (t <= 0) continue;
-    const m = legTierMarks(l).sec;
-    const g = m < t ? m : 0; // cases grises, dans l'unité de l'exo
-    const d = Math.min(Math.max(0, legDone(l)), t);
-    grey += g / t;
-    sec += Math.min(d, g) / t;
-    obj += (d - Math.min(d, g)) / t;
-  }
-  const w = (x: number) => (x / n) * 100;
-  const secLen = w(grey);
-  return { sec: w(sec), obj: w(obj), secLen, objLen: 100 - secLen };
-}
-
-/** 🎨 LES DEUX BARRES DU 360 (secondaire · objectif), chacune en % de SA longueur.
- *
- *  ⚠️ LE ROSE = LE RETARD RÉEL (`comboPace`, en points d'objectif), RÉPARTI dans le vide de
- *  l'argent puis dans celui du jaune — jamais calculé barre par barre, sinon l'avance prise
- *  ailleurs ne réduisait pas le rose de l'argent.
- *
- *  Le trait « dans les temps » se pose au bout du rose quand on est en retard (c'est là qu'on
- *  devrait être), sinon à l'avancement attendu (`onTimePct`) sur l'échelle argent → jaune. */
-export interface ComboBarSegment {
-  id: 'sec' | 'obj';
-  /** Longueur relative = la part de cases grises / jaunes du défi (environ 80 · 20). */
-  len: number;
+/** 🎨 LA BARRE DU 360 : UNE SEULE BARRE (v1.343.0 ; demandé : avec la variété d'exos, les cibles
+ *  par exo sont petites et la zone « secondaire » n'est plus qu'une miette — elle n'avait plus
+ *  d'intérêt). Remplissage = l'avancement (le même chiffre que le grand pourcentage), rose = le
+ *  RETARD réel (`comboPace`) juste après, trait 🎯 = où l'on devrait en être. Tout en % de la
+ *  largeur. Pur. */
+export interface ComboBarState {
   fill: number;
   late: number;
   mark: number | null;
 }
-/** 🔎 LES BARRES FILTRENT : toucher une barre ne garde que les exos qui y travaillent.
- *  L'argent tant que les séries de base d'un exo ne sont pas faites, le jaune ensuite.
- *  Un exo TERMINÉ (`legStage` 'done') n'est dans AUCUNE zone (`null`) : il n'y travaille
- *  plus, donc le filtre « Objectif » ne le montre pas (demandé). Il reste visible sans filtre. */
-export type ComboBarZone = ComboBarSegment['id'];
-export type ComboLegFilter = 'all' | ComboBarZone;
-export function legBarZone(l: ComboLeg): ComboBarZone | null {
-  const st = legStage(l);
-  return st === 'done' ? null : st === 'secondary' ? 'sec' : 'obj';
-}
-/** Sans filtre (« all »), les exos TERMINÉS (objectif atteint, `legStage` 'done') passent en bas de la
- *  liste, chacun dans son ordre d'origine (demandé par l'utilisateur) : ce qui reste à faire
- *  est en tête. Avec un filtre, l'ordre par groupe est gardé tel quel. Copie, jamais en place. */
-export function filterLegsByZone<T extends ComboLeg>(legs: readonly T[], f: ComboLegFilter): T[] {
-  if (f !== 'all') return legs.filter((l) => legBarZone(l) === f);
-  return [
-    ...legs.filter((l) => legStage(l) !== 'done'),
-    ...legs.filter((l) => legStage(l) === 'done'),
-  ];
+export function comboBar(pace: ComboPace): ComboBarState {
+  const fill = Math.max(0, Math.min(100, pace.donePct));
+  const late = Math.max(0, Math.min(100 - fill, pace.latePct));
+  return { fill, late, mark: pace.showMark ? pace.onTimePct : null };
 }
 
-/** 🔎 Les CASES d'un exo qu'on montre sous un filtre de zone (demandé : « en filtrant secondaire
- *  ou objectif, n'afficher que les séries correspondantes »). Sans filtre : toutes, de 1 à
- *  `count`. « Secondaire » : les cases de la zone secondaire ; « Objectif » : celles de la zone
- *  principale. Les numéros restent ceux de la série (n ≥ 1) : libellés, corrections et « ＋ »
- *  visent toujours la bonne série. */
-export function legSegNumbers(l: ComboLeg, count: number, f: ComboLegFilter): number[] {
-  const all = Array.from({ length: Math.max(0, count) }, (_, i) => i + 1);
-  if (f === 'all') return all;
-  const zone: SegZone = f === 'sec' ? 'secondary' : 'principal';
-  return all.filter((n) => legSegZone(l, n) === zone);
-}
-
-export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {
-  const done = comboBarParts(c);
-  const { secLen, objLen } = done;
-  let reste = Math.max(0, pace.latePct);
-  const lateSec = Math.min(reste, Math.max(0, secLen - done.sec));
-  reste -= lateSec;
-  const lateObj = Math.min(reste, Math.max(0, objLen - done.obj));
-  // Où poser le trait, en points d'objectif, et dans quelle barre.
-  let mark: { id: 'sec' | 'obj'; at: number } | null = null;
-  if (pace.showMark) {
-    // Rose arrêté dans l'argent : le trait à son bout (l'avance prise dans le jaune le
-    // décale avant l'attendu). Rose qui déborde dans le jaune : son bout tombe PILE sur
-    // l'attendu (argent plein + jaune fait + rose = attendu), la règle générale suffit.
-    if (lateSec > 0 && lateObj === 0) mark = { id: 'sec', at: done.sec + lateSec };
-    else if (pace.onTimePct <= secLen) mark = { id: 'sec', at: pace.onTimePct };
-    else mark = { id: 'obj', at: pace.onTimePct - secLen };
-  }
-  const seg = (id: 'sec' | 'obj', len: number, d: number, late: number) => ({
-    id,
-    len,
-    // Zone sans aucune case (tous les exos sont tout jaunes) : rien à faire = complète.
-    fill: len > 0 ? Math.min(100, (d / len) * 100) : 100,
-    late: len > 0 ? (late / len) * 100 : 0,
-    mark: mark && mark.id === id && mark.at > 0 && mark.at < len ? (mark.at / len) * 100 : null,
-  });
-  return [seg('sec', secLen, done.sec, lateSec), seg('obj', objLen, done.obj, lateObj)];
+/** Les exos TERMINÉS (objectif atteint) passent en bas de la liste, chacun dans son ordre
+ *  d'origine (demandé par l'utilisateur) : ce qui reste à faire est en tête. Copie, jamais en
+ *  place. */
+export function legsDoneLast<T extends ComboLeg>(legs: readonly T[]): T[] {
+  return [...legs.filter((l) => !legComplete(l)), ...legs.filter((l) => legComplete(l))];
 }
 
 /** Géométrie de la barre continue (modes REPS et DURÉE), rapportée à l'objectif : `fillPct`
@@ -910,13 +768,14 @@ export const COMBO_HOLD_SEC = 30;
 
 /** Une bulle d'un exo en durée : `cap` = ses secondes à tenir (30, sauf la dernière quand
  *  l'objectif n'est pas un multiple de 30), `held` = ce qui y est déjà tenu, `fill` = `held / cap`
- *  (0..1). `zone` = la même couleur de palier que les cases des exos en séries. */
+ *  (0..1). */
 export interface TimeBubble {
   n: number;
   cap: number;
   held: number;
   fill: number;
-  zone: SegZone;
+  /** Au-delà de l'objectif (360 d'avant la v1.53). */
+  beyond: boolean;
 }
 
 /** 🫧 Les BULLES d'un exo en DURÉE, comme les cases des exos en séries (demandé : « le même
@@ -925,29 +784,19 @@ export interface TimeBubble {
  *  (`legDone`, en secondes) et rempli bulle après bulle : une série de 90 s remplit trois bulles,
  *  les séries elles-mêmes restent listées en pastilles sous la barre. Objectif non multiple de
  *  30 (anciens 360 à 40 s/série) : la dernière bulle est plus courte et se remplit sur SA durée.
- *  Au-delà de l'objectif (360 d'avant la v1.53) : des bulles `beyond`. Palier d'une bulle : la
- *  règle des cases d'un exo de N séries appliquée à N bulles (80 % secondaires, le reste
- *  principal). Sous un filtre de zone, seules les bulles de la zone. */
-export function legTimeBubbles(l: ComboLeg, f: ComboLegFilter = 'all'): TimeBubble[] {
+ *  Au-delà de l'objectif (360 d'avant la v1.53) : des bulles `beyond`. Aucune couleur de palier. */
+export function legTimeBubbles(l: ComboLeg): TimeBubble[] {
   const target = Math.max(0, l.target);
   const done = Math.max(0, legDone(l));
   const total = Math.max(target, done);
-  // Paliers comptés EN BULLES, exactement comme un exo de n séries (`legTierMarks`/`legSegZone`) :
-  // la même couleur que les cases des autres exos, quel que soit l'exo.
-  const { count, secBubbles } = timeBubbleSplit(target);
   const out: TimeBubble[] = [];
   for (let start = 0, n = 1; start < total; start += COMBO_HOLD_SEC, n++) {
     const inTarget = start < target;
     const cap = inTarget ? Math.min(COMBO_HOLD_SEC, target - start) : COMBO_HOLD_SEC;
     const held = Math.min(cap, Math.max(0, done - start));
-    let zone: SegZone = 'principal';
-    if (!inTarget) zone = 'beyond';
-    else if (secBubbles !== count && n <= secBubbles) zone = 'secondary';
-    out.push({ n, cap, held, fill: cap > 0 ? held / cap : 0, zone });
+    out.push({ n, cap, held, fill: cap > 0 ? held / cap : 0, beyond: !inTarget });
   }
-  if (f === 'all') return out;
-  const want: SegZone = f === 'sec' ? 'secondary' : 'principal';
-  return out.filter((b) => b.zone === want);
+  return out;
 }
 
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
