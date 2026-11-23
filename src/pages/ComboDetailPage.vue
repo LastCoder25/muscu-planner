@@ -153,15 +153,6 @@
               {{ isChronoOn(leg) ? 'Pause' : 'Démarrer' }}
               <span class="cc-time">{{ chronoDisplay(leg) }}</span>
             </button>
-            <HoldGameLauncher
-              compact
-              :exercise-id="leg.exercise_id"
-              :target-sec="holdTargetSec(leg)"
-              :elapsed-sec="isChronoOn(leg) ? chronoSec : 0"
-              :running="isChronoOn(leg)"
-              @start="toggleChrono(leg)"
-              @stop="toggleChrono(leg)"
-            />
           </template>
           <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
         </div>
@@ -330,7 +321,6 @@ import {
   isNoEquipmentExercise,
 } from '@/lib/challenges';
 import SetLogDialog from '@/components/SetLogDialog.vue';
-import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useLibraryStore } from '@/stores/library';
@@ -646,10 +636,6 @@ const chronoLegKey = ref<string | null>(null);
 const chronoSec = ref(0);
 const chronoRunning = ref(false);
 let chronoTick: ReturnType<typeof setInterval> | undefined;
-// 🎮 La durée d'une série de gainage (haut de la fourchette) cale la difficulté du jeu.
-function holdTargetSec(leg: ComboLeg): number {
-  return Math.max(30, legRepRange(leg, profileStore.profile?.objective).max);
-}
 function isChronoOn(leg: ComboLeg): boolean {
   return chronoRunning.value && chronoLegKey.value === leg.exercise_id;
 }

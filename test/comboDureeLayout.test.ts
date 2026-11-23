@@ -14,3 +14,20 @@ describe('⏱️ exo en durée : les bulles ne partagent pas leur ligne avec le 
     expect(css).toMatch(/\.cl-bottom\.stacked > :deep\(\.tb-bar\) \{\s*flex: none;/);
   });
 });
+
+describe('🎮 plus de jeu sur les exos en durée du Défi 360', () => {
+  it('ni l’onglet 🎯 ni la fiche du défi ne proposent le jeu', () => {
+    for (const p of ['../src/pages/ChallengesPage.vue', '../src/pages/ComboDetailPage.vue']) {
+      expect(src(p), p).not.toContain('HoldGameLauncher');
+      expect(src(p), p).not.toContain('holdTargetSec');
+    }
+  });
+  it('le chrono, lui, reste', () => {
+    for (const p of ['../src/pages/ChallengesPage.vue', '../src/pages/ComboDetailPage.vue']) {
+      expect(src(p), p).toContain('toggleChrono(leg)');
+    }
+  });
+  it('les défis classiques gardent leur jeu (hors périmètre)', () => {
+    expect(src('../src/pages/ChallengeDetailPage.vue')).toContain('HoldGameLauncher');
+  });
+});
