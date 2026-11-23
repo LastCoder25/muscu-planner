@@ -122,6 +122,20 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_plank_side: '/exercises/ex_plank_side.jpg',
   ex_glute_bridge_hold: '/exercises/ex_glute_bridge.jpg', // même mouvement que le pont fessier, tenu en haut
   ex_superman_hold: '/exercises/ex_superman.jpg', // même mouvement que le superman en reps, tenu
+  // 🧱 Tenues de contraction (migr. 0120) : le mouvement de l'exo en reps, figé dans sa position clé.
+  ex_curl_hold: '/exercises/ex_curl_dumbbell.jpg',
+  ex_curl_ez_hold: '/exercises/ex_curl_ez.jpg',
+  ex_lateral_raise_hold: '/exercises/ex_lateral_raise.jpg',
+  ex_squat_hold: '/exercises/ex_bw_squat.jpg',
+  ex_farmer_hold: '/exercises/ex_farmer_hold.jpg', // free-exercise-db « Farmers_Walk »
+  ex_knee_raise_hold: '/exercises/ex_hanging_leg_raise.jpg',
+  ex_leg_raise_hold: '/exercises/ex_leg_raise_floor.jpg',
+  ex_hollow_hold: '/exercises/ex_leg_raise_floor.jpg', // allongé, jambes et épaules décollées
+  ex_pushup_hold: '/exercises/ex_pushup.jpg',
+  ex_chinup_hold: '/exercises/ex_chinup.jpg',
+  ex_dead_hang: '/exercises/ex_pullup.jpg',
+  ex_calf_raise_hold: '/exercises/ex_calf_raise_bw.jpg',
+  ex_glute_bridge_single_hold: '/exercises/ex_glute_bridge_single.jpg',
   ex_dead_bug: '/exercises/ex_dead_bug.jpg',
   ex_bicycle_crunch: '/exercises/ex_bicycle_crunch.jpg',
   ex_leg_raise_floor: '/exercises/ex_leg_raise_floor.jpg',

@@ -17,6 +17,12 @@ const LOADABLE_HOLD_IDS: readonly string[] = [
   'ex_plank', // Gainage (planche)
   'ex_wall_sit', // Chaise
   'ex_glute_bridge_hold', // Pont fessier (tenue) — un disque sur les hanches
+  // Tenues de contraction CHARGÉES (migr. 0120) : ici le « lest » est la charge tenue (haltères, barre Z).
+  'ex_curl_hold', // Curl tenu à 90° (haltères)
+  'ex_curl_ez_hold', // Curl tenu à 90° (barre Z)
+  'ex_lateral_raise_hold', // Élévation latérale tenue
+  'ex_squat_hold', // Squat tenu, un haltère contre la poitrine
+  'ex_farmer_hold', // Tenue de charge : la charge EST l'exercice
 ];
 
 export function holdLoadable(exerciseId: string | null | undefined): boolean {

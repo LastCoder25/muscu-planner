@@ -678,6 +678,111 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Garde la nuque dans le prolongement du dos. Mieux vaut un petit décollage tenu qu’un grand cambré.',
   },
+  // 🧱 Tenues de contraction (migr. 0120) : on fige le muscle en position de contraction maximale.
+  ex_curl_hold: {
+    steps: [
+      'Debout, un haltère dans chaque main, coudes collés au corps.',
+      'Monte les haltères jusqu’à ce que les avant-bras soient à l’horizontale (coudes à 90°).',
+      'Tiens la position en gardant le biceps contracté, sans balancer le buste.',
+    ],
+    tip: 'Respire normalement, ne bloque pas ta respiration. Choisis une charge qui te laisse tenir toute la durée.',
+  },
+  ex_curl_ez_hold: {
+    steps: [
+      'Debout, barre Z tenue aux courbes, coudes collés au corps.',
+      'Monte la barre jusqu’à ce que les avant-bras soient à l’horizontale (coudes à 90°).',
+      'Tiens la position en gardant le biceps contracté, sans balancer le buste.',
+    ],
+    tip: 'Respire normalement, ne bloque pas ta respiration. Si les coudes s’écartent, la charge est trop lourde.',
+  },
+  ex_lateral_raise_hold: {
+    steps: [
+      'Debout, un haltère léger dans chaque main, bras le long du corps.',
+      'Monte les bras sur les côtés jusqu’à l’horizontale, coudes légèrement fléchis.',
+      'Tiens les bras à l’horizontale, épaules basses, sans hausser les trapèzes.',
+    ],
+    tip: 'Très léger : la brûlure arrive vite. Respire, et pose les haltères dès que les épaules montent vers les oreilles.',
+  },
+  ex_squat_hold: {
+    steps: [
+      'Pieds écartés à la largeur des épaules, pointes légèrement ouvertes.',
+      'Descends jusqu’à ce que les cuisses soient parallèles au sol, dos droit, talons plaqués.',
+      'Tiens la position, genoux dans l’axe des pieds, en respirant.',
+    ],
+    tip: 'Tu peux tenir un haltère contre la poitrine pour te charger. Remonte si les talons décollent.',
+  },
+  ex_farmer_hold: {
+    steps: [
+      'Debout, un haltère lourd dans chaque main, bras le long du corps.',
+      'Redresse-toi : épaules en arrière et basses, poitrine ouverte, ventre gainé.',
+      'Serre fort les poignées et tiens, sans pencher le buste d’un côté.',
+    ],
+    tip: 'Travail de l’avant-bras et du haut du dos. Respire par le ventre ; pose les haltères dès que la prise lâche.',
+  },
+  ex_knee_raise_hold: {
+    steps: [
+      'Suspendu à une barre, bras tendus, épaules actives (ne pends pas dans les articulations).',
+      'Monte les genoux jusqu’à la hauteur des hanches, cuisses à l’horizontale.',
+      'Tiens la position sans balancer, bassin légèrement enroulé.',
+    ],
+    tip: 'Trop dur : monte les genoux moins haut. Plus facile encore : le relevé de jambes tendues au sol.',
+  },
+  ex_leg_raise_hold: {
+    steps: [
+      'Allongé sur le dos, les mains sous les fesses ou le long du corps, bas du dos plaqué au sol.',
+      'Monte les jambes tendues jusqu’à environ 45°, à quelques dizaines de centimètres du sol.',
+      'Tiens la position sans que le bas du dos se cambre.',
+    ],
+    tip: 'Si le dos se creuse, plie un peu les genoux ou relève les jambes plus haut.',
+  },
+  ex_hollow_hold: {
+    steps: [
+      'Allongé sur le dos, bras tendus au-dessus de la tête, jambes tendues.',
+      'Plaque le bas du dos au sol, puis décolle les épaules et les jambes en « banane » inversée.',
+      'Tiens la position, ventre contracté, en respirant par petites inspirations.',
+    ],
+    tip: 'Plus les bras et les jambes sont bas, plus c’est dur. Commence bras le long du corps, genoux pliés.',
+  },
+  ex_pushup_hold: {
+    steps: [
+      'En position de pompe, mains sous les épaules, corps aligné.',
+      'Descends lentement jusqu’à ce que la poitrine soit à quelques centimètres du sol, coudes à 45°.',
+      'Tiens en bas, corps gainé, sans poser le ventre ni cambrer.',
+    ],
+    tip: 'Sur les genoux pour faciliter. Pose la poitrine un instant si tu lâches : c’est la tenue qui compte.',
+  },
+  ex_chinup_hold: {
+    steps: [
+      'Monte (ou saute) menton au-dessus de la barre, mains en supination (paumes vers toi).',
+      'Serre les omoplates vers le bas et tiens, coudes proches du corps.',
+      'Redescends en contrôle quand le menton passe sous la barre.',
+    ],
+    tip: 'Trop dur : monte en saut ou avec une chaise, ou tiens à mi-hauteur (bras à 90°).',
+  },
+  ex_dead_hang: {
+    steps: [
+      'Suspends-toi à une barre, mains en pronation, un peu plus larges que les épaules.',
+      'Bras tendus, corps immobile, pieds décollés ou posés sur une chaise pour alléger.',
+      'Tiens en gardant les épaules actives (légère traction vers le bas), pas relâchées.',
+    ],
+    tip: 'Travaille la prise et étire le dos. Descends dès que la prise glisse.',
+  },
+  ex_calf_raise_hold: {
+    steps: [
+      'Debout, pieds parallèles, une main en appui léger pour l’équilibre.',
+      'Monte sur la pointe des pieds, le plus haut possible.',
+      'Tiens en haut, mollets contractés, sans faire rouler les chevilles.',
+    ],
+    tip: 'Plus dur : sur une seule jambe, ou avec un haltère dans la main libre.',
+  },
+  ex_glute_bridge_single_hold: {
+    steps: [
+      'Allongé sur le dos, un pied au sol, genou plié, l’autre jambe tendue vers le plafond.',
+      'Pousse dans le talon pour monter le bassin jusqu’à l’alignement épaules-hanches-genou.',
+      'Tiens en haut, fessier contracté, bassin bien à l’horizontale.',
+    ],
+    tip: 'Si le bassin pivote, redescends un peu. Un côté à la fois : fais la même durée de l’autre côté.',
+  },
   ex_plank_side: {
     steps: [
       'Sur le côté, appui sur l’avant-bras, jambes tendues et empilées.',

@@ -135,6 +135,7 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_pushup_decline',
     'ex_pushup_wide',
     'ex_pushup_archer',
+    'ex_pushup_hold', // tenu en bas
   ],
   ['ex_dips', 'ex_dips_assisted', 'ex_dips_bench'], // dips / assistés (élastique) / sur banc
   // Tractions / tirage vertical (tractions, assistées élastique, tirage machine).
@@ -146,6 +147,7 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_chinup_biceps',
     'ex_pullup_neutral',
     'ex_pullup_wide',
+    'ex_chinup_hold', // tenue menton au-dessus de la barre
   ],
   // Squat : au poids du corps, chargé, élastique, goblet.
   [
@@ -155,11 +157,18 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_kb_goblet_squat',
     'ex_squat_sumo',
     'ex_squat_pistol_assisted',
+    'ex_squat_hold', // tenu en bas
   ],
   // Fentes : avant, arrière, marchées, bulgare (pied arrière surélevé).
   ['ex_bw_lunge', 'ex_lunge_reverse', 'ex_lunge_walking', 'ex_squat_bulgarian'],
   // Pont fessier : deux jambes, une jambe, hip thrust, tenue statique.
-  ['ex_glute_bridge', 'ex_glute_bridge_single', 'ex_hip_thrust', 'ex_glute_bridge_hold'],
+  [
+    'ex_glute_bridge',
+    'ex_glute_bridge_single',
+    'ex_hip_thrust',
+    'ex_glute_bridge_hold',
+    'ex_glute_bridge_single_hold',
+  ],
   // Superman : en reps (lombaires) / tenu (gainage dorsal).
   ['ex_superman', 'ex_superman_hold'],
   // Soulevé de terre roumain : deux jambes / une jambe.
@@ -182,6 +191,8 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_curl_concentration',
     'ex_curl_incline',
     'ex_curl_preacher_ez',
+    'ex_curl_hold', // tenu à 90° (haltères)
+    'ex_curl_ez_hold', // tenu à 90° (barre Z)
   ],
   // Triceps au front (barre droite / barre EZ).
   ['ex_skullcrusher', 'ex_skullcrusher_ez'],
@@ -194,15 +205,15 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
   // Développé épaules (haltères, kettlebell, militaire barre).
   ['ex_shoulder_press_db', 'ex_kb_press', 'ex_ohp_barbell', 'ex_arnold_press'],
   // Élévations latérales (haltères / élastique).
-  ['ex_lateral_raise', 'ex_lateral_raise_band'],
+  ['ex_lateral_raise', 'ex_lateral_raise_band', 'ex_lateral_raise_hold'],
   // Gainage de face / latéral.
   ['ex_plank', 'ex_plank_side'],
   // Crunch / bicycle crunch.
   ['ex_crunch', 'ex_bicycle_crunch'],
   // Relevé de jambes : suspendu / au sol.
-  ['ex_hanging_leg_raise', 'ex_leg_raise_floor'],
+  ['ex_hanging_leg_raise', 'ex_leg_raise_floor', 'ex_knee_raise_hold', 'ex_leg_raise_hold'],
   // Mollets debout (machine / poids du corps).
-  ['ex_calf_raise', 'ex_calf_raise_bw', 'ex_calf_raise_single'],
+  ['ex_calf_raise', 'ex_calf_raise_bw', 'ex_calf_raise_single', 'ex_calf_raise_hold'],
 ];
 
 // id de variante → clé de famille (= 1er id du groupe). Absent = pas de variante.
@@ -224,7 +235,8 @@ export function variantFamilyKey(exerciseId: string): string {
 // gainage à la durée. Les familles de variantes font foi ; le tirage vertical à la machine,
 // rangé avec les tractions, est chargé : exclu.
 const FRACTION_FAMILIES = new Set(['ex_pushup', 'ex_dips', 'ex_pullup']);
-const NOT_FRACTIONABLE = new Set(['ex_lat_pulldown']);
+// Les TENUES (au temps) rangées dans ces familles ne se fractionnent pas : 30 s de tenue n'est pas un geste court.
+const NOT_FRACTIONABLE = new Set(['ex_lat_pulldown', 'ex_pushup_hold', 'ex_chinup_hold']);
 export function fractionableExercise(exerciseId: string): boolean {
   return FRACTION_FAMILIES.has(variantFamilyKey(exerciseId)) && !NOT_FRACTIONABLE.has(exerciseId);
 }
