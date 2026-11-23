@@ -28,7 +28,9 @@ describe('🎮 plus de jeu sur les exos en durée du Défi 360', () => {
     }
     expect(src('../src/components/HoldTimerButton.vue')).toContain('data-test="hold-mode-chrono"');
   });
-  it('les défis classiques gardent leur jeu (hors périmètre)', () => {
-    expect(src('../src/pages/ChallengeDetailPage.vue')).toContain('HoldGameLauncher');
+  it('les défis classiques n’ont plus de jeu non plus (v1.346.1)', () => {
+    const s = src('../src/pages/ChallengeDetailPage.vue');
+    expect(s).not.toContain('HoldGameLauncher');
+    expect(s).not.toContain('holdGames');
   });
 });

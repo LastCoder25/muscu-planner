@@ -217,14 +217,6 @@
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
-              <HoldGameLauncher
-                :exercise-id="ch.exercise_id"
-                :target-sec="holdTargetSec"
-                :elapsed-sec="running ? Math.max(0, chronoSec - segStart) : 0"
-                :running="running"
-                @start="toggleChrono"
-                @stop="toggleChrono"
-              />
               <div class="chrono-hint">
                 ⏸️ Chaque <b>pause</b> enregistre une série (sa durée) dans le journal du jour.
               </div>
@@ -559,7 +551,6 @@ import { miniLineLabel } from '@/lib/combo';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
-import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import HoldTimerButton from '@/components/HoldTimerButton.vue';
 
 const route = useRoute();

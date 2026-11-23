@@ -88,10 +88,10 @@ async function mountIt(
     await nextTick();
   }
   html?.(host.innerHTML);
-  // ⚠️ ON DÉMONTE, et ce n'est pas de l'hygiène : `HoldGame` est le premier composant du
-  // projet à installer une boucle 60 Hz, qui sans ça tournerait jusqu'à la fin du fichier
-  // en retenant tout son scope. Et ça fait enfin PASSER le test par `onBeforeUnmount`,
-  // que rien ne couvrait — un composant qui plante au démontage restait vert.
+  // ⚠️ ON DÉMONTE, et ce n'est pas de l'hygiène : un composant qui installe une boucle ou un
+  // écouteur la laisserait tourner jusqu'à la fin du fichier en retenant tout son scope. Et ça
+  // fait PASSER le test par `onBeforeUnmount`, que rien ne couvrait — un composant qui plante au
+  // démontage restait vert.
   app.unmount();
   return err;
 }
@@ -3437,97 +3437,6 @@ describe('TrophiesPage — le mur de records', () => {
     );
     expect(err).toBeNull();
     expect(out).not.toContain('Records de force');
-  }, 30_000);
-});
-
-describe('HoldGame — les mini-jeux du gainage', () => {
-  it('se monte en cours de partie', async () => {
-    // ⚠️ CE QUI EST VRAIMENT ÉPROUVÉ ICI, c'est le SETUP : `HoldGame` porte un `watch`
-    // IMMÉDIAT, donc évalué pendant le setup, qui lit `score` — exactement la forme qui a
-    // fait tomber la Guilde (v0.910). Le contenu du `q-dialog`, lui, ne rend rien dans ce
-    // harnais (les composants Quasar n'y sont pas enregistrés) : c'est pour ça que les
-    // SCÈNES sont éprouvées séparément juste en dessous, elles, sur leur HTML.
-    const { default: HoldGame } = await import('@/components/HoldGame.vue');
-    expect(
-      await mountIt(HoldGame, {
-        modelValue: true,
-        game: 'repousse',
-        targetSec: 45,
-        elapsedSec: 12,
-        running: true,
-      }),
-    ).toBeNull();
-  }, 30_000);
-
-  it('se monte aussi fermé, et en pause', async () => {
-    const { default: HoldGame } = await import('@/components/HoldGame.vue');
-    for (const [modelValue, running] of [
-      [false, false],
-      [true, false],
-    ] as const) {
-      expect(
-        await mountIt(HoldGame, {
-          modelValue,
-          game: 'tri',
-          targetSec: 30,
-          elapsedSec: 0,
-          running,
-        }),
-      ).toBeNull();
-    }
-  }, 30_000);
-
-  it('chaque scène dessine vraiment ce qui arrive', async () => {
-    const { activeBeats, buildHoldPlan } = await import('@/lib/holdGames');
-    const scenes = {
-      repousse: () => import('@/components/hold/HoldSceneRepousse.vue'),
-      cadence: () => import('@/components/hold/HoldSceneCadence.vue'),
-      tri: () => import('@/components/hold/HoldSceneTri.vue'),
-    } as const;
-
-    for (const game of ['repousse', 'cadence', 'tri'] as const) {
-      const plan = buildHoldPlan(game, 45, 3);
-      const beat = plan.beats[6]!;
-      const beats = activeBeats(plan, beat.at, new Set());
-      expect(beats.length, `${game} : rien à dessiner`).toBeGreaterThan(0);
-
-      const { default: Scene } = await scenes[game]();
-      let out = '';
-      const err = await mountIt(
-        Scene,
-        { beats, pulse: { side: 'left', verdict: 'perfect', at: beat.at }, reduced: false },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      );
-      expect(err, `${game} : erreur de setup`).toBeNull();
-      // ⚠️ On lit le HTML : sans ça, une scène qui ne rendrait RIEN resterait verte et le
-      // test ne garderait que son propre montage.
-      expect(out.length, `${game} : scène vide`).toBeGreaterThan(80);
-    }
-  }, 30_000);
-});
-
-describe('HoldGameLauncher — le bouton 🎮 à côté du chrono', () => {
-  it("s'affiche sur un gainage à deux mains, pas ailleurs", async () => {
-    const { default: HoldGameLauncher } = await import('@/components/HoldGameLauncher.vue');
-    const render = async (exerciseId: string) => {
-      let out = '';
-      const err = await mountIt(
-        HoldGameLauncher,
-        { exerciseId, targetSec: 45, elapsedSec: 0, running: false },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      );
-      expect(err).toBeNull();
-      return out;
-    };
-    expect(await render('ex_plank')).toContain('hgl-btn');
-    // Le gainage latéral n'a qu'une main libre : pas de jeu (cf. HOLD_GAME_EXERCISES).
-    expect(await render('ex_side_plank')).not.toContain('hgl-btn');
   }, 30_000);
 });
 

@@ -3,7 +3,7 @@
 //
 // Un exo au temps (`unit:'time'`) mesure des SECONDES dans `reps`. Deux exos seulement
 // acceptent un lest (un gilet, un disque sur les cuisses) : la planche et la chaise. Table
-// EXPLICITE (patron de `HOLD_GAME_EXERCISES`) : jamais une heuristique sur l'unité, sinon
+// EXPLICITE : jamais une heuristique sur l'unité, sinon
 // le gainage latéral ou la corde à sauter proposeraient un lest.
 //
 // ⚠️ Ce lest n'est PAS de la force soulevée : « 10 kg × 60 s » n'a pas de 1RM (Epley y
