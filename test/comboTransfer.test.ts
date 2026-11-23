@@ -248,9 +248,13 @@ describe('refus', () => {
       comboTransferBlocker(c, 'ex_bench_barbell', { exercise: { ...pompes, time: true } }),
     ).toBe('modeMismatch');
   });
-  it('un mouvement déjà présent ailleurs dans le défi', () => {
+  it('le même exo déjà présent dans le défi', () => {
+    const dup = { ...pompes, exercise_id: 'ex_dips' };
+    expect(comboTransferBlocker(c, 'ex_bench_barbell', { exercise: dup })).toBe('alreadyIn');
+  });
+  it('une VARIANTE d’un exo présent est un autre exo : permise (comme à la création)', () => {
     const assist = { ...pompes, exercise_id: 'ex_dips_assisted' };
-    expect(comboTransferBlocker(c, 'ex_bench_barbell', { exercise: assist })).toBe('alreadyIn');
+    expect(comboTransferBlocker(c, 'ex_bench_barbell', { exercise: assist })).toBeNull();
   });
   it('vers lui-même, ou un exo absent', () => {
     expect(comboTransferBlocker(c, 'ex_bench_barbell', { leg: 'ex_bench_barbell' })).toBe(
@@ -349,21 +353,34 @@ describe('bascule du RESTE seulement (l’exo reste, ce qui manquait part)', () 
     expect(legSets(pu)).toHaveLength(0);
   });
 
-  it('refusé sans rien de fait, sans reste, ou vers une variante du même mouvement', () => {
+  it('refusé sans rien de fait, sans reste, ou vers un exo déjà présent', () => {
     expect(
-      comboTransferBlocker(combo([leg({}), dips()]), 'ex_bench_barbell', { leg: 'ex_dips' }, 'rest'),
+      comboTransferBlocker(
+        combo([leg({}), dips()]),
+        'ex_bench_barbell',
+        { leg: 'ex_dips' },
+        'rest',
+      ),
     ).toBe('nothingDone');
     const done = leg({ target: 2, sets: bench().sets });
     expect(
       comboTransferBlocker(combo([done, dips()]), 'ex_bench_barbell', { leg: 'ex_dips' }, 'rest'),
     ).toBe('nothingLeft');
     const d = combo([dips(), bench()]);
+    const dup = { ...pompes, exercise_id: 'ex_bench_barbell', exercise_name: 'Développé couché' };
+    expect(comboTransferBlocker(d, 'ex_dips', { exercise: dup }, 'rest')).toBe('alreadyIn');
     const assist = { ...pompes, exercise_id: 'ex_dips_assisted', exercise_name: 'Dips assistés' };
-    expect(comboTransferBlocker(d, 'ex_dips', { exercise: assist }, 'rest')).toBe('alreadyIn');
+    expect(comboTransferBlocker(d, 'ex_dips', { exercise: assist }, 'rest')).toBeNull();
   });
 
   it('en mode reps, le reste est converti dans l’unité de la cible', () => {
-    const r = leg({ count_mode: 'reps', target: 60, rep_min: 8, rep_max: 12, sets: [{ date: D1, reps: 20 }] });
+    const r = leg({
+      count_mode: 'reps',
+      target: 60,
+      rep_min: 8,
+      rep_max: 12,
+      sets: [{ date: D1, reps: 20 }],
+    });
     const p = comboTransferPlan(
       combo([r, dips()].map((l) => ({ ...l, count_mode: 'reps' as const }))),
       'ex_bench_barbell',

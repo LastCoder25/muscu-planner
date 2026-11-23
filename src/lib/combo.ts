@@ -12,7 +12,7 @@ import { localDayIso } from './localDay';
 import { bodyweightLoad } from './bodyweightLoad';
 import { holdLoadable } from './loadedHold';
 import { addDaysUtcIso } from './startDate';
-import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf, variantFamilyKey } from '@/data/combo';
+import { COMBO_SLOTS, comboSlot, comboSlotRank, swapSlotsOf } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -2019,7 +2019,7 @@ export const COMBO_TRANSFER_BLOCK_LABEL: Record<ComboTransferBlock, string> = {
   sameLeg: 'C’est déjà cet exo.',
   otherSlot: 'Seulement vers un exo du même groupe musculaire (ou des jambes entre elles).',
   modeMismatch: 'Les deux exos ne se comptent pas pareil (séries, reps ou durée).',
-  alreadyIn: 'Ce mouvement est déjà dans ton défi.',
+  alreadyIn: 'Cet exo est déjà dans ton défi.',
   nothingDone: 'Rien n’est encore fait sur cet exo : bascule-le en entier.',
   nothingLeft: 'Cet exo a déjà atteint son objectif : il ne reste rien à basculer.',
 };
@@ -2067,13 +2067,9 @@ export function comboTransferBlocker(
   if (e.exercise_id === fromId) return 'sameLeg';
   if (!transferSlotFor(from, e.muscle_primary)) return 'otherSlot';
   if (e.time !== (legMode(from) === 'time')) return 'modeMismatch';
-  // Le même mouvement déjà présent AILLEURS dans le défi (l'exo quitté, lui, s'en va : on
-  // peut passer des dips aux dips assistés — sauf s'il RESTE, en ne basculant que le reste).
-  const fam = variantFamilyKey(e.exercise_id);
-  if (
-    c.legs.some((l) => (scope === 'rest' || l !== from) && variantFamilyKey(l.exercise_id) === fam)
-  )
-    return 'alreadyIn';
+  // Le MÊME exo déjà présent dans le défi (v1.342.0 : une variante est un exo à part entière,
+  // comme à la création — on peut passer des dips aux dips assistés, ou garder les deux).
+  if (c.legs.some((l) => l.exercise_id === e.exercise_id)) return 'alreadyIn';
   return null;
 }
 
