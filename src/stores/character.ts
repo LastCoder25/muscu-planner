@@ -556,6 +556,7 @@ import {
   type Seals,
 } from '@/lib/ascension';
 import { singleFlight } from '@/lib/singleFlight';
+import { createWriteCoalescer } from '@/lib/deferredWrites';
 import { levelUpTickets, pullPayment, buildTickets, welcomeTicketsDue } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
 import { gearRefonteGifts } from '@/lib/gearMigration';
@@ -645,6 +646,9 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   async function loadMine() {
+    // Pendant une série, la fiche en mémoire est PLUS RÉCENTE que la base (l'écriture groupée
+    // n'est pas encore partie) : la relire l'écraserait et ferait perdre les lancers déjà joués.
+    if (deferDepth > 0 && row.value) return row.value;
     // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
     // jamais ce qu'on VEUT lire. Ici l'enjeu est double : `maybeSingle()` LÈVE une erreur si
     // plusieurs lignes reviennent, donc l'ajout d'une policy SELECT élargie sur `characters`
@@ -1275,8 +1279,54 @@ export const useCharacterStore = defineStore('character', () => {
    * ⚠️ Ce qu'un AUTRE appareil a écrit entre-temps n'est plus relu à chaque écriture : il
    * arrive au prochain chargement (`fetchMine`).
    */
+  // ── Écritures groupées d'une série (deferredWrites) ──
+  let deferDepth = 0;
+  let deferUid = '';
+  const coalescer = createWriteCoalescer(async (body) => {
+    const res = await supabase
+      .from('characters')
+      .update(body)
+      .eq('user_id', deferUid)
+      .select('updated_at')
+      .single();
+    if (res.error) throw res.error;
+  });
+  const trackedFlushes = new Set<Promise<void>>();
+  /** L'écriture groupée en vol compte comme une écriture en vol : les ticks de fond passent
+   *  leur tour (`tickMayWrite`) et les gestes du joueur l'attendent (`writesSettled`). */
+  function trackDeferredFlush() {
+    const p = coalescer.current();
+    if (!p || trackedFlushes.has(p)) return;
+    trackedFlushes.add(p);
+    inFlight.add(p);
+    void p.finally(() => {
+      trackedFlushes.delete(p);
+      inFlight.delete(p);
+    });
+  }
+  /** Ouvre une série : jusqu'à `endDeferredWrites`, les écritures de la fiche sont groupées. */
+  function beginDeferredWrites() {
+    deferDepth++;
+  }
+  /** Ferme une série et ATTEND que tout soit écrit. Rejette si l'écriture a échoué : l'appelant
+   *  prévient le joueur et relit la fiche (`fetchMine`) — ce qui n'est pas parti n'est pas en base. */
+  async function endDeferredWrites(): Promise<void> {
+    deferDepth = Math.max(0, deferDepth - 1);
+    if (deferDepth > 0) return;
+    await coalescer.flush();
+  }
+
   async function persist(userId: string, patch: Record<string, unknown>) {
     const echo = writtenEcho({ ...patch, updated_at: new Date().toISOString() });
+    // 🔁 SÉRIE EN COURS (×5, ×10, ×25, Labyrinthe en série) : on met la fiche à jour ICI, tout de
+    // suite, et l'écriture part en arrière-plan, GROUPÉE avec les suivantes (cf. deferredWrites).
+    if (deferDepth > 0) {
+      deferUid = userId;
+      row.value = normalizeRow(mergeWritten(row.value, echo));
+      coalescer.add(echo);
+      trackDeferredFlush();
+      return row.value;
+    }
     const req = Promise.resolve(
       supabase.from('characters').update(echo).eq('user_id', userId).select('updated_at').single(),
     );
@@ -7321,6 +7371,8 @@ export const useCharacterStore = defineStore('character', () => {
     heroBackAtBase,
     ownedLevel,
     applyRun,
+    beginDeferredWrites,
+    endDeferredWrites,
     applyBossWin,
     chooseReward,
     applyEndless,

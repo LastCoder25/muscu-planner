@@ -1685,7 +1685,10 @@ async function start(tier?: Labyrinth, inSeries = false): Promise<boolean> {
   const uid = auth.user?.id;
   if (!uid) return false;
   seriesRecap.value = null;
-  if (!inSeries) series.value = null;
+  if (!inSeries) {
+    series.value = null;
+    void endSeriesWrites();
+  }
   if (!labyUnlocked.value) {
     $q.notify({
       type: 'warning',
@@ -1867,14 +1870,40 @@ async function startAuto(tier: Labyrinth, inSeries = false): Promise<boolean> {
   }
   return ok;
 }
+// ✍️ ÉCRITURES GROUPÉES D'UNE SÉRIE : chaque run écrivait toute la fiche (~175 Ko pour un compte
+// avancé) et le suivant attendait. En série, la fiche se met à jour en mémoire et l'écriture part
+// groupée en arrière-plan ; on attend la fin à la clôture de la série.
+let seriesWrites = false;
+function beginSeriesWrites() {
+  if (seriesWrites) return;
+  seriesWrites = true;
+  char.beginDeferredWrites();
+}
+async function endSeriesWrites() {
+  if (!seriesWrites) return;
+  seriesWrites = false;
+  try {
+    await char.endDeferredWrites();
+  } catch {
+    $q.notify({
+      type: 'negative',
+      message: 'L’enregistrement de la série a échoué : on recharge ta fiche depuis la base.',
+    });
+    await char.fetchMine().catch(() => undefined);
+  }
+}
 // Lance `n` runs auto à la suite sur le palier. Chaque run paie SES clés à son lancement :
 // arrêter la série en route garde les clés des runs non joués.
 async function startSeries(tier: Labyrinth, n: number) {
   clearSeriesTimer();
   const total = Math.max(1, Math.floor(n));
   series.value = total > 1 ? { total, done: 0, cleared: 0, dead: 0, gold: 0, loot: [] } : null;
+  if (total > 1) beginSeriesWrites();
   const ok = await startAuto(tier, total > 1);
-  if (!ok) series.value = null;
+  if (!ok) {
+    series.value = null;
+    void endSeriesWrites();
+  }
 }
 function clearSeriesTimer() {
   if (seriesTimer) clearTimeout(seriesTimer);
@@ -1896,9 +1925,11 @@ function closeSeries(stop: string) {
   if (s && s.done > 1) seriesRecap.value = { ...s, loot: [...s.loot], stop };
   series.value = null;
   over.value = true;
+  void endSeriesWrites();
 }
 onBeforeUnmount(() => {
   clearSeriesTimer();
+  void endSeriesWrites();
   stopAuto();
   stopWalk();
   if (pulseTimer) clearTimeout(pulseTimer);
@@ -1990,6 +2021,7 @@ function replayAuto() {
 function returnToLobby() {
   clearSeriesTimer();
   series.value = null;
+  void endSeriesWrites();
   seriesRecap.value = null;
   stopAuto();
   over.value = false;

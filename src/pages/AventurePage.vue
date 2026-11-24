@@ -5157,12 +5157,25 @@ async function runBatch(
   const b = newBatch(name, kind, n);
   batch = b;
   batchRunning.value = true;
+  // ✍️ Écritures GROUPÉES : chaque lancer renvoyait toute la fiche (~175 Ko pour un compte avancé)
+  // et le suivant attendait. Ici la fiche se met à jour en mémoire, l'écriture part groupée en
+  // arrière-plan, et on attend la fin avant le récap.
+  char.beginDeferredWrites();
   try {
     for (let i = 0; i < n; i++) {
       if (!(await once())) break;
     }
   } finally {
     batch = null;
+    try {
+      await char.endDeferredWrites();
+    } catch {
+      $q.notify({
+        type: 'negative',
+        message: 'L’enregistrement de la série a échoué : on recharge ta fiche depuis la base.',
+      });
+      await char.fetchMine().catch(() => undefined);
+    }
     batchRunning.value = false;
   }
   if (b.runs < n)
