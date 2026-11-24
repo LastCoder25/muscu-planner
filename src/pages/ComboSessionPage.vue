@@ -250,7 +250,7 @@
             :suggested="nextTimeTarget(i)"
             @finish="(sec: number) => validateTimeSet(i, sec)"
           />
-          <span class="ec-prog"
+          <span class="ec-prog" :class="{ 'set-flash': isFlashExo(i) }"
             >{{ doneCount(i) }}/{{ exo.sets.length }} séries<template v-if="nextTimeTarget(i)">
               · vise {{ nextTimeTarget(i) }} s</template
             ></span
@@ -277,7 +277,11 @@
             v-for="(reps, j) in exo.sets"
             :key="j"
             class="s-set"
-            :class="{ done: isDone(i, j), next: nextStep?.exo === i && nextStep?.set === j }"
+            :class="{
+              done: isDone(i, j),
+              next: nextStep?.exo === i && nextStep?.set === j,
+              'set-flash': flashKey === `${i}-${j}`,
+            }"
             @click="validate(i, j, reps)"
           >
             <span v-if="isDone(i, j)">✓ {{ doneReps(i, j) }}</span>
@@ -821,6 +825,18 @@ const logAssistable = ref(false);
 const logHint = ref('');
 const logRepOptions = ref<number[] | undefined>(undefined);
 
+// ✨ Halo sur la série qu'on vient de valider (cette séance n'écrit dans le 360 qu'à la fin : le
+// halo du store ne peut pas servir ici, il est local à l'écran).
+const flashKey = ref<string | null>(null);
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+function flash(key: string) {
+  flashKey.value = key;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => (flashKey.value = null), 2200);
+}
+function isFlashExo(i: number): boolean {
+  return flashKey.value?.startsWith(`${i}-`) ?? false;
+}
 function validate(i: number, j: number, reps: number) {
   const exo = session.value[i];
   if (!exo) return;
@@ -862,6 +878,7 @@ function onLogSave(v: {
   const wasDone = !!prev;
   // Corriger une série ne change pas l'heure où elle a été faite.
   logged.value = { ...logged.value, [key]: { ...v, at: prev?.at ?? Date.now() } };
+  flash(key);
   if (!wasDone) restLeft.value = restSec.value; // repos après une NOUVELLE série
   if (validatedCount.value >= totalSets.value) {
     $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });
@@ -900,6 +917,7 @@ function validateTimeSet(i: number, sec: number) {
       at: Date.now(),
     },
   };
+  flash(`${i}-${j}`);
   restLeft.value = restSec.value;
   if (validatedCount.value >= totalSets.value)
     $q.notify({ type: 'positive', message: 'Toutes les séries faites 💪' });

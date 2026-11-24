@@ -174,7 +174,7 @@
         </button>
       </div>
 
-      <!-- ④ TERMINÉ : le minuteur est à 0, la sonnerie se répète. On valide à la main (« OK »),
+      <!-- ④ TERMINÉ : le minuteur est à 0, un bip a retenti. On valide à la main (« OK »),
            de loin ou pas : la série n'est enregistrée qu'à ce moment, à la durée visée. -->
       <div v-else class="hd-body hd-live" data-test="hold-done">
         <div class="hd-state done">Terminé !</div>

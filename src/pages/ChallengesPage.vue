@@ -477,6 +477,7 @@
                     beyond: n > leg.target,
                     moved: !!legSets(leg)[n - 1]?.origin,
                     today: isDoneToday(leg, n),
+                    'set-flash': isJustAdded(comboStore.justAdded, leg.exercise_id, n),
                   }"
                   :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
                   :title="
@@ -662,6 +663,7 @@ import {
   type ElasticBand,
   legSets,
   setIsToday,
+  isJustAdded,
   setOriginLabel,
   legRepRange,
   comboStopPlan,

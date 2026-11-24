@@ -316,6 +316,32 @@ export function ownSets(leg: ComboLeg): ComboSet[] {
 export function setIsToday(s: ComboSet, today: string): boolean {
   return s.date === today;
 }
+/** ✨ La série qu'on vient d'ajouter (halo de quelques secondes). index = rang dans legSets(). */
+export interface JustAdded {
+  exerciseId: string;
+  index: number;
+  /** Numéro croissant : distingue deux ajouts de suite sur la même case. */
+  key: number;
+}
+/** La série n°n (à partir de 1) de cet exo est-elle celle qu'on vient d'ajouter ? */
+export function isJustAdded(j: JustAdded | null | undefined, exerciseId: string, n: number): boolean {
+  return !!j && j.exerciseId === exerciseId && j.index === n - 1;
+}
+/** Les secondes (de, à) que couvre la série d'index i d'un exo en durée, dans le cumul des
+ *  bulles : elle commence là où s'arrêtait la somme des séries précédentes. */
+export function setSpan(l: ComboLeg, index: number): [number, number] {
+  const sets = legSets(l);
+  let from = 0;
+  for (let k = 0; k < index && k < sets.length; k++) from += sets[k]!.reps || 0;
+  return [from, from + (sets[index]?.reps || 0)];
+}
+/** La bulle b (30 s chacune) est-elle touchée par la tranche de secondes span ? Les bornes
+ *  qui se touchent seulement (une série de 0 à 30 s, la bulle suivante commence à 30) ne comptent pas. */
+export function bubbleInSpan(b: { n: number; cap: number }, span: [number, number] | null): boolean {
+  if (!span) return false;
+  const start = (b.n - 1) * COMBO_HOLD_SEC;
+  return span[1] > start && span[0] < start + b.cap;
+}
 /** Nombre de séries faites. */
 export function legSetsDone(leg: ComboLeg): number {
   return legSets(leg).length;

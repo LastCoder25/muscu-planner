@@ -101,6 +101,7 @@
               beyond: n > leg.target,
               moved: !!legSets(leg)[n - 1]?.origin,
               today: isDoneToday(leg, n),
+                    'set-flash': isJustAdded(combo.justAdded, leg.exercise_id, n),
             }"
             :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
             :title="
@@ -279,6 +280,7 @@ import {
   legMode,
   legSets,
   setIsToday,
+  isJustAdded,
   groupSetLines,
   miniLineLabel,
   setOriginLabel,

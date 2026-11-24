@@ -18,11 +18,15 @@ import {
   type ComboChallenge,
   type ComboLeg,
   type ElasticBand,
+  type JustAdded,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 import type { ComboChestRecord } from '@/lib/comboChest';
 import { useAuthStore } from '@/stores/auth';
 import { createLatestWriter } from '@/lib/latestWriter';
+
+/** Durée du halo sur la série qu'on vient de faire. */
+const FLASH_MS = 2200;
 
 export interface ComboRow extends ComboChallenge {
   user_id?: string;
@@ -47,6 +51,12 @@ export interface NewCombo {
 export const useComboStore = defineStore('combo', () => {
   const list = ref<ComboRow[]>([]);
   const loaded = ref(false);
+  /** ✨ La dernière série ajoutée, pendant FLASH_MS : les écrans l'entourent d'un halo pour dire
+   *  « c'est celle-là, sur cet exo ». Un seul point de départ (addSet) pour les quatre écrans qui
+   *  peuvent valider une série. Jamais persisté. */
+  const justAdded = ref<JustAdded | null>(null);
+  let flashSeq = 0;
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Défis 360 qui viennent de se FERMER bouclés — le déclencheur du coffre de fin.
    *  ⚠️ Une FILE et non un seul id : au chargement, plusieurs 360 dont la date est passée
@@ -202,6 +212,13 @@ export const useComboStore = defineStore('combo', () => {
     // qui peuvent valider une série (donc quatre endroits où l'oublier), on émet ici et
     // un seul observateur, monté en permanence, s'en charge (`useComboChest`).
     refreshStatus(c);
+    // ✨ Halo sur la série posée. Une série saisie avec une heure PASSÉE (la séance générée
+    // enregistre toutes les siennes à la fin) ne flashe pas : l'utilisateur n'est plus dessus.
+    if (at === undefined) {
+      justAdded.value = { exerciseId, index: leg.sets.length - 1, key: ++flashSeq };
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => (justAdded.value = null), FLASH_MS);
+    }
     legsWriter.schedule(id);
   }
 
@@ -320,6 +337,7 @@ export const useComboStore = defineStore('combo', () => {
   return {
     list,
     loaded,
+    justAdded,
     closedChests,
     setChest,
     fetchMine,

@@ -123,3 +123,37 @@ body {
     --rk: var(--rank-#{$r});
   }
 }
+
+// ✨ Halo « je viens de faire cette série » (Défi 360) : un flash qui pulse autour de la case, pour
+// retrouver d'un coup d'œil QUELLE série de QUEL exo vient d'être posée. Posé par la classe
+// .set-flash, retirée par le store au bout de FLASH_MS. Mouvement réduit : un simple contour.
+@keyframes set-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--today);
+    transform: scale(1);
+  }
+  20% {
+    box-shadow:
+      0 0 0 3px var(--today),
+      0 0 18px 6px color-mix(in srgb, var(--today) 70%, transparent);
+    transform: scale(1.14);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 transparent,
+      0 0 0 0 transparent;
+    transform: scale(1);
+  }
+}
+.set-flash {
+  position: relative;
+  z-index: 2;
+  animation: set-flash 1.6s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .set-flash {
+    animation: none;
+    outline: 2px solid var(--today);
+    outline-offset: 1px;
+  }
+}

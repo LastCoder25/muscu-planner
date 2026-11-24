@@ -145,15 +145,13 @@ export function holdLoggedSec(view: HoldView): number {
   return view.phase === 'prep' ? 0 : view.heldSec;
 }
 
-export type HoldCue = 'tick' | 'go' | 'end' | 'alarm';
+export type HoldCue = 'tick' | 'go' | 'end';
 
 /**
  * Les signaux à émettre en passant de `prev` à `next` (appelé à chaque rafraîchissement).
  * - `tick` : les 3 dernières secondes avant le départ ET avant la fin d'un minuteur ;
  * - `go`   : la tenue commence ;
  * - `end`  : le minuteur arrive à sa cible.
- * - `alarm` : la sonnerie qui se RÉPÈTE ensuite jusqu'à la validation (émise par le composable,
- *   jamais par cette fonction : elle dépend du temps qui passe, pas d'un changement d'état).
  * Chacun une seule fois (comparaison des états, pas de l'horloge) : un rafraîchissement
  * tardif n'en émet pas deux, et un saut dans le temps n'invente pas de « tick ».
  */

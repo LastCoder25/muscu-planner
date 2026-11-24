@@ -13,6 +13,7 @@
         part: b.fill > 0 && b.fill < 1,
         beyond: b.beyond,
         'has-today': b.heldToday > 0,
+        'set-flash': bubbleInSpan(b, span),
       }"
     >
       <i v-if="b.fill > 0" class="tb-fill" :style="{ width: b.fill * 100 + '%' }" />
@@ -32,11 +33,18 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { legDone, legTimeBubbles, type ComboLeg } from '@/lib/combo';
+import { legDone, legTimeBubbles, setSpan, bubbleInSpan, type ComboLeg } from '@/lib/combo';
+import { useComboStore } from '@/stores/combo';
 import { logicalToday } from '@/lib/challenges';
 
 const props = defineProps<{ leg: ComboLeg }>();
 
+// ✨ Les bulles que couvre la série qu'on vient d'ajouter sur CET exo (halo de quelques secondes).
+const combo = useComboStore();
+const span = computed(() => {
+  const j = combo.justAdded;
+  return j && j.exerciseId === props.leg.exercise_id ? setSpan(props.leg, j.index) : null;
+});
 const bubbles = computed(() => legTimeBubbles(props.leg, logicalToday()));
 
 // L'unité vit dans le titre (survol / lecteur d'écran) : les bulles ne portent que le nombre.

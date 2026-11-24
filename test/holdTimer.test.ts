@@ -314,33 +314,20 @@ describe('useHoldTimer', () => {
     api.start();
     expect(beeps.length).toBe(1); // « go »
     vi.advanceTimersByTime(5_200);
-    // go (1) + tics 3, 2, 1 (3) + fin (2 bips)
-    expect(beeps.length).toBe(1 + 3 + 2);
+    // go (1) + tics 3, 2, 1 (3) + fin (1 bip)
+    expect(beeps.length).toBe(1 + 3 + 1);
     expect(vibrate).toHaveBeenCalled();
 
-    // ⚠️ LA SONNERIE SE RÉPÈTE tant qu'on n'a pas validé (on est debout, loin de l'écran) :
-    // trois bips toutes les 2,5 s…
+    // ⚠️ UN SEUL bip de fin (v1.350.0 : « juste un bip pour dire que c'est terminé ») : rien
+    // ensuite, ni sonnerie répétée ni rappel, jusqu'au « OK ».
     const atEnd = beeps.length;
-    vi.advanceTimersByTime(2_500);
-    expect(beeps.length).toBe(atEnd + 3);
-    vi.advanceTimersByTime(2_500);
-    expect(beeps.length).toBe(atEnd + 6);
-    // … jusqu'à « OK », qui la fait taire…
-    api.stop();
-    expect(finished).toEqual([5]);
-    const quiet = beeps.length;
-    vi.advanceTimersByTime(30_000);
-    expect(beeps.length).toBe(quiet);
-
-    // … mais pas indéfiniment : ~2 minutes, puis le silence (l'écran reste à 0).
-    beeps.length = 0;
-
-    api.settings.value = S({ mode: 'timer', targetSec: 5, prepSec: 0, signals: true });
-    api.start();
+    vibrate.mockClear();
     vi.advanceTimersByTime(10 * 60_000);
-    expect(beeps.length).toBe(1 + 3 + 2 + 48 * 3);
+    expect(beeps.length).toBe(atEnd);
+    expect(vibrate).not.toHaveBeenCalled();
     expect(api.finished.value).toBe(true);
     api.stop();
+    expect(finished).toEqual([5]);
 
     beeps.length = 0;
     vibrate.mockClear();
@@ -350,7 +337,7 @@ describe('useHoldTimer', () => {
     expect(beeps.length).toBe(0);
     expect(vibrate).not.toHaveBeenCalled();
     api.stop();
-    expect(finished).toEqual([5, 5, 5]);
+    expect(finished).toEqual([5, 5]);
   });
 });
 
