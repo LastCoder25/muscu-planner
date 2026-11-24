@@ -36,8 +36,16 @@ describe('⚙️ vercel.json', () => {
     ).toEqual(['main']);
   });
 
-  it('les assets hashés sont en cache long, immuables', () => {
-    expect(cacheOf('/assets/index-abc123.js')).toMatch(/max-age=31536000.*immutable/);
+  // ⚠️ v1.349.2 : AVANT, un an « immutable ». Un fichier demandé avant d'exister recevait la page
+  // d'accueil (ou un 404) que le téléphone gardait UN AN sans jamais revalider : « le démarrage
+  // est bloqué » revenait après chaque « Recharger ». Désormais une heure, puis revalidation en
+  // arrière-plan : la mauvaise réponse ne dure plus qu'une heure. Le quota (v0.1033) y perd des
+  // requêtes conditionnelles (304, sans corps), pas de la bande passante.
+  it('les assets hashés sont en cache une heure + revalidation en arrière-plan, JAMAIS immuables', () => {
+    const cc = cacheOf('/assets/index-abc123.js')!;
+    expect(cc).toMatch(/max-age=3600/);
+    expect(cc).toContain('stale-while-revalidate');
+    expect(cc).not.toContain('immutable');
   });
 
   it('les illustrations sont en cache (un jour)', () => {

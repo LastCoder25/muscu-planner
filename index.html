@@ -15,11 +15,38 @@
         function note(t) {
           if (errs.length < 5) errs.push(String(t).slice(0, 300));
         }
-        // 🔁 Un fichier de l'app (/assets/…) introuvable au DÉMARRAGE = une page périmée : on a
-        // redéployé, et le téléphone a gardé l'ancien index.html, dont les fichiers n'existent
-        // plus (signalé 2026-11-24 : « le démarrage est bloqué », index-…js introuvable). Un
-        // rechargement suffit (la page se revalide) : on le fait UNE fois, seul, au lieu
-        // d'attendre que l'utilisateur appuie sur le bouton. Garde de 60 s contre toute boucle.
+        // 🔁 Un fichier de l'app (/assets/…) introuvable au DÉMARRAGE (signalé 2026-11-24 : « le
+        // démarrage est bloqué », index-…js, combo-…js, challenges-…js introuvables, et ni
+        // « Recharger » ni « Réparer » n'y changeaient rien).
+        // ⚠️ Un simple rechargement NE SUFFIT PAS : le navigateur garde en cache, pour UN AN et
+        // sans jamais revalider (`immutable`), la mauvaise réponse reçue un jour pour ce nom de
+        // fichier (la page d'accueil renvoyée à la place du script, pendant un déploiement). On
+        // RETÉLÉCHARGE donc chaque fichier fautif en ignorant le cache (`cache: 'reload'`, qui
+        // remplace l'entrée), PUIS on recharge. Une seule fois seul (garde de 60 s : pas de boucle).
+        var failed = [];
+        function repairCache(done) {
+          var urls = failed.slice(0, 12);
+          var fired = false;
+          var fin = function () {
+            if (fired) return;
+            fired = true;
+            done();
+          };
+          if (!urls.length || typeof fetch !== 'function') return fin();
+          var left = urls.length;
+          var one = function () {
+            if (--left === 0) fin();
+          };
+          urls.forEach(function (u) {
+            fetch(u, { cache: 'reload' }).then(one, one);
+          });
+          setTimeout(fin, 6000); // réseau lent : on recharge quand même
+        }
+        function reloadNow() {
+          repairCache(function () {
+            location.reload();
+          });
+        }
         function reloadOnce() {
           try {
             var k = 'muscu:boot-reload';
@@ -29,14 +56,18 @@
           } catch (x) {
             return; // sans mémoire de session, pas de rechargement automatique (risque de boucle)
           }
-          location.reload();
+          // Un instant pour laisser TOUS les fichiers fautifs se déclarer (ils échouent ensemble).
+          setTimeout(reloadNow, 400);
         }
         // En CAPTURE : l'échec de chargement d'un script ne remonte pas jusqu'à window.
         window.addEventListener(
           'error',
           function (e) {
             var src = e.target && (e.target.src || e.target.href);
-            if (src && /\/assets\/[^/]+\.(js|css)(\?|$)/.test(src)) reloadOnce();
+            if (src && /\/assets\/[^/]+\.(js|css)(\?|$)/.test(src)) {
+              if (failed.indexOf(src) < 0) failed.push(src);
+              reloadOnce();
+            }
             if (src) note('ressource introuvable : ' + src.split('/').pop());
             else
               note(
@@ -71,9 +102,7 @@
           row.className = 'st-row';
           var b1 = document.createElement('button');
           b1.textContent = 'Recharger';
-          b1.onclick = function () {
-            location.reload();
-          };
+          b1.onclick = reloadNow;
           var b2 = document.createElement('button');
           b2.textContent = 'Réparer et recharger';
           b2.onclick = function () {
@@ -86,9 +115,7 @@
             } catch (x) {
               /* stockage indisponible */
             }
-            var done = function () {
-              location.reload();
-            };
+            var done = reloadNow;
             if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
               navigator.serviceWorker
                 .getRegistrations()

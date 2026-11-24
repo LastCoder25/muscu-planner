@@ -11,7 +11,12 @@
   "headers": [
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=604800"
+        }
+      ]
     },
     {
       "source": "/(exercises|champions|monsters|advgear|hero|icons|powers|militia)/(.*)",
@@ -23,5 +28,5 @@
       ]
     }
   ],
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/((?!assets/)[^.]*)", "destination": "/index.html" }]
 }

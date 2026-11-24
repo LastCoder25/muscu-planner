@@ -102,7 +102,7 @@ entrées datées et versionnées). ⚠️ **Lire le fichier du domaine AVANT de 
 c’est là que sont écrits les invariants mesurés, les pièges déjà rencontrés et les décisions de
 l’utilisateur. Une nouvelle décision s’ajoute À LA FIN du fichier de son domaine, pas ici.
 
-- [docs/domaines/architecture.md](docs/domaines/architecture.md) — Architecture et technique (stores, pages, layouts, PWA, tests, nav, thèmes, versionning) (30 entrées)
+- [docs/domaines/architecture.md](docs/domaines/architecture.md) — Architecture et technique (stores, pages, layouts, PWA, tests, nav, thèmes, versionning) (31 entrées)
 - [docs/domaines/social.md](docs/domaines/social.md) — Amis, boss entre amis, classement, notifications push (33 entrées)
 - [docs/domaines/sport.md](docs/domaines/sport.md) — Sport : Défi 360, challenges, séances, cardio, tennis, suivi corporel, accueil, stats, agenda, météo (70 entrées)
 - [docs/domaines/champions-gacha.md](docs/domaines/champions-gacha.md) — Champions, gacha, invocation, runes, éveil, ascension, sceaux, aventuriers, Panthéon (156 entrées)
