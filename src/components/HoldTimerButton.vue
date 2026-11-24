@@ -158,7 +158,7 @@
       </div>
 
       <!-- ③ TENUE -->
-      <div v-else class="hd-body hd-live" data-test="hold-run">
+      <div v-else-if="view.phase === 'run'" class="hd-body hd-live" data-test="hold-run">
         <div class="hd-state go">Tiens !</div>
         <div class="hd-big font-display" role="timer" aria-live="off" data-test="hold-time">
           {{ bigTime }}
@@ -171,6 +171,20 @@
         </div>
         <button type="button" class="hd-stop" data-test="hold-stop" @click="stop">
           Terminer
+        </button>
+      </div>
+
+      <!-- ④ TERMINÉ : le minuteur est à 0, la sonnerie se répète. On valide à la main (« OK »),
+           de loin ou pas : la série n'est enregistrée qu'à ce moment, à la durée visée. -->
+      <div v-else class="hd-body hd-live" data-test="hold-done">
+        <div class="hd-state done">Terminé !</div>
+        <div class="hd-big font-display" role="timer" aria-live="polite" data-test="hold-time">
+          {{ bigTime }}
+        </div>
+        <div class="hd-prog" aria-hidden="true"><span style="width: 100%" /></div>
+        <div class="hd-sub">{{ fmtHold(view.heldSec) }} tenues</div>
+        <button type="button" class="hd-stop ok" data-test="hold-ok" @click="stop">
+          OK · valider la série
         </button>
       </div>
     </div>
@@ -233,7 +247,8 @@ const bigTime = computed(() => {
 const buttonText = computed(() => {
   const v = view.value;
   if (!v) return props.variant === 'chip' ? 'Tenue' : 'Lancer la tenue';
-  return v.phase === 'prep' ? `${v.prepLeft} s` : bigTime.value;
+  if (v.phase === 'prep') return `${v.prepLeft} s`;
+  return v.phase === 'done' ? 'Terminé · OK' : bigTime.value;
 });
 
 // La tenue tourne alors que l'écran plein format est fermé (retour forcé) : on le rouvre.
@@ -448,6 +463,10 @@ watch(active, (a) => {
   &.go {
     color: var(--accent);
   }
+  &.done {
+    color: var(--d1, #7bc86c);
+    font-size: 28px;
+  }
 }
 .hd-big {
   font-size: clamp(96px, 38vw, 220px);
@@ -488,6 +507,12 @@ watch(active, (a) => {
     background: transparent;
     border: 1.5px solid var(--line);
     color: var(--text);
+  }
+  &.ok {
+    min-height: 80px;
+    font-size: 22px;
+    background: var(--d1, #7bc86c);
+    color: #10231a;
   }
 }
 @media (prefers-reduced-motion: no-preference) {

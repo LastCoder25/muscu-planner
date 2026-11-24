@@ -35,12 +35,19 @@ const CUE_BEEP: Record<HoldCue, { hz: number; ms: number; times: number }> = {
   tick: { hz: 660, ms: 110, times: 1 },
   go: { hz: 990, ms: 380, times: 1 },
   end: { hz: 880, ms: 220, times: 2 },
+  // La sonnerie de fin : plus aiguë et plus longue, pour s'entendre depuis le sol.
+  alarm: { hz: 1175, ms: 260, times: 3 },
 };
 const CUE_VIBRATE: Record<HoldCue, number[]> = {
   tick: [50],
   go: [220],
   end: [200, 100, 200],
+  alarm: [300, 120, 300, 120, 300],
 };
+/** La sonnerie de fin se répète tant qu'on n'a pas validé (téléphone posé, on ne regarde pas
+ *  l'écran), mais pas indéfiniment : ~2 minutes, puis le silence — l'écran reste à 0. */
+const ALARM_EVERY_MS = 2500;
+const ALARM_MAX = 48;
 
 /**
  * Le minuteur / chrono d'UNE tenue à la fois, partagé par tous les écrans qui en ont une
@@ -50,7 +57,8 @@ const CUE_VIBRATE: Record<HoldCue, number[]> = {
  * - `start()` : à appeler depuis un TOUCHER (le navigateur n'autorise le son qu'après un geste).
  * - `stop()` : « j'ai fini » — enregistre le temps réellement tenu (rien pendant la préparation).
  * - `cancel()` : on abandonne, rien n'est enregistré.
- * - Un minuteur qui arrive à sa cible s'enregistre TOUT SEUL (cible exacte).
+ * - Un minuteur qui arrive à sa cible NE S'ENREGISTRE PAS tout seul (v1.349.0) : l'écran reste à 0,
+ *   une sonnerie se répète, et la série s'enregistre à la cible EXACTE quand on valide (`stop()`).
  */
 export function useHoldTimer(onFinish: (sec: number) => void) {
   const settings = ref<HoldSettings>(readSettings());
@@ -72,6 +80,8 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
   const active = computed(() => run.value !== null);
 
   let timer: ReturnType<typeof setInterval> | undefined;
+  let alarmTimer: ReturnType<typeof setInterval> | undefined;
+  let alarmCount = 0;
   let last: HoldView | null = null;
   let ctx: AudioContext | null = null;
   let wake: { release: () => Promise<void> } | null = null;
@@ -118,9 +128,29 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
     void w?.release().catch(() => undefined);
   }
 
+  function stopAlarm() {
+    clearInterval(alarmTimer);
+    alarmTimer = undefined;
+    alarmCount = 0;
+  }
+  function startAlarm() {
+    // Le compteur n'est remis à zéro que par stopAlarm (validation) : une sonnerie épuisée
+    // (count > ALARM_MAX) ne repart pas toute seule au rafraîchissement suivant.
+    if (alarmTimer || alarmCount > ALARM_MAX) return;
+    alarmTimer = setInterval(() => {
+      if (++alarmCount > ALARM_MAX) {
+        clearInterval(alarmTimer);
+        alarmTimer = undefined;
+        return;
+      }
+      beep('alarm');
+    }, ALARM_EVERY_MS);
+  }
+
   function clear() {
     clearInterval(timer);
     timer = undefined;
+    stopAlarm();
     run.value = null;
     last = null;
     unlockScreen();
@@ -133,11 +163,10 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
     const v = holdView(run.value, now.value);
     for (const cue of holdCues(last, v)) beep(cue);
     last = v;
-    if (v.phase === 'done') {
-      const sec = holdLoggedSec(v);
-      clear();
-      if (sec > 0) onFinish(sec);
-    }
+    // Minuteur arrivé à sa cible : on RESTE sur l'écran (à 0), la sonnerie se répète, et on
+    // n'enregistre qu'à la validation (« OK »). Ne pas enregistrer ici : celui qui est debout,
+    // loin du téléphone, ne doit pas voir sa série validée avant d'avoir entendu la sonnerie.
+    if (v.phase === 'done') startAlarm();
   }
   /** L'écran se rallume : on rattrape tout de suite (et on redemande le verrou d'écran, que le
    *  navigateur retire quand la page passe en arrière-plan). */
@@ -188,5 +217,7 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
     ctx = null;
   });
 
-  return { settings, view, active, start, stop, cancel };
+  const finished = computed(() => view.value?.phase === 'done');
+
+  return { settings, view, active, finished, start, stop, cancel };
 }

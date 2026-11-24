@@ -309,6 +309,13 @@ export function ownSets(leg: ComboLeg): ComboSet[] {
   // « blocs » valent 1, serait faux — c'est cette liste qui nourrit les deux.
   return legSets(leg).filter((s) => !s.origin && !s.mini);
 }
+/** 🔵 Une série faite AUJOURD'HUI (today = logicalToday(), le jour d'entraînement : il bascule à 4 h,
+ *  comme la date que addSet pose sur chaque série). Demandé : voir d'une AUTRE couleur ce qu'on a
+ *  fait dans la journée, et que le lendemain tout revienne à la couleur normale. Rien n'est stocké :
+ *  c'est la date de la série comparée à celle d'aujourd'hui, donc la bascule se fait toute seule. */
+export function setIsToday(s: ComboSet, today: string): boolean {
+  return s.date === today;
+}
 /** Nombre de séries faites. */
 export function legSetsDone(leg: ComboLeg): number {
   return legSets(leg).length;
@@ -774,6 +781,8 @@ export interface TimeBubble {
   cap: number;
   held: number;
   fill: number;
+  /** Part de held tenue AUJOURD'HUI (0 si today n'est pas donné). */
+  heldToday: number;
   /** Au-delà de l'objectif (360 d'avant la v1.53). */
   beyond: boolean;
 }
@@ -785,16 +794,23 @@ export interface TimeBubble {
  *  les séries elles-mêmes restent listées en pastilles sous la barre. Objectif non multiple de
  *  30 (anciens 360 à 40 s/série) : la dernière bulle est plus courte et se remplit sur SA durée.
  *  Au-delà de l'objectif (360 d'avant la v1.53) : des bulles `beyond`. Aucune couleur de palier. */
-export function legTimeBubbles(l: ComboLeg): TimeBubble[] {
+export function legTimeBubbles(l: ComboLeg, today?: string): TimeBubble[] {
   const target = Math.max(0, l.target);
   const done = Math.max(0, legDone(l));
+  // Les secondes tenues AUJOURD'HUI sont les dernières du cumul (les séries se posent à la suite) :
+  // before = ce qui était déjà tenu les jours précédents, la part du jour vient après.
+  const todaySec = today
+    ? legSets(l).reduce((a, x) => a + (setIsToday(x, today) ? x.reps || 0 : 0), 0)
+    : 0;
+  const before = Math.max(0, done - todaySec);
   const total = Math.max(target, done);
   const out: TimeBubble[] = [];
   for (let start = 0, n = 1; start < total; start += COMBO_HOLD_SEC, n++) {
     const inTarget = start < target;
     const cap = inTarget ? Math.min(COMBO_HOLD_SEC, target - start) : COMBO_HOLD_SEC;
     const held = Math.min(cap, Math.max(0, done - start));
-    out.push({ n, cap, held, fill: cap > 0 ? held / cap : 0, beyond: !inTarget });
+    const heldToday = Math.max(0, held - Math.min(cap, Math.max(0, before - start)));
+    out.push({ n, cap, held, fill: cap > 0 ? held / cap : 0, heldToday, beyond: !inTarget });
   }
   return out;
 }

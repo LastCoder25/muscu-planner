@@ -100,6 +100,7 @@
               next: n === legDone(leg) + 1,
               beyond: n > leg.target,
               moved: !!legSets(leg)[n - 1]?.origin,
+              today: isDoneToday(leg, n),
             }"
             :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
             :title="
@@ -277,6 +278,7 @@ import {
   legsDoneLast,
   legMode,
   legSets,
+  setIsToday,
   groupSetLines,
   miniLineLabel,
   setOriginLabel,
@@ -591,6 +593,11 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
 }
 /** Case de série touchée : une case FAITE s’ouvre pour être corrigée ou retirée, une case
  *  vide ajoute une série. */
+/** 🔵 La série n°n a été faite AUJOURD'HUI (couleur à part ; demain elle redevient normale). */
+function isDoneToday(leg: ComboLeg, n: number): boolean {
+  const s = legSets(leg)[n - 1];
+  return !!s && setIsToday(s, logicalToday());
+}
 function onSeg(leg: ComboLeg, n: number) {
   if (n <= legSetsDone(leg)) openEdit(leg, n - 1);
   else addFromBar(leg);
@@ -916,6 +923,13 @@ onMounted(async () => {
   border-style: solid;
   border-color: var(--d1);
   color: #10231a;
+}
+/* 🔵 Série faite AUJOURD'HUI : d'une autre couleur que celles d'avant (jaune). Après .beyond et
+   .tier-beyond : le jour prime. Le lendemain la classe disparaît d'elle-même (date ≠ aujourd'hui). */
+.seg.on.today {
+  background: var(--today);
+  border-color: var(--today);
+  color: var(--today-ink);
 }
 .leg-actions {
   display: flex;

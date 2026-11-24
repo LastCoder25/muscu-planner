@@ -199,17 +199,35 @@ describe('useHoldTimer', () => {
     expect(finished).toEqual([8]);
   });
 
-  it('minuteur : à la cible, la série s’enregistre TOUTE SEULE (cible exacte, une seule fois)', () => {
+  it('⚠️ minuteur : à la cible l’écran RESTE à 0 et rien n’est enregistré avant « OK » (cible exacte, une seule fois)', () => {
     mountTimer();
     api.settings.value = S({ mode: 'timer', targetSec: 20, prepSec: 5 });
     api.start();
     vi.advanceTimersByTime(5_000 + 19_900);
-    expect(finished).toEqual([]);
+    expect(api.finished.value).toBe(false);
     vi.advanceTimersByTime(200);
-    expect(finished).toEqual([20]);
+    // Arrivé : toujours actif, à 0, PAS enregistré (on est peut-être debout, loin du téléphone).
+    expect(finished).toEqual([]);
+    expect(api.active.value).toBe(true);
+    expect(api.finished.value).toBe(true);
+    expect(api.view.value?.remainingSec).toBe(0);
     vi.advanceTimersByTime(60_000);
+    expect(finished).toEqual([]);
+    api.stop(); // « OK »
     expect(finished).toEqual([20]);
     expect(api.active.value).toBe(false);
+    api.stop();
+    expect(finished).toEqual([20]);
+  });
+
+  it('quitter l’écran sans avoir validé un minuteur terminé garde la série (cible exacte)', () => {
+    mountTimer();
+    api.settings.value = S({ mode: 'timer', targetSec: 15, prepSec: 0 });
+    api.start();
+    vi.advanceTimersByTime(16_000);
+    expect(finished).toEqual([]);
+    app.unmount();
+    expect(finished).toEqual([15]);
   });
 
   it('arrêt anticipé d’un minuteur : le temps tenu, pas la cible', () => {
@@ -231,14 +249,16 @@ describe('useHoldTimer', () => {
     expect(finished).toEqual([45]); // un compteur « +1 par intervalle » aurait donné 0
   });
 
-  it('⚠️ au retour de l’écran, un minuteur échu depuis longtemps s’enregistre aussitôt', () => {
+  it('⚠️ au retour de l’écran, un minuteur échu depuis longtemps est à 0, en attente de « OK »', () => {
     mountTimer();
     api.settings.value = S({ mode: 'timer', targetSec: 30, prepSec: 5 });
     api.start();
     vi.setSystemTime(Date.now() + 120_000);
     document.dispatchEvent(new Event('visibilitychange'));
+    expect(finished).toEqual([]);
+    expect(api.finished.value).toBe(true);
+    api.stop();
     expect(finished).toEqual([30]);
-    expect(api.active.value).toBe(false);
   });
 
   it('quitter l’écran en pleine tenue garde ce qui a été tenu ; en préparation, rien', () => {
@@ -298,14 +318,39 @@ describe('useHoldTimer', () => {
     expect(beeps.length).toBe(1 + 3 + 2);
     expect(vibrate).toHaveBeenCalled();
 
+    // ⚠️ LA SONNERIE SE RÉPÈTE tant qu'on n'a pas validé (on est debout, loin de l'écran) :
+    // trois bips toutes les 2,5 s…
+    const atEnd = beeps.length;
+    vi.advanceTimersByTime(2_500);
+    expect(beeps.length).toBe(atEnd + 3);
+    vi.advanceTimersByTime(2_500);
+    expect(beeps.length).toBe(atEnd + 6);
+    // … jusqu'à « OK », qui la fait taire…
+    api.stop();
+    expect(finished).toEqual([5]);
+    const quiet = beeps.length;
+    vi.advanceTimersByTime(30_000);
+    expect(beeps.length).toBe(quiet);
+
+    // … mais pas indéfiniment : ~2 minutes, puis le silence (l'écran reste à 0).
+    beeps.length = 0;
+
+    api.settings.value = S({ mode: 'timer', targetSec: 5, prepSec: 0, signals: true });
+    api.start();
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(beeps.length).toBe(1 + 3 + 2 + 48 * 3);
+    expect(api.finished.value).toBe(true);
+    api.stop();
+
     beeps.length = 0;
     vibrate.mockClear();
     api.settings.value = S({ mode: 'timer', targetSec: 5, prepSec: 0, signals: false });
     api.start();
-    vi.advanceTimersByTime(5_200);
+    vi.advanceTimersByTime(30_000);
     expect(beeps.length).toBe(0);
     expect(vibrate).not.toHaveBeenCalled();
-    expect(finished).toEqual([5, 5]);
+    api.stop();
+    expect(finished).toEqual([5, 5, 5]);
   });
 });
 
@@ -355,7 +400,7 @@ describe('HoldTimerButton monté', () => {
     m.unmount();
   });
 
-  it('minuteur 20 s, départ dans 5 s : décompte, tenue, puis série enregistrée toute seule', async () => {
+  it('minuteur 20 s, départ dans 5 s : décompte, tenue, puis écran à 0 et « OK » qui enregistre', async () => {
     const m = await mount({ suggested: 25 });
     await m.tap('hold-mode-timer');
     expect(m.q('hold-target-25')?.textContent).toContain('🎯'); // l'objectif de la série est proposé
@@ -371,8 +416,18 @@ describe('HoldTimerButton monté', () => {
     expect(m.host.textContent).toContain('Tiens');
     vi.advanceTimersByTime(20_100);
     await nextTick();
+    // ⚠️ Il RESTE sur le minuteur, à 0, avec « OK » : rien d'enregistré tant qu'on n'a pas validé.
+    expect(m.got).toEqual([]);
+    expect(m.q('hold-run')).toBeNull();
+    expect(m.q('hold-done')).not.toBeNull();
+    expect(m.q('hold-time')?.textContent?.trim()).toBe('0:00');
+    expect(m.host.textContent).toContain('Terminé');
+    vi.advanceTimersByTime(30_000);
+    await nextTick();
+    expect(m.q('hold-done')).not.toBeNull(); // il attend, aussi longtemps qu'il faut
+    await m.tap('hold-ok');
     expect(m.got).toEqual([20]);
-    expect(m.q('hold-run')).toBeNull(); // l'écran est repassé aux réglages
+    expect(m.q('hold-done')).toBeNull();
     m.unmount();
   });
 

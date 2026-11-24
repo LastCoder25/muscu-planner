@@ -8,9 +8,23 @@
       v-for="b in bubbles"
       :key="b.n"
       class="tb"
-      :class="{ on: b.fill >= 1, part: b.fill > 0 && b.fill < 1, beyond: b.beyond }"
+      :class="{
+        on: b.fill >= 1,
+        part: b.fill > 0 && b.fill < 1,
+        beyond: b.beyond,
+        'has-today': b.heldToday > 0,
+      }"
     >
       <i v-if="b.fill > 0" class="tb-fill" :style="{ width: b.fill * 100 + '%' }" />
+      <!-- 🔵 La part tenue AUJOURD'HUI, d'une autre couleur, à droite de ce qui date d'avant. -->
+      <i
+        v-if="b.heldToday > 0"
+        class="tb-fill today"
+        :style="{
+          left: ((b.held - b.heldToday) / b.cap) * 100 + '%',
+          width: (b.heldToday / b.cap) * 100 + '%',
+        }"
+      />
       <span v-if="b.held > 0" class="tb-txt">{{ Math.round(b.held) }}</span>
     </span>
   </div>
@@ -19,10 +33,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { legDone, legTimeBubbles, type ComboLeg } from '@/lib/combo';
+import { logicalToday } from '@/lib/challenges';
 
 const props = defineProps<{ leg: ComboLeg }>();
 
-const bubbles = computed(() => legTimeBubbles(props.leg));
+const bubbles = computed(() => legTimeBubbles(props.leg, logicalToday()));
 
 // L'unité vit dans le titre (survol / lecteur d'écran) : les bulles ne portent que le nombre.
 const label = computed(
@@ -65,6 +80,9 @@ const label = computed(
   left: 0;
   background: var(--accent);
 }
+.tb-fill.today {
+  background: var(--today);
+}
 .tb.beyond .tb-fill {
   background: var(--d1);
 }
@@ -83,6 +101,9 @@ const label = computed(
 .tb.on {
   border-color: var(--accent);
   color: var(--accent-ink);
+}
+.tb.on.has-today {
+  border-color: var(--today);
 }
 .tb.on.beyond {
   border-color: var(--d1);
