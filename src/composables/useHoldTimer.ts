@@ -3,6 +3,7 @@ import {
   holdCues,
   holdLoggedSec,
   holdView,
+  extendHoldRun,
   parseHoldSettings,
   startHoldRun,
   type HoldCue,
@@ -180,6 +181,15 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
   function cancel() {
     clear();
   }
+  /** « J'en refais un peu » : allonge le minuteur en cours (pendant la tenue, ou même juste après
+   *  le bip : il repart). Sans effet en préparation, en chrono, ou sans tenue en cours. */
+  function extend(sec: number) {
+    const r = run.value;
+    if (!r || r.mode !== 'timer') return;
+    if (holdView(r, Date.now()).phase === 'prep') return;
+    run.value = extendHoldRun(r, sec);
+    refresh();
+  }
 
   // Quitter l'écran en pleine tenue : on garde ce qui a été tenu (comme l'ancien chrono).
   onBeforeUnmount(() => {
@@ -190,5 +200,5 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
 
   const finished = computed(() => view.value?.phase === 'done');
 
-  return { settings, view, active, finished, start, stop, cancel };
+  return { settings, view, active, finished, start, stop, cancel, extend };
 }

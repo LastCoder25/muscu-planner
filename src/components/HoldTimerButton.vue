@@ -169,6 +169,20 @@
         <div class="hd-sub">
           {{ settings.mode === 'timer' ? `tenu ${fmtHold(view.heldSec)}` : 'chrono' }}
         </div>
+        <!-- ➕ « Je suis en forme » : on rallonge le minuteur sans l'arrêter (le temps déjà tenu
+             est gardé, seule la cible recule). -->
+        <div v-if="settings.mode === 'timer'" class="hd-more" role="group" aria-label="Ajouter du temps">
+          <button
+            v-for="s in HOLD_EXTEND_CHOICES"
+            :key="s"
+            type="button"
+            class="hd-chip"
+            :data-test="`hold-extend-${s}`"
+            @click="extend(s)"
+          >
+            +{{ s }} s
+          </button>
+        </div>
         <button type="button" class="hd-stop" data-test="hold-stop" @click="stop">
           Terminer
         </button>
@@ -183,6 +197,19 @@
         </div>
         <div class="hd-prog" aria-hidden="true"><span style="width: 100%" /></div>
         <div class="hd-sub">{{ fmtHold(view.heldSec) }} tenues</div>
+        <!-- ➕ Encore un peu ? Le minuteur repart pour la durée ajoutée. -->
+        <div v-if="settings.mode === 'timer'" class="hd-more" role="group" aria-label="Ajouter du temps">
+          <button
+            v-for="s in HOLD_EXTEND_CHOICES"
+            :key="s"
+            type="button"
+            class="hd-chip"
+            :data-test="`hold-extend-${s}`"
+            @click="extend(s)"
+          >
+            +{{ s }} s
+          </button>
+        </div>
         <button type="button" class="hd-stop ok" data-test="hold-ok" @click="stop">
           OK · valider la série
         </button>
@@ -197,6 +224,7 @@ import { useHoldTimer } from '@/composables/useHoldTimer';
 import {
   bumpTarget,
   fmtHold,
+  HOLD_EXTEND_CHOICES,
   HOLD_PREP_CHOICES,
   HOLD_TARGET_CHOICES,
   HOLD_TARGET_MAX,
@@ -219,7 +247,7 @@ const emit = defineEmits<{ finish: [sec: number] }>();
 const open = ref(false);
 /** Ouvre l'écran de tenue depuis l'extérieur (le bouton « Prochaine série » d'une séance). */
 defineExpose({ openPanel: () => (open.value = true) });
-const { settings, view, active, start, stop, cancel } = useHoldTimer((sec) => {
+const { settings, view, active, start, stop, cancel, extend } = useHoldTimer((sec) => {
   emit('finish', sec);
   open.value = false;
 });
@@ -371,6 +399,13 @@ watch(active, (a) => {
 }
 .hd-emo {
   font-size: 20px;
+}
+.hd-more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
 }
 .hd-chips {
   display: flex;

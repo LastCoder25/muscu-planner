@@ -87,6 +87,19 @@ export function startHoldRun(settings: HoldSettings, now: number): HoldRun {
   };
 }
 
+/** Les rallonges proposées pendant un minuteur (« je suis en forme, j'en refais 15 s »). */
+export const HOLD_EXTEND_CHOICES = [15, 30, 60] as const;
+/** Plafond d'un minuteur ALLONGÉ (30 min) : au-dessus de la durée réglable (10 min), mais borné. */
+export const HOLD_EXTEND_MAX = 1800;
+
+/** Allonge un minuteur EN COURS de sec secondes (jamais au-delà de HOLD_EXTEND_MAX). Le départ
+ *  (startedAt) et la préparation ne bougent pas : le temps déjà tenu est conservé, seule la cible
+ *  recule. Un chrono n'a pas de cible : il est rendu tel quel. */
+export function extendHoldRun(run: HoldRun, sec: number): HoldRun {
+  if (run.mode !== 'timer' || !(sec > 0)) return run;
+  return { ...run, targetSec: Math.min(HOLD_EXTEND_MAX, run.targetSec + Math.round(sec)) };
+}
+
 type HoldPhase = 'prep' | 'run' | 'done';
 
 export interface HoldView {
