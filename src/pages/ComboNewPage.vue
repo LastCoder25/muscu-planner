@@ -492,7 +492,7 @@
                     type="button"
                     :aria-label="'Une série de moins pour ' + e.name"
                     :data-test="'less-' + e.id"
-                    @click="moveShare(key, e.id, -1)"
+                    @click="nudgeShare(key, e.id, -1)"
                   >
                     −
                   </button>
@@ -503,7 +503,7 @@
                     type="button"
                     :aria-label="'Une série de plus pour ' + e.name"
                     :data-test="'more-' + e.id"
-                    @click="moveShare(key, e.id, 1)"
+                    @click="nudgeShare(key, e.id, 1)"
                   >
                     +
                   </button>
@@ -902,7 +902,7 @@ function shares(key: string): Record<string, number> {
   return p ? comboSplit(p.target, p.exercise_ids, p.alloc, 1) : {};
 }
 // ⇄ Déplace une part d'un exo à un autre : le TOTAL du groupe est fixe (le volume choisi).
-function moveShare(key: string, exId: string, d: 1 | -1) {
+function nudgeShare(key: string, exId: string, d: 1 | -1) {
   const p = picks[key];
   if (!p) return;
   Object.assign(p, comboMoveShare(p, exId, d, p.count_mode === 'reps' ? 10 : 1));
