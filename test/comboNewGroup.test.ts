@@ -32,6 +32,7 @@ const LIB = [
 
 async function run(
   act: (host: HTMLElement, created: { input: any }) => Promise<void>,
+  seed: { combo?: unknown; query?: string; level?: string } = {},
 ): Promise<{ host: HTMLElement; created: { input: any }; err: unknown }> {
   localStorage.clear();
   const pinia = createPinia();
@@ -45,7 +46,7 @@ async function run(
   const { useLogsStore } = await import('@/stores/logs');
   (useAuthStore() as any).user = { id: 'me' };
   (useProfileStore() as any).profile = {
-    experience: { level: 'intermediaire' },
+    experience: { level: seed.level ?? 'intermediaire' },
     objective: 'hypertrophie',
     available_equipment: [],
     sports: [],
@@ -54,7 +55,7 @@ async function run(
   (useLibraryStore() as any).fetchAll = async () => LIB;
   const created = { input: null as any };
   const cs = useComboStore() as any;
-  cs.list = [];
+  cs.list = seed.combo ? [seed.combo] : [];
   cs.fetchMine = async () => [];
   cs.create = async (input: unknown) => {
     created.input = input;
@@ -68,7 +69,7 @@ async function run(
     history: createMemoryHistory(),
     routes: [{ path: '/:all(.*)*', component: { render: () => null } }],
   });
-  await router.replace('/');
+  await router.replace('/' + (seed.query ?? ''));
   await router.isReady();
   const app = createApp({ render: () => h(ComboNewPage) });
   app.use(pinia);
@@ -247,6 +248,89 @@ describe('🧭 conseil de volume à la création (réglages et récap)', () => {
       await toRecap(h);
       expect(advice(h)).not.toBeNull();
       expect(h.innerHTML.indexOf('volume-advice')).toBeLessThan(h.innerHTML.indexOf('slot-card'));
+    });
+    expect(err).toBeNull();
+  }, 30_000);
+});
+
+describe('✏️ « Ajuster avant » : l’écran de création rouvert sur le dernier défi', () => {
+  const last = (over: Record<string, unknown> = {}) => ({
+    id: 'last',
+    name: 'Défi 360',
+    start_date: '2026-11-02',
+    duration_days: 5,
+    status: 'done',
+    legs: [
+      { slot: 'push', exercise_id: 'bench', exercise_name: 'Développé couché', rep_weight: 1, target: 5, count_mode: 'sets', sets: [] },
+      { slot: 'push', exercise_id: 'pushup', exercise_name: 'Pompes', rep_weight: 1, target: 2, count_mode: 'sets', sets: [] },
+      { slot: 'pull', exercise_id: 'row', exercise_name: 'Rowing', rep_weight: 1, target: 4, count_mode: 'sets', sets: [] },
+    ],
+    ...over,
+  });
+  async function runRepeat(
+    lastCombo: unknown,
+    query: string,
+    act: (host: HTMLElement, created: { input: any }) => Promise<void>,
+  ) {
+    // Niveau « avancé » : différent du niveau de départ de l'écran, donc les réglages CHANGENT au
+    // chargement et relancent le plan — c'est précisément ce que `keepRepeat` doit empêcher.
+    return run(async (h, c) => act(h, c), { combo: lastCombo, query, level: 'avance' });
+  }
+
+  it('ouvre le bilan avec les exos, la répartition et la durée du dernier défi, puis lance tel quel', async () => {
+    const { logicalToday } = await import('@/lib/challenges');
+    const { addDaysUtcIso } = await import('@/lib/startDate');
+    const tomorrow = addDaysUtcIso(logicalToday(), 1);
+    const { created, err } = await runRepeat(last(), '?repeat=last&start=' + tomorrow, async (h, c) => {
+      expect(h.querySelector('.slot-card')).not.toBeNull(); // on est au bilan
+      expect(h.querySelector('[data-test="split-total-push"]')?.textContent).toBe('7');
+      await click(h, '.foot-bar q-btn');
+      expect(c.input).not.toBeNull();
+    });
+    expect(err).toBeNull();
+    const input = created.input;
+    expect(input.duration_days).toBe(5);
+    expect(input.start_date).toBe(tomorrow); // la date choisie sur la carte suit
+    const t = Object.fromEntries(input.legs.map((l: any) => [l.exercise_id, l.target]));
+    expect(t).toEqual({ bench: 5, pushup: 2, row: 4 }); // la répartition 5/2 est gardée, pas 4/3
+  }, 30_000);
+
+  it('la répartition reste modifiable au bilan (total du groupe fixe)', async () => {
+    const { created, err } = await runRepeat(last(), '?repeat=last', async (h) => {
+      await click(h, '[data-test="more-pushup"]');
+      expect(h.querySelector('[data-test="split-total-push"]')?.textContent).toBe('7');
+      await click(h, '.foot-bar q-btn');
+    });
+    expect(err).toBeNull();
+    const t = Object.fromEntries(created.input.legs.map((l: any) => [l.exercise_id, l.target]));
+    expect(t.bench! + t.pushup!).toBe(7);
+    expect(t.pushup).toBe(3);
+  }, 30_000);
+
+  it('un défi par groupe se rouvre en mode groupe, cibles de groupe comprises', async () => {
+    const g = last({
+      legs: [
+        { slot: 'push', exercise_id: 'bench', exercise_name: 'Développé couché', rep_weight: 1, target: 0, count_mode: 'sets', sets: [] },
+        { slot: 'pull', exercise_id: 'row', exercise_name: 'Rowing', rep_weight: 1, target: 0, count_mode: 'sets', sets: [] },
+      ],
+      config: { mode: 'group', groups: [{ slot: 'push', target: 9 }, { slot: 'pull', target: 6 }] },
+    });
+    const { created, err } = await runRepeat(g, '?repeat=last', async (h) => {
+      expect(h.querySelector('[data-test="group-note-push"]')).not.toBeNull();
+      await click(h, '.foot-bar q-btn');
+    });
+    expect(err).toBeNull();
+    expect(created.input.config.mode).toBe('group');
+    expect(created.input.config.groups).toEqual([
+      { slot: 'push', target: 9 },
+      { slot: 'pull', target: 6 },
+    ]);
+  }, 30_000);
+
+  it('sans paramètre, l’écran s’ouvre aux réglages comme avant', async () => {
+    const { err } = await run(async (h) => {
+      expect(h.querySelector('.slot-card')).toBeNull();
+      expect(h.querySelector('[data-test="mode-exo"]')).not.toBeNull();
     });
     expect(err).toBeNull();
   }, 30_000);

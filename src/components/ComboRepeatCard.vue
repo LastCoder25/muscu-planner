@@ -62,7 +62,17 @@
       :disabled="!!blocked || busy"
       @click="emit('launch', startDate)"
     >
-      {{ busy ? 'Lancement…' : 'Relancer ce Défi 360' }}
+      {{ busy ? 'Lancement…' : 'Relancer tel quel' }}
+    </button>
+    <!-- ✏️ Même défi, mais on repasse par le bilan (exos, volume, répartition) avant de lancer. -->
+    <button
+      type="button"
+      class="rep-adjust"
+      data-test="repeat-adjust"
+      :disabled="busy"
+      @click="emit('adjust', startDate)"
+    >
+      ✏️ Ajuster avant
     </button>
   </section>
 </template>
@@ -87,7 +97,7 @@ const props = defineProps<{
   blocked?: string | null;
   busy?: boolean;
 }>();
-const emit = defineEmits<{ launch: [startDate: string] }>();
+const emit = defineEmits<{ launch: [startDate: string]; adjust: [startDate: string] }>();
 
 const MAX_NAMES = 6;
 const today = logicalToday();
@@ -214,6 +224,21 @@ function pick(d: string): void {
   border: 0;
   border-radius: 12px;
   cursor: pointer;
+}
+.rep-adjust {
+  min-height: 48px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.rep-adjust:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .rep-go:disabled {
   opacity: 0.45;

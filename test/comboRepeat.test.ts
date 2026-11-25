@@ -144,3 +144,72 @@ describe('repeatBlocker', () => {
     ).toBeNull();
   });
 });
+
+// ── ✏️ « Ajuster avant » : le dernier défi remis en choix de l'écran de création ─────────────────
+import { comboRepeatDraft } from '@/lib/comboRepeat';
+
+describe('comboRepeatDraft', () => {
+  const ALL = new Set(['ex_pushup', 'ex_dips', 'ex_plank', 'ex_row', 'ex_curl']);
+  const legs = [
+    leg({ exercise_id: 'ex_pushup', exercise_name: 'Pompes', target: 5 }),
+    leg({ exercise_id: 'ex_dips', exercise_name: 'Dips', target: 3 }),
+    leg({ slot: 'core', exercise_id: 'ex_plank', exercise_name: 'Gainage', target: 90, count_mode: 'time' }),
+  ];
+
+  it('mode par exercice : exos par groupe, volume = somme des parts, répartition reprise telle quelle', () => {
+    const d = comboRepeatDraft(combo({ duration_days: 5, legs }), ALL);
+    expect(d.mode).toBe('exo');
+    expect(d.duration).toBe(5);
+    expect(d.picks.push).toMatchObject({
+      exercise_ids: ['ex_pushup', 'ex_dips'],
+      target: 8,
+      setsTarget: 8,
+      count_mode: 'sets',
+      alloc: { ex_pushup: 5, ex_dips: 3 }, // pas un partage égal : la répartition choisie est gardée
+    });
+    expect(d.missing).toEqual([]);
+  });
+  it('une tenue au temps compte en séries de 30 s (90 s = 3 séries)', () => {
+    const d = comboRepeatDraft(combo({ legs }), ALL);
+    expect(d.picks.core).toMatchObject({ exercise_ids: ['ex_plank'], target: 3, alloc: { ex_plank: 3 } });
+  });
+  it('un exo en reps : le groupe passe en reps, le volume en séries sert de repli', () => {
+    const d = comboRepeatDraft(
+      combo({ legs: [leg({ target: 100, count_mode: 'reps', rep_min: 8, rep_max: 12 })] }),
+      ALL,
+    );
+    expect(d.picks.push).toMatchObject({ count_mode: 'reps', target: 100, setsTarget: 10 }); // 100 reps / 10
+  });
+  it('mode par groupe : le volume est celui du groupe, sans répartition par exo', () => {
+    const d = comboRepeatDraft(
+      combo({
+        legs: legs.map((l) => ({ ...l, target: 0, count_mode: 'sets' as const })),
+        config: { mode: 'group', groups: [{ slot: 'push', target: 12 }, { slot: 'core', target: 6 }] },
+      }),
+      ALL,
+    );
+    expect(d.mode).toBe('group');
+    expect(d.picks.push).toMatchObject({ exercise_ids: ['ex_pushup', 'ex_dips'], target: 12, setsTarget: 12 });
+    expect(d.picks.push!.alloc).toBeUndefined();
+    expect(d.picks.core!.target).toBe(6);
+  });
+  it('le dernier poids utilisé est repris', () => {
+    const d = comboRepeatDraft(
+      combo({ legs: [leg({ weight_kg: 10, sets: [{ date: '2026-11-03', reps: 8, weight: 30 }] })] }),
+      ALL,
+    );
+    expect(d.picks.push!.weight_kg).toBe(30);
+  });
+  it('un exo qui n’est plus disponible est signalé et retiré ; un groupe vidé disparaît', () => {
+    const d = comboRepeatDraft(combo({ legs }), new Set(['ex_pushup']));
+    expect(d.picks.push!.exercise_ids).toEqual(['ex_pushup']);
+    expect(d.picks.push!.target).toBe(5);
+    expect(d.picks.core).toBeUndefined();
+    expect(d.missing).toEqual(['Dips', 'Gainage']);
+  });
+  it('ne modifie jamais le défi d’origine', () => {
+    const last = combo({ legs });
+    comboRepeatDraft(last, ALL);
+    expect(last.legs).toEqual(legs);
+  });
+});

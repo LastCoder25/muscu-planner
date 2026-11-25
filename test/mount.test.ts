@@ -3810,7 +3810,7 @@ describe('🔁 Relancer le dernier Défi 360 (ComboRepeatCard)', () => {
     expect(out).toContain("Aujourd'hui");
     expect(out).toContain('Demain');
     expect(out).toContain('type="date"');
-    expect(out).toContain('Relancer ce Défi 360');
+    expect(out).toContain('Relancer tel quel');
     expect(out).not.toContain('repeat-blocked');
   }, 30_000);
   it('un choix de départ puis « Relancer » émet la date choisie', async () => {
@@ -3830,6 +3830,22 @@ describe('🔁 Relancer le dernier Défi 360 (ComboRepeatCard)', () => {
       h.querySelector<HTMLButtonElement>('[data-test="repeat-go"]')?.click();
     });
     expect(got2[0]).not.toBe(today);
+  }, 30_000);
+  it('« Ajuster avant » émet la date choisie, sans lancer', async () => {
+    const adjust: string[] = [];
+    const launch: string[] = [];
+    const { err, out } = await mount(
+      { last, onAdjust: (d: string) => adjust.push(d), onLaunch: (d: string) => launch.push(d) },
+      (h) => {
+        [...h.querySelectorAll<HTMLButtonElement>('.rep-tile')].find((b) => b.textContent?.includes('Demain'))?.click();
+        h.querySelector<HTMLButtonElement>('[data-test="repeat-adjust"]')?.click();
+      },
+    );
+    expect(err).toBeNull();
+    expect(out).toContain('Ajuster avant');
+    expect(adjust).toHaveLength(1);
+    expect(adjust[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(launch).toEqual([]);
   }, 30_000);
   it('bloqué par un challenge : la raison s’affiche et le bouton est inactif', async () => {
     const got: string[] = [];

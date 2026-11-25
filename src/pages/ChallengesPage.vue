@@ -380,6 +380,7 @@
             :blocked="repeatBlockedBy"
             :busy="repeating"
             @launch="relaunchCombo"
+            @adjust="adjustCombo"
           />
           <p>
             Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
@@ -800,6 +801,12 @@ const repeatBlockedBy = computed(() =>
     : null,
 );
 const repeating = ref(false);
+// ✏️ « Ajuster avant » : l'écran de création, ouvert au bilan, prérempli par le dernier défi.
+function adjustCombo(startDate: string): void {
+  const last = repeatable.value;
+  if (!last) return;
+  void router.push({ path: '/combo/new', query: { repeat: last.id, start: startDate } });
+}
 async function relaunchCombo(startDate: string): Promise<void> {
   const last = repeatable.value;
   if (!last || repeating.value || repeatBlockedBy.value) return;

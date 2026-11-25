@@ -569,8 +569,9 @@ import {
   addDaysUtcIso,
   START_MAX_AHEAD_DAYS,
 } from '@/lib/startDate';
-import { ref, reactive, computed, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { comboRepeatDraft } from '@/lib/comboRepeat';
 import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -622,6 +623,7 @@ import ComboVolumeAdvice from '@/components/ComboVolumeAdvice.vue';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
+const route = useRoute();
 const $q = useQuasar();
 const auth = useAuthStore();
 const profileStore = useProfileStore();
@@ -1077,7 +1079,50 @@ function applyPlan() {
   }
 }
 
-watch([level, zone, volume, objective], applyPlan);
+// ✏️ « Ajuster avant » (v1.360.0) : arrivé depuis la carte « Relancer comme la dernière fois », on
+// remet les CHOIX du dernier défi (exos, volume et répartition de chaque groupe, poids, durée, mode)
+// et on ouvre directement le bilan. ⚠️ Les réglages (niveau, volume…) se posent juste avant et
+// relanceraient `applyPlan` qui écraserait tout : `keepRepeat` saute ce passage-là, une fois.
+let keepRepeat = false;
+function applyRepeatFromQuery() {
+  const id = typeof route.query.repeat === 'string' ? route.query.repeat : '';
+  const last = id ? combo.list.find((c) => c.id === id) : undefined;
+  if (!last) return;
+  const available = new Set(lib.value.filter((e) => !takenByChallenge(e.id)).map((e) => e.id));
+  const d = comboRepeatDraft(last, available);
+  const oldSlots = Object.keys(d.picks).filter((k) => !COMBO_SLOTS.some((s) => s.key === k));
+  if (!Object.keys(d.picks).length || oldSlots.length === Object.keys(d.picks).length) {
+    $q.notify({ type: 'warning', message: 'Rien à reprendre du dernier défi : choisis tes exercices.' });
+    return;
+  }
+  keepRepeat = true;
+  duration.value = d.duration;
+  createMode.value = d.mode;
+  for (const slot of COMBO_SLOTS) {
+    const p = d.picks[slot.key];
+    enabled[slot.key] = !!p;
+    picks[slot.key] = p
+      ? { ...p }
+      : { exercise_ids: [], target: 0, setsTarget: 0, weight_kg: null, count_mode: 'sets' };
+  }
+  const st = typeof route.query.start === 'string' ? route.query.start : '';
+  if (st && isStartAllowed(st, today)) startDate.value = st;
+  step.value = 'recap';
+  if (d.missing.length || oldSlots.length)
+    $q.notify({
+      type: 'warning',
+      message: d.missing.length
+        ? `Plus disponible : ${d.missing.join(', ')}. Ajuste ton choix si besoin.`
+        : 'Un ancien groupe du dernier défi n’a pas été repris.',
+    });
+  void nextTick(() => {
+    keepRepeat = false;
+  });
+}
+watch([level, zone, volume, objective], () => {
+  if (keepRepeat) return;
+  applyPlan();
+});
 
 async function createCombo() {
   const uid = auth.user?.id;
@@ -1170,6 +1215,7 @@ onMounted(async () => {
     objective.value = profileStore.profile?.objective ?? DEFAULT_OBJECTIVE;
     profileReady.value = true;
     applyPlan();
+    applyRepeatFromQuery();
   } catch (e) {
     $q.notify({
       type: 'negative',

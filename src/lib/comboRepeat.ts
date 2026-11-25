@@ -6,8 +6,8 @@
 // s'est passé dedans : ni séries, ni coffre, ni clôture. On garde en revanche le dernier poids
 // utilisé (la première série d'une nouvelle semaine se préremplit) et la fourchette de reps figée.
 import { occupantsOf, exoAvailability, occupantReason } from '@/lib/exoExclusivity';
-import { legLastWeight } from '@/lib/combo';
-import type { ComboChallenge, ComboLeg } from '@/lib/combo';
+import { COMBO_HOLD_SEC, comboMode, legLastWeight } from '@/lib/combo';
+import type { ComboChallenge, ComboCountMode, ComboLeg, ComboMode } from '@/lib/combo';
 import type { Challenge } from '@/lib/challenges';
 
 /** Ce que le magasin sait créer (cf. `NewCombo` du store) : le défi, sans identifiant ni statut. */
@@ -84,4 +84,84 @@ export function repeatBlocker(
     if (b) return `${l.exercise_name} : ${occupantReason(b)}`;
   }
   return null;
+}
+
+// ── ✏️ « AJUSTER AVANT » : le dernier défi, remis dans l'écran de création au bilan ─────────────
+// (demandé : « avant de vraiment le relancer, remettre le bilan des exercices et de la répartition,
+// au cas où on veuille légèrement modifier »). On ne recopie pas les jambes : on reconstitue les
+// CHOIX que l'écran de création sait lire (exos par groupe, volume du groupe, répartition, poids).
+
+/** Un groupe tel que l'écran de création le stocke (même forme que ses `picks`). */
+export interface RepeatPick {
+  exercise_ids: string[];
+  /** Volume du groupe : séries (ou total de reps en mode reps) sur la durée du défi. */
+  target: number;
+  /** Le même volume en SÉRIES (repli quand on repasse de reps à séries). */
+  setsTarget: number;
+  weight_kg: number | null;
+  count_mode: ComboCountMode;
+  /** La répartition entre exos du dernier défi, reprise telle quelle (mode par exercice). */
+  alloc?: Record<string, number>;
+}
+
+export interface RepeatDraft {
+  duration: number;
+  mode: ComboMode;
+  /** Par emplacement. Un groupe sans aucun exo encore disponible est absent. */
+  picks: Record<string, RepeatPick>;
+  /** Noms des exos du dernier défi qu'on ne peut plus reprendre (retirés, pris par un challenge…). */
+  missing: string[];
+}
+
+/** Part d'un exo dans son groupe, dans l'unité de l'écran de création : séries (une tenue =
+ *  `COMBO_HOLD_SEC` secondes par série) ou reps. Au moins 1. */
+function legShare(l: ComboLeg): number {
+  return Math.max(1, Math.round(l.count_mode === 'time' ? l.target / COMBO_HOLD_SEC : l.target));
+}
+
+/** Le dernier défi, en choix de l'écran de création. `available` = les exos qu'on peut encore
+ *  prendre (dans la bibliothèque et libres de tout challenge). Pur ; ne modifie pas `last`. */
+export function comboRepeatDraft(last: ComboChallenge, available: ReadonlySet<string>): RepeatDraft {
+  const mode = comboMode(last);
+  const missing: string[] = [];
+  const bySlot = new Map<string, ComboLeg[]>();
+  for (const l of last.legs) {
+    if (!available.has(l.exercise_id)) {
+      missing.push(l.exercise_name);
+      continue;
+    }
+    bySlot.set(l.slot, [...(bySlot.get(l.slot) ?? []), l]);
+  }
+  const picks: Record<string, RepeatPick> = {};
+  for (const [slot, legs] of bySlot) {
+    const ids = legs.map((l) => l.exercise_id);
+    const firstLoaded = legs.find((l) => l.count_mode !== 'time');
+    const weight = firstLoaded ? legLastWeight(firstLoaded) : null;
+    if (mode === 'group') {
+      const target = Math.max(1, last.config?.groups?.find((g) => g.slot === slot)?.target ?? 1);
+      picks[slot] = { exercise_ids: ids, target, setsTarget: target, weight_kg: weight, count_mode: 'sets' };
+      continue;
+    }
+    const alloc: Record<string, number> = {};
+    for (const l of legs) alloc[l.exercise_id] = legShare(l);
+    const reps = legs.some((l) => l.count_mode === 'reps');
+    const target = Object.values(alloc).reduce((a, b) => a + b, 0);
+    // Le volume en séries : un exo compté en reps vaut (reps / milieu de sa fourchette) séries.
+    const setsTarget = reps
+      ? legs.reduce((a, l) => {
+          if (l.count_mode !== 'reps') return a + legShare(l);
+          const mid = ((l.rep_min ?? 8) + (l.rep_max ?? 12)) / 2;
+          return a + Math.max(1, Math.round(l.target / mid));
+        }, 0)
+      : target;
+    picks[slot] = {
+      exercise_ids: ids,
+      target,
+      setsTarget,
+      weight_kg: weight,
+      count_mode: reps ? 'reps' : 'sets',
+      alloc,
+    };
+  }
+  return { duration: last.duration_days, mode, picks, missing };
 }
