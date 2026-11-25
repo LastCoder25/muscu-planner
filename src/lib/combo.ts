@@ -143,11 +143,11 @@ export interface ComboChallenge {
  *  réparti librement entre les exos du groupe. Absent = « par exercice » (tous les 360 d'avant). */
 export type ComboMode = 'exo' | 'group';
 /** Objectif d'un groupe en mode groupe : séries sur la durée du défi (déjà au prorata). */
-export interface ComboGroupGoal {
+interface ComboGroupGoal {
   slot: string;
   target: number;
 }
-export interface ComboConfig {
+interface ComboConfig {
   /** Mode du défi. Absent = 'exo'. En mode 'group', les `legs` sont les exos AU MENU de chaque
    *  groupe (`target` 0, sans objectif propre) et `groups` porte l'objectif de chacun. */
   mode?: ComboMode;
