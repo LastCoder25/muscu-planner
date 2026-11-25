@@ -38,6 +38,7 @@
 
       <div v-if="c.status === 'active'" class="cta-row q-mb-md">
         <q-btn
+          v-if="!isGroupMode"
           class="cta-grow"
           outline
           color="primary"
@@ -57,6 +58,15 @@
         />
       </div>
 
+      <!-- 🧩 Défi « par groupe » : un bloc par groupe (jauge + exos au menu, sans cible par exo). -->
+      <ComboGroupBlock
+        v-if="isGroupMode"
+        :combo="c"
+        :editable="c.status === 'active'"
+        @add="(l: ComboLeg) => openSet(l, 1)"
+        @history="openHistory"
+      />
+      <template v-else>
       <div
         v-for="leg in shownLegs"
         :key="leg.exercise_id"
@@ -196,7 +206,14 @@
         </div>
       </div>
 
-      <div class="foot">
+      </template>
+
+      <div v-if="isGroupMode" class="foot">
+        Fais tes séries quand tu veux pendant le défi, sur les exos de ton choix. Le volume de
+        <b>chaque</b> groupe atteint = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps +
+        poids).
+      </div>
+      <div v-else class="foot">
         Fais tes séries quand tu veux pendant le défi. Toutes les séries prévues pour
         <b>tous</b> les exos = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps + poids).
       </div>
@@ -266,6 +283,7 @@ import { useComboStore } from '@/stores/combo';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
+  comboMode,
   fmtPct,
   legBarGeometry,
   legSetsDone,
@@ -309,6 +327,7 @@ import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import HoldSetEditor from '@/components/HoldSetEditor.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import ComboGroupBlock from '@/components/ComboGroupBlock.vue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import {
   logicalToday,
@@ -402,6 +421,7 @@ function fmtDM(iso: string): string {
 }
 // Semaine concernée (début → fin) du Défi 360.
 /** Bouclé dans les temps — la seule chose qui dit « bravo » et ouvre un coffre. */
+const isGroupMode = computed(() => !!c.value && comboMode(c.value) === 'group');
 const completeInTime = computed(() => (c.value ? comboCompleteInTime(c.value) : false));
 const comboWeek = computed(() => {
   if (!c.value) return '';

@@ -467,7 +467,7 @@
               /></span>
               <span class="dh-sub">
                 <template v-if="defis.combo.left">
-                  {{ defis.combo.left }} exo{{ defis.combo.left > 1 ? 's' : '' }} à travailler
+                  {{ defis.combo.left }} {{ defis.combo.group ? 'groupe' : 'exo' }}{{ defis.combo.left > 1 ? 's' : '' }} à travailler
                 </template>
                 <template v-else>tout est au max ✓</template>
               </span>

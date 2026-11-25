@@ -351,7 +351,8 @@
           <div class="cc-main">
             <div class="cc-title font-display">🎯 Défi 360</div>
             <div class="cc-sub">
-              {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ fmtPct(comboProgressPct(c)) }} %
+              {{ comboLegsDone(c) }}/{{ comboGoalCount(c) }} {{ comboUnit(c) }} ·
+              {{ fmtPct(comboProgressPct(c)) }} %
             </div>
             <div v-if="c.status === 'done'" class="cc-xp">
               <span v-if="comboXpb(c).duration > 0" class="xp-pill dur"
@@ -403,7 +404,9 @@
             <ComboProgressBar :pace="pace" thin />
           </div>
           <div class="c3-cta-row q-mb-sm">
+            <!-- La séance générée est calée sur des cibles PAR EXO : pas encore en mode groupe. -->
             <q-btn
+              v-if="!isGroupCombo"
               class="c3-cta-grow"
               outline
               color="primary"
@@ -422,6 +425,15 @@
               @click="exportCombo"
             />
           </div>
+          <!-- 🧩 Défi « par groupe » : un bloc par groupe musculaire (jauge + exos au menu). -->
+          <ComboGroupBlock
+            v-if="isGroupCombo"
+            :combo="activeCombo"
+            :editable="activeCombo.status === 'active'"
+            @add="(l: ComboLeg) => openSet(l, 1)"
+            @history="openHistory"
+          />
+          <template v-else>
           <div
             v-for="leg in shownComboLegs"
             :key="leg.exercise_id"
@@ -536,6 +548,7 @@
               </div>
             </div>
           </div>
+          </template>
         </template>
       </template>
     </template>
@@ -602,6 +615,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboTimeBubbles from '@/components/ComboTimeBubbles.vue';
+import ComboGroupBlock from '@/components/ComboGroupBlock.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
@@ -638,6 +652,9 @@ import { repRangeLabel } from '@/lib/repScheme';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
+  comboGoals,
+  comboMode,
+  goalComplete,
   fmtPct,
   comboXpBreakdown,
   comboXpPoints,
@@ -821,8 +838,13 @@ const comboList = computed(() =>
     .filter((c) => c.status === comboTab.value)
     .sort((a, b) => (b.start_date > a.start_date ? 1 : -1)),
 );
-const comboLegsDone = (c: (typeof comboStore.list)[number]) =>
-  c.legs.filter((l) => legComplete(l)).length;
+// Exos bouclés (mode exo) ou groupes bouclés (mode groupe) : la MÊME lecture des objectifs.
+const comboLegsDone = (c: ComboChallenge) => comboGoals(c).filter(goalComplete).length;
+const comboGoalCount = (c: ComboChallenge) => comboGoals(c).length;
+const comboUnit = (c: ComboChallenge) => (comboMode(c) === 'group' ? 'groupes' : 'exos');
+const isGroupCombo = computed(
+  () => !!activeCombo.value && comboMode(activeCombo.value) === 'group',
+);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 // Semaine du Défi 360 (début → fin) pour l'afficher clairement.
 // ⚠️ `fmtDM`/`addDaysLocal` (privés à cet écran) sont remplacés par `dateRangeLabel` :

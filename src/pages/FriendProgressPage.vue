@@ -22,31 +22,47 @@
               >📅 {{ dateRangeLabel(activeCombo.start_date, activeCombo.duration_days) }}</span
             >
             <span class="fp-c-sub"
-              >{{ comboLegsDone(activeCombo) }}/{{ activeCombo.legs.length }} exos bouclés</span
+              >{{ comboLegsDone(activeCombo) }}/{{ comboGoals(activeCombo).length }}
+              {{ comboMode(activeCombo) === 'group' ? 'groupes' : 'exos' }} bouclés</span
             >
           </div>
           <div class="fp-bar">
             <div class="fp-fill" :style="fillOf(comboProgressPct(activeCombo))" />
           </div>
-          <div v-for="leg in activeCombo.legs" :key="leg.exercise_id" class="fp-leg">
-            <div class="fp-leg-top">
-              <span class="fp-leg-n">{{ leg.exercise_name }}</span>
-              <span class="fp-leg-c" :class="{ ok: legComplete(leg) }">
-                {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
-              </span>
-            </div>
-            <!-- Détail des séries : visible entre amis (choix assumé). -->
-            <div v-if="legSets(leg).length" class="fp-sets">
-              <span v-for="(l, i) in groupSetLines(legSets(leg))" :key="i" class="fp-set">
-                <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
-                <template v-else-if="legMode(leg) === 'time'">{{ l.set.reps }} s</template>
-                <template v-else
-                  >{{ l.set.reps
-                  }}<template v-if="l.set.weight">×{{ l.set.weight }}kg</template></template
+          <!-- Mode « par groupe » : une ligne par groupe (« 8 / 12 séries »), puis ses exos avec leur
+               seul nombre de séries — jamais « 3/0 ». Mode exo : les mêmes lignes qu'avant. -->
+          <template v-for="row in friendRows" :key="row.key">
+            <div v-if="row.kind === 'group'" class="fp-leg fp-group">
+              <div class="fp-leg-top">
+                <span class="fp-leg-n">{{ row.label }}</span>
+                <span class="fp-leg-c" :class="{ ok: row.ok }"
+                  >{{ row.done }} / {{ row.target }} séries</span
                 >
-              </span>
+              </div>
             </div>
-          </div>
+            <div v-else class="fp-leg">
+              <div class="fp-leg-top">
+                <span class="fp-leg-n">{{ row.leg.exercise_name }}</span>
+                <span v-if="row.counted" class="fp-leg-c" :class="{ ok: legComplete(row.leg) }">
+                  {{ legDone(row.leg) }}/{{ row.leg.target }} {{ legUnitLabel(row.leg) }}
+                </span>
+                <span v-else class="fp-leg-c"
+                  >{{ legSetsDone(row.leg) }} série{{ legSetsDone(row.leg) > 1 ? 's' : '' }}</span
+                >
+              </div>
+              <!-- Détail des séries : visible entre amis (choix assumé). -->
+              <div v-if="legSets(row.leg).length" class="fp-sets">
+                <span v-for="(l, i) in groupSetLines(legSets(row.leg))" :key="i" class="fp-set">
+                  <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
+                  <template v-else-if="legMode(row.leg) === 'time'">{{ l.set.reps }} s</template>
+                  <template v-else
+                    >{{ l.set.reps
+                    }}<template v-if="l.set.weight">×{{ l.set.weight }}kg</template></template
+                  >
+                </span>
+              </div>
+            </div>
+          </template>
         </div>
       </section>
 
@@ -141,6 +157,7 @@ import {
   type Challenge,
 } from '@/lib/challenges';
 import { dateRangeLabel } from '@/lib/startDate';
+import { comboSlot } from '@/data/combo';
 import { readQuestSnapshot, type FriendQuestView } from '@/lib/questSnapshot';
 import { weekStart } from '@/lib/weeklyQuests';
 import { feedWhen } from '@/lib/friendFeed';
@@ -148,6 +165,10 @@ import {
   activeCombo as activeComboOf,
   comboNextStatus,
   comboProgressPct,
+  comboGoals,
+  comboMode,
+  goalComplete,
+  legSetsDone,
   fmtPct,
   groupSetLines,
   legDone,
@@ -190,7 +211,25 @@ const doneCombos = computed(
 const activeCombo = computed(() => activeComboOf(combos.value, logicalToday()));
 
 const st = (c: Challenge) => challengeStats(c);
-const comboLegsDone = (c: ComboChallenge) => c.legs.filter((l) => legComplete(l)).length;
+const comboLegsDone = (c: ComboChallenge) => comboGoals(c).filter(goalComplete).length;
+/** Les lignes du 360 d'un ami : un exo par ligne (mode exo), ou un groupe puis ses exos. */
+const friendRows = computed(() => {
+  const c = activeCombo.value;
+  if (!c) return [];
+  if (comboMode(c) !== 'group')
+    return c.legs.map((leg) => ({ kind: 'leg' as const, key: leg.exercise_id, leg, counted: true }));
+  return comboGoals(c).flatMap((g) => [
+    {
+      kind: 'group' as const,
+      key: 'g-' + g.key,
+      label: comboSlot(g.slot)?.label ?? g.slot,
+      done: g.done,
+      target: g.target,
+      ok: goalComplete(g),
+    },
+    ...g.legs.map((leg) => ({ kind: 'leg' as const, key: leg.exercise_id, leg, counted: false })),
+  ]);
+});
 const fillOf = (pct: number) => ({ width: Math.max(0, Math.min(100, pct)) + '%' });
 // ⚠️ L'unité vient de la LIB : cette copie écrivait « sec » en dur, donc l'avancement
 // d'un ami sur une marche s'affichait en secondes (cf. `challengeValueUnit`).
