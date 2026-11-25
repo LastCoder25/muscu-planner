@@ -23,7 +23,13 @@
         <span v-if="summary.failed" class="br-chip lose"
           >💀 {{ summary.failed }} raté{{ summary.failed > 1 ? 's' : '' }}</span
         >
-        <span class="br-chip gold">+{{ summary.gold }} 🪙</span>
+        <!-- L'or est une SOMME : les lancers plus les ventes automatiques (reliques, doublons). -->
+        <span class="br-chip gold" data-test="br-gold">+{{ batchTotalGold(summary) }} 🪙</span>
+        <span v-if="summary.relics" class="br-chip" data-test="br-relics"
+          >🔮 {{ summary.relics }} relique{{ summary.relics > 1 ? 's' : '' }} vendue{{
+            summary.relics > 1 ? 's' : ''
+          }}</span
+        >
         <span v-if="summary.summonStones" class="br-chip">+{{ summary.summonStones }} 🔮</span>
         <span v-if="summary.talents" class="br-chip"
           >🎓 {{ summary.talents }} talent{{ summary.talents > 1 ? 's' : '' }}</span
@@ -34,6 +40,24 @@
       <p v-if="summary.stoppedBecause" class="br-stop">
         ⏸️ Série arrêtée : {{ summary.stoppedBecause }}.
       </p>
+
+      <p v-if="summary.relicGold + summary.spareGold > 0" class="br-sales" data-test="br-sales">
+        dont {{ summary.relicGold + summary.spareGold }} 🪙 de ventes automatiques (reliques en
+        trop, doublons de set)
+      </p>
+
+      <!-- 🧩 Sets renforcés pendant la série : UNE ligne par set et par emplacement, la dernière
+           pièce posée seulement (jamais un récit lancer par lancer). -->
+      <div v-if="summary.sets.length" class="br-sets" data-test="br-sets">
+        <div class="br-sets-title">🧩 Sets renforcés</div>
+        <div v-for="n in summary.sets" :key="n.setIndex + ':' + n.slot" class="br-set">
+          <span class="br-set-item">{{ n.item.emoji }} {{ n.item.name }}</span>
+          <span class="br-set-meta"
+            >{{ n.setName }} · {{ SLOT_LABEL[n.item.slot] }} ·
+            {{ n.gain == null ? 'emplacement libre' : '⚔️ ' + (n.gain >= 0 ? '+' : '') + n.gain }}</span
+          >
+        </div>
+      </div>
 
       <div class="br-loot">
         <div v-if="!groups.length" class="br-none">Aucun objet cette fois.</div>
@@ -63,8 +87,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { dropsByRarity, type BatchSummary } from '@/lib/batchRun';
-import { RANK_COLOR, RANK_ORDER, rarityRank } from '@/lib/items';
+import { batchTotalGold, dropsByRarity, type BatchSummary } from '@/lib/batchRun';
+import { RANK_COLOR, RANK_ORDER, SLOT_LABEL, rarityRank } from '@/lib/items';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -131,6 +155,38 @@ const groups = computed(() => dropsByRarity(props.summary?.drops ?? [], RANK_ORD
 .br-chip.first {
   color: var(--accent);
   border-color: var(--accent);
+}
+.br-sales {
+  margin: -6px 0 0;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.br-sets {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.br-sets-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+.br-set {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.br-set-item {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.br-set-meta {
+  font-size: 11.5px;
+  color: var(--dim);
 }
 .br-stop {
   margin: 0;

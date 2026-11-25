@@ -3302,7 +3302,14 @@ import {
   type Rarity,
   bestGearLoadout,
 } from '@/lib/items';
-import { addToBatch, batchChoices, newBatch, type BatchSummary } from '@/lib/batchRun';
+import {
+  addToBatch,
+  batchChoices,
+  newBatch,
+  noteFiledPieces,
+  noteRelicSale,
+  type BatchSummary,
+} from '@/lib/batchRun';
 import { FUSION_SIZE, fusionResultRank } from '@/lib/companionFusion';
 import {
   talentsEarned,
@@ -5141,6 +5148,9 @@ async function enterArena() {
 /** 🔁 La série en cours (×5, ×10, Max) : tant qu'elle est posée, `explore`/`fightBoss` cumulent
  *  leur résultat ici au lieu d'ouvrir le rapport animé de chaque combat. */
 let batch: BatchSummary | null = null;
+/** 📋 Où versent le rangement et la vente AUTOMATIQUES pendant une série (et un instant après, le
+ *  temps qu'ils finissent) : au récap, jamais une annonce par lancer. Plus long que `batch`. */
+let batchNotes: BatchSummary | null = null;
 const batchReport = ref<BatchSummary | null>(null);
 const batchReportOpen = ref(false);
 const batchRunning = ref(false);
@@ -5156,6 +5166,7 @@ async function runBatch(
   if (batch || busy.value || n < 2) return;
   const b = newBatch(name, kind, n);
   batch = b;
+  batchNotes = b;
   batchRunning.value = true;
   // ✍️ Écritures GROUPÉES : chaque lancer renvoyait toute la fiche (~175 Ko pour un compte avancé)
   // et le suivant attendait. Ici la fiche se met à jour en mémoire, l'écriture part groupée en
@@ -5176,6 +5187,10 @@ async function runBatch(
       });
       await char.fetchMine().catch(() => undefined);
     }
+    // Le rangement des pièces de set et la vente des reliques en trop se font en arrière-plan,
+    // lancer après lancer : on les laisse finir ICI, tant qu'ils versent encore au récap.
+    await settleAutoOps();
+    batchNotes = null;
     batchRunning.value = false;
   }
   if (b.runs < n)
@@ -6959,7 +6974,10 @@ async function autoSellSurplus() {
   sellingSurplus = true;
   try {
     const r = await char.sellSurplusRelics(uid);
-    if (r.relics)
+    // Pendant une série (×5, ×10, ×25…), la vente se verse au RÉCAP : une annonce par lancer, c'était
+    // vingt-cinq bandeaux « 1 relique vendue » (demandé : une somme à la fin, pas un bandeau par lancer).
+    if (r.relics && batchNotes) noteRelicSale(batchNotes, r.relics, r.gold);
+    else if (r.relics)
       gameFx.celebrate({
         quiet: true,
         kind: 'drop',
@@ -6978,11 +6996,25 @@ watch(
   () => void autoSellSurplus(),
   { immediate: true },
 );
+/** Laisse finir le rangement et la vente automatiques avant de clore une série : ils tournent en
+ *  arrière-plan et pourraient sinon verser au récap APRÈS qu'il s'est ouvert. */
+async function settleAutoOps() {
+  await autoFileSetPieces();
+  await autoSellSurplus();
+  for (let i = 0; i < 40 && (filing || sellingSurplus); i++)
+    await new Promise((r) => setTimeout(r, 50));
+}
 /** Une seule annonce, discrète. ⚠️ Un doublon ne s'annonce PAS seul (v0.696) : annoncer
  *  « ta pièce était moins bonne » à chaque boss transformait une bonne nouvelle en
  *  reproche. Il se lit dans « Mes sets ». Plusieurs pièces d'un coup (retour du Labyrinthe,
  *  premier passage après la mise à jour) → un seul bandeau récapitulatif. */
 function announceFiled(filed: FiledPiece[], gold = 0) {
+  // Pendant une série : rien ne s'annonce un lancer à la fois. Le rangement verse au récap, qui ne
+  // garde QUE la dernière pièce de chaque emplacement de chaque set, et additionne l'or vendu.
+  if (batchNotes) {
+    noteFiledPieces(batchNotes, filed, gold, setScore.value, (i) => VOIES[i]?.name ?? '');
+    return;
+  }
   if (!filed.length) return;
   const soldNote = gold ? ` · doublon vendu +${fmtPow(gold)} 🪙` : '';
   const setName = (f: FiledPiece) => VOIES[f.setIndex]?.name ?? '';

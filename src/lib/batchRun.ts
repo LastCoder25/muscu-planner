@@ -8,9 +8,10 @@
  * stock de la ressource concernée, `cost` le prix d'UN lancer.
  */
 import type { Item } from './items';
+import type { FiledPiece } from './setFiling';
 
 /** Paliers proposés avant « Max ». */
-export const BATCH_STEPS = [5, 10] as const;
+const BATCH_STEPS = [5, 10] as const;
 /**
  * ⚠️ « Max » est plafonné : chaque lancer est une écriture en base (le trafic sortant du compte
  * gratuit a déjà été dépassé, cf. CLAUDE.md « TRAFIC SORTANT ») et un récap de 60 combats ne se
@@ -54,6 +55,19 @@ export interface BatchRunResult {
   firstClear?: boolean;
 }
 
+/** 🧩 Une pièce de set renforcée pendant la série : SEULE la dernière de son emplacement compte. */
+interface BatchSetNote {
+  setIndex: number;
+  setName: string;
+  slot: string;
+  /** La dernière pièce posée dans cet emplacement du set. */
+  item: Item;
+  /** Ce qui y était AVANT la série (null : l'emplacement était libre). */
+  from: Item | null;
+  /** Gain de puissance de la dernière pièce sur l'ORIGINALE (null : emplacement libre). */
+  gain: number | null;
+}
+
 export interface BatchSummary {
   name: string;
   kind: 'dungeon' | 'boss';
@@ -70,6 +84,14 @@ export interface BatchSummary {
   firstClear: boolean;
   /** Pourquoi la série s'est arrêtée avant la fin, s'il y a lieu. */
   stoppedBecause: string | null;
+  /** 🧩 Pièces de set renforcées PENDANT la série (une par set et par emplacement). Le rangement
+   *  automatique se fait en arrière-plan : il n'annonce plus rien un lancer à la fois, il vient ici. */
+  sets: BatchSetNote[];
+  /** L'or des doublons de set vendus d'office pendant la série. */
+  spareGold: number;
+  /** Reliques en trop vendues d'office, et l'or qu'elles ont rapporté. */
+  relics: number;
+  relicGold: number;
 }
 
 export function newBatch(name: string, kind: 'dungeon' | 'boss', asked: number): BatchSummary {
@@ -86,7 +108,55 @@ export function newBatch(name: string, kind: 'dungeon' | 'boss', asked: number):
     drops: [],
     firstClear: false,
     stoppedBecause: null,
+    sets: [],
+    spareGold: 0,
+    relics: 0,
+    relicGold: 0,
   };
+}
+
+/** L'or TOTAL d'une série : les lancers plus les ventes automatiques (reliques, doublons). */
+export function batchTotalGold(b: BatchSummary): number {
+  return b.gold + b.relicGold + b.spareGold;
+}
+
+/**
+ * Verse au récap ce que le rangement automatique des pièces de set a fait. Par set ET par
+ * emplacement, on ne garde que la DERNIÈRE pièce posée, comparée à celle d'AVANT la série (un set
+ * renforcé dix fois ne se raconte pas dix fois) ; l'or des doublons vendus s'additionne.
+ */
+export function noteFiledPieces(
+  b: BatchSummary,
+  filed: readonly FiledPiece[],
+  gold: number,
+  score: (it: Item) => number,
+  setName: (setIndex: number) => string,
+): BatchSummary {
+  b.spareGold += gold;
+  for (const f of filed) {
+    if (f.outcome === 'spare') continue; // un doublon ne s'annonce pas : il se lit dans « Mes sets »
+    const i = b.sets.findIndex((n) => n.setIndex === f.setIndex && n.slot === f.item.slot);
+    const prev = i >= 0 ? b.sets[i]! : null;
+    const from = prev ? prev.from : f.outcome === 'upgraded' ? (f.displaced ?? null) : null;
+    const note: BatchSetNote = {
+      setIndex: f.setIndex,
+      setName: setName(f.setIndex),
+      slot: f.item.slot,
+      item: f.item,
+      from,
+      gain: from ? Math.round(score(f.item) - score(from)) : null,
+    };
+    if (prev) b.sets[i] = note;
+    else b.sets.push(note);
+  }
+  return b;
+}
+
+/** Verse au récap une vente automatique de reliques en trop. */
+export function noteRelicSale(b: BatchSummary, relics: number, gold: number): BatchSummary {
+  b.relics += relics;
+  b.relicGold += gold;
+  return b;
 }
 
 /** Ajoute un lancer au récap (même objet, rendu pour chaîner). */
