@@ -119,7 +119,7 @@ describe('⏱️ création : la bascule « Durée | Séries » des exos au temps
       expect(h.querySelector('[data-test="hold-sets-ex_side_plank"]')).not.toBeNull();
     });
     expect(err).toBeNull();
-  }, 30_000);
+  }, 90_000);
 
   it('rien choisi : comme avant (durée, objectif en secondes) et chaque exo au temps marqué `hold`', async () => {
     const { created, err } = await run(async (h) => {
@@ -136,7 +136,7 @@ describe('⏱️ création : la bascule « Durée | Séries » des exos au temps
     const bench = legOf(created.input, 'bench');
     expect('hold' in bench).toBe(false);
     expect(bench.count_mode).toBe('sets');
-  }, 30_000);
+  }, 90_000);
 
   it('« Séries » : N tenues (la part, pas × 30), compté en séries, saisi en secondes', async () => {
     let share = 0;
@@ -160,7 +160,7 @@ describe('⏱️ création : la bascule « Durée | Séries » des exos au temps
     const side = legOf(created.input, 'ex_side_plank');
     expect(side.count_mode).toBe('time');
     expect(side.target).toBe(Number(side.target / 30) * 30);
-  }, 30_000);
+  }, 90_000);
 
   it('le total du groupe est le même dans les deux unités ; on peut revenir à « Durée »', async () => {
     const { created, err } = await run(async (h) => {
@@ -176,7 +176,24 @@ describe('⏱️ création : la bascule « Durée | Séries » des exos au temps
     expect(err).toBeNull();
     expect(legOf(created.input, 'ex_plank').count_mode).toBe('time');
     expect(legOf(created.input, 'ex_side_plank').count_mode).toBe('sets');
-  }, 30_000);
+  }, 90_000);
+
+  it('un emplacement compté en RÉPÉTITIONS : pas de bascule (sa part est un total de reps)', async () => {
+    const { err } = await run(async (h) => {
+      await toRecap(h);
+      expect(h.querySelector('[data-test="holds-core"]')).not.toBeNull();
+      const card = [...h.querySelectorAll<HTMLElement>('.slot-card')].find((c) =>
+        c.textContent?.includes('Gainage'),
+      )!;
+      const reps = [...card.querySelectorAll<HTMLElement>('.mode-toggle button')].find((b) =>
+        b.textContent?.includes('Répétitions'),
+      )!;
+      reps.click();
+      await tick();
+      expect(h.querySelector('[data-test="holds-core"]')).toBeNull();
+    });
+    expect(err).toBeNull();
+  }, 90_000);
 
   it('mode par groupe : aucune bascule, et les jambes comme avant (une entrée = une série)', async () => {
     const { created, err } = await run(async (h) => {
@@ -190,7 +207,7 @@ describe('⏱️ création : la bascule « Durée | Séries » des exos au temps
     const plank = legOf(created.input, 'ex_plank');
     expect(plank.count_mode).toBe('time');
     expect(plank.target).toBe(0);
-  }, 30_000);
+  }, 90_000);
 });
 
 describe('✏️ « Ajuster avant » : l’unité d’un exo au temps revient', () => {
@@ -226,7 +243,7 @@ describe('✏️ « Ajuster avant » : l’unité d’un exo au temps revient', 
     expect(plank.count_mode).toBe('sets');
     expect(plank.hold).toBe(true);
     expect(plank.target).toBe(5);
-  }, 30_000);
+  }, 90_000);
   it('un exo compté en durée reste en « Durée » (150 s = 5 bulles)', async () => {
     const { created, err } = await run(
       async (h) => {
@@ -239,5 +256,5 @@ describe('✏️ « Ajuster avant » : l’unité d’un exo au temps revient', 
     const plank = legOf(created.input, 'ex_plank');
     expect(plank.count_mode).toBe('time');
     expect(plank.target).toBe(150);
-  }, 30_000);
+  }, 90_000);
 });

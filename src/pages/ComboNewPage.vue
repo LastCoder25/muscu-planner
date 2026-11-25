@@ -1073,16 +1073,16 @@ const totalSets = computed(() =>
 // Pendant les réglages (avant le choix des exos) tous les groupes actifs comptent ; ensuite seulement
 // ceux qui ont au moins un exo.
 const adviceGroups = computed(() =>
-  COMBO_SLOTS.filter((s) => enabled[s.key] && (step.value === 'setup' || pickCount(s.key) > 0)).map(
-    (s) => {
-      const p = picks[s.key];
-      return {
-        slot: s.key,
-        sets: p?.count_mode === 'reps' ? (p?.setsTarget ?? 0) : (p?.target ?? 0),
-        essential: s.essential,
-      };
-    },
-  ),
+  COMBO_SLOTS.filter(
+    (s) => enabled[s.key] && (step.value === 'setup' || pickCount(s.key) > 0),
+  ).map((s) => {
+    const p = picks[s.key];
+    return {
+      slot: s.key,
+      sets: p?.count_mode === 'reps' ? (p?.setsTarget ?? 0) : (p?.target ?? 0),
+      essential: s.essential,
+    };
+  }),
 );
 // Récap : emplacements inclus avec au moins un exo.
 const recapKeys = computed(() =>
@@ -1141,10 +1141,7 @@ function applyRepeatFromQuery() {
   const d = comboRepeatDraft(last, available);
   const oldSlots = Object.keys(d.picks).filter((k) => !COMBO_SLOTS.some((s) => s.key === k));
   if (!Object.keys(d.picks).length || oldSlots.length === Object.keys(d.picks).length) {
-    $q.notify({
-      type: 'warning',
-      message: 'Rien à reprendre du dernier défi : choisis tes exercices.',
-    });
+    $q.notify({ type: 'warning', message: 'Rien à reprendre du dernier défi : choisis tes exercices.' });
     return;
   }
   keepRepeat = true;

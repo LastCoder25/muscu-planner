@@ -124,10 +124,7 @@ function legShare(l: ComboLeg): number {
 
 /** Le dernier défi, en choix de l'écran de création. `available` = les exos qu'on peut encore
  *  prendre (dans la bibliothèque et libres de tout challenge). Pur ; ne modifie pas `last`. */
-export function comboRepeatDraft(
-  last: ComboChallenge,
-  available: ReadonlySet<string>,
-): RepeatDraft {
+export function comboRepeatDraft(last: ComboChallenge, available: ReadonlySet<string>): RepeatDraft {
   const mode = comboMode(last);
   const missing: string[] = [];
   const bySlot = new Map<string, ComboLeg[]>();
@@ -145,13 +142,7 @@ export function comboRepeatDraft(
     const weight = firstLoaded ? legLastWeight(firstLoaded) : null;
     if (mode === 'group') {
       const target = Math.max(1, last.config?.groups?.find((g) => g.slot === slot)?.target ?? 1);
-      picks[slot] = {
-        exercise_ids: ids,
-        target,
-        setsTarget: target,
-        weight_kg: weight,
-        count_mode: 'sets',
-      };
+      picks[slot] = { exercise_ids: ids, target, setsTarget: target, weight_kg: weight, count_mode: 'sets' };
       continue;
     }
     const alloc: Record<string, number> = {};

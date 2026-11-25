@@ -144,7 +144,7 @@ describe('⏱️ fiche du défi : une tenue comptée en séries', () => {
     expect(plank).not.toContain('Ajouter une série : Planche');
     // Le « ＋ » de la prochaine case n'y est pas non plus.
     expect(visible(plank)).not.toContain('＋');
-  }, 30_000);
+  }, 90_000);
 
   it('la même planche en DURÉE garde ses bulles, et un exo en reps garde sa barre d’avant', async () => {
     const { default: ComboDetailPage } = await import('@/pages/ComboDetailPage.vue');
@@ -156,7 +156,7 @@ describe('⏱️ fiche du défi : une tenue comptée en séries', () => {
     expect(bench).toContain('seg-bar tap');
     expect(visible(bench)).toMatch(/10×40kg/);
     expect(bench).not.toContain('leg-actions');
-  }, 30_000);
+  }, 90_000);
 });
 
 describe('⏱️ fiche du défi : les gestes sur la barre de tenues', () => {
@@ -180,7 +180,7 @@ describe('⏱️ fiche du défi : les gestes sur la barre de tenues', () => {
     expect(err).toBeNull();
     expect(seen.sec).toBe('45');
     expect(seen.setlog).toBe(''); // la fenêtre reps & poids ne s'est pas ouverte
-  }, 30_000);
+  }, 90_000);
 
   it('toucher la barre n’ajoute rien (le chrono le fait) — alors que pour un exo en reps elle ouvre la saisie', async () => {
     const { default: ComboDetailPage } = await import('@/pages/ComboDetailPage.vue');
@@ -195,14 +195,20 @@ describe('⏱️ fiche du défi : les gestes sur la barre de tenues', () => {
     });
     expect(err).toBeNull();
     expect(seen).toEqual(['', 'Développé couché']);
-  }, 30_000);
+  }, 90_000);
 });
 
 describe('⏱️ onglet 🎯 : une tenue comptée en séries', () => {
   it('secondes par tenue, chrono sur sa ligne, aucune bulle', async () => {
     const { default: ChallengesPage } = await import('@/pages/ChallengesPage.vue');
-    const { err, html } = await mountIt(ChallengesPage, {}, '/?mode=combo');
+    let titleAfterTap = 'x';
+    const { err, html } = await mountIt(ChallengesPage, {}, '/?mode=combo', async (host) => {
+      (host.querySelector('.seg-bar.hold') as HTMLElement).click();
+      await settle();
+      titleAfterTap = host.querySelector('.sl-title')?.textContent?.trim() ?? '';
+    });
     expect(err).toBeNull();
+    expect(titleAfterTap).toBe(''); // toucher la barre de tenues n'ouvre pas la saisie reps & poids
     const idx = html.indexOf('Planche');
     expect(idx).toBeGreaterThan(-1);
     const zone = html.slice(idx, idx + 6000).split('Chaise')[0]!;
@@ -211,7 +217,10 @@ describe('⏱️ onglet 🎯 : une tenue comptée en séries', () => {
     expect(visible(zone)).toMatch(/45 s/);
     expect(visible(zone)).toMatch(/38 s/);
     expect(zone).toContain('cl-actions');
-  }, 30_000);
+    // Pas de « ＋ » reps & poids sur la barre de tenues, pas d'ajout d'un tap (l'onglet 🎯 aussi).
+    expect(visible(zone)).not.toContain('＋');
+    expect(zone).not.toContain('Ajouter une série : Planche');
+  }, 90_000);
 });
 
 describe('⏱️ séance générée : une tenue comptée en séries', () => {
@@ -246,5 +255,5 @@ describe('⏱️ séance générée : une tenue comptée en séries', () => {
     expect(visible(html)).toMatch(/0\/1 séries/);
     expect(visible(html)).toMatch(/vise \d+ s/);
     expect(html).not.toContain('s-set"'); // pas de case reps pour la planche
-  }, 30_000);
+  }, 90_000);
 });

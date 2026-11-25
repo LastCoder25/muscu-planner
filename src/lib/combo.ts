@@ -966,6 +966,11 @@ export function legTimeBubbles(l: ComboLeg, today?: string): TimeBubble[] {
   return out;
 }
 
+/** Travail crédité au plus, dans l'unité de saisie : la cible (reps, ou secondes en durée) ; pour
+ *  des tenues comptées en SÉRIES, N × `COMBO_HOLD_SEC` secondes — le total d'une durée de N bulles. */
+function creditCapOf(l: ComboLeg): number {
+  return legMode(l) === 'sets' && legIsHold(l) ? l.target * COMBO_HOLD_SEC : l.target;
+}
 /** Effort PLANIFIÉ d'un exo jusqu'à sa cible (base de sa part de prime) = reps réelles
  *  des séries comptées × poids-de-rep, plan figé (COMBO_PLAN_REPS) pour les séries
  *  manquantes. Correctif 135fa252 : symétrique avec les petits défis (prime ∝ effort réel). */
@@ -975,20 +980,11 @@ function legPlannedEffort(l: ComboLeg): number {
   // une série basculée d'un autre exo garde sa valeur. Sans série basculée, c'est
   // exactement l'ancien calcul (un seul poids de rep pour tout l'exo).
   const w = (s: ComboSet) => setOrigin(l, s).rep_weight;
-  if (legMode(l) === 'sets' && legIsHold(l)) {
-    // ⏱️ Tenues comptées en SÉRIES : l'effort d'une tenue est ses secondes (comme en durée) ;
-    // une tenue manquante est planifiée à `COMBO_HOLD_SEC` (la bulle d'une série en durée).
-    const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
-    const done = counted.reduce(
-      (a, s) => a + setRepUnits(l, setWork(l, s).reps || 0, s.date) * w(s),
-      0,
-    );
-    const missing = Math.max(0, l.target - counted.length);
-    return done + missing * COMBO_HOLD_SEC * (l.rep_weight ?? 1);
-  }
-  if (legMode(l) !== 'sets') {
-    // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
-    let left = l.target > 0 ? l.target : Infinity;
+  if (legMode(l) !== 'sets' || legIsHold(l)) {
+    // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif. ⏱️ Tenues
+    // comptées en séries : MÊME règle, plafonnée au total de la durée (N × 30 s) — aucune tenue
+    // manquante n'est planifiée, une tenue ne rapporte ni plus ni moins selon l'unité.
+    let left = l.target > 0 ? creditCapOf(l) : Infinity;
     let effort = 0;
     for (const s of sets) {
       if (left <= 0) break;
@@ -1098,17 +1094,7 @@ function legCountedSets(l: ComboLeg): number {
 }
 /** Mode reps/durée : le travail de chaque série retenu vers l'objectif (0 au-delà). */
 function legCountedWork(l: ComboLeg): number[] {
-  if (legMode(l) === 'sets') {
-    // ⏱️ Tenues en séries : les N premières tenues comptent, chacune pour ses secondes — la
-    // même valeur qu'une tenue en durée (le plafond est en séries, pas en secondes).
-    let n = l.target > 0 ? l.target : Infinity;
-    return legSets(l).map((s) => {
-      if (n <= 0) return 0;
-      n -= 1;
-      return (s.reps || 0) * workRatio(l, s);
-    });
-  }
-  let left = l.target > 0 ? l.target : Infinity;
+  let left = l.target > 0 ? creditCapOf(l) : Infinity;
   return legSets(l).map((s) => {
     if (left <= 0) return 0;
     const take = Math.min(s.reps || 0, left);
@@ -1204,6 +1190,18 @@ const OVER_TARGET_XP = 0.5;
  *  `OVER_TARGET_XP` pour la part de reps qui le dépasse (une série à cheval est pondérée). */
 function legOverFactors(l: ComboLeg): number[] {
   const sets = legSets(l);
+  if (legMode(l) === 'sets' && legIsHold(l) && l.target > 0) {
+    // ⏱️ Tenues en séries : seules les N × 30 premières secondes sont CRÉDITÉES (même total
+    // maximal qu'en durée) ; l'avancement, lui, reste tenues / N.
+    const cap = creditCapOf(l);
+    let cum = 0;
+    return sets.map((s) => {
+      const r = Math.max(0, s.reps || 0);
+      const take = Math.min(r, Math.max(0, cap - cum));
+      cum += r;
+      return r > 0 ? take / r : 1;
+    });
+  }
   if (!l.fractional || !(l.target > 0)) return sets.map(() => 1);
   let cum = 0;
   return sets.map((s) => {

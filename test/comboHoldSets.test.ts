@@ -175,13 +175,49 @@ describe('⏱️ XP : une tenue rapporte pareil en séries qu’en durée', () =
     expect(comboBonusXp(a)).toBe(comboBonusXp(b));
     expect(comboXpPoints([a], 75)).toBe(comboXpPoints([b], 75));
   });
-  it('la prime d’une tenue partielle se calcule sur l’effort PRÉVU (tenue manquante à 30 s), comme les séries', () => {
-    const end = '2099-01-01'; // la prime ne tombe qu'à la fin du défi
-    const part = comboTieredBonus(combo([holdSets([30, 30, 30, 30], 5)]), legTierShare, end);
-    const p80 = legTierShare(holdSets([30, 30, 30, 30], 5));
+  const END = '2099-01-01'; // la prime ne tombe qu'à la fin du défi
+  const prime = (l: ComboLeg) => comboTieredBonus(combo([l]), legTierShare, END);
+  it('la prime d’une tenue PARTIELLE est la même en séries et en durée (aucune tenue manquante planifiée)', () => {
+    const a = holdSets([30, 30, 30, 30], 5);
+    const b = holdTime([30, 30, 30, 30], 5);
+    const p80 = legTierShare(a);
     expect(p80).toBeGreaterThan(0);
-    // 5 tenues prévues × 30 s × poids de rep 0,6, au palier de 80 % — pas d'avance (défi non bouclé).
-    expect(part).toBeCloseTo(0.25 * (5 * 30 * 0.6) * p80, 6);
+    expect(prime(a)).toBeCloseTo(0.25 * (4 * 30 * 0.6) * p80, 6);
+    expect(prime(a)).toBe(prime(b));
+  });
+  it('en séries le travail crédité est plafonné à N × 30 s : 5 tenues de 60 s = 5 bulles de 30 s, à l’égalité exacte', () => {
+    const a = combo([holdSets([60, 60, 60, 60, 60], 5)]);
+    const b = combo([holdTime([30, 30, 30, 30, 30], 5)]);
+    expect(comboXpPoints([a], 75)).toBe(comboXpPoints([b], 75));
+    expect(comboXpBreakdown(a, 75)).toEqual(comboXpBreakdown(b, 75));
+    expect(prime(a.legs[0]!)).toBe(prime(b.legs[0]!));
+    expect(comboBonusXp(a)).toBe(comboBonusXp(b));
+    expect(comboXpByExoDay(a, 75).map((g) => g.xp)).toEqual(
+      comboXpByExoDay(b, 75).map((g) => g.xp),
+    );
+    // L'avancement, lui, reste tenues / N.
+    expect(comboProgressPct(a)).toBe(100);
+  });
+  it('2 tenues de 75 s sur N = 5 : 150 s crédités, rien de coupé ; 3 tenues de 10 s : 30 s', () => {
+    for (const secs of [
+      [75, 75],
+      [10, 10, 10],
+    ]) {
+      const a = combo([holdSets(secs, 5)]);
+      const b = combo([holdTime(secs, 5)]);
+      // Le travail crédité (reps + durée) est identique ; la prime, elle, dépend du palier
+      // d'avancement (2 tenues sur 5 ≠ 150 s sur 150 s), pas des secondes.
+      const x = comboXpBreakdown(a, 75);
+      const y = comboXpBreakdown(b, 75);
+      expect([x.reps, x.duration]).toEqual([y.reps, y.duration]);
+    }
+    // Au plafond : 2 tenues de 75 s ont déjà crédité 150 s — une 3e, une 4e n'ajoutent rien.
+    const work = (k: number) => {
+      const x = comboXpBreakdown(combo([holdSets(Array(k).fill(75), 5)]), 75);
+      return [x.reps, x.duration];
+    };
+    expect(work(3)).toEqual(work(2));
+    expect(work(4)).toEqual(work(2));
   });
   it('au-delà de l’objectif en séries, la durée créditée ne grossit plus', () => {
     const four = comboCountedSets(combo([holdSets([30, 30, 30, 30], 4)]));
@@ -240,6 +276,10 @@ describe('⏱️ séance, quota, export', () => {
     );
     expect(dur!.time).toBe(true);
     expect(dur!.sets.reduce((a, b) => a + b, 0)).toBe(90);
+  });
+  it('le quota du jour : plafonné à 5 tenues, en séries (jamais × la durée d’une série)', () => {
+    const c = combo([holdSets([], 12)]);
+    expect(comboDayQuota(c, DAY, 'hypertrophie')).toEqual({ ex_plank: 5 }); // ceil(12×3/7) = 6 → 5
   });
   it('le quota du jour se lit en séries pour une tenue en séries', () => {
     const c = combo([holdSets([], 7)]);
