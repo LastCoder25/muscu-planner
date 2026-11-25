@@ -54,7 +54,7 @@ import { computed } from 'vue';
 import {
   groupSetLines,
   holdLestLabel,
-  legMode,
+  legIsHold,
   legSets,
   miniLineLabel,
   setOriginLabel,
@@ -69,7 +69,7 @@ const props = defineProps<{
   editable?: boolean;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [boolean]; edit: [index: number] }>();
-const isHold = computed(() => !!props.editable && !!props.leg && legMode(props.leg) === 'time');
+const isHold = computed(() => !!props.editable && !!props.leg && legIsHold(props.leg));
 
 // Les plus récentes en tête : c'est la dernière série qu'on vient vérifier.
 // Mini-séries du fractionné regroupées par jour : une ligne « 7 reps · 6 prises ».
@@ -79,7 +79,7 @@ const miniReps = computed(() =>
   lines.value.reduce((a, l) => a + (l.kind === 'mini' ? l.reps : 0), 0),
 );
 // Un exo au TEMPS (gainage) compte des secondes, pas des reps.
-const unit = computed(() => (props.leg && legMode(props.leg) === 'time' ? 's' : 'reps'));
+const unit = computed(() => (props.leg && legIsHold(props.leg) ? 's' : 'reps'));
 
 function fmtDay(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', {

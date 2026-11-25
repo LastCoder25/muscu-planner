@@ -104,6 +104,11 @@ export interface ComboLeg {
   rep_weight: number; // poids de rep de l'exo (pour l'XP)
   target: number; // objectif : SÉRIES (mode 'sets') OU total REPS (mode 'reps') sur la sem
   count_mode?: ComboCountMode; // défaut 'sets' (rétro-compat)
+  /** ⏱️ L'exo se SAISIT en secondes (tenue : gainage, chaise…), quel que soit ce qu'on COMPTE
+   *  vers l'objectif (`count_mode`) : 'time' = total de secondes (bulles de 30 s), 'sets' = N
+   *  tenues, chacune une série saisie en secondes. Absent = « saisi en secondes si compté en
+   *  durée » (360 d'avant) — `legIsHold` est la seule lecture. */
+  hold?: boolean;
   weight_kg?: number | null; // dernier poids utilisé → préremplissage de la prochaine série
   /** 🧱 Dernier lest choisi sur une tenue lestable : préremplit la série suivante. */
   lest_kg?: number | null;
@@ -268,7 +273,7 @@ const REPS_EQUIVALENT_FROM = '2026-10-11';
 /** Reps d'une série telles que l'XP les compte : compressées (séries récentes), sauf au
  *  temps. */
 function setRepUnits(leg: ComboLeg, reps: number, date?: string | null, mini = false): number {
-  if (legMode(leg) === 'time') return Math.max(0, reps);
+  if (legIsHold(leg)) return Math.max(0, reps);
   // 🔁 Mini-série : la racine par série n'a aucun sens sur 1 rep (30 mini-séries d'1 rep
   // valaient 30 × 3,16 = 95 contre 30 pour 3 × 10, mesuré). Les reps comptent comme celles
   // de séries pleines de la fourchette de l'exo : reps × √(10 ÷ milieu), c'est-à-dire ce
@@ -306,7 +311,7 @@ function workRatio(leg: ComboLeg, s: ComboSet): number {
 export function setOriginLabel(leg: ComboLeg, s: ComboSet): string | null {
   if (!s.origin) return null;
   const w = setWork(leg, s);
-  const unit = legMode(leg) === 'time' ? 's' : 'reps';
+  const unit = legIsHold(leg) ? 's' : 'reps';
   let t = `${s.origin.exercise_name} · ${w.reps} ${unit}`;
   if (w.weight) t += ` · ${w.weight} kg`;
   if (w.assisted) t += ' · assisté';
@@ -416,6 +421,13 @@ export function legReps(leg: ComboLeg): number {
 export function legMode(leg: ComboLeg): ComboCountMode {
   return leg.count_mode ?? 'sets';
 }
+/** ⏱️ L'exo se SAISIT en secondes (chrono, fenêtre de secondes, lest, « s ») ? À ne pas
+ *  confondre avec `legMode(leg) === 'time'`, qui dit COMMENT ON COMPTE (total de secondes,
+ *  bulles de 30 s) : une tenue comptée en SÉRIES se saisit en secondes sans être en durée.
+ *  Un 360 d'avant (sans `hold`) : saisi en secondes ⇔ compté en durée, comme toujours. */
+export function legIsHold(leg: ComboLeg): boolean {
+  return leg.hold ?? legMode(leg) === 'time';
+}
 
 /** 📑 L'ORDRE D'AFFICHAGE DES EXOS D'UN DÉFI 360 : PAR GROUPE MUSCULAIRE (demandé par
  *  l'utilisateur), dans l'ordre des emplacements (`COMBO_SLOTS` : Poussée, Tirage, Squat,
@@ -486,8 +498,10 @@ export function legLastAssisted(leg: ComboLeg): boolean {
 /** Étiquette COMPACTE d'une série dans une cellule d'avancement : « 12 », « 12×15kg », puis
  *  🟧 si l'élastique aide, 🟦 s'il rend l'exo plus dur (le détail est dans l'historique).
  *  ⚠️ Une seule règle, lue par la fiche du 360 ET l'onglet 🎯 (elle y était recopiée). */
-export function setCellLabel(s: ComboSet | undefined): string {
+export function setCellLabel(s: ComboSet | undefined, hold = false): string {
   if (!s) return '';
+  // ⏱️ Une tenue (exo saisi en secondes) : « 45 s », lestée « 45 s +5 kg ».
+  if (hold) return [`${s.reps} s`, holdLestLabel(s)].filter(Boolean).join(' ');
   const base = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
   return s.assisted ? `${base} 🟧` : s.band ? `${base} 🟦` : base;
 }
@@ -552,7 +566,7 @@ export function legLastBand(leg: ComboLeg): ElasticBand | null {
  *  existe : on recalcule depuis l’objectif passé en second (sinon le défaut du schéma).
  *  Ne renvoie JAMAIS null → aucun écran n’a de cas particulier à gérer. */
 export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRange {
-  const time = legMode(leg) === 'time';
+  const time = legIsHold(leg);
   // Figée à la création, mais CORRIGÉE à la lecture pour les exos qui ont leur propre
   // fourchette (burpees, pompes…) : la valeur figée par une version d’avant était fausse.
   if (leg.rep_min != null && leg.rep_max != null)
@@ -961,6 +975,17 @@ function legPlannedEffort(l: ComboLeg): number {
   // une série basculée d'un autre exo garde sa valeur. Sans série basculée, c'est
   // exactement l'ancien calcul (un seul poids de rep pour tout l'exo).
   const w = (s: ComboSet) => setOrigin(l, s).rep_weight;
+  if (legMode(l) === 'sets' && legIsHold(l)) {
+    // ⏱️ Tenues comptées en SÉRIES : l'effort d'une tenue est ses secondes (comme en durée) ;
+    // une tenue manquante est planifiée à `COMBO_HOLD_SEC` (la bulle d'une série en durée).
+    const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
+    const done = counted.reduce(
+      (a, s) => a + setRepUnits(l, setWork(l, s).reps || 0, s.date) * w(s),
+      0,
+    );
+    const missing = Math.max(0, l.target - counted.length);
+    return done + missing * COMBO_HOLD_SEC * (l.rep_weight ?? 1);
+  }
   if (legMode(l) !== 'sets') {
     // Mode REPS/DURÉE : effort = reps (ou secondes) réalisées jusqu'à l'objectif.
     let left = l.target > 0 ? l.target : Infinity;
@@ -1062,7 +1087,7 @@ export const COMBO_SET_MIN = 3.5;
 
 /** Séries d'UN exo comptées vers son objectif (mode-aware), plafonnées à sa cible. */
 function legCountedSets(l: ComboLeg): number {
-  if (legMode(l) !== 'sets') {
+  if (legMode(l) !== 'sets' || legIsHold(l)) {
     // Reps ou durée → « séries » équivalentes, plafonnées à l'objectif. Le plafond se lit
     // dans l'unité de la cible, le crédit sur le travail réel (série convertie comprise).
     const work = legCountedWork(l).reduce((a, w) => a + w, 0);
@@ -1073,6 +1098,16 @@ function legCountedSets(l: ComboLeg): number {
 }
 /** Mode reps/durée : le travail de chaque série retenu vers l'objectif (0 au-delà). */
 function legCountedWork(l: ComboLeg): number[] {
+  if (legMode(l) === 'sets') {
+    // ⏱️ Tenues en séries : les N premières tenues comptent, chacune pour ses secondes — la
+    // même valeur qu'une tenue en durée (le plafond est en séries, pas en secondes).
+    let n = l.target > 0 ? l.target : Infinity;
+    return legSets(l).map((s) => {
+      if (n <= 0) return 0;
+      n -= 1;
+      return (s.reps || 0) * workRatio(l, s);
+    });
+  }
   let left = l.target > 0 ? l.target : Infinity;
   return legSets(l).map((s) => {
     if (left <= 0) return 0;
@@ -1087,7 +1122,7 @@ function legCountedWork(l: ComboLeg): number[] {
 function legSetDurationShares(l: ComboLeg): number[] {
   const sets = legSets(l);
   const counted = legCountedSets(l);
-  if (legMode(l) === 'sets') return sets.map((_, i) => (i < counted ? 1 : 0));
+  if (legMode(l) === 'sets' && !legIsHold(l)) return sets.map((_, i) => (i < counted ? 1 : 0));
   const work = legCountedWork(l);
   const total = work.reduce((a, w) => a + w, 0);
   return work.map((w) => (total > 0 ? (w / total) * counted : 0));
@@ -1233,6 +1268,8 @@ export interface ComboExoDayXp {
   exerciseName: string;
   date: string;
   mode: ComboCountMode;
+  /** L'exo se saisit en secondes (`legIsHold`) : ses séries sont des tenues, pas des reps. */
+  hold: boolean;
   /** Ce qui a vraiment été fait (série convertie : ses valeurs d'origine). */
   sets: ComboSet[];
   /** XP d'EFFORT de ces séries : durée créditée + reps + tonnage — hors prime de fin. */
@@ -1262,6 +1299,7 @@ export function comboXpByExoDay(c: ComboChallenge, bodyKg?: number | null): Comb
           exerciseName: o.exercise_name,
           date: s.date,
           mode: legMode(l),
+          hold: legIsHold(l),
           sets: [],
           xp: 0,
           raw: 0,
@@ -1426,15 +1464,16 @@ export function buildComboSessionFromCounts(
     const n = Math.max(0, Math.floor(counts[l.exercise_id] ?? 0));
     if (n <= 0) continue;
     const range = legRepRange(l, objective);
-    const time = legMode(l) === 'time';
+    const time = legIsHold(l);
     const reps = legLastReps(l, prescribedReps(range));
     out.push({
       exercise_id: l.exercise_id,
       exercise_name: l.exercise_name,
       weight_kg: legLastWeight(l),
-      sets: time
-        ? comboTimeSets(n, legTimePerSet(l, objective))
-        : Array.from({ length: n }, () => reps),
+      sets:
+        legMode(l) === 'time'
+          ? comboTimeSets(n, legTimePerSet(l, objective))
+          : Array.from({ length: n }, () => reps),
       time,
       rep_min: range.min,
       rep_max: range.max,
@@ -1540,7 +1579,7 @@ export function updateHoldSetAt(
 /** Un exo du défi accepte-t-il un lest ? Une TENUE (mode durée) de la table `LOADABLE_HOLD_IDS`
  *  (planche, chaise) — jamais le gainage latéral ni un exo en reps (qui a son poids). */
 export function legHoldLoadable(leg: ComboLeg): boolean {
-  return legMode(leg) === 'time' && holdLoadable(leg.exercise_id);
+  return legIsHold(leg) && holdLoadable(leg.exercise_id);
 }
 /** Le lest proposé pour la prochaine série : celui de la dernière série lestée, sinon le
  *  dernier choisi sur l'exo, sinon 0. 0 si l'exo n'accepte pas de lest. */
@@ -1868,7 +1907,7 @@ function fmtDM(iso: string): string {
 /** Le détail des séries d'un exo pour l'export texte (reps×poids, ou secondes). */
 function legSetsDetail(leg: ComboLeg): string {
   const sets = legSets(leg);
-  return legMode(leg) === 'time'
+  return legIsHold(leg)
     ? sets
         .map((s) => {
           const o = setOriginLabel(leg, s);
@@ -1980,7 +2019,7 @@ function adviceSets(leg: ComboLeg, history: ComboChallenge[]): ComboSet[] {
   const past = [...history].sort((a, b) => (a.start_date < b.start_date ? 1 : -1));
   for (const c of past) {
     for (const l of c.legs) {
-      if (l === leg || l.exercise_id !== leg.exercise_id || legMode(l) === 'time') continue;
+      if (l === leg || l.exercise_id !== leg.exercise_id || legIsHold(l)) continue;
       const s = ownSets(l).filter((x) => x.reps > 0);
       if (s.length) return s;
     }
@@ -2022,7 +2061,7 @@ export function legLoadAdvice(
   history: ComboChallenge[],
   range: { min: number; max: number },
 ): LegLoadAdvice | null {
-  if (legMode(leg) === 'time') return null; // gainage : des secondes, pas de charge
+  if (legIsHold(leg)) return null; // gainage : des secondes, pas de charge
   const sets = adviceSets(leg, history);
   const last = sets[sets.length - 1];
   if (!last) return null; // jamais fait : rien à juger
@@ -2134,13 +2173,14 @@ export function comboTransferBlocker(
     const dest = c.legs.find((l) => l.exercise_id === to.leg);
     if (!dest) return 'noLeg';
     if (!swapSlotsOf(from.slot).includes(dest.slot)) return 'otherSlot';
-    if (legMode(dest) !== legMode(from)) return 'modeMismatch';
+    if (legMode(dest) !== legMode(from) || legIsHold(dest) !== legIsHold(from))
+      return 'modeMismatch';
     return null;
   }
   const e = to.exercise;
   if (e.exercise_id === fromId) return 'sameLeg';
   if (!transferSlotFor(from, e.muscle_primary)) return 'otherSlot';
-  if (e.time !== (legMode(from) === 'time')) return 'modeMismatch';
+  if (e.time !== legIsHold(from)) return 'modeMismatch';
   // Le MÊME exo déjà présent dans le défi (v1.342.0 : une variante est un exo à part entière,
   // comme à la création — on peut passer des dips aux dips assistés, ou garder les deux).
   if (c.legs.some((l) => l.exercise_id === e.exercise_id)) return 'alreadyIn';
@@ -2265,6 +2305,7 @@ function transferRest(
     rep_weight: e.rep_weight,
     target: addTarget,
     count_mode: from.count_mode ?? 'sets',
+    ...(from.hold !== undefined ? { hold: from.hold } : {}),
     weight_kg: null,
     assistable: e.assistable,
     rep_min: e.rep_min,
@@ -2342,6 +2383,7 @@ export function transferComboLeg(
     rep_weight: e.rep_weight,
     target: addTarget,
     count_mode: from.count_mode ?? 'sets',
+    ...(from.hold !== undefined ? { hold: from.hold } : {}),
     weight_kg: null,
     assistable: e.assistable,
     rep_min: e.rep_min,

@@ -447,6 +447,36 @@
                 </button>
               </div>
             </div>
+            <!-- ⏱️ Un exo AU TEMPS : compté en durée (30 s par série visée) ou en séries de tenues. -->
+            <div v-if="holdExos(key).length" class="cfg-holds" :data-test="'holds-' + key">
+              <div v-for="e in holdExos(key)" :key="e.id" class="hold-row">
+                <span class="hold-name">{{ e.name }}</span>
+                <div class="mode-toggle hold-toggle" role="group" :aria-label="'Compter ' + e.name">
+                  <button
+                    type="button"
+                    :class="{ on: !holdAsSets(key, e.id) }"
+                    :aria-pressed="!holdAsSets(key, e.id)"
+                    :data-test="'hold-time-' + e.id"
+                    @click="setHoldUnit(key, e.id, false)"
+                  >
+                    Durée
+                  </button>
+                  <button
+                    type="button"
+                    :class="{ on: holdAsSets(key, e.id) }"
+                    :aria-pressed="holdAsSets(key, e.id)"
+                    :data-test="'hold-sets-' + e.id"
+                    @click="setHoldUnit(key, e.id, true)"
+                  >
+                    Séries
+                  </button>
+                </div>
+              </div>
+              <div class="hold-hint">
+                Durée : des bulles de {{ COMBO_HOLD_SEC }} s à remplir · Séries : chaque tenue est
+                une série, saisie en secondes
+              </div>
+            </div>
             <div class="cfg-row">
               <span class="cfg-lbl"
                 >{{ picks[key]?.count_mode === 'reps' ? 'Reps' : 'Séries' }} /
@@ -790,6 +820,8 @@ const picks = reactive<
       count_mode: ComboCountMode;
       /** Répartition choisie entre les exos (absente = parts égales). */
       alloc?: Record<string, number>;
+      /** ⏱️ Exos AU TEMPS comptés en SÉRIES de tenues (les autres exos au temps : en durée). */
+      holdSets?: string[];
     }
   >
 >({});
@@ -999,6 +1031,23 @@ function applyProposal(key: string) {
     p.alloc = undefined;
   }
 }
+// ── ⏱️ Un exo au temps : compté en DURÉE (défaut) ou en SÉRIES de tenues ──
+// Pas en mode groupe (une entrée = une série) ni quand l'emplacement se compte en reps (sa part
+// y est un total de reps). Le volume du groupe reste en SÉRIES : changer l'unité d'un exo ne
+// change ni le total ni la répartition, seulement la conversion au lancement.
+function holdExos(key: string): ExerciseRow[] {
+  if (isGroupMode.value || picks[key]?.count_mode === 'reps') return [];
+  return selectedExos(key).filter((e) => e.unit === 'time');
+}
+function holdAsSets(key: string, exId: string): boolean {
+  return picks[key]?.holdSets?.includes(exId) ?? false;
+}
+function setHoldUnit(key: string, exId: string, asSets: boolean) {
+  const p = picks[key];
+  if (!p) return;
+  const rest = (p.holdSets ?? []).filter((id) => id !== exId);
+  p.holdSets = asSets ? [...rest, exId] : rest;
+}
 function setMode(key: string, mode: SlotMode) {
   const p = picks[key];
   if (!p) return;
@@ -1024,16 +1073,16 @@ const totalSets = computed(() =>
 // Pendant les réglages (avant le choix des exos) tous les groupes actifs comptent ; ensuite seulement
 // ceux qui ont au moins un exo.
 const adviceGroups = computed(() =>
-  COMBO_SLOTS.filter(
-    (s) => enabled[s.key] && (step.value === 'setup' || pickCount(s.key) > 0),
-  ).map((s) => {
-    const p = picks[s.key];
-    return {
-      slot: s.key,
-      sets: p?.count_mode === 'reps' ? (p?.setsTarget ?? 0) : (p?.target ?? 0),
-      essential: s.essential,
-    };
-  }),
+  COMBO_SLOTS.filter((s) => enabled[s.key] && (step.value === 'setup' || pickCount(s.key) > 0)).map(
+    (s) => {
+      const p = picks[s.key];
+      return {
+        slot: s.key,
+        sets: p?.count_mode === 'reps' ? (p?.setsTarget ?? 0) : (p?.target ?? 0),
+        essential: s.essential,
+      };
+    },
+  ),
 );
 // Récap : emplacements inclus avec au moins un exo.
 const recapKeys = computed(() =>
@@ -1092,7 +1141,10 @@ function applyRepeatFromQuery() {
   const d = comboRepeatDraft(last, available);
   const oldSlots = Object.keys(d.picks).filter((k) => !COMBO_SLOTS.some((s) => s.key === k));
   if (!Object.keys(d.picks).length || oldSlots.length === Object.keys(d.picks).length) {
-    $q.notify({ type: 'warning', message: 'Rien à reprendre du dernier défi : choisis tes exercices.' });
+    $q.notify({
+      type: 'warning',
+      message: 'Rien à reprendre du dernier défi : choisis tes exercices.',
+    });
     return;
   }
   keepRepeat = true;
@@ -1153,8 +1205,11 @@ async function createCombo() {
     for (const exId of p.exercise_ids) {
       const e = lib.value.find((x) => x.id === exId);
       if (!e) continue;
-      // Exo au TEMPS (gainage) → mode DURÉE : objectif en SECONDES (30 s / série visée = une bulle).
+      // Exo au TEMPS (gainage) → mode DURÉE : objectif en SECONDES (30 s / série visée = une bulle),
+      // ou, au choix (par exo), N SÉRIES de tenues saisies en secondes (`hold`).
       const isTime = e.unit === 'time';
+      const holdSets =
+        isTime && !isGroupMode.value && p.count_mode !== 'reps' && holdAsSets(slot.key, exId);
       // Fourchette FIGÉE ici : l’objectif choisi, corrigé par la nature de l’exo
       // (gainage → secondes, isolation → plancher relevé).
       const range = repRangeForExercise(objective.value, {
@@ -1171,10 +1226,11 @@ async function createCombo() {
         // Mode groupe : aucun objectif propre à l'exo (c'est le groupe qui en a un).
         target: isGroupMode.value
           ? 0
-          : isTime
+          : isTime && !holdSets
             ? (split[exId] ?? 1) * COMBO_HOLD_SEC
             : (split[exId] ?? 1),
-        count_mode: isTime ? 'time' : isGroupMode.value ? 'sets' : p.count_mode,
+        count_mode: holdSets ? 'sets' : isTime ? 'time' : isGroupMode.value ? 'sets' : p.count_mode,
+        ...(isTime ? { hold: true } : {}),
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
         rep_min: range.min,
@@ -1823,6 +1879,36 @@ onMounted(async () => {
   background: var(--surface-2);
   font-size: 12px;
   color: var(--dim);
+}
+.cfg-holds {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 8px 10px;
+}
+.hold-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-bottom: 4px;
+}
+.hold-name {
+  min-width: 0;
+  flex: 1 1 120px;
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hold-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--dim);
+}
+.hold-toggle button {
+  min-height: 44px;
+  min-width: 72px;
 }
 .cfg-range {
   font-size: 12px;

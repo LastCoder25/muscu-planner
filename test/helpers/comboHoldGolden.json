@@ -1,0 +1,1023 @@
+[
+  {
+    "id": "A",
+    "pct": 44,
+    "bonus": 0,
+    "xp": 450,
+    "breakdown": {
+      "reps": 51,
+      "duration": 399,
+      "bonus": 0,
+      "total": 450
+    },
+    "counted": 19,
+    "byDay": [
+      {
+        "exerciseId": "bench",
+        "exerciseName": "Développé couché",
+        "date": "2026-10-12",
+        "mode": "sets",
+        "sets": [
+          {
+            "date": "2026-10-12",
+            "reps": 10,
+            "weight": 40
+          }
+        ],
+        "xp": 27
+      },
+      {
+        "exerciseId": "bench",
+        "exerciseName": "Développé couché",
+        "date": "2026-10-13",
+        "mode": "sets",
+        "sets": [
+          {
+            "date": "2026-10-13",
+            "reps": 9,
+            "weight": 40
+          }
+        ],
+        "xp": 27
+      },
+      {
+        "exerciseId": "pushup",
+        "exerciseName": "Pompes",
+        "date": "2026-10-13",
+        "mode": "reps",
+        "sets": [
+          {
+            "date": "2026-10-13",
+            "reps": 20
+          }
+        ],
+        "xp": 49
+      },
+      {
+        "exerciseId": "pushup",
+        "exerciseName": "Pompes",
+        "date": "2026-10-14",
+        "mode": "reps",
+        "sets": [
+          {
+            "date": "2026-10-14",
+            "reps": 18
+          }
+        ],
+        "xp": 44
+      },
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-12",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-12",
+            "reps": 45
+          }
+        ],
+        "xp": 111
+      },
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-13",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-13",
+            "reps": 40,
+            "lest": 5
+          }
+        ],
+        "xp": 98
+      },
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-14",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-14",
+            "reps": 38
+          }
+        ],
+        "xp": 93
+      }
+    ],
+    "text": "🎯 Défi 360 — Semaine du 12/10 → 18/10\nProgression : 44% (théorique 43%)\n\n• Développé couché — 2/6 séries\n   paliers : sec. 5 · objectif 6\n   séries : 10×40kg, 9×40kg\n• Pompes — 38/80 reps\n   paliers : sec. 64 · objectif 80\n   séries : 20, 18\n• Planche — 123/240 sec\n   paliers : sec. 192 · objectif 240\n   séries : 45s, 40s, 38s",
+    "quota": {
+      "bench": 1
+    },
+    "session": [
+      {
+        "exercise_id": "bench",
+        "exercise_name": "Développé couché",
+        "weight_kg": 40,
+        "sets": [9, 9],
+        "time": false,
+        "rep_min": 8,
+        "rep_max": 12
+      },
+      {
+        "exercise_id": "pushup",
+        "exercise_name": "Pompes",
+        "weight_kg": null,
+        "sets": [
+          18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+          18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+          18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18
+        ],
+        "time": false,
+        "rep_min": 8,
+        "rep_max": 15
+      },
+      {
+        "exercise_id": "ex_plank",
+        "exercise_name": "Planche",
+        "weight_kg": null,
+        "sets": [30, 30],
+        "time": true,
+        "rep_min": 30,
+        "rep_max": 60
+      }
+    ],
+    "legs": [
+      {
+        "id": "bench",
+        "done": 2,
+        "left": 4,
+        "complete": false,
+        "tier": "none",
+        "share": 0,
+        "range": {
+          "min": 8,
+          "max": 12,
+          "rest": 90
+        },
+        "loadable": false,
+        "advice": {
+          "weight": 40,
+          "assisted": false,
+          "call": "hold",
+          "reps": 11
+        },
+        "bubbles": null,
+        "origins": [null, null]
+      },
+      {
+        "id": "pushup",
+        "done": 38,
+        "left": 42,
+        "complete": false,
+        "tier": "none",
+        "share": 0,
+        "range": {
+          "min": 8,
+          "max": 15,
+          "rest": 90
+        },
+        "loadable": false,
+        "advice": {
+          "weight": null,
+          "assisted": false,
+          "call": "up",
+          "reps": 8
+        },
+        "bubbles": null,
+        "origins": [null, null]
+      },
+      {
+        "id": "ex_plank",
+        "done": 123,
+        "left": 117,
+        "complete": false,
+        "tier": "none",
+        "share": 0,
+        "range": {
+          "min": 30,
+          "max": 60,
+          "rest": 45
+        },
+        "loadable": true,
+        "advice": null,
+        "bubbles": [
+          {
+            "n": 1,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 2,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 3,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 5,
+            "beyond": false
+          },
+          {
+            "n": 4,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 30,
+            "beyond": false
+          },
+          {
+            "n": 5,
+            "cap": 30,
+            "held": 3,
+            "fill": 0.1,
+            "heldToday": 3,
+            "beyond": false
+          },
+          {
+            "n": 6,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 7,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 8,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          }
+        ],
+        "origins": [null, null, null]
+      }
+    ],
+    "balance": [
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 2.7,
+        "value": 5.3,
+        "pct": 0.6625,
+        "state": "ok"
+      },
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 5.3,
+        "value": 13,
+        "pct": 1.3,
+        "state": "ok"
+      }
+    ],
+    "balance4": [
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 0.7,
+        "value": 1.3,
+        "pct": 0.1625,
+        "state": "low"
+      },
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 1.3,
+        "value": 3.2,
+        "pct": 0.32,
+        "state": "low"
+      }
+    ],
+    "items": [
+      {
+        "source": "combo",
+        "day": "2026-10-12",
+        "exerciseId": "bench",
+        "name": "Développé couché",
+        "primary": "pectoraux",
+        "sets": 1,
+        "reps": 10
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-13",
+        "exerciseId": "bench",
+        "name": "Développé couché",
+        "primary": "pectoraux",
+        "sets": 1,
+        "reps": 9
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-13",
+        "exerciseId": "pushup",
+        "name": "Pompes",
+        "primary": "pectoraux",
+        "sets": 1.7391304347826086,
+        "reps": 20
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-14",
+        "exerciseId": "pushup",
+        "name": "Pompes",
+        "primary": "pectoraux",
+        "sets": 1.565217391304348,
+        "reps": 18
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-12",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 1,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-13",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 0.8888888888888888,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-14",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 0.8444444444444444,
+        "reps": 0
+      }
+    ],
+    "habit": []
+  },
+  {
+    "id": "B",
+    "pct": 63.9,
+    "bonus": 72,
+    "xp": 709,
+    "breakdown": {
+      "reps": 70,
+      "duration": 567,
+      "bonus": 72,
+      "total": 709
+    },
+    "counted": 27,
+    "byDay": [
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-12",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-12",
+            "reps": 60
+          },
+          {
+            "date": "2026-10-12",
+            "reps": 60
+          }
+        ],
+        "xp": 281
+      },
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-13",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-13",
+            "reps": 60
+          },
+          {
+            "date": "2026-10-13",
+            "reps": 60
+          }
+        ],
+        "xp": 281
+      },
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-14",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-14",
+            "reps": 30
+          }
+        ],
+        "xp": 7
+      },
+      {
+        "exerciseId": "ex_side_plank",
+        "exerciseName": "Gainage latéral",
+        "date": "2026-10-14",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-14",
+            "reps": 25
+          }
+        ],
+        "xp": 68
+      }
+    ],
+    "text": "🎯 Défi 360 — Semaine du 12/10 → 18/10\nProgression : 63,9% (théorique 43%)\n\n• Planche — 270/240 sec ✓ (+30 en plus)\n   paliers : sec. 192 · objectif 240\n   séries : 60s, 60s, 60s, 60s, 30s\n• Gainage latéral — 25/90 sec\n   paliers : sec. 72 · objectif 90\n   séries : 25s",
+    "quota": {
+      "ex_side_plank": 15
+    },
+    "session": [
+      {
+        "exercise_id": "ex_plank",
+        "exercise_name": "Planche",
+        "weight_kg": null,
+        "sets": [30, 30],
+        "time": true,
+        "rep_min": 30,
+        "rep_max": 60
+      },
+      {
+        "exercise_id": "ex_side_plank",
+        "exercise_name": "Gainage latéral",
+        "weight_kg": null,
+        "sets": [30, 30],
+        "time": true,
+        "rep_min": 30,
+        "rep_max": 60
+      }
+    ],
+    "legs": [
+      {
+        "id": "ex_plank",
+        "done": 270,
+        "left": 0,
+        "complete": true,
+        "tier": "principal",
+        "share": 1,
+        "range": {
+          "min": 30,
+          "max": 60,
+          "rest": 45
+        },
+        "loadable": true,
+        "advice": null,
+        "bubbles": [
+          {
+            "n": 1,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 2,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 3,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 4,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 5,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 6,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 7,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 8,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 9,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 30,
+            "beyond": true
+          }
+        ],
+        "origins": [null, null, null, null, null]
+      },
+      {
+        "id": "ex_side_plank",
+        "done": 25,
+        "left": 65,
+        "complete": false,
+        "tier": "none",
+        "share": 0,
+        "range": {
+          "min": 30,
+          "max": 60,
+          "rest": 45
+        },
+        "loadable": false,
+        "advice": null,
+        "bubbles": [
+          {
+            "n": 1,
+            "cap": 30,
+            "held": 25,
+            "fill": 0.8333333333333334,
+            "heldToday": 25,
+            "beyond": false
+          },
+          {
+            "n": 2,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 3,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          }
+        ],
+        "origins": [null]
+      }
+    ],
+    "balance": [
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 0,
+        "value": 0,
+        "pct": 0,
+        "state": "low"
+      },
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 6.6,
+        "value": 7.3,
+        "pct": 0.9125,
+        "state": "ok"
+      }
+    ],
+    "balance4": [
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 0,
+        "value": 0,
+        "pct": 0,
+        "state": "low"
+      },
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 1.6,
+        "value": 1.8,
+        "pct": 0.225,
+        "state": "low"
+      }
+    ],
+    "items": [
+      {
+        "source": "combo",
+        "day": "2026-10-12",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 1.3333333333333333,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-12",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 1.3333333333333333,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-13",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 1.3333333333333333,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-13",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 1.3333333333333333,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-14",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 0.6666666666666666,
+        "reps": 0
+      },
+      {
+        "source": "combo",
+        "day": "2026-10-14",
+        "exerciseId": "ex_side_plank",
+        "name": "Gainage latéral",
+        "primary": "abdominaux",
+        "sets": 0.5555555555555556,
+        "reps": 0
+      }
+    ],
+    "habit": []
+  },
+  {
+    "id": "C",
+    "pct": 0,
+    "bonus": 0,
+    "xp": 0,
+    "breakdown": {
+      "reps": 0,
+      "duration": 0,
+      "bonus": 0,
+      "total": 0
+    },
+    "counted": 0,
+    "byDay": [],
+    "text": "🎯 Défi 360 — Semaine du 12/10 → 18/10\nProgression : 0% (théorique 43%)\n\n• Planche — 0/240 sec\n   paliers : sec. 192 · objectif 240\n• Développé couché — 0/6 séries\n   paliers : sec. 5 · objectif 6",
+    "quota": {
+      "ex_plank": 105,
+      "bench": 3
+    },
+    "session": [
+      {
+        "exercise_id": "ex_plank",
+        "exercise_name": "Planche",
+        "weight_kg": null,
+        "sets": [60],
+        "time": true,
+        "rep_min": 30,
+        "rep_max": 60
+      },
+      {
+        "exercise_id": "bench",
+        "exercise_name": "Développé couché",
+        "weight_kg": null,
+        "sets": [12, 12],
+        "time": false,
+        "rep_min": 8,
+        "rep_max": 12
+      }
+    ],
+    "legs": [
+      {
+        "id": "ex_plank",
+        "done": 0,
+        "left": 240,
+        "complete": false,
+        "tier": "none",
+        "share": 0,
+        "range": {
+          "min": 30,
+          "max": 60,
+          "rest": 45
+        },
+        "loadable": true,
+        "advice": null,
+        "bubbles": [
+          {
+            "n": 1,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 2,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 3,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 4,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 5,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 6,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 7,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 8,
+            "cap": 30,
+            "held": 0,
+            "fill": 0,
+            "heldToday": 0,
+            "beyond": false
+          }
+        ],
+        "origins": []
+      },
+      {
+        "id": "bench",
+        "done": 0,
+        "left": 6,
+        "complete": false,
+        "tier": "none",
+        "share": 0,
+        "range": {
+          "min": 8,
+          "max": 12,
+          "rest": 90
+        },
+        "loadable": false,
+        "advice": null,
+        "bubbles": null,
+        "origins": []
+      }
+    ],
+    "balance": [
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 0,
+        "value": 6,
+        "pct": 0.6,
+        "state": "ok"
+      },
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 0,
+        "value": 5.3,
+        "pct": 0.6625,
+        "state": "ok"
+      }
+    ],
+    "balance4": [
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 0,
+        "value": 1.5,
+        "pct": 0.15,
+        "state": "low"
+      },
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 0,
+        "value": 1.3,
+        "pct": 0.1625,
+        "state": "low"
+      }
+    ],
+    "items": [],
+    "habit": []
+  },
+  {
+    "id": "D",
+    "pct": 100,
+    "bonus": 67,
+    "xp": 348,
+    "breakdown": {
+      "reps": 29,
+      "duration": 252,
+      "bonus": 67,
+      "total": 348
+    },
+    "counted": 12,
+    "byDay": [
+      {
+        "exerciseId": "ex_plank",
+        "exerciseName": "Planche",
+        "date": "2026-10-12",
+        "mode": "time",
+        "sets": [
+          {
+            "date": "2026-10-12",
+            "reps": 120
+          }
+        ],
+        "xp": 281
+      }
+    ],
+    "text": "🎯 Défi 360 — Semaine du 12/10 → 18/10\nProgression : 100% — bouclé ✅\n\n• Planche — 120/120 sec ✓\n   paliers : sec. 96 · objectif 120\n   séries : 120s",
+    "quota": {},
+    "session": [
+      {
+        "exercise_id": "ex_plank",
+        "exercise_name": "Planche",
+        "weight_kg": null,
+        "sets": [60],
+        "time": true,
+        "rep_min": 30,
+        "rep_max": 60
+      }
+    ],
+    "legs": [
+      {
+        "id": "ex_plank",
+        "done": 120,
+        "left": 0,
+        "complete": true,
+        "tier": "principal",
+        "share": 1,
+        "range": {
+          "min": 30,
+          "max": 60,
+          "rest": 45
+        },
+        "loadable": true,
+        "advice": null,
+        "bubbles": [
+          {
+            "n": 1,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 2,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 3,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          },
+          {
+            "n": 4,
+            "cap": 30,
+            "held": 30,
+            "fill": 1,
+            "heldToday": 0,
+            "beyond": false
+          }
+        ],
+        "origins": [null]
+      }
+    ],
+    "balance": [
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 0,
+        "value": 0,
+        "pct": 0,
+        "state": "low"
+      },
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 2.7,
+        "value": 2.7,
+        "pct": 0.3375,
+        "state": "low"
+      }
+    ],
+    "balance4": [
+      {
+        "muscle": "pectoraux",
+        "target": 10,
+        "done": 0,
+        "value": 0,
+        "pct": 0,
+        "state": "low"
+      },
+      {
+        "muscle": "abdominaux",
+        "target": 8,
+        "done": 0.7,
+        "value": 0.7,
+        "pct": 0.0875,
+        "state": "low"
+      }
+    ],
+    "items": [
+      {
+        "source": "combo",
+        "day": "2026-10-12",
+        "exerciseId": "ex_plank",
+        "name": "Planche",
+        "primary": "abdominaux",
+        "sets": 2.6666666666666665,
+        "reps": 0
+      }
+    ],
+    "habit": []
+  }
+]

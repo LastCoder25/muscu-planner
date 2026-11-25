@@ -319,7 +319,7 @@ const entries = computed<Entry[]>(() => {
           : g.mode === 'reps'
             ? `${reps} reps`
             : `${g.sets.length} série${g.sets.length > 1 ? 's' : ''}${
-                repsList.length ? ' · ' + numList(repsList) + ' reps' : ''
+                repsList.length ? ' · ' + numList(repsList) + (g.hold ? ' s' : ' reps') : ''
               }`;
       out.push({
         ts,

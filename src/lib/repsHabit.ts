@@ -5,7 +5,14 @@
 // dernières semaines ACTIVES (séances + Défis 360 + challenges muscu ; une semaine à 0 est
 // ignorée), +10 %, arrondi propre. Sans historique : séries × milieu de fourchette.
 import type { Challenge } from './challenges';
-import { legSets, setOrigin, setWork, comboDayShare, legMode, type ComboChallenge } from './combo';
+import {
+  legSets,
+  setOrigin,
+  setWork,
+  comboDayShare,
+  legIsHold,
+  type ComboChallenge,
+} from './combo';
 import { isMuscuLog, mondayOf, type LogEntry } from './volume';
 
 /** Semaines actives lues pour l'habitude. */
@@ -41,7 +48,7 @@ export function exerciseRepDays(
   }
   for (const c of src.combos) {
     for (const leg of c.legs) {
-      if (legMode(leg) === 'time') continue;
+      if (legIsHold(leg)) continue;
       for (const s of legSets(leg)) {
         if (setOrigin(leg, s).exercise_id !== exerciseId) continue;
         const reps = setWork(leg, s).reps || 0;

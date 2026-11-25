@@ -121,7 +121,7 @@
             <span class="exo-name" :class="{ struck: !included[leg.exercise_id] }">{{
               leg.exercise_name
             }}</span>
-            <HoldMuscleChip :muscle="leg.muscle_primary" :time="legMode(leg) === 'time'" />
+            <HoldMuscleChip :muscle="leg.muscle_primary" :time="legIsHold(leg)" />
             <span class="exo-rem"
               >reste {{ legRemaining(leg) }} {{ legUnitLabel(leg)
               }}<template v-if="legMode(leg) === 'time' && included[leg.exercise_id]">
@@ -380,6 +380,7 @@ import {
   legsByGroup,
   legUnitLabel,
   legMode,
+  legIsHold,
   legHoldLoadable,
   legHoldLest,
   legLastReps,
@@ -490,7 +491,8 @@ function perSetOf(leg: ComboLeg): number {
 function countLabel(leg: ComboLeg): { v: string; u: string } {
   const n = counts[leg.exercise_id] ?? 0;
   const m = legMode(leg);
-  if (m !== 'time') return { v: String(n), u: m === 'reps' ? 'r' : 's' };
+  // ⏱️ Une tenue comptée en séries se règle en séries : « 1 s » se lirait « 1 seconde ».
+  if (m !== 'time') return { v: String(n), u: m === 'reps' ? 'r' : legIsHold(leg) ? 'sér.' : 's' };
   return n < 60
     ? { v: String(n), u: 's' }
     : { v: `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`, u: 'min' };
@@ -879,7 +881,7 @@ function validate(i: number, j: number, reps: number) {
     : (exo.weight_kg ?? recallWeight(exo.exercise_id));
   logAssisted.value = seed?.assisted ?? false;
   logBand.value = seed ? (seed.band ?? null) : leg ? legLastBand(leg) : null;
-  logRepOptions.value = repQuickPicks(exo.rep_min, exo.rep_max, !!leg && legMode(leg) === 'time');
+  logRepOptions.value = repQuickPicks(exo.rep_min, exo.rep_max, !!leg && legIsHold(leg));
   logAssistable.value = !!leg?.assistable;
   logHint.value = exoRangeLabel(exo);
   logOpen.value = true;

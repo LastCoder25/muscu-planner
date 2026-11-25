@@ -479,11 +479,13 @@
                 <div
                   v-if="legMode(leg) === 'sets'"
                   class="seg-bar"
-                  :class="{ tap: !legComplete(leg) }"
-                  :role="legComplete(leg) ? undefined : 'button'"
-                  :tabindex="legComplete(leg) ? undefined : 0"
+                  :class="{ tap: !legComplete(leg) && !legIsHold(leg), hold: legIsHold(leg) }"
+                  :role="legComplete(leg) || legIsHold(leg) ? undefined : 'button'"
+                  :tabindex="legComplete(leg) || legIsHold(leg) ? undefined : 0"
                   :aria-label="
-                    legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`
+                    legComplete(leg) || legIsHold(leg)
+                      ? undefined
+                      : `Ajouter une série : ${leg.exercise_name}`
                   "
                   @click="addFromBar(leg)"
                   @keydown.enter="addFromBar(leg)"
@@ -509,9 +511,9 @@
                     @click.stop="onSeg(leg, n)"
                   >
                     <template v-if="n <= legDone(leg)">{{
-                      segSetLabel(legSets(leg)[n - 1])
+                      segSetLabel(legSets(leg)[n - 1], legIsHold(leg))
                     }}</template>
-                    <template v-else-if="n === legDone(leg) + 1">＋</template>
+                    <template v-else-if="n === legDone(leg) + 1 && !legIsHold(leg)">＋</template>
                   </span>
                 </div>
                 <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
@@ -537,7 +539,7 @@
                 >
                   ＋
                 </button>
-                <div v-else-if="legMode(leg) === 'time'" class="cl-actions">
+                <div v-else-if="legIsHold(leg)" class="cl-actions">
                   <template v-if="!legComplete(leg)">
                     <!-- Mode DURÉE : chrono ou minuteur avec départ différé (série de la durée tenue). -->
                     <HoldTimerButton
@@ -581,10 +583,7 @@
       :assistable="setLeg?.assistable"
       :hint="
         setLeg
-          ? repRangeLabel(
-              legRepRange(setLeg, profileStore.profile?.objective),
-              legMode(setLeg) === 'time',
-            )
+          ? repRangeLabel(legRepRange(setLeg, profileStore.profile?.objective), legIsHold(setLeg))
           : undefined
       "
       :initial-reps="setReps"
@@ -676,6 +675,7 @@ import {
   legsDoneLast,
   legBarGeometry,
   legMode,
+  legIsHold,
   legLastReps,
   legLastWeight,
   legLastAssisted,
@@ -702,6 +702,7 @@ import {
   comboBonusXp,
   comboCompleteInTime,
   type ComboLeg,
+  type ComboSet,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
 import { comboRepeatInput, lastRepeatable, repeatBlocker } from '@/lib/comboRepeat';
@@ -908,7 +909,7 @@ const pace = computed(() =>
 
 // Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
 // du corps, « 12·a » si assisté). Vide si la série n'existe pas encore.
-const segSetLabel = setCellLabel;
+const segSetLabel = (s: ComboSet | undefined, hold = false) => setCellLabel(s, hold);
 
 // Saisie d'une série (reps + poids), préremplie avec la dernière série de l'exo.
 const setOpen = ref(false);
@@ -922,7 +923,7 @@ const setRepOptions = computed(() => {
   const l = setLeg.value;
   if (!l) return undefined;
   const r = legRepRange(l, profileStore.profile?.objective);
-  return repQuickPicks(r.min, r.max, legMode(l) === 'time');
+  return repQuickPicks(r.min, r.max, legIsHold(l));
 });
 /** Série en cours de CORRECTION (index), ou null quand on en ajoute une. */
 const editIndex = ref<number | null>(null);
@@ -945,12 +946,15 @@ const undoLabel = computed(() => {
   if (editIndex.value !== null) return '🗑 Retirer';
   const sets = setLeg.value ? legSets(setLeg.value) : [];
   const last = sets[sets.length - 1];
-  return last ? `↩ Retirer la dernière (${segSetLabel(last)})` : undefined;
+  return last
+    ? `↩ Retirer la dernière (${segSetLabel(last, !!setLeg.value && legIsHold(setLeg.value))})`
+    : undefined;
 });
 /** Toucher la barre ajoute une série — sauf objectif atteint : le 360 n'accepte plus de
  *  série en plus (v1.53), qui veut en faire davantage lance un challenge à part. */
 function addFromBar(leg: ComboLeg) {
-  if (!legComplete(leg)) openSet(leg, 1);
+  // ⏱️ Une tenue se pose au chrono, pas dans la fenêtre reps & poids.
+  if (!legComplete(leg) && !legIsHold(leg)) openSet(leg, 1);
 }
 /** Énergie que rapporte UNE série (= son XP, ENERGY_PER_XP=1) : la différence du total du
  *  défi avec et sans elle — durée, reps, poids du corps, prime : la règle de la lib. */
@@ -1072,8 +1076,10 @@ function isDoneToday(leg: ComboLeg, n: number): boolean {
   return !!s && setIsToday(s, logicalToday());
 }
 function onSeg(leg: ComboLeg, n: number) {
-  if (n <= legSetsDone(leg)) openEdit(leg, n - 1);
-  else addFromBar(leg);
+  if (n <= legSetsDone(leg)) {
+    if (legIsHold(leg)) openHoldEdit(leg, n - 1);
+    else openEdit(leg, n - 1);
+  } else addFromBar(leg);
 }
 /** Retire UNE série (par défaut la dernière) — celle dont on a touché la case. */
 function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
@@ -1089,7 +1095,7 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
     title: `Retirer la série ${index + 1} ?`,
     message: wouldDeficit
       ? "Tu as déjà dépensé l'énergie gagnée avec cette série. La retirer te mettra en déficit d'énergie : il faudra refaire du sport avant de rejouer à l'aventure."
-      : `« ${leg.exercise_name} » — ${segSetLabel(last)}`,
+      : `« ${leg.exercise_name} » — ${segSetLabel(last, legIsHold(leg))}`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Retirer', color: 'negative' },
   }).onOk(doRemove);
@@ -1102,13 +1108,16 @@ const histLeg = ref<ComboLeg | null>(null);
 const holdEditOpen = ref(false);
 const holdEditLeg = ref<ComboLeg | null>(null);
 const holdEditIndex = ref<number | null>(null);
+function openHoldEdit(leg: ComboLeg, index: number) {
+  holdEditLeg.value = leg;
+  holdEditIndex.value = index;
+  holdEditOpen.value = true;
+}
 function onHistoryEdit(index: number) {
   const leg = histLeg.value;
   if (!leg) return;
   histOpen.value = false;
-  holdEditLeg.value = leg;
-  holdEditIndex.value = index;
-  holdEditOpen.value = true;
+  openHoldEdit(leg, index);
 }
 function openHistory(leg: ComboLeg) {
   histLeg.value = leg;
@@ -1679,6 +1688,16 @@ onMounted(async () => {
   flex: none;
 }
 .cl-bottom.stacked .cl-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+/* ⏱️ Tenues comptées en SÉRIES : la barre de séries pleine largeur, le chrono sur sa ligne dessous. */
+.cl-bottom:has(> .seg-bar.hold) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.cl-bottom:has(> .seg-bar.hold) .cl-actions {
   flex-wrap: wrap;
   align-items: center;
 }

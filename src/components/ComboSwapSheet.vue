@@ -17,8 +17,8 @@
           <b>{{ pending.name }}</b
           >.
           <template v-if="(plan.moved ?? restCount) < restCount">
-            {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }}
-            déjà faites et {{ restCount - (plan.moved ?? restCount) }} encore à faire.
+            {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }} déjà
+            faites et {{ restCount - (plan.moved ?? restCount) }} encore à faire.
           </template>
           <template v-else>
             {{ leg.exercise_name }} reste dans ton défi avec ses {{ doneCount }} {{ unitWord }}
@@ -285,7 +285,7 @@
             </div>
             <div class="sw-name">
               {{ l.exercise_name }}
-              <HoldMuscleChip :muscle="l.muscle_primary" :time="legMode(l) === 'time'" />
+              <HoldMuscleChip :muscle="l.muscle_primary" :time="legIsHold(l)" />
             </div>
             <div v-if="groupOf(l.slot)" class="sw-grp-tag">{{ groupOf(l.slot) }}</div>
             <div class="sw-sub">
@@ -358,6 +358,7 @@ import {
   legRemaining,
   legSets,
   legMode,
+  legIsHold,
   COMBO_TRANSFER_BLOCK_LABEL,
   transferSlotFor,
   type ComboChallenge,
@@ -405,9 +406,7 @@ const doneCount = computed(() => (leg.value ? legDone(leg.value) : 0));
 const restCount = computed(() => (leg.value ? legRemaining(leg.value) : 0));
 /** Basculer le reste : il faut du restant, et soit du fait (l'exo garde son objectif atteint),
  *  soit au moins 2 restants (une PART du reste laisse un objectif > 0 à l'exo). */
-const canRest = computed(() =>
-  doneCount.value > 0 ? restCount.value > 0 : restCount.value > 1,
-);
+const canRest = computed(() => (doneCount.value > 0 ? restCount.value > 0 : restCount.value > 1));
 /** 🔀 Combien du reste on peut basculer : tout si l'exo est entamé, sinon tout sauf 1 (l'exo
  *  ne peut pas rester avec un objectif nul). */
 const amountMax = computed(() =>
@@ -415,16 +414,15 @@ const amountMax = computed(() =>
 );
 /** La part choisie (par défaut tout), toujours dans [1, amountMax]. */
 const amount = ref(0);
-const amountEff = computed(() => Math.min(amountMax.value, Math.max(1, amount.value || amountMax.value)));
+const amountEff = computed(() =>
+  Math.min(amountMax.value, Math.max(1, amount.value || amountMax.value)),
+);
 const amountStep = computed(() => {
   const m = leg.value ? legMode(leg.value) : 'sets';
   return m === 'sets' ? 1 : m === 'time' ? 10 : 5;
 });
 function stepAmount(d: number) {
-  amount.value = Math.min(
-    amountMax.value,
-    Math.max(1, amountEff.value + d * amountStep.value),
-  );
+  amount.value = Math.min(amountMax.value, Math.max(1, amountEff.value + d * amountStep.value));
 }
 /** Portée choisie : le reste par défaut dès que l'exo est entamé (le cas courant : finir ses
  *  séries manquantes sur un autre exo), sinon tout. Remise à chaque ouverture. */
@@ -492,8 +490,13 @@ const inCombo = computed(() => {
   return cc.legs.filter(
     (x) =>
       x !== l &&
-      comboTransferBlocker(cc, l.exercise_id, { leg: x.exercise_id }, effScope.value, moveAmount.value) ===
-        null,
+      comboTransferBlocker(
+        cc,
+        l.exercise_id,
+        { leg: x.exercise_id },
+        effScope.value,
+        moveAmount.value,
+      ) === null,
   );
 });
 
@@ -522,8 +525,7 @@ const fresh = computed(() => {
           { exercise: newExercise(e) },
           effScope.value,
           moveAmount.value,
-        ) ===
-          null,
+        ) === null,
     )
     .sort(
       (a, b) =>
@@ -593,7 +595,8 @@ watch(
     if (!open) cancelPending();
   },
 );
-const isTime = computed(() => !!leg.value && legMode(leg.value) === 'time');
+// ⏱️ Saisie en secondes (tenue), qu'elle soit comptée en durée ou en séries ; `isSets` = on compte des séries.
+const isTime = computed(() => !!leg.value && legIsHold(leg.value));
 const isSets = computed(() => !leg.value || legMode(leg.value) === 'sets');
 const unitShort = computed(() => (isTime.value ? 's' : 'reps'));
 const destAssistable = computed(() => {

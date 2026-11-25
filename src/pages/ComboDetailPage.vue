@@ -94,10 +94,14 @@
           <div
             v-if="legMode(leg) === 'sets'"
             class="seg-bar"
-            :class="{ tap: !legComplete(leg) }"
-            :role="legComplete(leg) ? undefined : 'button'"
-            :tabindex="legComplete(leg) ? undefined : 0"
-            :aria-label="legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`"
+            :class="{ tap: !legComplete(leg) && !legIsHold(leg) }"
+            :role="legComplete(leg) || legIsHold(leg) ? undefined : 'button'"
+            :tabindex="legComplete(leg) || legIsHold(leg) ? undefined : 0"
+            :aria-label="
+              legComplete(leg) || legIsHold(leg)
+                ? undefined
+                : `Ajouter une série : ${leg.exercise_name}`
+            "
             @click="addFromBar(leg)"
             @keydown.enter="addFromBar(leg)"
           >
@@ -121,8 +125,10 @@
               "
               @click.stop="onSeg(leg, n)"
             >
-              <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
-              <template v-else-if="n === legDone(leg) + 1">＋</template>
+              <template v-if="n <= legDone(leg)">{{
+                segSetLabel(legSets(leg)[n - 1], legIsHold(leg))
+              }}</template>
+              <template v-else-if="n === legDone(leg) + 1 && !legIsHold(leg)">＋</template>
             </span>
           </div>
           <div
@@ -153,8 +159,9 @@
             :combo-id="id"
             :leg="leg"
           />
-          <!-- Mode DURÉE (gainage) : chrono / minuteur avec départ différé, OU ajout manuel d'une durée. -->
-          <div v-if="legMode(leg) === 'time'" class="leg-actions">
+          <!-- Exo AU TEMPS (durée ou séries de tenues) : chrono / minuteur avec départ différé, OU ajout
+             manuel d'une durée. -->
+          <div v-if="legIsHold(leg)" class="leg-actions">
             <template v-if="!legComplete(leg)">
               <HoldTimerButton
                 :label="leg.exercise_name"
@@ -164,7 +171,7 @@
             <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
           </div>
           <!-- Ajout manuel d'une durée sans chrono. -->
-          <div v-if="legMode(leg) === 'time' && !legComplete(leg)" class="dur-adds">
+          <div v-if="legIsHold(leg) && !legComplete(leg)" class="dur-adds">
             <span class="da-lbl">Ajouter :</span>
             <button
               v-for="s in DUR_QUICK_ADDS"
@@ -182,22 +189,20 @@
               v-for="(l, i) in groupSetLines(legSets(leg))"
               :key="i"
               class="leg-set-chip"
-              :class="{ tap: legMode(leg) === 'time' && l.kind === 'set' }"
-              :role="legMode(leg) === 'time' && l.kind === 'set' ? 'button' : undefined"
-              :tabindex="legMode(leg) === 'time' && l.kind === 'set' ? 0 : undefined"
+              :class="{ tap: legIsHold(leg) && l.kind === 'set' }"
+              :role="legIsHold(leg) && l.kind === 'set' ? 'button' : undefined"
+              :tabindex="legIsHold(leg) && l.kind === 'set' ? 0 : undefined"
               :aria-label="
-                legMode(leg) === 'time' && l.kind === 'set'
+                legIsHold(leg) && l.kind === 'set'
                   ? `Corriger la série ${l.index + 1} : ${leg.exercise_name}`
                   : undefined
               "
-              :data-test="legMode(leg) === 'time' && l.kind === 'set' ? 'hold-set-chip' : undefined"
-              @click="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
-              @keydown.enter="
-                legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)
-              "
+              :data-test="legIsHold(leg) && l.kind === 'set' ? 'hold-set-chip' : undefined"
+              @click="legIsHold(leg) && l.kind === 'set' && openHoldEdit(leg, l.index)"
+              @keydown.enter="legIsHold(leg) && l.kind === 'set' && openHoldEdit(leg, l.index)"
             >
               <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
-              <template v-else-if="legMode(leg) === 'time'"
+              <template v-else-if="legIsHold(leg)"
                 >{{ l.set.reps }} s<template v-if="l.set.lest">
                   · {{ holdLestLabel(l.set) }}</template
                 ></template
@@ -300,6 +305,7 @@ import {
   legsByGroup,
   legsDoneLast,
   legMode,
+  legIsHold,
   legSets,
   setIsToday,
   isJustAdded,
@@ -323,6 +329,7 @@ import {
   comboBonusXp,
   comboCompleteInTime,
   type ComboLeg,
+  type ComboSet,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
@@ -464,7 +471,7 @@ function legRange(leg: ComboLeg) {
   return legRepRange(leg, profileStore.profile?.objective);
 }
 function rangeLabel(leg: ComboLeg): string {
-  return repRangeLabel(legRange(leg), legMode(leg) === 'time');
+  return repRangeLabel(legRange(leg), legIsHold(leg));
 }
 
 function slotEmoji(key: string) {
@@ -478,10 +485,12 @@ const undoLabel = computed(() => {
   if (editIndex.value !== null) return '🗑 Retirer';
   const sets = setLeg.value ? legSets(setLeg.value) : [];
   const last = sets[sets.length - 1];
-  return last ? `↩ Retirer la dernière (${segSetLabel(last)})` : undefined;
+  return last
+    ? `↩ Retirer la dernière (${segSetLabel(last, !!setLeg.value && legIsHold(setLeg.value))})`
+    : undefined;
 });
 
-const segSetLabel = setCellLabel;
+const segSetLabel = (s: ComboSet | undefined, hold = false) => setCellLabel(s, hold);
 
 // Saisie d'une série via le dialogue partagé, préremplie avec la dernière série.
 const setOpen = ref(false);
@@ -490,7 +499,7 @@ const setRepOptions = computed(() => {
   const l = setLeg.value;
   if (!l) return undefined;
   const r = legRange(l);
-  return repQuickPicks(r.min, r.max, legMode(l) === 'time');
+  return repQuickPicks(r.min, r.max, legIsHold(l));
 });
 const setCount = ref(1);
 const setInitReps = ref(10);
@@ -612,7 +621,7 @@ function undoSet(leg: ComboLeg, index = legSets(leg).length - 1) {
   if (!s) return;
   $q.dialog({
     title: `Retirer la série ${index + 1} ?`,
-    message: `« ${leg.exercise_name} » — ${segSetLabel(s)}`,
+    message: `« ${leg.exercise_name} » — ${segSetLabel(s, legIsHold(leg))}`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: 'Retirer', color: 'negative' },
   }).onOk(() => combo.removeSet(id, leg.exercise_id, index));
@@ -625,13 +634,16 @@ function isDoneToday(leg: ComboLeg, n: number): boolean {
   return !!s && setIsToday(s, logicalToday());
 }
 function onSeg(leg: ComboLeg, n: number) {
-  if (n <= legSetsDone(leg)) openEdit(leg, n - 1);
-  else addFromBar(leg);
+  if (n <= legSetsDone(leg)) {
+    if (legIsHold(leg)) openHoldEdit(leg, n - 1);
+    else openEdit(leg, n - 1);
+  } else addFromBar(leg);
 }
 /** Toucher la barre ajoute une série — sauf objectif atteint : le 360 n'accepte plus de
  *  série en plus (v1.53), qui veut en faire davantage lance un challenge à part. */
 function addFromBar(leg: ComboLeg) {
-  if (!legComplete(leg)) openSet(leg, 1);
+  // ⏱️ Une tenue se pose au chrono (ou au bouton « + 30 s »), pas dans la fenêtre reps & poids.
+  if (!legComplete(leg) && !legIsHold(leg)) openSet(leg, 1);
 }
 
 // Exporte : partage natif (mobile) si dispo, sinon copie dans le presse-papier.

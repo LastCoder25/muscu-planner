@@ -54,7 +54,7 @@
               <div v-if="legSets(row.leg).length" class="fp-sets">
                 <span v-for="(l, i) in groupSetLines(legSets(row.leg))" :key="i" class="fp-set">
                   <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
-                  <template v-else-if="legMode(row.leg) === 'time'">{{ l.set.reps }} s</template>
+                  <template v-else-if="legIsHold(row.leg)">{{ l.set.reps }} s</template>
                   <template v-else
                     >{{ l.set.reps
                     }}<template v-if="l.set.weight">×{{ l.set.weight }}kg</template></template
@@ -173,7 +173,7 @@ import {
   groupSetLines,
   legDone,
   legComplete,
-  legMode,
+  legIsHold,
   legSets,
   miniLineLabel,
   legUnitLabel,

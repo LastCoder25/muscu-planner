@@ -23,8 +23,10 @@
 import type { Objective } from './types';
 import { isMuscuLog, mondayOf, volumeState, type LogEntry, type VolumeState } from './volume';
 import {
+  COMBO_HOLD_SEC,
   legSets,
   legMode,
+  legIsHold,
   legRepRange,
   comboGoals,
   comboMode,
@@ -189,8 +191,9 @@ function sessionItems(sessions: readonly LogEntry[]): VolumeItem[] {
 
 /** Séries faites d'un exo du 360, en séries (une entrée = 1 série, ou ses reps ÷ fourchette). */
 function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
-  const mode = legMode(leg);
-  const unit = mode === 'sets' ? 0 : perSet(legRepRange(leg, objective));
+  // ⏱️ Une tenue comptée en SÉRIES vaut ses secondes ÷ la fourchette, comme en durée : seule
+  // une série de reps ordinaire vaut 1.
+  const unit = legMode(leg) === 'sets' && !legIsHold(leg) ? 0 : perSet(legRepRange(leg, objective));
   // ⚠️ Une série basculée d'un autre exo crédite les muscles de SON exo d'origine.
   return legSets(leg).map((s) => {
     const o = setOrigin(leg, s);
@@ -202,7 +205,7 @@ function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
       primary: o.muscle_primary,
       sets: unit ? (s.reps || 0) / unit : 1,
       // Reps VRAIMENT faites (une série convertie à la bascule garde les siennes).
-      reps: mode === 'time' ? 0 : setWork(leg, s).reps || 0,
+      reps: legIsHold(leg) ? 0 : setWork(leg, s).reps || 0,
     };
   });
 }
@@ -316,9 +319,13 @@ function comboItems(
       comboMode(c) === 'group'
         ? groupTargetItems(c, day, already)
         : c.legs.map((leg) => {
-            const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
+            const series = legMode(leg) === 'sets' && !legIsHold(leg);
+            const unit = series ? 1 : perSet(legRepRange(leg, i.objective));
+            // ⏱️ N tenues comptées en séries = N × 30 s (la tenue prévue, comme une bulle en durée).
+            const planned =
+              legMode(leg) === 'sets' && legIsHold(leg) ? leg.target * COMBO_HOLD_SEC : leg.target;
             // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
-            const sets = leg.target / unit - already(leg);
+            const sets = planned / unit - already(leg);
             return {
               source: 'combo' as const,
               day,

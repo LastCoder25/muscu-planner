@@ -15,7 +15,7 @@
       <div class="lh-name" :title="leg.exercise_name">
         {{ leg.exercise_name
         }}<span v-if="bodyweight" class="lh-bw" title="Poids du corps (aucun matériel)">🤸</span
-        ><HoldMuscleChip :muscle="leg.muscle_primary" :time="legMode(leg) === 'time'" />
+        ><HoldMuscleChip :muscle="leg.muscle_primary" :time="legIsHold(leg)" />
       </div>
       <!-- Toute la ligne ouvre les séries faites : une cible large, pas une pastille de 20 px. -->
       <button
@@ -62,7 +62,7 @@ import HoldMuscleChip from './HoldMuscleChip.vue';
 import {
   legComplete,
   legDone,
-  legMode,
+  legIsHold,
   legLoadAdvice,
   LOAD_ADVICE,
   legRepRange,
@@ -103,7 +103,7 @@ const props = withDefaults(
 const emit = defineEmits<{ history: []; swap: [] }>();
 
 const range = computed(() =>
-  repRangeLabel(legRepRange(props.leg, props.objective), legMode(props.leg) === 'time'),
+  repRangeLabel(legRepRange(props.leg, props.objective), legIsHold(props.leg)),
 );
 /** Dans la rangée, « reps » est implicite : on garde la place pour le conseil de charge. */
 const rangeShort = computed(() => range.value.replace(/ reps$/, ''));
