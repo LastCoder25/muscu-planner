@@ -1047,6 +1047,15 @@ describe('📅 LA BARRE D’AVANCEMENT DU 360', () => {
     expect(comboPace(mk(), '2026-01-08').showMark).toBe(true);
   });
 
+  it('📅 la durée choisie et le jour en cours alimentent la découpe de la barre', () => {
+    const p = comboPace(mk(), '2026-01-07'); // jour 3 sur 7
+    expect(p.days).toBe(7);
+    expect(p.day).toBe(3);
+    expect(comboPace(mk(), '2026-01-01').day).toBe(0); // pas commencé
+    expect(comboPace(mk(), '2026-02-01').day).toBe(7); // bouclé : borné à la durée
+    expect(comboPace({ ...mk(), duration_days: 3 }, '2026-01-05').days).toBe(3);
+  });
+
   it('en avance : aucun rose', () => {
     const fini = mk({
       legs: [
@@ -1446,6 +1455,22 @@ describe('🎨 LA BARRE DU 360 : une seule barre (avancement, retard, repère)',
   });
   it('le premier jour, personne n’est en retard', () => {
     expect(comboBar(pace(14, 0, { latePct: 0 })).late).toBe(0);
+  });
+  it('📅 la barre est découpée selon la durée choisie : N jours = N-1 traits, jour en cours teinté', () => {
+    // 5 jours, jour 2 : traits à 20/40/60/80 %, tranche 20→40 %.
+    const b = comboBar(pace(40, 10, { days: 5, day: 2 }));
+    expect(b.ticks).toEqual([20, 40, 60, 80]);
+    expect(b.today).toEqual({ from: 20, to: 40 });
+    // 3 jours et 7 jours : la découpe suit la durée.
+    expect(comboBar(pace(34, 0, { days: 3, day: 1 })).ticks).toHaveLength(2);
+    expect(comboBar(pace(14, 0, { days: 7, day: 1 })).ticks).toHaveLength(6);
+    // Dernier jour : la tranche finit à 100 %.
+    expect(comboBar(pace(100, 50, { days: 4, day: 4 })).today).toEqual({ from: 75, to: 100 });
+    // Pas commencé : pas de tranche. Un seul jour : ni trait ni tranche.
+    expect(comboBar(pace(0, 0, { days: 5, day: 0 })).today).toBeNull();
+    const un = comboBar(pace(100, 0, { days: 1, day: 1 }));
+    expect(un.ticks).toEqual([]);
+    expect(un.today).toBeNull();
   });
   it('ne déborde jamais de la barre, même avec des valeurs aberrantes', () => {
     for (const [on, done, late] of [

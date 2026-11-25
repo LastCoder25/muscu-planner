@@ -2,22 +2,31 @@
   <!-- 🎨 Avancement du Défi 360 : UNE SEULE BARRE (v1.343.0 ; avec la variété d'exos, la zone
        « secondaire » n'était plus qu'une miette). Remplissage = l'avancement (le même chiffre
        que le grand pourcentage), rose = le RETARD réel juste après, trait 🎯 = où l'on devrait
-       en être. Tout vient de `comboBar` (lib, testée). La ligne dessous rappelle la prime. -->
+       en être. 📅 v1.354.0 (demandé : « pas de texte sous la barre, mais voir sur la barre la
+       répartition théorique selon la durée choisie ») : la barre est DÉCOUPÉE en autant de
+       tranches que de jours (traits fins) et la tranche du jour est teintée. Plus de ligne
+       dessous. Tout vient de `comboBar` (lib, testée). -->
   <div class="cpb-wrap" :class="{ thin }">
     <div
       class="cpb-seg"
       role="progressbar"
-      aria-label="Avancement du défi"
+      :aria-label="`Avancement du défi, ${bar.ticks.length + 1} jours`"
       :aria-valuenow="Math.round(bar.fill)"
       aria-valuemin="0"
       aria-valuemax="100"
     >
+      <span
+        v-if="bar.today"
+        class="cpb-today"
+        :style="{ left: bar.today.from + '%', width: bar.today.to - bar.today.from + '%' }"
+      />
       <span class="cpb-fill" :style="{ width: bar.fill + '%' }" />
       <span
         v-if="bar.late > 0"
         class="cpb-late"
         :style="{ left: bar.fill + '%', width: bar.late + '%' }"
       />
+      <i v-for="t in bar.ticks" :key="t" class="cpb-tick" :style="{ left: t + '%' }" />
       <i
         v-if="bar.mark !== null"
         class="cpb-mark"
@@ -25,8 +34,6 @@
         :title="`Pour être dans les temps : ${pace.onTimePct}%`"
       />
     </div>
-    <!-- La prime est par exo : 15 % dès 80 % de l'exo, tout à 100 %. -->
-    <p class="cpb-hint">Prime d’un exo : 15 % dès 80 % faits, en entier à 100 %</p>
   </div>
 </template>
 
@@ -45,17 +52,18 @@ const bar = computed(() => comboBar(props.pace));
 .cpb-seg {
   position: relative;
   display: block;
-  height: 10px;
+  height: 12px;
   border-radius: 6px;
   overflow: hidden;
   background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
 }
 .cpb-wrap.thin .cpb-seg {
-  height: 8px;
+  height: 10px;
   border-radius: 5px;
 }
 .cpb-fill,
-.cpb-late {
+.cpb-late,
+.cpb-today {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -66,6 +74,23 @@ const bar = computed(() => comboBar(props.pace));
 }
 .cpb-late {
   background: #ff6a9c;
+}
+/* La tranche du jour : un voile plus clair sur la piste (visible là où la barre n'est pas
+   encore remplie), pour dire « c'est ce créneau-là qu'il faut faire aujourd'hui ». */
+.cpb-today {
+  background: color-mix(in srgb, var(--accent) 34%, var(--surface-2));
+}
+/* Frontières de jours : un trait sombre fin par-dessus remplissage et rose. */
+.cpb-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--bg);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 1;
 }
 /* Repère « dans les temps ». */
 .cpb-mark {
@@ -78,12 +103,5 @@ const bar = computed(() => comboBar(props.pace));
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
   pointer-events: none;
   z-index: 2;
-}
-.cpb-hint {
-  margin: 4px 0 0;
-  font-size: 10.5px;
-  line-height: 1.3;
-  color: var(--dim);
-  opacity: 0.85;
 }
 </style>

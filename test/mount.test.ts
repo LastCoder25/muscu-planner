@@ -3755,7 +3755,25 @@ describe('🎨 Barre du Défi 360 : une seule barre (ComboProgressBar)', () => {
     expect(out).not.toContain('<button');
     expect(out).not.toContain('cpb-sec');
     expect(out).not.toContain('cpb-obj');
-    expect(out).toContain('Prime d’un exo');
+    // Plus de texte sous la barre.
+    expect(out).not.toContain('cpb-hint');
+    expect(out).not.toContain('Prime d’un exo');
+  }, 30_000);
+  it('📅 la découpe du défi : un trait par frontière de jour, la tranche du jour teintée', async () => {
+    const { err, out } = await mount({
+      onTimePct: 40,
+      donePct: 10,
+      latePct: 30,
+      showMark: true,
+      days: 5,
+      day: 2,
+    });
+    expect(err).toBeNull();
+    expect((out.match(/cpb-tick/g) ?? []).length).toBe(4);
+    expect(out).toContain('left: 20%');
+    expect(out).toContain('left: 80%');
+    expect(out).toContain('cpb-today');
+    expect(out).toContain('width: 20%');
   }, 30_000);
   it('dans les temps : pas de rose', async () => {
     const { err, out } = await mount({ onTimePct: 30, donePct: 50, latePct: 0, showMark: true });

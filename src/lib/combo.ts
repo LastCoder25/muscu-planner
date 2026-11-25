@@ -324,7 +324,11 @@ export interface JustAdded {
   key: number;
 }
 /** La série n°n (à partir de 1) de cet exo est-elle celle qu'on vient d'ajouter ? */
-export function isJustAdded(j: JustAdded | null | undefined, exerciseId: string, n: number): boolean {
+export function isJustAdded(
+  j: JustAdded | null | undefined,
+  exerciseId: string,
+  n: number,
+): boolean {
   return !!j && j.exerciseId === exerciseId && j.index === n - 1;
 }
 /** Les secondes (de, à) que couvre la série d'index i d'un exo en durée, dans le cumul des
@@ -337,7 +341,10 @@ export function setSpan(l: ComboLeg, index: number): [number, number] {
 }
 /** La bulle b (30 s chacune) est-elle touchée par la tranche de secondes span ? Les bornes
  *  qui se touchent seulement (une série de 0 à 30 s, la bulle suivante commence à 30) ne comptent pas. */
-export function bubbleInSpan(b: { n: number; cap: number }, span: [number, number] | null): boolean {
+export function bubbleInSpan(
+  b: { n: number; cap: number },
+  span: [number, number] | null,
+): boolean {
   if (!span) return false;
   const start = (b.n - 1) * COMBO_HOLD_SEC;
   return span[1] > start && span[0] < start + b.cap;
@@ -721,6 +728,9 @@ export interface ComboPace {
   /** La ligne « en avance / en retard ». Elle, doit rester au dernier jour. */
   showPace: boolean;
   state: 'ahead' | 'behind';
+  /** Durée choisie (jours) et jour en cours (0 = pas commencé) : la barre en dessine la découpe. */
+  days: number;
+  day: number;
 }
 /** Rien à dire : pas de défi chargé. ⚠️ Dans la LIB, pas recopié par chaque écran —
  *  les deux qui peignent cette barre en avaient déjà chacun leur exemplaire. */
@@ -731,6 +741,8 @@ export const NO_PACE: ComboPace = {
   showMark: false,
   showPace: false,
   state: 'ahead',
+  days: 1,
+  day: 0,
 };
 
 export function comboPace(c: ComboChallenge, today: string): ComboPace {
@@ -754,6 +766,8 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
     // et quand il est bouclé — plus rien n’est en retard, la barre est pleine.
     showPace: c.status === 'active' && !day1 && onTimePct > 0 && donePct < 100,
     state: day1 || donePct >= onTimePct ? 'ahead' : 'behind',
+    days: jours,
+    day: Math.max(0, Math.min(jours, ecoules)),
   };
 }
 
@@ -766,11 +780,21 @@ export interface ComboBarState {
   fill: number;
   late: number;
   mark: number | null;
+  /** 📅 La découpe théorique choisie : un trait à chaque frontière de jour (en %), N-1 pour N jours. */
+  ticks: number[];
+  /** Le jour en cours, en tranche teintée [de, à] en % (null : pas commencé, ou défi d'un jour). */
+  today: { from: number; to: number } | null;
 }
 export function comboBar(pace: ComboPace): ComboBarState {
   const fill = Math.max(0, Math.min(100, pace.donePct));
   const late = Math.max(0, Math.min(100 - fill, pace.latePct));
-  return { fill, late, mark: pace.showMark ? pace.onTimePct : null };
+  const n = Math.max(1, Math.round(pace.days));
+  const ticks = Array.from({ length: n - 1 }, (_, i) => ((i + 1) / n) * 100);
+  const today =
+    n > 1 && pace.day >= 1 && pace.day <= n
+      ? { from: ((pace.day - 1) / n) * 100, to: (pace.day / n) * 100 }
+      : null;
+  return { fill, late, mark: pace.showMark ? pace.onTimePct : null, ticks, today };
 }
 
 /** Les exos TERMINÉS (objectif atteint) passent en bas de la liste, chacun dans son ordre
