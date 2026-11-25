@@ -26,6 +26,7 @@ export type EquipmentItem =
   | 'machine'
   | 'pullup_bar'
   | 'dip_station'
+  | 'ab_wheel'
   // Cardio & combat : aucun exercice de la bibliothèque ne les requiert encore, mais ils
   // voyagent avec le profil jusqu'à l'export IA (coach_request), qui peut s'en servir.
   | 'rower'

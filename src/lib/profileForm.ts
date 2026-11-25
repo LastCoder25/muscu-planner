@@ -107,6 +107,7 @@ const VALID_EQUIPMENT_SET: Record<EquipmentItem, true> = {
   machine: true,
   pullup_bar: true,
   dip_station: true,
+  ab_wheel: true,
   rower: true,
   punching_bag: true,
   medicine_ball: true,

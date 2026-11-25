@@ -783,6 +783,22 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Plus exigeant pour l’épaule que sur l’avant-bras : passe d’abord par la planche latérale sur le coude.',
   },
+  ex_ab_wheel_knees: {
+    steps: [
+      'À genoux sur un tapis, mains sur les poignées de la roue, juste sous les épaules.',
+      'Rentre le bassin et gaine le ventre, puis fais rouler la roue vers l’avant en gardant le dos plat.',
+      'Va aussi loin que tu peux sans creuser le dos, puis ramène la roue vers les genoux en contractant les abdos.',
+    ],
+    tip: 'Si le bas du dos se creuse, raccourcis l’amplitude. Commence par des allers-retours courts, de plus en plus loin.',
+  },
+  ex_ab_wheel: {
+    steps: [
+      'Debout, jambes tendues, mains sur les poignées de la roue posée devant les pieds.',
+      'Penche-toi en rentrant le bassin et fais rouler la roue vers l’avant, bras tendus, dos plat.',
+      'Descends le plus bas que tu peux sans creuser, puis remonte en contractant les abdos.',
+    ],
+    tip: 'Très difficile : passe d’abord par la version sur les genoux. Arrête dès que le bassin s’affaisse.',
+  },
   ex_hollow_hold: {
     steps: [
       'Allongé sur le dos, bras tendus au-dessus de la tête, jambes tendues.',

@@ -72,6 +72,7 @@ export const EQUIPMENT_GROUPS: EquipmentGroup[] = [
     items: [
       { value: 'pullup_bar', label: 'Barre de traction' },
       { value: 'dip_station', label: 'Barre à dips / station' },
+      { value: 'ab_wheel', label: 'Roue abdominale', desc: 'Roulette à deux poignées' },
     ],
   },
   {

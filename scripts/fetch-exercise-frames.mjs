@@ -138,6 +138,7 @@ const MAP = {
   ex_upright_row: 'Standing_Dumbbell_Upright_Row',
   ex_pullover_db: 'Straight-Arm_Dumbbell_Pullover',
   ex_plank_side: 'Side_Bridge',
+  ex_ab_wheel_knees: 'Ab_Roller',
   ex_dead_bug: 'Dead_Bug',
   ex_farmer_hold: 'Farmers_Walk',
   ex_bicycle_crunch: 'Air_Bike',

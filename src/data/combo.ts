@@ -217,6 +217,8 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_plank_high_long',
     'ex_plank_side_hand',
   ],
+  // Roue abdominale : sur les genoux / debout (migr. 0122).
+  ['ex_ab_wheel_knees', 'ex_ab_wheel'],
   // Crunch / bicycle crunch.
   ['ex_crunch', 'ex_bicycle_crunch'],
   // Relevé de jambes : suspendu / au sol.
