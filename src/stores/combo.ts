@@ -17,7 +17,6 @@ import {
   type ComboTransferPlan,
   type ComboTransferTarget,
   type ComboChallenge,
-  type ComboConfig,
   type ComboLeg,
   type ElasticBand,
   type JustAdded,
@@ -50,7 +49,7 @@ export interface NewCombo {
   legs: ComboLeg[];
   /** Réglages du défi : mode « par groupe » et objectifs des groupes (colonne jsonb `config`,
    *  sans migration) ; repris tels quels à la relance d'un défi. */
-  config?: ComboConfig;
+  config?: ComboChallenge['config'];
 }
 
 export const useComboStore = defineStore('combo', () => {

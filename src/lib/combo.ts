@@ -1388,8 +1388,7 @@ export function comboDayQuota(
   const jours = Math.max(1, c.duration_days);
   const elapsed = comboDaysElapsed(c, today);
   if (elapsed <= 0) return out;
-  // Par groupe : pas de quota par exo (le groupe se répartit à la main).
-  if (comboMode(c) === 'group') return out;
+  // (Mode groupe : les exos n'ont pas de cible → `leg.target <= 0` les écarte, aucun quota.)
   for (const leg of c.legs) {
     const left = legRemaining(leg);
     if (left <= 0 || leg.target <= 0) continue;
