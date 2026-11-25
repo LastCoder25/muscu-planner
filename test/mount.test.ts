@@ -3723,6 +3723,49 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
   }, 30_000);
 });
 
+describe('🧭 Conseil de volume du Défi 360 (ComboVolumeAdvice)', () => {
+  const mount = async (props: Record<string, unknown>) => {
+    const { default: Advice } = await import('@/components/ComboVolumeAdvice.vue');
+    let out = '';
+    const err = await mountIt(Advice, props, undefined, undefined, '/', (h) => (out = h));
+    return { err, out };
+  };
+  it('3 jours et un groupe très chargé : pastille « soutenu », phrase sur la durée, groupe nommé', async () => {
+    const { err, out } = await mount({
+      level: 'intermediaire',
+      duration: 3,
+      groups: [
+        { slot: 'push', sets: 5 },
+        { slot: 'pull', sets: 5 },
+        { slot: 'biceps', sets: 9, essential: false },
+      ],
+    });
+    expect(err).toBeNull();
+    expect(out).toContain('data-test="volume-advice"');
+    expect(out).toContain('vol-advice high');
+    expect(out).toContain('Volume soutenu');
+    expect(out).toContain('Sur 3 jours');
+    expect(out).toContain('Les plus chargés');
+    expect(out).toContain('Biceps');
+  }, 30_000);
+  it('volume léger : message de reprise, pas de groupe nommé', async () => {
+    const { err, out } = await mount({
+      level: 'intermediaire',
+      duration: 7,
+      groups: [{ slot: 'push', sets: 3 }],
+    });
+    expect(err).toBeNull();
+    expect(out).toContain('Volume léger');
+    expect(out).toContain('reprise');
+    expect(out).not.toContain('volume-advice-hot');
+  }, 30_000);
+  it('aucun groupe : rien du tout', async () => {
+    const { err, out } = await mount({ level: 'avance', duration: 7, groups: [] });
+    expect(err).toBeNull();
+    expect(out).not.toContain('volume-advice');
+  }, 30_000);
+});
+
 describe('🔁 Relancer le dernier Défi 360 (ComboRepeatCard)', () => {
   const last = {
     id: 'c1',
