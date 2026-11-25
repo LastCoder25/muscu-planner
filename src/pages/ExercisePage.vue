@@ -47,6 +47,40 @@
       </div>
       <div v-else class="required dim">Aucun matériel requis (poids du corps).</div>
 
+      <!-- 🪜 Échelle de difficulté (planches à levier, migr. 0121) : où l'on en est, quel cran ensuite. -->
+      <template v-if="ladder">
+        <div class="sec-h">Échelle de difficulté</div>
+        <div class="chips" data-test="ladder">
+          <button
+            v-for="(r, i) in ladder.rungs"
+            :key="r.id"
+            type="button"
+            class="rung"
+            :class="{ on: i === ladder.at }"
+            :aria-current="i === ladder.at ? 'step' : undefined"
+            @click="i === ladder.at ? undefined : goExercise(r.id)"
+          >
+            <span class="rung-n">{{ i + 1 }}</span> {{ r.label }}
+          </button>
+        </div>
+        <p class="ladder-note">Du plus facile au plus dur. Un cran de plus : repars à 20-30 s.</p>
+        <button
+          v-if="advice"
+          type="button"
+          class="ladder-advice"
+          :class="advice.kind"
+          data-test="ladder-advice"
+          @click="goExercise(advice.to.id)"
+        >
+          <template v-if="advice.kind === 'up'">
+            🔼 Tu as tenu {{ advice.best }} s : essaie « {{ advice.to.label }} » (20-30 s).
+          </template>
+          <template v-else>
+            🔽 Meilleur temps {{ advice.best }} s : « {{ advice.to.label }} » sera plus confortable.
+          </template>
+        </button>
+      </template>
+
       <!-- Progression -->
       <template v-if="series.length">
         <div class="sec-h">Progression (1RM estimé)</div>
@@ -110,6 +144,7 @@ import { useLibraryStore, type ExerciseFull, type ExerciseRow } from '@/stores/l
 import { useLogsStore } from '@/stores/logs';
 import { bestE1RM } from '@/lib/estimates';
 import { isTimeExercise } from '@/lib/loadedHold';
+import { ladderAdvice, ladderPosition } from '@/lib/exerciseLadder';
 import { EQUIPMENT_ITEMS } from '@/data/profileOptions';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
 import { exerciseFrames, exerciseImage, exerciseImageCredit } from '@/data/exerciseImages';
@@ -125,6 +160,9 @@ const loading = ref(true);
 const ex = ref<ExerciseFull | null>(null);
 const alts = ref<ExerciseRow[]>([]);
 const series = ref<number[]>([]); // 1RM estimé chronologique (historique de l'exo)
+const bestHold = ref(0); // meilleur temps tenu (s) sur cet exo, séances de musculation
+const ladder = computed(() => ladderPosition(ex.value?.id));
+const advice = computed(() => ladderAdvice(ex.value?.id, bestHold.value));
 const guide = computed(() => (ex.value ? exerciseInstructions(ex.value.id) : undefined));
 // Démonstration animée (bascule des 2 poses) si l'exo a des images.
 const hasAnim = computed(() => (ex.value ? !!exerciseFrames(ex.value.id) : false));
@@ -168,6 +206,7 @@ async function load(id: string) {
   loading.value = true;
   alts.value = [];
   series.value = [];
+  bestHold.value = 0;
   try {
     ex.value = await library.fetchOne(id);
     if (!ex.value) {
@@ -184,6 +223,9 @@ async function load(id: string) {
     for (const row of recent) {
       const le = row.payload.exercises.find((x) => x.id === id || x.swapped_from === id);
       if (!le) continue;
+      if (isTimeExercise(le)) {
+        for (const p of le.performed) bestHold.value = Math.max(bestHold.value, p.reps);
+      }
       const v = bestE1RM(le.performed, isTimeExercise(le));
       if (v > 0) pts.push({ date: row.performed_at, val: v });
     }
@@ -325,6 +367,52 @@ watch(
   color: #fff;
   background: var(--d4);
   border-color: var(--d4);
+}
+.rung {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.rung.on {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+  cursor: default;
+}
+.rung-n {
+  font-family: var(--font-display);
+  font-size: 12px;
+  opacity: 0.75;
+}
+.ladder-note {
+  margin: 8px 2px 0;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.ladder-advice {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  cursor: pointer;
 }
 .required {
   font-size: 13px;

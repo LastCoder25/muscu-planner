@@ -735,6 +735,54 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Si le dos se creuse, plie un peu les genoux ou relève les jambes plus haut.',
   },
+  ex_plank_knees: {
+    steps: [
+      'Sur les avant-bras et les genoux, coudes sous les épaules.',
+      'Aligne épaules, hanches et genoux ; rentre le bassin, ventre contracté.',
+      'Tiens la position en respirant calmement.',
+    ],
+    tip: 'La version pour débuter : passe à la planche sur les coudes quand tu tiens 60 s sans creuser le dos.',
+  },
+  ex_plank_high: {
+    steps: [
+      'Bras tendus, mains au sol sous les épaules, pointe des pieds au sol.',
+      'Corps aligné de la tête aux talons, fessiers et abdos serrés.',
+      'Tiens la position sans creuser le dos ni lever les fesses.',
+    ],
+    tip: 'Plus accessible que sur les coudes : bien pour apprendre à gainer. Éloigne ensuite les mains pour durcir.',
+  },
+  ex_plank_feet: {
+    steps: [
+      'Avant-bras au sol, coudes sous les épaules, pieds posés sur un banc ou une chaise.',
+      'Corps aligné des épaules aux talons, bassin ni creusé ni remonté.',
+      'Tiens la position en gardant les abdos et les fessiers serrés.',
+    ],
+    tip: 'Plus les pieds sont hauts, plus c’est dur. Si le bas du dos se creuse, redescends d’un cran.',
+  },
+  ex_plank_long: {
+    steps: [
+      'En planche sur les avant-bras, avance les coudes devant la tête (au-dessus du front, voire plus loin).',
+      'Garde le corps aligné ; le bassin ne doit ni se creuser ni remonter.',
+      'Tiens la position, abdos et fessiers bien serrés, en respirant.',
+    ],
+    tip: 'Plus les coudes s’éloignent des épaules, plus le levier est long et plus c’est dur. Commence par 15 à 20 s, avance les coudes de quelques centimètres à la fois.',
+  },
+  ex_plank_high_long: {
+    steps: [
+      'Bras tendus, mains posées loin devant la tête (bien en avant des épaules).',
+      'Corps aligné de la tête aux talons, épaules poussées vers l’avant, ventre rentré.',
+      'Tiens la position sans creuser le dos.',
+    ],
+    tip: 'Le cran le plus dur : plus les mains sont loin, plus le levier est long. Commence par 10 à 15 s, mains juste devant les épaules.',
+  },
+  ex_plank_side_hand: {
+    steps: [
+      'Sur le côté, appui sur une main (bras tendu sous l’épaule), pieds empilés ou l’un devant l’autre.',
+      'Soulève le bassin pour aligner chevilles, hanches et épaule.',
+      'Tiens la position, puis change de côté : fais la même durée des deux côtés.',
+    ],
+    tip: 'Plus exigeant pour l’épaule que sur l’avant-bras : passe d’abord par la planche latérale sur le coude.',
+  },
   ex_hollow_hold: {
     steps: [
       'Allongé sur le dos, bras tendus au-dessus de la tête, jambes tendues.',

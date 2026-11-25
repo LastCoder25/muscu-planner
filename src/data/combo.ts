@@ -206,8 +206,17 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
   ['ex_shoulder_press_db', 'ex_kb_press', 'ex_ohp_barbell', 'ex_arnold_press'],
   // Élévations latérales (haltères / élastique).
   ['ex_lateral_raise', 'ex_lateral_raise_band', 'ex_lateral_raise_hold'],
-  // Gainage de face / latéral.
-  ['ex_plank', 'ex_plank_side'],
+  // Gainage de face / latéral, et leurs variantes de levier (migr. 0121).
+  [
+    'ex_plank',
+    'ex_plank_side',
+    'ex_plank_knees',
+    'ex_plank_high',
+    'ex_plank_feet',
+    'ex_plank_long',
+    'ex_plank_high_long',
+    'ex_plank_side_hand',
+  ],
   // Crunch / bicycle crunch.
   ['ex_crunch', 'ex_bicycle_crunch'],
   // Relevé de jambes : suspendu / au sol.
