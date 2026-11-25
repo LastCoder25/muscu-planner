@@ -33,7 +33,7 @@ export const VOLUME_LIGHT_BELOW: Record<Level, number> = {
   avance: 12,
 };
 /** Une fenêtre de ce nombre de jours ou moins est « courte ». */
-export const SHORT_WINDOW_DAYS = 4;
+const SHORT_WINDOW_DAYS = 4;
 /** De combien les seuils haut descendent sur une fenêtre courte (séries/sem). */
 export const SHORT_WINDOW_EASE = 3;
 /** Écart entre « soutenu » et « très gros ». */
