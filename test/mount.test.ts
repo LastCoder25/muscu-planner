@@ -3723,6 +3723,94 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
   }, 30_000);
 });
 
+describe('🔁 Relancer le dernier Défi 360 (ComboRepeatCard)', () => {
+  const last = {
+    id: 'c1',
+    name: 'Défi 360',
+    start_date: '2026-11-02',
+    duration_days: 7,
+    status: 'done',
+    legs: [
+      {
+        slot: 'push',
+        exercise_id: 'ex_pushup',
+        exercise_name: 'Pompes',
+        rep_weight: 1,
+        target: 6,
+        sets: [],
+      },
+      {
+        slot: 'core',
+        exercise_id: 'ex_plank',
+        exercise_name: 'Gainage',
+        rep_weight: 1,
+        target: 180,
+        sets: [],
+      },
+    ],
+  };
+  const mount = async (props: Record<string, unknown>, act?: (h: HTMLElement) => void) => {
+    const { default: Card } = await import('@/components/ComboRepeatCard.vue');
+    let out = '';
+    const err = await mountIt(Card, props, undefined, undefined, '/', (h) => (out = h), act);
+    return { err, out };
+  };
+  it('se monte : résumé en pastilles, repères de départ, bouton', async () => {
+    const { err, out } = await mount({ last });
+    expect(err).toBeNull();
+    expect(out).toContain('Relancer comme la dernière fois');
+    expect(out).toContain('2 exos');
+    expect(out).toContain('2 groupes');
+    expect(out).toContain('7 jours');
+    expect(out).toContain('Pompes');
+    expect(out).toContain('Gainage');
+    expect(out).toContain("Aujourd'hui");
+    expect(out).toContain('Demain');
+    expect(out).toContain('type="date"');
+    expect(out).toContain('Relancer ce Défi 360');
+    expect(out).not.toContain('repeat-blocked');
+  }, 30_000);
+  it('un choix de départ puis « Relancer » émet la date choisie', async () => {
+    const got: string[] = [];
+    const { err } = await mount({ last, onLaunch: (d: string) => got.push(d) }, (h) => {
+      const tiles = [...h.querySelectorAll<HTMLButtonElement>('.rep-tile')];
+      tiles.find((b) => b.textContent?.includes('Demain'))?.click();
+      h.querySelector<HTMLButtonElement>('[data-test="repeat-go"]')?.click();
+    });
+    expect(err).toBeNull();
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Le défaut est aujourd'hui : « Demain » a bien changé la date.
+    const today = got[0];
+    const got2: string[] = [];
+    await mount({ last, onLaunch: (d: string) => got2.push(d) }, (h) => {
+      h.querySelector<HTMLButtonElement>('[data-test="repeat-go"]')?.click();
+    });
+    expect(got2[0]).not.toBe(today);
+  }, 30_000);
+  it('bloqué par un challenge : la raison s’affiche et le bouton est inactif', async () => {
+    const got: string[] = [];
+    let disabled: boolean | undefined;
+    const { err, out } = await mount(
+      {
+        last,
+        blocked: 'Pompes : déjà dans ton challenge « Pompes »',
+        onLaunch: (d: string) => got.push(d),
+      },
+      (h) => {
+        const b = h.querySelector<HTMLButtonElement>('[data-test="repeat-go"]');
+        disabled = b?.disabled;
+        b?.click();
+      },
+    );
+    expect(err).toBeNull();
+    expect(out).toContain('repeat-blocked');
+    expect(out).toContain('déjà dans ton challenge');
+    expect(disabled).toBe(true);
+    expect(got).toEqual([]);
+  }, 30_000);
+});
+
 describe('🎨 Barre du Défi 360 : une seule barre (ComboProgressBar)', () => {
   const mount = async (pace: Record<string, unknown>) => {
     const { default: ComboProgressBar } = await import('@/components/ComboProgressBar.vue');

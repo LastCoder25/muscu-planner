@@ -48,7 +48,8 @@ export interface NewCombo {
   start_date: string;
   duration_days: number;
   legs: ComboLeg[];
-  /** Mode « par groupe » et objectifs des groupes (colonne jsonb `config`, sans migration). */
+  /** Réglages du défi : mode « par groupe » et objectifs des groupes (colonne jsonb `config`,
+   *  sans migration) ; repris tels quels à la relance d'un défi. */
   config?: ComboConfig;
 }
 

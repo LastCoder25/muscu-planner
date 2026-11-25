@@ -351,3 +351,23 @@ describe('répartition : déplacer une série, total du groupe fixe', () => {
     expect(r.setsTarget).toBe(6);
   });
 });
+
+describe('relancer un 360 « par groupe » (comboRepeat)', () => {
+  it('le mode, les groupes et leurs cibles sont repris ; séries et clôture non', async () => {
+    const { comboRepeatInput } = await import('@/lib/comboRepeat');
+    const last = groupe({ status: 'done' }, [3, 3], 4);
+    last.config = { ...last.config!, closed_by_user: true };
+    const r = comboRepeatInput(last, '2026-10-05');
+    expect(r.config).toEqual({
+      mode: 'group',
+      groups: [
+        { slot: 'push', target: 6 },
+        { slot: 'pull', target: 4 },
+      ],
+    });
+    expect(r.legs.every((l) => l.target === 0 && (l.sets ?? []).length === 0)).toBe(true);
+    const neuf = { ...last, ...r, id: 'n', status: 'active' as const };
+    expect(comboMode(neuf)).toBe('group');
+    expect(comboProgressPct(neuf)).toBe(0);
+  });
+});
