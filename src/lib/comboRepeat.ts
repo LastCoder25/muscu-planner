@@ -52,8 +52,11 @@ export function repeatSummary(c: ComboChallenge): RepeatSummary {
  *  les drapeaux de fin disparaissent ; le dernier poids et le dernier lest restent. */
 export function comboRepeatInput(last: ComboChallenge, startDate: string): RepeatInput {
   const legs: ComboLeg[] = last.legs.map((l) => {
-    const { sets: _sets, progress: _progress, fractional: _fractional, ...keep } = l;
-    return { ...keep, weight_kg: legLastWeight(l), sets: [] };
+    const copy: ComboLeg = { ...l, weight_kg: legLastWeight(l), sets: [] };
+    // Ni l'historique de saisie d'avant, ni le mode fractionné hérité (champs optionnels).
+    delete copy.progress;
+    delete copy.fractional;
+    return copy;
   });
   const input: RepeatInput = {
     name: last.name || 'Défi 360',
@@ -62,7 +65,8 @@ export function comboRepeatInput(last: ComboChallenge, startDate: string): Repea
     legs,
   };
   if (last.config) {
-    const { closed_by_user: _closed, ...rest } = last.config;
+    const rest = { ...last.config };
+    delete rest.closed_by_user; // la clôture manuelle d'avant ne se reprend pas
     if (Object.keys(rest).length) input.config = rest;
   }
   return input;
