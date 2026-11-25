@@ -46,6 +46,8 @@ export interface NewCombo {
   start_date: string;
   duration_days: number;
   legs: ComboLeg[];
+  /** Réglages du défi (relance d'un défi : on les reprend). */
+  config?: ComboChallenge['config'];
 }
 
 export const useComboStore = defineStore('combo', () => {

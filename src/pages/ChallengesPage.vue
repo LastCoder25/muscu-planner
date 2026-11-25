@@ -372,6 +372,14 @@
 
       <template v-else>
         <div v-if="!activeCombo" class="combo-empty">
+          <!-- 🔁 Pour ceux qui refont chaque semaine le même 360 : relancer le dernier, à l'identique. -->
+          <ComboRepeatCard
+            v-if="repeatable"
+            :last="repeatable"
+            :blocked="repeatBlockedBy"
+            :busy="repeating"
+            @launch="relaunchCombo"
+          />
           <p>
             Un défi <b>full-body sur 7 jours</b> : un exo par groupe, tes séries réparties dans la
             semaine.
@@ -609,6 +617,7 @@ import BodyBalance from '@/components/BodyBalance.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import HoldSetEditor from '@/components/HoldSetEditor.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import ComboRepeatCard from '@/components/ComboRepeatCard.vue';
 import { useComboFatigue } from '@/composables/useComboFatigue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
@@ -629,7 +638,7 @@ import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
 import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
-import { useChallengesStore } from '@/stores/challenges';
+import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
 import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useComboStore } from '@/stores/combo';
@@ -677,6 +686,7 @@ import {
   type ComboLeg,
 } from '@/lib/combo';
 import { logicalToday } from '@/lib/challenges';
+import { comboRepeatInput, lastRepeatable, repeatBlocker } from '@/lib/comboRepeat';
 import {
   tokenCost,
   isAccessoryMuscle,
@@ -761,6 +771,32 @@ const comboTab = ref<string>('active');
 // ⚠️ Même règle que le store et que l'écran d'un ami (`activeCombo`, lib) : ces trois copies
 // pouvaient désigner trois 360 différents dès qu'un joueur en a plusieurs d'ouverts.
 const activeCombo = computed(() => activeComboOf(comboStore.list, logicalToday()));
+
+// 🔁 Relancer le dernier Défi 360 (cf. lib/comboRepeat) : proposé quand aucun n'est en cours.
+const repeatable = computed(() => lastRepeatable(comboStore.list));
+const repeatBlockedBy = computed(() =>
+  repeatable.value
+    ? repeatBlocker(
+        repeatable.value,
+        store.list.filter((c) => !isCardioChallengeRow(c)),
+      )
+    : null,
+);
+const repeating = ref(false);
+async function relaunchCombo(startDate: string): Promise<void> {
+  const last = repeatable.value;
+  if (!last || repeating.value || repeatBlockedBy.value) return;
+  repeating.value = true;
+  try {
+    const c = await comboStore.create(comboRepeatInput(last, startDate));
+    $q.notify({ type: 'positive', message: 'Défi 360 relancé 🔁' });
+    await router.push(`/combo/${c.id}`);
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    repeating.value = false;
+  }
+}
 
 // ⇄ Changer d'exo en cours de défi (cf. ComboSwapSheet / transferComboLeg).
 const swapOpen = ref(false);
