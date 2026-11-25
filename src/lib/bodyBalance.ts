@@ -26,6 +26,8 @@ import {
   legSets,
   legMode,
   legRepRange,
+  comboGoals,
+  comboMode,
   setOrigin,
   setWork,
   type ComboChallenge,
@@ -34,6 +36,7 @@ import {
 import { challengeTargetBetween, type Challenge } from './challenges';
 import { repRangeForExercise, type RepRange } from './repScheme';
 import { addDaysUtcIso } from './startDate';
+import { comboSlot } from '@/data/combo';
 import { normMuscle } from './muscles';
 import { challengeLane } from './tennisTraining';
 import { bossXpTrack, type BossAgendaEntry } from './friendBoss';
@@ -310,21 +313,48 @@ function comboItems(
   return i.combos
     .filter((c) => c.status === 'active')
     .flatMap((c) =>
-      c.legs.map((leg) => {
-        const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
-        // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
-        const sets = leg.target / unit - already(leg);
-        return {
-          source: 'combo' as const,
-          day,
-          exerciseId: leg.exercise_id,
-          name: leg.exercise_name,
-          primary: leg.muscle_primary,
-          sets,
-          reps: 0,
-        };
-      }),
+      comboMode(c) === 'group'
+        ? groupTargetItems(c, day, already)
+        : c.legs.map((leg) => {
+            const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
+            // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
+            const sets = leg.target / unit - already(leg);
+            return {
+              source: 'combo' as const,
+              day,
+              exerciseId: leg.exercise_id,
+              name: leg.exercise_name,
+              primary: leg.muscle_primary,
+              sets,
+              reps: 0,
+            };
+          }),
     );
+}
+
+/** Mode « par groupe » : la cible d'un GROUPE est créditée aux muscles de son emplacement (à parts
+ *  égales s'il en a plusieurs : « Épaules & mollets »), moins ce que ses exos ont déjà fait avant
+ *  `day`. ⚠️ Pas de muscles secondaires sur la CIBLE (aucun exo précis n'est visé) alors que le
+ *  FAIT, lui, crédite les secondaires de l'exo réellement choisi : la cible est donc prudente. */
+function groupTargetItems(
+  c: ComboChallenge,
+  day: string,
+  already: (leg: ComboLeg) => number,
+): VolumeItem[] {
+  return comboGoals(c).flatMap((g) => {
+    const muscles = comboSlot(g.slot)?.muscles ?? [];
+    if (!muscles.length) return [];
+    const sets = g.target - g.legs.reduce((a, leg) => a + already(leg), 0);
+    return muscles.map((m) => ({
+      source: 'combo' as const,
+      day,
+      exerciseId: '',
+      name: comboSlot(g.slot)?.label ?? g.slot,
+      primary: m,
+      sets: sets / muscles.length,
+      reps: 0,
+    }));
+  });
 }
 
 /** L'objectif COMPLET du 360 : ce qu'il demande pour sa semaine. */

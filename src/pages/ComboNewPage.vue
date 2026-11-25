@@ -16,11 +16,38 @@
           <b>quand tu veux</b> dans la période.
         </p>
 
+        <!-- 🧩 Mode du défi : un objectif PAR EXERCICE (l'historique), ou un volume de séries
+             PAR GROUPE MUSCULAIRE réparti librement entre les exos. -->
+        <section class="set-card" data-test="mode-card">
+          <div class="set-head">
+            <span class="set-num">1</span>
+            <span class="set-title">Façon de compter</span>
+          </div>
+          <div class="opt-list">
+            <button
+              v-for="o in MODE_OPTS"
+              :key="o.id"
+              type="button"
+              class="obj-tile"
+              :class="{ on: createMode === o.id }"
+              :aria-pressed="createMode === o.id"
+              :data-test="'mode-' + o.id"
+              @click="createMode = o.id"
+            >
+              <span class="obj-emo">{{ o.emoji }}</span>
+              <span class="obj-txt">
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
+              </span>
+            </button>
+          </div>
+        </section>
+
         <!-- Une carte par réglage, titre numéroté ; les options une par ligne : en ligne,
              sur téléphone, les tuiles tombaient à ~60-100 px et leurs libellés se coupaient. -->
         <section class="set-card">
           <div class="set-head">
-            <span class="set-num">1</span>
+            <span class="set-num">2</span>
             <span class="set-title">Ton niveau</span>
           </div>
           <div class="opt-list">
@@ -43,7 +70,7 @@
 
         <section class="set-card">
           <div class="set-head">
-            <span class="set-num">2</span>
+            <span class="set-num">3</span>
             <span class="set-title">Zone du corps</span>
           </div>
           <div class="opt-list">
@@ -67,7 +94,7 @@
 
         <section class="set-card">
           <div class="set-head">
-            <span class="set-num">3</span>
+            <span class="set-num">4</span>
             <span class="set-title">Ton objectif</span>
           </div>
           <div class="opt-list">
@@ -99,7 +126,7 @@
 
         <section class="set-card">
           <div class="set-head">
-            <span class="set-num">4</span>
+            <span class="set-num">5</span>
             <span class="set-title">Volume d'entraînement</span>
           </div>
           <div class="opt-list">
@@ -131,7 +158,7 @@
              Jamais dans le passé (les jours écoulés compteraient comme perdus). -->
         <section class="set-card">
           <div class="set-head">
-            <span class="set-num">5</span>
+            <span class="set-num">6</span>
             <span class="set-title">Départ et durée</span>
           </div>
           <div class="start-row">
@@ -237,7 +264,10 @@
           </div>
         </div>
         <div class="draft-instr">
-          <span>Choisis autant d’exercices que tu veux, variantes comprises</span>
+          <span v-if="isGroupMode"
+            >Choisis les exercices au menu du groupe : tu y répartis tes séries comme tu veux</span
+          >
+          <span v-else>Choisis autant d’exercices que tu veux, variantes comprises</span>
           <span class="di-note" :class="{ full: pickCount(curKey) > 0 }">
             {{ pickCount(curKey) }} choisi{{ pickCount(curKey) > 1 ? 's' : '' }}
           </span>
@@ -355,7 +385,13 @@
 
       <!-- ÉTAPE 3 — RÉCAP : volume/charge éditables + créer -->
       <template v-else>
-        <p class="intro">Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.</p>
+        <p v-if="isGroupMode" class="intro">
+          Ajuste le <b>volume de chaque groupe</b> : tu répartis ensuite tes séries comme tu veux
+          entre ses exercices (1 ou 2 sur l’un, 5 ou 6 sur celui que tu préfères).
+        </p>
+        <p v-else class="intro">
+          Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.
+        </p>
         <div v-if="!recapKeys.length" class="no-ex">
           Aucun exercice choisi.
           <button class="link-btn" @click="step = 'draft'">Revenir au choix</button>
@@ -375,7 +411,7 @@
             <span v-for="e in selectedExos(key)" :key="e.id" class="ex-chip on">{{ e.name }}</span>
           </div>
           <div class="leg-cfg">
-            <div class="cfg-row cfg-mode">
+            <div v-if="!isGroupMode" class="cfg-row cfg-mode">
               <span class="cfg-lbl">Compter en</span>
               <div class="mode-toggle tri" role="group" aria-label="Mode de comptage">
                 <button
@@ -407,7 +443,7 @@
                 <button type="button" @click="bumpTarget(key, 1)">+</button>
               </div>
             </div>
-            <div v-if="picks[key]?.count_mode === 'reps'" class="cfg-habit">
+            <div v-if="!isGroupMode && picks[key]?.count_mode === 'reps'" class="cfg-habit">
               <template v-for="h in slotProposal(key).lines" :key="h.name">
                 <div v-if="h.habit !== null">
                   Tu fais d’habitude ~<b>{{ h.habit }} reps</b> par semaine ({{ h.name }}).
@@ -422,13 +458,23 @@
                 ↺ Proposé : {{ slotProposal(key).target }} reps
               </button>
             </div>
+            <div v-if="isGroupMode" class="cfg-group-note" :data-test="'group-note-' + key">
+              {{ pickCount(key) }} exo{{ pickCount(key) > 1 ? 's' : '' }} au menu · pas d’objectif
+              par exo : seul le total de {{ picks[key]?.target }} séries compte.
+            </div>
             <div class="cfg-range">🎯 {{ slotRangeLabel(key) }} par série</div>
             <!-- 🍰 Répartition entre les exos : parts égales par défaut, ajustables une à une. -->
-            <div v-if="pickCount(key) > 1" class="cfg-split" :data-test="'split-' + key">
+            <div
+              v-if="!isGroupMode && pickCount(key) > 1"
+              class="cfg-split"
+              :data-test="'split-' + key"
+            >
               <div class="cs-head">
                 <span>
                   Répartition
                   {{ picks[key]?.alloc ? 'choisie' : 'proposée' }}
+                  · total <b :data-test="'split-total-' + key">{{ picks[key]?.target }}</b>
+                  {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }}
                 </span>
                 <button
                   v-if="picks[key]?.alloc"
@@ -444,7 +490,8 @@
                 <div class="stepper cs-step">
                   <button
                     type="button"
-                    :aria-label="'Moins pour ' + e.name"
+                    :aria-label="'Une série de moins pour ' + e.name"
+                    :data-test="'less-' + e.id"
                     @click="nudgeShare(key, e.id, -1)"
                   >
                     −
@@ -454,7 +501,8 @@
                   }}</span>
                   <button
                     type="button"
-                    :aria-label="'Plus pour ' + e.name"
+                    :aria-label="'Une série de plus pour ' + e.name"
+                    :data-test="'more-' + e.id"
                     @click="nudgeShare(key, e.id, 1)"
                   >
                     +
@@ -462,7 +510,8 @@
                 </div>
               </div>
               <div class="cs-unit">
-                {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} par exo
+                {{ picks[key]?.count_mode === 'reps' ? 'reps' : 'séries' }} par exo · le total ne
+                change pas : une part prise à un exo est rendue à l’autre
               </div>
             </div>
             <div class="cfg-row">
@@ -522,7 +571,7 @@ import { isTennisExercise } from '@/lib/tennisTraining';
 import {
   suggestFullBodyPlan,
   comboTogglePick,
-  comboNudgeShare,
+  comboMoveShare,
   comboSplit,
   comboWeeklySets,
   comboMuscleInZone,
@@ -537,6 +586,7 @@ import {
   type ComboZone,
   type ComboLeg,
   type ComboCountMode,
+  type ComboMode,
 } from '@/lib/combo';
 import {
   repRangeFor,
@@ -582,6 +632,29 @@ const LEVEL_OPTS: { id: Level; emoji: string; label: string; sub: string }[] = [
 ];
 
 const tileMedia = 104;
+
+// 🧩 Façon de compter : par exercice (défaut, comme avant) ou par groupe musculaire.
+const MODE_OPTS: { id: ComboMode; emoji: string; label: string; sub: string }[] = [
+  { id: 'exo', emoji: '🎯', label: 'Par exercice', sub: 'chaque exo a son objectif de séries' },
+  {
+    id: 'group',
+    emoji: '🧩',
+    label: 'Par groupe musculaire',
+    sub: 'un volume de séries par groupe, à répartir comme tu veux entre ses exos',
+  },
+];
+const createMode = ref<ComboMode>('exo');
+const isGroupMode = computed(() => createMode.value === 'group');
+// Le comptage en reps n'existe pas en mode groupe : on revient aux séries, sans perte.
+watch(createMode, (m) => {
+  if (m !== 'group') return;
+  for (const p of Object.values(picks)) {
+    if (p.count_mode !== 'reps') continue;
+    p.count_mode = 'sets';
+    p.target = Math.max(targetMin('sets'), p.setsTarget);
+    p.alloc = undefined;
+  }
+});
 
 // Wizard : réglages → draft (choix des exos, un emplacement à la fois) → récap.
 const step = ref<'setup' | 'draft' | 'recap'>('setup');
@@ -828,10 +901,11 @@ function shares(key: string): Record<string, number> {
   const p = picks[key];
   return p ? comboSplit(p.target, p.exercise_ids, p.alloc, 1) : {};
 }
-function nudgeShare(key: string, exId: string, d: number) {
+// ⇄ Déplace une part d'un exo à un autre : le TOTAL du groupe est fixe (le volume choisi).
+function nudgeShare(key: string, exId: string, d: 1 | -1) {
   const p = picks[key];
   if (!p) return;
-  Object.assign(p, comboNudgeShare(p, exId, d, p.count_mode === 'reps' ? 10 : 1));
+  Object.assign(p, comboMoveShare(p, exId, d, p.count_mode === 'reps' ? 10 : 1));
 }
 function resetShares(key: string) {
   const p = picks[key];
@@ -991,10 +1065,13 @@ async function createCombo() {
     return;
   }
   const legs: ComboLeg[] = [];
+  // Mode groupe : l'objectif de chaque groupe (séries sur la durée), les exos sans cible.
+  const groups: { slot: string; target: number }[] = [];
   for (const slot of COMBO_SLOTS) {
     if (!enabled[slot.key]) continue;
     const p = picks[slot.key];
     if (!p?.exercise_ids.length) continue;
+    if (isGroupMode.value) groups.push({ slot: slot.key, target: Math.max(1, p.target) });
     const split = shares(slot.key);
     for (const exId of p.exercise_ids) {
       const e = lib.value.find((x) => x.id === exId);
@@ -1014,8 +1091,13 @@ async function createCombo() {
         exercise_name: e.name,
         muscle_primary: e.muscle_primary,
         rep_weight: repWeightFromExercise(e.muscle_secondary, e.equipment_required, e.name),
-        target: isTime ? (split[exId] ?? 1) * COMBO_HOLD_SEC : (split[exId] ?? 1),
-        count_mode: isTime ? 'time' : p.count_mode,
+        // Mode groupe : aucun objectif propre à l'exo (c'est le groupe qui en a un).
+        target: isGroupMode.value
+          ? 0
+          : isTime
+            ? (split[exId] ?? 1) * COMBO_HOLD_SEC
+            : (split[exId] ?? 1),
+        count_mode: isTime ? 'time' : isGroupMode.value ? 'sets' : p.count_mode,
         weight_kg: isTime ? null : p.weight_kg || null,
         assistable: !isTime && isBodyweightExercise(e.equipment_required, e.name),
         rep_min: range.min,
@@ -1032,6 +1114,7 @@ async function createCombo() {
       start_date: startDate.value,
       duration_days: duration.value,
       legs,
+      ...(isGroupMode.value ? { config: { mode: 'group' as const, groups } } : {}),
     });
     $q.notify({ type: 'positive', message: 'Défi 360 lancé 💪' });
     await router.replace(`/combo/${c.id}`);
@@ -1651,6 +1734,15 @@ onMounted(async () => {
   text-align: right;
 }
 /* Fourchette conseillée : consigne d’exécution → accent, pas la grisaille des notes. */
+.cfg-group-note {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--dim);
+}
 .cfg-range {
   font-size: 12px;
   color: var(--accent);

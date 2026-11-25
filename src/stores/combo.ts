@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import {
   comboChestEligible,
+  comboLegBlocked,
   legComplete,
   activeCombo,
   comboNextStatus,
@@ -46,7 +47,8 @@ export interface NewCombo {
   start_date: string;
   duration_days: number;
   legs: ComboLeg[];
-  /** Réglages du défi (relance d'un défi : on les reprend). */
+  /** Réglages du défi : mode « par groupe » et objectifs des groupes (colonne jsonb `config`,
+   *  sans migration) ; repris tels quels à la relance d'un défi. */
   config?: ComboChallenge['config'];
 }
 
@@ -193,6 +195,8 @@ export const useComboStore = defineStore('combo', () => {
     if (!c || reps <= 0) return;
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg || legComplete(leg)) return;
+    // Mode « par groupe » : l'objectif est celui du GROUPE (la cible de l'exo, elle, vaut 0).
+    if (comboLegBlocked(c, leg)) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
     const stamp = new Date(at ?? Date.now()).toISOString();
     // Un lest n'est retenu que sur une tenue lestable : ailleurs, il est ignoré.

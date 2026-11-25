@@ -14,6 +14,23 @@
 
     <div v-if="!c" class="row flex-center q-pa-lg"><q-spinner color="primary" /></div>
 
+    <!-- 🧩 Défi « par groupe » : la séance générée est calée sur des cibles PAR EXO, qui n'existent
+         pas ici — on renvoie vers le défi, où chaque exo s'ajoute en un geste. -->
+    <div v-else-if="isGroupMode" class="group-note" data-test="group-note">
+      <p>
+        Ce Défi 360 compte <b>par groupe musculaire</b> : pas de séance générée pour l'instant.
+        Ajoute tes séries directement sur les exos de chaque groupe.
+      </p>
+      <q-btn
+        color="primary"
+        text-color="dark"
+        no-caps
+        icon="arrow_back"
+        label="Retour au défi"
+        @click="backOr(router, `/combo/${c.id}`)"
+      />
+    </div>
+
     <!-- Configuration de la séance -->
     <template v-else-if="phase === 'config'">
       <p class="intro">
@@ -357,6 +374,7 @@ import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import { useComboStore } from '@/stores/combo';
 import {
   buildComboSessionFromCounts,
+  comboMode,
   comboSessionDurationMin,
   legRemaining,
   legsByGroup,
@@ -414,6 +432,7 @@ const library = useLibraryStore();
 
 const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
+const isGroupMode = computed(() => !!c.value && comboMode(c.value) === 'group');
 
 const RESTS = [0, 30, 60, 90];
 const EXPRESS_SIZES = [2, 3, 4, 5];
@@ -853,10 +872,10 @@ function validate(i: number, j: number, reps: number) {
       ? lastEnteredSet(exerciseHistorySets(combo.list, leg.exercise_id))
       : null;
   const seed = prev ?? before ?? (hist ? { ...hist, assisted: !!hist.assisted } : null);
-  logReps.value =
-    seed?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
+  logReps.value = seed?.reps ?? reps ?? prescribedReps({ min: exo.rep_min, max: exo.rep_max });
   logWeight.value = seed
-    ? (seed.weight ?? (leg?.assistable ? null : (recallWeight(exo.exercise_id) ?? exo.weight_kg ?? null)))
+    ? (seed.weight ??
+      (leg?.assistable ? null : (recallWeight(exo.exercise_id) ?? exo.weight_kg ?? null)))
     : (exo.weight_kg ?? recallWeight(exo.exercise_id));
   logAssisted.value = seed?.assisted ?? false;
   logBand.value = seed ? (seed.band ?? null) : leg ? legLastBand(leg) : null;
@@ -1003,6 +1022,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+.group-note {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 14px;
+}
 .combo-session {
   background: var(--bg);
   min-height: 100vh;

@@ -38,6 +38,7 @@
 
       <div v-if="c.status === 'active'" class="cta-row q-mb-md">
         <q-btn
+          v-if="!isGroupMode"
           class="cta-grow"
           outline
           color="primary"
@@ -57,146 +58,166 @@
         />
       </div>
 
-      <div
-        v-for="leg in shownLegs"
-        :key="leg.exercise_id"
-        class="leg"
-        :class="{ done: legComplete(leg) }"
-      >
-        <!-- Même en-tête que l'onglet 🎯 Défi 360. La vignette d'exécution remplace l'emoji
+      <!-- 🧩 Défi « par groupe » : un bloc par groupe (jauge + exos au menu, sans cible par exo). -->
+      <ComboGroupBlock
+        v-if="isGroupMode"
+        :combo="c"
+        :editable="c.status === 'active'"
+        @add="(l: ComboLeg) => openSet(l, 1)"
+        @history="openHistory"
+      />
+      <template v-else>
+        <div
+          v-for="leg in shownLegs"
+          :key="leg.exercise_id"
+          class="leg"
+          :class="{ done: legComplete(leg) }"
+        >
+          <!-- Même en-tête que l'onglet 🎯 Défi 360. La vignette d'exécution remplace l'emoji
              du groupe quand l'exo a une illustration. -->
-        <ComboLegHead
-          :leg="leg"
-          :objective="profileStore.profile?.objective"
-          :bodyweight="noEquipIds.has(leg.exercise_id)"
-          :fallback="slotEmoji(leg.slot)"
-          :history="combo.list"
-          :swappable="c.status === 'active'"
-          :fatigue="legFatigue(leg)"
-          @history="openHistory(leg)"
-          @swap="openSwap(leg)"
-        />
-        <!-- Mode séries : segments par série ; mode reps : barre de progression simple.
+          <ComboLegHead
+            :leg="leg"
+            :objective="profileStore.profile?.objective"
+            :bodyweight="noEquipIds.has(leg.exercise_id)"
+            :fallback="slotEmoji(leg.slot)"
+            :history="combo.list"
+            :swappable="c.status === 'active'"
+            :fatigue="legFatigue(leg)"
+            @history="openHistory(leg)"
+            @swap="openSwap(leg)"
+          />
+          <!-- Mode séries : segments par série ; mode reps : barre de progression simple.
              ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 série » et « ↩ »
              prenaient une ligne entière par exo. La prochaine case vide porte le « ＋ »,
              et le retrait vit dans la fenêtre de saisie. Objectif atteint : plus d'ajout
              (v1.53) — on peut encore corriger une série. -->
-        <div
-          v-if="legMode(leg) === 'sets'"
-          class="seg-bar"
-          :class="{ tap: !legComplete(leg) }"
-          :role="legComplete(leg) ? undefined : 'button'"
-          :tabindex="legComplete(leg) ? undefined : 0"
-          :aria-label="legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`"
-          @click="addFromBar(leg)"
-          @keydown.enter="addFromBar(leg)"
-        >
-          <span
-            v-for="n in segCount(leg)"
-            :key="n"
-            class="seg"
-            :class="{
-              on: n <= legDone(leg),
-              next: n === legDone(leg) + 1,
-              beyond: n > leg.target,
-              moved: !!legSets(leg)[n - 1]?.origin,
-              today: isDoneToday(leg, n),
-                    'set-flash': isJustAdded(combo.justAdded, leg.exercise_id, n),
-            }"
-            :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
-            :title="
-              legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
-                ? `Faite en ${setOriginLabel(leg, legSets(leg)[n - 1]!)}`
-                : undefined
-            "
-            @click.stop="onSeg(leg, n)"
+          <div
+            v-if="legMode(leg) === 'sets'"
+            class="seg-bar"
+            :class="{ tap: !legComplete(leg) }"
+            :role="legComplete(leg) ? undefined : 'button'"
+            :tabindex="legComplete(leg) ? undefined : 0"
+            :aria-label="legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`"
+            @click="addFromBar(leg)"
+            @keydown.enter="addFromBar(leg)"
           >
-            <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
-            <template v-else-if="n === legDone(leg) + 1">＋</template>
-          </span>
-        </div>
-        <div
-          v-else-if="legMode(leg) === 'reps'"
-          class="bar-tap"
-          :class="{ tap: !legComplete(leg) }"
-          :role="legComplete(leg) ? undefined : 'button'"
-          :tabindex="legComplete(leg) ? undefined : 0"
-          :aria-label="legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`"
-          @click="addFromBar(leg)"
-          @keydown.enter="addFromBar(leg)"
-        >
-          <div class="reps-bar">
-            <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
             <span
-              class="reps-over"
-              :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
-            />
-            <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
+              v-for="n in segCount(leg)"
+              :key="n"
+              class="seg"
+              :class="{
+                on: n <= legDone(leg),
+                next: n === legDone(leg) + 1,
+                beyond: n > leg.target,
+                moved: !!legSets(leg)[n - 1]?.origin,
+                today: isDoneToday(leg, n),
+                'set-flash': isJustAdded(combo.justAdded, leg.exercise_id, n),
+              }"
+              :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
+              :title="
+                legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
+                  ? `Faite en ${setOriginLabel(leg, legSets(leg)[n - 1]!)}`
+                  : undefined
+              "
+              @click.stop="onSeg(leg, n)"
+            >
+              <template v-if="n <= legDone(leg)">{{ segSetLabel(legSets(leg)[n - 1]) }}</template>
+              <template v-else-if="n === legDone(leg) + 1">＋</template>
+            </span>
           </div>
-          <span v-if="!legComplete(leg)" class="bar-plus" aria-hidden="true">＋</span>
-        </div>
-        <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
-        <ComboTimeBubbles v-else :leg="leg" />
-        <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
-        <HoldLestStepper
-          v-if="legHoldLoadable(leg) && !legComplete(leg)"
-          :combo-id="id"
-          :leg="leg"
-        />
-        <!-- Mode DURÉE (gainage) : chrono / minuteur avec départ différé, OU ajout manuel d'une durée. -->
-        <div v-if="legMode(leg) === 'time'" class="leg-actions">
-          <template v-if="!legComplete(leg)">
-            <HoldTimerButton
-              :label="leg.exercise_name"
-              @finish="(sec: number) => doAddSeconds(leg, sec)"
-            />
-          </template>
-          <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
-        </div>
-        <!-- Ajout manuel d'une durée sans chrono. -->
-        <div v-if="legMode(leg) === 'time' && !legComplete(leg)" class="dur-adds">
-          <span class="da-lbl">Ajouter :</span>
-          <button v-for="s in DUR_QUICK_ADDS" :key="s" class="da-btn" @click="doAddSeconds(leg, s)">
-            +{{ fmtDurShort(s) }}
-          </button>
-        </div>
-        <!-- Détail des séries faites (secondes en durée / reps en mode reps). En mode
-             séries, le détail est DANS les cellules jaunes → on ne le répète pas ici. -->
-        <div v-if="legSets(leg).length && legMode(leg) !== 'sets'" class="leg-sets">
-          <span
-            v-for="(l, i) in groupSetLines(legSets(leg))"
-            :key="i"
-            class="leg-set-chip"
-            :class="{ tap: legMode(leg) === 'time' && l.kind === 'set' }"
-            :role="legMode(leg) === 'time' && l.kind === 'set' ? 'button' : undefined"
-            :tabindex="legMode(leg) === 'time' && l.kind === 'set' ? 0 : undefined"
-            :aria-label="
-              legMode(leg) === 'time' && l.kind === 'set'
-                ? `Corriger la série ${l.index + 1} : ${leg.exercise_name}`
-                : undefined
-            "
-            :data-test="legMode(leg) === 'time' && l.kind === 'set' ? 'hold-set-chip' : undefined"
-            @click="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
-            @keydown.enter="
-              legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)
-            "
+          <div
+            v-else-if="legMode(leg) === 'reps'"
+            class="bar-tap"
+            :class="{ tap: !legComplete(leg) }"
+            :role="legComplete(leg) ? undefined : 'button'"
+            :tabindex="legComplete(leg) ? undefined : 0"
+            :aria-label="legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`"
+            @click="addFromBar(leg)"
+            @keydown.enter="addFromBar(leg)"
           >
-            <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
-            <template v-else-if="legMode(leg) === 'time'"
-              >{{ l.set.reps }} s<template v-if="l.set.lest">
-                · {{ holdLestLabel(l.set) }}</template
-              ></template
+            <div class="reps-bar">
+              <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
+              <span
+                class="reps-over"
+                :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
+              />
+              <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
+            </div>
+            <span v-if="!legComplete(leg)" class="bar-plus" aria-hidden="true">＋</span>
+          </div>
+          <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
+          <ComboTimeBubbles v-else :leg="leg" />
+          <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
+          <HoldLestStepper
+            v-if="legHoldLoadable(leg) && !legComplete(leg)"
+            :combo-id="id"
+            :leg="leg"
+          />
+          <!-- Mode DURÉE (gainage) : chrono / minuteur avec départ différé, OU ajout manuel d'une durée. -->
+          <div v-if="legMode(leg) === 'time'" class="leg-actions">
+            <template v-if="!legComplete(leg)">
+              <HoldTimerButton
+                :label="leg.exercise_name"
+                @finish="(sec: number) => doAddSeconds(leg, sec)"
+              />
+            </template>
+            <button class="add corr" :disabled="!legSetsDone(leg)" @click="undoSet(leg)">↩</button>
+          </div>
+          <!-- Ajout manuel d'une durée sans chrono. -->
+          <div v-if="legMode(leg) === 'time' && !legComplete(leg)" class="dur-adds">
+            <span class="da-lbl">Ajouter :</span>
+            <button
+              v-for="s in DUR_QUICK_ADDS"
+              :key="s"
+              class="da-btn"
+              @click="doAddSeconds(leg, s)"
             >
-            <template v-else
-              >{{ l.set.reps }}<template v-if="l.set.weight">×{{ l.set.weight }} kg</template
-              ><template v-if="l.set.assisted"> 🟧</template
-              ><template v-else-if="l.set.band"> 🟦</template></template
+              +{{ fmtDurShort(s) }}
+            </button>
+          </div>
+          <!-- Détail des séries faites (secondes en durée / reps en mode reps). En mode
+             séries, le détail est DANS les cellules jaunes → on ne le répète pas ici. -->
+          <div v-if="legSets(leg).length && legMode(leg) !== 'sets'" class="leg-sets">
+            <span
+              v-for="(l, i) in groupSetLines(legSets(leg))"
+              :key="i"
+              class="leg-set-chip"
+              :class="{ tap: legMode(leg) === 'time' && l.kind === 'set' }"
+              :role="legMode(leg) === 'time' && l.kind === 'set' ? 'button' : undefined"
+              :tabindex="legMode(leg) === 'time' && l.kind === 'set' ? 0 : undefined"
+              :aria-label="
+                legMode(leg) === 'time' && l.kind === 'set'
+                  ? `Corriger la série ${l.index + 1} : ${leg.exercise_name}`
+                  : undefined
+              "
+              :data-test="legMode(leg) === 'time' && l.kind === 'set' ? 'hold-set-chip' : undefined"
+              @click="legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)"
+              @keydown.enter="
+                legMode(leg) === 'time' && l.kind === 'set' && openHoldEdit(leg, l.index)
+              "
             >
-          </span>
+              <template v-if="l.kind === 'mini'">{{ miniLineLabel(l) }}</template>
+              <template v-else-if="legMode(leg) === 'time'"
+                >{{ l.set.reps }} s<template v-if="l.set.lest">
+                  · {{ holdLestLabel(l.set) }}</template
+                ></template
+              >
+              <template v-else
+                >{{ l.set.reps }}<template v-if="l.set.weight">×{{ l.set.weight }} kg</template
+                ><template v-if="l.set.assisted"> 🟧</template
+                ><template v-else-if="l.set.band"> 🟦</template></template
+              >
+            </span>
+          </div>
         </div>
-      </div>
+      </template>
 
-      <div class="foot">
+      <div v-if="isGroupMode" class="foot">
+        Fais tes séries quand tu veux pendant le défi, sur les exos de ton choix. Le volume de
+        <b>chaque</b> groupe atteint = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps +
+        poids).
+      </div>
+      <div v-else class="foot">
         Fais tes séries quand tu veux pendant le défi. Toutes les séries prévues pour
         <b>tous</b> les exos = Défi 360 bouclé. Chaque série alimente ta piste Muscu (reps + poids).
       </div>
@@ -266,6 +287,7 @@ import { useComboStore } from '@/stores/combo';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
+  comboMode,
   fmtPct,
   legBarGeometry,
   legSetsDone,
@@ -309,6 +331,7 @@ import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import HoldSetEditor from '@/components/HoldSetEditor.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
+import ComboGroupBlock from '@/components/ComboGroupBlock.vue';
 import ComboSwapSheet from '@/components/ComboSwapSheet.vue';
 import {
   logicalToday,
@@ -402,6 +425,7 @@ function fmtDM(iso: string): string {
 }
 // Semaine concernée (début → fin) du Défi 360.
 /** Bouclé dans les temps — la seule chose qui dit « bravo » et ouvre un coffre. */
+const isGroupMode = computed(() => !!c.value && comboMode(c.value) === 'group');
 const completeInTime = computed(() => (c.value ? comboCompleteInTime(c.value) : false));
 const comboWeek = computed(() => {
   if (!c.value) return '';

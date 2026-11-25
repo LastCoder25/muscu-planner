@@ -5982,3 +5982,155 @@ describe('⛰️ saisie cardio : le dénivelé selon l’activité', () => {
     expect(html.includes('Pente (%)'), activity).toBe(pente);
   });
 });
+
+// 🧩 Défi 360 « par groupe » (v1.358) : chaque écran touché se MONTE sur un défi en mode groupe.
+// ⚠️ Le fixture porte `config.mode = 'group'`, des exos SANS cible et des séries : c'est ce qui
+// éveille le bloc par groupe (sans lui, un montage vide reste vert et ne prouve rien).
+describe('🧩 Défi 360 par groupe : les écrans se montent', () => {
+  // Démarré aujourd'hui : un défi daté du passé serait déjà FERMÉ et l'onglet resterait vide.
+  const D0 = new Date().toISOString().slice(0, 10);
+  const groupCombo = () => ({
+    id: 'g1',
+    name: 'Défi 360',
+    start_date: D0,
+    duration_days: 7,
+    status: 'active',
+    config: {
+      mode: 'group',
+      groups: [
+        { slot: 'push', target: 6 },
+        { slot: 'pull', target: 4 },
+      ],
+    },
+    legs: [
+      {
+        slot: 'push',
+        exercise_id: 'bench',
+        exercise_name: 'Développé couché',
+        muscle_primary: 'pectoraux',
+        rep_weight: 1,
+        target: 0,
+        count_mode: 'sets',
+        sets: [
+          { date: D0, reps: 10, weight: 20 },
+          { date: D0, reps: 10, weight: 20 },
+        ],
+      },
+      {
+        slot: 'push',
+        exercise_id: 'pushup',
+        exercise_name: 'Pompes',
+        muscle_primary: 'pectoraux',
+        rep_weight: 1,
+        target: 0,
+        count_mode: 'sets',
+        sets: [{ date: D0, reps: 12 }],
+      },
+      {
+        slot: 'pull',
+        exercise_id: 'row',
+        exercise_name: 'Rowing',
+        muscle_primary: 'dos',
+        rep_weight: 1,
+        target: 0,
+        count_mode: 'sets',
+        sets: [],
+      },
+    ],
+  });
+  /** Le texte rendu SANS les commentaires HTML (ils citent des « 2/12 séries » d'exemple). */
+  const visible = (h: string) => h.replace(/<!--[\s\S]*?-->/g, '');
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
+  };
+  const seedCombo = async () => {
+    const { useComboStore } = await import('@/stores/combo');
+    const s = useComboStore() as unknown as {
+      list: unknown[];
+      loaded: boolean;
+      fetchMine: unknown;
+    };
+    s.list = [groupCombo()];
+    s.loaded = true;
+    s.fetchMine = async () => s.list;
+  };
+
+  it('ComboGroupBlock : un bloc par groupe, jauge « 3 / 6 séries », exos avec leur nombre', async () => {
+    const { default: ComboGroupBlock } = await import('@/components/ComboGroupBlock.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        ComboGroupBlock,
+        { combo: groupCombo(), editable: true },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('3 / 6 séries');
+    expect(out).toContain('0 / 4 séries');
+    expect(out).toContain('2 séries');
+    expect(out).toContain('1 série');
+    expect(out).toContain('aucune série');
+    expect(visible(out)).not.toMatch(/\d\/0 /);
+  }, 30_000);
+
+  it('ComboDetailPage : le bloc par groupe remplace la liste d’exos à cible', async () => {
+    const { default: ComboDetailPage } = await import('@/pages/ComboDetailPage.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        ComboDetailPage,
+        {},
+        undefined,
+        seedCombo,
+        '/session/g1',
+        (h) => (out = h),
+        settle,
+      ),
+    ).toBeNull();
+    expect(out).toContain('3 / 6 séries');
+    expect(out).toContain('Pompes');
+    expect(visible(out)).not.toMatch(/\d\/0 /);
+  }, 30_000);
+
+  it('ChallengesPage (onglet 🎯) : les groupes, sans « Générer une séance »', async () => {
+    const { default: ChallengesPage } = await import('@/pages/ChallengesPage.vue');
+    const seed = async () => {
+      await seedCombo();
+      const { useChallengesStore } = await import('@/stores/challenges');
+      const { useCharacterStore } = await import('@/stores/character');
+      const ch = useChallengesStore() as unknown as Record<string, unknown>;
+      ch.fetchMine = async () => [];
+      ch.fetchAchievements = async () => undefined;
+      ch.unlock = async () => undefined;
+      (useCharacterStore() as unknown as Record<string, unknown>).fetchMine = async () => undefined;
+    };
+    let out = '';
+    expect(
+      await mountIt(ChallengesPage, {}, undefined, seed, '/?mode=combo', (h) => (out = h), settle),
+    ).toBeNull();
+    expect(out).toContain('3 / 6 séries');
+    expect(out).toContain('data-test="group-push"');
+    expect(visible(out)).not.toContain('Générer une séance');
+    expect(visible(out)).not.toMatch(/\d\/0 /);
+  }, 30_000);
+
+  it('ComboSessionPage : explique que la séance générée n’existe pas en mode groupe', async () => {
+    const { default: ComboSessionPage } = await import('@/pages/ComboSessionPage.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        ComboSessionPage,
+        {},
+        undefined,
+        seedCombo,
+        '/session/g1',
+        (h) => (out = h),
+        settle,
+      ),
+    ).toBeNull();
+    expect(out).toContain('data-test="group-note"');
+  }, 30_000);
+});

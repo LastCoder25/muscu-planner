@@ -139,7 +139,19 @@ export interface ComboChallenge {
   config?: ComboConfig | null;
 }
 
+/** 🧩 MODE « PAR GROUPE » (v1.357.0) : l'objectif est un VOLUME DE SÉRIES PAR GROUPE MUSCULAIRE,
+ *  réparti librement entre les exos du groupe. Absent = « par exercice » (tous les 360 d'avant). */
+export type ComboMode = 'exo' | 'group';
+/** Objectif d'un groupe en mode groupe : séries sur la durée du défi (déjà au prorata). */
+interface ComboGroupGoal {
+  slot: string;
+  target: number;
+}
 interface ComboConfig {
+  /** Mode du défi. Absent = 'exo'. En mode 'group', les `legs` sont les exos AU MENU de chaque
+   *  groupe (`target` 0, sans objectif propre) et `groups` porte l'objectif de chacun. */
+  mode?: ComboMode;
+  groups?: ComboGroupGoal[];
   /** Le joueur a CLÔTURÉ lui-même (bouton retiré en v1.53 : le 360 se ferme seul à
    *  l'objectif). Encore lu pour les 360 clôturés ainsi avant. */
   closed_by_user?: boolean;
@@ -557,19 +569,86 @@ export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRan
   });
 }
 
+// ── 🧩 LES OBJECTIFS DU DÉFI : UN PAR EXO, OU UN PAR GROUPE (v1.357.0) ─────────────────
+// « Par exercice » (le mode d'origine) : chaque exo a sa cible. « Par groupe » : le joueur se
+// donne un volume de séries par groupe musculaire et le répartit LIBREMENT entre les exos du
+// groupe. Tout ce qui mesure un avancement (%, retard, paliers, prime, clôture, coffre, blocage
+// des séries en trop, équilibre du corps) lit ces objectifs : une seule règle par sujet.
+
+/** Un objectif du défi : un exo (mode exo) ou un groupe musculaire (mode groupe). */
+export interface ComboGoalRow {
+  /** Identifiant stable : l'exo, ou l'emplacement du groupe. */
+  key: string;
+  slot: string;
+  /** Fait, dans l'unité de la cible : unité du mode de l'exo (mode exo), séries (mode groupe). */
+  done: number;
+  target: number;
+  /** Les exos concernés : lui seul en mode exo, tous ceux du menu du groupe en mode groupe. */
+  legs: ComboLeg[];
+  group: boolean;
+}
+
+export function comboMode(c: ComboChallenge): ComboMode {
+  return c.config?.mode === 'group' && Array.isArray(c.config.groups) ? 'group' : 'exo';
+}
+
+export function comboGoals(c: ComboChallenge): ComboGoalRow[] {
+  if (comboMode(c) === 'group') {
+    return (c.config?.groups ?? []).map((g) => {
+      const legs = c.legs.filter((l) => l.slot === g.slot);
+      // ⚠️ Une série = une ENTRÉE, quel que soit l'exo : une tenue au temps vaut une série.
+      return {
+        key: g.slot,
+        slot: g.slot,
+        done: legs.reduce((a, l) => a + legSetsDone(l), 0),
+        target: g.target,
+        legs,
+        group: true,
+      };
+    });
+  }
+  return c.legs.map((l) => ({
+    key: l.exercise_id,
+    slot: l.slot,
+    done: legDone(l),
+    target: l.target,
+    legs: [l],
+    group: false,
+  }));
+}
+
+export function goalComplete(g: ComboGoalRow): boolean {
+  return g.target > 0 && g.done >= g.target;
+}
+
+/** Combien d'objectifs restent à boucler (exos ou groupes selon le mode). */
+export function comboGoalsLeft(c: ComboChallenge): number {
+  return comboGoals(c).filter((g) => !goalComplete(g)).length;
+}
+
+/** Cet exo ne peut plus recevoir de série : son objectif (le sien, ou celui de son groupe) est
+ *  atteint (v1.53 : pas de séries en plus ; qui veut en faire davantage lance un challenge). */
+export function comboLegBlocked(c: ComboChallenge, leg: ComboLeg): boolean {
+  const g = comboGoals(c).find((x) => x.legs.some((l) => l.exercise_id === leg.exercise_id));
+  return !!g && goalComplete(g);
+}
+
 /** Avancement global = MOYENNE des fractions de complétion par exo (mode-neutre :
  *  chaque exo compte pour 1, quel que soit son unité séries/reps → on peut mélanger).
  *  Au DIXIÈME près (demandé : le % exact). ⚠️ L’arrondi ne ment jamais aux bornes : un
  *  défi incomplet ne s’affiche pas 100 %, un défi entamé ne s’affiche pas 0 %. */
 export function comboProgressPct(c: ComboChallenge): number {
-  if (!c.legs.length) return 0;
-  // ⚠️ Chaque exo est borné à 100 % : un exo d'avant la v1.53 qui a dépassé son objectif
+  // ⚠️ Lu sur les OBJECTIFS (`comboGoals`) : un par exo en mode « par exercice », un par groupe
+  // en mode « par groupe ». Une seule règle, deux modes.
+  const goals = comboGoals(c);
+  if (!goals.length) return 0;
+  // ⚠️ Chaque objectif est borné à 100 % : un exo d'avant la v1.53 qui a dépassé son objectif
   // ne compense pas le retard d'un autre (il n'y a plus de séries bonus).
-  const frac = c.legs.reduce((a, l) => {
-    if (l.target <= 0) return a;
-    return a + Math.min(1, legDone(l) / l.target);
+  const frac = goals.reduce((a, g) => {
+    if (g.target <= 0) return a;
+    return a + Math.min(1, g.done / g.target);
   }, 0);
-  const exact = (frac / c.legs.length) * 100;
+  const exact = (frac / goals.length) * 100;
   const pct = Math.round(exact * 10) / 10;
   if (pct >= 100 && exact < 100) return 99.9;
   if (pct <= 0 && exact > 0) return 0.1;
@@ -580,7 +659,8 @@ export function fmtPct(pct: number): string {
   return (Math.round(pct * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 }
 export function comboComplete(c: ComboChallenge): boolean {
-  return c.legs.length > 0 && c.legs.every((l) => legComplete(l));
+  const goals = comboGoals(c);
+  return goals.length > 0 && goals.every(goalComplete);
 }
 
 // ── 📅 LE DÉLAI ET LA FERMETURE (v0.825 ; décisions de l'utilisateur) ─────────────────
@@ -680,11 +760,18 @@ export type ComboTier = keyof typeof COMBO_TIER_SHARE;
 
 /** Palier atteint par un exo d'après son avancement (fait / cible). */
 export function legTier(l: ComboLeg): ComboTier {
-  if (l.target <= 0) return 'none';
-  const frac = legDone(l) / l.target;
+  return tierOf(legDone(l), l.target);
+}
+function tierOf(done: number, target: number): ComboTier {
+  if (target <= 0) return 'none';
+  const frac = done / target;
   if (frac >= 1) return 'principal';
   if (frac >= COMBO_TIER_SECONDARY) return 'secondary';
   return 'none';
+}
+/** Palier atteint par un objectif (exo ou groupe) : mêmes seuils, 80 % → 15 %, 100 % → entier. */
+function goalTierShare(g: ComboGoalRow): number {
+  return COMBO_TIER_SHARE[tierOf(g.done, g.target)];
 }
 /** Part CUMULÉE de la prime de l'exo débloquée par le palier atteint (0..1). */
 export function legTierShare(l: ComboLeg): number {
@@ -898,6 +985,20 @@ function legPlannedEffort(l: ComboLeg): number {
   return done + missing * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
 }
 
+/** Effort planifié d'un GROUPE : celui des séries faites, plus ce qui manque à sa cible au
+ *  poids de rep MOYEN de ses exos (le joueur n'a pas encore choisi sur lequel il les fera).
+ *  ⚠️ BIAIS CONNU : choisir l'exo au plus gros poids de rep fait grimper l'XP de CHAQUE série
+ *  (inchangé) et, tant que le groupe n'est pas bouclé, la prime des séries manquantes. */
+function goalPlannedEffort(g: ComboGoalRow): number {
+  let effort = 0;
+  for (const l of g.legs) effort += legPlannedEffort(l);
+  const missing = Math.max(0, g.target - g.done);
+  const mean = g.legs.length
+    ? g.legs.reduce((a, l) => a + (l.rep_weight ?? 1), 0) / g.legs.length
+    : 1;
+  return effort + missing * COMBO_PLAN_REPS * mean;
+}
+
 /** Prime de bouclage À PALIERS (pré-XP_MULT). Par exo : sa part de prime `0,25 ×
  *  effort planifié` × la part CUMULÉE du palier atteint (15 / 100 %). Remplace
  *  l'ancienne prime tout-ou-rien.
@@ -938,8 +1039,13 @@ export function comboTieredBonus(
   const d = comboInDeadline(c);
   const early = 1 + comboEarlyFraction(d);
   let sum = 0;
-  for (const l of d.legs) {
-    sum += 0.25 * legPlannedEffort(l) * shareOf(l);
+  if (comboMode(d) === 'group') {
+    // Par GROUPE : la part du palier atteint par le groupe, sur l'effort planifié du groupe.
+    for (const g of comboGoals(d)) sum += 0.25 * goalPlannedEffort(g) * goalTierShare(g);
+  } else {
+    for (const l of d.legs) {
+      sum += 0.25 * legPlannedEffort(l) * shareOf(l);
+    }
   }
   return sum * early;
 }
@@ -1284,6 +1390,7 @@ export function comboDayQuota(
   const jours = Math.max(1, c.duration_days);
   const elapsed = comboDaysElapsed(c, today);
   if (elapsed <= 0) return out;
+  // (Mode groupe : les exos n'ont pas de cible → `leg.target <= 0` les écarte, aucun quota.)
   for (const leg of c.legs) {
     const left = legRemaining(leg);
     if (left <= 0 || leg.target <= 0) continue;
@@ -1546,6 +1653,43 @@ export function comboNudgeShare(
   };
 }
 
+/** ⇄ DÉPLACE une part d'un exo à un autre, TOTAL DU GROUPE FIXE (v1.357.0 ; demandé : « montrer la
+ *  répartition à la validation et la laisser éditer, la somme reste égale au volume du groupe »).
+ *  `delta` +1 : l'exo prend `step` à l'exo qui en a le plus ; −1 : il en rend `step` à celui qui en
+ *  a le moins. Aucun exo ne descend sous 1 série (sous `step` en reps) : si le donneur n'a rien à
+ *  donner, rien ne bouge. Rend le même état que `comboNudgeShare` ; la somme ne change JAMAIS. Pur. */
+export function comboMoveShare(
+  p: ComboPick,
+  exerciseId: string,
+  delta: 1 | -1,
+  step: number,
+): Pick<ComboPick, 'target' | 'setsTarget' | 'alloc'> {
+  const cur = comboSplit(p.target, p.exercise_ids, p.alloc, 1);
+  const keep = { target: p.target, setsTarget: p.setsTarget, alloc: p.alloc };
+  const min = step > 1 ? step : 1;
+  const others = p.exercise_ids.filter((id) => id !== exerciseId);
+  if (!others.length || cur[exerciseId] === undefined) return keep;
+  let from: string | undefined;
+  let to: string | undefined;
+  if (delta > 0) {
+    // Le donneur : le plus gros des autres (le premier en cas d'égalité) qui peut encore donner.
+    from = others
+      .filter((id) => (cur[id] ?? 0) - step >= min)
+      .reduce<
+        string | undefined
+      >((b, id) => (b === undefined || cur[id]! > cur[b]! ? id : b), undefined);
+    to = exerciseId;
+  } else {
+    if (cur[exerciseId] - step < min) return keep;
+    from = exerciseId;
+    to = others.reduce((b, id) => (cur[id]! < cur[b]! ? id : b), others[0]!);
+  }
+  if (from === undefined || to === undefined) return keep;
+  const take = comboNudgeShare(p, from, -1, step);
+  const give = comboNudgeShare({ ...p, ...take }, to, 1, step);
+  return give;
+}
+
 /** Volume hebdo de base par muscle (séries) selon le niveau (repère hypertrophie). */
 function comboBaseWeekly(level: Level): number {
   return level === 'debutant' ? 9 : level === 'avance' ? 15 : 12;
@@ -1721,6 +1865,29 @@ function fmtDM(iso: string): string {
   const [, m, d] = iso.split('-');
   return `${d}/${m}`;
 }
+/** Le détail des séries d'un exo pour l'export texte (reps×poids, ou secondes). */
+function legSetsDetail(leg: ComboLeg): string {
+  const sets = legSets(leg);
+  return legMode(leg) === 'time'
+    ? sets
+        .map((s) => {
+          const o = setOriginLabel(leg, s);
+          return o ? `${s.reps}s (↪ ${o})` : `${s.reps}s`;
+        })
+        .join(', ')
+    : groupSetLines(sets)
+        .map((l) => {
+          // Mini-séries d'un jour : une mention, pas une par prise.
+          if (l.kind === 'mini') return miniLineLabel(l);
+          const s = l.set;
+          const b = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
+          const a = s.assisted ? `${b}·a` : b;
+          const o = setOriginLabel(leg, s);
+          return o ? `${a} (↪ ${o})` : a;
+        })
+        .join(', ');
+}
+
 /** Texte détaillé du défi complet : entête (semaine, %, théorique) + chaque exo
  *  (cible/réalisé, paliers) avec le détail de chaque série faite (reps×poids / secondes).
  *  `today` = jour logique courant (pour l'avancement théorique). */
@@ -1744,6 +1911,20 @@ export function comboExportText(c: ComboChallenge, today: string): string {
       (c.status === 'done' ? ' — bouclé ✅' : ''),
   );
   L.push('');
+  if (comboMode(c) === 'group') {
+    // Par GROUPE : le volume du groupe, puis ce qui a été fait sur chaque exo de son menu.
+    for (const g of comboGoals(c)) {
+      L.push(
+        `• ${comboSlot(g.slot)?.label ?? g.slot} — ${g.done}/${g.target} séries${goalComplete(g) ? ' ✓' : ''}`,
+      );
+      for (const leg of g.legs) {
+        const n = legSetsDone(leg);
+        L.push(`   - ${leg.exercise_name} : ${n} série${n > 1 ? 's' : ''}`);
+        if (n) L.push(`     séries : ${legSetsDetail(leg)}`);
+      }
+    }
+    return L.join('\n');
+  }
   for (const leg of c.legs) {
     const done = legDone(leg);
     const { sec } = legTierMarks(leg);
@@ -1753,29 +1934,7 @@ export function comboExportText(c: ComboChallenge, today: string): string {
         (done > leg.target ? ` (+${done - leg.target} en plus)` : ''),
     );
     L.push(`   paliers : sec. ${sec} · objectif ${leg.target}`);
-    const sets = legSets(leg);
-    if (sets.length) {
-      const detail =
-        legMode(leg) === 'time'
-          ? sets
-              .map((s) => {
-                const o = setOriginLabel(leg, s);
-                return o ? `${s.reps}s (↪ ${o})` : `${s.reps}s`;
-              })
-              .join(', ')
-          : groupSetLines(sets)
-              .map((l) => {
-                // Mini-séries d'un jour : une mention, pas une par prise.
-                if (l.kind === 'mini') return miniLineLabel(l);
-                const s = l.set;
-                const b = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
-                const a = s.assisted ? `${b}·a` : b;
-                const o = setOriginLabel(leg, s);
-                return o ? `${a} (↪ ${o})` : a;
-              })
-              .join(', ');
-      L.push(`   séries : ${detail}`);
-    }
+    if (legSets(leg).length) L.push(`   séries : ${legSetsDetail(leg)}`);
   }
   return L.join('\n');
 }

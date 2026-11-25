@@ -12,7 +12,13 @@
  */
 
 import { challengeStats, type Challenge } from './challenges';
-import { activeCombo, comboProgressPct, legComplete, type ComboChallenge } from './combo';
+import {
+  activeCombo,
+  comboProgressPct,
+  comboGoalsLeft,
+  comboMode,
+  type ComboChallenge,
+} from './combo';
 
 export interface DefisSummary {
   /** Défis solo EN COURS (statut actif), quel que soit leur état du jour. */
@@ -31,6 +37,8 @@ export interface DefisSummary {
     pct: number;
     /** Exercices qui n'ont pas atteint leur objectif — ce qu'il reste à travailler. */
     left: number;
+    /** Mode « par groupe » : `left` compte des groupes musculaires, pas des exos. */
+    group: boolean;
   } | null;
 }
 
@@ -63,7 +71,8 @@ export function defisSummary(
           name: c.name,
           // Brut : l'écran l'affiche avec fmtPct, comme les autres écrans du 360 (dixième, bornes justes).
           pct: comboProgressPct(c),
-          left: c.legs.filter((l) => !legComplete(l)).length,
+          left: comboGoalsLeft(c),
+          group: comboMode(c) === 'group',
         }
       : null,
   };

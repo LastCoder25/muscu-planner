@@ -351,7 +351,8 @@
           <div class="cc-main">
             <div class="cc-title font-display">🎯 Défi 360</div>
             <div class="cc-sub">
-              {{ comboLegsDone(c) }}/{{ c.legs.length }} exos · {{ fmtPct(comboProgressPct(c)) }} %
+              {{ comboLegsDone(c) }}/{{ comboGoalCount(c) }} {{ comboUnit(c) }} ·
+              {{ fmtPct(comboProgressPct(c)) }} %
             </div>
             <div v-if="c.status === 'done'" class="cc-xp">
               <span v-if="comboXpb(c).duration > 0" class="xp-pill dur"
@@ -411,7 +412,9 @@
             <ComboProgressBar :pace="pace" thin />
           </div>
           <div class="c3-cta-row q-mb-sm">
+            <!-- La séance générée est calée sur des cibles PAR EXO : pas encore en mode groupe. -->
             <q-btn
+              v-if="!isGroupCombo"
               class="c3-cta-grow"
               outline
               color="primary"
@@ -430,120 +433,130 @@
               @click="exportCombo"
             />
           </div>
-          <div
-            v-for="leg in shownComboLegs"
-            :key="leg.exercise_id"
-            class="combo-leg"
-            :class="{ done: legComplete(leg) }"
-          >
-            <!-- Même en-tête que la fiche du 360 : c’est souvent ICI qu’on consulte son
+          <!-- 🧩 Défi « par groupe » : un bloc par groupe musculaire (jauge + exos au menu). -->
+          <ComboGroupBlock
+            v-if="isGroupCombo"
+            :combo="activeCombo"
+            :editable="activeCombo.status === 'active'"
+            @add="(l: ComboLeg) => openSet(l, 1)"
+            @history="openHistory"
+          />
+          <template v-else>
+            <div
+              v-for="leg in shownComboLegs"
+              :key="leg.exercise_id"
+              class="combo-leg"
+              :class="{ done: legComplete(leg) }"
+            >
+              <!-- Même en-tête que la fiche du 360 : c’est souvent ICI qu’on consulte son
                  défi en cours, pas sur /combo/:id. -->
-            <ComboLegHead
-              :leg="leg"
-              :objective="profileStore.profile?.objective"
-              :bodyweight="noEquipIds.has(leg.exercise_id)"
-              :size="36"
-              :history="comboStore.list"
-              swappable
-              :fatigue="legFatigue(leg)"
-              @history="openHistory(leg)"
-              @swap="openSwap(leg)"
-            />
-            <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
+              <ComboLegHead
+                :leg="leg"
+                :objective="profileStore.profile?.objective"
+                :bodyweight="noEquipIds.has(leg.exercise_id)"
+                :size="36"
+                :history="comboStore.list"
+                swappable
+                :fatigue="legFatigue(leg)"
+                @history="openHistory(leg)"
+                @swap="openSwap(leg)"
+              />
+              <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui
                  prenaient la largeur, et les cases partaient à la ligne. La prochaine case vide
                  porte le « ＋ » ; le retrait vit dans la fenêtre de saisie. Seul le chrono du
                  mode durée garde ses boutons (il n'a pas de fenêtre de saisie).
                  Objectif atteint : plus d'ajout (v1.53) — on peut encore corriger une série. -->
-            <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
-            <HoldLestStepper
-              v-if="activeCombo && legHoldLoadable(leg) && !legComplete(leg)"
-              :combo-id="activeCombo.id"
-              :leg="leg"
-            />
-            <!-- Exo en DURÉE : les bulles sur leur propre ligne, le chrono dessous (sinon les bulles
+              <!-- 🧱 Lest d'une tenue (planche, chaise) : choisi ici, il part avec la prochaine série. -->
+              <HoldLestStepper
+                v-if="activeCombo && legHoldLoadable(leg) && !legComplete(leg)"
+                :combo-id="activeCombo.id"
+                :leg="leg"
+              />
+              <!-- Exo en DURÉE : les bulles sur leur propre ligne, le chrono dessous (sinon les bulles
                  se serrent à côté des boutons et passent sur beaucoup de lignes). -->
-            <div class="cl-bottom" :class="{ stacked: legMode(leg) === 'time' }">
-              <div
-                v-if="legMode(leg) === 'sets'"
-                class="seg-bar"
-                :class="{ tap: !legComplete(leg) }"
-                :role="legComplete(leg) ? undefined : 'button'"
-                :tabindex="legComplete(leg) ? undefined : 0"
-                :aria-label="
-                  legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`
-                "
-                @click="addFromBar(leg)"
-                @keydown.enter="addFromBar(leg)"
-              >
-                <span
-                  v-for="n in segCount(leg)"
-                  :key="n"
-                  class="seg"
-                  :class="{
-                    on: n <= legDone(leg),
-                    next: n === legDone(leg) + 1,
-                    beyond: n > leg.target,
-                    moved: !!legSets(leg)[n - 1]?.origin,
-                    today: isDoneToday(leg, n),
-                    'set-flash': isJustAdded(comboStore.justAdded, leg.exercise_id, n),
-                  }"
-                  :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
-                  :title="
-                    legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
-                      ? `Faite en ${setOriginLabel(leg, legSets(leg)[n - 1]!)}`
-                      : undefined
+              <div class="cl-bottom" :class="{ stacked: legMode(leg) === 'time' }">
+                <div
+                  v-if="legMode(leg) === 'sets'"
+                  class="seg-bar"
+                  :class="{ tap: !legComplete(leg) }"
+                  :role="legComplete(leg) ? undefined : 'button'"
+                  :tabindex="legComplete(leg) ? undefined : 0"
+                  :aria-label="
+                    legComplete(leg) ? undefined : `Ajouter une série : ${leg.exercise_name}`
                   "
-                  @click.stop="onSeg(leg, n)"
+                  @click="addFromBar(leg)"
+                  @keydown.enter="addFromBar(leg)"
                 >
-                  <template v-if="n <= legDone(leg)">{{
-                    segSetLabel(legSets(leg)[n - 1])
-                  }}</template>
-                  <template v-else-if="n === legDone(leg) + 1">＋</template>
-                </span>
-              </div>
-              <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
-              <ComboTimeBubbles v-else-if="legMode(leg) === 'time'" :leg="leg" />
-              <div
-                v-else
-                class="reps-bar"
-                :class="{ tap: legMode(leg) === 'reps' && !legComplete(leg) }"
-                @click="legMode(leg) === 'reps' && addFromBar(leg)"
-              >
-                <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
-                <span
-                  class="reps-over"
-                  :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
-                />
-                <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
-              </div>
-              <button
-                v-if="legMode(leg) === 'reps' && !legComplete(leg)"
-                class="cl-add"
-                :aria-label="`Ajouter une série : ${leg.exercise_name}`"
-                @click="openSet(leg, 1)"
-              >
-                ＋
-              </button>
-              <div v-else-if="legMode(leg) === 'time'" class="cl-actions">
-                <template v-if="!legComplete(leg)">
-                  <!-- Mode DURÉE : chrono ou minuteur avec départ différé (série de la durée tenue). -->
-                  <HoldTimerButton
-                    variant="chip"
-                    :label="leg.exercise_name"
-                    @finish="(sec: number) => doAddSeconds(leg, sec)"
+                  <span
+                    v-for="n in segCount(leg)"
+                    :key="n"
+                    class="seg"
+                    :class="{
+                      on: n <= legDone(leg),
+                      next: n === legDone(leg) + 1,
+                      beyond: n > leg.target,
+                      moved: !!legSets(leg)[n - 1]?.origin,
+                      today: isDoneToday(leg, n),
+                      'set-flash': isJustAdded(comboStore.justAdded, leg.exercise_id, n),
+                    }"
+                    :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
+                    :title="
+                      legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
+                        ? `Faite en ${setOriginLabel(leg, legSets(leg)[n - 1]!)}`
+                        : undefined
+                    "
+                    @click.stop="onSeg(leg, n)"
+                  >
+                    <template v-if="n <= legDone(leg)">{{
+                      segSetLabel(legSets(leg)[n - 1])
+                    }}</template>
+                    <template v-else-if="n === legDone(leg) + 1">＋</template>
+                  </span>
+                </div>
+                <!-- Mode DURÉE : les mêmes bulles que les séries (1 bulle = 30 s, remplie à la durée tenue). -->
+                <ComboTimeBubbles v-else-if="legMode(leg) === 'time'" :leg="leg" />
+                <div
+                  v-else
+                  class="reps-bar"
+                  :class="{ tap: legMode(leg) === 'reps' && !legComplete(leg) }"
+                  @click="legMode(leg) === 'reps' && addFromBar(leg)"
+                >
+                  <span class="reps-fill" :style="{ width: bar(leg).fillPct + '%' }" />
+                  <span
+                    class="reps-over"
+                    :style="{ left: bar(leg).objPct + '%', width: bar(leg).overPct + '%' }"
                   />
-                </template>
+                  <span class="reps-mark" :style="{ left: bar(leg).objPct + '%' }" />
+                </div>
                 <button
-                  class="cl-corr"
-                  :disabled="!legSetsDone(leg)"
-                  title="Retirer la dernière série"
-                  @click="undoSet(leg)"
+                  v-if="legMode(leg) === 'reps' && !legComplete(leg)"
+                  class="cl-add"
+                  :aria-label="`Ajouter une série : ${leg.exercise_name}`"
+                  @click="openSet(leg, 1)"
                 >
-                  ↩
+                  ＋
                 </button>
+                <div v-else-if="legMode(leg) === 'time'" class="cl-actions">
+                  <template v-if="!legComplete(leg)">
+                    <!-- Mode DURÉE : chrono ou minuteur avec départ différé (série de la durée tenue). -->
+                    <HoldTimerButton
+                      variant="chip"
+                      :label="leg.exercise_name"
+                      @finish="(sec: number) => doAddSeconds(leg, sec)"
+                    />
+                  </template>
+                  <button
+                    class="cl-corr"
+                    :disabled="!legSetsDone(leg)"
+                    title="Retirer la dernière série"
+                    @click="undoSet(leg)"
+                  >
+                    ↩
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </template>
       </template>
     </template>
@@ -610,6 +623,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboTimeBubbles from '@/components/ComboTimeBubbles.vue';
+import ComboGroupBlock from '@/components/ComboGroupBlock.vue';
 import HoldLestStepper from '@/components/HoldLestStepper.vue';
 import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
@@ -647,6 +661,9 @@ import { repRangeLabel } from '@/lib/repScheme';
 import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
+  comboGoals,
+  comboMode,
+  goalComplete,
   fmtPct,
   comboXpBreakdown,
   comboXpPoints,
@@ -857,8 +874,13 @@ const comboList = computed(() =>
     .filter((c) => c.status === comboTab.value)
     .sort((a, b) => (b.start_date > a.start_date ? 1 : -1)),
 );
-const comboLegsDone = (c: (typeof comboStore.list)[number]) =>
-  c.legs.filter((l) => legComplete(l)).length;
+// Exos bouclés (mode exo) ou groupes bouclés (mode groupe) : la MÊME lecture des objectifs.
+const comboLegsDone = (c: ComboChallenge) => comboGoals(c).filter(goalComplete).length;
+const comboGoalCount = (c: ComboChallenge) => comboGoals(c).length;
+const comboUnit = (c: ComboChallenge) => (comboMode(c) === 'group' ? 'groupes' : 'exos');
+const isGroupCombo = computed(
+  () => !!activeCombo.value && comboMode(activeCombo.value) === 'group',
+);
 const comboPct = computed(() => (activeCombo.value ? comboProgressPct(activeCombo.value) : 0));
 // Semaine du Défi 360 (début → fin) pour l'afficher clairement.
 // ⚠️ `fmtDM`/`addDaysLocal` (privés à cet écran) sont remplacés par `dateRangeLabel` :

@@ -109,6 +109,28 @@ const ECRANS = [
       { nom: 'suivant-8', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
     ],
   },
+  // 🧩 Création d'un Défi 360 « par groupe » (v1.358.0) : la tuile de mode se touche, les exos se
+  // choisissent, le récap montre le volume du groupe (pas de répartition par exo). Rien n'est créé.
+  {
+    route: '/combo/new',
+    nom: 'defi360-creation-groupe',
+    gestes: [
+      {
+        nom: 'mode-groupe',
+        clic: '[data-test="mode-group"]',
+        attendu: '[data-test="mode-group"][aria-pressed="true"]',
+      },
+      { nom: 'choisir-exos', clic: 'button:has-text("Choisir mes exercices")', attendu: '.dtile' },
+      { nom: 'suivant-1', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-2', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-3', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-4', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-5', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-6', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-7', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+      { nom: 'suivant-8', clic: '.draft-foot .q-btn >> nth=0', attendu: '.draft-foot, .slot-card' },
+    ],
+  },
   { route: '/muscu', nom: 'muscu' },
   { route: '/cardio', nom: 'cardio' },
   { route: '/tennis', nom: 'tennis' },
