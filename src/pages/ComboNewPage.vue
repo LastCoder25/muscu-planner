@@ -206,6 +206,14 @@
               >🧳 objectifs et récompenses à {{ sharePct }} %</span
             >
           </div>
+          <!-- 🧭 Repère de volume (jamais un blocage) : léger = bien pour une reprise, soutenu = bien
+               si tu charges moins lourd. Suit le volume et la durée en direct. -->
+          <ComboVolumeAdvice
+            class="vol-advice-slot"
+            :level="level"
+            :duration="duration"
+            :groups="adviceGroups"
+          />
         </section>
         <div class="foot-bar cta-bar">
           <div class="cta-stack">
@@ -392,6 +400,13 @@
         <p v-else class="intro">
           Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.
         </p>
+        <ComboVolumeAdvice
+          v-if="recapKeys.length"
+          class="vol-advice-slot"
+          :level="level"
+          :duration="duration"
+          :groups="adviceGroups"
+        />
         <div v-if="!recapKeys.length" class="no-ex">
           Aucun exercice choisi.
           <button class="link-btn" @click="step = 'draft'">Revenir au choix</button>
@@ -603,6 +618,7 @@ import {
 } from '@/lib/challenges';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
+import ComboVolumeAdvice from '@/components/ComboVolumeAdvice.vue';
 import type { Level } from '@/lib/types';
 
 const router = useRouter();
@@ -1001,6 +1017,22 @@ const activeCount = computed(() => COMBO_SLOTS.filter((s) => enabled[s.key]).len
 const totalSets = computed(() =>
   COMBO_SLOTS.reduce((a, s) => a + (enabled[s.key] ? (picks[s.key]?.target ?? 0) : 0), 0),
 );
+// 🧭 Les groupes que le conseil de volume évalue : ceux qui sont inclus, avec leur volume en SÉRIES
+// sur la durée choisie (en mode reps, la cible est un total de reps : on lit `setsTarget`).
+// Pendant les réglages (avant le choix des exos) tous les groupes actifs comptent ; ensuite seulement
+// ceux qui ont au moins un exo.
+const adviceGroups = computed(() =>
+  COMBO_SLOTS.filter(
+    (s) => enabled[s.key] && (step.value === 'setup' || pickCount(s.key) > 0),
+  ).map((s) => {
+    const p = picks[s.key];
+    return {
+      slot: s.key,
+      sets: p?.count_mode === 'reps' ? (p?.setsTarget ?? 0) : (p?.target ?? 0),
+      essential: s.essential,
+    };
+  }),
+);
 // Récap : emplacements inclus avec au moins un exo.
 const recapKeys = computed(() =>
   COMBO_SLOTS.filter((s) => enabled[s.key] && pickCount(s.key) > 0).map((s) => s.key),
@@ -1167,6 +1199,9 @@ onMounted(async () => {
   align-items: center;
 }
 /* Durée : 5 tuiles d'égale largeur, jamais sous 44 px de haut. */
+.vol-advice-slot {
+  margin-top: 12px;
+}
 .dur-row {
   margin-top: 8px;
   display: grid;

@@ -195,3 +195,59 @@ describe('récap : répartition éditable en mode exo (total du groupe fixe)', (
     expect(Object.values(t).reduce((a, b) => a + b, 0)).toBe(total);
   }, 30_000);
 });
+
+describe('🧭 conseil de volume à la création (réglages et récap)', () => {
+  const tile = async (host: HTMLElement, sel: string, text: string) => {
+    const el = [...host.querySelectorAll<HTMLElement>(sel)].find((b) => b.textContent?.includes(text));
+    expect(el, `${sel} « ${text} »`).toBeTruthy();
+    el!.click();
+    await tick();
+  };
+  const advice = (h: HTMLElement) => h.querySelector('[data-test="volume-advice"]');
+
+  it('réglages : « zone de progression » au départ, « léger » au volume léger', async () => {
+    const { err } = await run(async (h) => {
+      expect(advice(h)?.className).toContain('ok');
+      await tile(h, '.obj-tile', 'Léger');
+      expect(advice(h)?.className).toContain('light');
+      expect(advice(h)?.textContent).toContain('reprise');
+    });
+    expect(err).toBeNull();
+  }, 30_000);
+
+  it('réglages : gros volume sur 3 jours → « soutenu » ou plus et la durée est dite ; il suit le volume en direct', async () => {
+    const { err } = await run(async (h) => {
+      await tile(h, '.obj-tile', 'Intense');
+      await tile(h, '.dur-tile', '3 j');
+      expect(advice(h)?.className).toMatch(/high|veryHigh/);
+      expect(advice(h)?.textContent).toContain('Sur 3 jours');
+      await tile(h, '.obj-tile', 'Léger');
+      expect(advice(h)?.className).toContain('light');
+      expect(advice(h)?.textContent).not.toContain('Sur 3 jours');
+    });
+    expect(err).toBeNull();
+  }, 30_000);
+
+  it('récap : passer tous les groupes en répétitions ne fait pas exploser le conseil (il lit des séries, pas des reps)', async () => {
+    const { err } = await run(async (h) => {
+      await toRecap(h);
+      const before = advice(h)?.className;
+      for (const b of [...h.querySelectorAll<HTMLElement>('.mode-toggle button')].filter((x) =>
+        x.textContent?.includes('Répétitions'),
+      ))
+        b.click();
+      await tick();
+      expect(advice(h)?.className).toBe(before);
+    });
+    expect(err).toBeNull();
+  }, 30_000);
+
+  it('récap : le conseil est en tête et suit la répartition finale', async () => {
+    const { err } = await run(async (h) => {
+      await toRecap(h);
+      expect(advice(h)).not.toBeNull();
+      expect(h.innerHTML.indexOf('volume-advice')).toBeLessThan(h.innerHTML.indexOf('slot-card'));
+    });
+    expect(err).toBeNull();
+  }, 30_000);
+});
