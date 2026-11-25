@@ -92,7 +92,7 @@ export function repeatBlocker(
 // CHOIX que l'écran de création sait lire (exos par groupe, volume du groupe, répartition, poids).
 
 /** Un groupe tel que l'écran de création le stocke (même forme que ses `picks`). */
-export interface RepeatPick {
+interface RepeatPick {
   exercise_ids: string[];
   /** Volume du groupe : séries (ou total de reps en mode reps) sur la durée du défi. */
   target: number;
