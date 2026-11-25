@@ -40,10 +40,40 @@ function defi(over: Partial<ComboChallenge> = {}): ComboChallenge {
     status: 'active',
     legs: [
       leg({ sets: sets(6) }), // 6/6 bouclé
-      leg({ slot: 'pull', exercise_id: 'row', exercise_name: 'Rowing', muscle_primary: 'dos', target: 5, sets: sets(4) }), // 4/5 = 80 %
-      leg({ slot: 'squat', exercise_id: 'squat', exercise_name: 'Squat', muscle_primary: 'quadriceps', target: 4, sets: sets(1) }),
-      leg({ slot: 'core', exercise_id: 'plank', exercise_name: 'Planche', muscle_primary: 'abdominaux', target: 90, count_mode: 'time', sets: [{ date: '2026-09-15', reps: 30 }] }),
-      leg({ slot: 'biceps', exercise_id: 'curl', exercise_name: 'Curl', muscle_primary: 'biceps', target: 100, count_mode: 'reps', sets: sets(3, 12, '2026-09-15') }),
+      leg({
+        slot: 'pull',
+        exercise_id: 'row',
+        exercise_name: 'Rowing',
+        muscle_primary: 'dos',
+        target: 5,
+        sets: sets(4),
+      }), // 4/5 = 80 %
+      leg({
+        slot: 'squat',
+        exercise_id: 'squat',
+        exercise_name: 'Squat',
+        muscle_primary: 'quadriceps',
+        target: 4,
+        sets: sets(1),
+      }),
+      leg({
+        slot: 'core',
+        exercise_id: 'plank',
+        exercise_name: 'Planche',
+        muscle_primary: 'abdominaux',
+        target: 90,
+        count_mode: 'time',
+        sets: [{ date: '2026-09-15', reps: 30 }],
+      }),
+      leg({
+        slot: 'biceps',
+        exercise_id: 'curl',
+        exercise_name: 'Curl',
+        muscle_primary: 'biceps',
+        target: 100,
+        count_mode: 'reps',
+        sets: sets(3, 12, '2026-09-15'),
+      }),
     ],
     ...over,
   };
@@ -69,7 +99,9 @@ describe('mode exo : mêmes nombres qu’avant l’abstraction', () => {
   });
 
   it('bouclé : tous les exos à leur cible', () => {
-    const c = defi({ legs: [leg({ sets: sets(6) }), leg({ exercise_id: 'r', target: 2, sets: sets(2) })] });
+    const c = defi({
+      legs: [leg({ sets: sets(6) }), leg({ exercise_id: 'r', target: 2, sets: sets(2) })],
+    });
     expect(comboComplete(c)).toBe(true);
     expect(comboProgressPct(c)).toBe(100);
     expect(comboClosed(c, '2026-09-15')).toBe(true);

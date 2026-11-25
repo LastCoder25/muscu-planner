@@ -66,7 +66,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ExerciseDemo from './ExerciseDemo.vue';
-import { comboGoals, goalComplete, legSetsDone, legsByGroup, type ComboChallenge, type ComboLeg } from '@/lib/combo';
+import {
+  comboGoals,
+  goalComplete,
+  legSetsDone,
+  legsByGroup,
+  type ComboChallenge,
+  type ComboLeg,
+} from '@/lib/combo';
 import { comboSlot, comboSlotRank } from '@/data/combo';
 import { comboLegColor } from '@/lib/volume';
 

@@ -217,7 +217,12 @@ const friendRows = computed(() => {
   const c = activeCombo.value;
   if (!c) return [];
   if (comboMode(c) !== 'group')
-    return c.legs.map((leg) => ({ kind: 'leg' as const, key: leg.exercise_id, leg, counted: true }));
+    return c.legs.map((leg) => ({
+      kind: 'leg' as const,
+      key: leg.exercise_id,
+      leg,
+      counted: true,
+    }));
   return comboGoals(c).flatMap((g) => [
     {
       kind: 'group' as const,

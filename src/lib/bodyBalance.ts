@@ -316,19 +316,19 @@ function comboItems(
       comboMode(c) === 'group'
         ? groupTargetItems(c, day, already)
         : c.legs.map((leg) => {
-        const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
-        // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
-        const sets = leg.target / unit - already(leg);
-        return {
-          source: 'combo' as const,
-          day,
-          exerciseId: leg.exercise_id,
-          name: leg.exercise_name,
-          primary: leg.muscle_primary,
-          sets,
-          reps: 0,
-        };
-      }),
+            const unit = legMode(leg) === 'sets' ? 1 : perSet(legRepRange(leg, i.objective));
+            // Négatif si l'objectif est déjà dépassé : `creditSets` ignore toute valeur ≤ 0.
+            const sets = leg.target / unit - already(leg);
+            return {
+              source: 'combo' as const,
+              day,
+              exerciseId: leg.exercise_id,
+              name: leg.exercise_name,
+              primary: leg.muscle_primary,
+              sets,
+              reps: 0,
+            };
+          }),
     );
 }
 

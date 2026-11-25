@@ -98,7 +98,8 @@ const click = async (host: HTMLElement, sel: string) => {
 /** Du réglage jusqu'au récap : « Choisir mes exercices », puis « Suivant » à chaque groupe. */
 async function toRecap(host: HTMLElement) {
   await click(host, '.foot-cta');
-  for (let i = 0; i < 12 && !host.querySelector('.slot-card'); i++) await click(host, '.draft-foot q-btn');
+  for (let i = 0; i < 12 && !host.querySelector('.slot-card'); i++)
+    await click(host, '.draft-foot q-btn');
 }
 
 describe('création du Défi 360 : le choix du mode', () => {

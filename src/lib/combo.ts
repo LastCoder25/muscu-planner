@@ -993,7 +993,9 @@ function goalPlannedEffort(g: ComboGoalRow): number {
   let effort = 0;
   for (const l of g.legs) effort += legPlannedEffort(l);
   const missing = Math.max(0, g.target - g.done);
-  const mean = g.legs.length ? g.legs.reduce((a, l) => a + (l.rep_weight ?? 1), 0) / g.legs.length : 1;
+  const mean = g.legs.length
+    ? g.legs.reduce((a, l) => a + (l.rep_weight ?? 1), 0) / g.legs.length
+    : 1;
   return effort + missing * COMBO_PLAN_REPS * mean;
 }
 
@@ -1673,10 +1675,12 @@ export function comboMoveShare(
     // Le donneur : le plus gros des autres (le premier en cas d'égalité) qui peut encore donner.
     from = others
       .filter((id) => (cur[id] ?? 0) - step >= min)
-      .reduce<string | undefined>((b, id) => (b === undefined || cur[id]! > cur[b]! ? id : b), undefined);
+      .reduce<
+        string | undefined
+      >((b, id) => (b === undefined || cur[id]! > cur[b]! ? id : b), undefined);
     to = exerciseId;
   } else {
-    if (cur[exerciseId]! - step < min) return keep;
+    if (cur[exerciseId] - step < min) return keep;
     from = exerciseId;
     to = others.reduce((b, id) => (cur[id]! < cur[b]! ? id : b), others[0]!);
   }

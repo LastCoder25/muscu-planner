@@ -6002,7 +6002,11 @@ describe('🧩 Défi 360 par groupe : les écrans se montent', () => {
   };
   const seedCombo = async () => {
     const { useComboStore } = await import('@/stores/combo');
-    const s = useComboStore() as unknown as { list: unknown[]; loaded: boolean; fetchMine: unknown };
+    const s = useComboStore() as unknown as {
+      list: unknown[];
+      loaded: boolean;
+      fetchMine: unknown;
+    };
     s.list = [groupCombo()];
     s.loaded = true;
     s.fetchMine = async () => s.list;
@@ -6033,7 +6037,15 @@ describe('🧩 Défi 360 par groupe : les écrans se montent', () => {
     const { default: ComboDetailPage } = await import('@/pages/ComboDetailPage.vue');
     let out = '';
     expect(
-      await mountIt(ComboDetailPage, {}, undefined, seedCombo, '/session/g1', (h) => (out = h), settle),
+      await mountIt(
+        ComboDetailPage,
+        {},
+        undefined,
+        seedCombo,
+        '/session/g1',
+        (h) => (out = h),
+        settle,
+      ),
     ).toBeNull();
     expect(out).toContain('3 / 6 séries');
     expect(out).toContain('Pompes');
@@ -6066,7 +6078,15 @@ describe('🧩 Défi 360 par groupe : les écrans se montent', () => {
     const { default: ComboSessionPage } = await import('@/pages/ComboSessionPage.vue');
     let out = '';
     expect(
-      await mountIt(ComboSessionPage, {}, undefined, seedCombo, '/session/g1', (h) => (out = h), settle),
+      await mountIt(
+        ComboSessionPage,
+        {},
+        undefined,
+        seedCombo,
+        '/session/g1',
+        (h) => (out = h),
+        settle,
+      ),
     ).toBeNull();
     expect(out).toContain('data-test="group-note"');
   }, 30_000);

@@ -224,7 +224,23 @@ describe('prime et XP (mode groupe)', () => {
     expect(comboTieredBonus(groupe({}, [3, 1], 4), undefined, '2026-09-16')).toBe(0);
     const plein = comboTieredBonus(groupe({}, [4, 2], 4), undefined, FIN);
     const quatreCinq = comboTieredBonus(groupe({}, [3, 1], 4), undefined, FIN); // push 4/6 : < 80 %
-    const sec = comboTieredBonus(groupe({ config: { mode: 'group', groups: [{ slot: 'push', target: 5 }, { slot: 'pull', target: 4 }] } }, [2, 2], 4), undefined, FIN); // push 4/5 = 80 %
+    const sec = comboTieredBonus(
+      groupe(
+        {
+          config: {
+            mode: 'group',
+            groups: [
+              { slot: 'push', target: 5 },
+              { slot: 'pull', target: 4 },
+            ],
+          },
+        },
+        [2, 2],
+        4,
+      ),
+      undefined,
+      FIN,
+    ); // push 4/5 = 80 %
     expect(plein).toBeGreaterThan(0);
     expect(quatreCinq).toBeLessThan(sec);
     expect(sec).toBeLessThan(plein);

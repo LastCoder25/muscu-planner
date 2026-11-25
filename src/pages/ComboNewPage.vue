@@ -389,7 +389,9 @@
           Ajuste le <b>volume de chaque groupe</b> : tu répartis ensuite tes séries comme tu veux
           entre ses exercices (1 ou 2 sur l’un, 5 ou 6 sur celui que tu préfères).
         </p>
-        <p v-else class="intro">Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.</p>
+        <p v-else class="intro">
+          Ajuste le <b>volume</b> et la <b>charge</b>, puis lance ton défi.
+        </p>
         <div v-if="!recapKeys.length" class="no-ex">
           Aucun exercice choisi.
           <button class="link-btn" @click="step = 'draft'">Revenir au choix</button>
@@ -462,7 +464,11 @@
             </div>
             <div class="cfg-range">🎯 {{ slotRangeLabel(key) }} par série</div>
             <!-- 🍰 Répartition entre les exos : parts égales par défaut, ajustables une à une. -->
-            <div v-if="!isGroupMode && pickCount(key) > 1" class="cfg-split" :data-test="'split-' + key">
+            <div
+              v-if="!isGroupMode && pickCount(key) > 1"
+              class="cfg-split"
+              :data-test="'split-' + key"
+            >
               <div class="cs-head">
                 <span>
                   Répartition
