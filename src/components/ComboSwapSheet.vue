@@ -203,6 +203,23 @@
         </div>
       </template>
       <template v-else>
+        <!-- 🔁 LE MÊME EXO, COMPTÉ AUTREMENT : le reste change d'unité (séries ↔ durée pour une tenue,
+             séries ↔ reps sinon), ce qui est fait ne bouge pas. Une seule unité par exo. -->
+        <div v-if="unitOptions.length" class="sw-switch" data-test="sw-switch">
+          <div class="sw-grp">🔁 Le même exo, compté autrement</div>
+          <button
+            v-for="o in unitOptions"
+            :key="o.mode"
+            type="button"
+            class="sw-switch-b"
+            :disabled="busy"
+            :data-test="'sw-switch-' + o.mode"
+            @click="switchUnit(o.mode)"
+          >
+            <b>{{ o.label }}</b>
+            <span>{{ o.preview }}</span>
+          </button>
+        </div>
         <div v-if="canRest" class="sw-scope" role="radiogroup" aria-label="Ce qui bascule">
           <button
             type="button"
@@ -385,6 +402,10 @@ import { exoAvailability, occupantsOf } from '@/lib/exoExclusivity';
 import {
   comboTransferBlocker,
   comboTransferPlan,
+  comboUnitBlocker,
+  legUnitChoices,
+  switchLegUnit,
+  type ComboCountMode,
   legDone,
   legRemaining,
   legSets,
@@ -676,6 +697,43 @@ function stepTarget(d: number) {
       plan.value.target + d * (isTime.value || plan.value.asTime ? 5 : 1),
     );
 }
+// 🔁 Le même exo, compté autrement : un bouton par unité possible, avec ce qu'il restera à faire.
+const UNIT_LABEL: Record<ComboCountMode, string> = {
+  sets: 'En séries',
+  time: 'En durée',
+  reps: 'En répétitions',
+};
+const UNIT_WORD: Record<ComboCountMode, string> = { sets: 'séries', time: 's', reps: 'reps' };
+const unitOptions = computed(() => {
+  const cc = c.value;
+  const l = leg.value;
+  if (!cc || !l) return [];
+  return legUnitChoices(l)
+    .filter((m) => comboUnitBlocker(cc, l.exercise_id, m) === null)
+    .map((m) => {
+      const after = switchLegUnit(cc, l.exercise_id, m).find((x) => x.exercise_id === l.exercise_id)!;
+      return {
+        mode: m,
+        label: UNIT_LABEL[m],
+        preview: `Il reste ${legRemaining(l)} ${UNIT_WORD[legMode(l)]} → ${legRemaining(after)} ${UNIT_WORD[m]}`,
+      };
+    });
+});
+async function switchUnit(m: ComboCountMode) {
+  const cc = c.value;
+  const l = leg.value;
+  if (!cc || !l || busy.value) return;
+  busy.value = true;
+  try {
+    await combo.switchUnit(cc.id, l.exercise_id, m);
+    $q.notify({ type: 'positive', message: `🔁 ${l.exercise_name} : ${UNIT_LABEL[m].toLowerCase()}.` });
+    close();
+  } catch (e) {
+    $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
+  } finally {
+    busy.value = false;
+  }
+}
 // ⏱️ Compter la tenue neuve en durée plutôt qu'en séries (portée « reste », exo compté en séries).
 const asTime = ref(false);
 const canPickTimeUnit = computed(() => {
@@ -757,6 +815,34 @@ async function apply(
 </script>
 
 <style scoped>
+.sw-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.sw-switch-b {
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  min-width: 0;
+}
+.sw-switch-b span {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.sw-switch-b:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .sw-unit {
   display: flex;
   align-items: center;

@@ -2352,6 +2352,71 @@ function transferRest(
   return c.legs.flatMap((l) => (l === from ? [kept, fresh] : [l]));
 }
 
+// ── 🔁 LE MÊME EXO, COMPTÉ AUTREMENT (v1.366.0 ; demandé : « remplacer un exo, ou une partie de son
+// volume, par le même exo mais en séries ou en durée ») ───────────────────────────────────────────
+// Une jambe du 360 n'a qu'UNE unité de comptage et son exo est sa clé partout : on ne peut pas garder
+// deux lignes du même exo. On CONVERTIT donc l'unité de l'exo EN PLACE : ce qui reste à faire change
+// d'unité, ce qui est fait ne bouge pas (les séries gardent leurs valeurs, en secondes pour une
+// tenue). Une tenue : séries ↔ durée ; un autre exo : séries ↔ reps.
+type ComboUnitBlock = 'notActive' | 'noLeg' | 'groupMode' | 'sameUnit' | 'unsupported' | 'nothingLeft';
+
+export const COMBO_UNIT_BLOCK_LABEL: Record<ComboUnitBlock, string> = {
+  notActive: 'Le défi n’est plus en cours.',
+  noLeg: 'Exo introuvable dans le défi.',
+  groupMode: 'En mode par groupe, il n’y a pas d’unité par exo : seules les séries comptent.',
+  sameUnit: 'Cet exo est déjà compté ainsi.',
+  unsupported: 'Cet exo ne peut pas se compter ainsi.',
+  nothingLeft: 'Cet exo a déjà atteint son objectif : il ne reste rien à convertir.',
+};
+
+/** Les unités vers lesquelles cet exo peut passer (hors l'actuelle) : une tenue compte en séries ou
+ *  en durée, les autres en séries ou en reps. */
+export function legUnitChoices(leg: ComboLeg): ComboCountMode[] {
+  const all: ComboCountMode[] = legIsHold(leg) ? ['sets', 'time'] : ['sets', 'reps'];
+  return all.filter((m) => m !== legMode(leg));
+}
+
+/** Pourquoi on ne peut pas changer l'unité de cet exo — `null` si c'est possible. Source unique de
+ *  l'écran et du store (qui le re-vérifie). */
+export function comboUnitBlocker(
+  c: ComboChallenge,
+  exerciseId: string,
+  to: ComboCountMode,
+): ComboUnitBlock | null {
+  if (c.status !== 'active') return 'notActive';
+  const leg = c.legs.find((l) => l.exercise_id === exerciseId);
+  if (!leg) return 'noLeg';
+  if (comboMode(c) === 'group') return 'groupMode';
+  if (to === legMode(leg)) return 'sameUnit';
+  if (!legUnitChoices(leg).includes(to)) return 'unsupported';
+  if (legRemaining(leg) <= 0) return 'nothingLeft';
+  return null;
+}
+
+/** L'exo après conversion de ce qui RESTE à faire. Séries → durée : chaque série restante vaut
+ *  `COMBO_HOLD_SEC` s, ajoutées aux secondes déjà tenues ; durée → séries : les secondes restantes
+ *  en séries de `COMBO_HOLD_SEC` s ; séries ↔ reps : une série vaut le milieu de la fourchette de
+ *  reps de l'exo. Ce qui est fait ne change pas. Lève si c'est refusé. */
+export function switchLegUnit(c: ComboChallenge, exerciseId: string, to: ComboCountMode): ComboLeg[] {
+  const block = comboUnitBlocker(c, exerciseId, to);
+  if (block) throw new Error(COMBO_UNIT_BLOCK_LABEL[block]);
+  const leg = c.legs.find((l) => l.exercise_id === exerciseId)!;
+  const from = legMode(leg);
+  const rem = legRemaining(leg);
+  let target: number;
+  if (from === 'sets') {
+    const per = to === 'time' ? COMBO_HOLD_SEC : legMidReps(leg);
+    target = legReps(leg) + Math.max(1, Math.round(rem * per));
+  } else {
+    const per = from === 'time' ? COMBO_HOLD_SEC : legMidReps(leg);
+    target = legSetsDone(leg) + Math.max(1, Math.ceil(rem / per));
+  }
+  // Une tenue reste une tenue (saisie en secondes) quel que soit son comptage : on le fixe, sinon un
+  // exo hérité (sans `hold`) la perdrait en quittant la durée.
+  const next: ComboLeg = { ...leg, count_mode: to, target, ...(legIsHold(leg) ? { hold: true } : {}) };
+  return c.legs.map((l) => (l === leg ? next : l));
+}
+
 /** Le drapeau `hold` d'un exo neuf : celui de l'exo quitté, sauf quand on passe de reps à secondes
  *  (ou l'inverse) en séries (`transferEntryUnit`) : c'est alors l'exo neuf qui décide. */
 function freshHold(from: ComboLeg, e: ComboNewExercise): { hold?: boolean } {

@@ -11,6 +11,8 @@ import {
   removeSetAt,
   updateSetAt,
   transferComboLeg,
+  switchLegUnit,
+  type ComboCountMode,
   legHoldLoadable,
   updateHoldSetAt,
   HOLD_LEST_MAX,
@@ -325,6 +327,18 @@ export const useComboStore = defineStore('combo', () => {
     await persistLegs(id, legs, next.status);
   }
 
+  /** 🔁 Change l'unité de comptage d'UN exo en place (séries ↔ durée pour une tenue, séries ↔ reps
+   *  sinon) : le reste est converti, le fait ne bouge pas. Le refus vit dans la lib
+   *  (`comboUnitBlocker`) et se rejoue ici. Le statut se recalcule. Lève si c'est refusé. */
+  async function switchUnit(id: string, exerciseId: string, to: ComboCountMode) {
+    const c = list.value.find((x) => x.id === id);
+    if (!c) return;
+    const legs = switchLegUnit(c, exerciseId, to);
+    const next = { ...c, legs };
+    refreshStatus(next);
+    await persistLegs(id, legs, next.status);
+  }
+
   /** Conserve le contenu du coffre de fin sur le défi : preuve durable du versement, et
    *  ce qui permet de le revoir une fois le message chassé de la boîte (30 messages). */
   async function setChest(id: string, chest: ComboChestRecord) {
@@ -353,6 +367,7 @@ export const useComboStore = defineStore('combo', () => {
     removeSet,
     updateSet,
     transferLeg,
+    switchUnit,
     setHoldLest,
     updateHoldSet,
     setWeight,
