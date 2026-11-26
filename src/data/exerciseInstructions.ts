@@ -727,6 +727,30 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Trop dur : monte les genoux moins haut. Plus facile encore : le relevé de jambes tendues au sol.',
   },
+  ex_knee_raise_floor: {
+    steps: [
+      'Allongé sur le dos, mains sous les fesses ou le long du corps, jambes pliées.',
+      'Ramène les genoux vers la poitrine en décollant légèrement le bassin, sans balancer.',
+      'Redescends lentement sans poser les pieds, le bas du dos plaqué au sol.',
+    ],
+    tip: 'Plus facile que les jambes tendues : passe aux jambes tendues quand tu enchaînes 15 reps propres.',
+  },
+  ex_knee_raise_floor_hold: {
+    steps: [
+      'Allongé sur le dos, mains sous les fesses ou le long du corps, bas du dos plaqué au sol.',
+      'Monte les genoux pliés à 90° au-dessus des hanches, pieds décollés.',
+      'Tiens la position, ventre contracté, en respirant calmement.',
+    ],
+    tip: 'Version facile de la tenue jambes tendues. Si le dos se creuse, rapproche les genoux de la poitrine.',
+  },
+  ex_knee_raise_hanging: {
+    steps: [
+      'Suspendu à la barre, bras tendus, épaules engagées, jambes pendantes.',
+      'Monte les genoux jusqu’à la hauteur des hanches (ou plus haut) sans balancer le corps.',
+      'Redescends lentement jusqu’à la suspension, sans te laisser aller.',
+    ],
+    tip: 'Plus facile que les jambes tendues suspendues. Si ça balance, serre les fessiers et ralentis.',
+  },
   ex_leg_raise_hold: {
     steps: [
       'Allongé sur le dos, les mains sous les fesses ou le long du corps, bas du dos plaqué au sol.',

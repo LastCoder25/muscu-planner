@@ -244,9 +244,12 @@ describe('refus', () => {
   });
   it('deux exos qui ne se comptent pas pareil', () => {
     expect(comboTransferBlocker(c, 'ex_bench_barbell', { leg: 'ex_plank' })).toBe('modeMismatch');
-    expect(
-      comboTransferBlocker(c, 'ex_bench_barbell', { exercise: { ...pompes, time: true } }),
-    ).toBe('modeMismatch');
+    // Un exo compté en SÉRIES peut passer à un exo au temps (v1.362.0) : seul le RESTE bascule.
+    // Avec des séries déjà faites, la bascule entière reste refusée (reps ≠ secondes), pour une
+    // autre raison qu'avant (`entryUnit`) ; cf. `comboTransferUnit.test.ts`.
+    const tenue = { ...pompes, time: true };
+    expect(comboTransferBlocker(c, 'ex_bench_barbell', { exercise: tenue })).toBe('entryUnit');
+    expect(comboTransferBlocker(c, 'ex_bench_barbell', { exercise: tenue }, 'rest')).toBeNull();
   });
   it('le même exo déjà présent dans le défi', () => {
     const dup = { ...pompes, exercise_id: 'ex_dips' };

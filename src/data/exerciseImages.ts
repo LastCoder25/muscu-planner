@@ -130,6 +130,7 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_squat_hold: '/exercises/ex_bw_squat.jpg',
   ex_farmer_hold: '/exercises/ex_farmer_hold.jpg', // free-exercise-db « Farmers_Walk »
   ex_knee_raise_hold: '/exercises/ex_hanging_leg_raise.jpg',
+  ex_knee_raise_hanging: '/exercises/ex_hanging_leg_raise.jpg', // même geste, en répétitions
   ex_leg_raise_hold: '/exercises/ex_leg_raise_floor.jpg',
   ex_hollow_hold: '/exercises/ex_leg_raise_floor.jpg', // allongé, jambes et épaules décollées
   ex_pushup_hold: '/exercises/ex_pushup.jpg',

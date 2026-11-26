@@ -222,7 +222,16 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
   // Crunch / bicycle crunch.
   ['ex_crunch', 'ex_bicycle_crunch'],
   // Relevé de jambes : suspendu / au sol.
-  ['ex_hanging_leg_raise', 'ex_leg_raise_floor', 'ex_knee_raise_hold', 'ex_leg_raise_hold'],
+  [
+    'ex_hanging_leg_raise',
+    'ex_leg_raise_floor',
+    'ex_knee_raise_hold',
+    'ex_leg_raise_hold',
+    // Relevés de genoux (migr. 0123) : plus faciles que les jambes tendues.
+    'ex_knee_raise_floor',
+    'ex_knee_raise_floor_hold',
+    'ex_knee_raise_hanging',
+  ],
   // Mollets debout (machine / poids du corps).
   ['ex_calf_raise', 'ex_calf_raise_bw', 'ex_calf_raise_single', 'ex_calf_raise_hold'],
 ];

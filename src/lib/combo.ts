@@ -2120,6 +2120,7 @@ type ComboTransferBlock =
   | 'sameLeg'
   | 'otherSlot'
   | 'modeMismatch'
+  | 'entryUnit'
   | 'alreadyIn'
   | 'nothingDone'
   | 'nothingLeft';
@@ -2130,6 +2131,8 @@ export const COMBO_TRANSFER_BLOCK_LABEL: Record<ComboTransferBlock, string> = {
   sameLeg: 'C’est déjà cet exo.',
   otherSlot: 'Seulement vers un exo du même groupe musculaire (ou des jambes entre elles).',
   modeMismatch: 'Les deux exos ne se comptent pas pareil (séries, reps ou durée).',
+  entryUnit:
+    'Un exo en reps et un exo au temps ne se saisissent pas pareil (reps ou secondes) : bascule seulement le reste, pas les séries déjà faites.',
   alreadyIn: 'Cet exo est déjà dans ton défi.',
   nothingDone: 'Rien n’est encore fait sur cet exo : bascule-le en entier.',
   nothingLeft: 'Cet exo a déjà atteint son objectif : il ne reste rien à basculer.',
@@ -2144,6 +2147,24 @@ export function transferSlotFor(from: ComboLeg, muscle: string | null | undefine
   for (const key of swapSlotsOf(from.slot))
     if (comboSlot(key)?.muscles.includes(muscle ?? '')) return key;
   return null;
+}
+
+/** 🔁 REPS ↔ SECONDES (v1.362.0 ; demandé : « remplacer des séries de relevés de jambes par le même
+ *  exo en tenue »). Un exo qui se saisit en reps et un exo qui se saisit en secondes ne se mélangent
+ *  pas dans une même jambe : leurs séries n'ont pas la même unité. Mais quand l'exo quitté se COMPTE
+ *  EN SÉRIES (une série reste une série, peu importe ce qu'on y saisit) et qu'on ne bascule que le
+ *  RESTE (aucune série déjà faite ne bouge), l'objectif passe tel quel : N séries à faire en tenues
+ *  au lieu de N séries de reps. Sinon : `modeMismatch` (compté en reps ou en secondes totales, les
+ *  deux unités ne se convertissent pas) ou `entryUnit` (séries déjà faites à convertir). */
+function transferEntryUnit(
+  from: ComboLeg,
+  destHold: boolean,
+  scope: ComboTransferScope,
+): ComboTransferBlock | null {
+  if (destHold === legIsHold(from)) return null;
+  if (legMode(from) !== 'sets') return 'modeMismatch';
+  // Aucune série déjà faite : rien à convertir, l'objectif passe aussi en bascule entière.
+  return scope === 'rest' || legSetsDone(from) === 0 ? null : 'entryUnit';
 }
 
 /** Pourquoi on ne peut pas basculer — `null` si c'est possible. Source unique de l'écran
@@ -2171,14 +2192,16 @@ export function comboTransferBlocker(
     const dest = c.legs.find((l) => l.exercise_id === to.leg);
     if (!dest) return 'noLeg';
     if (!swapSlotsOf(from.slot).includes(dest.slot)) return 'otherSlot';
-    if (legMode(dest) !== legMode(from) || legIsHold(dest) !== legIsHold(from))
-      return 'modeMismatch';
+    if (legMode(dest) !== legMode(from)) return 'modeMismatch';
+    const unit = transferEntryUnit(from, legIsHold(dest), scope);
+    if (unit) return unit;
     return null;
   }
   const e = to.exercise;
   if (e.exercise_id === fromId) return 'sameLeg';
   if (!transferSlotFor(from, e.muscle_primary)) return 'otherSlot';
-  if (e.time !== legIsHold(from)) return 'modeMismatch';
+  const unit = transferEntryUnit(from, e.time, scope);
+  if (unit) return unit;
   // Le MÊME exo déjà présent dans le défi (v1.342.0 : une variante est un exo à part entière,
   // comme à la création — on peut passer des dips aux dips assistés, ou garder les deux).
   if (c.legs.some((l) => l.exercise_id === e.exercise_id)) return 'alreadyIn';
@@ -2303,7 +2326,7 @@ function transferRest(
     rep_weight: e.rep_weight,
     target: addTarget,
     count_mode: from.count_mode ?? 'sets',
-    ...(from.hold !== undefined ? { hold: from.hold } : {}),
+    ...freshHold(from, e),
     weight_kg: null,
     assistable: e.assistable,
     rep_min: e.rep_min,
@@ -2311,6 +2334,13 @@ function transferRest(
     sets: [],
   };
   return c.legs.flatMap((l) => (l === from ? [kept, fresh] : [l]));
+}
+
+/** Le drapeau `hold` d'un exo neuf : celui de l'exo quitté, sauf quand on passe de reps à secondes
+ *  (ou l'inverse) en séries (`transferEntryUnit`) : c'est alors l'exo neuf qui décide. */
+function freshHold(from: ComboLeg, e: ComboNewExercise): { hold?: boolean } {
+  if (legMode(from) === 'sets' && legIsHold(from) !== e.time) return { hold: e.time };
+  return from.hold !== undefined ? { hold: from.hold } : {};
 }
 
 /** Les exos du défi après la bascule (`plan.scope` = `rest` : cf. `transferRest`). L'exo quitté disparaît ; la cible porte son objectif
@@ -2381,7 +2411,7 @@ export function transferComboLeg(
     rep_weight: e.rep_weight,
     target: addTarget,
     count_mode: from.count_mode ?? 'sets',
-    ...(from.hold !== undefined ? { hold: from.hold } : {}),
+    ...freshHold(from, e),
     weight_kg: null,
     assistable: e.assistable,
     rep_min: e.rep_min,

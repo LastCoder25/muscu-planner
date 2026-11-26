@@ -306,6 +306,10 @@
         <div class="sw-grp">
           {{ inCombo.length ? 'Ou un autre exo du groupe' : 'Un autre exo du groupe' }}
         </div>
+        <p v-if="entryHidden > 0" class="sw-note" data-test="sw-entry-hint">
+          💡 {{ entryHidden }} exo{{ entryHidden > 1 ? 's' : '' }} se saisi{{ entryHidden > 1 ? 'ssent' : 't' }}
+          autrement (reps ↔ secondes) : choisis « Seulement le reste » pour {{ entryHidden > 1 ? 'les' : 'le' }} voir.
+        </p>
         <div v-if="loading" class="sw-empty">Chargement…</div>
         <div v-else-if="!fresh.length" class="sw-empty">
           Aucun autre exo de ce groupe n'est disponible (déjà pris par un défi, ou compté
@@ -496,6 +500,24 @@ const inCombo = computed(() => {
       comboTransferBlocker(cc, l.exercise_id, { leg: x.exercise_id }, effScope.value, moveAmount.value) ===
         null,
   );
+});
+
+/** 💡 Les exos que seule la bascule du RESTE permet (reps ↔ secondes, `entryUnit`) : en bascule
+ *  entière ils sont absents, on le dit au lieu de laisser croire qu'il n'y en a pas. */
+const entryHidden = computed(() => {
+  const cc = c.value;
+  const l = leg.value;
+  if (!cc || !l || effScope.value !== 'all' || !canRest.value) return 0;
+  const occ = occupantsOf(
+    challenges.list.filter((ch) => !isCardioChallengeRow(ch)),
+    [],
+  );
+  return lib.value.filter(
+    (e) =>
+      !isTennisExercise(e) &&
+      !exoAvailability(e.id, occ).classic &&
+      comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }, 'all') === 'entryUnit',
+  ).length;
 });
 
 /** Exos neufs du groupe : même règle que l'assistant de création (muscle de l'emplacement,
