@@ -172,3 +172,61 @@ describe('tenue en séries → reps, et entre jambes déjà dans le défi', () =
     ).toBe('modeMismatch');
   });
 });
+
+describe('⏱️ reste → tenue neuve comptée en DURÉE (choix « Séries | Durée » à l’échange)', () => {
+  const c = combo([leg({ sets: done(2) })]); // 6 séries, 2 faites, 4 restantes
+  const to = { exercise: holdEx() };
+  it('N séries restantes deviennent N × 30 s ; l’exo neuf est une tenue en durée', () => {
+    expect(comboTransferBlocker(c, 'ex_leg_raise_floor', to, 'rest', undefined, true)).toBeNull();
+    const plan = comboTransferPlan(c, 'ex_leg_raise_floor', to, null, 'rest', undefined, true);
+    expect(plan.asTime).toBe(true);
+    expect(plan.target).toBe(120);
+    const [kept, fresh] = transferComboLeg(c, 'ex_leg_raise_floor', to, plan) as [ComboLeg, ComboLeg];
+    expect(kept.target).toBe(2);
+    expect(fresh.count_mode).toBe('time');
+    expect(fresh.hold).toBe(true);
+    expect(fresh.target).toBe(120);
+  });
+  it('sans le choix : toujours en séries (comportement de la v1.362.0)', () => {
+    const plan = comboTransferPlan(c, 'ex_leg_raise_floor', to, null, 'rest');
+    expect(plan.asTime).toBeUndefined();
+    const [, fresh] = transferComboLeg(c, 'ex_leg_raise_floor', to, plan) as [ComboLeg, ComboLeg];
+    expect(fresh.count_mode).toBe('sets');
+    expect(fresh.target).toBe(4);
+  });
+  it('une PART du reste : 1 série → 30 s', () => {
+    const plan = comboTransferPlan(c, 'ex_leg_raise_floor', to, null, 'rest', 1, true);
+    expect(plan.target).toBe(30);
+    expect(plan.moved).toBe(1);
+  });
+  it('une tenue comptée en séries peut aussi passer en durée', () => {
+    const t = combo([leg({ exercise_id: 'ex_plank', hold: true, count_mode: 'sets', target: 5, sets: done(1) })]);
+    const plan = comboTransferPlan(t, 'ex_plank', to, null, 'rest', undefined, true);
+    expect(plan.target).toBe(4 * 30);
+  });
+  it('refusé : bascule entière, exo qui n’est pas au temps, exo compté en reps ou en durée, jambe déjà dans le défi', () => {
+    const b = (cc: ComboChallenge, from: string, dest: any, scope: 'all' | 'rest') =>
+      comboTransferBlocker(cc, from, dest, scope, undefined, true);
+    expect(b(c, 'ex_leg_raise_floor', to, 'all')).toBe('modeMismatch');
+    expect(b(c, 'ex_leg_raise_floor', { exercise: repsEx() }, 'rest')).toBe('modeMismatch');
+    const reps = combo([leg({ count_mode: 'reps', target: 60, sets: done(2) })]);
+    expect(b(reps, 'ex_leg_raise_floor', to, 'rest')).toBe('modeMismatch');
+    const dur = combo([leg({ exercise_id: 'ex_plank', count_mode: 'time', target: 120, sets: done(1) })]);
+    expect(b(dur, 'ex_plank', to, 'rest')).toBe('modeMismatch');
+    const two = combo([leg({ sets: done(2) }), leg({ exercise_id: 'ex_leg_raise_hold', hold: true, count_mode: 'sets', target: 3 })]);
+    expect(b(two, 'ex_leg_raise_floor', { leg: 'ex_leg_raise_hold' }, 'rest')).toBe('modeMismatch');
+  });
+  it('transferComboLeg refuse un plan « durée » qui ne tient pas (le store re-vérifie)', () => {
+    const forged = { sets: [], target: 120, scope: 'rest' as const, moved: 4, asTime: true };
+    expect(() => transferComboLeg(c, 'ex_leg_raise_floor', { exercise: repsEx() }, forged)).toThrow();
+    expect(() => transferComboLeg(c, 'ex_leg_raise_floor', to, { ...forged, scope: 'all' as const })).toThrow();
+  });
+  it('la feuille propose le choix (pastilles Séries | Durée) seulement dans ce cas', async () => {
+    const { readFileSync } = await import('node:fs');
+    const sheet = readFileSync(new URL('../src/components/ComboSwapSheet.vue', import.meta.url), 'utf8');
+    expect(sheet).toContain('data-test="sw-unit"');
+    expect(sheet).toContain('data-test="sw-unit-time"');
+    expect(sheet).toContain("legMode(leg.value) === 'sets'");
+    expect(sheet).toContain('p.to.exercise.time');
+  });
+});

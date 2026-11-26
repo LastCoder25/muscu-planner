@@ -2177,6 +2177,9 @@ export function comboTransferBlocker(
   /** 🔀 Seulement une PART du reste (v1.328.0) : en unités de l'exo quitté. Une part stricte
    *  laisse un objectif > 0 à l'exo, donc il n'a pas besoin d'être entamé. */
   amount?: number,
+  /** ⏱️ Compter l'exo neuf en DURÉE (secondes) plutôt qu'en séries : seulement le reste d'un exo
+   *  compté en séries, vers un exo au temps neuf. */
+  asTime = false,
 ): ComboTransferBlock | null {
   if (c.status !== 'active') return 'notActive';
   const from = c.legs.find((l) => l.exercise_id === fromId);
@@ -2187,6 +2190,7 @@ export function comboTransferBlocker(
     if (!part && legDone(from) <= 0) return 'nothingDone';
     if (legRemaining(from) <= 0) return 'nothingLeft';
   }
+  if (asTime && 'leg' in to) return 'modeMismatch'; // la durée ne vaut que pour un exo NEUF
   if ('leg' in to) {
     if (to.leg === fromId) return 'sameLeg';
     const dest = c.legs.find((l) => l.exercise_id === to.leg);
@@ -2198,6 +2202,7 @@ export function comboTransferBlocker(
     return null;
   }
   const e = to.exercise;
+  if (asTime && (scope !== 'rest' || !e.time || legMode(from) !== 'sets')) return 'modeMismatch';
   if (e.exercise_id === fromId) return 'sameLeg';
   if (!transferSlotFor(from, e.muscle_primary)) return 'otherSlot';
   const unit = transferEntryUnit(from, e.time, scope);
@@ -2245,6 +2250,9 @@ export interface ComboTransferPlan {
    *  tout le reste. Le reste du reste demeure sur l'exo quitté (on peut le répartir ensuite
    *  sur un second exo : « 7 séries de dips restantes → 4 ici, 3 là »). */
   moved?: number;
+  /** ⏱️ Portée `rest`, exo neuf AU TEMPS : le reste passe en DURÉE (`target` en secondes, N séries
+   *  → N × `COMBO_HOLD_SEC`) au lieu de rester en séries de tenues. */
+  asTime?: boolean;
 }
 
 const midOf = (min: number, max: number) => Math.max(1, Math.round((min + max) / 2));
@@ -2258,8 +2266,10 @@ export function comboTransferPlan(
   scope: ComboTransferScope = 'all',
   /** 🔀 Portée `rest` : la part du reste qui bascule (par défaut tout le reste). */
   amount?: number,
+  /** ⏱️ Voir `ComboTransferPlan.asTime`. */
+  asTime = false,
 ): ComboTransferPlan {
-  const block = comboTransferBlocker(c, fromId, to, scope, amount);
+  const block = comboTransferBlocker(c, fromId, to, scope, amount, asTime);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
   let base: ComboSetWork;
@@ -2294,7 +2304,11 @@ export function comboTransferPlan(
     const r = legRepRange(from, objective);
     target = Math.max(1, Math.round((moving / midOf(r.min, r.max)) * base.reps));
   }
-  if (scope === 'rest') return { sets: [], target, scope, moved: part };
+  if (scope === 'rest') {
+    // En durée, N séries restantes deviennent N × 30 s (une bulle chacune).
+    if (asTime) return { sets: [], target: part * COMBO_HOLD_SEC, scope, moved: part, asTime: true };
+    return { sets: [], target, scope, moved: part };
+  }
   return { sets: legSets(from).map(setPlan), target };
 }
 
@@ -2325,8 +2339,10 @@ function transferRest(
     muscle_primary: e.muscle_primary ?? null,
     rep_weight: e.rep_weight,
     target: addTarget,
-    count_mode: from.count_mode ?? 'sets',
-    ...freshHold(from, e),
+    // En durée, l'exo neuf est une tenue comptée en secondes (comme à la création du défi).
+    ...(plan.asTime
+      ? { count_mode: 'time' as const, hold: true }
+      : { count_mode: from.count_mode ?? 'sets', ...freshHold(from, e) }),
     weight_kg: null,
     assistable: e.assistable,
     rep_min: e.rep_min,
@@ -2353,7 +2369,7 @@ export function transferComboLeg(
   plan: ComboTransferPlan = comboTransferPlan(c, fromId, to),
 ): ComboLeg[] {
   const scope = plan.scope ?? 'all';
-  const block = comboTransferBlocker(c, fromId, to, scope, plan.moved);
+  const block = comboTransferBlocker(c, fromId, to, scope, plan.moved, !!plan.asTime);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
   if (scope === 'rest') return transferRest(c, from, to, plan);

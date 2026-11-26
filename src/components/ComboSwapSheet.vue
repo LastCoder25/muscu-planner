@@ -25,14 +25,41 @@
             déjà faites (objectif atteint).
           </template>
         </p>
-        <div v-if="!isSets" class="sw-row sw-target">
+        <!-- ⏱️ Vers une tenue neuve, depuis un exo compté en séries : en SÉRIES de tenues (N tenues,
+             saisies en secondes) ou en DURÉE (N × 30 s à tenir au total). -->
+        <div v-if="canPickTimeUnit" class="sw-unit" role="radiogroup" aria-label="Compter en" data-test="sw-unit">
+          <span class="sw-unit-lbl">Compter en</span>
+          <button
+            type="button"
+            class="sw-unit-b"
+            :class="{ on: !asTime }"
+            role="radio"
+            :aria-checked="!asTime"
+            data-test="sw-unit-sets"
+            @click="setAsTime(false)"
+          >
+            Séries
+          </button>
+          <button
+            type="button"
+            class="sw-unit-b"
+            :class="{ on: asTime }"
+            role="radio"
+            :aria-checked="asTime"
+            data-test="sw-unit-time"
+            @click="setAsTime(true)"
+          >
+            Durée
+          </button>
+        </div>
+        <div v-if="!isSets || plan.asTime" class="sw-row sw-target">
           <div class="sw-row-from">À faire sur {{ pending.name }}</div>
           <div class="sw-row-ctl">
             <div class="sw-step">
               <q-btn flat round dense icon="remove" aria-label="Moins" @click="stepTarget(-1)" />
               <span class="sw-val"
                 ><b>{{ plan.target }}</b
-                ><small>{{ unitShort }}</small></span
+                ><small>{{ plan.asTime ? 's' : unitShort }}</small></span
               >
               <q-btn flat round dense icon="add" aria-label="Plus" @click="stepTarget(1)" />
             </div>
@@ -643,7 +670,41 @@ function stepAll(what: 'reps' | 'weight', d: number) {
   for (const p of plan.value?.sets ?? []) (what === 'reps' ? stepReps : stepWeight)(p, d);
 }
 function stepTarget(d: number) {
-  if (plan.value) plan.value.target = Math.max(1, plan.value.target + d * (isTime.value ? 5 : 1));
+  if (plan.value)
+    plan.value.target = Math.max(
+      1,
+      plan.value.target + d * (isTime.value || plan.value.asTime ? 5 : 1),
+    );
+}
+// ⏱️ Compter la tenue neuve en durée plutôt qu'en séries (portée « reste », exo compté en séries).
+const asTime = ref(false);
+const canPickTimeUnit = computed(() => {
+  const p = pending.value;
+  return (
+    !!p &&
+    !!plan.value &&
+    plan.value.scope === 'rest' &&
+    'exercise' in p.to &&
+    p.to.exercise.time &&
+    !!leg.value &&
+    legMode(leg.value) === 'sets'
+  );
+});
+function setAsTime(v: boolean) {
+  const p = pending.value;
+  const cc = c.value;
+  const l = leg.value;
+  if (!p || !cc || !l) return;
+  asTime.value = v;
+  plan.value = comboTransferPlan(
+    cc,
+    l.exercise_id,
+    p.to,
+    profile.profile?.objective ?? null,
+    effScope.value,
+    moveAmount.value,
+    v,
+  );
 }
 /** « Dips · 12 reps · 20 kg » : ce qu'était la série i avant la bascule. */
 function fromLabel(i: number): string {
@@ -659,6 +720,7 @@ function fromLabel(i: number): string {
 function cancelPending() {
   pending.value = null;
   plan.value = null;
+  asTime.value = false;
 }
 function confirmPending() {
   const p = pending.value;
@@ -695,6 +757,34 @@ async function apply(
 </script>
 
 <style scoped>
+.sw-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.sw-unit-lbl {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.sw-unit-b {
+  min-height: 44px;
+  min-width: 72px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.sw-unit-b.on {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
 .sw-scope {
   display: grid;
   grid-template-columns: 1fr 1fr;
