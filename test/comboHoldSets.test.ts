@@ -302,17 +302,24 @@ describe('⏱️ changer d’exo : l’unité ne se mélange pas', () => {
     rep_max: unit === 'time' ? 60 : 12,
     time: unit === 'time',
   });
-  it('tenue en séries ⇄ exo au temps seulement ; jamais vers un exo en reps ou en séries ordinaires', () => {
+  it('tenue en séries ⇄ exo au temps librement ; vers un exo en reps ou en séries ordinaires : seulement le RESTE', () => {
+    // v1.362.0 : avant, ces deux derniers cas étaient `modeMismatch` en toute portée. Une tenue
+    // comptée en séries peut maintenant céder ses séries RESTANTES à un exo saisi en reps ; la
+    // bascule entière (séries déjà faites à convertir) reste refusée, sous le motif `entryUnit`.
     const c = combo([
       holdSets([45], 4),
       holdSets([], 4, { exercise_id: 'ex_wall_sit', exercise_name: 'Chaise' }),
       { ...holdSets([]), exercise_id: 'bench', hold: undefined, slot: 'core' } as ComboLeg,
     ]);
     expect(comboTransferBlocker(c, 'ex_plank', { leg: 'ex_wall_sit' })).toBeNull();
-    expect(comboTransferBlocker(c, 'ex_plank', { leg: 'bench' })).toBe('modeMismatch');
+    expect(comboTransferBlocker(c, 'ex_plank', { leg: 'bench' })).toBe('entryUnit');
+    expect(comboTransferBlocker(c, 'ex_plank', { leg: 'bench' }, 'rest')).toBeNull();
     expect(comboTransferBlocker(c, 'ex_plank', { exercise: exo('hollow', 'reps') })).toBe(
-      'modeMismatch',
+      'entryUnit',
     );
+    expect(
+      comboTransferBlocker(c, 'ex_plank', { exercise: exo('hollow', 'reps') }, 'rest'),
+    ).toBeNull();
     expect(comboTransferBlocker(c, 'ex_plank', { exercise: exo('hollow', 'time') })).toBeNull();
   });
   it('l’exo neuf garde l’unité : séries de tenues, saisi en secondes', () => {
