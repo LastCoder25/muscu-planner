@@ -36,6 +36,9 @@
               >🟦 élastique {{ elasticBandLabel(l.set.band).toLowerCase() }}</span
             >
             <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
+            <span v-if="l.set.before" class="hist-origin" data-test="hist-before"
+              >↩ avant le changement d’unité</span
+            >
             <span v-if="l.set.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, l.set) }}</span>
           </span>
           <span v-if="isHold && l.kind === 'set'" class="hist-edit" aria-hidden="true">✏️</span>

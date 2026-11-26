@@ -37,6 +37,12 @@
       </button>
       <!-- Fatigue du groupe : un CONSEIL discret (jamais un grisé — le gris veut déjà dire
            « exo terminé »), avec la raison écrite. Rien quand les muscles sont reposés. -->
+      <!-- ↩ Les séries faites AVANT un changement d'unité (« compter autrement ») : conservées, montrées
+           à part au lieu d'être fondues dans la nouvelle unité. -->
+      <span v-if="beforeSets.length" class="lh-before" data-test="lh-before">
+        ↩ Avant le changement : {{ beforeSets.length }} série{{ beforeSets.length > 1 ? 's' : '' }}
+        · {{ beforeLabels }}
+      </span>
       <span v-if="fatigueText" class="lh-fat" :class="fatigue?.level" :title="fatigueText.title">{{
         fatigueText.text
       }}</span>
@@ -67,6 +73,8 @@ import {
   LOAD_ADVICE,
   legRepRange,
   legUnitLabel,
+  legBeforeSets,
+  setCellLabel,
   type ComboChallenge,
   type ComboLeg,
 } from '@/lib/combo';
@@ -146,6 +154,13 @@ const extra = computed(() => legDone(props.leg) - props.leg.target);
 /** Couleur du groupe musculaire, celle de l'Équilibre du corps : on relie l'exo à sa barre. */
 const color = computed(() => comboLegColor(props.leg));
 const fatigueText = computed(() => (props.fatigue ? fatigueLabel(props.fatigue) : null));
+// ↩ Séries faites avant un changement d'unité : « 40 s · 40 s » (au plus 6, puis « +N »).
+const beforeSets = computed(() => legBeforeSets(props.leg));
+const beforeLabels = computed(() => {
+  const hold = legIsHold(props.leg);
+  const all = beforeSets.value.map((s) => setCellLabel(s, hold));
+  return all.length > 6 ? `${all.slice(0, 6).join(' · ')} · +${all.length - 6}` : all.join(' · ');
+});
 </script>
 
 <style scoped>
@@ -286,6 +301,12 @@ const fatigueText = computed(() => (props.fatigue ? fatigueLabel(props.fatigue) 
 .lh-extra {
   margin-left: 3px;
   color: var(--d1);
+}
+.lh-before {
+  flex: 1 0 100%;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--dim);
 }
 .lh-fat {
   /* Sa propre ligne, sous le nom et l'avancement : elle ne vole la place de personne. */

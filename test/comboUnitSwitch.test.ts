@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COMBO_UNIT_BLOCK_LABEL,
   comboUnitBlocker,
+  legBeforeSets,
   legDone,
   legIsHold,
   legMidReps,
@@ -52,7 +53,8 @@ describe('tenue : séries → durée', () => {
     expect(next.count_mode).toBe('time');
     expect(next.target).toBe(80 + 3 * 30);
     expect(next.hold).toBe(true);
-    expect(next.sets).toEqual(c.legs[0]!.sets);
+    // Les séries gardent leurs valeurs (seul le marqueur « avant le changement » s'ajoute).
+    expect(next.sets!.map(({ before, ...rest }) => rest)).toEqual(c.legs[0]!.sets);
     expect(legDone(next)).toBe(80);
     expect(legRemaining(next)).toBe(90);
   });
@@ -138,5 +140,43 @@ describe('branché sur la feuille et le store', () => {
     const store = src('src/stores/combo.ts');
     expect(store).toContain('switchLegUnit(c, exerciseId, to)');
     expect(store).toMatch(/return \{[\s\S]*switchUnit,/);
+  });
+});
+
+describe('↩ les séries faites avant le changement sont CONSERVÉES et marquées', () => {
+  it('les séries d’avant gardent leurs valeurs et portent `before` ; celles d’après non', () => {
+    const c = combo([leg({ sets: [set(40), set(35, 1)] })]);
+    const next = only(switchLegUnit(c, 'ex_plank', 'time'));
+    expect(next.sets).toHaveLength(2);
+    expect(next.sets!.map((s) => s.reps)).toEqual([40, 35]); // valeurs inchangées
+    expect(next.sets!.every((s) => s.before === true)).toBe(true);
+    // Une série faite APRÈS n'est pas « avant ».
+    const after = { ...next, sets: [...next.sets!, set(30, 2)] };
+    expect(legBeforeSets(after).map((s) => s.reps)).toEqual([40, 35]);
+  });
+  it('l’exo d’origine n’est pas marqué (copie), et un second changement garde les marques', () => {
+    const c = combo([leg({ sets: [set(40)] })]);
+    switchLegUnit(c, 'ex_plank', 'time');
+    expect(c.legs[0]!.sets![0]!.before).toBeUndefined();
+    const once = combo(switchLegUnit(c, 'ex_plank', 'time'));
+    const withNew = combo([{ ...once.legs[0]!, sets: [...once.legs[0]!.sets!, set(30, 1)] }]);
+    const twice = only(switchLegUnit(withNew, 'ex_plank', 'sets'));
+    expect(twice.sets!.every((s) => s.before === true)).toBe(true);
+    expect(legBeforeSets(twice)).toHaveLength(2);
+  });
+  it('l’ancien format `progress` est converti en séries marquées, sans doublon', () => {
+    const old = leg({ exercise_id: 'ex_pushup', progress: [{ date: D1, reps: 40 }], hold: undefined, count_mode: 'sets', target: 4 });
+    delete old.sets;
+    const next = only(switchLegUnit(combo([old]), 'ex_pushup', 'reps'), 'ex_pushup');
+    expect(next.progress).toBeUndefined();
+    expect(next.sets).toHaveLength(1);
+    expect(legDone(next)).toBe(next.sets![0]!.reps);
+  });
+  it('l’en-tête de l’exo et l’historique les montrent à part', () => {
+    const head = readFileSync(new URL('../src/components/ComboLegHead.vue', import.meta.url), 'utf8');
+    expect(head).toContain('data-test="lh-before"');
+    expect(head).toContain('legBeforeSets(props.leg)');
+    const hist = readFileSync(new URL('../src/components/ComboSetHistory.vue', import.meta.url), 'utf8');
+    expect(hist).toContain('data-test="hist-before"');
   });
 });

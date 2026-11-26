@@ -57,6 +57,10 @@ export interface ComboSet {
    *  marqueur est sur la SÉRIE et non sur l'exo : l'XP et les conseils lisent la série, donc
    *  régler un exo en fractionné ne réécrit jamais l'XP déjà versée. */
   mini?: true;
+  /** ↩ Série faite AVANT un changement d'unité de l'exo (« compter autrement », v1.367.0) : elle
+   *  reste enregistrée avec ses vraies valeurs et compte toujours pour l'avancement, mais la fiche
+   *  la montre à part (« Avant le changement : 2 séries ») au lieu de la fondre dans la nouvelle unité. */
+  before?: true;
   /** Série FAITE SUR UN AUTRE EXO puis basculée ici par un changement d'exo en cours de
    *  défi (`transferComboLeg`). Elle compte pour l'avancement et les paliers de l'exo qui
    *  la porte, mais son XP, son tonnage et ses muscles restent ceux de l'exo d'origine :
@@ -2413,8 +2417,24 @@ export function switchLegUnit(c: ComboChallenge, exerciseId: string, to: ComboCo
   }
   // Une tenue reste une tenue (saisie en secondes) quel que soit son comptage : on le fixe, sinon un
   // exo hérité (sans `hold`) la perdrait en quittant la durée.
-  const next: ComboLeg = { ...leg, count_mode: to, target, ...(legIsHold(leg) ? { hold: true } : {}) };
+  // ↩ Les séries déjà faites sont CONSERVÉES et marquées « avant le changement » : leurs valeurs ne
+  // bougent pas, la fiche les montre à part. (`legSets` lit aussi l'ancien format `progress`, qu'on
+  // abandonne alors, comme à la bascule d'un exo.)
+  const sets = legSets(leg).map((s) => (s.before ? s : { ...s, before: true as const }));
+  const next: ComboLeg = {
+    ...leg,
+    count_mode: to,
+    target,
+    sets,
+    ...(legIsHold(leg) ? { hold: true } : {}),
+  };
+  delete next.progress;
   return c.legs.map((l) => (l === leg ? next : l));
+}
+
+/** ↩ Les séries faites avant un changement d'unité de cet exo, dans l'ordre où elles ont été faites. */
+export function legBeforeSets(leg: ComboLeg): ComboSet[] {
+  return legSets(leg).filter((s) => s.before);
 }
 
 /** Le drapeau `hold` d'un exo neuf : celui de l'exo quitté, sauf quand on passe de reps à secondes
