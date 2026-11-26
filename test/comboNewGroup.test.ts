@@ -32,7 +32,7 @@ const LIB = [
 
 async function run(
   act: (host: HTMLElement, created: { input: any }) => Promise<void>,
-  seed: { combo?: unknown; query?: string; level?: string } = {},
+  seed: { combo?: unknown; query?: string; level?: string; lib?: unknown[] } = {},
 ): Promise<{ host: HTMLElement; created: { input: any }; err: unknown }> {
   localStorage.clear();
   const pinia = createPinia();
@@ -52,7 +52,7 @@ async function run(
     sports: [],
     favorite_exercises: [],
   };
-  (useLibraryStore() as any).fetchAll = async () => LIB;
+  (useLibraryStore() as any).fetchAll = async () => seed.lib ?? LIB;
   const created = { input: null as any };
   const cs = useComboStore() as any;
   cs.list = seed.combo ? [seed.combo] : [];
@@ -332,6 +332,25 @@ describe('✏️ « Ajuster avant » : l’écran de création rouvert sur le de
       expect(h.querySelector('.slot-card')).toBeNull();
       expect(h.querySelector('[data-test="mode-exo"]')).not.toBeNull();
     });
+    expect(err).toBeNull();
+  }, 30_000);
+});
+
+describe('🧩 variantes à côté de leur exo de base dans le choix des exos', () => {
+  it('une variante suit son exo de base au lieu de passer après tous les exos de base', async () => {
+    const lib = [
+      ex('ex_pushup', 'Pompes', 'pectoraux'),
+      ex('ex_bench_barbell', 'Développé couché', 'pectoraux'),
+      { ...ex('ex_pushup_incline', 'Pompes inclinées', 'pectoraux'), tags: ['variante'] },
+    ];
+    const { err } = await run(
+      async (h) => {
+        await click(h, '.foot-cta'); // premier groupe : Poussée
+        const names = [...h.querySelectorAll('.dtile-name')].map((n) => n.textContent?.trim());
+        expect(names).toEqual(['Pompes', 'Pompes inclinées', 'Développé couché']);
+      },
+      { lib },
+    );
     expect(err).toBeNull();
   }, 30_000);
 });

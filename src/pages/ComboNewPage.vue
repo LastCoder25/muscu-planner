@@ -286,7 +286,7 @@
           <div v-if="otherCandidates(curSlot).length" class="grp-label">🎒 Avec ton matériel</div>
           <div class="tile-grid">
             <button
-              v-for="e in mineCandidates(curSlot)"
+              v-for="e in shownMine"
               :key="e.id"
               type="button"
               class="dtile"
@@ -337,7 +337,7 @@
           <div v-if="showGymNow" class="grp-label alt">🏋️ En salle (autre matériel)</div>
           <div v-if="showGymNow" class="tile-grid">
             <button
-              v-for="e in otherCandidates(curSlot)"
+              v-for="e in shownOther"
               :key="e.id"
               type="button"
               class="dtile"
@@ -609,7 +609,12 @@ import { useProfileStore } from '@/stores/profile';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useComboStore } from '@/stores/combo';
 import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
-import { COMBO_SLOTS, variantFamilyKey, type ComboSlot } from '@/data/combo';
+import {
+  COMBO_SLOTS,
+  groupVariantFamilies,
+  variantFamilyKey,
+  type ComboSlot,
+} from '@/data/combo';
 import { exoAvailability, occupantReason, occupantsOf } from '@/lib/exoExclusivity';
 import { useLogsStore } from '@/stores/logs';
 import { exerciseRepDays, proposeRepsTarget } from '@/lib/repsHabit';
@@ -917,6 +922,14 @@ function mineCandidates(slot: ComboSlot): ExerciseRow[] {
 function otherCandidates(slot: ComboSlot): ExerciseRow[] {
   return candidates(slot).filter((e) => !canDo(e));
 }
+// 🧩 Ce qui s'AFFICHE : les variantes rangées à côté de leur exo de base. La présélection
+// (`applyPlan`) lit l'ordre d'origine (un favori passe avant sa famille), pas celui-ci.
+const shownMine = computed(() =>
+  curSlot.value ? groupVariantFamilies(mineCandidates(curSlot.value)) : [],
+);
+const shownOther = computed(() =>
+  curSlot.value ? groupVariantFamilies(otherCandidates(curSlot.value)) : [],
+);
 /** Le matériel de salle : replié, sauf si rien n'est faisable chez toi pour cet emplacement
  *  (sinon l'écran serait vide) ou si tu l'as déplié. */
 const showGym = ref(false);

@@ -614,6 +614,7 @@ import {
   type ChallengeConfig,
 } from '@/lib/challenges';
 import { exerciseInstructions } from '@/data/exerciseInstructions';
+import { groupVariantFamilies } from '@/data/combo';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
@@ -919,9 +920,10 @@ const filteredLib = computed(() => {
           (e.muscle_secondary ?? []).some((m) => m.toLowerCase().includes(n)),
       )
     : visible;
-  return [...base]
-    .sort((a, b) => focusRank(b) - focusRank(a) || exRank(b.id) - exRank(a.id))
-    .slice(0, 60);
+  // 🧩 Les variantes à côté de leur exo de base : on regroupe AVANT de couper à 60.
+  return groupVariantFamilies(
+    [...base].sort((a, b) => focusRank(b) - focusRank(a) || exRank(b.id) - exRank(a.id)),
+  ).slice(0, 60);
 });
 
 function next() {

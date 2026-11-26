@@ -353,7 +353,7 @@ import { useQuasar } from 'quasar';
 import ExerciseAnim from './ExerciseAnim.vue';
 import HoldMuscleChip from './HoldMuscleChip.vue';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
-import { comboSlot } from '@/data/combo';
+import { comboSlot, groupVariantFamilies } from '@/data/combo';
 import { exoAvailability, occupantsOf } from '@/lib/exoExclusivity';
 import {
   comboTransferBlocker,
@@ -557,7 +557,8 @@ const fresh = computed(() => {
   // quelqu'un qui n'y va pas). Rien de faisable → on montre tout plutôt qu'une feuille vide.
   const owned = new Set<string>(profile.profile?.available_equipment ?? []);
   const mine = all.filter((e) => (e.equipment_required ?? []).every((r) => owned.has(r)));
-  return mine.length ? mine : all;
+  // 🧩 Les variantes à côté de leur exo de base (la famille prend la place de son premier membre).
+  return groupVariantFamilies(mine.length ? mine : all);
 });
 
 const hasAnim = (id: string) => !!exerciseFrames(id);

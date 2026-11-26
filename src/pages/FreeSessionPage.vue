@@ -513,6 +513,7 @@ import { setAdvice, instancesOf, verdictLabel, type SetAdvice } from '@/lib/prog
 import { holdLoadable, isTimeExercise, workTonnage } from '@/lib/loadedHold';
 import { repRangeForExercise, repRangeLabel } from '@/lib/repScheme';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
+import { groupVariantFamiliesBy } from '@/data/combo';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 import HoldTimerButton from '@/components/HoldTimerButton.vue';
 import {
@@ -712,10 +713,14 @@ const filteredLib = computed(() => {
     );
   // ★ Favoris puis 🕘 faits récemment devant (audit 2026-10-15) : on retrouve ses exos
   // habituels sans les chercher parmi la centaine de la bibliothèque.
-  return pickerOrder(
-    base,
-    profileStore.profile?.favorite_exercises ?? [],
-    recentExerciseIds(logs.all.map((r) => r.payload)),
+  // 🧩 Les variantes à côté de leur exo de base : on regroupe AVANT de couper à 60.
+  return groupVariantFamiliesBy(
+    pickerOrder(
+      base,
+      profileStore.profile?.favorite_exercises ?? [],
+      recentExerciseIds(logs.all.map((r) => r.payload)),
+    ),
+    (x) => x.ex.id,
   ).slice(0, 60);
 });
 function exIcon(e: ExerciseRow): string {

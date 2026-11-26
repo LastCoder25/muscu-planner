@@ -248,6 +248,37 @@ export function variantFamilyKey(exerciseId: string): string {
   return VARIANT_FAMILY_OF[exerciseId] ?? exerciseId;
 }
 
+// Rang d'un exo dans sa famille (0 = l'exo de base, listé en premier).
+const VARIANT_RANK: Record<string, number> = Object.fromEntries(
+  EXERCISE_VARIANT_FAMILIES.flatMap((fam) => fam.map((id, i) => [id, i])),
+);
+
+/** 🧩 RANGE LES VARIANTES À CÔTÉ DE LEUR EXO DE BASE dans une liste de choix (v1.364.0 ; demandé :
+ *  « mets les variantes proches de l'exo de base dans les listings »). Une famille de variantes
+ *  (`EXERCISE_VARIANT_FAMILIES`) forme un bloc posé À LA PLACE DE SON PREMIER MEMBRE de la liste
+ *  d'entrée — donc l'ordre voulu par l'écran (favoris en tête, récents, pertinence…) est conservé
+ *  d'une famille à l'autre — et ses membres s'y suivent dans l'ordre de la famille (l'exo de base
+ *  d'abord, puis ses variantes). Un exo sans variante ne bouge pas. Pur, copie. ⚠️ Pour l'AFFICHAGE :
+ *  une présélection (« les 2 premiers exos du groupe ») doit garder l'ordre d'origine, où un favori
+ *  passe avant sa famille. */
+export function groupVariantFamilies<T extends { id: string }>(list: readonly T[]): T[] {
+  return groupVariantFamiliesBy(list, (e) => e.id);
+}
+/** Idem pour une liste dont les éléments ne portent pas l'identifiant à la racine (`{ ex, tag }`). */
+export function groupVariantFamiliesBy<T>(list: readonly T[], idOf: (e: T) => string): T[] {
+  const blocks = new Map<string, T[]>();
+  for (const e of list) {
+    const key = variantFamilyKey(idOf(e));
+    const block = blocks.get(key);
+    if (block) block.push(e);
+    else blocks.set(key, [e]);
+  }
+  const out: T[] = [];
+  for (const block of blocks.values())
+    out.push(...[...block].sort((a, b) => (VARIANT_RANK[idOf(a)] ?? 0) - (VARIANT_RANK[idOf(b)] ?? 0)));
+  return out;
+}
+
 // ── 🔁 EXOS QUI SE FRACTIONNENT (demandé par l'utilisateur : « une traction toutes les
 // 10/20/30 minutes ») ─────────────────────────────────────────────────────────────────
 // Seulement tractions, pompes et dips — et leurs variantes au poids du corps du même
