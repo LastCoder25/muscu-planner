@@ -48,3 +48,19 @@ describe('client', () => {
     expect(sheet).toContain("=== 'entryUnit'");
   });
 });
+
+describe('🧗 tenue jambes tendues SUSPENDU (migration 0124)', () => {
+  const sql4 = readFileSync(new URL('../supabase/migrations/0124_tenue_jambes_suspendu.sql', import.meta.url), 'utf8');
+  it('un exo au temps, abdominaux, difficulté 3, barre de traction seule, sans muscle secondaire', () => {
+    const r = sql4.split('\n').find((l) => l.includes("('ex_leg_raise_hang_hold'")) ?? '';
+    expect(r).toContain("'abdominaux', '{}'");
+    expect(r).toContain("'{pullup_bar}', 3, 'time'");
+    expect(r).toContain("'musculation', '{variante}'");
+  });
+  it('dans la famille des relevés de jambes, avec consignes et l’image du relevé suspendu', () => {
+    expect(variantFamilyKey('ex_leg_raise_hang_hold')).toBe(variantFamilyKey('ex_leg_raise_hold'));
+    expect(exerciseInstructions('ex_leg_raise_hang_hold')?.steps.length).toBeGreaterThanOrEqual(3);
+    expect(exerciseInstructions('ex_leg_raise_hang_hold')?.tip).toBeTruthy();
+    expect(exerciseImage('ex_leg_raise_hang_hold')).toBe(exerciseImage('ex_hanging_leg_raise'));
+  });
+});

@@ -231,6 +231,7 @@ const EXERCISE_VARIANT_FAMILIES: string[][] = [
     'ex_knee_raise_floor',
     'ex_knee_raise_floor_hold',
     'ex_knee_raise_hanging',
+    'ex_leg_raise_hang_hold', // jambes tendues tenues, suspendu (migr. 0124)
   ],
   // Mollets debout (machine / poids du corps).
   ['ex_calf_raise', 'ex_calf_raise_bw', 'ex_calf_raise_single', 'ex_calf_raise_hold'],

@@ -727,6 +727,14 @@ const EXERCISE_INSTRUCTIONS: Record<string, ExerciseGuide> = {
     ],
     tip: 'Trop dur : monte les genoux moins haut. Plus facile encore : le relevé de jambes tendues au sol.',
   },
+  ex_leg_raise_hang_hold: {
+    steps: [
+      'Suspendu à la barre, bras tendus, épaules engagées vers le bas.',
+      'Monte les jambes tendues jusqu’à l’horizontale (ou le plus haut possible) et tiens.',
+      'Garde le bassin rentré, sans balancer ni creuser le dos ; redescends en contrôle.',
+    ],
+    tip: 'Très difficile : commence par la tenue genoux levés suspendu, puis allonge peu à peu les jambes.',
+  },
   ex_knee_raise_floor: {
     steps: [
       'Allongé sur le dos, mains sous les fesses ou le long du corps, jambes pliées.',
