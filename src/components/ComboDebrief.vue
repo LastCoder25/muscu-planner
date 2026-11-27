@@ -16,7 +16,7 @@
       >
       <span v-if="debrief.restDays" class="chip">{{ debrief.restDays }} de repos</span>
       <span class="chip">{{ debrief.total }} séries</span>
-      <span v-if="debrief.total >= 10" class="chip" :class="{ hot: debrief.peakShare >= 0.4 }">
+      <span v-if="debrief.total >= 10" class="chip" :class="{ hot: debrief.peakHot }">
         pic : {{ Math.round(debrief.peakShare * 100) }} % le jour {{ debrief.peakDay + 1 }}
       </span>
       <span v-if="debrief.lateSets" class="chip late" data-test="db-late">
@@ -54,7 +54,7 @@
           :key="d.date"
           class="cell tot"
           :class="{
-            peak: debrief.total >= 10 && i === debrief.peakDay && debrief.peakShare >= 0.4,
+            peak: debrief.peakHot && i === debrief.peakDay,
           }"
           role="cell"
           >{{ d.total || '' }}</span

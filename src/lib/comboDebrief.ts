@@ -23,33 +23,33 @@ import { comboGoals, comboEndDate, goalComplete, legSets, setOrigin } from '@/li
 import type { ComboChallenge } from '@/lib/combo';
 
 /** Un jour qui porte au moins cette part du volume total est un « pic ». */
-export const PEAK_SHARE = 0.4;
+const PEAK_SHARE = 0.4;
 /** …à condition que le défi ait un volume qui permette de l'étaler. */
 export const PEAK_MIN_SETS = 10;
 /** Part du volume tombée dans le DERNIER TIERS du défi au-delà de laquelle on parle de rush. */
-export const LATE_SHARE = 0.5;
+const LATE_SHARE = 0.5;
 /** Jours consécutifs sans série à partir desquels on le signale (sur un défi d'au moins 5 jours). */
-export const GAP_DAYS = 3;
+const GAP_DAYS = 3;
 /** Un groupe qui n'a eu qu'UN jour alors que le défi en a au moins autant… */
-export const SINGLE_DAY_MIN_DURATION = 5;
+const SINGLE_DAY_MIN_DURATION = 5;
 /** …et au moins ce volume (en dessous, un seul jour est normal). */
-export const SINGLE_DAY_MIN_SETS = 6;
+const SINGLE_DAY_MIN_SETS = 6;
 /** Séries par jour, pour un même groupe, à partir desquelles deux jours d'affilée comptent. */
 export const BACK_TO_BACK_SETS = 4;
 
 /** Ce qu'un jour a porté pour UN exo. */
-export interface DebriefLegDay {
+interface DebriefLegDay {
   exercise_id: string;
   name: string;
   sets: number;
 }
 /** Ce qu'un jour a porté pour UN groupe. */
-export interface DebriefGroupDay {
+interface DebriefGroupDay {
   slot: string;
   sets: number;
   legs: DebriefLegDay[];
 }
-export interface DebriefDay {
+interface DebriefDay {
   /** 1 pour le premier jour du défi. */
   n: number;
   date: string;
@@ -57,7 +57,7 @@ export interface DebriefDay {
   groups: DebriefGroupDay[];
 }
 /** Une ligne de la grille : un groupe, une case par jour du défi. */
-export interface DebriefGroupRow {
+interface DebriefGroupRow {
   slot: string;
   /** Séries par jour, dans l'ordre des jours du défi. */
   perDay: number[];
@@ -77,7 +77,7 @@ export type DebriefTipId =
   | 'backToBack'
   | 'missed'
   | 'noRest';
-export interface DebriefTip {
+interface DebriefTip {
   id: DebriefTipId;
   /** 'good' = un constat positif ; 'tip' = un conseil. */
   tone: 'good' | 'tip';
@@ -98,6 +98,8 @@ export interface ComboDebrief {
   /** Le jour le plus chargé (index 0-based) et sa part du volume (0 sans volume). */
   peakDay: number;
   peakShare: number;
+  /** Le pic est assez net pour être signalé (même règle que le conseil « peak »). */
+  peakHot: boolean;
   /** Séries faites APRÈS la fin du défi (non comptées ci-dessus). */
   lateSets: number;
   /** Séries par jour qui répartiraient le volume à égalité (arrondi au supérieur). */
@@ -197,11 +199,12 @@ export function comboDebrief(c: ComboChallenge): ComboDebrief | null {
   const peakDay = totals.indexOf(peak);
   const peakShare = peak / total;
   const idealPerDay = Math.ceil(total / D);
+  const peakHot = total >= PEAK_MIN_SETS && peakShare >= PEAK_SHARE;
 
   const tips: DebriefTip[] = [];
 
   // 1. Un seul jour concentre une grosse part du volume.
-  if (D >= 3 && total >= PEAK_MIN_SETS && peakShare >= PEAK_SHARE) {
+  if (D >= 3 && peakHot) {
     tips.push({
       id: 'peak',
       tone: 'tip',
@@ -325,6 +328,7 @@ export function comboDebrief(c: ComboChallenge): ComboDebrief | null {
     restDays: D - activeDays,
     peakDay,
     peakShare,
+    peakHot,
     lateSets,
     idealPerDay,
     tips,
