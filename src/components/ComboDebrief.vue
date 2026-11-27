@@ -2,11 +2,18 @@
   <!-- 📊 Bilan de répartition d'un Défi 360 clôturé (v1.368.0) : la grille « groupe × jour » (qui
        a été travaillé quand), le rappel jour par jour (quelles séries de quel exo), puis des
        conseils de répartition. Un miroir avant tout : rien n'est écrit dans le défi. -->
-  <section v-if="debrief" class="debrief" data-test="combo-debrief" aria-label="Bilan de répartition">
+  <section
+    v-if="debrief"
+    class="debrief"
+    data-test="combo-debrief"
+    aria-label="Bilan de répartition"
+  >
     <h2 class="db-title font-display">📊 Ta répartition</h2>
 
     <div class="db-chips">
-      <span class="chip" data-test="db-active">{{ debrief.activeDays }}/{{ debrief.duration }} jours actifs</span>
+      <span class="chip" data-test="db-active"
+        >{{ debrief.activeDays }}/{{ debrief.duration }} jours actifs</span
+      >
       <span v-if="debrief.restDays" class="chip">{{ debrief.restDays }} de repos</span>
       <span class="chip">{{ debrief.total }} séries</span>
       <span v-if="debrief.total >= 10" class="chip" :class="{ hot: debrief.peakShare >= 0.4 }">
@@ -27,7 +34,9 @@
         </span>
       </div>
       <div v-for="r in rows" :key="r.slot" class="g-row" role="row" :data-slot="r.slot">
-        <span class="g-label" role="rowheader" :title="slotName(r.slot)">{{ slotEmoji(r.slot) }}</span>
+        <span class="g-label" role="rowheader" :title="slotName(r.slot)">{{
+          slotEmoji(r.slot)
+        }}</span>
         <span
           v-for="(n, i) in r.perDay"
           :key="i"
@@ -44,7 +53,9 @@
           v-for="(d, i) in debrief.days"
           :key="d.date"
           class="cell tot"
-          :class="{ peak: debrief.total >= 10 && i === debrief.peakDay && debrief.peakShare >= 0.4 }"
+          :class="{
+            peak: debrief.total >= 10 && i === debrief.peakDay && debrief.peakShare >= 0.4,
+          }"
           role="cell"
           >{{ d.total || '' }}</span
         >

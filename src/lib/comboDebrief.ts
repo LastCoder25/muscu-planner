@@ -263,7 +263,9 @@ export function comboDebrief(c: ComboChallenge): ComboDebrief | null {
   // 5. Un même groupe fortement chargé deux jours d'affilée.
   if (D >= 4) {
     const b2b = rows.filter((r) =>
-      r.perDay.some((n, i) => i > 0 && n >= BACK_TO_BACK_SETS && r.perDay[i - 1]! >= BACK_TO_BACK_SETS),
+      r.perDay.some(
+        (n, i) => i > 0 && n >= BACK_TO_BACK_SETS && r.perDay[i - 1]! >= BACK_TO_BACK_SETS,
+      ),
     );
     if (b2b.length) {
       tips.push({

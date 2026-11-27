@@ -32,7 +32,11 @@ const leg = (slot: string, id: string, name: string, target: number, s: ComboSet
     count_mode: 'sets',
     sets: s,
   }) as ComboLeg;
-const combo = (legs: ComboLeg[], duration = 7, over: Partial<ComboChallenge> = {}): ComboChallenge => ({
+const combo = (
+  legs: ComboLeg[],
+  duration = 7,
+  over: Partial<ComboChallenge> = {},
+): ComboChallenge => ({
   id: 'c1',
   name: '360',
   start_date: START,
@@ -73,7 +77,12 @@ describe('comboDebrief : ce qui s’est passé', () => {
   });
   it('une série basculée est nommée d’après l’exo réellement fait', () => {
     const swapped = sets(1, 1, {
-      origin: { exercise_id: 'z', exercise_name: 'Pompes diamant', muscle_primary: null, rep_weight: 1 },
+      origin: {
+        exercise_id: 'z',
+        exercise_name: 'Pompes diamant',
+        muscle_primary: null,
+        rep_weight: 1,
+      },
     } as Partial<ComboSet>);
     const d = comboDebrief(combo([leg('push', 'a', 'Pompes', 3, [...sets(0, 2), ...swapped])]))!;
     expect(d.days[1]!.groups[0]!.legs[0]).toMatchObject({ name: 'Pompes diamant', sets: 1 });
@@ -81,13 +90,19 @@ describe('comboDebrief : ce qui s’est passé', () => {
   it('un groupe à objectif mais sans aucune série apparaît quand même (ligne à 0)', () => {
     const c = combo([leg('push', 'a', 'Pompes', 3, sets(0, 3)), leg('legs', 'b', 'Squat', 4, [])]);
     const rows = comboDebrief(c)!.rows;
-    expect(rows.find((r) => r.slot === 'legs')).toMatchObject({ total: 0, target: 4, daysWorked: 0 });
+    expect(rows.find((r) => r.slot === 'legs')).toMatchObject({
+      total: 0,
+      target: 4,
+      daysWorked: 0,
+    });
   });
 });
 
 describe('comboDebrief : les conseils', () => {
   it('un jour qui écrase les autres → « peak » (et le conseil donne le rythme idéal)', () => {
-    const c = combo([leg('push', 'a', 'Pompes', 12, [...sets(0, 1), ...sets(3, 1), ...sets(4, 10)])]);
+    const c = combo([
+      leg('push', 'a', 'Pompes', 12, [...sets(0, 1), ...sets(3, 1), ...sets(4, 10)]),
+    ]);
     expect(tips(c)).toContain('peak');
     const t = comboDebrief(c)!;
     expect(t.idealPerDay).toBe(2);
@@ -98,9 +113,13 @@ describe('comboDebrief : les conseils', () => {
     expect(tips(c)).not.toContain('peak');
   });
   it('le volume tombé sur le dernier tiers → « late »', () => {
-    const c = combo([leg('push', 'a', 'Pompes', 10, [...sets(0, 2), ...sets(5, 4), ...sets(6, 4)])]);
+    const c = combo([
+      leg('push', 'a', 'Pompes', 10, [...sets(0, 2), ...sets(5, 4), ...sets(6, 4)]),
+    ]);
     expect(tips(c)).toContain('late');
-    expect(tips(combo([leg('push', 'a', 'Pompes', 10, [...sets(0, 4), ...sets(2, 3), ...sets(4, 3)])]))).not.toContain('late');
+    expect(
+      tips(combo([leg('push', 'a', 'Pompes', 10, [...sets(0, 4), ...sets(2, 3), ...sets(4, 3)])])),
+    ).not.toContain('late');
   });
   it('3 jours de suite sans rien → « gap » avec les jours cités', () => {
     const c = combo([leg('push', 'a', 'Pompes', 6, [...sets(0, 3), ...sets(4, 3)])]);
@@ -117,9 +136,21 @@ describe('comboDebrief : les conseils', () => {
     expect(t.slots).toEqual(['push']);
   });
   it('un même groupe chargé deux jours d’affilée → « backToBack »', () => {
-    const c = combo([leg('legs', 'a', 'Squat', 10, [...sets(1, BACK_TO_BACK_SETS), ...sets(2, BACK_TO_BACK_SETS), ...sets(5, 2)])]);
+    const c = combo([
+      leg('legs', 'a', 'Squat', 10, [
+        ...sets(1, BACK_TO_BACK_SETS),
+        ...sets(2, BACK_TO_BACK_SETS),
+        ...sets(5, 2),
+      ]),
+    ]);
     expect(comboDebrief(c)!.tips.find((t) => t.id === 'backToBack')!.slots).toEqual(['legs']);
-    const lighter = combo([leg('legs', 'a', 'Squat', 10, [...sets(1, BACK_TO_BACK_SETS), ...sets(2, BACK_TO_BACK_SETS - 1), ...sets(5, 2)])]);
+    const lighter = combo([
+      leg('legs', 'a', 'Squat', 10, [
+        ...sets(1, BACK_TO_BACK_SETS),
+        ...sets(2, BACK_TO_BACK_SETS - 1),
+        ...sets(5, 2),
+      ]),
+    ]);
     expect(tips(lighter)).not.toContain('backToBack');
   });
   it('aucun jour de repos sur 7 → « noRest »', () => {
@@ -143,7 +174,9 @@ describe('comboDebrief : les conseils', () => {
     expect(t.map((x) => x.id)).toEqual(['regular']);
     expect(t[0]!.tone).toBe('good');
     // 3 jours actifs (assez pour un constat positif) MAIS un pic : le conseil prime, pas de « bravo ».
-    const bad = combo([leg('push', 'a', 'Pompes', 12, [...sets(0, 1), ...sets(3, 1), ...sets(6, 10)])]);
+    const bad = combo([
+      leg('push', 'a', 'Pompes', 12, [...sets(0, 1), ...sets(3, 1), ...sets(6, 10)]),
+    ]);
     expect(tips(bad)).toContain('peak');
     expect(tips(bad)).not.toContain('regular');
   });
@@ -171,7 +204,9 @@ describe('ComboDebrief (composant)', () => {
     const r = await render(c);
     expect(r.el.querySelector('[data-test="combo-debrief"]')).not.toBeNull();
     expect(r.el.querySelectorAll('[data-test="db-grid"] .g-row').length).toBe(4); // en-tête + 2 groupes + total
-    expect(r.el.querySelector('[data-test="db-active"]')?.textContent).toContain('3/7 jours actifs');
+    expect(r.el.querySelector('[data-test="db-active"]')?.textContent).toContain(
+      '3/7 jours actifs',
+    );
     const days = r.el.querySelectorAll('[data-test="db-days"] .day');
     expect(days.length).toBe(7);
     expect(days[4]!.textContent).toContain('Pompes ×11');
