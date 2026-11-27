@@ -36,6 +36,9 @@
         <ComboChestView v-if="c.chest" :combo-id="c.id" :chest="c.chest" />
       </div>
 
+      <!-- 📊 Bilan de répartition : seulement une fois le défi clôturé (terminé, jamais abandonné). -->
+      <ComboDebrief v-if="c.status === 'done'" :combo="c" />
+
       <div v-if="c.status === 'active'" class="cta-row q-mb-md">
         <q-btn
           v-if="!isGroupMode"
@@ -335,6 +338,7 @@ import { comboSlot } from '@/data/combo';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboTimeBubbles from '@/components/ComboTimeBubbles.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
+import ComboDebrief from '@/components/ComboDebrief.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import HoldSetEditor from '@/components/HoldSetEditor.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
