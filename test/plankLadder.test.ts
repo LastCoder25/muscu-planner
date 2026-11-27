@@ -59,12 +59,12 @@ describe('client', () => {
     expect(COMBO_SLOTS.find((s) => s.muscles.includes('abdominaux'))?.key).toBe('core');
     for (const id of NEW_IDS) expect(variantFamilyKey(id), id).toBe(variantFamilyKey('ex_plank'));
   });
-  it('chacune a ses consignes, et aucune image (l’icône vaut mieux qu’une photo fausse)', () => {
+  it('chacune a ses consignes et une photo (celle de la planche proche, v1.369.0)', () => {
     for (const id of NEW_IDS) {
       const g = exerciseInstructions(id);
       expect(g?.steps.length, id).toBeGreaterThanOrEqual(3);
       expect(g?.tip, id).toBeTruthy();
-      expect(exerciseImage(id), id).toBeUndefined();
+      expect(exerciseImage(id), id).toBeDefined();
     }
   });
 });

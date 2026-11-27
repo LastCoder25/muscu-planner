@@ -132,6 +132,19 @@ const EXERCISE_IMAGES: Record<string, string> = {
   ex_knee_raise_hold: '/exercises/ex_hanging_leg_raise.jpg',
   ex_knee_raise_hanging: '/exercises/ex_hanging_leg_raise.jpg', // même geste, en répétitions
   ex_leg_raise_hang_hold: '/exercises/ex_hanging_leg_raise.jpg', // même geste, figé jambes à l'horizontale
+  // 🖼️ Exos ajoutés en v1.354–1.363 (planches, roue, relevés de genoux) : photo + animation. Les photos
+  // sont celles du même geste ou de sa position clé (règle des tenues) — pas de cliché fidèle
+  // dans la base pour les variantes de planche, donc la planche coudes sert aux variantes sur les
+  // coudes, la position haute des pompes aux variantes sur les mains.
+  ex_plank_knees: '/exercises/ex_plank.jpg', // même gainage, appui sur les genoux
+  ex_plank_feet: '/exercises/ex_plank.jpg', // même gainage, pieds sur un banc
+  ex_plank_long: '/exercises/ex_plank.jpg', // même gainage, coudes plus avancés
+  ex_plank_high: '/exercises/ex_pushup.jpg', // position haute des pompes = planche sur les mains
+  ex_plank_high_long: '/exercises/ex_pushup.jpg', // idem, mains avancées
+  ex_plank_side_hand: '/exercises/ex_plank_side.jpg', // même gainage latéral, sur la main
+  ex_ab_wheel: '/exercises/ex_ab_wheel_knees.jpg', // même roue, plus loin (debout)
+  ex_knee_raise_floor: '/exercises/ex_knee_raise_floor.jpg', // free-exercise-db « Leg_Pull-In »
+  ex_knee_raise_floor_hold: '/exercises/ex_knee_raise_floor.jpg', // même geste, genoux tenus relevés
   ex_leg_raise_hold: '/exercises/ex_leg_raise_floor.jpg',
   ex_hollow_hold: '/exercises/ex_leg_raise_floor.jpg', // allongé, jambes et épaules décollées
   ex_pushup_hold: '/exercises/ex_pushup.jpg',

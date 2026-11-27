@@ -32,14 +32,15 @@ describe('client', () => {
       expect(variantFamilyKey(id), id).toBe(variantFamilyKey('ex_leg_raise_floor'));
     expect(variantFamilyKey('ex_leg_raise_hold')).toBe(variantFamilyKey('ex_knee_raise_floor'));
   });
-  it('consignes pour les trois ; seule la version suspendue reprend l’image du relevé suspendu', () => {
+  it('consignes pour les trois ; la version suspendue reprend l’image du relevé suspendu, celles au sol la leur', () => {
     for (const id of IDS) {
       expect(exerciseInstructions(id)?.steps.length, id).toBeGreaterThanOrEqual(3);
       expect(exerciseInstructions(id)?.tip, id).toBeTruthy();
     }
     expect(exerciseImage('ex_knee_raise_hanging')).toBe(exerciseImage('ex_hanging_leg_raise'));
-    expect(exerciseImage('ex_knee_raise_floor')).toBeUndefined();
-    expect(exerciseImage('ex_knee_raise_floor_hold')).toBeUndefined();
+    expect(exerciseImage('ex_knee_raise_floor')).toBeDefined();
+    expect(exerciseImage('ex_knee_raise_floor_hold')).toBe(exerciseImage('ex_knee_raise_floor'));
+    expect(existsSync(new URL('../public/exercises/ex_knee_raise_floor-1.jpg', import.meta.url))).toBe(true);
     expect(existsSync(new URL('../public/exercises/ex_hanging_leg_raise.jpg', import.meta.url))).toBe(true);
   });
   it('le changement d’exo explique pourquoi des exos manquent en bascule entière', () => {

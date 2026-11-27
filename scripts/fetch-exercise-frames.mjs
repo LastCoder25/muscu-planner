@@ -143,6 +143,7 @@ const MAP = {
   ex_farmer_hold: 'Farmers_Walk',
   ex_bicycle_crunch: 'Air_Bike',
   ex_leg_raise_floor: 'Flat_Bench_Lying_Leg_Raise',
+  ex_knee_raise_floor: 'Leg_Pull-In',
   ex_chinup: 'Chin-Up',
   ex_pullup_neutral: 'V-Bar_Pullup',
   ex_pullup_wide: 'Wide-Grip_Rear_Pull-Up',

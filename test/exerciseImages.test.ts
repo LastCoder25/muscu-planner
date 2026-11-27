@@ -95,3 +95,29 @@ describe('illustrations d’exercices', () => {
       expect(exerciseImage(id), id).toBeUndefined();
   });
 });
+
+describe('exos ajoutés en v1.354–1.363 (planches, roue, relevés de genoux)', () => {
+  const NEW_IDS = [
+    'ex_plank_knees',
+    'ex_plank_feet',
+    'ex_plank_long',
+    'ex_plank_high',
+    'ex_plank_high_long',
+    'ex_plank_side_hand',
+    'ex_ab_wheel',
+    'ex_ab_wheel_knees',
+    'ex_knee_raise_floor',
+    'ex_knee_raise_floor_hold',
+    'ex_knee_raise_hanging',
+    'ex_leg_raise_hang_hold',
+  ];
+  it('ont une photo ET une animation (deux poses sur disque)', () => {
+    const noPhoto = NEW_IDS.filter((id) => !exerciseImage(id));
+    expect(noPhoto).toEqual([]);
+    const noAnim = NEW_IDS.filter((id) => {
+      const f = exerciseFrames(id);
+      return !f || !(onDisk(f[0]) && onDisk(f[1]));
+    });
+    expect(noAnim).toEqual([]);
+  });
+});

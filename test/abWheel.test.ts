@@ -46,7 +46,7 @@ describe('client', () => {
     expect(variantFamilyKey('ex_ab_wheel')).toBe(variantFamilyKey('ex_ab_wheel_knees'));
     expect(variantFamilyKey('ex_ab_wheel')).not.toBe(variantFamilyKey('ex_crunch'));
   });
-  it('consignes pour les deux ; photo animée seulement pour la version sur les genoux', () => {
+  it('consignes pour les deux ; photo animée pour les deux', () => {
     for (const id of IDS) {
       expect(exerciseInstructions(id)?.steps.length, id).toBeGreaterThanOrEqual(3);
       expect(exerciseInstructions(id)?.tip, id).toBeTruthy();
@@ -58,7 +58,7 @@ describe('client', () => {
     expect(
       existsSync(new URL('../public/exercises/ex_ab_wheel_knees-1.jpg', import.meta.url)),
     ).toBe(true);
-    // La version debout n'a pas de bon cliché : l'icône vaut mieux qu'une photo fausse.
-    expect(exerciseImage('ex_ab_wheel')).toBeUndefined();
+    // La version debout n'a pas de cliché propre : elle reprend celui de la roue sur les genoux (v1.369.0).
+    expect(exerciseImage('ex_ab_wheel')).toBe(exerciseImage('ex_ab_wheel_knees'));
   });
 });
