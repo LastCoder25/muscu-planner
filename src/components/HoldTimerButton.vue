@@ -16,12 +16,12 @@
     <span class="htb-t">{{ buttonText }}</span>
   </button>
 
-  <q-dialog v-model="open" maximized :persistent="active" transition-show="fade" transition-hide="fade">
+  <q-dialog v-model="open" maximized :persistent="active || review !== null" transition-show="fade" transition-hide="fade">
     <div class="hd" role="dialog" :aria-label="`Tenue : ${label}`" data-test="hold-dialog">
       <header class="hd-head">
         <div class="hd-name font-display">{{ label }}</div>
         <button
-          v-if="!active"
+          v-if="!active && review === null"
           type="button"
           class="hd-x"
           aria-label="Fermer"
@@ -32,8 +32,65 @@
         </button>
       </header>
 
+      <!-- ⑤ CONTRÔLE DU CHRONO (v1.370.0 ; demandé : « j'ai tenu 20 s mais le temps d'arrêter le
+           chrono il est monté à 21 : je veux corriger »). Le chrono est arrêté, le temps relevé est
+           MODIFIABLE (−/+) et rien n'est enregistré avant « Valider ». Le minuteur n'y passe pas : il
+           enregistre sa cible exacte. -->
+      <div v-if="review !== null" class="hd-body hd-live" data-test="hold-review">
+        <div class="hd-state done">Chrono arrêté</div>
+        <div class="hd-step hd-review-step">
+          <button
+            type="button"
+            class="hd-pm"
+            aria-label="1 seconde de moins"
+            :disabled="review <= 1"
+            data-test="hold-review-minus"
+            @click="adjust(-1)"
+          >
+            −
+          </button>
+          <div class="hd-val font-display" data-test="hold-review-val" role="timer" aria-live="polite">
+            {{ fmtHold(review) }}
+          </div>
+          <button
+            type="button"
+            class="hd-pm"
+            aria-label="1 seconde de plus"
+            :disabled="review >= HOLD_TARGET_MAX"
+            data-test="hold-review-plus"
+            @click="adjust(1)"
+          >
+            +
+          </button>
+        </div>
+        <div class="hd-more" role="group" aria-label="Corriger le temps">
+          <button
+            v-for="d in [-5, -2, 2, 5]"
+            :key="d"
+            type="button"
+            class="hd-chip"
+            :data-test="`hold-review-${d}`"
+            @click="adjust(d)"
+          >
+            {{ d > 0 ? '+' : '−' }}{{ Math.abs(d) }} s
+          </button>
+        </div>
+        <p v-if="reviewDrop > 0" class="hd-hint" data-test="hold-review-hint">
+          Chrono arrêté à {{ fmtHold(review + reviewDrop) }} : tu as retiré {{ reviewDrop }} s.
+        </p>
+        <p v-else class="hd-hint">
+          Tu as arrêté le chrono un peu après la fin ? Corrige le temps avant de valider.
+        </p>
+        <button type="button" class="hd-stop ok" data-test="hold-review-ok" @click="validateReview">
+          Valider · {{ fmtHold(review) }}
+        </button>
+        <button type="button" class="hd-stop ghost" data-test="hold-review-cancel" @click="dropReview">
+          Ne pas enregistrer
+        </button>
+      </div>
+
       <!-- ① RÉGLAGES -->
-      <div v-if="!view" class="hd-body">
+      <div v-else-if="!view" class="hd-body">
         <section aria-label="Mode">
           <div class="hd-cap">Mode</div>
           <div class="hd-tiles" role="radiogroup" aria-label="Chrono ou minuteur">
@@ -183,7 +240,7 @@
             +{{ s }} s
           </button>
         </div>
-        <button type="button" class="hd-stop" data-test="hold-stop" @click="stop">
+        <button type="button" class="hd-stop" data-test="hold-stop" @click="onStop">
           Terminer
         </button>
       </div>
@@ -219,7 +276,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useHoldTimer } from '@/composables/useHoldTimer';
 import {
   bumpTarget,
@@ -247,9 +304,43 @@ const emit = defineEmits<{ finish: [sec: number] }>();
 const open = ref(false);
 /** Ouvre l'écran de tenue depuis l'extérieur (le bouton « Prochaine série » d'une séance). */
 defineExpose({ openPanel: () => (open.value = true) });
-const { settings, view, active, start, stop, cancel, extend } = useHoldTimer((sec) => {
+const { settings, view, active, start, stop, halt, cancel, extend } = useHoldTimer((sec) => {
   emit('finish', sec);
   open.value = false;
+});
+
+// ⑤ Contrôle du chrono : le temps relevé à l'arrêt, corrigeable avant d'être enregistré.
+/** Secondes à enregistrer pendant le contrôle ; null = pas de contrôle en cours. */
+const review = ref<number | null>(null);
+/** Le temps relevé au bouton « Terminer » (pour dire de combien on a corrigé). */
+const reviewRaw = ref(0);
+const reviewDrop = computed(() => (review.value === null ? 0 : Math.max(0, reviewRaw.value - review.value)));
+/** « Terminer » : un CHRONO passe par le contrôle (on a pu l'arrêter après la fin réelle) ; un
+ *  minuteur, lui, enregistre sa cible exacte. */
+function onStop() {
+  if (settings.value.mode !== 'chrono') return stop();
+  const sec = halt();
+  if (sec <= 0) return;
+  reviewRaw.value = sec;
+  review.value = sec;
+}
+function adjust(d: number) {
+  if (review.value === null) return;
+  review.value = Math.min(HOLD_TARGET_MAX, Math.max(1, review.value + d));
+}
+function validateReview() {
+  const sec = review.value;
+  review.value = null;
+  if (sec !== null && sec > 0) emit('finish', sec);
+  open.value = false;
+}
+function dropReview() {
+  review.value = null;
+  open.value = false;
+}
+// Quitter l'écran pendant le contrôle : on garde le temps relevé (comme en pleine tenue).
+onBeforeUnmount(() => {
+  if (review.value !== null && review.value > 0) emit('finish', review.value);
 });
 
 /** Les durées proposées : les quatre usuelles, plus l'objectif de la série s'il en diffère. */

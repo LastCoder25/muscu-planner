@@ -418,7 +418,7 @@ describe('HoldTimerButton monté', () => {
     m.unmount();
   });
 
-  it('chrono : « Terminer » enregistre ; « Annuler » pendant le décompte n’enregistre rien', async () => {
+  it('chrono : « Terminer » ouvre le contrôle puis « Valider » enregistre ; « Annuler » pendant le décompte n’enregistre rien', async () => {
     const m = await mount();
     await m.tap('hold-prep-10');
     await m.tap('hold-start');
@@ -432,6 +432,10 @@ describe('HoldTimerButton monté', () => {
     vi.advanceTimersByTime(10_000 + 6_300);
     await nextTick();
     await m.tap('hold-stop');
+    // v1.370.0 : le chrono s'arrête sur un écran de contrôle (corrigeable) ; rien n'est enregistré avant « Valider ».
+    expect(m.got).toEqual([]);
+    expect(m.q('hold-review-val')?.textContent?.trim()).toBe('0:06');
+    await m.tap('hold-review-ok');
     expect(m.got).toEqual([6]);
     m.unmount();
   });

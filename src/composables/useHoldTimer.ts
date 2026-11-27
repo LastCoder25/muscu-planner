@@ -178,6 +178,15 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
     clear();
     if (sec > 0) onFinish(sec);
   }
+  /** « J'ai arrêté » SANS enregistrer : rend le temps tenu et coupe le chrono. Sert à l'écran de
+   *  contrôle du chrono (v1.370.0) : on a pu l'arrêter une ou deux secondes après la fin réelle de
+   *  la tenue, l'écran hôte laisse corriger avant d'appeler `onFinish` lui-même. 0 = rien tenu. */
+  function halt(): number {
+    if (!run.value) return 0;
+    const sec = holdLoggedSec(holdView(run.value, Date.now()));
+    clear();
+    return sec;
+  }
   function cancel() {
     clear();
   }
@@ -200,5 +209,5 @@ export function useHoldTimer(onFinish: (sec: number) => void) {
 
   const finished = computed(() => view.value?.phase === 'done');
 
-  return { settings, view, active, finished, start, stop, cancel, extend };
+  return { settings, view, active, finished, start, stop, halt, cancel, extend };
 }
