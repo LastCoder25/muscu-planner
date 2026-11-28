@@ -207,6 +207,7 @@ import {
   buildingLevel,
   type BuildingTypeId,
 } from '@/lib/buildings';
+import { planBaseUpgrades } from '@/lib/baseUpgrade';
 import { combatPower, mulberry32, type Combatant } from '@/lib/combat';
 import {
   emptyMilitia,
@@ -3429,6 +3430,26 @@ export const useCharacterStore = defineStore('character', () => {
       gold: cur.gold - cost,
       buildings: cur.buildings.map((x) => (x.slot === slot ? { ...x, level: x.level + 1 } : x)),
     });
+  }
+  /** ⏫ TOUT AMÉLIORER (cour et enceinte, les moins chers d'abord, tant que l'or suit) : le
+   *  lot entier part en UNE écriture. Rien de payable = aucune écriture. */
+  async function upgradeAllBase(userId: string, playerLevel: number) {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return null;
+    const plan = planBaseUpgrades({
+      gold: cur.gold,
+      playerLevel,
+      buildings: cur.buildings,
+      defenses: cur.base?.defenses ?? [],
+    });
+    if (!plan.levels) return plan;
+    await persistOptimistic(userId, {
+      gold: cur.gold - plan.spent,
+      buildings: plan.buildings,
+      ...(cur.base ? { base: { ...cur.base, defenses: plan.defenses } } : {}),
+    });
+    return plan;
   }
   // Récolte TOUS les filons : crédite poussière/pierres accumulées, réinitialise l'horloge.
   // ── DÉFENSE DE LA BASE (sièges) ──
@@ -7411,6 +7432,7 @@ export const useCharacterStore = defineStore('character', () => {
     expeMarkRead,
     buildFilon,
     upgradeFilon,
+    upgradeAllBase,
     collectFilons,
     baseTick,
     buildDefense,

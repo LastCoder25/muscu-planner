@@ -3156,6 +3156,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // ⚠️ ON LIT LE HTML : sans ça un fixture périmé ferait rendre l'état vide et le test
     // deviendrait creux — le piège déjà rencontré sur GuildPanel.
     expect(out, 'la cour doit être dessinée').toContain('yard');
+    // ⏫ Le bouton « Tout améliorer » est posé sur l'enceinte (niveau du joueur connu).
+    expect(out, 'tout améliorer').toContain('data-test="up-all"');
     expect(out, 'le champ de bataille est du décor, mais il se dessine').toContain('corpse');
     // 🛕 Le Panthéon bâti trône au CENTRE (v0.1006) et s'y dessine PLUS GRAND que les
     // ateliers (v0.1107). ⚠️ On lit les carrés dessinés et on raisonne sur leur GÉOMÉTRIE,

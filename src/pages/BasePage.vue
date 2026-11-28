@@ -48,6 +48,7 @@
          emplacements vides restent dessinés en pointillés — ils disent au joueur
          ce qu'il pourrait avoir. -->
     <div class="keep-wrap">
+      <BaseUpgradeAll :hero-level="heroLevel" />
       <svg viewBox="0 0 200 200" class="keep" role="img" aria-label="Enceinte de la base">
         <defs>
           <!-- Prairie : verte au centre, qui s'assombrit vers les bords du cadre. -->
@@ -1133,6 +1134,7 @@ import type { AutoUpSettings } from '@/lib/autoUp';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { useChampionFocus } from '@/composables/useChampionFocus';
 import VillagePlots from '@/components/VillagePlots.vue';
+import BaseUpgradeAll from '@/components/BaseUpgradeAll.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import RuneBankSheet from '@/components/RuneBankSheet.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
@@ -2443,6 +2445,7 @@ function doHarvest() {
 
 /* ── Enceinte ── */
 .keep-wrap {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
