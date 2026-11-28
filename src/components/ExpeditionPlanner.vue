@@ -153,10 +153,13 @@
         v-if="section === 'plan'"
         type="button"
         class="pl-go"
-        :disabled="running"
+        :disabled="running || !!launching"
         @click="compute"
       >
         <span v-if="running">⏳ Calcul… {{ Math.round(progress * 100) }} %</span>
+        <span v-else-if="sending" data-test="sending"
+          >🚀 Départs… {{ sending.done }} / {{ sending.total }}</span
+        >
         <span v-else
           >🪄
           {{
@@ -214,8 +217,20 @@
       <div class="pl-fill" :style="{ width: Math.round(progress * 100) + '%' }" />
     </div>
 
+    <!-- ✅ Tout est parti : pas de liste, juste ce qui s'est passé. -->
+    <output
+      v-if="section === 'plan' && !running && !sending && !rows && sentCount"
+      class="pl-sent"
+      data-test="all-sent"
+    >
+      ✅ {{ sentCount }} expédition{{ sentCount > 1 ? 's' : '' }}
+      {{ sentCount > 1 ? 'sont parties' : 'est partie' }}.
+    </output>
     <template v-if="section === 'plan' && rows && !running">
-      <p v-if="!rows.length && modes.length === 1 && modes[0] === 'harvest' && nothingToPlan" class="pl-empty">
+      <p
+        v-if="!rows.length && modes.length === 1 && modes[0] === 'harvest' && nothingToPlan"
+        class="pl-empty"
+      >
         Aucun lieu de récolte à visiter sur la carte.
       </p>
       <p v-else-if="!rows.length && modes.includes('rifts') && nothingToPlan" class="pl-empty">
@@ -427,6 +442,8 @@ const {
   rows,
   unreachable,
   launching,
+  sending,
+  sentCount,
   compute,
   launch,
   launchAll,
@@ -443,11 +460,7 @@ const {
 // 📜 Une fois les expéditions générées, l'écran défile : pastilles, « Tout lancer » puis les
 // propositions en haut (au lieu de laisser l'utilisateur sous les réglages).
 const sumEl = ref<HTMLElement | null>(null);
-useScrollWhenReady(
-  running,
-  () => props.section === 'plan' && !!rows.value?.length,
-  sumEl,
-);
+useScrollWhenReady(running, () => props.section === 'plan' && !!rows.value?.length, sumEl);
 
 const MODES: { id: PlanMode; emo: string; title: string; short: string; sub: string }[] = [
   {
@@ -901,6 +914,12 @@ const placeOf = (p: Poi | null) => (p ? `${poiEmo(p)} ${poiLabel(p)}` : '🏠 Ba
 .pl-note {
   font-size: 12px;
   color: var(--dim);
+  margin: 0;
+}
+.pl-sent {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--d1);
   margin: 0;
 }
 </style>

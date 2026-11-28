@@ -1068,9 +1068,7 @@ export const useCharacterStore = defineStore('character', () => {
   async function fuseAllRuneSkills(
     userId: string,
     only: FuseOnly = null,
-  ): Promise<
-    { ok: false; reason: string } | { ok: true; groups: FuseGroup[]; rises: RiseLine[] }
-  > {
+  ): Promise<{ ok: false; reason: string } | { ok: true; groups: FuseGroup[]; rises: RiseLine[] }> {
     const cur = row.value;
     if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
     const out = fuseAllRising(cur.runes, only);
@@ -1231,6 +1229,10 @@ export const useCharacterStore = defineStore('character', () => {
    *  encore celle qu'on a lue, sinon un autre onglet vient de récupérer et le second ne met à
    *  jour aucune ligne. Rend les tickets versés (0 si rien n'était dû). */
   async function claimWeeklyQuests(userId: string, monday: string, earned: number) {
+    // ⚠️ Écrit et RELIT la ligne en direct : jamais pendant une série, où la fiche en mémoire
+    // est en avance sur la base (la relire effacerait ce qui n'est pas encore parti).
+    if (deferDepth > 0) await seriesEnd;
+    await writesSettled();
     const cur = row.value;
     if (!cur) return 0;
     const tickets = earned - parseQuestMark(cur.quest_week, monday);
@@ -1266,8 +1268,13 @@ export const useCharacterStore = defineStore('character', () => {
   /** Un tick peut écrire ce qu'il a calculé sur `snap` : rien ne vole, et l'état n'a pas
    *  changé depuis sa lecture. Sinon il passe son tour (il recalculera au suivant). */
   function tickMayWrite(snap: CharacterRow): boolean {
-    return inFlight.size === 0 && row.value === snap;
+    // Pendant une série, l'envoi groupé est DÉJÀ dans la fiche : il ne la périme pas.
+    const stale = deferDepth > 0 ? staleWrites().length : inFlight.size;
+    return stale === 0 && row.value === snap;
   }
+  /** Les écritures en vol que la fiche en mémoire ne reflète pas encore (toutes, sauf les
+   *  envois groupés d'une série). */
+  const staleWrites = () => [...inFlight].filter((p) => !trackedFlushes.has(p as Promise<void>));
   /**
    * 📉 ÉCRIT SANS RELIRE LA LIGNE (v1.134, mesuré) : chaque écriture relisait la ligne ENTIÈRE
    * (`.select(COLS)`, jusqu'à 200 Ko de JSON pour un compte avancé), soit ~5 000 lignes
@@ -1292,6 +1299,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (res.error) throw res.error;
   });
   const trackedFlushes = new Set<Promise<void>>();
+  /** La fiche en mémoire est-elle à jour ? Comme `writesSettled`, SANS attendre les envois
+   *  groupés d'une série : les attendre lui rendrait un aller-retour réseau par geste. */
+  async function rowCurrent(): Promise<void> {
+    while (staleWrites().length) await Promise.allSettled(staleWrites());
+  }
+  /** Se résout quand plus aucune série n'est ouverte. */
+  let seriesEnd: Promise<void> = Promise.resolve();
+  let closeSeries: () => void = () => undefined;
   /** L'écriture groupée en vol compte comme une écriture en vol : les ticks de fond passent
    *  leur tour (`tickMayWrite`) et les gestes du joueur l'attendent (`writesSettled`). */
   function trackDeferredFlush() {
@@ -1306,14 +1321,43 @@ export const useCharacterStore = defineStore('character', () => {
   }
   /** Ouvre une série : jusqu'à `endDeferredWrites`, les écritures de la fiche sont groupées. */
   function beginDeferredWrites() {
+    if (deferDepth === 0) seriesEnd = new Promise((res) => (closeSeries = res));
     deferDepth++;
   }
   /** Ferme une série et ATTEND que tout soit écrit. Rejette si l'écriture a échoué : l'appelant
    *  prévient le joueur et relit la fiche (`fetchMine`) — ce qui n'est pas parti n'est pas en base. */
   async function endDeferredWrites(): Promise<void> {
-    deferDepth = Math.max(0, deferDepth - 1);
-    if (deferDepth > 0) return;
-    await coalescer.flush();
+    if (deferDepth > 1) {
+      deferDepth--;
+      return;
+    }
+    try {
+      // ⚠️ La série reste OUVERTE jusqu'au bout de l'envoi : un geste fait pendant ce temps
+      // rejoint le lot, au lieu d'une écriture parallèle qui pourrait arriver avant lui.
+      do await coalescer.flush();
+      while (coalescer.dirty());
+    } catch (e) {
+      // ⚠️ L'appelant relit la fiche : ce qui n'est pas parti est ABANDONNÉ, sinon ces
+      // colonnes périmées repartiraient avec la série suivante, par-dessus la fiche relue.
+      coalescer.drop();
+      claimedLocally.clear();
+      throw e;
+    } finally {
+      deferDepth = Math.max(0, deferDepth - 1);
+      if (deferDepth === 0) closeSeries();
+    }
+  }
+  /** ⏩ UNE SUITE DE GESTES, SANS ATTENDRE LE RÉSEAU : chacun s'applique tout de suite à la
+   *  fiche en mémoire, l'écriture part groupée. Les écritures déjà en vol atterrissent
+   *  d'abord. Rejette si l'envoi échoue : l'appelant relit la fiche (`fetchMine`). */
+  async function groupedWrites(run: () => Promise<void>): Promise<void> {
+    await writesSettled();
+    beginDeferredWrites();
+    try {
+      await run();
+    } finally {
+      await endDeferredWrites();
+    }
   }
 
   async function persist(userId: string, patch: Record<string, unknown>) {
@@ -1883,8 +1927,7 @@ export const useCharacterStore = defineStore('character', () => {
   function spentBossTokens(n: number) {
     const cur = row.value;
     // n < 0 = jetons rendus (annulation d'un boss), dans la limite de la réserve.
-    if (cur)
-      row.value = { ...cur, boss_tokens: Math.min(6, Math.max(0, cur.boss_tokens - n)) };
+    if (cur) row.value = { ...cur, boss_tokens: Math.min(6, Math.max(0, cur.boss_tokens - n)) };
   }
 
   async function claimLevelUps(userId: string, currentLevel: number) {
@@ -4690,7 +4733,7 @@ export const useCharacterStore = defineStore('character', () => {
       lateOk?: boolean;
     },
   ): Promise<string | null> {
-    await writesSettled();
+    await rowCurrent();
     const cur = row.value;
     if (!cur?.expedition_map) return 'la carte n’est pas chargée';
     const { now } = opts;
@@ -7373,6 +7416,7 @@ export const useCharacterStore = defineStore('character', () => {
     applyRun,
     beginDeferredWrites,
     endDeferredWrites,
+    groupedWrites,
     applyBossWin,
     chooseReward,
     applyEndless,

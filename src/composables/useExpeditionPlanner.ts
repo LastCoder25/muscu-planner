@@ -221,6 +221,10 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   const rows = ref<PlannerRow[] | null>(null);
   const unreachable = ref<Poi[]>([]);
   const launching = ref<string | null>(null);
+  /** 🚀 Où en est un lancement groupé (`null` hors lancement). */
+  const sending = ref<{ done: number; total: number } | null>(null);
+  /** ✅ Combien sont parties quand il ne reste plus rien à lancer (la ligne qui le dit). */
+  const sentCount = ref(0);
   // Deux calculs indépendants (deux panneaux sur la carte) : chacun son compteur.
   let run = 0;
   let repoRun = 0;
@@ -265,7 +269,9 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     progress.value = 0;
     rows.value = null;
     unreachable.value = [];
-    let launchNow = false;
+    sentCount.value = 0;
+    /** 🚀 En départ automatique, la proposition ne passe JAMAIS par la liste. */
+    let auto: PlannerRow[] | null = null;
     try {
       const now = ctx.coarseNow.value;
       const map = char.row?.expedition_map;
@@ -405,7 +411,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
         },
       });
       if (!res || me !== run) return;
-      rows.value = res.trips.map((tr: PlannedTrip<Poi>, i) => ({
+      const built: PlannerRow[] = res.trips.map((tr: PlannedTrip<Poi>, i) => ({
         mode: res.tripModes[i]!,
         key: `${tr.target.id}|${tr.units.map((u) => u.id).join(',')}`,
         poi: tr.target,
@@ -427,13 +433,14 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       }));
       unreachable.value = res.unreachable;
       progress.value = 1;
-      launchNow = autoLaunch.value && rows.value.length > 0;
+      if (autoLaunch.value && built.length && !launching.value) auto = built;
+      else rows.value = built;
     } finally {
       if (me === run) running.value = false;
     }
     // 🚀 Départ automatique : APRÈS la fin du calcul (le panneau n'est plus « en calcul »), et
     // seulement si ce calcul est toujours le dernier (un réglage changé entre-temps l'annule).
-    if (launchNow && me === run) await launchAllAuto();
+    if (auto && me === run) await launchAllAuto(auto, me);
   }
 
   /**
@@ -618,6 +625,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     running.value = false;
     rows.value = null;
     unreachable.value = [];
+    sentCount.value = 0;
   }
   watch([threshold, modes, withGarrisons, withHero, withControls, allowedSupplies], reset);
   // ⚔️ Un lieu attaqué depuis le calcul (envoi manuel, héros seul) quitte les cibles : sa
@@ -630,7 +638,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
   );
 
   /** Lance UNE proposition. Rend la raison d'un refus (`null` = parti). */
-  async function sendRow(r: PlannerRow): Promise<string | null> {
+  async function sendRow(r: PlannerRow, now: number): Promise<string | null> {
     const uid = auth.user?.id;
     if (!uid) return 'non connecté';
     // ⚔️ Une attaque combinée part par le MÊME chemin que l'écran (`sendCombinedAttack`) :
@@ -643,7 +651,7 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
           hero: w.hero ? heroObj() : null,
         })),
         playerLevel: r.hero ? ctx.progressionLevel.value : ctx.heroLevel.value,
-        now: Date.now(),
+        now,
         supplies: r.supplies,
       });
     return char.sendParty(uid, r.poi, {
@@ -651,11 +659,18 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
       escortIds: r.advs.map((a) => a.id),
       // Même règle que l'écran d'envoi : avec le héros, son niveau de progression.
       playerLevel: r.hero ? ctx.progressionLevel.value : ctx.heroLevel.value,
-      now: Date.now(),
+      now,
       // 🎒 Les consommables du plan : le store les revérifie (`suppliesBlocker`, stock).
       supplies: r.supplies,
       ...(r.from ? { fromControlId: r.from.id } : {}),
     });
+  }
+
+  /** Retire un départ parti ; la liste vidée laisse la place à la ligne « parties ». */
+  function dropSent(key: string) {
+    if (!rows.value) return;
+    const left = rows.value.filter((x) => x.key !== key);
+    rows.value = left.length ? left : null;
   }
 
   async function launch(r: PlannerRow) {
@@ -663,50 +678,103 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     launching.value = r.key;
     try {
       await ctx.settleDueSiege();
-      const refused = await sendRow(r);
+      const refused = await sendRow(r, Date.now());
       if (refused) $q.notify({ type: 'negative', message: `Départ impossible : ${refused}.` });
-      else if (rows.value) rows.value = rows.value.filter((x) => x.key !== r.key);
-    } finally {
-      launching.value = null;
-    }
-  }
-
-  /** Le départ automatique : `launchAll`, puis ce qui est parti est DIT (le départ à la main se
-   *  voit sur l'écran ; celui-ci n'a pas de clic derrière lequel l'attendre). */
-  async function launchAllAuto() {
-    const n = rows.value?.length ?? 0;
-    await launchAll();
-    const sent = n - (rows.value?.length ?? 0);
-    if (sent > 0)
-      $q.notify({
-        type: 'positive',
-        message: `🚀 ${sent} expédition${sent > 1 ? 's' : ''} lancée${sent > 1 ? 's' : ''} automatiquement`,
-      });
-  }
-
-  async function launchAll() {
-    if (launching.value || !rows.value?.length) return;
-    launching.value = '*';
-    let ok = 0;
-    const refusals: string[] = [];
-    try {
-      await ctx.settleDueSiege();
-      for (const r of [...(rows.value ?? [])]) {
-        const refused = await sendRow(r);
-        if (refused) refusals.push(refused);
-        else {
-          ok++;
-          rows.value = (rows.value ?? []).filter((x) => x.key !== r.key);
-        }
+      else {
+        sentCount.value++;
+        dropSent(r.key);
       }
     } finally {
       launching.value = null;
     }
-    if (refusals.length)
-      $q.notify({
-        type: ok ? 'warning' : 'negative',
-        message: `${ok} expédition(s) lancée(s), ${refusals.length} refusée(s) : ${refusals[0]}.`,
+  }
+
+  /**
+   * 🚀 LES DÉPARTS D'UN LOT, EN ÉCRITURES GROUPÉES (demandé : « lance les expéditions, ce
+   * sera plus rapide »). Chaque départ s'applique tout de suite à la fiche en mémoire et le
+   * suivant part sans attendre le réseau (`groupedWrites`). Si
+   * l'enregistrement échoue, la fiche est relue en base et `null` est rendu.
+   */
+  async function sendAll(
+    list: readonly PlannerRow[],
+    onSent: (r: PlannerRow) => void,
+  ): Promise<{ sent: number; reasons: string[]; refused: PlannerRow[] } | null> {
+    if (launching.value || !list.length) return null;
+    launching.value = '*';
+    sending.value = { done: 0, total: list.length };
+    const refused: PlannerRow[] = [];
+    const reasons: string[] = [];
+    let sent = 0;
+    // ⚠️ Une heure STRICTEMENT croissante : elle nomme le voyage (`party_…`, `atk_…`) et
+    // sème son issue (à 2 ms près) ; en mémoire, deux départs tombent dans la même.
+    let clock = 0;
+    try {
+      await ctx.settleDueSiege();
+      await char.groupedWrites(async () => {
+        for (const r of list) {
+          clock = Math.max(Date.now(), clock + 2);
+          const reason = await sendRow(r, clock);
+          if (reason) {
+            refused.push(r);
+            reasons.push(reason);
+          } else {
+            sent++;
+            onSent(r);
+          }
+          sending.value = { done: sent + refused.length, total: list.length };
+          // L'écran garde la main : le pronostic de chaque départ se calcule ici.
+          await new Promise((res) => setTimeout(res, 0));
+        }
       });
+    } catch (e) {
+      console.error('départs groupés', e);
+      $q.notify({
+        type: 'negative',
+        message: 'L’enregistrement des départs a échoué : on recharge ta fiche depuis la base.',
+      });
+      await char.fetchMine().catch(() => undefined);
+      rows.value = null;
+      return null;
+    } finally {
+      launching.value = null;
+      sending.value = null;
+    }
+    return { sent, reasons, refused };
+  }
+
+  function sayRefusals(sent: number, reasons: string[]) {
+    if (reasons.length)
+      $q.notify({
+        type: sent ? 'warning' : 'negative',
+        message: `${sent} expédition(s) lancée(s), ${reasons.length} refusée(s) : ${reasons[0]}.`,
+      });
+  }
+
+  /** Le départ automatique : tout part, sans liste. Seuls les refus s'affichent ensuite ; ce
+   *  qui est parti est DIT (aucun clic derrière lequel l'attendre). */
+  async function launchAllAuto(list: readonly PlannerRow[], me: number) {
+    const out = await sendAll(list, () => undefined);
+    if (!out) return;
+    // Un réglage changé pendant les départs : la proposition refusée n'a plus cours.
+    if (me === run) {
+      rows.value = out.refused.length ? out.refused : null;
+      sentCount.value = out.sent;
+    }
+    if (out.sent > 0 && !out.reasons.length) {
+      const s = out.sent > 1 ? 's' : '';
+      $q.notify({
+        type: 'positive',
+        message: `🚀 ${out.sent} expédition${s} lancée${s} automatiquement`,
+      });
+    }
+    sayRefusals(out.sent, out.reasons);
+  }
+
+  async function launchAll() {
+    const out = await sendAll([...(rows.value ?? [])], (r) => dropSent(r.key));
+    if (!out) return;
+    sentCount.value += out.sent;
+    sayRefusals(out.sent, out.reasons);
   }
 
   /** 🕳️ Combien de failles le mode « Failles » peut viser (l'écran le dit s'il n'y en a aucune). */
@@ -736,6 +804,8 @@ export function useExpeditionPlanner(ctx: PlannerCtx) {
     rows,
     unreachable,
     launching,
+    sending,
+    sentCount,
     compute,
     reset,
     launch,

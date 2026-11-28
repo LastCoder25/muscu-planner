@@ -6045,39 +6045,87 @@ async function expeLifecycle() {
   if (!uid || expeBusy) return;
   expeBusy = true;
   try {
-    // 📬 Le rapport tombe dans la boîte, SANS toast : il annonçait l'issue (vert = gagné)
-    // avant qu'on ait ouvert le rapport, et s'empilait avec les autres à l'ouverture.
-    await char.expeTick(uid, Date.now(), activeDays7.value);
-    // Le héros rentre : il redevient disponible tout de suite.
-    await char.expeSettle(uid, Date.now(), activeDays7.value);
-    // ⚔️ Les groupes partis sans le héros vivent leur voyage ici aussi : rapport à l'arrivée
-    // sur le camp, retour en ville.
-    const partyMsgs = await char.partyTick(uid, Date.now(), activeDays7.value);
-    // Un groupe en route a changé : l'échéance de son retour se réaligne.
-    if (partyMsgs.length) void syncPush(true);
-    // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).
-    for (const done of await char.expeAutoClaim(uid, Date.now())) announceClaim(done);
-    // ⚠️ `progress.ready` OBLIGATOIRE pour la suite : tout ce qui suit lit le NIVEAU du héros,
-    // qui vient de l'XP de fond, chargée en tâche de fond. Au montage (l'Aventure épinglée
-    // en cockpit s'ouvre avec l'app), ce tick partait AVANT : niveau 1 → la production des
-    // lieux fixes accumulée pendant l'absence était versée au tarif du niveau 1 (mine au
-    // niveau 30 : 40 🪙/h au lieu de ~4 000, et la réserve repartait de zéro), les reprises
-    // et les sièges se jouaient au niveau 1, et la carte se synchronisait au niveau 1.
-    // Ce qui précède ne lit pas le niveau : les voyages continuent pendant le chargement.
-    if (!progress.ready.value) return;
-    // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
-    // défend plus son point).
-    await attackStep(uid);
-    // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctl = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
-    // 🏰 Production des lieux fixes et issue des reprises : plus de toast. Les ressources
-    // s'affichent en « +N » sous le plateau (`ResourceGains`), le récit est dans la boîte 📬.
-    if (ctl.attacks.length) void syncPush(true);
-    await char.expeSyncMap(uid, Date.now(), c.value.level.level);
-    await baseLifecycle();
+    await expePass(uid);
+  } finally {
+    expeBusy = false;
+    if (catchUpAsked) void expeCatchUp();
+  }
+}
+/** ⏩ Passages au plus d'un rattrapage : chaque tick ne règle qu'une étape à la fois. */
+const CATCH_UP_PASSES = 12;
+let catchUpAsked = false;
+/**
+ * ⏩ RATTRAPAGE À L'ARRIVÉE (signalé : « la carte est rarement à jour, il faut attendre ») :
+ * au montage, au retour dans l'app et quand le niveau est connu, les passages s'enchaînent
+ * jusqu'à ce que plus rien ne bouge, en écritures GROUPÉES. L'écran montre tout d'un coup,
+ * sans attendre ni le réseau ni la seconde suivante.
+ */
+async function expeCatchUp() {
+  const uid = auth.user?.id;
+  if (!uid || disposed || !char.row) return;
+  if (expeBusy) {
+    catchUpAsked = true;
+    return;
+  }
+  expeBusy = true;
+  catchUpAsked = false;
+  try {
+    await char.groupedWrites(async () => {
+      for (let i = 0; i < CATCH_UP_PASSES; i++) {
+        const before = char.row;
+        await expePass(uid);
+        if (char.row === before) break;
+      }
+    });
+  } catch (e) {
+    console.error('rattrapage de la carte', e);
+    $q.notify({
+      type: 'negative',
+      message: 'La mise à jour de la carte a échoué : on recharge ta fiche.',
+    });
+    await char.fetchMine().catch(() => undefined);
   } finally {
     expeBusy = false;
   }
+  if (catchUpAsked) void expeCatchUp();
+}
+/** Un passage du cycle : les voyages, puis (niveau connu) les lieux tenus, la carte, la base. */
+async function expePass(uid: string) {
+  // 📬 Le rapport tombe dans la boîte, SANS toast : il annonçait l'issue (vert = gagné)
+  // avant qu'on ait ouvert le rapport, et s'empilait avec les autres à l'ouverture.
+  await char.expeTick(uid, Date.now(), activeDays7.value);
+  // Le héros rentre : il redevient disponible tout de suite.
+  await char.expeSettle(uid, Date.now(), activeDays7.value);
+  // ⚔️ Les groupes partis sans le héros vivent leur voyage ici aussi : rapport à l'arrivée
+  // sur le camp, retour en ville.
+  const partyMsgs = await char.partyTick(uid, Date.now(), activeDays7.value);
+  // Un groupe en route a changé : l'échéance de son retour se réaligne.
+  if (partyMsgs.length) void syncPush(true);
+  // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).
+  for (const done of await char.expeAutoClaim(uid, Date.now())) announceClaim(done);
+  // ⚠️ `progress.ready` OBLIGATOIRE pour la suite : tout ce qui suit lit le NIVEAU du héros,
+  // qui vient de l'XP de fond, chargée en tâche de fond. Au montage (l'Aventure épinglée
+  // en cockpit s'ouvre avec l'app), ce tick partait AVANT : niveau 1 → la production des
+  // lieux fixes accumulée pendant l'absence était versée au tarif du niveau 1 (mine au
+  // niveau 30 : 40 🪙/h au lieu de ~4 000, et la réserve repartait de zéro), les reprises
+  // et les sièges se jouaient au niveau 1, et la carte se synchronisait au niveau 1.
+  // Ce qui précède ne lit pas le niveau : les voyages continuent pendant le chargement.
+  if (!progress.ready.value) {
+    // 🗺️ LA CARTE, ELLE, N'ATTEND PAS LE SPORT : elle se met à jour au niveau déjà
+    // récompensé, écrit sur la fiche (jamais au niveau 1 : sans lui, on attend).
+    if ((char.row?.reward_level ?? 0) > 0) await char.expeSyncMap(uid, Date.now(), char.heroLevel);
+    return;
+  }
+  // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
+  // défend plus son point).
+  await attackStep(uid);
+  // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
+  const ctl = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
+  // 🏰 Production des lieux fixes et issue des reprises : plus de toast. Les ressources
+  // s'affichent en « +N » sous le plateau (`ResourceGains`), le récit est dans la boîte 📬.
+  if (ctl.attacks.length) void syncPush(true);
+  await char.expeSyncMap(uid, Date.now(), c.value.level.level);
+  await baseLifecycle();
 }
 /** Encaisse le butin d'un rapport. La célébration est ici : c'est en prenant le butin
  *  qu'on le découvre, pas pendant qu'on regardait un autre écran. */
@@ -7273,17 +7321,32 @@ onMounted(async () => {
   // et il écrit en base chaque seconde (`expeLifecycle`).
   if (disposed) return;
   // Expédition idle : synchro carte + cycle de vie (rapport/collecte) au fil du temps.
-  void expeLifecycle();
+  void expeCatchUp();
   expeTimer = setInterval(() => {
     expeNow.value = Date.now();
     void expeLifecycle();
   }, 1000);
+  document.addEventListener('visibilitychange', onExpeVisible);
 });
+/** Retour dans l'app (restée en arrière-plan) : l'heure et la carte se rattrapent aussitôt. */
+function onExpeVisible() {
+  if (document.visibilityState !== 'visible') return;
+  expeNow.value = Date.now();
+  void expeCatchUp();
+}
+// Le niveau vient d'arriver : les lieux tenus et la base se règlent sans attendre la seconde.
+watch(
+  () => progress.ready.value,
+  (ready) => {
+    if (ready && expeTimer) void expeCatchUp();
+  },
+);
 let expeTimer: ReturnType<typeof setInterval> | null = null;
 let disposed = false;
 onUnmounted(() => {
   disposed = true;
   if (expeTimer) clearInterval(expeTimer);
+  document.removeEventListener('visibilitychange', onExpeVisible);
 });
 </script>
 

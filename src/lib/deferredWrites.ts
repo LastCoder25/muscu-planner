@@ -24,6 +24,8 @@ export interface WriteCoalescer {
   current(): Promise<void> | null;
   /** Reste-t-il quelque chose à écrire (en vol ou en attente) ? */
   dirty(): boolean;
+  /** Abandonne ce qui attend (la fiche va être relue en base). */
+  drop(): void;
 }
 
 export function createWriteCoalescer(
@@ -83,5 +85,8 @@ export function createWriteCoalescer(
     },
     current: () => running,
     dirty: () => running !== null || hasPending(),
+    drop() {
+      pending = {};
+    },
   };
 }
