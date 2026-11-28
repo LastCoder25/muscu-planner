@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 interface Sent {
   method: string;
   body: Record<string, unknown>;
-  release: (status?: number) => void;
+  release: (status?: number, data?: unknown) => void;
 }
 
 const base = globalThis.fetch;
@@ -23,9 +23,9 @@ async function setup() {
       sent.push({
         method: init?.method ?? 'GET',
         body: init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {},
-        release: (status = 200) =>
+        release: (status = 200, data = { updated_at: '2026-01-01T00:00:00Z' }) =>
           resolve(
-            new Response(JSON.stringify({ updated_at: '2026-01-01T00:00:00Z' }), {
+            new Response(JSON.stringify(data), {
               status,
               headers: { 'content-type': 'application/json' },
             }),
@@ -101,6 +101,10 @@ describe('écritures groupées', { timeout: 60000 }, () => {
       await char.expeMarkRead('u1');
     });
     const failed = expect(p).rejects.toBeTruthy();
+    const { useAuthStore } = await import('@/stores/auth');
+    (useAuthStore() as unknown as { user: unknown }).user = { id: 'u1' };
+    const stored = JSON.parse(JSON.stringify(char.row)) as { messages: { read: boolean }[] };
+    stored.messages.forEach((m) => (m.read = false));
     let i = 0;
     let done = false;
     void p.finally(() => (done = true)).catch(() => undefined);
@@ -109,16 +113,92 @@ describe('écritures groupées', { timeout: 60000 }, () => {
       while (i < sent.length) sent[i++]!.release(500);
     }
     await failed;
+    // La fiche relue, une nouvelle série n'envoie que SES colonnes.
     const before = sent.length;
-    await drain(
-      char.groupedWrites(async () => {
-        await char.toggleLock('u1', 'i1');
-      }),
-      sent,
-      before,
-    );
-    expect(sent.length).toBe(before + 1);
-    expect(Object.keys(sent[before]!.body)).not.toContain('messages');
+    const next = char.groupedWrites(async () => {
+      await char.toggleLock('u1', 'i1');
+    });
+    let over = false;
+    void next.finally(() => (over = true)).catch(() => undefined);
+    while (!over) {
+      await flush();
+      while (i < sent.length) {
+        const r = sent[i++]!;
+        r.release(200, r.method === 'GET' ? [stored] : undefined);
+      }
+    }
+    await next;
+    const writes = sent.slice(before).filter((r) => r.method === 'PATCH');
+    const last = writes.at(-1)!;
+    expect(Object.keys(last.body)).toContain('inventory');
+    expect(Object.keys(last.body)).not.toContain('messages');
+  });
+
+  it('⚠️ après un envoi raté, RIEN ne s’écrit tant que la fiche n’a pas été relue', async () => {
+    const { char, sent } = await setup();
+    const { useAuthStore } = await import('@/stores/auth');
+    (useAuthStore() as unknown as { user: unknown }).user = { id: 'u1' };
+    const stored = JSON.parse(JSON.stringify(char.row)) as unknown;
+    let online = false;
+    let answered = 0;
+    /** Répond à tout ce qui est parti : en ligne, la lecture rend la fiche d'avant. */
+    const pump = async (p: Promise<unknown>) => {
+      let done = false;
+      void p.finally(() => (done = true)).catch(() => undefined);
+      while (!done) {
+        await flush();
+        while (answered < sent.length) {
+          const r = sent[answered++]!;
+          r.release(online ? 200 : 503, online && r.method === 'GET' ? [stored] : undefined);
+        }
+      }
+      return p;
+    };
+    const patches = () => sent.filter((r) => r.method === 'PATCH').length;
+    // Une fiche lue à l'instant : seule l'écriture ratée doit la faire relire.
+    online = true;
+    await pump(char.fetchMine());
+    online = false;
+    (char as unknown as { row: unknown }).row = JSON.parse(JSON.stringify(stored));
+    await expect(
+      pump(char.groupedWrites(async () => void (await char.toggleLock('u1', 'i1')))),
+    ).rejects.toBeTruthy();
+    // L'écran montre encore l'objet verrouillé, la base non.
+    expect(char.row!.inventory[0]!.locked).toBe(true);
+    expect(char.needsReload()).toBe(true);
+    await pump(char.fetchMine()).catch(() => undefined); // toujours hors ligne
+    const before = patches();
+    await expect(pump(char.toggleLock('u1', 'i1'))).rejects.toThrow('pas à jour');
+    await expect(pump(char.groupedWrites(async () => undefined))).rejects.toBeTruthy();
+    expect(patches()).toBe(before);
+    expect(char.needsReload()).toBe(true);
+    // Le réseau revient : la fiche est relue, puis on écrit de nouveau.
+    online = true;
+    await pump(char.fetchIfStale(3_600_000));
+    expect(char.needsReload()).toBe(false);
+    expect(char.row!.inventory[0]?.locked).toBeFalsy();
+    await pump(char.toggleLock('u1', 'i1'));
+    expect(patches()).toBeGreaterThan(before);
+  });
+
+  it('une série demandée pendant une autre attend qu’elle soit enregistrée', async () => {
+    const { char, sent } = await setup();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const first = char.groupedWrites(async () => {
+      await char.toggleLock('u1', 'i1');
+      await gate;
+    });
+    let started = false;
+    const second = char.groupedWrites(async () => {
+      started = true;
+      await char.expeMarkRead('u1');
+    });
+    for (let i = 0; i < 5; i++) await flush();
+    expect(started).toBe(false);
+    release();
+    await drain(Promise.all([first, second]), sent);
+    expect(started).toBe(true);
   });
 
   it('les tickets de quêtes (écriture + relecture directes) attendent la fin de la série', async () => {

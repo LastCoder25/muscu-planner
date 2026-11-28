@@ -641,7 +641,8 @@ export const useCharacterStore = defineStore('character', () => {
    *  force la lecture. Ce qu'un AUTRE appareil a écrit arrive au plus `maxAgeMs` plus tard. */
   async function fetchIfStale(maxAgeMs: number) {
     const uid = useAuthStore().user?.id ?? null;
-    if (row.value && uid && uid === loadedUid && Date.now() - loadedAt < maxAgeMs) return row.value;
+    if (!reloadNeeded && row.value && uid && uid === loadedUid && Date.now() - loadedAt < maxAgeMs)
+      return row.value;
     return fetchMine();
   }
 
@@ -678,6 +679,7 @@ export const useCharacterStore = defineStore('character', () => {
     const rawRuneComp = Math.floor(Number((data?.runes as { comp?: unknown } | null)?.comp)) || 0;
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
+    reloadNeeded = false;
     loadedAt = Date.now();
     loadedUid = uid;
     // 🪬 La bascule d'abord : tant qu'elle n'est pas écrite, toute écriture du vivier seul
@@ -1234,7 +1236,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (deferDepth > 0) await seriesEnd;
     await writesSettled();
     const cur = row.value;
-    if (!cur) return 0;
+    if (!cur || reloadNeeded) return 0;
     const tickets = earned - parseQuestMark(cur.quest_week, monday);
     if (tickets <= 0) return 0;
     const res = await supabase
@@ -1270,8 +1272,13 @@ export const useCharacterStore = defineStore('character', () => {
   function tickMayWrite(snap: CharacterRow): boolean {
     // Pendant une série, l'envoi groupé est DÉJÀ dans la fiche : il ne la périme pas.
     const stale = deferDepth > 0 ? staleWrites().length : inFlight.size;
-    return stale === 0 && row.value === snap;
+    return !reloadNeeded && stale === 0 && row.value === snap;
   }
+  /** ⚠️ Un envoi groupé a échoué : la fiche en mémoire est EN AVANCE sur la base (gains et
+   *  départs affichés, jamais enregistrés). Rien ne s'écrit tant qu'elle n'a pas été relue :
+   *  une écriture partielle (l'or sans la boîte) ferait encaisser deux fois. */
+  let reloadNeeded = false;
+  const needsReload = () => reloadNeeded;
   /** Les écritures en vol que la fiche en mémoire ne reflète pas encore (toutes, sauf les
    *  envois groupés d'une série). */
   const staleWrites = () => [...inFlight].filter((p) => !trackedFlushes.has(p as Promise<void>));
@@ -1341,6 +1348,7 @@ export const useCharacterStore = defineStore('character', () => {
       // colonnes périmées repartiraient avec la série suivante, par-dessus la fiche relue.
       coalescer.drop();
       claimedLocally.clear();
+      reloadNeeded = true;
       throw e;
     } finally {
       deferDepth = Math.max(0, deferDepth - 1);
@@ -1351,7 +1359,13 @@ export const useCharacterStore = defineStore('character', () => {
    *  fiche en mémoire, l'écriture part groupée. Les écritures déjà en vol atterrissent
    *  d'abord. Rejette si l'envoi échoue : l'appelant relit la fiche (`fetchMine`). */
   async function groupedWrites(run: () => Promise<void>): Promise<void> {
-    await writesSettled();
+    // ⚠️ Jamais DANS une série déjà ouverte : sa fin ne confirmerait rien d'enregistré.
+    // Revérifié après chaque attente : une autre série a pu s'ouvrir entre-temps.
+    do {
+      while (deferDepth > 0) await seriesEnd;
+      if (reloadNeeded) await fetchMine();
+      await writesSettled();
+    } while (deferDepth > 0);
     beginDeferredWrites();
     try {
       await run();
@@ -1361,6 +1375,11 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   async function persist(userId: string, patch: Record<string, unknown>) {
+    if (reloadNeeded) {
+      // Le patch vient d'une fiche en avance sur la base : refusé, et on relit pour la suite.
+      void fetchMine().catch(() => undefined);
+      throw new Error('ta fiche n’est pas à jour (connexion perdue) : réessaie dans un instant');
+    }
     const echo = writtenEcho({ ...patch, updated_at: new Date().toISOString() });
     // 🔁 SÉRIE EN COURS (×5, ×10, ×25, Labyrinthe en série) : on met la fiche à jour ICI, tout de
     // suite, et l'écriture part en arrière-plan, GROUPÉE avec les suivantes (cf. deferredWrites).
@@ -7417,6 +7436,7 @@ export const useCharacterStore = defineStore('character', () => {
     beginDeferredWrites,
     endDeferredWrites,
     groupedWrites,
+    needsReload,
     applyBossWin,
     chooseReward,
     applyEndless,

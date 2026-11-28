@@ -6045,7 +6045,9 @@ async function expeLifecycle() {
   if (!uid || expeBusy) return;
   expeBusy = true;
   try {
-    await expePass(uid);
+    // Après un envoi raté, rien ne se joue tant que la fiche n'a pas été relue.
+    if (char.needsReload()) await char.fetchMine().catch(() => undefined);
+    if (!char.needsReload()) await expePass(uid);
   } finally {
     expeBusy = false;
     if (catchUpAsked) void expeCatchUp();
